@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="1024"
+   height="1024"
+   viewBox="0 0 270.93333 270.93333"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.1.2 (b8e25be833, 2022-02-05)"
+   sodipodi:docname="meno_logo.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     units="px"
+     inkscape:zoom="0.80087682"
+     inkscape:cx="397.06481"
+     inkscape:cy="560.63553"
+     inkscape:window-width="3440"
+     inkscape:window-height="1369"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2">
+    <clipPath
+       id="clip0">
+      <rect
+         x="238"
+         y="176"
+         width="484"
+         height="399"
+         id="rect824" />
+    </clipPath>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       clip-path="url(#clip0)"
+       transform="matrix(0.48846846,0,0,0.48846846,-98.998194,-52.859383)"
+       id="g833">
+      <path
+         d="m 410,504.5 c 0,-38.936 31.34,-70.5 70,-70.5 38.66,0 70,31.564 70,70.5 0,38.936 -31.34,70.5 -70,70.5 -38.66,0 -70,-31.564 -70,-70.5 z"
+         fill="#020403"
+         fill-rule="evenodd"
+         id="path829" />
+      <path
+         d="M 238,434.425 C 238.434,291.456 346.812,175.846 480.26,176 613.682,176.154 721.818,291.971 722,434.914 L 663.155,435 C 663.02,324.602 565.226,256.789 477.005,258.271 388.783,259.753 297.166,324.205 296.844,434.63 Z"
+         fill="#020403"
+         fill-rule="evenodd"
+         id="path831" />
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,67 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "windows": ["main"],
+  "permissions": [
+    "fs:default",
+
+    { "identifier": "fs:allow-resource-read-recursive" },
+
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [
+        { "path": "$RESOURCE" },
+        { "path": "$RESOURCE/**/*" },
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**/*" },
+        { "path": "$APPLOCALDATA" },
+        { "path": "$APPLOCALDATA/**/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        { "path": "$RESOURCE" },
+        { "path": "$RESOURCE/**/*" },
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "$RESOURCE" },
+        { "path": "$RESOURCE/**/*" },
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**/*" },
+        { "path": "$APPLOCALDATA" },
+        { "path": "$APPLOCALDATA/**/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**/*" },
+        { "path": "$APPLOCALDATA" },
+        { "path": "$APPLOCALDATA/**/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**/*" },
+        { "path": "$APPLOCALDATA" },
+        { "path": "$APPLOCALDATA/**/*" }
+      ]
+    }
+  ]
+}

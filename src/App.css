@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accel-background: rgb(246, 250, 252);
+  --color-accel-foreground: rgb(26, 31, 43);
+  --color-accel-base: rgb(49, 118, 137);
+  --color-accel-accent: rgb(205, 69, 96);
+  --color-accel-lightbase: rgb(207, 231, 238);
+  --color-accel-lightaccent: rgb(245, 218, 223);
+  --color-accel-white: rgb(255, 255, 255);
+  --color-accel-blue: rgb(29, 78, 216);
+
+  --color-gh-background: rgb(255, 255, 255);
+  --color-gh-black: rgb(31, 35, 40);
+  --color-gh-base: rgb(246, 248, 250);
+  --color-gh-line: rgb(209, 217, 224);
+  --color-gh-gray: rgb(89, 99, 110);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background-color: rgb(49, 118, 137);
+  border-radius: 9999px;
+  border: 1px solid rgb(209, 217, 224);
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background-color: rgb(49, 118, 137);
+  border-radius: 9999px;
+  border: 1px solid rgb(209, 217, 224);
+  cursor: pointer;
+}
+
+@layer base {
+  .rf-no-cursor
+    :is(
+      .react-flow__pane,
+      .react-flow__renderer,
+      .react-flow__node,
+      .react-flow__node.dragging,
+      .react-flow__edge,
+      .react-flow__edge-path,
+      .react-flow__handle,
+      .react-flow__minimap,
+      .react-flow__controls button
+    ) {
+    cursor: default !important;
+  }
+}
