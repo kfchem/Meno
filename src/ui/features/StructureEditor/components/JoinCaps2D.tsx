@@ -16,7 +16,7 @@ export default function JoinCaps2D({
   options?: Partial<LayoutOptions>;
 }) {
   const { camera } = useThree();
-  const { model } = useEditor();
+  const { model, moveDrag } = useEditor();
   const [zoom, setZoom] = useState((camera as THREE.OrthographicCamera).zoom);
   useFrame(() => {
     const z = (camera as THREE.OrthographicCamera).zoom;
@@ -40,7 +40,7 @@ export default function JoinCaps2D({
       out.push({ a1: i1, a2: i2, order, stereo });
     }
     return out;
-  }, [model.bonds, atoms]);
+  }, [model.bonds, atoms, moveDrag.active, moveDrag.atomId]);
 
   const opts: LayoutOptions = useMemo(
     () => acsWorldOptions(atoms, bonds, { ...options, units: "world" }),
@@ -51,20 +51,43 @@ export default function JoinCaps2D({
     [atoms, bonds, opts, zoom]
   );
 
+  // Determine if we should suppress only the moving atom's cap (for deg>=2)
+  const movingId = moveDrag.active ? moveDrag.atomId : null;
+  const movingDeg = useMemo(() => {
+    if (movingId == null) return 0;
+    return model.bonds.reduce(
+      (acc, b) => acc + (b.a === movingId || b.b === movingId ? 1 : 0),
+      0
+    );
+  }, [model.bonds, movingId]);
+  const movingPos = useMemo(() => {
+    if (movingId == null) return null as { x: number; y: number } | null;
+    const a = atoms.find((aa) => aa.id === movingId);
+    return a ? { x: a.x, y: a.y } : null;
+  }, [atoms, movingId]);
+
   return (
     <group>
-      {(layout as any).fills?.map((c: any, i: number) => (
-        <mesh key={`cap-${i}`} position={[c.c.x, c.c.y, 0]} renderOrder={9}>
-          <circleGeometry args={[c.r, 24]} />
-          <meshBasicMaterial
-            color="black"
-            transparent
-            opacity={1}
-            depthTest={false}
-            depthWrite={false}
-          />
-        </mesh>
-      ))}
+      {(layout as any).fills
+        ?.filter((c: any) => {
+          if (movingId == null || movingDeg < 2 || !movingPos) return true;
+          // Skip only the cap at the moving atom itself; keep neighbor caps
+          const dx = c.c.x - movingPos.x;
+          const dy = c.c.y - movingPos.y;
+          return Math.hypot(dx, dy) > 1e-6;
+        })
+        .map((c: any, i: number) => (
+          <mesh key={`cap-${i}`} position={[c.c.x, c.c.y, 0]} renderOrder={9}>
+            <circleGeometry args={[c.r, 24]} />
+            <meshBasicMaterial
+              color="black"
+              transparent
+              opacity={1}
+              depthTest={false}
+              depthWrite={false}
+            />
+          </mesh>
+        ))}
     </group>
   );
 }

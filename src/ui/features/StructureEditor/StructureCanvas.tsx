@@ -16,6 +16,7 @@ import {
   Arrows2D,
 } from "./components";
 import AromaticCircles2D from "./components/AromaticCircles2D";
+import { ATOM_HOVER_RING_RADIUS_RATIO } from "./constants";
 import Wedges2D from "./components/Wedges2D";
 import Labels2D from "./components/Labels2D";
 import LabelEditor2D from "./components/LabelEditor2D";
@@ -402,7 +403,8 @@ function StructureCanvasContent({
     const st = store.getState();
     const p = clientToWorld(e.clientX, e.clientY);
     if (!p) return;
-    const id = st.findAtomNear(p.x, p.y, NOMINAL_BOND_LENGTH * 0.3, null);
+    const tol = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
+    const id = st.findAtomNear(p.x, p.y, tol, null);
     if (id != null) st.setHoveredFromId(id);
     else st.clearAtomHover();
   };

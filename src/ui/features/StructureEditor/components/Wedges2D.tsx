@@ -16,7 +16,7 @@ export default function Wedges2D({
   options?: Partial<LayoutOptions>;
 }) {
   const { camera } = useThree();
-  const { model } = useEditor();
+  const { model, moveDrag } = useEditor();
   const [zoom, setZoom] = useState((camera as THREE.OrthographicCamera).zoom);
   useFrame(() => {
     const z = (camera as THREE.OrthographicCamera).zoom;
@@ -31,7 +31,12 @@ export default function Wedges2D({
     const idToIndex = new Map<number, number>();
     atoms.forEach((a, i) => idToIndex.set(a.id, i));
     const out: LBond[] = [];
-    for (const b of model.bonds) {
+    const movingId = moveDrag.active ? moveDrag.atomId : null;
+    const srcBonds =
+      movingId != null
+        ? model.bonds.filter((b) => b.a !== movingId && b.b !== movingId)
+        : model.bonds;
+    for (const b of srcBonds) {
       const i1 = idToIndex.get(b.a as number);
       const i2 = idToIndex.get(b.b as number);
       if (i1 == null || i2 == null) continue;
@@ -49,7 +54,7 @@ export default function Wedges2D({
       } as any);
     }
     return out;
-  }, [model.bonds, atoms]);
+  }, [model.bonds, atoms, moveDrag.active, moveDrag.atomId]);
 
   const opts: LayoutOptions = useMemo(
     () => acsWorldOptions(atoms, bonds, { ...options, units: "world" }),

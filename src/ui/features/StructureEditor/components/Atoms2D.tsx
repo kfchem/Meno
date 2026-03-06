@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { computeMoveSnap } from "../utils/moveSnap";
+import { ATOM_PICK_RADIUS_RATIO } from "../constants";
 
 export function Atoms2D() {
   const {
@@ -20,6 +22,7 @@ export function Atoms2D() {
     beginPanHold,
     endPanHold,
     setExtendMode,
+    setMoveMode,
     beginMoveDrag,
     updateMovePointer,
     endMoveDrag,
@@ -78,8 +81,8 @@ export function Atoms2D() {
       pendingEdit.current.atomId = null;
     }
   };
-  // World-fixed hit area (independent of zoom & element type)
-  const HIT_RADIUS_RATIO = 0.4; // radius ≈ 0.4 * L to make picking easier
+  // World-fixed hit area: keep in sync with hover ring radius
+  const HIT_RADIUS_RATIO = ATOM_PICK_RADIUS_RATIO;
   const countCap = Math.max(model.atoms.length, 1);
   const remountKey = model.atoms.length;
 
@@ -245,6 +248,8 @@ export function Atoms2D() {
               (e as any).nativeEvent?.pointerId ?? (e as any).pointerId ?? null;
             beginPanHold(pid);
             const MOV_PX = 5; // start moving threshold (px)
+            // Do not mutate atom coordinates during drag; preview only
+            const LIVE_MOVE_PREVIEW = false;
             // capture initial world offset for stable drag (for free move)
             const thisAtom = model.atoms[idx];
             const startWorld = toWorld(cx, cy);
@@ -304,6 +309,9 @@ export function Atoms2D() {
               }
               idleTimer.current = window.setTimeout(() => {
                 moveFree = true;
+                try {
+                  setMoveMode("free");
+                } catch {}
                 // stop spring animation if running
                 if (anim.running && anim.raf) {
                   try {
@@ -343,21 +351,26 @@ export function Atoms2D() {
                     (Math.hypot(pNow.x - ctr.x, pNow.y - ctr.y) - startLen) * s;
                   const nx = ctr.x + lenBlend * Math.cos(angBlend);
                   const ny = ctr.y + lenBlend * Math.sin(angBlend);
-                  moveAtom(thisAtom.id, nx, ny);
+                  if (LIVE_MOVE_PREVIEW) {
+                    moveAtom(thisAtom.id, nx, ny);
+                  }
                   if (t < 1 && cand.current.active) {
-                    window.requestAnimationFrame(stepBlend);
+                    if (LIVE_MOVE_PREVIEW)
+                      window.requestAnimationFrame(stepBlend);
                   } else {
                     // After transition, follow cursor directly (offset zero)
                     offset.dx = 0;
                     offset.dy = 0;
                     const pFinal = toWorld(lx, ly);
-                    moveAtom(thisAtom.id, pFinal.x, pFinal.y);
+                    if (LIVE_MOVE_PREVIEW)
+                      moveAtom(thisAtom.id, pFinal.x, pFinal.y);
                   }
                 };
-                window.requestAnimationFrame(stepBlend);
+                if (LIVE_MOVE_PREVIEW) window.requestAnimationFrame(stepBlend);
               }, 1000) as unknown as number;
             };
             const startSpring = () => {
+              if (!LIVE_MOVE_PREVIEW) return;
               if (anim.running) return;
               anim.running = true;
               const loop = (ts: number) => {
@@ -399,7 +412,7 @@ export function Atoms2D() {
                   const rnow = anim.radius && anim.radius > 0 ? anim.radius : L;
                   const nx = anim.center.x + rnow * Math.cos(anim.curAng);
                   const ny = anim.center.y + rnow * Math.sin(anim.curAng);
-                  moveAtom(thisAtom.id, nx, ny);
+                  if (LIVE_MOVE_PREVIEW) moveAtom(thisAtom.id, nx, ny);
                 }
                 anim.raf = window.requestAnimationFrame(loop);
               };
@@ -476,11 +489,7 @@ export function Atoms2D() {
                     anim.running = false;
                     anim.raf = 0;
                   }
-                  moveAtom(
-                    cand.current.atomId,
-                    p.x + offset.dx,
-                    p.y + offset.dy
-                  );
+                  // Do not mutate coordinates during drag
                 } else if (deg === 1 && basePos) {
                   // snapping with spring update: set target angle and ensure RAF
                   const ang = Math.atan2(p.y - basePos.y, p.x - basePos.x);
@@ -787,11 +796,7 @@ export function Atoms2D() {
                     if (!anim.running) startSpring();
                   }
                 } else {
-                  moveAtom(
-                    cand.current.atomId,
-                    p.x + offset.dx,
-                    p.y + offset.dy
-                  );
+                  // Free preview; no live mutation
                 }
                 moved = true;
               }
@@ -826,19 +831,89 @@ export function Atoms2D() {
                   suppressDoubleClick?.(480);
                 } catch {}
               }
-              // clear moving flag
-              // If a nearby atom exists on drop, replace the moved atom with that atom and connect
+              // Commit on drop: first try merge/replace at raw pointer position, then fallback to snap/free move
               try {
                 const pEnd = toWorld(ev.clientX, ev.clientY);
-                const hitId = findAtomNear(
-                  pEnd.x,
-                  pEnd.y,
-                  NOMINAL_BOND_LENGTH * 0.4,
-                  thisAtom.id
-                );
-                if (hitId != null && moved) {
-                  // Replace the moving atom from the perspective of the base (deg==1) or hub
-                  replaceDraggedAtomWith(thisAtom.id, hitId);
+                let didReplace = false;
+                // 1) If dropping directly onto another atom, prefer replacement regardless of snap
+                if (moved) {
+                  const nearPtrId = findAtomNear(
+                    pEnd.x,
+                    pEnd.y,
+                    NOMINAL_BOND_LENGTH * 0.4,
+                    thisAtom.id
+                  );
+                  if (nearPtrId != null) {
+                    replaceDraggedAtomWith(thisAtom.id, nearPtrId);
+                    didReplace = true;
+                  }
+                }
+                if (didReplace) {
+                  // merged; nothing else to do
+                } else {
+                  // recompute neighbors & centers
+                  const nbrs: number[] = [];
+                  for (const b of model.bonds) {
+                    if (b.a === thisAtom.id) nbrs.push(b.b);
+                    else if (b.b === thisAtom.id) nbrs.push(b.a);
+                  }
+                  const degNow = nbrs.length;
+                  const L = NOMINAL_BOND_LENGTH;
+                  const step = Math.PI / 6;
+                  const baseIdNow = degNow === 1 ? nbrs[0] : null;
+                  const basePosNow =
+                    degNow === 1
+                      ? model.atoms.find((aa) => aa.id === baseIdNow) || null
+                      : null;
+                  // hubNow not needed; computeMoveSnap encapsulates snapping logic for deg>=2
+                  let finalX = thisAtom.x;
+                  let finalY = thisAtom.y;
+                  if (!moved) {
+                    // no drag
+                  } else if (moveFree) {
+                    // Free mode: commit exactly at the pointer to match preview
+                    finalX = pEnd.x;
+                    finalY = pEnd.y;
+                  } else if (degNow === 1 && basePosNow) {
+                    const ang = Math.atan2(
+                      pEnd.y - basePosNow.y,
+                      pEnd.x - basePosNow.x
+                    );
+                    const snap = Math.round(ang / step) * step;
+                    finalX = basePosNow.x + L * Math.cos(snap);
+                    finalY = basePosNow.y + L * Math.sin(snap);
+                  } else if (degNow >= 2) {
+                    // Unified snapping using shared utility
+                    const snap = computeMoveSnap(model as any, thisAtom.id, {
+                      x: pEnd.x,
+                      y: pEnd.y,
+                    });
+                    if (
+                      snap &&
+                      Number.isFinite(snap.px) &&
+                      Number.isFinite(snap.py)
+                    ) {
+                      finalX = snap.px;
+                      finalY = snap.py;
+                    } else {
+                      finalX = pEnd.x + offset.dx;
+                      finalY = pEnd.y + offset.dy;
+                    }
+                  } else {
+                    finalX = pEnd.x + offset.dx;
+                    finalY = pEnd.y + offset.dy;
+                  }
+                  const hitId = findAtomNear(
+                    finalX,
+                    finalY,
+                    NOMINAL_BOND_LENGTH * 0.4,
+                    thisAtom.id
+                  );
+                  if (hitId != null && moved) {
+                    replaceDraggedAtomWith(thisAtom.id, hitId);
+                  } else if (moved) {
+                    moveAtom(thisAtom.id, finalX, finalY);
+                  }
                 }
               } catch {}
               endMoveDrag();

@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { TabKind } from "../../../lib/core";
 // no direct parsing here; route to StructureEditor
+import { detectFormat, readMoleculesFromText } from "../../../utils/importers";
 
 type Props = {
   onResolve: (next: { kind: TabKind } & Record<string, unknown>) => void;
@@ -49,9 +50,15 @@ export default function OmniLoader({ onResolve }: Props) {
     const textRaw = await file.text();
     const text = normalize(textRaw);
 
-    // Route chemical files to StructureEditor (replace open)
+    // Prefer MoleculeViewer for XYZ; others continue to StructureEditor as before
+    const fmt = detectFormat(file.name, textRaw);
+    if (fmt === "xyz" || isXyz(text) || ext === "xyz") {
+      const molecules = readMoleculesFromText(textRaw, "xyz");
+      onResolve({ kind: "3d", molecules, filename: file.name });
+      return;
+    }
+    // Route other chemical files to StructureEditor
     if (
-      isXyz(text) ||
       ext === "sdf" ||
       EXT_3D.has(ext) ||
       isRxn(text) ||

@@ -50,6 +50,7 @@ export type EditorState = {
     active: boolean;
     atomId: number | null;
     pointer: { x: number; y: number } | null;
+    mode?: "snap" | "free";
   };
   extend: {
     active: boolean;
@@ -93,6 +94,7 @@ export type EditorState = {
   beginPanHold: (pointerId: number | null) => void;
   endPanHold: (pointerId?: number | null) => void;
   setExtendMode: (mode: "snap" | "free") => void;
+  setMoveMode: (mode: "snap" | "free") => void;
   beginMoveDrag: (
     atomId: number,
     pointer?: { x: number; y: number } | null
@@ -141,7 +143,7 @@ function createEditorStore(): EditorStore {
     aromaticEnabled: false,
     aromaticRings: {},
     labelEdit: { active: false, atomId: null, value: "", autoCap: true },
-    moveDrag: { active: false, atomId: null, pointer: null },
+    moveDrag: { active: false, atomId: null, pointer: null, mode: "snap" },
     extend: { active: false, atomId: null, pointer: null, mode: "snap" },
     panHold: { active: false, pointerId: null },
     suppressDblClickUntil: 0,
@@ -503,7 +505,7 @@ function createEditorStore(): EditorStore {
         }
         return {
           ...prev,
-          moveDrag: { active: true, atomId, pointer },
+          moveDrag: { active: true, atomId, pointer, mode: "snap" },
           hovered,
         };
       }),
@@ -514,10 +516,17 @@ function createEditorStore(): EditorStore {
           ? { ...prev.moveDrag, pointer: { x, y } }
           : prev.moveDrag,
       })),
+    setMoveMode: (mode) =>
+      set((prev: EditorState) => ({
+        ...prev,
+        moveDrag: prev.moveDrag.active
+          ? { ...prev.moveDrag, mode }
+          : prev.moveDrag,
+      })),
     endMoveDrag: () =>
       set((prev: EditorState) => ({
         ...prev,
-        moveDrag: { active: false, atomId: null, pointer: null },
+        moveDrag: { active: false, atomId: null, pointer: null, mode: "snap" },
       })),
     // Replace entire model
     replaceModel: (next) =>

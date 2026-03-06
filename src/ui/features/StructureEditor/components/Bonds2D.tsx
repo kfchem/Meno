@@ -16,7 +16,7 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
     const z = (camera as THREE.OrthographicCamera).zoom || 1;
     if (z !== zoomVal) setZoomVal(z);
   });
-  const { model, aromaticEnabled, aromaticRings } = useEditor();
+  const { model, aromaticEnabled, aromaticRings, moveDrag } = useEditor();
   const inst = useRef<THREE.InstancedMesh>(null!);
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
   const tmpQ = useMemo(() => new THREE.Quaternion(), []);
@@ -37,7 +37,13 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
     const idToIndex = new Map<number, number>();
     for (let i = 0; i < model.atoms.length; i++)
       idToIndex.set(model.atoms[i].id, i);
-    const bondsL = model.bonds
+    // If moving, hide only bonds attached to the moving atom from the base rendering.
+    const movingId = moveDrag.active ? moveDrag.atomId : null;
+    const srcBonds =
+      movingId != null
+        ? model.bonds.filter((b) => b.a !== movingId && b.b !== movingId)
+        : model.bonds;
+    const bondsL = srcBonds
       .map((b) => {
         const i1 = idToIndex.get(b.a);
         const i2 = idToIndex.get(b.b);
@@ -98,6 +104,8 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
     zoomVal,
     aromaticEnabled,
     aromaticRings,
+    moveDrag.active,
+    moveDrag.atomId,
   ]);
 
   return (

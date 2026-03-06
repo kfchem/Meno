@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { COLORS, ALPHA } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { ATOM_HOVER_RING_RADIUS_RATIO } from "../constants";
 
 export default function AtomsHoverRings2D() {
   // World-scaling mode: no camera dependency needed
@@ -13,7 +14,7 @@ export default function AtomsHoverRings2D() {
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
   const countCap = Math.max(model.atoms.length, 1);
   // Visual ratios w.r.t. baseline bond length L=NOMINAL_BOND_LENGTH (world units)
-  const RING_RADIUS_RATIO = 0.26; // outer radius ≈ 0.26 * L (slightly smaller than before)
+  const RING_RADIUS_RATIO = ATOM_HOVER_RING_RADIUS_RATIO; // keep in sync with pick radius
   const targetOpacity = ALPHA.highlight;
   // Animated state
   const scaleRef = useRef(0); // current scale (world)
