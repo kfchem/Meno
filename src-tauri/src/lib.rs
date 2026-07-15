@@ -54,12 +54,13 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+#[cfg(windows)]
 fn no_window(cmd: &mut Command) {
-    #[cfg(windows)]
-    {
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    cmd.creation_flags(CREATE_NO_WINDOW);
 }
+
+#[cfg(not(windows))]
+fn no_window(_cmd: &mut Command) {}
 
 #[tauri::command]
 async fn py_env_python_path_uv(app: AppHandle, payload: PyEnvInfo) -> Result<String, String> {
@@ -120,10 +121,8 @@ fn pipe_logs<R: Read + Send + 'static>(app: &AppHandle, stream: R, ch: &'static 
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         let r = BufReader::new(stream);
-        for l in r.lines() {
-            if let Ok(s) = l {
-                let _ = app2.emit(ch, s);
-            }
+        for s in r.lines().map_while(Result::ok) {
+            let _ = app2.emit(ch, s);
         }
     });
 }
