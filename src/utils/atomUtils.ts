@@ -1417,12 +1417,3 @@ export function getColor(symbol: string): string {
   const element = elements.find((e) => e.symbol === symbol);
   return element?.color ?? "#cccccc";
 }
-
-export function getRadius(
-  symbol: string,
-  type: "vdw" | "empirical" | "calculated" | "single" | "double" | "triple"
-): number | null {
-  const element = elements.find((e) => e.symbol === symbol);
-  if (!element) return null;
-  return element[type] ?? null;
-}

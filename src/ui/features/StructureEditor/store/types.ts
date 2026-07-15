@@ -52,7 +52,6 @@ export type EditorState = {
   suppressDblClickUntil: number;
   nextId: number;
   nextArrowId: number;
-  set: (fn: (s: EditorState) => void) => void;
   addAtom: (x: number, y: number, el?: string, r?: number) => number;
   addBond: (a: number, b: number, order?: Bond["order"]) => number;
   connectAtoms: (a: number, b: number, order?: Bond["order"]) => number | null;

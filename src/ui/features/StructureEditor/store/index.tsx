@@ -37,12 +37,6 @@ export function createEditorStore(): EditorStore {
     suppressDblClickUntil: 0,
     nextId: 1,
     nextArrowId: 1,
-    set: (fn) =>
-      set((s: EditorState) => {
-        const next = { ...s };
-        fn(next);
-        return next;
-      }),
 
     // Spread slices
     ...createModelSlice(set, get),
