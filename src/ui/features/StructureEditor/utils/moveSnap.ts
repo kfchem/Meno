@@ -144,7 +144,7 @@ export function computeMoveSnap(
         for (const C of centers2) {
           const aU = Math.atan2(U.y - C.y, U.x - C.x);
           const aV = Math.atan2(V.y - C.y, V.x - C.x);
-          let dUV = wrapPiArc(aV - aU);
+          const dUV = wrapPiArc(aV - aU);
           const steps2 = Math.max(
             4,
             Math.round(Math.abs(dUV) / (Math.PI / 12))

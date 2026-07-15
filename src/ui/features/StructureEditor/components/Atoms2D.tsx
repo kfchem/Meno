@@ -616,7 +616,7 @@ export function Atoms2D() {
                       const genMinorArc = (C: { x: number; y: number }) => {
                         const aA = Math.atan2(A.y - C.y, A.x - C.x);
                         const aB = Math.atan2(B.y - C.y, B.x - C.x);
-                        let d = wrapPi(aB - aA);
+                        const d = wrapPi(aB - aA);
                         // ensure d is the minor arc sweep (|d| <= π)
                         // We expect |d| ≈ 120° here
                         const steps = Math.max(
@@ -660,7 +660,7 @@ export function Atoms2D() {
                         for (const C of centers2) {
                           const aU = Math.atan2(U.y - C.y, U.x - C.x);
                           const aV = Math.atan2(V.y - C.y, V.x - C.x);
-                          let dUV = wrapPi(aV - aU);
+                          const dUV = wrapPi(aV - aU);
                           const steps2 = Math.max(
                             4,
                             Math.round(Math.abs(dUV) / (Math.PI / 12))
