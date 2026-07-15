@@ -57,7 +57,7 @@ export default function HoverOverlay2D() {
     const a1 = b ? model.atoms.find((a) => a.id === b.a) : undefined;
     const a2 = b ? model.atoms.find((a) => a.id === b.b) : undefined;
     const L = NOMINAL_BOND_LENGTH;
-    let targetWorld = THICKNESS_RATIO * L;
+    const targetWorld = THICKNESS_RATIO * L;
     const now =
       typeof performance !== "undefined" ? performance.now() : Date.now();
     const pulsing =

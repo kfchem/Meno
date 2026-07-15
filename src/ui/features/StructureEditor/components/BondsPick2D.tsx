@@ -16,7 +16,6 @@ export default function BondsPick2D() {
     beginPanHold,
     endPanHold,
     suppressDoubleClick,
-    setBondStereo,
     hovered,
     triggerHoverPulse,
   } = useEditor();
@@ -66,9 +65,6 @@ export default function BondsPick2D() {
       });
       return;
     }
-    const cur = b.stereo ?? "none";
-    const next = cur === "none" ? "up" : cur === "up" ? "down" : "none";
-    setBondStereo(b.id, next as any);
     const curS = (b.stereo ?? "none") as "none" | "up" | "down";
     const curO = ((b as any).stereoOrient ?? "principle") as
       | "principle"

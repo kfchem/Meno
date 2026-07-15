@@ -19,7 +19,7 @@ export default function PyConsole() {
   };
 
   useEffect(() => {
-    let unsubs: Array<() => void> = [];
+    const unsubs: Array<() => void> = [];
 
     (async () => {
       unsubs.push(
