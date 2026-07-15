@@ -5,6 +5,7 @@ export { default as FitToContent2D } from "./FitToContent2D";
 export { default as AromaticCircles2D } from "./AromaticCircles2D";
 export { default as Wedges2D } from "./Wedges2D";
 export { default as Labels2D } from "./Labels2D";
+export { default as LabelEditor2D } from "./LabelEditor2D";
 export { default as JoinCaps2D } from "./JoinCaps2D";
 export { default as HoverOverlay2D } from "./HoverOverlay2D";
 export { default as ExtendPreview2D } from "./ExtendPreview2D";
