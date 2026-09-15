@@ -2,94 +2,100 @@ import { ensurePyEnv } from "../../../lib/pyEnv";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveResource } from "@tauri-apps/api/path";
-import { listen } from "@tauri-apps/api/event";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 type Profile = "console" | "node";
 
 export default function PyConsole() {
   const [pid, setPid] = useState<string | null>(null);
+  // Mirrors `pid` for the event listeners, which are registered once. Set
+  // synchronously as soon as the sidecar id is known so no output is dropped
+  // while React re-renders.
+  const pidRef = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState("");
   const [profile, setProfile] = useState<Profile>("console");
   const outRef = useRef<HTMLDivElement>(null);
-  const append = (s: string) => {
+  const append = useCallback((s: string) => {
     if (!outRef.current) return;
     outRef.current.textContent += s + "\n";
     outRef.current.scrollTop = outRef.current.scrollHeight;
-  };
+  }, []);
+
+  const setCurrentPid = useCallback((id: string | null) => {
+    pidRef.current = id;
+    setPid(id);
+  }, []);
 
   useEffect(() => {
-    const unsubs: Array<() => void> = [];
+    // `listen` resolves asynchronously; if the effect is cleaned up first
+    // (e.g. React StrictMode's mount/unmount/mount), unlisten immediately
+    // instead of leaking a duplicate listener.
+    let disposed = false;
+    const unsubs: UnlistenFn[] = [];
+    const track = (p: Promise<UnlistenFn>) =>
+      p.then((u) => (disposed ? u() : unsubs.push(u))).catch(() => {});
 
-    (async () => {
-      unsubs.push(
-        await listen<string>("uv:log", (e) => {
-          append(e.payload);
-        })
-      );
-      unsubs.push(
-        await listen<string>("uv:err", (e) => {
-          append(`[uv:err] ${e.payload}`);
-        })
-      );
+    track(listen<string>("uv:log", (e) => append(e.payload)));
+    track(listen<string>("uv:err", (e) => append(`[uv:err] ${e.payload}`)));
 
-      unsubs.push(
-        await listen<string>("ext:stdout", (e) => {
-          try {
-            const { id, line } = JSON.parse(e.payload);
-            if (id !== pid) return;
+    track(
+      listen<string>("ext:stdout", (e) => {
+        try {
+          const { id, line } = JSON.parse(e.payload);
+          if (id !== pidRef.current) return;
 
-            if (line && line[0] === "{") {
-              try {
-                const msg = JSON.parse(line);
-                if (msg?.event === "exec_done") {
-                  if (msg.stdout) append(msg.stdout.replace(/\n$/, ""));
-                  if (msg.stderr)
-                    append(`[stderr] ${msg.stderr.replace(/\n$/, "")}`);
-                  return;
-                }
-                if (msg?.event === "pong") {
-                  append("pong");
-                  return;
-                }
-              } catch {}
-            }
-            append(line);
-          } catch {
-            append(String(e.payload));
+          if (line && line[0] === "{") {
+            try {
+              const msg = JSON.parse(line);
+              if (msg?.event === "exec_done") {
+                if (msg.stdout) append(msg.stdout.replace(/\n$/, ""));
+                if (msg.stderr)
+                  append(`[stderr] ${msg.stderr.replace(/\n$/, "")}`);
+                return;
+              }
+              if (msg?.event === "pong") {
+                append("pong");
+                return;
+              }
+            } catch {}
           }
-        })
-      );
+          append(line);
+        } catch {
+          append(String(e.payload));
+        }
+      })
+    );
 
-      unsubs.push(
-        await listen<string>("ext:stderr", (e) => {
-          try {
-            const { id, line } = JSON.parse(e.payload);
-            if (id === pid) append(`[stderr] ${line}`);
-          } catch {
-            append(`[stderr] ${e.payload}`);
-          }
-        })
-      );
+    track(
+      listen<string>("ext:stderr", (e) => {
+        try {
+          const { id, line } = JSON.parse(e.payload);
+          if (id === pidRef.current) append(`[stderr] ${line}`);
+        } catch {
+          append(`[stderr] ${e.payload}`);
+        }
+      })
+    );
 
-      unsubs.push(
-        await listen<string>("ext:exit", (e) => {
-          try {
-            const { id } = JSON.parse(e.payload);
-            if (id === pid) setPid(null);
-          } catch {}
-        })
-      );
-    })();
+    track(
+      listen<string>("ext:exit", (e) => {
+        try {
+          const { id } = JSON.parse(e.payload);
+          if (id === pidRef.current) setCurrentPid(null);
+        } catch {}
+      })
+    );
 
     return () => {
+      disposed = true;
       unsubs.forEach((u) => {
         try {
           u();
         } catch {}
       });
     };
-  }, [pid]);
+  }, [append, setCurrentPid]);
 
   const start = useCallback(async () => {
     if (pid || busy) return;
@@ -103,34 +109,40 @@ export default function PyConsole() {
       const id = await invoke<string>("ext_spawn_sidecar", {
         payload: { entry: venvPy, args: ["-u", workerAbs] },
       });
-      setPid(id);
+      setCurrentPid(id);
       append(`[env:${profile}] ready`);
 
       await invoke("ext_stdin", {
         id,
         data: JSON.stringify({ req: "exec", code: 'print("AUTO OK")' }) + "\n",
       });
+    } catch (e) {
+      append(`[error] failed to start Python (${profile}): ${String(e)}`);
     } finally {
       setBusy(false);
     }
-  }, [pid, busy, profile]);
+  }, [pid, busy, profile, append, setCurrentPid]);
 
   const run = useCallback(async () => {
     if (!pid) return;
-    await invoke("ext_stdin", {
-      id: pid,
-      data: JSON.stringify({ req: "exec", code }) + "\n",
-    });
-    setCode("");
-  }, [pid, code]);
+    try {
+      await invoke("ext_stdin", {
+        id: pid,
+        data: JSON.stringify({ req: "exec", code }) + "\n",
+      });
+      setCode("");
+    } catch (e) {
+      append(`[error] ${String(e)}`);
+    }
+  }, [pid, code, append]);
 
   const stop = useCallback(async () => {
     if (pid) {
       await invoke("ext_kill", { id: pid });
       append("invoked ext_kill");
-      setPid(null);
+      setCurrentPid(null);
     }
-  }, [pid]);
+  }, [pid, append, setCurrentPid]);
 
   const onSwitch = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
