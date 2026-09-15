@@ -31,13 +31,8 @@ const EXT_TEXT = new Set([
   "html",
 ]);
 
-const isRxn = (s: string) => /^\s*\$RXN\b/m.test(s);
-const isMol = (s: string) =>
-  /\b(V2000|V3000)\b/.test(s) || /^(M\s{2,}END)\s*$/m.test(s);
 // const isKet = (s: string) =>
 //   s.trim().startsWith("{") && /"root"|\"nodes\"/.test(s);
-const isXyz = (s: string) => /^\s*\d+\s*$/m.test(s.split("\n")[0] || "");
-const normalize = (s: string) => s.replace(/\r\n?/g, "\n").trim();
 
 export default function OmniLoader({ onResolve }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -48,23 +43,16 @@ export default function OmniLoader({ onResolve }: Props) {
     const file = files[0];
     const ext = (file.name.split(".").pop() || "").toLowerCase();
     const textRaw = await file.text();
-    const text = normalize(textRaw);
 
     // Prefer MoleculeViewer for XYZ; others continue to StructureEditor as before
     const fmt = detectFormat(file.name, textRaw);
-    if (fmt === "xyz" || isXyz(text) || ext === "xyz") {
+    if (fmt === "xyz") {
       const molecules = readMoleculesFromText(textRaw, "xyz");
       onResolve({ kind: "3d", molecules, filename: file.name });
       return;
     }
     // Route other chemical files to StructureEditor
-    if (
-      ext === "sdf" ||
-      EXT_3D.has(ext) ||
-      isRxn(text) ||
-      isMol(text) ||
-      EXT_2D.has(ext)
-    ) {
+    if (fmt !== null || EXT_3D.has(ext) || EXT_2D.has(ext)) {
       onResolve({ kind: "structure", filename: file.name, payload: textRaw });
       return;
     }
