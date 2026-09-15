@@ -60,9 +60,10 @@ export const viewRegistry: Record<string, ViewEntry> = {
   },
   "2d": {
     kind: "2d",
-    Component: ({ tabId, content }) => (
+    Component: ({ tabId, content, active }) => (
       <StructureCanvas
         tabId={tabId}
+        active={active}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
       />
@@ -101,9 +102,10 @@ export const viewRegistry: Record<string, ViewEntry> = {
   },
   structure: {
     kind: "structure",
-    Component: ({ tabId, content }) => (
+    Component: ({ tabId, content, active }) => (
       <StructureCanvas
         tabId={tabId}
+        active={active}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
       />
