@@ -126,7 +126,7 @@ Events: `uv:log`, `uv:err` (plain strings); `ext:stdout`, `ext:stderr`,
 | SDF | 2D editor | `parseSDF` | All records merged into one canvas. |
 | RXN (V2000) | 2D editor | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
 | XYZ (multi-frame) | 3D viewer | `parseXYZ` | Bonds inferred from covalent radii. |
-| PDB, KET | — | none | Accepted by the file picker but not parsed yet. |
+| PDB, KET | — | none | Accepted by the file picker; the 2D editor reports "not supported yet". |
 | Text files | Text editor | — | By extension, or anything that is not recognised. |
 
 ## Verification commands
