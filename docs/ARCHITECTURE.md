@@ -116,7 +116,28 @@ the lock or Python version changes.
 | `greet` | — | Template leftover, unused. |
 
 Events: `uv:log`, `uv:err` (plain strings); `ext:stdout`, `ext:stderr`,
-`ext:exit` (JSON strings `{ id, line? }`).
+`ext:exit` (JSON strings `{ id, line? }`). `ext:exit` is emitted exactly once
+per sidecar, whether it exits by itself or through `ext_kill`.
+
+### What the backend accepts
+
+The webview is not trusted with process execution, so `lib.rs` validates every
+path it is given:
+
+- `py_env_*`: `uv` must be the bundled `resources/py/uv[.exe]`; `lockPath` must
+  be a `.lock` file under `resources/py/`; `venvHome` must be under `uv/` in the
+  app data dir; relative paths may not contain `..`, `.` or absolute/drive
+  prefixes; `pythonVersion` must look like `3.12` or `3.12.4`.
+- `ext_spawn_sidecar`: `entry` must be an absolute `python`/`python3`/`python.exe`
+  inside `<app data>/uv/`; `args` may start with `-u` / `-B`, followed by an
+  absolute `.py` script inside `resources/workers/`; later arguments go to the
+  script unchanged.
+- Sidecars are reaped when their stdout closes or on `ext_kill`, and all of
+  them are killed when the app exits.
+
+Adding a new worker or interpreter flag means extending these rules
+(`PYTHON_FLAGS`, the workers directory) together with the unit tests in
+`lib.rs`.
 
 ## File format support
 
