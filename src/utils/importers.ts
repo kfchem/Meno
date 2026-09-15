@@ -25,17 +25,33 @@ const normalizeNewlines = (s: string) => s.replace(/\r\n?/g, "\n");
 
 export type DetectedFormat = "mol" | "sdf" | "rxn" | "xyz" | null;
 
+// XYZ: line 1 is the atom count, line 2 a comment, line 3 the first atom
+// ("<symbol or atomic number> <x> <y> <z>").
+const XYZ_NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?`;
+const XYZ_ATOM_LINE = new RegExp(
+  String.raw`^\s*(?:[A-Za-z]{1,3}|\d{1,3})\s+${XYZ_NUM}\s+${XYZ_NUM}\s+${XYZ_NUM}\b`
+);
+
+function looksLikeXyz(lines: string[]): boolean {
+  const first = lines[0] ?? "";
+  if (!/^\s*\d+\s*$/.test(first)) return false;
+  if (Number.parseInt(first, 10) === 0) return true;
+  return XYZ_ATOM_LINE.test(lines[2] ?? "");
+}
+
 export function detectFormat(fileName: string, text: string): DetectedFormat {
   const ext = (fileName.split(".").pop() || "").toLowerCase();
   const t = normalizeNewlines(text).trim();
   if (/^\s*\$RXN\b/m.test(t)) return "rxn";
   if (ext === "rxn") return "rxn";
-  if (/^\s*\d+\s*$/m.test(t.split("\n")[0] || "")) return "xyz";
+  // CTfile markers must be checked before the XYZ heuristic: a MOL/SDF title
+  // line is free text and is often a bare number (e.g. PubChem CIDs).
   if (/\b(V2000|V3000)\b/.test(t) || /(M\s{2,}END)\s*$/m.test(t))
-    return ext === "sdf" ? "sdf" : ext === "mol" ? "mol" : "mol";
+    return ext === "sdf" ? "sdf" : "mol";
   if (ext === "sdf") return "sdf";
   if (ext === "mol") return "mol";
   if (ext === "xyz") return "xyz";
+  if (looksLikeXyz(t.split("\n"))) return "xyz";
   return null;
 }
 
@@ -98,9 +114,14 @@ export function parseRXNGroups(text: string): RXNGroups {
   let agentCount = 0;
   if (headerMatch) {
     const header = headerMatch[0];
-    // Look for a counts-like line containing at least two integers
     const lines = header.split("\n").map((l) => l.trim());
-    for (const l of lines) {
+    // CTfile RXN header: $RXN, name, program line, comment, then the counts
+    // line ("rrrppp[aaa]"). Read it at its fixed position first, so a
+    // reaction name such as "step 1 of 2" is never mistaken for the counts.
+    const fixed = (lines[4] ?? "").match(/^(\d+)\s+(\d+)(?:\s+(\d+))?$/);
+    // Otherwise look for a counts-like line containing at least two integers
+    const candidates = fixed ? [lines[4]] : lines;
+    for (const l of candidates) {
       const nums = l.match(/(-?\d+)/g);
       if (nums && nums.length >= 2) {
         reactCount = parseInt(nums[0], 10) || 0;
