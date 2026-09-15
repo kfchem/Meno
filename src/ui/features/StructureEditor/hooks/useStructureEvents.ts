@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useEditorStore } from "../store";
 import { ATOM_HOVER_RING_RADIUS_RATIO } from "../constants";
@@ -17,6 +17,12 @@ export function useStructureEvents(
   const domRef = useRef<HTMLCanvasElement | null>(null);
   const clickTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Last import failure, shown in the canvas until dismissed or replaced.
+  const [importError, setImportError] = useState<string | null>(null);
+  const reportImportError = (what: string, err: unknown) => {
+    console.warn(`${what} import failed`, err);
+    setImportError(err instanceof Error ? err.message : String(err));
+  };
 
   // Helper: Client to World conversion
   const clientToWorld = (clientX: number, clientY: number) => {
@@ -135,7 +141,7 @@ export function useStructureEvents(
           } catch {}
         }
       } catch (e) {
-        console.warn("initial payload import failed", e);
+        reportImportError("initial payload", e);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -312,6 +318,7 @@ export function useStructureEvents(
       };
 
       replayAppend(shifted);
+      setImportError(null);
 
       if (result.arrow) {
         const cx = (result.arrow.x1 + result.arrow.x2) / 2 + dx;
@@ -323,7 +330,7 @@ export function useStructureEvents(
         store.getState().addArrow(cx, cy, 0, len);
       }
     } catch (err) {
-      console.warn("append import failed", err);
+      reportImportError("append", err);
     }
   };
 
@@ -342,6 +349,7 @@ export function useStructureEvents(
         bonds: result.model.bonds,
       };
       replayReplace(shifted);
+      setImportError(null);
       if (result.arrow) {
         const cx = (result.arrow.x1 + result.arrow.x2) / 2;
         const cy = (result.arrow.y1 + result.arrow.y2) / 2;
@@ -352,9 +360,12 @@ export function useStructureEvents(
         store.getState().addArrow(cx, cy, 0, len);
       }
     } catch (err) {
-      console.warn("replace import failed", err);
+      reportImportError("replace", err);
     }
   };
+
+  const openFilePicker = () => fileInputRef.current?.click();
+  const dismissImportError = () => setImportError(null);
 
   const handleMouseDownCapture = (e: React.MouseEvent<HTMLDivElement>) => {
     const st = store.getState();
@@ -388,6 +399,9 @@ export function useStructureEvents(
     handleWrapperClick,
     onDropAppend,
     onPickFiles,
+    openFilePicker,
+    importError,
+    dismissImportError,
     handleMouseDownCapture,
   };
 }
