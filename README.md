@@ -30,13 +30,18 @@ Prerequisites:
 Setup and common commands:
 
 ```bash
-npm install        # install frontend dependencies
-npm run dev         # run the Vite dev server only (frontend, in a browser)
-npm run tauri dev   # run the full desktop app (Rust + WebView)
+npm install          # install frontend dependencies
+npm run dev          # run the Vite dev server only (frontend, in a browser)
+npm run tauri dev    # run the full desktop app (Rust + WebView)
+npm run typecheck    # TypeScript typecheck only
+npm run lint         # ESLint
+npm test             # Vitest unit tests (parsers, tab reducer, editor store)
 npm run build        # tsc typecheck + production frontend build
-npm run lint         # ESLint over src/
 npm run tauri build  # produce a desktop app bundle
 ```
+
+Unit tests live next to the code as `*.test.ts(x)` and run in Node; they cover
+pure logic only, so GUI changes still need a manual check in `npm run tauri dev`.
 
 Rust-side checks (run from `src-tauri/`):
 
@@ -46,10 +51,21 @@ cargo clippy  # lint the Tauri backend
 cargo test    # run Rust tests
 ```
 
+On Windows, compiling the Rust side also needs the MSVC build tools
+("Desktop development with C++" in Visual Studio Build Tools).
+
+CI (`.github/workflows/ci.yml`) runs all of the above on every pull request:
+typecheck, lint, tests and build on Ubuntu, and `cargo check` / `clippy` /
+`test` on Windows.
+
+Further reading: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (how the app
+is structured, Tauri commands, supported file formats) and
+[`docs/AUDIT-2026-09.md`](./docs/AUDIT-2026-09.md) (known issues and backlog).
+
 Known limitations (pre-alpha):
 
 - The embedded Python Console/Workflow sidecar (`src/lib/pyEnv.ts`, the `py_env_setup_uv` / `ext_spawn_sidecar` Tauri commands) depends on a bundled `uv` binary at `src-tauri/resources/py/`. Only the Windows binary (`uv.exe`) is currently checked in, so this feature does not work on macOS/Linux builds yet.
-- There is no automated frontend test suite yet; `npm run build` and `npm run lint` are the current safety net alongside `cargo check` / `cargo clippy` / `cargo test` on the Rust side.
+- Unit tests cover parsing and state logic only; there are no rendering or end-to-end tests yet.
 
 ## License
 
