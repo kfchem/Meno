@@ -48,9 +48,10 @@ export default function App() {
   const replaceData = (id: string, next: any) => {
     const nextKind = next?.kind ?? "loader";
     const nextData = { ...next };
+    // Keep `filename` in the data: views use it (e.g. the 2D editor's
+    // `initialFilename`) to pick a parser by extension.
     const filename = nextData.filename as string | undefined;
     delete (nextData as any).kind;
-    delete (nextData as any).filename;
     if (filename) dispatch({ type: "RENAME_TAB", id, label: filename });
     dispatch({ type: "SET_CONTENT", id, content: { kind: nextKind, data: nextData } });
   };
