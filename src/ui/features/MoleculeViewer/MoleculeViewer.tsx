@@ -7,7 +7,7 @@ import MotionBond from "./components/MotionBond";
 import MotionAtom from "./components/MotionAtom";
 import MotionMeasure from "./components/MotionMeasure";
 import { CalculatorIcon } from "@heroicons/react/24/solid";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { v4 as uuidv4 } from "uuid";
 import type { Molecule } from "../../../utils/structureParsers";
 import clsx from "clsx";
