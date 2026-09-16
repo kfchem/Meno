@@ -1,4 +1,10 @@
-import { useState, useCallback, useMemo } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  createContext,
+  useContext,
+} from "react";
 import {
   ReactFlow,
   applyNodeChanges,
@@ -26,9 +32,16 @@ import MoleculeViewer from "../MoleculeViewer/MoleculeViewer";
 import { Molecule, parseXYZ } from "../../../utils/structureParsers";
 import testXyz from "../../../assets/KEF20633_b_296.xyz?raw";
 
+/**
+ * False while the Workflow tab is hidden, so the canvases embedded in nodes
+ * can pause their render loops like standalone tabs do.
+ */
+const NodeActiveContext = createContext(true);
+
 type Molecule2DNode = Node<{ filename?: string; payload?: string }>;
 
 function Molecule2D({ id, data }: NodeProps<Molecule2DNode>) {
+  const active = useContext(NodeActiveContext);
   // Show helper hint only until first interaction or when initial data exists
   const [hideHint, setHideHint] = useState<boolean>(
     !!(data?.payload || data?.filename)
@@ -68,6 +81,7 @@ function Molecule2D({ id, data }: NodeProps<Molecule2DNode>) {
         >
           <StructureCanvas
             tabId={id}
+            active={active}
             initialFilename={data?.filename}
             initialPayload={data?.payload}
           />
@@ -88,6 +102,7 @@ function Molecule2D({ id, data }: NodeProps<Molecule2DNode>) {
 type Molecule3DNode = Node<{ molecules: Molecule[] | Molecule[][] }>;
 
 function Molecule3D({ id, data }: NodeProps<Molecule3DNode>) {
+  const active = useContext(NodeActiveContext);
   return (
     <>
       <NodeResizeControl
@@ -110,6 +125,7 @@ function Molecule3D({ id, data }: NodeProps<Molecule3DNode>) {
           initialMolecules={data.molecules}
           tabId={id}
           showAtomIndex={false}
+          paused={!active}
           className="cursor-default nowheel nopan nodrag"
         />
       </div>
@@ -740,9 +756,12 @@ const initialEdges: Edge[] = [
 export default function GraphEditor({
   initialFilename,
   initialPayload,
+  active = true,
 }: {
   initialFilename?: string;
   initialPayload?: string;
+  /** False while the owning tab is hidden: pauses the embedded canvases. */
+  active?: boolean;
 }) {
   const initialNodes: Node[] = [
     {
@@ -852,27 +871,29 @@ export default function GraphEditor({
   );
 
   return (
-    <div className="w-full h-full rf-no-cursor">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Controls className="border border-gh-line" />
-        <MiniMap className="border border-gh-line rounded-lg hidden" />
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={30}
-          size={2}
-          lineWidth={1}
-          bgColor="white"
-          color="rgb(209, 217, 224)"
-        />
-      </ReactFlow>
-    </div>
+    <NodeActiveContext.Provider value={active}>
+      <div className="w-full h-full rf-no-cursor">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Controls className="border border-gh-line" />
+          <MiniMap className="border border-gh-line rounded-lg hidden" />
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={30}
+            size={2}
+            lineWidth={1}
+            bgColor="white"
+            color="rgb(209, 217, 224)"
+          />
+        </ReactFlow>
+      </div>
+    </NodeActiveContext.Provider>
   );
 }

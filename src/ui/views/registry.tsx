@@ -92,8 +92,9 @@ export const viewRegistry: Record<string, ViewEntry> = {
   },
   node: {
     kind: "node",
-    Component: ({ content }) => (
+    Component: ({ content, active }) => (
       <GraphEditor
+        active={active}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
       />
