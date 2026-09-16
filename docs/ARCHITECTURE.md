@@ -58,7 +58,12 @@ src-tauri/
   render order so reordering tabs never remounts a WebGL canvas.
 - `Deck` renders **all** open tabs and hides the inactive ones; views receive an
   `active` flag and are expected to pause expensive work (e.g. set the R3F
-  `frameloop` to `"never"`) while inactive.
+  `frameloop` to `"never"`) while inactive. Workflow tabs pass the same flag to
+  the canvases embedded in their nodes through `NodeActiveContext`.
+- Because every live canvas holds a WebGL context and browsers keep only about
+  16, `lib/core/limits.ts` budgets them: a 2D/3D/structure tab costs one, a
+  workflow tab two, and opening past the limit is refused with a notice rather
+  than silently blanking the oldest view.
 - A new tab starts as `loader` (OmniHub). When a file is chosen, OmniHub calls
   `replaceContent({ kind, ...data, filename })` and the tab switches view.
 
