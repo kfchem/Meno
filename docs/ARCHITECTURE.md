@@ -81,7 +81,7 @@ src-tauri/
   polygons, text and circles; `lib/chem/acs.ts` provides ACS-style proportions
   scaled to `NOMINAL_BOND_LENGTH` world units.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
-- **Rendering**: the canvas runs `frameloop="demand"` at a fixed `CANVAS_DPR`
+- **Frame loop**: the canvas runs `frameloop="demand"` at a fixed `CANVAS_DPR`
   (2x). React commits (store changes) request a frame automatically; anything
   that animates or mutates the scene imperatively must call `invalidate()`
   while it is still moving — see `PanZoom2D` (inertia), the hover layers and
