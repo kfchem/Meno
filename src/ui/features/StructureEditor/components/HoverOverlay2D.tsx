@@ -1,12 +1,13 @@
 import * as THREE from "three";
 import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { COLORS, ALPHA } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
 export default function HoverOverlay2D() {
   const { model, hovered, hoverPulse } = useEditor();
+  const invalidate = useThree((s) => s.invalidate);
   const mesh = useRef<THREE.Mesh>(null!);
   const mat = useRef<THREE.MeshBasicMaterial>(null!);
   const q = useMemo(() => new THREE.Quaternion(), []);
@@ -165,6 +166,8 @@ export default function HoverOverlay2D() {
     mesh.current.scale.set(1, 1, 1);
     mesh.current.visible = true;
     if (mat.current) mat.current.opacity = oRef.current;
+    // Keep the highlight animating under on-demand rendering.
+    if (anim.current.mode !== "idle") invalidate();
   });
 
   return (
