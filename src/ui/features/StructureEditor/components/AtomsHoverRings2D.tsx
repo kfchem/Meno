@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { useEffect, useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { COLORS, ALPHA } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
@@ -9,6 +9,7 @@ import { ATOM_HOVER_RING_RADIUS_RATIO } from "../constants";
 export default function AtomsHoverRings2D() {
   // World-scaling mode: no camera dependency needed
   const { model, hovered } = useEditor();
+  const invalidate = useThree((s) => s.invalidate);
   const inst = useRef<THREE.InstancedMesh>(null!);
   const mat = useRef<THREE.MeshBasicMaterial>(null!);
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
@@ -133,6 +134,8 @@ export default function AtomsHoverRings2D() {
     }
     m.instanceMatrix.needsUpdate = true;
     if (mat.current) mat.current.opacity = opacityRef.current;
+    // Keep the ring fade animating under on-demand rendering.
+    if (anim.current.mode !== "idle") invalidate();
   });
 
   return (
