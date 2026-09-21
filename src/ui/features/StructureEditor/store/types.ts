@@ -41,6 +41,11 @@ export type EditorState = {
     atomId: number | null;
     pointer: { x: number; y: number } | null;
     mode?: "snap" | "free";
+    /**
+     * Where the dragged atom is actually previewed (after snapping), published
+     * by MovePreview2D so other layers - the label, for one - can follow it.
+     */
+    preview?: { x: number; y: number } | null;
   };
   extend: {
     active: boolean;
@@ -89,6 +94,7 @@ export type EditorState = {
     pointer?: { x: number; y: number } | null,
   ) => void;
   updateMovePointer: (x: number, y: number) => void;
+  setMoveDragPreview: (x: number, y: number) => void;
   endMoveDrag: () => void;
   replaceModel: (next: Model) => void;
   appendModel: (next: Model) => void;

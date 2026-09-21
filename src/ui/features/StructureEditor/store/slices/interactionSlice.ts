@@ -139,9 +139,25 @@ export function createInteractionSlice(set: SetState, get: GetState) {
             atomId,
             pointer: pointer ?? null,
             mode: "snap",
+            preview: pointer ?? null,
           },
           hovered,
         };
+      }),
+
+    /**
+     * Preview position of the dragged atom, written by MovePreview2D once per
+     * frame. Ignore sub-pixel jitter so the layers reading it do not re-render
+     * for movement nobody can see.
+     */
+    setMoveDragPreview: (x: number, y: number) =>
+      set((prev: EditorState) => {
+        if (!prev.moveDrag.active) return prev;
+        const cur = prev.moveDrag.preview;
+        if (cur && Math.abs(cur.x - x) < 1e-4 && Math.abs(cur.y - y) < 1e-4) {
+          return prev;
+        }
+        return { ...prev, moveDrag: { ...prev.moveDrag, preview: { x, y } } };
       }),
 
     updateMovePointer: (x: number, y: number) =>
@@ -163,7 +179,13 @@ export function createInteractionSlice(set: SetState, get: GetState) {
     endMoveDrag: () =>
       set((prev: EditorState) => ({
         ...prev,
-        moveDrag: { active: false, atomId: null, pointer: null, mode: "snap" },
+        moveDrag: {
+          active: false,
+          atomId: null,
+          pointer: null,
+          mode: "snap",
+          preview: null,
+        },
       })),
 
     beginPanHold: (pointerId: number | null) =>
