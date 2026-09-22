@@ -10,6 +10,7 @@
     "typecheck": "tsc",
     "lint": "eslint .",
     "test": "vitest run",
+    "check:tauri": "node scripts/check-tauri-versions.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

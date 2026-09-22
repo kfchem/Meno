@@ -23,6 +23,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # tauri build refuses to run when the Rust crates and npm packages
+      # drift apart; dev only warns, so catch it here.
+      - run: npm run check:tauri
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test

@@ -36,6 +36,7 @@ npm run tauri dev    # run the full desktop app (Rust + WebView)
 npm run typecheck    # TypeScript typecheck only
 npm run lint         # ESLint
 npm test             # Vitest unit tests (parsers, tab reducer, editor store)
+npm run check:tauri  # Tauri crate/npm versions must match (tauri build fails otherwise)
 npm run build        # tsc typecheck + production frontend build
 npm run tauri build  # produce a desktop app bundle
 ```
