@@ -1,11 +1,5 @@
 import { create, type StoreApi, type UseBoundStore } from "zustand";
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { EditorState } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
@@ -47,17 +41,6 @@ export function createEditorStore(): EditorStore {
   }));
 }
 
-const storeRegistry = new Map<string, EditorStore>();
-
-function getOrCreate(tabId: string): EditorStore {
-  let s = storeRegistry.get(tabId);
-  if (!s) {
-    s = createEditorStore();
-    storeRegistry.set(tabId, s);
-  }
-  return s;
-}
-
 const EditorStoreContext = createContext<EditorStore | null>(null);
 
 export function EditorProvider({
@@ -67,14 +50,12 @@ export function EditorProvider({
   tabId: string;
   children: ReactNode;
 }) {
-  const store = useMemo(() => getOrCreate(tabId), [tabId]);
-  useEffect(
-    () => () => {
-      // Clean up store when provider unmounts (tab closed)
-      storeRegistry.delete(tabId);
-    },
-    [tabId],
-  );
+  // One store per provider instance, recreated if the tab identity changes.
+  // Deliberately not a module-level registry keyed by tabId: ids are not
+  // globally unique (the workflow editor's sketch node is "mol2d" in every
+  // Workflow Builder tab), so a registry made those canvases share one model.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const store = useMemo(() => createEditorStore(), [tabId]);
   return (
     <EditorStoreContext.Provider value={store}>
       {children}

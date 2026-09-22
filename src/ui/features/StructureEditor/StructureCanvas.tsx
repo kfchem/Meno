@@ -137,15 +137,18 @@ export default function StructureCanvas({
   tabId,
   initialPayload,
   initialFilename,
+  active = true,
 }: {
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
+  /** False while the owning tab is hidden: pauses the render loop. */
+  active?: boolean;
 }) {
   return (
     <EditorProvider tabId={tabId}>
       <StructureCanvasContent
-        active={true}
+        active={active}
         tabId={tabId}
         initialPayload={initialPayload}
         initialFilename={initialFilename}
