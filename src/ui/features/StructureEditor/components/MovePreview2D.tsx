@@ -21,7 +21,8 @@ import { computeMoveSnap } from "../utils/moveSnap";
 // - Thick snapped preview (neighbor -> snapped endpoint) mirrors Extend behavior.
 export default function MovePreview2D() {
   const { model, moveDrag } = useEditor();
-  const { camera } = useThree();
+  const setMoveDragPreview = useEditor((s) => s.setMoveDragPreview);
+  const { camera, invalidate } = useThree();
   const thinInst = useRef<THREE.InstancedMesh>(null!);
   const thickInst = useRef<THREE.InstancedMesh>(null!);
   // Stereo preview helpers
@@ -56,6 +57,8 @@ export default function MovePreview2D() {
   const FREE_DUR_MS = 180;
 
   useFrame((_, dtRaw) => {
+    // Preview follows the pointer while dragging (on-demand rendering).
+    if (moveDrag.active) invalidate();
     const mThin = thinInst.current;
     const mThick = thickInst.current;
     const mHash = hashInst.current;
@@ -278,6 +281,8 @@ export default function MovePreview2D() {
       Number.isFinite(pxPrev) &&
       Number.isFinite(pyPrev)
     ) {
+      // Let other layers (e.g. the atom's label) follow the same position.
+      setMoveDragPreview(pxPrev, pyPrev);
       // Build atoms (with the moving atom temporarily at the snapped endpoint)
       const movingId = moving.id;
       const atomsL: LAtom[] = model.atoms.map((a) =>

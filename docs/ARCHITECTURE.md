@@ -58,7 +58,12 @@ src-tauri/
   render order so reordering tabs never remounts a WebGL canvas.
 - `Deck` renders **all** open tabs and hides the inactive ones; views receive an
   `active` flag and are expected to pause expensive work (e.g. set the R3F
-  `frameloop` to `"never"`) while inactive.
+  `frameloop` to `"never"`) while inactive. Workflow tabs pass the same flag to
+  the canvases embedded in their nodes through `NodeActiveContext`.
+- Because every live canvas holds a WebGL context and browsers keep only about
+  16, `lib/core/limits.ts` budgets them: a 2D/3D/structure tab costs one, a
+  workflow tab two, and opening past the limit is refused with a notice rather
+  than silently blanking the oldest view.
 - A new tab starts as `loader` (OmniHub). When a file is chosen, OmniHub calls
   `replaceContent({ kind, ...data, filename })` and the tab switches view.
 
@@ -76,6 +81,13 @@ src-tauri/
   polygons, text and circles; `lib/chem/acs.ts` provides ACS-style proportions
   scaled to `NOMINAL_BOND_LENGTH` world units.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
+- **Frame loop**: the canvas runs `frameloop="demand"` at a fixed `CANVAS_DPR`
+  (2x). React commits (store changes) request a frame automatically; anything
+  that animates or mutates the scene imperatively must call `invalidate()`
+  while it is still moving — see `PanZoom2D` (inertia), the hover layers and
+  the drag/extend previews. A new animated layer that forgets this will appear
+  frozen; a layer that invalidates unconditionally brings back the old
+  always-on loop.
 
 ## 3D molecule viewer (`ui/features/MoleculeViewer`)
 
