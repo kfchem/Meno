@@ -1,16 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAllPrimitives,
   buildBondPrimitives,
   buildTextLabels,
   implicitHydrogens,
+  mitreJoinPolys,
+  roundPolyCorners,
   type Atom,
   type Bond,
   type LayoutOptions,
+  type Vec2,
 } from "./layout2d";
 import { acsWorldOptions } from "./acs";
 
 const opts = (over: Partial<LayoutOptions> = {}): LayoutOptions =>
   acsWorldOptions([], [], { units: "world", ...over });
+
+const polyArea = (pts: Vec2[]) => {
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    s += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(s) / 2;
+};
 
 describe("implicitHydrogens", () => {
   it("fills the usual valences", () => {
@@ -97,6 +111,9 @@ describe("buildTextLabels", () => {
 describe("wedge geometry", () => {
   // the camera zoom the canvas draws at; world sizes are converted with it
   const ZOOM = 40;
+  // the outline before the corners are rounded
+  const raw = (over: Partial<LayoutOptions> = {}) =>
+    opts({ joinStyle: "sharp", ...over });
   const atoms: Atom[] = [
     { id: 1, x: 0, y: 0, el: "C" }, // stereocentre, higher degree
     { id: 2, x: 1.5, y: 0, el: "C" },
@@ -108,7 +125,7 @@ describe("wedge geometry", () => {
   const wedge: Bond = { a1: 0, a2: 1, order: 1, stereo: "up" };
 
   it("ends in a flat tip as wide as a bond, not a point", () => {
-    const o = opts();
+    const o = raw();
     const { polys } = buildBondPrimitives(atoms, wedge, o, ZOOM, deg);
     expect(polys).toHaveLength(1);
     const pts = polys[0].points;
@@ -127,7 +144,7 @@ describe("wedge geometry", () => {
   });
 
   it("keeps the wide end at the far atom", () => {
-    const o = opts();
+    const o = raw();
     const { polys } = buildBondPrimitives(atoms, wedge, o, ZOOM, deg);
     const base = polys[0].points.filter((p) => p.x > 0.75);
     expect(base).toHaveLength(2);
@@ -151,7 +168,7 @@ describe("wedge geometry", () => {
       [1, [0, 2]],
       [2, [1]],
     ]);
-    const o = opts();
+    const o = raw();
     const { polys } = buildBondPrimitives(
       chain,
       wedge,
@@ -180,14 +197,14 @@ describe("wedge geometry", () => {
   });
 
   it("leaves the wide end square when nothing continues from it", () => {
-    const o = opts();
+    const o = raw();
     const { polys } = buildBondPrimitives(atoms, wedge, o, ZOOM, deg);
     const base = polys[0].points.filter((p) => p.x > 0.75);
     expect(base[0].x).toBeCloseTo(base[1].x, 12);
   });
 
   it("gives the hashed wedge a last hash of bond width", () => {
-    const o = opts();
+    const o = raw();
     const hashed: Bond = { ...wedge, stereo: "down" };
     const { lines } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
     expect(lines.length).toBeGreaterThan(3);
@@ -196,5 +213,115 @@ describe("wedge geometry", () => {
     // a pointed wedge used to end in a hash of almost no length
     expect(narrowest).toBeGreaterThan(o.lineWidthPx * 0.5);
     expect(Math.max(...widths)).toBeLessThanOrEqual(o.wedgeWidthPx + 1e-9);
+  });
+});
+
+describe("roundPolyCorners", () => {
+  const square: Vec2[] = [
+    { x: -1, y: -1 },
+    { x: 1, y: -1 },
+    { x: 1, y: 1 },
+    { x: -1, y: 1 },
+  ];
+  it("rounds a corner to the radius asked for", () => {
+    const r = 0.25;
+    const out = roundPolyCorners(square, r);
+    // each corner loses the bit outside the arc; the arc itself is drawn as
+    // segments, so the area lands just inside the exact figure
+    const exact = 4 - (4 - Math.PI) * r * r;
+    expect(polyArea(out)).toBeGreaterThan(exact * 0.995);
+    expect(polyArea(out)).toBeLessThanOrEqual(exact);
+    for (const p of out) {
+      expect(Math.abs(p.x)).toBeLessThanOrEqual(1 + 1e-9);
+      expect(Math.abs(p.y)).toBeLessThanOrEqual(1 + 1e-9);
+    }
+  });
+
+  it("keeps the shape when there is no room for the radius", () => {
+    // a radius wider than the shape itself still stays inside it
+    const out = roundPolyCorners(square, 10);
+    expect(polyArea(out)).toBeLessThanOrEqual(4);
+    expect(polyArea(out)).toBeGreaterThan(2);
+  });
+
+  it("leaves a polygon alone when the radius is zero", () => {
+    expect(roundPolyCorners(square, 0)).toBe(square);
+  });
+});
+
+describe("mitreJoinPolys", () => {
+  it("fills each gap out to where the two outlines cross", () => {
+    // two bonds 120 degrees apart
+    const dirs: Vec2[] = [
+      { x: 1, y: 0 },
+      { x: Math.cos((2 * Math.PI) / 3), y: Math.sin((2 * Math.PI) / 3) },
+    ];
+    const h = 0.05;
+    const polys = mitreJoinPolys({ x: 0, y: 0 }, dirs, h);
+    expect(polys).toHaveLength(2);
+    for (const p of polys) {
+      expect(p.points).toHaveLength(4);
+      const apex = p.points[2];
+      // the mitre point of two outlines h from the centre
+      const gap = Math.hypot(apex.x, apex.y);
+      expect(gap).toBeGreaterThan(h);
+      expect(gap).toBeLessThan(h * 4);
+    }
+  });
+
+  it("cuts the mitre off when the gap is too shallow for it", () => {
+    const dirs: Vec2[] = [
+      { x: 1, y: 0 },
+      { x: Math.cos(0.05), y: Math.sin(0.05) },
+    ];
+    const polys = mitreJoinPolys({ x: 0, y: 0 }, dirs, 0.05);
+    const squared = polys.filter((p) => p.points.length === 3);
+    expect(squared.length).toBeGreaterThan(0);
+  });
+
+  it("needs two bonds", () => {
+    expect(mitreJoinPolys({ x: 0, y: 0 }, [{ x: 1, y: 0 }], 0.05)).toEqual([]);
+  });
+});
+
+describe("joinStyle", () => {
+  // a bent chain with a wedge whose wide end carries two bonds on
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 1.5, el: "C" },
+    { id: 2, x: 0, y: 0, el: "C" },
+    { id: 3, x: 1.3, y: -0.75, el: "C" },
+    { id: 4, x: -1.3, y: -0.75, el: "C" },
+  ];
+  const bonds: Bond[] = [
+    { a1: 0, a2: 1, order: 1, stereo: "up", stereoOrient: "reverse" },
+    { a1: 1, a2: 2, order: 1, stereo: "none" },
+    { a1: 1, a2: 3, order: 1, stereo: "none" },
+  ];
+
+  it("rounds the wedge and caps the joins by default", () => {
+    const o = opts();
+    const { polys, fills } = buildAllPrimitives(atoms, bonds, o, 40);
+    expect(fills.length).toBeGreaterThan(0);
+    // the wedge is the only polygon, and it is arcs instead of corners
+    expect(polys).toHaveLength(1);
+    expect(polys[0].points.length).toBeGreaterThan(8);
+  });
+
+  it("mitres the joins and leaves the wedge cut when asked", () => {
+    const o = opts({ joinStyle: "sharp" });
+    const { polys, fills } = buildAllPrimitives(atoms, bonds, o, 40);
+    expect(fills).toHaveLength(0);
+    // the wedge is the shape with some size to it; the joins are slivers
+    const wedge = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    // base left, dent, base right, and the two tip corners
+    expect(wedge.points).toHaveLength(5);
+    // the dent points back towards the thin end
+    const dent = wedge.points[1];
+    expect(dent.y).toBeGreaterThan(wedge.points[0].y);
+    expect(dent.y).toBeGreaterThan(wedge.points[2].y);
+    // and the joins are filled
+    expect(polys.length).toBeGreaterThan(1);
   });
 });

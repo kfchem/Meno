@@ -9,6 +9,7 @@ import {
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
 import { acsWorldOptions } from "../../../../lib/chem/acs";
+import { polyTriangles } from "./polyTriangles";
 
 export default function Wedges2D({
   options,
@@ -72,7 +73,7 @@ export default function Wedges2D({
         const g = new THREE.BufferGeometry().setFromPoints(
           p.points.map((pt) => new THREE.Vector3(pt.x, pt.y, 0))
         );
-        (g as any).setIndex([0, 1, 2]);
+        g.setIndex(polyTriangles(p.points));
         return (
           <mesh
             key={`poly-${i}`}

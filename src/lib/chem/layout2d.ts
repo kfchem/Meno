@@ -35,6 +35,12 @@ export type LayoutOptions = {
   showCarbonLabels: boolean;
   /** Draw the hydrogens a labelled atom carries, e.g. OH, NH2. Default: on. */
   showImplicitHydrogens?: boolean;
+  /**
+   * How bonds meet. "round" (the default) rounds the corners of a wedge and
+   * fills the join where bonds meet with a round cap; "sharp" leaves the
+   * wedge's corners as they are cut and mitres the join instead.
+   */
+  joinStyle?: "round" | "sharp";
   units?: "px" | "world";
   minLinePx?: number;
   // boolean: all rings ON, undefined/false: OFF
@@ -165,59 +171,169 @@ function buildTripleLines(
 }
 
 /**
- * Where the wide end of a wedge meets another bond, the flat cut leaves a
- * notch on the side the bond descends to. Slide the corner along the wedge's
- * edge until it sits on that bond's line, so the cut face runs parallel to the
- * bond and the two shapes read as one. With a bond on either side each corner
- * follows its own, which closes both notches.
+ * A line as a point and a direction; the cut the wide end of a wedge follows.
  */
-function mitreBaseCorner(
+type Cut = { on: Vec2; dir: Vec2; key: number };
+
+/**
+ * Where the wide end of a wedge meets another bond, a square cut leaves a
+ * notch on the side the bond descends to. Pick, for this side of the wedge,
+ * the bond to follow and the line to cut along: its near edge, half a line
+ * width off its centre, so the cut face and the bond's outline are one run.
+ */
+function baseCut(
   atom: Vec2,
-  corner: Vec2,
-  tipCorner: Vec2,
   side: number,
   axis: Vec2,
-  baseHalfWorld: number,
   halfLineWorld: number,
   neighbourDirs: Vec2[],
-): Vec2 {
-  if (neighbourDirs.length === 0) return corner;
+): Cut | null {
+  if (neighbourDirs.length === 0) return null;
   const n = vperp(axis);
-  // the neighbour furthest round to this side; with only one bond both
-  // corners follow it, which is the parallel cut
-  let pick: Vec2 | null = null;
+  // the neighbour furthest round to this side; with only one bond both sides
+  // follow it, which is the cut parallel to that bond
+  let key = -1;
   let best = -Infinity;
-  for (const m of neighbourDirs) {
+  for (let i = 0; i < neighbourDirs.length; i++) {
+    const m = neighbourDirs[i];
     const d = (m.x * n.x + m.y * n.y) * side;
     if (d > best) {
       best = d;
-      pick = m;
+      key = i;
     }
   }
-  if (!pick) return corner;
+  if (key < 0) return null;
+  const dir = neighbourDirs[key];
+  const off = vperp(dir);
+  const towardsTip = off.x * axis.x + off.y * axis.y >= 0 ? 1 : -1;
+  return { on: vadd(atom, vscale(off, towardsTip * halfLineWorld)), dir, key };
+}
+
+/** Slide a base corner along the wedge's edge until it sits on the cut. */
+function cornerOnCut(
+  cut: Cut | null,
+  corner: Vec2,
+  tipCorner: Vec2,
+  limit: number,
+): Vec2 {
+  if (!cut) return corner;
   const e = vnorm(vsub(tipCorner, corner));
-  const den = vcross(e, pick);
+  const den = vcross(e, cut.dir);
   // nearly parallel to the edge: the cut would run off to infinity
   if (Math.abs(den) < 1e-6) return corner;
-  // Cut along the bond's near edge rather than its centre line, so the wedge's
-  // face and the bond's outline are one straight run.
-  const side0 = vperp(pick);
-  const towardsTip = side0.x * axis.x + side0.y * axis.y >= 0 ? 1 : -1;
-  const on = vadd(
-    atom,
-    vscale(side0, towardsTip * Math.min(halfLineWorld, baseHalfWorld)),
-  );
-  const t = vcross(vsub(on, corner), pick) / den;
-  // a mitre limit, so a bond that nearly continues the wedge does not stretch
-  // the base into a spike
-  const limit = baseHalfWorld * 1.5;
+  const t = vcross(vsub(cut.on, corner), cut.dir) / den;
   return vadd(corner, vscale(e, Math.max(-limit, Math.min(limit, t))));
+}
+
+/** Where two cuts cross: the point both bonds' outlines meet at. */
+function cutsCross(a: Cut, b: Cut): Vec2 | null {
+  const den = vcross(a.dir, b.dir);
+  if (Math.abs(den) < 1e-6) return null;
+  const s = vcross(vsub(b.on, a.on), b.dir) / den;
+  return vadd(a.on, vscale(a.dir, s));
+}
+
+/**
+ * Replaces each corner of a polygon with an arc of `radius`, the way a round
+ * join does. The radius is reduced where an edge is too short to give it room,
+ * so a wedge's narrow end becomes a semicircle rather than losing its shape.
+ */
+export function roundPolyCorners(
+  points: Vec2[],
+  radius: number,
+  segments = 4,
+): Vec2[] {
+  const n = points.length;
+  if (n < 3 || radius <= 0) return points;
+  const out: Vec2[] = [];
+  for (let i = 0; i < n; i++) {
+    const b = points[i];
+    const a = points[(i - 1 + n) % n];
+    const c = points[(i + 1) % n];
+    const v1 = vsub(a, b);
+    const v2 = vsub(c, b);
+    const l1 = vlen(v1);
+    const l2 = vlen(v2);
+    if (l1 < 1e-9 || l2 < 1e-9) {
+      out.push(b);
+      continue;
+    }
+    const u1 = vscale(v1, 1 / l1);
+    const u2 = vscale(v2, 1 / l2);
+    const cosA = Math.max(-1, Math.min(1, u1.x * u2.x + u1.y * u2.y));
+    const angle = Math.acos(cosA);
+    // straight or folded back on itself: nothing to round
+    if (angle < 1e-3 || Math.PI - angle < 1e-3) {
+      out.push(b);
+      continue;
+    }
+    const half = angle / 2;
+    // keep the arc inside both edges, sharing each with the next corner
+    const dist = Math.min(radius / Math.tan(half), l1 / 2, l2 / 2);
+    const r = dist * Math.tan(half);
+    const t1 = vadd(b, vscale(u1, dist));
+    const t2 = vadd(b, vscale(u2, dist));
+    const bis = vnorm(vadd(u1, u2));
+    const centre = vadd(b, vscale(bis, r / Math.sin(half)));
+    const a1 = Math.atan2(t1.y - centre.y, t1.x - centre.x);
+    const a2 = Math.atan2(t2.y - centre.y, t2.x - centre.x);
+    let sweep = a2 - a1;
+    while (sweep > Math.PI) sweep -= 2 * Math.PI;
+    while (sweep < -Math.PI) sweep += 2 * Math.PI;
+    const steps = Math.max(1, Math.ceil(Math.abs(sweep) / (Math.PI / 8)));
+    const count = Math.max(steps, segments);
+    for (let k = 0; k <= count; k++) {
+      const ang = a1 + (sweep * k) / count;
+      out.push({
+        x: centre.x + r * Math.cos(ang),
+        y: centre.y + r * Math.sin(ang),
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Fills the notches where bonds meet at an atom the way a mitre join does:
+ * for each gap between two bonds, out to the point where the outlines of the
+ * two would cross. A gap too shallow for that is cut off square instead.
+ */
+export function mitreJoinPolys(
+  centre: Vec2,
+  dirs: Vec2[],
+  halfWidth: number,
+  miterLimit = 4,
+): Poly[] {
+  if (dirs.length < 2 || halfWidth <= 0) return [];
+  const round = [...dirs].sort(
+    (a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x),
+  );
+  const out: Poly[] = [];
+  for (let i = 0; i < round.length; i++) {
+    const d1 = round[i];
+    const d2 = round[(i + 1) % round.length];
+    // the two outlines facing the gap that runs anticlockwise from d1 to d2
+    const e1 = vadd(centre, vscale(vperp(d1), halfWidth));
+    const e2 = vsub(centre, vscale(vperp(d2), halfWidth));
+    const den = vcross(d1, d2);
+    let apex: Vec2 | null = null;
+    if (Math.abs(den) > 1e-6) {
+      const s = vcross(vsub(e2, e1), d2) / den;
+      const p = vadd(e1, vscale(d1, s));
+      if (vlen(vsub(p, centre)) <= halfWidth * miterLimit) apex = p;
+    }
+    out.push({
+      points: apex ? [centre, e1, apex, e2] : [centre, e1, e2],
+    });
+  }
+  return out;
 }
 
 /**
  * Solid wedge. Neither end is a point: the narrow end is as wide as a plain
  * bond so the join at an atom is as clean as a line-to-line one, and the wide
- * end is cut along the bonds that continue from its atom.
+ * end is cut along the bonds that continue from its atom - following each of
+ * them where there are two, which dents the middle of the cut inwards.
  */
 function buildWedgeTriangle(
   p1: Vec2,
@@ -225,6 +341,7 @@ function buildWedgeTriangle(
   baseHalfWorld: number,
   tipHalfWorld: number,
   baseNeighbourDirs: Vec2[] = [],
+  round = false,
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
   // Keep a taper even when the minimum line width would otherwise make the
@@ -237,27 +354,25 @@ function buildWedgeTriangle(
   const tip = vadd(p2, vscale(dir, tipHalf));
   const tipL = vadd(tip, nt);
   const tipR = vsub(tip, nt);
-  const baseL = mitreBaseCorner(
-    p1,
-    vadd(p1, nb),
-    tipL,
-    1,
-    dir,
-    baseHalfWorld,
-    tipHalfWorld,
-    baseNeighbourDirs,
-  );
-  const baseR = mitreBaseCorner(
-    p1,
-    vsub(p1, nb),
-    tipR,
-    -1,
-    dir,
-    baseHalfWorld,
-    tipHalfWorld,
-    baseNeighbourDirs,
-  );
-  return { points: [baseL, baseR, tipR, tipL] };
+  const halfLine = Math.min(tipHalfWorld, baseHalfWorld);
+  const cutL = baseCut(p1, 1, dir, halfLine, baseNeighbourDirs);
+  const cutR = baseCut(p1, -1, dir, halfLine, baseNeighbourDirs);
+  // a mitre limit, so a bond that nearly continues the wedge does not stretch
+  // the base into a spike
+  const limit = baseHalfWorld * 1.5;
+  const baseL = cornerOnCut(cutL, vadd(p1, nb), tipL, limit);
+  const baseR = cornerOnCut(cutR, vsub(p1, nb), tipR, limit);
+  const points = [baseL];
+  if (cutL && cutR && cutL.key !== cutR.key) {
+    // two bonds carry on from the wide end: follow both, so the cut meets
+    // where their outlines do instead of running flat between them
+    const cross = cutsCross(cutL, cutR);
+    if (cross && vlen(vsub(cross, p1)) <= baseHalfWorld) points.push(cross);
+  }
+  points.push(baseR, tipR, tipL);
+  return {
+    points: round ? roundPolyCorners(points, tipHalf) : points,
+  };
 }
 
 function buildHashedWedgeSegments(
@@ -495,6 +610,7 @@ export function buildBondPrimitives(
         baseHalf,
         tipHalf,
         neighbourDirs,
+        (opts.joinStyle ?? "round") === "round",
       );
       polys.push(tri);
       return { lines, polys };
@@ -797,18 +913,28 @@ export function buildAllPrimitives(
     opts.units === "world"
       ? opts.lineWidthPx * 0.5
       : pxToWorld(widthPx * 0.5, zoom); // restore previous size
-  // A solid wedge's wide end is cut along the bonds it meets, so a cap there
-  // would only bulge out of that face.
-  const mitredBases = new Set<number>();
-  for (const b of bonds) {
-    if (b.stereo === "up") mitredBases.add(wedgeBaseAtom(b, deg));
+  // Where bonds meet, fill the join: a round cap, or a mitre. Bond ends are
+  // left alone, so a chain still ends flat. A cap sits inside the cut face of
+  // a wedge's wide end, which is exactly a cap's radius away.
+  const roundJoins = (opts.joinStyle ?? "round") === "round";
+  const plainDirs = new Map<number, Vec2[]>();
+  if (!roundJoins) {
+    for (const b of bonds) {
+      if (b.stereo === "up" || b.stereo === "down") continue;
+      const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
+      const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
+      if (vlen(vsub(q, p)) < 1e-9) continue;
+      plainDirs.set(b.a1, [...(plainDirs.get(b.a1) ?? []), vnorm(vsub(q, p))]);
+      plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
+    }
   }
   for (let i = 0; i < atoms.length; i++) {
     const d = deg.get(i) || 0;
     const showLabel = opts.showCarbonLabels || atoms[i].el !== "C";
-    if (d >= 2 && !showLabel && !mitredBases.has(i)) {
-      fills.push({ c: { x: atoms[i].x, y: atoms[i].y }, r: rWorld });
-    }
+    if (d < 2 || showLabel) continue;
+    const c = { x: atoms[i].x, y: atoms[i].y };
+    if (roundJoins) fills.push({ c, r: rWorld });
+    else polys.push(...mitreJoinPolys(c, plainDirs.get(i) ?? [], rWorld));
   }
   // build lines/polys
   for (const b of bonds) {
