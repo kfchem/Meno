@@ -67,6 +67,30 @@ src-tauri/
 - A new tab starts as `loader` (OmniHub). When a file is chosen, OmniHub calls
   `replaceContent({ kind, ...data, filename })` and the tab switches view.
 
+## Documents and undo (`lib/doc`, being adopted)
+
+A tab's content is a **document**: undoable, saveable, and readable by anything
+holding the tab. Everything else a view needs - hover, drag previews, camera,
+edit buffers - is **ephemeral**: owned by the view, never undone, never saved.
+Drawing that line is what makes one undo mechanism work for every view, lets a
+2D and a 3D view share one molecule, and keeps a new view to a small amount of
+wiring.
+
+`createDocument(initial)` returns a store with `edit(label, updater)`, `undo`,
+`redo`, `reset`, `markSaved` and `history()`. History is snapshots: updates are
+immutable, so untouched parts are shared rather than copied. Each document has
+its own history (Ctrl+Z belongs to the active tab, not the whole app), edits
+sharing a `coalesceKey` inside a short window collapse into one step (a drag
+must not need one undo per frame), and the stack is capped.
+`subscribe` matches React's `useSyncExternalStore`; nothing in `lib/doc`
+imports React.
+
+Adoption is incremental and not finished: the core lands first, then the tab
+shell routes undo to the active document, then views move their content across
+one at a time. Until a view has moved, it keeps owning its state - the 2D
+editor in its Zustand store, the workflow editor in component state - and its
+content is still lost when the tab closes.
+
 ## 2D structure editor (`ui/features/StructureEditor`)
 
 - **State**: a Zustand store per canvas instance (`store/index.tsx`), composed
