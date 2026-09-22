@@ -17,16 +17,26 @@ export default function Labels2D({
   options?: Partial<LayoutOptions>;
 }) {
   const { camera } = useThree();
-  const { model } = useEditor();
+  const { model, moveDrag } = useEditor();
   const [zoom, setZoom] = useState((camera as THREE.OrthographicCamera).zoom);
   useFrame(() => {
     const z = (camera as THREE.OrthographicCamera).zoom;
     if (z !== zoom) setZoom(z);
   });
 
+  // While an atom is being dragged its coordinates in the model stay put
+  // until the drop, so follow the preview position instead - otherwise a
+  // labelled atom (O, N, ...) leaves its label behind while the bonds move.
+  const dragged =
+    moveDrag.active && moveDrag.preview ? moveDrag : null;
   const atoms: LAtom[] = useMemo(
-    () => model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el })),
-    [model.atoms]
+    () =>
+      model.atoms.map((a) =>
+        dragged && a.id === dragged.atomId
+          ? { id: a.id, x: dragged.preview!.x, y: dragged.preview!.y, el: a.el }
+          : { id: a.id, x: a.x, y: a.y, el: a.el }
+      ),
+    [model.atoms, dragged]
   );
   const bonds: LBond[] = useMemo(() => {
     const idToIndex = new Map<number, number>();

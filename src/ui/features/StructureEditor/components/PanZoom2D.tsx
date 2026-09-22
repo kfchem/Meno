@@ -36,6 +36,11 @@ export function PanZoom2D() {
     const onDown = (e: PointerEvent) => {
       // disable pan during bond extension or on a double-click down
       if (extendRef.current) return;
+      // Pressing on an atom starts a move, not a pan. Atom hit-testing is done
+      // by the canvas wrapper (hovered.atomId), which does not depend on the
+      // 3D raycast, so this also holds if the raycast misses the atom.
+      const st = store.getState();
+      if (st.hovered.atomId != null || st.moveDrag.active) return;
       // Block pan initiation while panHold is active (e.g., dblclick direction gesture)
       if (panHoldRef.current) return;
       const btn = (e as any).button;
@@ -70,6 +75,13 @@ export function PanZoom2D() {
       // Skip pan while panHold is active
       if (panHoldRef.current) return;
       if (dblHold.current.active) return;
+      // An atom drag started after the press: abandon the pan instead of
+      // moving the whole view along with the atom.
+      if (store.getState().moveDrag.active) {
+        maybe.current.active = false;
+        dragging.current = false;
+        return;
+      }
       if (!dragging.current) {
         if (!maybe.current.active) return;
         const dx0 = e.clientX - maybe.current.x;
@@ -129,7 +141,7 @@ export function PanZoom2D() {
       dom.removeEventListener("pointerup", onUp);
       dom.removeEventListener("wheel", onWheel);
     };
-  }, [camera, gl, invalidate, dom, extend.active]);
+  }, [camera, gl, invalidate, dom, extend.active, store]);
 
   // When camera is updated externally (e.g., FitToContent2D), mirror it internally to avoid overrides
   useEffect(() => {
