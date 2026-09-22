@@ -1,5 +1,5 @@
 import "./App.css";
-import { useCallback, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import TopBar, { type TabsController } from "./ui/layouts/TopBar";
 import {
   reducer,
@@ -9,11 +9,58 @@ import {
   TabKind,
 } from "./lib/core";
 import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
+import DocumentBridge from "./ui/views/DocumentBridge";
+import type { TabInstance } from "./lib/core";
+import type { DocumentStore } from "./lib/doc";
+import { undoIntent } from "./lib/doc/shortcuts";
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
   // Shown when an action is refused, e.g. the WebGL canvas budget is full.
   const [notice, setNotice] = useState<string | null>(null);
+
+  // One document per tab, for the view kinds that declare `createDocument`.
+  // Documents live outside React state: each is its own store and notifies
+  // its subscribers, so the app shell only has to hand them out.
+  const documentsRef = useRef(
+    new Map<string, { kind: string; doc: DocumentStore<any> }>(),
+  );
+  const getDocument = useCallback((tab: TabInstance) => {
+    const entry = viewRegistry[tab.content.kind];
+    if (!entry?.createDocument) return undefined;
+    const held = documentsRef.current.get(tab.meta.id);
+    // A tab changes kind when a file is opened into it; start a fresh document.
+    if (held && held.kind === tab.content.kind) return held.doc;
+    const doc = entry.createDocument(tab.content.data);
+    documentsRef.current.set(tab.meta.id, { kind: tab.content.kind, doc });
+    return doc;
+  }, []);
+
+  // Undo/redo belong to the active tab, not to the app as a whole.
+  const activeIdRef = useRef(state.activeId);
+  useEffect(() => {
+    activeIdRef.current = state.activeId;
+  }, [state.activeId]);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const intent = undoIntent({
+        key: e.key,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        shiftKey: e.shiftKey,
+        target: e.target,
+      });
+      if (!intent) return;
+      const id = activeIdRef.current;
+      const held = id ? documentsRef.current.get(id) : undefined;
+      if (!held) return;
+      const changed =
+        intent === "undo" ? held.doc.undo() : held.doc.redo();
+      if (changed) e.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const ctl: TabsController = {
     tabOrder: state.tabOrder,
@@ -23,7 +70,10 @@ export default function App() {
     activeId: state.activeId,
     reorder: (order) => dispatch({ type: "REORDER", order }),
     select: (id) => dispatch({ type: "SELECT_TAB", id }),
-    close: (id) => dispatch({ type: "CLOSE_TAB", id }),
+    close: (id) => {
+      documentsRef.current.delete(id);
+      dispatch({ type: "CLOSE_TAB", id });
+    },
     add: () => {
       const t = viewRegistry.loader.create("New Tab");
       dispatch({ type: "ADD_TAB", tab: t });
@@ -89,6 +139,21 @@ export default function App() {
           </button>
         </div>
       )}
+      {state.mountOrder.map((id) => {
+        const tab = state.tabsById[id];
+        const entry = tab ? viewRegistry[tab.content.kind] : undefined;
+        const doc = tab ? getDocument(tab) : undefined;
+        if (!tab || !entry || !doc) return null;
+        return (
+          <DocumentBridge
+            key={id}
+            id={id}
+            document={doc}
+            toTabData={entry.toTabData}
+            dispatch={dispatch}
+          />
+        );
+      })}
       <Deck
         order={state.mountOrder}
         tabs={state.tabsById}
@@ -96,6 +161,7 @@ export default function App() {
         resolveView={resolveView}
         patchData={patchData}
         replaceData={replaceData}
+        getDocument={getDocument}
       />
     </div>
   );
