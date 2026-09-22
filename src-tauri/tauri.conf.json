@@ -16,6 +16,8 @@
         "title": "Meno",
         "width": 1024,
         "height": 768,
+        "minWidth": 640,
+        "minHeight": 480,
         "dragDropEnabled": false,
         "decorations": false
       }

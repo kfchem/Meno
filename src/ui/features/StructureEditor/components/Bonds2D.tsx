@@ -20,8 +20,16 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
   const inst = useRef<THREE.InstancedMesh>(null!);
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
   const tmpQ = useMemo(() => new THREE.Quaternion(), []);
-  // Capacity: allow up to 3 segments per bond (triple-bond worst case)
-  const countCap = Math.max(model.bonds.length * 3, 1);
+  // Capacity: worst case is a hashed ("down" stereo) wedge, which alone can
+  // emit ~7 segments (see buildHashedWedgeSegments), or a wavy bond, whose
+  // segment count grows with bond length/zoom and is unbounded. Start from a
+  // generous per-bond estimate and self-correct below if a layout ever needs
+  // more room than currently allocated, instead of assuming a fixed max of 3
+  // (triple-bond) segments per bond, which silently overflows the instanced
+  // mesh's vertex buffer for stereo/wavy bonds and blanks the whole canvas.
+  const [countCap, setCountCap] = useState(() =>
+    Math.max(model.bonds.length * 8, 1)
+  );
 
   useEffect(() => {
     const m = inst.current;
@@ -77,6 +85,13 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
     // Use live zoom for layout as well to avoid a lag between layout widthPx and thickness conversion
     const layout = layoutMolecule(atomsL, bondsL, opts, zNow);
     const segs = layout.lines;
+    if (segs.length > countCap) {
+      // Current instanced mesh is too small for this layout (e.g. a hashed
+      // wedge or a long wavy bond). Grow capacity and bail; the effect will
+      // rerun once the larger mesh has mounted.
+      setCountCap(Math.max(segs.length, countCap * 2));
+      return;
+    }
     m.count = segs.length;
     for (let i = 0; i < segs.length; i++) {
       const s = segs[i];
@@ -106,6 +121,7 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
     aromaticRings,
     moveDrag.active,
     moveDrag.atomId,
+    countCap,
   ]);
 
   return (
