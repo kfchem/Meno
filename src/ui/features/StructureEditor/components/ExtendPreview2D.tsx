@@ -7,7 +7,7 @@ import { ACS_RATIOS, NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
 export default function ExtendPreview2D() {
   const { model, extend } = useEditor();
-  const { camera } = useThree();
+  const { camera, invalidate } = useThree();
   const thin = useRef<THREE.Mesh>(null!);
   const thick = useRef<THREE.Mesh>(null!);
   const dotA = useRef<THREE.Mesh>(null!);
@@ -29,6 +29,8 @@ export default function ExtendPreview2D() {
   }>({ active: false, t: 0, dur: 0.18, startAng: 0, startLen: 0 });
 
   useFrame((_, dtRaw) => {
+    // Angle smoothing runs while the gesture is active (on-demand rendering).
+    if (extend.active) invalidate();
     const base =
       extend.atomId != null
         ? model.atoms.find((a) => a.id === extend.atomId)

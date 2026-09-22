@@ -58,7 +58,12 @@ src-tauri/
   render order so reordering tabs never remounts a WebGL canvas.
 - `Deck` renders **all** open tabs and hides the inactive ones; views receive an
   `active` flag and are expected to pause expensive work (e.g. set the R3F
-  `frameloop` to `"never"`) while inactive.
+  `frameloop` to `"never"`) while inactive. Workflow tabs pass the same flag to
+  the canvases embedded in their nodes through `NodeActiveContext`.
+- Because every live canvas holds a WebGL context and browsers keep only about
+  16, `lib/core/limits.ts` budgets them: a 2D/3D/structure tab costs one, a
+  workflow tab two, and opening past the limit is refused with a notice rather
+  than silently blanking the oldest view.
 - A new tab starts as `loader` (OmniHub). When a file is chosen, OmniHub calls
   `replaceContent({ kind, ...data, filename })` and the tab switches view.
 
@@ -76,6 +81,13 @@ src-tauri/
   polygons, text and circles; `lib/chem/acs.ts` provides ACS-style proportions
   scaled to `NOMINAL_BOND_LENGTH` world units.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
+- **Frame loop**: the canvas runs `frameloop="demand"` at a fixed `CANVAS_DPR`
+  (2x). React commits (store changes) request a frame automatically; anything
+  that animates or mutates the scene imperatively must call `invalidate()`
+  while it is still moving — see `PanZoom2D` (inertia), the hover layers and
+  the drag/extend previews. A new animated layer that forgets this will appear
+  frozen; a layer that invalidates unconditionally brings back the old
+  always-on loop.
 
 ## 3D molecule viewer (`ui/features/MoleculeViewer`)
 
@@ -116,7 +128,28 @@ the lock or Python version changes.
 | `greet` | — | Template leftover, unused. |
 
 Events: `uv:log`, `uv:err` (plain strings); `ext:stdout`, `ext:stderr`,
-`ext:exit` (JSON strings `{ id, line? }`).
+`ext:exit` (JSON strings `{ id, line? }`). `ext:exit` is emitted exactly once
+per sidecar, whether it exits by itself or through `ext_kill`.
+
+### What the backend accepts
+
+The webview is not trusted with process execution, so `lib.rs` validates every
+path it is given:
+
+- `py_env_*`: `uv` must be the bundled `resources/py/uv[.exe]`; `lockPath` must
+  be a `.lock` file under `resources/py/`; `venvHome` must be under `uv/` in the
+  app data dir; relative paths may not contain `..`, `.` or absolute/drive
+  prefixes; `pythonVersion` must look like `3.12` or `3.12.4`.
+- `ext_spawn_sidecar`: `entry` must be an absolute `python`/`python3`/`python.exe`
+  inside `<app data>/uv/`; `args` may start with `-u` / `-B`, followed by an
+  absolute `.py` script inside `resources/workers/`; later arguments go to the
+  script unchanged.
+- Sidecars are reaped when their stdout closes or on `ext_kill`, and all of
+  them are killed when the app exits.
+
+Adding a new worker or interpreter flag means extending these rules
+(`PYTHON_FLAGS`, the workers directory) together with the unit tests in
+`lib.rs`.
 
 ## File format support
 
@@ -126,7 +159,7 @@ Events: `uv:log`, `uv:err` (plain strings); `ext:stdout`, `ext:stderr`,
 | SDF | 2D editor | `parseSDF` | All records merged into one canvas. |
 | RXN (V2000) | 2D editor | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
 | XYZ (multi-frame) | 3D viewer | `parseXYZ` | Bonds inferred from covalent radii. |
-| PDB, KET | — | none | Accepted by the file picker but not parsed yet. |
+| PDB, KET | — | none | Accepted by the file picker; the 2D editor reports "not supported yet". |
 | Text files | Text editor | — | By extension, or anything that is not recognised. |
 
 ## Verification commands

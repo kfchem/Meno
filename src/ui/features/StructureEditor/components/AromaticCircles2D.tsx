@@ -17,7 +17,7 @@ export default function AromaticCircles2D({
 }: {
   options?: Partial<LayoutOptions>;
 }) {
-  const { camera } = useThree();
+  const { camera, invalidate } = useThree();
   const { model, aromaticEnabled, aromaticRings, toggleAromatic, toggleRing } =
     useEditor();
   const [zoom, setZoom] = useState((camera as THREE.OrthographicCamera).zoom);
@@ -25,7 +25,13 @@ export default function AromaticCircles2D({
   useFrame(() => {
     const z = (camera as THREE.OrthographicCamera).zoom;
     if (z !== zoom) setZoom(z);
-    setNow(performance.now());
+    // `now` only drives the hover ring's expand animation (~780 ms). Updating
+    // it on every frame re-rendered this component continuously, which would
+    // defeat on-demand rendering.
+    if (hoverStart != null && performance.now() - hoverStart < 780) {
+      setNow(performance.now());
+      invalidate();
+    }
   });
 
   const atoms: LAtom[] = useMemo(
