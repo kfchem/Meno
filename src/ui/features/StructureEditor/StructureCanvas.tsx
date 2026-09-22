@@ -26,6 +26,7 @@ import {
   FolderOpenIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { CANVAS_DPR } from "./constants";
 
 function StructureCanvasContent({
   active,
@@ -128,14 +129,11 @@ function StructureCanvasContent({
         key={tabId}
         orthographic
         camera={{ position: [0, 0, 10], zoom: 4 }}
-        frameloop={active ? "always" : "never"}
-        // Force a minimum DPR to improve antialiasing on 100% (1x) displays
-        // Keep upper bound to allow high-DPI devices to use native scaling
-        dpr={
-          typeof window !== "undefined"
-            ? Math.max(window.devicePixelRatio || 1, 2)
-            : 2
-        }
+        // Render on demand: interactions, store changes and the animation
+        // layers request frames (see PanZoom2D and the preview components)
+        // instead of redrawing continuously while nothing changes.
+        frameloop={active ? "demand" : "never"}
+        dpr={CANVAS_DPR}
         onDoubleClick={handleDoubleClick}
         gl={{
           antialias: true,

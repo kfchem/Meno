@@ -20,28 +20,8 @@ export function useCanvasSetup(
       camRef.current = state.camera as THREE.OrthographicCamera;
       domRef.current = canvas;
 
-      // Ensure the WebGL renderer uses the same pixelRatio and enable
-      // antialiasing-related settings. This helps on displays reporting
-      // devicePixelRatio=1 where aliasing can be more noticeable.
-      try {
-        const DPR =
-          typeof window !== "undefined"
-            ? Math.max(window.devicePixelRatio || 1, 1.5)
-            : 1.5;
-        if (state.gl.setPixelRatio) state.gl.setPixelRatio(DPR);
-        // For canvas 2D fallback or composited canvases, ensure smoothing is enabled
-        try {
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.imageSmoothingEnabled = true;
-            // Some browsers expose prefixed names
-            // @ts-expect-error - vendor-prefixed, not in lib.dom types
-            ctx.webkitImageSmoothingEnabled = true;
-            // @ts-expect-error - vendor-prefixed, not in lib.dom types
-            ctx.mozImageSmoothingEnabled = true;
-          }
-        } catch {}
-      } catch {}
+      // The canvas `dpr` prop owns the pixel ratio (CANVAS_DPR); overriding it
+      // here made the renderer disagree with it.
     },
     [camRef, domRef],
   );

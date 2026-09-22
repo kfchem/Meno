@@ -195,6 +195,15 @@ export function PanZoom2D() {
       // stronger friction for smoother stop (was -6)
       const zoomFriction = Math.exp(-10 * dt);
       zVel.current *= zoomFriction;
+    }
+
+    // On-demand rendering: request the next frame while the camera is still
+    // moving, otherwise dragging and inertia would stop after one frame.
+    if (
+      dragging.current ||
+      vel.current.lengthSq() > 1e-8 ||
+      Math.abs(zVel.current) > 1e-5
+    ) {
       invalidate();
     }
   });
