@@ -121,6 +121,10 @@ function vnorm(a: Vec2): Vec2 {
   const L = vlen(a);
   return L > 1e-9 ? { x: a.x / L, y: a.y / L } : { x: 1, y: 0 };
 }
+function vcross(a: Vec2, b: Vec2): number {
+  return a.x * b.y - a.y * b.x;
+}
+
 function vperp(a: Vec2): Vec2 {
   return { x: -a.y, y: a.x };
 }
@@ -161,15 +165,66 @@ function buildTripleLines(
 }
 
 /**
- * Solid wedge. The narrow end is not a point but as wide as a plain bond, so
- * where it meets other bonds at an atom the join is as clean as a line-to-line
- * one; a pointed tip leaves white notches on both sides of the vertex.
+ * Where the wide end of a wedge meets another bond, the flat cut leaves a
+ * notch on the side the bond descends to. Slide the corner along the wedge's
+ * edge until it sits on that bond's line, so the cut face runs parallel to the
+ * bond and the two shapes read as one. With a bond on either side each corner
+ * follows its own, which closes both notches.
+ */
+function mitreBaseCorner(
+  atom: Vec2,
+  corner: Vec2,
+  tipCorner: Vec2,
+  side: number,
+  axis: Vec2,
+  baseHalfWorld: number,
+  halfLineWorld: number,
+  neighbourDirs: Vec2[],
+): Vec2 {
+  if (neighbourDirs.length === 0) return corner;
+  const n = vperp(axis);
+  // the neighbour furthest round to this side; with only one bond both
+  // corners follow it, which is the parallel cut
+  let pick: Vec2 | null = null;
+  let best = -Infinity;
+  for (const m of neighbourDirs) {
+    const d = (m.x * n.x + m.y * n.y) * side;
+    if (d > best) {
+      best = d;
+      pick = m;
+    }
+  }
+  if (!pick) return corner;
+  const e = vnorm(vsub(tipCorner, corner));
+  const den = vcross(e, pick);
+  // nearly parallel to the edge: the cut would run off to infinity
+  if (Math.abs(den) < 1e-6) return corner;
+  // Cut along the bond's near edge rather than its centre line, so the wedge's
+  // face and the bond's outline are one straight run.
+  const side0 = vperp(pick);
+  const towardsTip = side0.x * axis.x + side0.y * axis.y >= 0 ? 1 : -1;
+  const on = vadd(
+    atom,
+    vscale(side0, towardsTip * Math.min(halfLineWorld, baseHalfWorld)),
+  );
+  const t = vcross(vsub(on, corner), pick) / den;
+  // a mitre limit, so a bond that nearly continues the wedge does not stretch
+  // the base into a spike
+  const limit = baseHalfWorld * 1.5;
+  return vadd(corner, vscale(e, Math.max(-limit, Math.min(limit, t))));
+}
+
+/**
+ * Solid wedge. Neither end is a point: the narrow end is as wide as a plain
+ * bond so the join at an atom is as clean as a line-to-line one, and the wide
+ * end is cut along the bonds that continue from its atom.
  */
 function buildWedgeTriangle(
   p1: Vec2,
   p2: Vec2,
   baseHalfWorld: number,
   tipHalfWorld: number,
+  baseNeighbourDirs: Vec2[] = [],
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
   // Keep a taper even when the minimum line width would otherwise make the
@@ -180,9 +235,29 @@ function buildWedgeTriangle(
   // Reach just past the atom so the flat tip overlaps the bonds meeting there,
   // the way a mitred line join does.
   const tip = vadd(p2, vscale(dir, tipHalf));
-  return {
-    points: [vadd(p1, nb), vsub(p1, nb), vsub(tip, nt), vadd(tip, nt)],
-  };
+  const tipL = vadd(tip, nt);
+  const tipR = vsub(tip, nt);
+  const baseL = mitreBaseCorner(
+    p1,
+    vadd(p1, nb),
+    tipL,
+    1,
+    dir,
+    baseHalfWorld,
+    tipHalfWorld,
+    baseNeighbourDirs,
+  );
+  const baseR = mitreBaseCorner(
+    p1,
+    vsub(p1, nb),
+    tipR,
+    -1,
+    dir,
+    baseHalfWorld,
+    tipHalfWorld,
+    baseNeighbourDirs,
+  );
+  return { points: [baseL, baseR, tipR, tipL] };
 }
 
 function buildHashedWedgeSegments(
@@ -331,6 +406,19 @@ export function buildTextLabels(
   return out;
 }
 
+/**
+ * Which end of a wedge carries the wide base. By the usual principle the thin
+ * end points at the stereocentre, i.e. the atom of higher degree; the reverse
+ * orientation swaps the ends.
+ */
+function wedgeBaseAtom(bond: Bond, deg?: Map<number, number>): number {
+  const degA = deg?.get(bond.a1) || 0;
+  const degB = deg?.get(bond.a2) || 0;
+  const thinAtA = degA >= degB; // tie: thin end at a1
+  const baseAtA = bond.stereoOrient === "reverse" ? thinAtA : !thinAtA;
+  return baseAtA ? bond.a1 : bond.a2;
+}
+
 function degreeMap(bonds: Bond[]): Map<number, number> {
   const m = new Map<number, number>();
   for (const b of bonds) {
@@ -347,7 +435,8 @@ export function buildBondPrimitives(
   zoom: number,
   deg?: Map<number, number>,
   inRing?: boolean,
-  autoSgn?: number
+  autoSgn?: number,
+  adj?: Map<number, number[]>
 ): { lines: LineSeg[]; polys: Poly[] } {
   const a = atoms[bond.a1];
   const c = atoms[bond.a2];
@@ -377,21 +466,36 @@ export function buildBondPrimitives(
   const p1 = vadd(p1o, vscale(dir, trimA));
   const p2 = vadd(p2o, vscale(dir, -trimB));
   if (bond.stereo === "up" || bond.stereo === "down") {
-    // Wedge direction: principle = thin tip toward higher degree side (base on lower side)
-    const degA = deg?.get(bond.a1) || 0;
-    const degB = deg?.get(bond.a2) || 0;
-    const principleThinAtP1 = degA >= degB; // tie: tip at p1
-    const reverse = bond.stereoOrient === "reverse";
-    // baseAtP1: is the thick base on p1 side? In principle, base is lower-degree side = !principleThinAtP1
-    // Reverse principle flips this logic
-    const baseAtP1 = reverse ? principleThinAtP1 : !principleThinAtP1;
+    const baseAtP1 = wedgeBaseAtom(bond, deg) === bond.a1;
     const baseHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
     // The narrow end is a bond's width, matching the join caps at atoms.
     const tipHalf = pxToWorld(lwPx * 0.5, zoom);
     const bp1 = baseAtP1 ? p1 : p2;
     const bp2 = baseAtP1 ? p2 : p1;
     if (bond.stereo === "up") {
-      const tri = buildWedgeTriangle(bp1, bp2, baseHalf, tipHalf);
+      // Directions of the bonds continuing from the wide end, to cut it along
+      // them. A labelled atom is left out: the bond stops short of the label,
+      // so there is no join to make.
+      const baseIdx = baseAtP1 ? bond.a1 : bond.a2;
+      const tipIdx = baseAtP1 ? bond.a2 : bond.a1;
+      const baseAtom = atoms[baseIdx];
+      const neighbourDirs: Vec2[] = [];
+      if (!hasLabel(baseAtom.el)) {
+        for (const other of adj?.get(baseIdx) ?? []) {
+          if (other === tipIdx || other === baseIdx) continue;
+          const o = atoms[other];
+          if (!o) continue;
+          const d = vsub({ x: o.x, y: o.y }, { x: baseAtom.x, y: baseAtom.y });
+          if (vlen(d) > 1e-9) neighbourDirs.push(vnorm(d));
+        }
+      }
+      const tri = buildWedgeTriangle(
+        bp1,
+        bp2,
+        baseHalf,
+        tipHalf,
+        neighbourDirs,
+      );
       polys.push(tri);
       return { lines, polys };
     } else {
@@ -693,10 +797,16 @@ export function buildAllPrimitives(
     opts.units === "world"
       ? opts.lineWidthPx * 0.5
       : pxToWorld(widthPx * 0.5, zoom); // restore previous size
+  // A solid wedge's wide end is cut along the bonds it meets, so a cap there
+  // would only bulge out of that face.
+  const mitredBases = new Set<number>();
+  for (const b of bonds) {
+    if (b.stereo === "up") mitredBases.add(wedgeBaseAtom(b, deg));
+  }
   for (let i = 0; i < atoms.length; i++) {
     const d = deg.get(i) || 0;
     const showLabel = opts.showCarbonLabels || atoms[i].el !== "C";
-    if (d >= 2 && !showLabel) {
+    if (d >= 2 && !showLabel && !mitredBases.has(i)) {
       fills.push({ c: { x: atoms[i].x, y: atoms[i].y }, r: rWorld });
     }
   }
@@ -747,7 +857,8 @@ export function buildAllPrimitives(
       zoom,
       deg,
       inRing,
-      autoSgn
+      autoSgn,
+      adj
     );
     lines.push(...r.lines);
     polys.push(...r.polys);

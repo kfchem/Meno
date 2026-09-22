@@ -134,6 +134,58 @@ describe("wedge geometry", () => {
     expect(Math.abs(base[0].y - base[1].y)).toBeCloseTo(o.wedgeWidthPx, 6);
   });
 
+  it("cuts the wide end along a bond that continues from it", () => {
+    // stereocentre at 0, wide end at 1, which carries on to 2
+    const chain: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.5, y: 0, el: "C" },
+      { id: 3, x: 2.3, y: -1.3, el: "C" },
+    ];
+    const chainDeg = new Map([
+      [0, 3],
+      [1, 2],
+      [2, 1],
+    ]);
+    const adj = new Map([
+      [0, [1]],
+      [1, [0, 2]],
+      [2, [1]],
+    ]);
+    const o = opts();
+    const { polys } = buildBondPrimitives(
+      chain,
+      wedge,
+      o,
+      ZOOM,
+      chainDeg,
+      undefined,
+      undefined,
+      adj,
+    );
+    const base = polys[0].points.filter((p) => p.x > 0.75);
+    expect(base).toHaveLength(2);
+    // the cut runs parallel to the continuing bond
+    const cut = { x: base[0].x - base[1].x, y: base[0].y - base[1].y };
+    const bond = { x: 2.3 - 1.5, y: -1.3 };
+    expect(cut.x * bond.y - cut.y * bond.x).toBeCloseTo(0, 6);
+    // and along its near edge, half a line width off its centre line
+    const len = Math.hypot(bond.x, bond.y);
+    const n0 = { x: -bond.y / len, y: bond.x / len };
+    // the near edge is the one facing the thin end
+    const towardsTip = n0.x * (0 - 1.5) >= 0 ? 1 : -1;
+    for (const p of base) {
+      const off = ((p.x - 1.5) * n0.x + (p.y - 0) * n0.y) * towardsTip;
+      expect(off).toBeCloseTo(o.lineWidthPx / 2, 6);
+    }
+  });
+
+  it("leaves the wide end square when nothing continues from it", () => {
+    const o = opts();
+    const { polys } = buildBondPrimitives(atoms, wedge, o, ZOOM, deg);
+    const base = polys[0].points.filter((p) => p.x > 0.75);
+    expect(base[0].x).toBeCloseTo(base[1].x, 12);
+  });
+
   it("gives the hashed wedge a last hash of bond width", () => {
     const o = opts();
     const hashed: Bond = { ...wedge, stereo: "down" };
