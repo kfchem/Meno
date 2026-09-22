@@ -33,6 +33,8 @@ export type LayoutOptions = {
   fontPx: number;
   paddingPx: number;
   showCarbonLabels: boolean;
+  /** Draw the hydrogens a labelled atom carries, e.g. OH, NH2. Default: on. */
+  showImplicitHydrogens?: boolean;
   units?: "px" | "world";
   minLinePx?: number;
   // boolean: all rings ON, undefined/false: OFF
@@ -48,7 +50,23 @@ export type LineSeg = {
   widthPx: number;
 };
 export type Poly = { points: Vec2[] };
-export type TextItem = { x: number; y: number; text: string; fontPx: number };
+/** A piece of a label; `sub` marks a subscript such as the 2 in NH2. */
+export type TextRun = { text: string; sub?: boolean };
+
+export type TextItem = {
+  x: number;
+  y: number;
+  /** The whole label as plain text (subscripts inline), for simple consumers. */
+  text: string;
+  fontPx: number;
+  /** The label split into runs, so subscripts can be drawn smaller. */
+  runs?: TextRun[];
+  /**
+   * Which run sits on the atom: the element symbol, so that OH hangs to the
+   * right of the atom and HO to its left.
+   */
+  anchorRun?: number;
+};
 export type Circle = { c: Vec2; r: number; key?: string };
 
 export type Layout = {
@@ -142,34 +160,54 @@ function buildTripleLines(
   ];
 }
 
-function buildWedgeTriangle(p1: Vec2, p2: Vec2, baseHalfWorld: number): Poly {
+/**
+ * Solid wedge. The narrow end is not a point but as wide as a plain bond, so
+ * where it meets other bonds at an atom the join is as clean as a line-to-line
+ * one; a pointed tip leaves white notches on both sides of the vertex.
+ */
+function buildWedgeTriangle(
+  p1: Vec2,
+  p2: Vec2,
+  baseHalfWorld: number,
+  tipHalfWorld: number,
+): Poly {
   const dir = vnorm(vsub(p2, p1));
-  const n = vscale(vperp(dir), baseHalfWorld);
-  const a = vadd(p1, n);
-  const b = vsub(p1, n);
-  const t = p2;
-  return { points: [a, b, t] };
+  // Keep a taper even when the minimum line width would otherwise make the
+  // narrow end as wide as the base (very low zoom).
+  const tipHalf = Math.min(tipHalfWorld, baseHalfWorld * 0.5);
+  const nb = vscale(vperp(dir), baseHalfWorld);
+  const nt = vscale(vperp(dir), tipHalf);
+  // Reach just past the atom so the flat tip overlaps the bonds meeting there,
+  // the way a mitred line join does.
+  const tip = vadd(p2, vscale(dir, tipHalf));
+  return {
+    points: [vadd(p1, nb), vsub(p1, nb), vsub(tip, nt), vadd(tip, nt)],
+  };
 }
 
 function buildHashedWedgeSegments(
   p1: Vec2,
   p2: Vec2,
   baseHalfWorld: number,
-  steps: number
+  steps: number,
+  tipHalfWorld = 0
 ): LineSeg[] {
-  // Same triangular outline as solid wedge. For each slice draw full-width lines (outline aligned)
+  // Same outline as the solid wedge, drawn as separate hashes. The narrow end
+  // keeps a bond's width so the last hash does not shrink to a dot.
   const dir = vnorm(vsub(p2, p1));
   const n = vperp(dir);
   const baseL = vadd(p1, vscale(n, baseHalfWorld));
   const baseR = vadd(p1, vscale(n, -baseHalfWorld));
-  const apex = p2;
+  const tipHalf = Math.min(tipHalfWorld, baseHalfWorld * 0.5);
+  const apexL = vadd(p2, vscale(n, tipHalf));
+  const apexR = vadd(p2, vscale(n, -tipHalf));
   const out: LineSeg[] = [];
   for (let i = 0; i < steps; i++) {
     // Place separator lines at equal distances from base to apex
     const u = (i + 0.5) / steps;
     // Points at the same ratio along left (baseL→apex) and right (baseR→apex) edges
-    const Lp = vadd(baseL, vscale(vsub(apex, baseL), u));
-    const Rp = vadd(baseR, vscale(vsub(apex, baseR), u));
+    const Lp = vadd(baseL, vscale(vsub(apexL, baseL), u));
+    const Rp = vadd(baseR, vscale(vsub(apexR, baseR), u));
     out.push({ x1: Lp.x, y1: Lp.y, x2: Rp.x, y2: Rp.y, widthPx: 0 });
   }
   return out;
@@ -203,15 +241,92 @@ function buildWavySegments(
   return out;
 }
 
+/**
+ * Valences used to work out how many hydrogens a drawn atom carries. Charges
+ * and radicals are not modelled yet, so a charged atom gets no hydrogens here.
+ */
+const DEFAULT_VALENCE: Record<string, number> = {
+  B: 3,
+  C: 4,
+  N: 3,
+  O: 2,
+  Si: 4,
+  P: 3,
+  S: 2,
+  Se: 2,
+  F: 1,
+  Cl: 1,
+  Br: 1,
+  I: 1,
+};
+
+/** Hydrogens left on an atom of `el` whose bond orders sum to `bondOrderSum`. */
+export function implicitHydrogens(el: string, bondOrderSum: number): number {
+  const valence = DEFAULT_VALENCE[el];
+  if (valence == null) return 0;
+  return Math.max(0, valence - bondOrderSum);
+}
+
 export function buildTextLabels(
   atoms: Atom[],
-  opts: LayoutOptions
+  opts: LayoutOptions,
+  bonds: Bond[] = []
 ): TextItem[] {
+  // Bond orders and directions per atom: the first decides how many hydrogens
+  // an atom carries, the second which side to write them on.
+  const orderSum = new Map<number, number>();
+  const away = new Map<number, Vec2>();
+  const note = (i: number, j: number, order: number) => {
+    orderSum.set(i, (orderSum.get(i) ?? 0) + order);
+    const from = atoms[i];
+    const to = atoms[j];
+    if (!from || !to) return;
+    const d = vnorm(vsub({ x: to.x, y: to.y }, { x: from.x, y: from.y }));
+    const acc = away.get(i) ?? { x: 0, y: 0 };
+    away.set(i, { x: acc.x + d.x, y: acc.y + d.y });
+  };
+  for (const b of bonds) {
+    const order = b.order ?? 1;
+    note(b.a1, b.a2, order);
+    note(b.a2, b.a1, order);
+  }
+
   const out: TextItem[] = [];
-  for (const a of atoms) {
+  for (let i = 0; i < atoms.length; i++) {
+    const a = atoms[i];
     const show = opts.showCarbonLabels || a.el !== "C";
     if (!show) continue;
-    out.push({ x: a.x, y: a.y, text: a.el, fontPx: opts.fontPx });
+    const h =
+      opts.showImplicitHydrogens === false
+        ? 0
+        : implicitHydrogens(a.el, orderSum.get(i) ?? 0);
+    if (h <= 0) {
+      out.push({
+        x: a.x,
+        y: a.y,
+        text: a.el,
+        fontPx: opts.fontPx,
+        runs: [{ text: a.el }],
+        anchorRun: 0,
+      });
+      continue;
+    }
+    const hydrogens: TextRun[] =
+      h > 1 ? [{ text: "H" }, { text: String(h), sub: true }] : [{ text: "H" }];
+    // Keep the hydrogens clear of the bonds: if the neighbours sit to the
+    // right, write HO rather than OH.
+    const neighboursRight = (away.get(i)?.x ?? 0) > 1e-6;
+    const runs = neighboursRight
+      ? [...hydrogens, { text: a.el }]
+      : [{ text: a.el }, ...hydrogens];
+    out.push({
+      x: a.x,
+      y: a.y,
+      text: runs.map((r) => r.text).join(""),
+      fontPx: opts.fontPx,
+      runs,
+      anchorRun: neighboursRight ? runs.length - 1 : 0,
+    });
   }
   return out;
 }
@@ -271,10 +386,12 @@ export function buildBondPrimitives(
     // Reverse principle flips this logic
     const baseAtP1 = reverse ? principleThinAtP1 : !principleThinAtP1;
     const baseHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
+    // The narrow end is a bond's width, matching the join caps at atoms.
+    const tipHalf = pxToWorld(lwPx * 0.5, zoom);
     const bp1 = baseAtP1 ? p1 : p2;
     const bp2 = baseAtP1 ? p2 : p1;
     if (bond.stereo === "up") {
-      const tri = buildWedgeTriangle(bp1, bp2, baseHalf);
+      const tri = buildWedgeTriangle(bp1, bp2, baseHalf, tipHalf);
       polys.push(tri);
       return { lines, polys };
     } else {
@@ -282,7 +399,8 @@ export function buildBondPrimitives(
         bp1,
         bp2,
         baseHalf,
-        Math.max(5, Math.floor(opts.hashCount * 0.9))
+        Math.max(5, Math.floor(opts.hashCount * 0.9)),
+        tipHalf
       );
       for (let i = 0; i < segs.length; i++) segs[i].widthPx = lwPx;
       lines.push(...segs);
@@ -645,7 +763,7 @@ export function layoutMolecule(
 ): Layout {
   const bounds = computeBounds(atoms);
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
-  const texts = buildTextLabels(atoms, opts);
+  const texts = buildTextLabels(atoms, opts, bonds);
   return {
     lines: prim.lines,
     polys: prim.polys,

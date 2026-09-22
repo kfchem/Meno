@@ -62,11 +62,6 @@ export default function Labels2D({
     [atoms, bonds, opts, zoom]
   );
 
-  // Two-letter element symbols stay centered; single uppercase is now left-aligned
-  const isTwoLetterElementSymbol = (s: string) => /^[A-Z][a-z]$/.test(s);
-
-  // Measure first character width in px to compute world-offset so that
-  // the first character center sits on the atom position even for left-aligned labels.
   const fontFamily =
     "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
   const measRef = useMemo(() => {
@@ -74,39 +69,54 @@ export default function Labels2D({
     const ctx = canvas.getContext("2d");
     return ctx;
   }, []);
-  const firstCharHalfWidthWorld = (text: string, fontPxWorld: number) => {
-    const ch = text && text.length > 0 ? text[0] : "H";
+  /** Width of a piece of a label, in world units. */
+  const widthWorld = (text: string, fontWorld: number) => {
     const ctx = measRef;
     if (!ctx) return 0;
-    const fontPx = fontPxWorld * Math.max(zoom, 1e-6);
+    const fontPx = fontWorld * Math.max(zoom, 1e-6);
     ctx.font = `${fontPx}px ${fontFamily}`;
-    const w = ctx.measureText(ch).width;
-    const halfPx = w * 0.5;
-    const halfWorld = halfPx / Math.max(zoom, 1e-6);
-    return halfWorld;
+    return ctx.measureText(text).width / Math.max(zoom, 1e-6);
   };
+  /** Hydrogen counts are drawn smaller and lower, as subscripts. */
+  const SUB_SCALE = 0.7;
+  const SUB_DROP = 0.28;
 
   return (
     <group>
       {layout.texts.map((t, i) => {
-        const leftAligned = !isTwoLetterElementSymbol(t.text);
-        const dx = leftAligned ? firstCharHalfWidthWorld(t.text, t.fontPx) : 0;
+        const fontWorld =
+          opts.units === "px" ? t.fontPx / Math.max(zoom, 1e-6) : t.fontPx;
+        const runs = t.runs ?? [{ text: t.text }];
+        const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
+        const sizes = runs.map((r) => fontWorld * (r.sub ? SUB_SCALE : 1));
+        const widths = runs.map((r, k) => widthWorld(r.text, sizes[k]));
+        // Put the element symbol itself on the atom, so OH hangs to the right
+        // of the atom and HO to its left.
+        let before = 0;
+        for (let k = 0; k < anchor; k++) before += widths[k];
+        let cursor = t.x - (before + widths[anchor] * 0.5);
         return (
-          <Text
-            key={`txt-${i}`}
-            position={[t.x - dx, t.y, 0]}
-            fontSize={
-              opts.units === "px" ? t.fontPx / Math.max(zoom, 1e-6) : t.fontPx
-            }
-            color="black"
-            anchorX={leftAligned ? "left" : "center"}
-            anchorY="middle"
-            renderOrder={30}
-            material-depthTest={false}
-            material-depthWrite={false}
-          >
-            {t.text}
-          </Text>
+          <group key={`txt-${i}`}>
+            {runs.map((r, k) => {
+              const x = cursor;
+              cursor += widths[k];
+              return (
+                <Text
+                  key={`run-${k}`}
+                  position={[x, t.y - (r.sub ? fontWorld * SUB_DROP : 0), 0]}
+                  fontSize={sizes[k]}
+                  color="black"
+                  anchorX="left"
+                  anchorY="middle"
+                  renderOrder={30}
+                  material-depthTest={false}
+                  material-depthWrite={false}
+                >
+                  {r.text}
+                </Text>
+              );
+            })}
+          </group>
         );
       })}
     </group>
