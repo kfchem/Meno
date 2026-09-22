@@ -19,6 +19,10 @@ import type {
   TabKind,
 } from "../../lib/core";
 import { StructureCanvas } from "../../ui/features/StructureEditor";
+import {
+  createStructureDocument,
+  type StructureDocument,
+} from "../features/StructureEditor/document";
 
 export type ViewProps = {
   tabId: TabId;
@@ -75,10 +79,12 @@ export const viewRegistry: Record<string, ViewEntry> = {
   },
   "2d": {
     kind: "2d",
-    Component: ({ tabId, content, active }) => (
+    createDocument: () => createStructureDocument(),
+    Component: ({ tabId, content, active, document }) => (
       <StructureCanvas
         tabId={tabId}
         active={active}
+        document={document as DocumentStore<StructureDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
       />
@@ -124,10 +130,12 @@ export const viewRegistry: Record<string, ViewEntry> = {
   },
   structure: {
     kind: "structure",
-    Component: ({ tabId, content, active }) => (
+    createDocument: () => createStructureDocument(),
+    Component: ({ tabId, content, active, document }) => (
       <StructureCanvas
         tabId={tabId}
         active={active}
+        document={document as DocumentStore<StructureDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
       />

@@ -27,6 +27,8 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { CANVAS_DPR } from "./constants";
+import type { DocumentStore } from "../../../lib/doc";
+import type { StructureDocument } from "./document";
 
 function StructureCanvasContent({
   active,
@@ -180,15 +182,18 @@ export default function StructureCanvas({
   initialPayload,
   initialFilename,
   active = true,
+  document,
 }: {
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
   /** False while the owning tab is hidden: pauses the render loop. */
   active?: boolean;
+  /** The tab's document; omitted for canvases embedded in other views. */
+  document?: DocumentStore<StructureDocument>;
 }) {
   return (
-    <EditorProvider tabId={tabId}>
+    <EditorProvider tabId={tabId} document={document}>
       <StructureCanvasContent
         active={active}
         tabId={tabId}

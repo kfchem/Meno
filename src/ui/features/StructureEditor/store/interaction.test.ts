@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createEditorStore } from ".";
+import { createStructureDocument } from "../document";
 
 describe("move drag preview", () => {
   const withDraggedAtom = () => {
-    const store = createEditorStore();
+    const store = createEditorStore(createStructureDocument());
     const id = store.getState().addAtom(0, 0, "O");
     store.getState().beginMoveDrag(id, { x: 1, y: 1 });
     return { store, id };
@@ -39,7 +40,7 @@ describe("move drag preview", () => {
   });
 
   it("does nothing when no atom is being dragged", () => {
-    const store = createEditorStore();
+    const store = createEditorStore(createStructureDocument());
     const before = store.getState().moveDrag;
     store.getState().setMoveDragPreview(5, 5);
     expect(store.getState().moveDrag).toBe(before);

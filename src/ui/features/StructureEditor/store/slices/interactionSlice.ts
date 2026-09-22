@@ -86,8 +86,7 @@ export function createInteractionSlice(set: SetState, get: GetState) {
       if (nearId != null) {
         get().connectAtoms(base.id, nearId, 1);
       } else {
-        const nid = get().addAtom(nx, ny, "C", 0.9);
-        get().addBond(base.id, nid, 1);
+        get().addAtomBonded(base.id, nx, ny, "C", 1);
       }
       set((prev: EditorState) => ({
         ...prev,

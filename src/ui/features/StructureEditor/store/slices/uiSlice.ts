@@ -1,9 +1,17 @@
+import type { DocumentStore } from "../../../../../lib/doc";
+import * as ops from "../../document";
+import type { StructureDocument } from "../../document";
 import { EditorState } from "../types";
 import { StoreApi } from "zustand";
 
 type SetState = StoreApi<EditorState>["setState"];
+type GetState = StoreApi<EditorState>["getState"];
 
-export function createUiSlice(set: SetState) {
+export function createUiSlice(
+  doc: DocumentStore<StructureDocument>,
+  set: SetState,
+  get: GetState,
+) {
   return {
     beginLabelEdit: (atomId: number, initial = "", forceLower = false) =>
       set((prev: EditorState) => {
@@ -39,21 +47,18 @@ export function createUiSlice(set: SetState) {
         };
       }),
 
-    commitLabelEdit: () =>
-      set((prev: EditorState) => {
-        if (!prev.labelEdit.active || prev.labelEdit.atomId == null)
-          return prev;
-        const id = prev.labelEdit.atomId;
-        const value = prev.labelEdit.value.trim();
-        const atoms = prev.model.atoms.map((a) =>
-          a.id === id ? { ...a, el: value || a.el } : a,
-        );
-        return {
-          ...prev,
-          model: { atoms, bonds: prev.model.bonds },
-          labelEdit: { active: false, atomId: null, value: "", autoCap: true },
-        };
-      }),
+    commitLabelEdit: () => {
+      const { labelEdit } = get();
+      if (!labelEdit.active || labelEdit.atomId == null) return;
+      const id = labelEdit.atomId;
+      const value = labelEdit.value.trim();
+      // An empty input keeps the current label.
+      if (value) doc.edit("rename atom", (d) => ops.setAtomLabel(d, id, value));
+      set((prev: EditorState) => ({
+        ...prev,
+        labelEdit: { active: false, atomId: null, value: "", autoCap: true },
+      }));
+    },
 
     cancelLabelEdit: () =>
       set((prev: EditorState) => ({
@@ -61,29 +66,25 @@ export function createUiSlice(set: SetState) {
         labelEdit: { active: false, atomId: null, value: "", autoCap: true },
       })),
 
-    setAromaticEnabled: (v: boolean) =>
-      set((prev: EditorState) => ({ ...prev, aromaticEnabled: v })),
+    setAromaticEnabled: (v: boolean) => {
+      doc.edit("aromatic circles", (d) => ops.setAromaticEnabled(d, v));
+    },
 
-    toggleAromatic: () =>
-      set((prev: EditorState) => ({
-        ...prev,
-        aromaticEnabled: !prev.aromaticEnabled,
-      })),
+    toggleAromatic: () => {
+      doc.edit("aromatic circles", (d) =>
+        ops.setAromaticEnabled(d, !d.aromaticEnabled),
+      );
+    },
 
-    setRingEnabled: (key: string, v: boolean) =>
-      set((prev: EditorState) => ({
-        ...prev,
-        aromaticRings: { ...prev.aromaticRings, [key]: v },
-      })),
+    setRingEnabled: (key: string, v: boolean) => {
+      doc.edit("aromatic circle", (d) => ops.setRingEnabled(d, key, v));
+    },
 
-    toggleRing: (key: string) =>
-      set((prev: EditorState) => ({
-        ...prev,
-        aromaticRings: {
-          ...prev.aromaticRings,
-          [key]: !prev.aromaticRings[key],
-        },
-      })),
+    toggleRing: (key: string) => {
+      doc.edit("aromatic circle", (d) =>
+        ops.setRingEnabled(d, key, !d.aromaticRings[key]),
+      );
+    },
 
     requestFit: () =>
       set((prev: EditorState) => ({ ...prev, fitNonce: prev.fitNonce + 1 })),
