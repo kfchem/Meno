@@ -196,6 +196,40 @@ describe("wedge geometry", () => {
     }
   });
 
+  it("leaves the wide end square when a bond runs along the wedge", () => {
+    // the bond at the wide end doubles back at a shallow angle: cutting to it
+    // would draw the wedge out into a spike
+    const shallow: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.5, y: 0, el: "C" },
+      { id: 3, x: -1.41, y: -0.51, el: "C" },
+    ];
+    const shallowDeg = new Map([
+      [0, 2],
+      [1, 3],
+      [2, 1],
+    ]);
+    const o = raw();
+    const { polys } = buildBondPrimitives(
+      shallow,
+      { a1: 1, a2: 0, order: 1, stereo: "up" },
+      o,
+      ZOOM,
+      shallowDeg,
+      undefined,
+      undefined,
+      new Map([
+        [0, [1, 2]],
+        [1, [0]],
+        [2, [0]],
+      ]),
+    );
+    const base = polys[0].points.filter((p) => p.x < 0.75);
+    expect(base).toHaveLength(2);
+    // square: both corners sit on the atom, not stretched along the wedge
+    for (const p of base) expect(p.x).toBeCloseTo(0, 9);
+  });
+
   it("leaves the wide end square when nothing continues from it", () => {
     const o = raw();
     const { polys } = buildBondPrimitives(atoms, wedge, o, ZOOM, deg);

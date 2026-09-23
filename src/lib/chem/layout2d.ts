@@ -209,20 +209,27 @@ function baseCut(
   return { on: vadd(atom, vscale(off, towardsTip * halfLineWorld)), dir, key };
 }
 
-/** Slide a base corner along the wedge's edge until it sits on the cut. */
+/**
+ * Slides a base corner along the wedge's edge until it sits on the cut, or
+ * gives up. A bond leaving the atom at a shallow angle to the wedge meets that
+ * edge far away; cutting to it would draw the wedge out into a spike instead
+ * of tidying its end, and a square end there is no worse than any other bond
+ * end, so the corner is left alone.
+ */
 function cornerOnCut(
   cut: Cut | null,
   corner: Vec2,
   tipCorner: Vec2,
   limit: number,
-): Vec2 {
-  if (!cut) return corner;
+): Vec2 | null {
+  if (!cut) return null;
   const e = vnorm(vsub(tipCorner, corner));
   const den = vcross(e, cut.dir);
   // nearly parallel to the edge: the cut would run off to infinity
-  if (Math.abs(den) < 1e-6) return corner;
+  if (Math.abs(den) < 1e-6) return null;
   const t = vcross(vsub(cut.on, corner), cut.dir) / den;
-  return vadd(corner, vscale(e, Math.max(-limit, Math.min(limit, t))));
+  if (Math.abs(t) > limit) return null;
+  return vadd(corner, vscale(e, t));
 }
 
 /**
@@ -370,16 +377,19 @@ function buildWedgeTriangle(
   const halfLine = Math.min(tipHalfWorld, baseHalfWorld);
   const cutL = baseCut(p1, 1, dir, halfLine, baseNeighbourDirs);
   const cutR = baseCut(p1, -1, dir, halfLine, baseNeighbourDirs);
-  // a mitre limit, so a bond that nearly continues the wedge does not stretch
-  // the base into a spike
-  const limit = baseHalfWorld * 1.5;
-  const baseL = cornerOnCut(cutL, vadd(p1, nb), tipL, limit);
-  const baseR = cornerOnCut(cutR, vsub(p1, nb), tipR, limit);
+  // how far a corner may slide: about a right angle between bond and wedge
+  const limit = baseHalfWorld;
+  const squareL = vadd(p1, nb);
+  const squareR = vsub(p1, nb);
+  const mitredL = cornerOnCut(cutL, squareL, tipL, limit);
+  const mitredR = cornerOnCut(cutR, squareR, tipR, limit);
+  const baseL = mitredL ?? squareL;
+  const baseR = mitredR ?? squareR;
   const points = [baseL];
   // A corner cut along a bond carries on into that bond, so it is not a free
   // corner and must stay as it is; the rest may be softened.
-  const soften = [!cutL];
-  if (cutL && cutR && cutL.key !== cutR.key) {
+  const soften = [!mitredL];
+  if (mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key) {
     // Two bonds carry on from the wide end, so the cut follows one on each
     // side and dents in to the atom between them. Taking it to the atom
     // rather than to where the two outlines cross keeps the dent inside what
@@ -394,7 +404,7 @@ function buildWedgeTriangle(
     }
   }
   points.push(baseR, tipR, tipL);
-  soften.push(!cutR, true, true);
+  soften.push(!mitredR, true, true);
   return {
     points: round ? roundPolyCorners(points, tipHalf, soften) : points,
   };
