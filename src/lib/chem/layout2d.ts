@@ -178,8 +178,14 @@ type Cut = { on: Vec2; dir: Vec2; key: number };
 /**
  * Where the wide end of a wedge meets another bond, a square cut leaves a
  * notch on the side the bond descends to. Pick, for this side of the wedge,
- * the bond to follow and the line to cut along: its near edge, half a line
- * width off its centre, so the cut face and the bond's outline are one run.
+ * the bond to follow and the line to cut along: one of that bond's edges,
+ * half a line width off its centre, so the cut face and that edge are one run.
+ *
+ * Which edge depends on what else is at the atom. A single bond carries on
+ * away from the wedge, and the edge that carries the outline round is its far
+ * one, so the cut takes the bond in whole. Where two bonds carry on, each is
+ * followed by its near edge, which is the outline between them, and the two
+ * cuts meet in the dent.
  */
 function baseCut(
   atom: Vec2,
@@ -206,7 +212,8 @@ function baseCut(
   const dir = neighbourDirs[key];
   const off = vperp(dir);
   const towardsTip = off.x * axis.x + off.y * axis.y >= 0 ? 1 : -1;
-  return { on: vadd(atom, vscale(off, towardsTip * halfLineWorld)), dir, key };
+  const edge = neighbourDirs.length === 1 ? -towardsTip : towardsTip;
+  return { on: vadd(atom, vscale(off, edge * halfLineWorld)), dir, key };
 }
 
 /**

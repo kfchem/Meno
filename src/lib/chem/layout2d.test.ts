@@ -185,14 +185,14 @@ describe("wedge geometry", () => {
     const cut = { x: base[0].x - base[1].x, y: base[0].y - base[1].y };
     const bond = { x: 2.3 - 1.5, y: -1.3 };
     expect(cut.x * bond.y - cut.y * bond.x).toBeCloseTo(0, 6);
-    // and along its near edge, half a line width off its centre line
+    // and along its far edge, so the bond is taken in whole: with nothing
+    // else at the atom, that edge is the one carrying the outline round
     const len = Math.hypot(bond.x, bond.y);
     const n0 = { x: -bond.y / len, y: bond.x / len };
-    // the near edge is the one facing the thin end
     const towardsTip = n0.x * (0 - 1.5) >= 0 ? 1 : -1;
     for (const p of base) {
       const off = ((p.x - 1.5) * n0.x + (p.y - 0) * n0.y) * towardsTip;
-      expect(off).toBeCloseTo(o.lineWidthPx / 2, 6);
+      expect(off).toBeCloseTo(-o.lineWidthPx / 2, 6);
     }
   });
 
