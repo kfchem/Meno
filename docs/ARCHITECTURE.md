@@ -85,19 +85,23 @@ must not need one undo per frame), and the stack is capped.
 `subscribe` matches React's `useSyncExternalStore`; nothing in `lib/doc`
 imports React.
 
-Adoption is incremental and not finished: the core lands first, then the tab
-shell routes undo to the active document, then views move their content across
-one at a time. Until a view has moved, it keeps owning its state - the 2D
-editor in its Zustand store, the workflow editor in component state - and its
-content is still lost when the tab closes.
+Adoption is incremental. The text view and the 2D structure editor are on
+documents; the workflow editor and the 3D viewer still keep their content in
+component state, and it is still lost when their tab closes.
 
 ## 2D structure editor (`ui/features/StructureEditor`)
 
-- **State**: a Zustand store per canvas instance (`store/index.tsx`), composed
-  from slices: `modelSlice` (atoms, bonds, arrows), `selectionSlice`,
-  `hoverSlice`, `interactionSlice` (drag/extend/pan), `uiSlice` (label editing,
-  aromatic circles, fit requests). `EditorProvider` creates the store;
-  components read it with `useEditor(selector)`.
+- **State**: the structure itself - atoms, bonds, arrows, aromatic circles and
+  the id counters - lives in the tab's document (`document.ts`), which is what
+  undo, redo and saving act on. A Zustand store per canvas (`store/index.tsx`)
+  holds the ephemeral half (hover, drag and extend gestures, fit requests, the
+  label edit buffer) **and mirrors the document**, so components keep reading
+  `model` and `arrows` from the store with `useEditor(selector)`.
+  `connectStoreToDocument` maintains that mirror; the slices never write model
+  state directly, they call `document.edit()` with the pure operations from
+  `document.ts`. A gesture is one undo step: extending a bond adds the atom and
+  its bond together, an import replaces the model in one go, and repeated moves
+  of one atom coalesce.
 - **Rendering**: an orthographic react-three-fiber `<Canvas>`; each visual layer
   is its own component in `components/` (`Bonds2D`, `Atoms2D`, `Wedges2D`,
   `Labels2D`, previews, hover overlays, `PanZoom2D`, `FitToContent2D`, …).

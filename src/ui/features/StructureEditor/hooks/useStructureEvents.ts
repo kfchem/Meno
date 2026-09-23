@@ -38,83 +38,43 @@ export function useStructureEvents(
     return { x: v.x, y: v.y };
   };
 
-  // Helper: Rebuild model via addAtom/addBond (Replace)
+  // An import is one undo step: the model goes into the document as a whole,
+  // rather than being replayed atom by atom.
+  const toModel = (mdl: { atoms: any[]; bonds: any[] }) => ({
+    atoms: mdl.atoms.map((a) => ({
+      id: a.id,
+      x: a.x,
+      y: a.y,
+      r: a.r ?? 0.9,
+      el: a.el ?? "C",
+    })),
+    bonds: mdl.bonds.map((b) => ({
+      id: b.id,
+      a: b.a,
+      b: b.b,
+      order: (b.order as 1 | 2 | 3) ?? 1,
+      stereo: b.stereo ?? "none",
+      stereoOrient: b.stereoOrient ?? "principle",
+      ...(b.doubleMode ? { doubleMode: b.doubleMode } : {}),
+    })),
+  });
+
   const replayReplace = (mdl: { atoms: any[]; bonds: any[] }) => {
-    const st = store.getState();
-    try {
-      st.beginAutoFitSuspend();
-    } catch {}
-    st.replaceModel({ atoms: [], bonds: [] });
-    const idMap = new Map<number, number>();
-    for (const a of mdl.atoms) {
-      const nid = st.addAtom(a.x, a.y, a.el ?? "C", a.r ?? 0.9);
-      idMap.set(a.id, nid);
-    }
-    for (const b of mdl.bonds) {
-      const a1 = idMap.get(b.a);
-      const a2 = idMap.get(b.b);
-      if (a1 == null || a2 == null) continue;
-      const nbid = st.addBond(a1, a2, (b.order as any) ?? 1);
-      try {
-        if (b.stereo && b.stereo !== "none") st.setBondStereo(nbid, b.stereo);
-      } catch {}
-      try {
-        const orient = (b as any).stereoOrient;
-        if (orient) st.setBondStereoOrient(nbid, orient);
-      } catch {}
-      try {
-        const dm = (b as any).doubleMode;
-        if (dm) st.setBondDoubleMode(nbid, dm);
-      } catch {}
-    }
-    try {
-      st.requestFit();
-    } catch {}
-    try {
-      st.endAutoFitSuspend();
-    } catch {}
+    store.getState().replaceModel(toModel(mdl));
   };
 
-  // Helper: Rebuild model (Append)
   const replayAppend = (mdl: { atoms: any[]; bonds: any[] }) => {
-    const st = store.getState();
-    try {
-      st.beginAutoFitSuspend();
-    } catch {}
-    const idMap = new Map<number, number>();
-    for (const a of mdl.atoms) {
-      const nid = st.addAtom(a.x, a.y, a.el ?? "C", a.r ?? 0.9);
-      idMap.set(a.id, nid);
-    }
-    for (const b of mdl.bonds) {
-      const a1 = idMap.get(b.a);
-      const a2 = idMap.get(b.b);
-      if (a1 == null || a2 == null) continue;
-      const nbid = st.addBond(a1, a2, (b.order as any) ?? 1);
-      try {
-        if (b.stereo && b.stereo !== "none") st.setBondStereo(nbid, b.stereo);
-      } catch {}
-      try {
-        const orient = (b as any).stereoOrient;
-        if (orient) st.setBondStereoOrient(nbid, orient);
-      } catch {}
-      try {
-        const dm = (b as any).doubleMode;
-        if (dm) st.setBondDoubleMode(nbid, dm);
-      } catch {}
-    }
-    try {
-      st.requestFit();
-    } catch {}
-    try {
-      st.endAutoFitSuspend();
-    } catch {}
+    store.getState().appendModel(toModel(mdl));
   };
 
   // Effect: Initial Payload
+  const importedInitial = useRef(false);
   useEffect(() => {
     (async () => {
-      if (!initialPayload) return;
+      if (!initialPayload || importedInitial.current) return;
+      // One import per canvas: this effect runs twice under StrictMode, and
+      // importing twice would leave two undo steps for a single file.
+      importedInitial.current = true;
       try {
         const result = await processFileContent(
           initialFilename || "",
