@@ -220,7 +220,8 @@ function cornerOnCut(
   cut: Cut | null,
   corner: Vec2,
   tipCorner: Vec2,
-  limit: number,
+  intoWedge: number,
+  pastAtom: number,
 ): Vec2 | null {
   if (!cut) return null;
   const e = vnorm(vsub(tipCorner, corner));
@@ -228,7 +229,7 @@ function cornerOnCut(
   // nearly parallel to the edge: the cut would run off to infinity
   if (Math.abs(den) < 1e-6) return null;
   const t = vcross(vsub(cut.on, corner), cut.dir) / den;
-  if (Math.abs(t) > limit) return null;
+  if (t > intoWedge || t < -pastAtom) return null;
   return vadd(corner, vscale(e, t));
 }
 
@@ -377,14 +378,25 @@ function buildWedgeTriangle(
   const halfLine = Math.min(tipHalfWorld, baseHalfWorld);
   const cutL = baseCut(p1, 1, dir, halfLine, baseNeighbourDirs);
   const cutR = baseCut(p1, -1, dir, halfLine, baseNeighbourDirs);
-  // how far a corner may slide: about a right angle between bond and wedge
-  const limit = baseHalfWorld;
+  // How far a corner may slide to reach the cut. Real structures need up to
+  // about 1.3 times the wedge's half width (a bond leaving at 140 degrees to
+  // the wedge); beyond that the bond runs so close to the wedge's own
+  // direction that cutting to it would draw the end out into a spike.
+  const intoWedge = baseHalfWorld * 1.5;
+  const pastAtom = baseHalfWorld * 1.5;
   const squareL = vadd(p1, nb);
   const squareR = vsub(p1, nb);
-  const mitredL = cornerOnCut(cutL, squareL, tipL, limit);
-  const mitredR = cornerOnCut(cutR, squareR, tipR, limit);
-  const baseL = mitredL ?? squareL;
-  const baseR = mitredR ?? squareR;
+  const mitredL = cornerOnCut(cutL, squareL, tipL, intoWedge, pastAtom);
+  const mitredR = cornerOnCut(cutR, squareR, tipR, intoWedge, pastAtom);
+  // A square end left at an atom other bonds meet would stop right at the
+  // atom, and the cap that fills the join there would bulge out of it. Reach
+  // the cap's width past the atom instead, so the end covers it.
+  const back =
+    baseNeighbourDirs.length > 0
+      ? vscale(dir, -Math.min(tipHalfWorld, baseHalfWorld))
+      : { x: 0, y: 0 };
+  const baseL = mitredL ?? vadd(squareL, back);
+  const baseR = mitredR ?? vadd(squareR, back);
   const points = [baseL];
   // A corner cut along a bond carries on into that bond, so it is not a free
   // corner and must stay as it is; the rest may be softened.
@@ -963,10 +975,17 @@ export function buildAllPrimitives(
       plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
     }
   }
+  // The wide end of a solid wedge covers the join at its atom itself, either
+  // by reaching past it or by being cut along the bonds there; a cap on top of
+  // that only bulges out of the wedge.
+  const wedgeEnds = new Set<number>();
+  for (const b of bonds) {
+    if (b.stereo === "up") wedgeEnds.add(wedgeBaseAtom(b, deg));
+  }
   for (let i = 0; i < atoms.length; i++) {
     const d = deg.get(i) || 0;
     const showLabel = opts.showCarbonLabels || atoms[i].el !== "C";
-    if (d < 2 || showLabel) continue;
+    if (d < 2 || showLabel || wedgeEnds.has(i)) continue;
     const c = { x: atoms[i].x, y: atoms[i].y };
     if (roundJoins) fills.push({ c, r: rWorld });
     else polys.push(...mitreJoinPolys(c, plainDirs.get(i) ?? [], rWorld));

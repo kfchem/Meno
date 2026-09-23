@@ -226,8 +226,13 @@ describe("wedge geometry", () => {
     );
     const base = polys[0].points.filter((p) => p.x < 0.75);
     expect(base).toHaveLength(2);
-    // square: both corners sit on the atom, not stretched along the wedge
-    for (const p of base) expect(p.x).toBeCloseTo(0, 9);
+    // square, not stretched along the wedge: both corners at the same place
+    // along it, a cap's width behind the atom so they cover the join cap
+    expect(base[0].x).toBeCloseTo(base[1].x, 9);
+    for (const p of base) {
+      expect(p.x).toBeLessThanOrEqual(0);
+      expect(p.x).toBeGreaterThanOrEqual(-o.lineWidthPx);
+    }
   });
 
   it("leaves the wide end square when nothing continues from it", () => {
@@ -325,18 +330,21 @@ describe("joinStyle", () => {
     { id: 2, x: 0, y: 0, el: "C" },
     { id: 3, x: 1.3, y: -0.75, el: "C" },
     { id: 4, x: -1.3, y: -0.75, el: "C" },
+    // a plain corner well away from the wedge
+    { id: 5, x: 2.6, y: 0, el: "C" },
   ];
   const bonds: Bond[] = [
     { a1: 0, a2: 1, order: 1, stereo: "up", stereoOrient: "reverse" },
     { a1: 1, a2: 2, order: 1, stereo: "none" },
     { a1: 1, a2: 3, order: 1, stereo: "none" },
+    { a1: 2, a2: 4, order: 1, stereo: "none" },
   ];
 
   it("rounds the wedge and caps the joins by default", () => {
     const o = opts();
     const { polys, fills } = buildAllPrimitives(atoms, bonds, o, 40);
     expect(fills.length).toBeGreaterThan(0);
-    // the wedge is the only polygon, and it is arcs instead of corners
+    // a cap at the plain corner, and the wedge drawn as arcs not corners
     expect(polys).toHaveLength(1);
     expect(polys[0].points.length).toBeGreaterThan(8);
   });
