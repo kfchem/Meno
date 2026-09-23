@@ -59,6 +59,20 @@ export type EditorState = {
   nextArrowId: number;
   addAtom: (x: number, y: number, el?: string, r?: number) => number;
   addBond: (a: number, b: number, order?: Bond["order"]) => number;
+  /** New atom plus its bond to `baseId`, as one undo step. */
+  addAtomBonded: (
+    baseId: number,
+    x: number,
+    y: number,
+    el?: string,
+    order?: Bond["order"],
+  ) => number;
+  /** Two new atoms and the bond between them, as one undo step. */
+  addBondedPair: (
+    first: { x: number; y: number; el?: string },
+    second: { x: number; y: number; el?: string },
+    order?: Bond["order"],
+  ) => void;
   connectAtoms: (a: number, b: number, order?: Bond["order"]) => number | null;
   replaceDraggedAtomWith: (movingId: number, targetId: number) => void;
   moveAtom: (id: number, x: number, y: number) => void;
