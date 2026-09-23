@@ -307,6 +307,39 @@ describe("joinStyle", () => {
     expect(polys[0].points.length).toBeGreaterThan(8);
   });
 
+  it("rounds only the corners no bond runs into", () => {
+    const wedgeOf = (o: LayoutOptions) => {
+      const { polys } = buildAllPrimitives(atoms, bonds, o, 40);
+      return polys.reduce((big, p) =>
+        polyArea(p.points) > polyArea(big.points) ? p : big,
+      );
+    };
+    const cut = wedgeOf(opts()).points;
+    const square = wedgeOf(opts({ joinStyle: "sharp" })).points;
+    // the wide end is cut along two bonds, so those corners and the dent are
+    // left as they are; only the free narrow end is rounded
+    for (const p of square.slice(0, 3)) {
+      expect(
+        cut.some(
+          (q) => Math.abs(q.x - p.x) < 1e-9 && Math.abs(q.y - p.y) < 1e-9,
+        ),
+      ).toBe(true);
+    }
+    expect(cut.length).toBeGreaterThan(square.length);
+  });
+
+  it("dents in to the atom, where the join is filled", () => {
+    const o = opts({ joinStyle: "sharp" });
+    const { polys } = buildAllPrimitives(atoms, bonds, o, 40);
+    const wedge = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    const dent = wedge.points[1];
+    // the branching atom itself
+    expect(dent.x).toBeCloseTo(0, 9);
+    expect(dent.y).toBeCloseTo(0, 9);
+  });
+
   it("mitres the joins and leaves the wedge cut when asked", () => {
     const o = opts({ joinStyle: "sharp" });
     const { polys, fills } = buildAllPrimitives(atoms, bonds, o, 40);

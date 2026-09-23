@@ -225,31 +225,44 @@ function cornerOnCut(
   return vadd(corner, vscale(e, Math.max(-limit, Math.min(limit, t))));
 }
 
-/** Where two cuts cross: the point both bonds' outlines meet at. */
-function cutsCross(a: Cut, b: Cut): Vec2 | null {
-  const den = vcross(a.dir, b.dir);
-  if (Math.abs(den) < 1e-6) return null;
-  const s = vcross(vsub(b.on, a.on), b.dir) / den;
-  return vadd(a.on, vscale(a.dir, s));
-}
-
 /**
  * Replaces each corner of a polygon with an arc of `radius`, the way a round
  * join does. The radius is reduced where an edge is too short to give it room,
  * so a wedge's narrow end becomes a semicircle rather than losing its shape.
+ *
+ * Only corners that stick out are rounded, and only those `soften` allows. A
+ * corner that folds inwards, or one that a bond runs into, keeps its point:
+ * rounding it would scoop out the join instead of softening a free edge.
  */
 export function roundPolyCorners(
   points: Vec2[],
   radius: number,
+  soften?: boolean[],
   segments = 4,
 ): Vec2[] {
   const n = points.length;
   if (n < 3 || radius <= 0) return points;
+  // which way the outline is wound, so a corner can be told from a dent
+  let twice = 0;
+  for (let i = 0; i < n; i++) {
+    const p = points[i];
+    const q = points[(i + 1) % n];
+    twice += p.x * q.y - q.x * p.y;
+  }
+  const winding = twice >= 0 ? 1 : -1;
   const out: Vec2[] = [];
   for (let i = 0; i < n; i++) {
     const b = points[i];
     const a = points[(i - 1 + n) % n];
     const c = points[(i + 1) % n];
+    if (soften && !soften[i]) {
+      out.push(b);
+      continue;
+    }
+    if (vcross(vsub(b, a), vsub(c, b)) * winding < 0) {
+      out.push(b);
+      continue;
+    }
     const v1 = vsub(a, b);
     const v2 = vsub(c, b);
     const l1 = vlen(v1);
@@ -363,15 +376,27 @@ function buildWedgeTriangle(
   const baseL = cornerOnCut(cutL, vadd(p1, nb), tipL, limit);
   const baseR = cornerOnCut(cutR, vsub(p1, nb), tipR, limit);
   const points = [baseL];
+  // A corner cut along a bond carries on into that bond, so it is not a free
+  // corner and must stay as it is; the rest may be softened.
+  const soften = [!cutL];
   if (cutL && cutR && cutL.key !== cutR.key) {
-    // two bonds carry on from the wide end: follow both, so the cut meets
-    // where their outlines do instead of running flat between them
-    const cross = cutsCross(cutL, cutR);
-    if (cross && vlen(vsub(cross, p1)) <= baseHalfWorld) points.push(cross);
+    // Two bonds carry on from the wide end, so the cut follows one on each
+    // side and dents in to the atom between them. Taking it to the atom
+    // rather than to where the two outlines cross keeps the dent inside what
+    // the join fill covers, so no sliver of background shows through.
+    const edge = vsub(baseR, baseL);
+    const n = vperp(edge);
+    const towardsTip = n.x * dir.x + n.y * dir.y >= 0 ? 1 : -1;
+    const dent = vsub(p1, baseL);
+    if ((dent.x * n.x + dent.y * n.y) * towardsTip > 0) {
+      points.push(p1);
+      soften.push(false);
+    }
   }
   points.push(baseR, tipR, tipL);
+  soften.push(!cutR, true, true);
   return {
-    points: round ? roundPolyCorners(points, tipHalf) : points,
+    points: round ? roundPolyCorners(points, tipHalf, soften) : points,
   };
 }
 
