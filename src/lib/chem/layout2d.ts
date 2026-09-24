@@ -307,6 +307,134 @@ function baseCut(
   return { on: vadd(atom, vscale(off, edge * half)), dir, key };
 }
 
+/**
+ * Where a double bond meets another at an atom, the line beside each of them
+ * should meet its neighbour's rather than stop short of it: run on to where
+ * the two would cross. Returns the point to end at, or the one given.
+ */
+function mitreOffsetEnd(
+  atoms: Atom[],
+  atIdx: number,
+  from: Vec2,
+  along: Vec2,
+  outward: Vec2,
+  offset: number,
+  fallback: Vec2,
+  sideOf: (b: Bond) => number[],
+  others: Bond[],
+  limit: number,
+): Vec2 {
+  const at = { x: atoms[atIdx].x, y: atoms[atIdx].y };
+  const mine = { on: vadd(from, vscale(vperp(along), offset)), dir: along };
+  let best: Vec2 | null = null;
+  let bestD = Infinity;
+  for (const b of others) {
+    const far = b.a1 === atIdx ? b.a2 : b.a1;
+    const o = atoms[far];
+    if (!o) continue;
+    const d = vsub({ x: o.x, y: o.y }, at);
+    if (vlen(d) < 1e-9) continue;
+    const dir = vnorm(d);
+    // the two bonds' own directions from the atom; a line belongs to the
+    // side of the corner its offset leans towards
+    const bisect = vnorm(vadd(outward, dir));
+    const sideMine = Math.sign(
+      vperp(along).x * offset * bisect.x + vperp(along).y * offset * bisect.y,
+    );
+    for (const off of sideOf(b)) {
+      const sideOther = Math.sign(
+        vperp(dir).x * off * bisect.x + vperp(dir).y * off * bisect.y,
+      );
+      // only ever meet the line on the same side of the corner
+      if (sideMine * sideOther < 0) continue;
+      const line = { on: vadd(at, vscale(vperp(dir), off)), dir };
+      const den = vcross(mine.dir, line.dir);
+      if (Math.abs(den) < 1e-6) continue;
+      const s = vcross(vsub(line.on, mine.on), line.dir) / den;
+      const p = vadd(mine.on, vscale(mine.dir, s));
+      const dist = vlen(vsub(p, at));
+      if (dist > limit || dist >= bestD) continue;
+      best = p;
+      bestD = dist;
+    }
+  }
+  return best ?? fallback;
+}
+
+/**
+ * The two lines of a double bond drawn centred, each carried on to meet the
+ * line of a neighbouring double bond where they share an atom. Left to stop
+ * short, consecutive double bonds read as four loose lines rather than a
+ * chain.
+ */
+/** Where the lines of a double bond sit, either side of its own line. */
+function doubleOffsets(
+  b: Bond,
+  off: number,
+  doubleSides?: Map<Bond, number | undefined>,
+): number[] {
+  if (b.order !== 2) return [];
+  const mode = b.doubleMode || "auto";
+  if (mode === "center") return [off * 0.5, -off * 0.5];
+  if (mode === "left") return [off];
+  if (mode === "right") return [-off];
+  const sgn = doubleSides?.get(b);
+  return sgn == null ? [off * 0.5, -off * 0.5] : [off * sgn];
+}
+
+function centredPair(
+  p1: Vec2,
+  p2: Vec2,
+  dir: Vec2,
+  n: Vec2,
+  off: number,
+  widthPx: number,
+  bond: Bond,
+  atoms: Atom[],
+  adjBonds?: Map<number, Bond[]>,
+  doubleSides?: Map<Bond, number | undefined>,
+): LineSeg[] {
+  const half = off * 0.5;
+  const limit = off * 2;
+  const sideOf = (b: Bond) => doubleOffsets(b, off, doubleSides);
+  const others = (idx: number) =>
+    (adjBonds?.get(idx) ?? []).filter(
+      (b) => b !== bond && b.order === 2 && b.stereo !== "up" && b.stereo !== "down",
+    );
+  const out: LineSeg[] = [];
+  for (const sgn of [1, -1]) {
+    const o = vscale(n, half * sgn);
+    const a = vadd(p1, o);
+    const b = vadd(p2, o);
+    const endA = mitreOffsetEnd(
+      atoms,
+      bond.a1,
+      p1,
+      dir,
+      dir,
+      half * sgn,
+      a,
+      sideOf,
+      others(bond.a1),
+      limit,
+    );
+    const endB = mitreOffsetEnd(
+      atoms,
+      bond.a2,
+      p2,
+      dir,
+      vscale(dir, -1),
+      half * sgn,
+      b,
+      sideOf,
+      others(bond.a2),
+      limit,
+    );
+    out.push({ x1: endA.x, y1: endA.y, x2: endB.x, y2: endB.y, widthPx });
+  }
+  return out;
+}
+
 /** Where two cuts cross: the point both bonds' outlines meet at. */
 function cutsCross(a: Cut, b: Cut): Vec2 | null {
   const den = vcross(a.dir, b.dir);
@@ -741,7 +869,8 @@ export function buildBondPrimitives(
   inRing?: boolean,
   autoSgn?: number,
   adjBonds?: Map<number, Bond[]>,
-  labelBoxes?: Map<number, LabelBox>
+  labelBoxes?: Map<number, LabelBox>,
+  doubleSides?: Map<Bond, number | undefined>
 ): { lines: LineSeg[]; polys: Poly[] } {
   const a = atoms[bond.a1];
   const c = atoms[bond.a2];
@@ -881,47 +1010,40 @@ export function buildBondPrimitives(
 
     const mode = bond.doubleMode || "auto";
     if (mode === "center") {
-      // Symmetric placement: two lines at ±off/2 from the axis
-      const o1 = vscale(n, off * 0.5);
-      const o2 = vscale(n, -off * 0.5);
-      const lA: LineSeg = {
-        x1: p1.x + o1.x,
-        y1: p1.y + o1.y,
-        x2: p2.x + o1.x,
-        y2: p2.y + o1.y,
-        widthPx: lwPx,
-      };
-      const lB: LineSeg = {
-        x1: p1.x + o2.x,
-        y1: p1.y + o2.y,
-        x2: p2.x + o2.x,
-        y2: p2.y + o2.y,
-        widthPx: lwPx,
-      };
-      lines.push(lA, lB);
+      // Symmetric placement: two lines at ±off/2 from the axis, each run on
+      // to meet its neighbour's where two double bonds share an atom
+      lines.push(
+        ...centredPair(
+          p1,
+          p2,
+          dir,
+          n,
+          off,
+          lwPx,
+          bond,
+          atoms,
+          adjBonds,
+          doubleSides,
+        ),
+      );
       return { lines, polys };
     } else if (mode === "auto") {
       // Auto: if balanced or no substituents -> center; if biased -> short line on denser side
       // autoSgn: +1 means +n side, -1 means -n side; undefined means centered
       if (autoSgn == null || !isFinite(autoSgn)) {
-        // Center (two lines symmetric)
-        const o1 = vscale(n, off * 0.5);
-        const o2 = vscale(n, -off * 0.5);
         lines.push(
-          {
-            x1: p1.x + o1.x,
-            y1: p1.y + o1.y,
-            x2: p2.x + o1.x,
-            y2: p2.y + o1.y,
-            widthPx: lwPx,
-          },
-          {
-            x1: p1.x + o2.x,
-            y1: p1.y + o2.y,
-            x2: p2.x + o2.x,
-            y2: p2.y + o2.y,
-            widthPx: lwPx,
-          }
+          ...centredPair(
+          p1,
+          p2,
+          dir,
+          n,
+          off,
+          lwPx,
+          bond,
+          atoms,
+          adjBonds,
+          doubleSides,
+        ),
         );
         return { lines, polys };
       }
@@ -934,8 +1056,42 @@ export function buildBondPrimitives(
         widthPx: lwPx,
       };
       const o = vscale(n, off * sgn);
-      const ps1b = vadd(ps1, o);
-      const ps2b = vadd(ps2, o);
+      // Meet the line of a double bond next door where they share an atom,
+      // rather than stopping short of it: two double bonds in a row read as a
+      // chain that way, and as four loose lines otherwise.
+      const others = (idx: number) =>
+        (adjBonds?.get(idx) ?? []).filter(
+          (nb) =>
+            nb !== bond &&
+            nb.order === 2 &&
+            nb.stereo !== "up" &&
+            nb.stereo !== "down",
+        );
+      const sideOf = (nb: Bond) => doubleOffsets(nb, off, doubleSides);
+      const ps1b = mitreOffsetEnd(
+        atoms,
+        bond.a1,
+        p1,
+        dir,
+        dir,
+        off * sgn,
+        vadd(ps1, o),
+        sideOf,
+        others(bond.a1),
+        off * 2,
+      );
+      const ps2b = mitreOffsetEnd(
+        atoms,
+        bond.a2,
+        p2,
+        dir,
+        vscale(dir, -1),
+        off * sgn,
+        vadd(ps2, o),
+        sideOf,
+        others(bond.a2),
+        off * 2,
+      );
       const l2: LineSeg = {
         x1: ps1b.x,
         y1: ps1b.y,
@@ -1005,6 +1161,65 @@ export function buildAllPrimitives(
   const fills: Circle[] = [];
   const deg = degreeMap(bonds);
   // adjacency by index
+  // Which side the second line of each double bond takes. Worked out for all
+  // of them before any is drawn, so that a bond can meet its neighbour's line
+  // where they share an atom instead of stopping short of it.
+  const doubleSides = new Map<Bond, number | undefined>();
+  for (const b of bonds) {
+    if (b.order !== 2) continue;
+    if (b.doubleMode !== undefined && b.doubleMode !== "auto") continue;
+    const p1 = { x: atoms[b.a1].x, y: atoms[b.a1].y };
+    const p2 = { x: atoms[b.a2].x, y: atoms[b.a2].y };
+    const axis = vsub(p2, p1);
+    const L0 = vlen(axis);
+    const dir = L0 > 1e-9 ? vscale(axis, 1 / L0) : { x: 1, y: 0 };
+    const n = vperp(dir); // Treat +n as "left"
+    const neigh1 = bonds
+      .filter((o) => o !== b && (o.a1 === b.a1 || o.a2 === b.a1))
+      .map((o) => (o.a1 === b.a1 ? o.a2 : o.a1));
+    const neigh2 = bonds
+      .filter((o) => o !== b && (o.a1 === b.a2 || o.a2 === b.a2))
+      .map((o) => (o.a1 === b.a2 ? o.a2 : o.a1));
+    const EPS = Math.max(1e-4, L0 * 0.06); // Ignore near-axis to suppress flipping
+    let plus = 0;
+    let minus = 0;
+    for (const [from, list] of [
+      [p1, neigh1],
+      [p2, neigh2],
+    ] as [Vec2, number[]][]) {
+      for (const o of list) {
+        const v = { x: atoms[o].x - from.x, y: atoms[o].y - from.y };
+        const s = v.x * n.x + v.y * n.y;
+        if (s > EPS) plus++;
+        else if (s < -EPS) minus++;
+      }
+    }
+    let sgn: number | undefined = plus === minus ? undefined : plus > minus ? 1 : -1;
+    if (sgn != null) {
+      // A bond of its own width beside the second line leaves no room for it.
+      const clearance = (side: number) => {
+        let worst = Math.PI;
+        for (const [from, list] of [
+          [p1, neigh1],
+          [p2, neigh2],
+        ] as [Vec2, number[]][]) {
+          for (const o of list) {
+            const v = vnorm({ x: atoms[o].x - from.x, y: atoms[o].y - from.y });
+            if ((v.x * n.x + v.y * n.y) * side <= 0) continue;
+            const along = Math.abs(v.x * dir.x + v.y * dir.y);
+            worst = Math.min(worst, Math.acos(Math.min(1, along)));
+          }
+        }
+        return worst;
+      };
+      const CROWDED = Math.PI / 4;
+      const here = clearance(sgn);
+      const there = clearance(-sgn);
+      if (here < CROWDED && there > here) sgn = -sgn;
+    }
+    doubleSides.set(b, sgn);
+  }
+
   // bonds at each atom, and just the neighbours, which the ring search uses
   // measure the labels once: the bonds are trimmed to them
   const fontWorld = toWorld(opts.fontPx, zoom, opts.units);
@@ -1223,63 +1438,9 @@ export function buildAllPrimitives(
     const key = u < v ? `${u}-${v}` : `${v}-${u}`;
     const inRing = ringEdges.has(key);
     const beff: Bond = aromaticEdges.has(key) ? { ...b, order: 1 } : b;
-    // autoSgn: count substituents on both ends (excluding the opposite endpoint) and decide by +n vs -n totals
-    let autoSgn: number | undefined = undefined;
-    if (
-      beff.order === 2 &&
-      (beff.doubleMode === undefined || beff.doubleMode === "auto")
-    ) {
-      const p1 = { x: atoms[b.a1].x, y: atoms[b.a1].y };
-      const p2 = { x: atoms[b.a2].x, y: atoms[b.a2].y };
-      const axis = vsub(p2, p1);
-      const L0 = vlen(axis);
-      const dir = L0 > 1e-9 ? vscale(axis, 1 / L0) : { x: 1, y: 0 };
-      const n = vperp(dir); // Treat +n as "left"
-      const neigh1 = (adj.get(b.a1) || []).filter((x) => x !== b.a2);
-      const neigh2 = (adj.get(b.a2) || []).filter((x) => x !== b.a1);
-      const EPS = Math.max(1e-4, L0 * 0.06); // Ignore near-axis to suppress flipping
-      let plus = 0,
-        minus = 0;
-      for (const o of neigh1) {
-        const v = { x: atoms[o].x - p1.x, y: atoms[o].y - p1.y };
-        const s = v.x * n.x + v.y * n.y;
-        if (s > EPS) plus++;
-        else if (s < -EPS) minus++;
-      }
-      for (const o of neigh2) {
-        const v = { x: atoms[o].x - p2.x, y: atoms[o].y - p2.y };
-        const s = v.x * n.x + v.y * n.y;
-        if (s > EPS) plus++;
-        else if (s < -EPS) minus++;
-      }
-      // Center only when the counts are exactly equal (or both zero); otherwise keep skew
-      if (plus === minus) autoSgn = undefined; // -> center
-      else autoSgn = plus > minus ? +1 : -1;
-      // A bond of its own width beside the second line leaves no room for it:
-      // the two run into each other. Put the line on the other side when this
-      // one is crowded and that one is not.
-      if (autoSgn != null) {
-        const clearance = (side: number) => {
-          let worst = Math.PI;
-          for (const [from, list] of [
-            [p1, neigh1],
-            [p2, neigh2],
-          ] as [Vec2, number[]][]) {
-            for (const o of list) {
-              const v = vnorm({ x: atoms[o].x - from.x, y: atoms[o].y - from.y });
-              if ((v.x * n.x + v.y * n.y) * side <= 0) continue;
-              const along = Math.abs(v.x * dir.x + v.y * dir.y);
-              worst = Math.min(worst, Math.acos(Math.min(1, along)));
-            }
-          }
-          return worst;
-        };
-        const CROWDED = Math.PI / 4; // 45 degrees
-        const here = clearance(autoSgn);
-        const there = clearance(-autoSgn);
-        if (here < CROWDED && there > here) autoSgn = -autoSgn;
-      }
-    }
+    // which side the second line of a double bond takes, worked out for every
+    // one of them first so that each knows what its neighbours are doing
+    const autoSgn = doubleSides.get(b);
     const r = buildBondPrimitives(
       atoms,
       beff,
@@ -1289,7 +1450,8 @@ export function buildAllPrimitives(
       inRing,
       autoSgn,
       adjBonds,
-      labelBoxes
+      labelBoxes,
+      doubleSides
     );
     lines.push(...r.lines);
     polys.push(...r.polys);

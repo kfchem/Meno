@@ -762,3 +762,37 @@ describe("angles and lines that reach an atom", () => {
     ).toBe(false);
   });
 });
+
+describe("double bonds in a row", () => {
+  it("meets its neighbour's line at the atom they share", () => {
+    const o = opts();
+    // two double bonds sharing atom 1
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.5, y: 0, el: "C" },
+      { id: 3, x: 2.3, y: 1.3, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 2, stereo: "none" },
+      { a1: 1, a2: 2, order: 2, stereo: "none" },
+    ];
+    const { lines } = buildAllPrimitives(atoms, bonds, o, 40);
+    // the ends of the lines beside each bond, near the atom they share
+    const at = { x: 1.5, y: 0 };
+    const ends: { x: number; y: number; d: number }[] = [];
+    for (const l of lines) {
+      for (const p of [
+        { x: l.x1, y: l.y1 },
+        { x: l.x2, y: l.y2 },
+      ]) {
+        const d = Math.hypot(p.x - at.x, p.y - at.y);
+        if (d > 1e-9 && d < 0.6) ends.push({ ...p, d });
+      }
+    }
+    ends.sort((a, b) => a.d - b.d);
+    expect(ends.length).toBeGreaterThanOrEqual(2);
+    // they meet, rather than each stopping short on its own
+    const gap = Math.hypot(ends[0].x - ends[1].x, ends[0].y - ends[1].y);
+    expect(gap).toBeLessThan(o.lineWidthPx);
+  });
+});
