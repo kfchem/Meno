@@ -5,11 +5,13 @@ import { useMemo, useState } from "react";
 import { useEditor } from "../store";
 import {
   layoutMolecule,
+  SUB_DROP,
+  SUB_SCALE,
   type LayoutOptions,
   type Atom as LAtom,
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
-import { acsWorldOptions } from "../../../../lib/chem/acs";
+import { editorLayoutOptions } from "../layoutOptions";
 
 export default function Labels2D({
   options,
@@ -54,7 +56,7 @@ export default function Labels2D({
   }, [model.bonds, atoms]);
 
   const opts: LayoutOptions = useMemo(
-    () => acsWorldOptions(atoms, bonds, { ...options, units: "world" }),
+    () => editorLayoutOptions(atoms, bonds, options),
     [atoms, bonds, options]
   );
   const layout = useMemo(
@@ -77,10 +79,6 @@ export default function Labels2D({
     ctx.font = `${fontPx}px ${fontFamily}`;
     return ctx.measureText(text).width / Math.max(zoom, 1e-6);
   };
-  /** Hydrogen counts are drawn smaller and lower, as subscripts. */
-  const SUB_SCALE = 0.7;
-  const SUB_DROP = 0.28;
-
   return (
     <group>
       {layout.texts.map((t, i) => {

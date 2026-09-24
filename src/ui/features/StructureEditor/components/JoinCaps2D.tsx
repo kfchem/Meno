@@ -8,7 +8,7 @@ import {
   type Atom as LAtom,
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
-import { acsWorldOptions } from "../../../../lib/chem/acs";
+import { editorLayoutOptions } from "../layoutOptions";
 
 export default function JoinCaps2D({
   options,
@@ -43,7 +43,7 @@ export default function JoinCaps2D({
   }, [model.bonds, atoms, moveDrag.active, moveDrag.atomId]);
 
   const opts: LayoutOptions = useMemo(
-    () => acsWorldOptions(atoms, bonds, { ...options, units: "world" }),
+    () => editorLayoutOptions(atoms, bonds, options),
     [atoms, bonds, options]
   );
   const layout = useMemo(

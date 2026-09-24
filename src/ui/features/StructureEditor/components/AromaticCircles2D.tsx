@@ -9,8 +9,8 @@ import {
   type Atom as LAtom,
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
-import { acsWorldOptions } from "../../../../lib/chem/acs";
 import CapJoinLine from "./CapJoinLine";
+import { editorLayoutOptions } from "../layoutOptions";
 
 export default function AromaticCircles2D({
   options,
@@ -71,9 +71,8 @@ export default function AromaticCircles2D({
         : aromaticEnabled
         ? true
         : false;
-    return acsWorldOptions(atoms, bonds, {
+    return editorLayoutOptions(atoms, bonds, {
       ...options,
-      units: "world",
       aromaticCircle: enabled,
     });
   }, [atoms, bonds, options, aromaticEnabled, aromaticRings]);
@@ -85,9 +84,8 @@ export default function AromaticCircles2D({
   // Separate preview layout to discover ring centers even when enabled=false
   const prevOpts: LayoutOptions = useMemo(
     () =>
-      acsWorldOptions(atoms, bonds, {
+      editorLayoutOptions(atoms, bonds, {
         ...options,
-        units: "world",
         aromaticCircle: true,
       }),
     [atoms, bonds, options]

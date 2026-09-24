@@ -1,0 +1,92 @@
+import { describe, expect, it } from "vitest";
+import { createSVG, layoutMolecule, type Atom, type Bond } from "./layout2d";
+import { acsWorldOptions } from "./acs";
+
+const atoms: Atom[] = [
+  { id: 1, x: 0, y: 0, el: "C" },
+  { id: 2, x: 1.5, y: 0, el: "C" },
+  { id: 3, x: 2.3, y: 1.3, el: "N" },
+];
+const bonds: Bond[] = [
+  { a1: 0, a2: 1, order: 1, stereo: "up" },
+  { a1: 1, a2: 2, order: 1, stereo: "none" },
+];
+
+const opts = (over = {}) =>
+  acsWorldOptions(atoms, bonds, { units: "world", ...over });
+
+const numbers = (svg: string, attr: string) =>
+  [...svg.matchAll(new RegExp(`${attr}="([-\\d.e]+)"`, "g"))].map((m) =>
+    Number(m[1]),
+  );
+
+describe("createSVG", () => {
+  // the canvas converts the layout's pixel sizes with the zoom it drew at;
+  // the SVG has to land on the same numbers or the two drift apart
+  it("writes sizes in the coordinates the drawing is in", () => {
+    const o = opts();
+    const zoom = 60;
+    const layout = layoutMolecule(atoms, bonds, o, zoom);
+    const svg = createSVG(layout, o);
+    const expected = layout.lines.map((l) => l.widthPx / zoom);
+    expect(numbers(svg, "stroke-width").sort()).toEqual(
+      [...new Set(expected)].sort(),
+    );
+    // and nothing is pinned to the screen, so it scales as one drawing
+    expect(svg).not.toContain("non-scaling-stroke");
+  });
+
+  it("keeps a bond the same width in the drawing at any zoom", () => {
+    // world sizes do not depend on the zoom, so neither may the SVG's; only
+    // the padding does, being a margin in screen pixels
+    const o = opts();
+    for (const zoom of [30, 300]) {
+      const svg = createSVG(layoutMolecule(atoms, bonds, o, zoom), o);
+      expect(numbers(svg, "stroke-width")[0]).toBeCloseTo(o.lineWidthPx, 9);
+    }
+  });
+
+  it("pads by the padding asked for, in pixels", () => {
+    const o = opts();
+    const zoom = 60;
+    const layout = layoutMolecule(atoms, bonds, o, zoom);
+    const box = /viewBox="([-\d.e ]+)"/
+      .exec(createSVG(layout, o))![1]
+      .split(" ")
+      .map(Number);
+    const pad = o.paddingPx / zoom;
+    expect(box[0]).toBeCloseTo(layout.bounds.min.x - pad, 9);
+    expect(box[2]).toBeCloseTo(
+      layout.bounds.max.x - layout.bounds.min.x + pad * 2,
+      9,
+    );
+  });
+
+  it("says how big it was meant to be drawn", () => {
+    const o = opts();
+    const zoom = 60;
+    const svg = createSVG(layoutMolecule(atoms, bonds, o, zoom), o);
+    const box = /viewBox="([-\d.e ]+)"/.exec(svg)![1].split(" ").map(Number);
+    expect(Number(/width="([\d.e]+)"/.exec(svg)![1])).toBeCloseTo(
+      box[2] * zoom,
+      6,
+    );
+  });
+
+  it("draws a label the way the canvas does: runs, and the symbol on the atom", () => {
+    const o = opts();
+    const layout = layoutMolecule(atoms, bonds, o, 60);
+    const svg = createSVG(layout, o);
+    const label = layout.texts.find((t) => t.text.startsWith("N"))!;
+    // the count is a subscript, so it is its own smaller piece
+    expect(label.runs?.some((r) => r.sub)).toBe(true);
+    const sizes = numbers(svg, "font-size");
+    expect(sizes).toContain(o.fontPx);
+    expect(sizes.some((s) => Math.abs(s - o.fontPx * 0.7) < 1e-9)).toBe(true);
+    // the element symbol straddles the atom
+    const xs = numbers(svg, "x");
+    const symbol = xs.find((x) => Math.abs(x - label.x) < o.fontPx)!;
+    expect(symbol).toBeLessThan(label.x);
+    expect(symbol).toBeGreaterThan(label.x - o.fontPx);
+  });
+});

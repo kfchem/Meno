@@ -7,7 +7,8 @@ import {
   type Bond as LBond,
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
-import { acsPxOptions, averageBondLengthWorld } from "../../../../lib/chem/acs";
+import { averageBondLengthWorld } from "../../../../lib/chem/acs";
+import { editorLayoutOptions } from "../layoutOptions";
 
 function toLayoutInputs(model: {
   atoms: { id: number; x: number; y: number; el: string }[];
@@ -87,8 +88,10 @@ export default function ExportSvg2D({
         : aromaticEnabled
         ? true
         : false;
-    return { ...acsPxOptions(targetLpx), aromaticCircle, ...options };
-  }, [targetLpx, options, aromaticEnabled, aromaticRings]);
+    // the same options the canvas draws with, so an export matches it; the
+    // export's own scale is the zoom the layout is built for
+    return editorLayoutOptions(atoms, bonds, { aromaticCircle, ...options });
+  }, [atoms, bonds, options, aromaticEnabled, aromaticRings]);
   const onExport = React.useCallback(() => {
     const layout = layoutMolecule(atoms, bonds, opts, pxPerWorld);
     const svg = createSVG(layout, opts);
