@@ -444,8 +444,10 @@ export default function MovePreview2D() {
       }
     }
 
-    // joint dot at snapped endpoint for deg >= 2 (replaces hidden base join caps)
-    if (deg >= 2 && joinDot.current) {
+    // The cap that rounds off a bond end, carried to where the atom is being
+    // dragged: every bond end has one now, not only a join of two or more,
+    // and the one in the drawing is hidden while the drag is on.
+    if (deg >= 1 && joinDot.current) {
       const rWorld = thickW * 0.5;
       joinDot.current.position.set(pxPrev, pyPrev, -0.035);
       joinDot.current.scale.set(rWorld, rWorld, 1);
