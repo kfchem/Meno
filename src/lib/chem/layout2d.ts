@@ -740,7 +740,6 @@ export function buildBondPrimitives(
   inRing?: boolean,
   autoSgn?: number,
   adjBonds?: Map<number, Bond[]>,
-  wedgeBaseAtoms?: Set<number>,
   labelBoxes?: Map<number, LabelBox>
 ): { lines: LineSeg[]; polys: Poly[] } {
   const a = atoms[bond.a1];
@@ -874,15 +873,8 @@ export function buildBondPrimitives(
     const d1 = (deg?.get(bond.a1) || 1) - 1;
     const d2 = (deg?.get(bond.a2) || 1) - 1;
     const ringShort = inRing === true;
-    // The wide end of a wedge covers the atom and a little beyond, so a line
-    // held back from that atom starts inside nothing and floats free of the
-    // drawing. Run it to the atom and let the wedge cover its end.
-    const atWedge1 = wedgeBaseAtoms?.has(bond.a1) ?? false;
-    const atWedge2 = wedgeBaseAtoms?.has(bond.a2) ?? false;
-    const shortenA =
-      !atWedge1 && (ringShort || d1 > d2 || (d1 === d2 && d1 > 0));
-    const shortenB =
-      !atWedge2 && (ringShort || d2 > d1 || (d1 === d2 && d2 > 0));
+    const shortenA = ringShort || d1 > d2 || (d1 === d2 && d1 > 0);
+    const shortenB = ringShort || d2 > d1 || (d1 === d2 && d2 > 0);
     const ps1 = shortenA ? vadd(p1, vscale(dir, shorten)) : p1;
     const ps2 = shortenB ? vadd(p2, vscale(dir, -shorten)) : p2;
 
@@ -1243,7 +1235,6 @@ export function buildAllPrimitives(
       inRing,
       autoSgn,
       adjBonds,
-      wedgeEnds,
       labelBoxes
     );
     lines.push(...r.lines);

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { Text } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useMemo, useState } from "react";
+import { useMemo, useReducer, useRef, useState } from "react";
 import { useEditor } from "../store";
 import {
   layoutMolecule,
@@ -64,20 +64,43 @@ export default function Labels2D({
     [atoms, bonds, opts, zoom]
   );
 
+  // The text is drawn by troika, which carries its own font, so measuring it
+  // with the browser's puts a label off its atom by a fraction of a letter.
+  // Ask troika instead: the first frame goes up with an estimate, and each
+  // piece reports its real width as it syncs, which is then kept and used.
   const fontFamily =
     "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
+  const invalidate = useThree((s) => s.invalidate);
+  const [, relayout] = useReducer((n: number) => n + 1, 0);
+  const measured = useRef(new Map<string, number>());
   const measRef = useMemo(() => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     return ctx;
   }, []);
+  const key = (text: string, fontWorld: number) =>
+    `${text}|${fontWorld.toFixed(4)}`;
   /** Width of a piece of a label, in world units. */
   const widthWorld = (text: string, fontWorld: number) => {
+    const known = measured.current.get(key(text, fontWorld));
+    if (known != null) return known;
     const ctx = measRef;
     if (!ctx) return 0;
     const fontPx = fontWorld * Math.max(zoom, 1e-6);
     ctx.font = `${fontPx}px ${fontFamily}`;
     return ctx.measureText(text).width / Math.max(zoom, 1e-6);
+  };
+  const onSync = (troika: unknown, text: string, fontWorld: number) => {
+    const bounds = (troika as { textRenderInfo?: { blockBounds?: number[] } })
+      ?.textRenderInfo?.blockBounds;
+    if (!bounds) return;
+    const width = bounds[2] - bounds[0];
+    if (!(width > 0)) return;
+    const k = key(text, fontWorld);
+    if (Math.abs((measured.current.get(k) ?? -1) - width) < 1e-6) return;
+    measured.current.set(k, width);
+    relayout();
+    invalidate();
   };
   return (
     <group>
@@ -109,6 +132,7 @@ export default function Labels2D({
                   renderOrder={30}
                   material-depthTest={false}
                   material-depthWrite={false}
+                  onSync={(troika) => onSync(troika, r.text, sizes[k])}
                 >
                   {r.text}
                 </Text>
