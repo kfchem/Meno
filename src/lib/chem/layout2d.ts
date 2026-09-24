@@ -76,7 +76,12 @@ export type TextItem = {
    * right of the atom and HO to its left.
    */
   anchorRun?: number;
+  /** The atom this label belongs to, by index. */
+  atom?: number;
 };
+
+/** How far a label reaches around its atom. */
+export type LabelBox = { left: number; right: number; half: number };
 export type Circle = { c: Vec2; r: number; key?: string };
 
 export type Layout = {
@@ -98,6 +103,24 @@ export function pxToWorld(px: number, zoom: number): number {
   return px / Math.max(zoom, 1e-6);
 }
 
+/**
+ * Rough advance width of a character, as a fraction of the font size. The
+ * canvas measures text properly; here there is nothing to measure against, so
+ * this only has to place the hydrogens beside an element symbol - the symbol
+ * itself is anchored on its atom and does not depend on it.
+ */
+function advanceEm(ch: string): number {
+  if (ch >= "0" && ch <= "9") return 0.556;
+  if (ch >= "a" && ch <= "z") return 0.55;
+  return 0.667;
+}
+
+function runWidth(text: string, size: number): number {
+  let w = 0;
+  for (const ch of text) w += advanceEm(ch) * size;
+  return w;
+}
+
 export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
   let minX = Infinity,
     minY = Infinity,
@@ -111,6 +134,41 @@ export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
   }
   if (!isFinite(minX)) return { min: { x: -1, y: -1 }, max: { x: 1, y: 1 } };
   return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
+}
+
+/** How far a label reaches either side of its atom, and above and below. */
+export function labelBox(t: TextItem, fontSize: number): LabelBox {
+  const runs = t.runs ?? [{ text: t.text }];
+  const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
+  const size = (i: number) => fontSize * (runs[i].sub ? SUB_SCALE : 1);
+  let left = runWidth(runs[anchor].text, fontSize) / 2;
+  let right = left;
+  for (let i = 0; i < anchor; i++) left += runWidth(runs[i].text, size(i));
+  for (let i = anchor + 1; i < runs.length; i++) {
+    right += runWidth(runs[i].text, size(i));
+  }
+  // roughly half the height of a capital, with a little room to spare
+  return { left, right, half: fontSize * 0.45 };
+}
+
+/** The box a label takes up, so the drawing's bounds can make room for it. */
+function expandBoundsForLabels(
+  bounds: { min: Vec2; max: Vec2 },
+  texts: TextItem[],
+  fontSize: number,
+): { min: Vec2; max: Vec2 } {
+  const out = {
+    min: { x: bounds.min.x, y: bounds.min.y },
+    max: { x: bounds.max.x, y: bounds.max.y },
+  };
+  for (const t of texts) {
+    const { left, right, half } = labelBox(t, fontSize);
+    out.min.x = Math.min(out.min.x, t.x - left);
+    out.max.x = Math.max(out.max.x, t.x + right);
+    out.min.y = Math.min(out.min.y, t.y - half);
+    out.max.y = Math.max(out.max.y, t.y + half);
+  }
+  return out;
 }
 
 function toWorld(
@@ -594,6 +652,7 @@ export function buildTextLabels(
         fontPx: opts.fontPx,
         runs: [{ text: a.el }],
         anchorRun: 0,
+        atom: i,
       });
       continue;
     }
@@ -612,6 +671,7 @@ export function buildTextLabels(
       fontPx: opts.fontPx,
       runs,
       anchorRun: neighboursRight ? runs.length - 1 : 0,
+      atom: i,
     });
   }
   return out;
@@ -648,7 +708,8 @@ export function buildBondPrimitives(
   inRing?: boolean,
   autoSgn?: number,
   adjBonds?: Map<number, Bond[]>,
-  wedgeBaseAtoms?: Set<number>
+  wedgeBaseAtoms?: Set<number>,
+  labelBoxes?: Map<number, LabelBox>
 ): { lines: LineSeg[]; polys: Poly[] } {
   const a = atoms[bond.a1];
   const c = atoms[bond.a2];
@@ -660,19 +721,31 @@ export function buildBondPrimitives(
   let lwPx = units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx;
   const minPx = Math.max(0.5, opts.minLinePx ?? 1);
   if (!(lwPx >= minPx)) lwPx = minPx;
-  // Shorten bonds at atom ends that have labels to avoid overlap with text.
-  // Labels are drawn centered on atom position with font size opts.fontPx.
-  // Use a fraction of font size (and a small margin) as trimming length.
+  // Stop a bond short of a label so the two do not overlap. How far depends
+  // on which way the bond leaves: OH reaches further to the right than up, so
+  // measuring by font size alone lets a bond run into a wide label from one
+  // side and leaves a gap from another.
   const hasLabel = (el: string) => opts.showCarbonLabels || el !== "C";
   const fontWorld = toWorld(opts.fontPx, zoom, units);
-  const trimBase = Math.max(0, fontWorld * 0.5);
   // Additional clearance ≈ half the line thickness (in world units)
   const trimMargin = pxToWorld(lwPx * 0.5, zoom);
-  const trimA0 = hasLabel(a.el) ? trimBase + trimMargin : 0;
-  const trimB0 = hasLabel(c.el) ? trimBase + trimMargin : 0;
   const dir0 = vsub(p2o, p1o);
   const L0 = vlen(dir0);
   const dir = L0 > 1e-9 ? vscale(dir0, 1 / L0) : { x: 1, y: 0 };
+  /** How far the label at an atom reaches along the bond, either way. */
+  const labelReach = (idx: number, el: string, towards: Vec2) => {
+    if (!hasLabel(el)) return 0;
+    const box = idx >= 0 ? labelBoxes?.get(idx) : undefined;
+    if (!box) return Math.max(0, fontWorld * 0.5) + trimMargin;
+    // the box around the atom, met along the bond
+    const sx = towards.x >= 0 ? box.right : box.left;
+    const tx = Math.abs(towards.x) > 1e-9 ? sx / Math.abs(towards.x) : Infinity;
+    const ty =
+      Math.abs(towards.y) > 1e-9 ? box.half / Math.abs(towards.y) : Infinity;
+    return Math.min(tx, ty) + trimMargin;
+  };
+  const trimA0 = labelReach(bond.a1, a.el, dir);
+  const trimB0 = labelReach(bond.a2, c.el, vscale(dir, -1));
   const trimA = Math.min(trimA0, Math.max(0, L0 * 0.45));
   const trimB = Math.min(trimB0, Math.max(0, L0 * 0.45));
   const p1 = vadd(p1o, vscale(dir, trimA));
@@ -900,6 +973,12 @@ export function buildAllPrimitives(
   const deg = degreeMap(bonds);
   // adjacency by index
   // bonds at each atom, and just the neighbours, which the ring search uses
+  // measure the labels once: the bonds are trimmed to them
+  const fontWorld = toWorld(opts.fontPx, zoom, opts.units);
+  const labelBoxes = new Map<number, LabelBox>();
+  for (const tx of buildTextLabels(atoms, opts, bonds)) {
+    if (tx.atom != null) labelBoxes.set(tx.atom, labelBox(tx, fontWorld));
+  }
   const adjBonds = new Map<number, Bond[]>();
   for (const b of bonds) {
     adjBonds.set(b.a1, [...(adjBonds.get(b.a1) || []), b]);
@@ -1132,7 +1211,8 @@ export function buildAllPrimitives(
       inRing,
       autoSgn,
       adjBonds,
-      wedgeEnds
+      wedgeEnds,
+      labelBoxes
     );
     lines.push(...r.lines);
     polys.push(...r.polys);
@@ -1146,9 +1226,16 @@ export function layoutMolecule(
   opts: LayoutOptions,
   zoom: number
 ): Layout {
-  const bounds = computeBounds(atoms);
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
   const texts = buildTextLabels(atoms, opts, bonds);
+  // A label hangs off its atom, so the drawing is wider than the atoms are:
+  // leave it out and a label at the edge is cut off, on the canvas as in an
+  // export.
+  const bounds = expandBoundsForLabels(
+    computeBounds(atoms),
+    texts,
+    toWorld(opts.fontPx, zoom, opts.units),
+  );
   return {
     lines: prim.lines,
     polys: prim.polys,
@@ -1189,24 +1276,6 @@ function escapeXml(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-/**
- * Rough advance width of a character, as a fraction of the font size. The
- * canvas measures text properly; here there is nothing to measure against, so
- * this only has to place the hydrogens beside an element symbol - the symbol
- * itself is anchored on its atom and does not depend on it.
- */
-function advanceEm(ch: string): number {
-  if (ch >= "0" && ch <= "9") return 0.556;
-  if (ch >= "a" && ch <= "z") return 0.55;
-  return 0.667;
-}
-
-function runWidth(text: string, size: number): number {
-  let w = 0;
-  for (const ch of text) w += advanceEm(ch) * size;
-  return w;
 }
 
 /** A label as the canvas draws it: runs, subscripts, symbol on the atom. */

@@ -4,6 +4,7 @@ import {
   buildBondPrimitives,
   buildTextLabels,
   implicitHydrogens,
+  layoutMolecule,
   mitreJoinPolys,
   roundPolyCorners,
   type Atom,
@@ -571,5 +572,57 @@ describe("a label must not change how a bond is drawn", () => {
     for (const x of labelled) {
       expect(plain.some((p) => Math.abs(p - x) < 0.02)).toBe(true);
     }
+  });
+});
+
+describe("labels and the room they need", () => {
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: 1.5, y: 0, el: "N" }, // NH2, hanging to the right
+  ];
+  const bonds: Bond[] = [{ a1: 0, a2: 1, order: 1, stereo: "none" }];
+
+  it("makes room for a label in the drawing's bounds", () => {
+    const o = opts();
+    const layout = layoutMolecule(atoms, bonds, o, 40);
+    // the label reaches past its atom, and the drawing has to include it
+    expect(layout.bounds.max.x).toBeGreaterThan(1.5 + o.fontPx * 0.2);
+    expect(layout.bounds.max.y).toBeGreaterThan(0);
+    expect(layout.bounds.min.y).toBeLessThan(0);
+  });
+
+  it("stops where the label actually reaches, not at a fixed distance", () => {
+    const o = opts();
+    const endingAt = (el: string) =>
+      layoutMolecule(
+        [
+          { id: 1, x: 0, y: 0, el: "C" },
+          { id: 2, x: 1.5, y: 0, el },
+        ],
+        bonds,
+        o,
+        40,
+      ).lines[0].x2;
+    // a wide symbol takes more room than a narrow one, side on
+    expect(endingAt("Br")).toBeLessThan(endingAt("I"));
+    // and the hydrogens, which hang the other way, take none of it
+    expect(endingAt("O")).toBeCloseTo(endingAt("I"), 6);
+  });
+
+  it("does not hold a bond off a label it barely meets", () => {
+    const o = opts();
+    // straight down onto the same label: only its height is in the way
+    const above = layoutMolecule(
+      [
+        { id: 1, x: 1.5, y: 1.5, el: "C" },
+        { id: 2, x: 1.5, y: 0, el: "N" },
+      ],
+      bonds,
+      o,
+      40,
+    ).lines[0];
+    const gap = Math.min(above.y1, above.y2);
+    expect(gap).toBeLessThan(o.fontPx * 0.6);
+    expect(gap).toBeGreaterThan(0);
   });
 });
