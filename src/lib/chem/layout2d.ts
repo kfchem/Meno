@@ -285,6 +285,16 @@ function baseCut(
   }
   if (key < 0) return null;
   const { dir, half, wide } = neighbours[key];
+  // A bond running straight on through the wide end cannot be cut along: its
+  // line is the wedge's own. Square across the wedge is what carries that
+  // bond out of it, and it lets the other side still follow its own bond.
+  if (Math.abs(vcross(dir, axis)) < 0.26) {
+    return {
+      on: vadd(atom, vscale(axis, -half)),
+      dir: vperp(axis),
+      key,
+    };
+  }
   const off = vperp(dir);
   const towardsTip = off.x * axis.x + off.y * axis.y >= 0 ? 1 : -1;
   // Take the bond in whole when it is the only one carrying on, or when it is
@@ -293,6 +303,14 @@ function baseCut(
   const takeWhole = neighbours.length === 1 || wide;
   const edge = takeWhole ? -towardsTip : towardsTip;
   return { on: vadd(atom, vscale(off, edge * half)), dir, key };
+}
+
+/** Where two cuts cross: the point both bonds' outlines meet at. */
+function cutsCross(a: Cut, b: Cut): Vec2 | null {
+  const den = vcross(a.dir, b.dir);
+  if (Math.abs(den) < 1e-6) return null;
+  const s = vcross(vsub(b.on, a.on), b.dir) / den;
+  return vadd(a.on, vscale(a.dir, s));
 }
 
 /**
@@ -488,16 +506,26 @@ function buildWedgeTriangle(
   const soften = [!mitredL];
   if (mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key) {
     // Two bonds carry on from the wide end, so the cut follows one on each
-    // side and dents in to the atom between them. Taking it to the atom
-    // rather than to where the two outlines cross keeps the dent inside what
-    // the join fill covers, so no sliver of background shows through.
+    // side and turns between them.
     const edge = vsub(baseR, baseL);
     const n = vperp(edge);
     const towardsTip = n.x * dir.x + n.y * dir.y >= 0 ? 1 : -1;
-    const dent = vsub(p1, baseL);
-    if ((dent.x * n.x + dent.y * n.y) * towardsTip > 0) {
+    const inwards =
+      ((p1.x - baseL.x) * n.x + (p1.y - baseL.y) * n.y) * towardsTip > 0;
+    if (inwards) {
+      // the turn is inwards: stop at the atom rather than at where the two
+      // outlines cross, which is further out than anything else there reaches
+      // and would show a sliver of background through the join
       points.push(p1);
       soften.push(false);
+    } else {
+      // the turn is outwards - a bond carrying straight on through the wide
+      // end puts it there - so follow both cuts to where they meet
+      const cross = cutsCross(cutL, cutR);
+      if (cross && vlen(vsub(cross, p1)) <= baseHalfWorld) {
+        points.push(cross);
+        soften.push(false);
+      }
     }
   }
   points.push(baseR, tipR, tipL);
@@ -566,6 +594,10 @@ function buildWavySegments(
   const dir = vnorm(vsub(p2, p1));
   const n = vperp(dir);
   const L = vlen(vsub(p2, p1));
+  // A whole number of half turns, so the wave meets the bond's own line at
+  // both ends: an end left mid-turn sits beside the atom, and the cap that
+  // rounds it off then looks loose.
+  const turns = Math.max(0.5, Math.round(freq * 2) / 2);
   const steps = Math.max(8, Math.floor(L / Math.max(pxToWorld(6, zoom), 1e-6)));
   const amp = toWorld(ampPx, zoom, units);
   const out: LineSeg[] = [];
@@ -575,7 +607,7 @@ function buildWavySegments(
     const base = vadd(p1, vscale(dir, L * t));
     const u =
       phase && phase.full > 1e-9 ? (phase.start + L * t) / phase.full : t;
-    const off = Math.sin(2 * Math.PI * freq * u);
+    const off = Math.sin(2 * Math.PI * turns * u);
     const pt = vadd(base, vscale(n, amp * off));
     if (prev) {
       out.push({ x1: prev.x, y1: prev.y, x2: pt.x, y2: pt.y, widthPx: 0 });

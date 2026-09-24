@@ -317,6 +317,24 @@ export default function MovePreview2D() {
         adj.set(b.a1, [...(adj.get(b.a1) || []), b.a2]);
         adj.set(b.a2, [...(adj.get(b.a2) || []), b.a1]);
       }
+      // The bonds at each atom, and which atoms carry the wide end of a
+      // wedge: without these a wedge is drawn with a square end while it is
+      // dragged and snaps into shape when it is dropped.
+      const adjBonds = new Map<number, any[]>();
+      for (const b of bondsAll) {
+        adjBonds.set(b.a1, [...(adjBonds.get(b.a1) || []), b]);
+        adjBonds.set(b.a2, [...(adjBonds.get(b.a2) || []), b]);
+      }
+      const wedgeEnds = new Set<number>();
+      for (const b of bondsAll) {
+        if (b.stereo !== "up") continue;
+        const d1 = degMap.get(b.a1) || 0;
+        const d2 = degMap.get(b.a2) || 0;
+        const thinAtA = d1 >= d2;
+        const baseAtA =
+          (b as any).stereoOrient === "reverse" ? thinAtA : !thinAtA;
+        wedgeEnds.add(baseAtA ? b.a1 : b.a2);
+      }
       // Build primitives for attached bonds only, but with full deg info
       const zNow = (camera as any)?.zoom || 1;
       const opts: LayoutOptions = editorLayoutOptions(
@@ -374,7 +392,9 @@ export default function MovePreview2D() {
           zNow,
           degMap,
           /*inRing*/ false,
-          autoSgn
+          autoSgn,
+          adjBonds as any,
+          wedgeEnds
         );
         outLines.push(...prim.lines);
         outPolys.push(...prim.polys);

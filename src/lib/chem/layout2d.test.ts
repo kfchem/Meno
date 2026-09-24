@@ -626,3 +626,50 @@ describe("labels and the room they need", () => {
     expect(gap).toBeGreaterThan(0);
   });
 });
+
+describe("a wedge with a bond carrying straight on", () => {
+  const ZOOM = 40;
+  // the wide end at atom 1, with one bond carrying on in line with the wedge
+  // and another leaving at an angle
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: 1.5, y: 0, el: "C" },
+    { id: 3, x: 3, y: 0, el: "C" },
+    { id: 4, x: 2.2, y: -1.3, el: "C" },
+  ];
+  const bonds: Bond[] = [
+    { a1: 0, a2: 1, order: 1, stereo: "up", stereoOrient: "reverse" },
+    { a1: 1, a2: 2, order: 1, stereo: "none" },
+    { a1: 1, a2: 3, order: 1, stereo: "none" },
+  ];
+
+  it("squares the end across the bond that carries on", () => {
+    const o = opts({ joinStyle: "sharp" });
+    const { polys } = buildAllPrimitives(atoms, bonds, o, ZOOM);
+    const wedge = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    const end = wedge.points.filter((p) => p.x > 0.75);
+    // three points at the wide end: a corner either side and the turn between
+    expect(end.length).toBe(3);
+    // and the end reaches past the atom, so the bond comes out of it
+    expect(Math.max(...end.map((p) => p.x))).toBeGreaterThan(1.5);
+  });
+});
+
+describe("a wavy bond", () => {
+  it("comes back to the bond's own line at both ends", () => {
+    const o = opts();
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.5, y: 0, el: "C" },
+    ];
+    const bond: Bond = { a1: 0, a2: 1, order: 1, stereo: "wavy" };
+    const { lines } = buildBondPrimitives(atoms, [bond][0], o, 40);
+    const first = lines[0];
+    const last = lines[lines.length - 1];
+    // a cap sits on the atom, so the wave has to end there too
+    expect(first.y1).toBeCloseTo(0, 9);
+    expect(last.y2).toBeCloseTo(0, 6);
+  });
+});
