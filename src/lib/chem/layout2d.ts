@@ -285,10 +285,12 @@ function baseCut(
   }
   if (key < 0) return null;
   const { dir, half, wide } = neighbours[key];
-  // A bond running straight on through the wide end cannot be cut along: its
-  // line is the wedge's own. Square across the wedge is what carries that
-  // bond out of it, and it lets the other side still follow its own bond.
-  if (Math.abs(vcross(dir, axis)) < 0.26) {
+  // A bond running nearly straight on through the wide end cannot usefully be
+  // cut along: its line is almost the wedge's own, and following it would
+  // draw the end out into a spike. Square across the wedge is what carries
+  // such a bond out of it, and the other side still follows its own bond.
+  // The turn is at 150 degrees, so everything short of that is followed.
+  if (Math.abs(vcross(dir, axis)) < 0.5) {
     return {
       on: vadd(atom, vscale(axis, -half)),
       dir: vperp(axis),
@@ -481,12 +483,11 @@ function buildWedgeTriangle(
   const tipR = vsub(tip, nt);
   const cutL = baseCut(p1, 1, dir, baseNeighbours);
   const cutR = baseCut(p1, -1, dir, baseNeighbours);
-  // How far a corner may slide to reach the cut. Real structures need up to
-  // about 1.3 times the wedge's half width (a bond leaving at 140 degrees to
-  // the wedge); beyond that the bond runs so close to the wedge's own
-  // direction that cutting to it would draw the end out into a spike.
-  const intoWedge = baseHalfWorld * 1.5;
-  const pastAtom = baseHalfWorld * 1.5;
+  // How far a corner may slide to reach the cut: enough for a bond at 150
+  // degrees to the wedge, which needs about 1.8 times its half width. Past
+  // that angle the cut is square across the wedge instead.
+  const intoWedge = baseHalfWorld * 2;
+  const pastAtom = baseHalfWorld * 2;
   const squareL = vadd(p1, nb);
   const squareR = vsub(p1, nb);
   const mitredL = cornerOnCut(cutL, squareL, tipL, intoWedge, pastAtom);
@@ -1162,10 +1163,25 @@ export function buildAllPrimitives(
   const roundJoins = (opts.joinStyle ?? "round") === "round";
   const plainDirs = new Map<number, Vec2[]>();
   const plainEnds = new Set<number>();
+  // A double bond drawn centred has no line along the bond itself, so nothing
+  // of it reaches the atom for a cap to round off: a cap there is a dot in
+  // mid air between the two lines.
+  const onAxis = (b: Bond) =>
+    b.order !== 2 ||
+    (b.doubleMode !== undefined &&
+      b.doubleMode !== "auto" &&
+      b.doubleMode !== "center");
+  const reaching = new Map<number, number>();
+  for (const b of bonds) {
+    if (!onAxis(b)) continue;
+    reaching.set(b.a1, (reaching.get(b.a1) ?? 0) + 1);
+    reaching.set(b.a2, (reaching.get(b.a2) ?? 0) + 1);
+  }
   for (const b of bonds) {
     // A wedge is a shape of its own, and a hashed one is a row of hashes:
     // a cap at either would sit past the last of them as a loose dot.
     if (b.stereo === "up" || b.stereo === "down") continue;
+    if (!onAxis(b)) continue;
     plainEnds.add(b.a1);
     plainEnds.add(b.a2);
     const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
@@ -1191,8 +1207,11 @@ export function buildAllPrimitives(
     if (roundJoins) {
       // A free end of a plain bond, or any atom bonds meet at - including one
       // where only wedges meet, whose thin ends are each a bond wide and do
-      // not fill the join between them on their own.
-      if (plainEnds.has(i) || d >= 2) fills.push({ c, r: rWorld });
+      // not fill the join between them on their own. Something has to reach
+      // the atom for the cap to round off, though.
+      if (plainEnds.has(i) || (d >= 2 && (reaching.get(i) ?? 0) > 0)) {
+        fills.push({ c, r: rWorld });
+      }
     } else if (d >= 2) {
       polys.push(...mitreJoinPolys(c, plainDirs.get(i) ?? [], rWorld));
     }

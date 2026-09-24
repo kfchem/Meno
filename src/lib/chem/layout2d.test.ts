@@ -717,3 +717,48 @@ describe("where bonds crowd each other", () => {
     expect(fills.some((f) => Math.hypot(f.c.x, f.c.y) < 1e-9)).toBe(true);
   });
 });
+
+describe("angles and lines that reach an atom", () => {
+  it("follows a bond at 150 degrees to the wedge", () => {
+    const o = opts({ joinStyle: "sharp" });
+    // wide end at atom 1, with a bond leaving at 150 degrees to the wedge
+    const a = (150 * Math.PI) / 180;
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.5, y: 0, el: "C" },
+      { id: 3, x: 1.5 + 1.5 * Math.cos(a), y: 1.5 * Math.sin(a), el: "C" },
+      { id: 4, x: 1.5, y: -1.5, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1, stereo: "up", stereoOrient: "reverse" },
+      { a1: 1, a2: 2, order: 1, stereo: "none" },
+      { a1: 1, a2: 3, order: 1, stereo: "none" },
+    ];
+    const { polys } = buildAllPrimitives(atoms, bonds, o, 40);
+    const wedge = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    const end = wedge.points.filter((p) => p.x > 0.75);
+    // cut, not left square: the two corners are at different places along it
+    expect(Math.abs(end[0].x - end[end.length - 1].x)).toBeGreaterThan(0.05);
+  });
+
+  it("leaves no cap where two centred double bonds meet", () => {
+    const o = opts();
+    // a diene drawn with both lines either side of the bond itself
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.3, y: 0.75, el: "C" },
+      { id: 3, x: 2.6, y: 0, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 2, stereo: "none", doubleMode: "center" },
+      { a1: 1, a2: 2, order: 2, stereo: "none", doubleMode: "center" },
+    ];
+    const { fills } = buildAllPrimitives(atoms, bonds, o, 40);
+    // nothing of either bond reaches the atom between them
+    expect(
+      fills.some((f) => Math.hypot(f.c.x - 1.3, f.c.y - 0.75) < 1e-9),
+    ).toBe(false);
+  });
+});

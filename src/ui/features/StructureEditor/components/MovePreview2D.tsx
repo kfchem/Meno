@@ -473,6 +473,7 @@ export default function MovePreview2D() {
         ref={thinInst}
         key={"mv-lines-" + countCap}
         args={[undefined as any, undefined as any, countCap]}
+        frustumCulled={false}
         visible={false}
       >
         <planeGeometry args={[1, 1]} />
@@ -489,6 +490,7 @@ export default function MovePreview2D() {
         ref={thickInst}
         key={"mv-thick-" + countCap}
         args={[undefined as any, undefined as any, countCap]}
+        frustumCulled={false}
         visible={false}
       >
         <planeGeometry args={[1, 1]} />
@@ -503,6 +505,7 @@ export default function MovePreview2D() {
         ref={hashInst}
         key={"mv-hash-" + hashCap}
         args={[undefined as any, undefined as any, hashCap]}
+        frustumCulled={false}
         visible={false}
       >
         <planeGeometry args={[1, 1]} />
@@ -513,7 +516,7 @@ export default function MovePreview2D() {
         />
       </instancedMesh>
       {/* Solid wedge triangles for 'up' stereo */}
-      <mesh ref={wedgeSolidMesh} visible={false}>
+      <mesh ref={wedgeSolidMesh} frustumCulled={false} visible={false}>
         <bufferGeometry ref={wedgeSolidGeo} />
         <meshBasicMaterial
           color={COLORS.bond}
@@ -523,7 +526,7 @@ export default function MovePreview2D() {
         />
       </mesh>
       {/* Joint dot at snapped endpoint (deg>=2) */}
-      <mesh ref={joinDot} visible={false}>
+      <mesh ref={joinDot} frustumCulled={false} visible={false}>
         <circleGeometry args={[1, 32]} />
         <meshBasicMaterial
           color={COLORS.bond}
@@ -533,7 +536,7 @@ export default function MovePreview2D() {
           depthWrite={false}
         />
       </mesh>
-      <mesh ref={cursorDot} visible={false}>
+      <mesh ref={cursorDot} frustumCulled={false} visible={false}>
         <circleGeometry args={[1, 32]} />
         <meshBasicMaterial
           color={COLORS.highlight}
@@ -545,7 +548,7 @@ export default function MovePreview2D() {
         />
       </mesh>
       {/* outline disabled: we match highlight color/opacity and draw behind bonds */}
-      <mesh ref={cursorDotOutline} visible={false}>
+      <mesh ref={cursorDotOutline} frustumCulled={false} visible={false}>
         <ringGeometry args={[0.9, 1, 48]} />
         <meshBasicMaterial
           color={COLORS.highlight}
