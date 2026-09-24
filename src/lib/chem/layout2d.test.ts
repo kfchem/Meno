@@ -521,3 +521,55 @@ describe("a wedge and a bond of more than one line", () => {
     }
   });
 });
+
+describe("a label must not change how a bond is drawn", () => {
+  const ZOOM = 40;
+  const deg = new Map([
+    [0, 3],
+    [1, 1],
+  ]);
+  const pair = (el: string): Atom[] => [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: 1.5, y: 0, el },
+  ];
+  const spacing = (lines: { x1: number; x2: number }[]) => {
+    const xs = lines.map((l) => (l.x1 + l.x2) / 2).sort((a, b) => a - b);
+    return xs.slice(1).map((x, i) => x - xs[i]);
+  };
+
+  it("keeps the hashes of a hashed wedge equally spaced", () => {
+    const o = opts();
+    const bond: Bond = { a1: 0, a2: 1, order: 1, stereo: "down" };
+    const plain = buildBondPrimitives(pair("C"), bond, o, ZOOM, deg).lines;
+    const labelled = buildBondPrimitives(pair("O"), bond, o, ZOOM, deg).lines;
+    // the bond to a labelled atom is shorter, so it carries fewer hashes -
+    // but the gap between them is the same
+    expect(labelled.length).toBeLessThan(plain.length);
+    const a = spacing(plain);
+    const b = spacing(labelled);
+    expect(b[0]).toBeCloseTo(a[0], 6);
+  });
+
+  it("keeps the wave of a wavy bond the same length", () => {
+    const o = opts();
+    const bond: Bond = { a1: 0, a2: 1, order: 1, stereo: "wavy" };
+    // where the wave crosses the bond's own line: half a wavelength apart,
+    // and at the same places along the bond whatever is drawn of it
+    const crossings = (atoms: Atom[]) => {
+      const out: number[] = [];
+      for (const l of buildBondPrimitives(atoms, bond, o, ZOOM, deg).lines) {
+        if (l.y1 === 0 || l.y1 * l.y2 < 0) {
+          const f = l.y1 === 0 ? 0 : l.y1 / (l.y1 - l.y2);
+          out.push(l.x1 + (l.x2 - l.x1) * f);
+        }
+      }
+      return out;
+    };
+    const plain = crossings(pair("C"));
+    const labelled = crossings(pair("O"));
+    expect(labelled.length).toBeLessThan(plain.length);
+    for (const x of labelled) {
+      expect(plain.some((p) => Math.abs(p - x) < 0.02)).toBe(true);
+    }
+  });
+});

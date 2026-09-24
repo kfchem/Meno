@@ -449,12 +449,19 @@ function buildWedgeTriangle(
   };
 }
 
+/**
+ * Hashes across a wedge, `p1` the wide end and `p2` the narrow one. Both are
+ * the bond's own ends, before anything is trimmed for a label: the hashes are
+ * placed on that, and `span` then says how much of it is actually drawn, so a
+ * label takes hashes away rather than squeezing them together.
+ */
 function buildHashedWedgeSegments(
   p1: Vec2,
   p2: Vec2,
   baseHalfWorld: number,
   steps: number,
-  tipHalfWorld = 0
+  tipHalfWorld = 0,
+  span?: { from: number; to: number }
 ): LineSeg[] {
   // Same outline as the solid wedge, drawn as separate hashes. The narrow end
   // keeps a bond's width so the last hash does not shrink to a dot.
@@ -465,12 +472,17 @@ function buildHashedWedgeSegments(
   const tipHalf = Math.min(tipHalfWorld, baseHalfWorld * 0.5);
   const apexL = vadd(p2, vscale(n, tipHalf));
   const apexR = vadd(p2, vscale(n, -tipHalf));
+  const full = vlen(vsub(p2, p1));
+  const from = span ? span.from : 0;
+  const to = span ? span.to : full;
   const out: LineSeg[] = [];
   for (let i = 0; i < steps; i++) {
     // Hashes at equal distances, the first at the wide end and the last on
     // the atom at the narrow end: a hash short of it reads as a gap between
     // the wedge and the bonds there, where a solid wedge runs right in.
     const u = steps > 1 ? i / (steps - 1) : 0.5;
+    const along = u * full;
+    if (along < from - 1e-9 || along > to + 1e-9) continue;
     // Points at the same ratio along left (baseL→apex) and right (baseR→apex) edges
     const Lp = vadd(baseL, vscale(vsub(apexL, baseL), u));
     const Rp = vadd(baseR, vscale(vsub(apexR, baseR), u));
@@ -479,13 +491,19 @@ function buildHashedWedgeSegments(
   return out;
 }
 
+/**
+ * A wavy bond. `phase` carries the bond's own length and how far into it the
+ * drawn part starts, so that trimming for a label shortens the wave rather
+ * than squeezing the same number of turns into less room.
+ */
 function buildWavySegments(
   p1: Vec2,
   p2: Vec2,
   ampPx: number,
   freq: number,
   zoom: number,
-  units: "px" | "world" | undefined
+  units: "px" | "world" | undefined,
+  phase?: { start: number; full: number }
 ): LineSeg[] {
   const dir = vnorm(vsub(p2, p1));
   const n = vperp(dir);
@@ -497,7 +515,9 @@ function buildWavySegments(
   for (let k = 0; k <= steps; k++) {
     const t = k / steps;
     const base = vadd(p1, vscale(dir, L * t));
-    const off = Math.sin(2 * Math.PI * freq * t);
+    const u =
+      phase && phase.full > 1e-9 ? (phase.start + L * t) / phase.full : t;
+    const off = Math.sin(2 * Math.PI * freq * u);
     const pt = vadd(base, vscale(n, amp * off));
     if (prev) {
       out.push({ x1: prev.x, y1: prev.y, x2: pt.x, y2: pt.y, widthPx: 0 });
@@ -704,12 +724,19 @@ export function buildBondPrimitives(
       polys.push(tri);
       return { lines, polys };
     } else {
+      // Place the hashes on the bond itself and draw the part that is left
+      // after any label has taken its share.
+      const bp1o = baseAtP1 ? p1o : p2o;
+      const bp2o = baseAtP1 ? p2o : p1o;
+      const trimBase = baseAtP1 ? trimA : trimB;
+      const trimTip = baseAtP1 ? trimB : trimA;
       const segs = buildHashedWedgeSegments(
-        bp1,
-        bp2,
+        bp1o,
+        bp2o,
         baseHalf,
         Math.max(5, Math.floor(opts.hashCount * 0.9)),
-        tipHalf
+        tipHalf,
+        { from: trimBase, to: L0 - trimTip }
       );
       for (let i = 0; i < segs.length; i++) segs[i].widthPx = lwPx;
       lines.push(...segs);
@@ -718,7 +745,10 @@ export function buildBondPrimitives(
   }
   if (bond.stereo === "wavy") {
     lines.push(
-      ...buildWavySegments(p1, p2, opts.wavyAmpPx, opts.wavyFreq, zoom, units)
+      ...buildWavySegments(p1, p2, opts.wavyAmpPx, opts.wavyFreq, zoom, units, {
+        start: trimA,
+        full: L0,
+      })
     );
     for (const l of lines) l.widthPx = lwPx;
     return { lines, polys };
