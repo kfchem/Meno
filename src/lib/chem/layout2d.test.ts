@@ -400,3 +400,46 @@ describe("joinStyle", () => {
     expect(polys.length).toBeGreaterThan(1);
   });
 });
+
+describe("how a bond ends", () => {
+  // a chain ending free, a hashed wedge, and a labelled atom
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: 1.5, y: 0, el: "C" },
+    { id: 3, x: 2.3, y: 1.3, el: "C" },
+    { id: 4, x: 2.3, y: -1.3, el: "O" },
+  ];
+  const bonds: Bond[] = [
+    { a1: 0, a2: 1, order: 1, stereo: "none" },
+    { a1: 1, a2: 2, order: 1, stereo: "down" },
+    { a1: 1, a2: 3, order: 1, stereo: "none" },
+  ];
+  const capAt = (fills: { c: Vec2 }[], a: Atom) =>
+    fills.some((f) => Math.hypot(f.c.x - a.x, f.c.y - a.y) < 1e-9);
+
+  it("rounds a free end as much as a join", () => {
+    const o = opts();
+    const { fills } = buildAllPrimitives(atoms, bonds, o, 40);
+    expect(capAt(fills, atoms[0])).toBe(true); // the end of the chain
+    expect(capAt(fills, atoms[1])).toBe(true); // where the bonds meet
+    for (const f of fills) expect(f.r).toBeCloseTo(o.lineWidthPx / 2, 9);
+  });
+
+  it("leaves a hashed wedge and a label alone", () => {
+    const { fills } = buildAllPrimitives(atoms, bonds, opts(), 40);
+    // a cap past the last hash would read as a loose dot
+    expect(capAt(fills, atoms[2])).toBe(false);
+    // a label takes the bond's end with it
+    expect(capAt(fills, atoms[3])).toBe(false);
+  });
+
+  it("ends flat when asked for sharp joins", () => {
+    const { fills } = buildAllPrimitives(
+      atoms,
+      bonds,
+      opts({ joinStyle: "sharp" }),
+      40,
+    );
+    expect(fills).toHaveLength(0);
+  });
+});
