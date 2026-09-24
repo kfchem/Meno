@@ -972,10 +972,18 @@ export function buildBondPrimitives(
   if (bond.order === 3) {
     // Triple bond outer offset matches the double-bond offset
     const off = toWorld(opts.doubleOffsetPx, zoom, units);
-    const [o1, o2, o3] = buildTripleLines(p1, p2, off);
+    // The outer lines are held back from an atom other bonds meet, the way a
+    // double bond's second line is: run to the atom and they cross whatever
+    // else arrives there.
+    const shorten = Math.max(0, toWorld(opts.doubleShortenPx || 0, zoom, units));
+    const back1 = (deg?.get(bond.a1) || 1) > 1 ? shorten : 0;
+    const back2 = (deg?.get(bond.a2) || 1) > 1 ? shorten : 0;
+    const q1 = vadd(p1, vscale(dir, back1));
+    const q2 = vadd(p2, vscale(dir, -back2));
+    const [o1, , o3] = buildTripleLines(q1, q2, off);
     lines.push(
       { x1: o1.x1, y1: o1.y1, x2: o1.x2, y2: o1.y2, widthPx: lwPx },
-      { x1: o2.x1, y1: o2.y1, x2: o2.x2, y2: o2.y2, widthPx: lwPx },
+      { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx },
       { x1: o3.x1, y1: o3.y1, x2: o3.x2, y2: o3.y2, widthPx: lwPx }
     );
     return { lines, polys };
@@ -1181,7 +1189,10 @@ export function buildAllPrimitives(
     if (showLabel || wedgeEnds.has(i)) continue;
     const c = { x: atoms[i].x, y: atoms[i].y };
     if (roundJoins) {
-      if (plainEnds.has(i)) fills.push({ c, r: rWorld });
+      // A free end of a plain bond, or any atom bonds meet at - including one
+      // where only wedges meet, whose thin ends are each a bond wide and do
+      // not fill the join between them on their own.
+      if (plainEnds.has(i) || d >= 2) fills.push({ c, r: rWorld });
     } else if (d >= 2) {
       polys.push(...mitreJoinPolys(c, plainDirs.get(i) ?? [], rWorld));
     }
@@ -1225,6 +1236,30 @@ export function buildAllPrimitives(
       // Center only when the counts are exactly equal (or both zero); otherwise keep skew
       if (plus === minus) autoSgn = undefined; // -> center
       else autoSgn = plus > minus ? +1 : -1;
+      // A bond of its own width beside the second line leaves no room for it:
+      // the two run into each other. Put the line on the other side when this
+      // one is crowded and that one is not.
+      if (autoSgn != null) {
+        const clearance = (side: number) => {
+          let worst = Math.PI;
+          for (const [from, list] of [
+            [p1, neigh1],
+            [p2, neigh2],
+          ] as [Vec2, number[]][]) {
+            for (const o of list) {
+              const v = vnorm({ x: atoms[o].x - from.x, y: atoms[o].y - from.y });
+              if ((v.x * n.x + v.y * n.y) * side <= 0) continue;
+              const along = Math.abs(v.x * dir.x + v.y * dir.y);
+              worst = Math.min(worst, Math.acos(Math.min(1, along)));
+            }
+          }
+          return worst;
+        };
+        const CROWDED = Math.PI / 4; // 45 degrees
+        const here = clearance(autoSgn);
+        const there = clearance(-autoSgn);
+        if (here < CROWDED && there > here) autoSgn = -autoSgn;
+      }
     }
     const r = buildBondPrimitives(
       atoms,

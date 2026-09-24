@@ -673,3 +673,47 @@ describe("a wavy bond", () => {
     expect(last.y2).toBeCloseTo(0, 6);
   });
 });
+
+describe("where bonds crowd each other", () => {
+  it("holds a triple bond's outer lines back from a join", () => {
+    const o = opts();
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.5, y: 0, el: "C" },
+      { id: 3, x: 2.3, y: 1.3, el: "C" }, // something else at the far end
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 3, stereo: "none" },
+      { a1: 1, a2: 2, order: 1, stereo: "none" },
+    ];
+    const { lines } = buildAllPrimitives(atoms, bonds, o, 40);
+    const triple = lines.filter((l) => l.x1 < 1.6 && l.x2 <= 1.5 + 1e-9);
+    const middle = triple.find((l) => Math.abs(l.y1) < 1e-9)!;
+    const outer = triple.filter((l) => Math.abs(l.y1) > 1e-9);
+    expect(outer).toHaveLength(2);
+    // the free end runs the full length; the end where a bond joins does not
+    for (const l of outer) {
+      expect(l.x1).toBeCloseTo(middle.x1, 9);
+      expect(l.x2).toBeLessThan(middle.x2 - 1e-6);
+    }
+  });
+
+  it("keeps a wedge's join filled where only wedges meet", () => {
+    const o = opts();
+    // a stereocentre carrying nothing but wedges
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.5, y: 0, el: "C" },
+      { id: 3, x: -0.75, y: 1.3, el: "C" },
+      { id: 4, x: -0.75, y: -1.3, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1, stereo: "up" },
+      { a1: 0, a2: 2, order: 1, stereo: "up" },
+      { a1: 0, a2: 3, order: 1, stereo: "down" },
+    ];
+    const { fills } = buildAllPrimitives(atoms, bonds, o, 40);
+    // the thin ends are each a bond wide and do not fill the join on their own
+    expect(fills.some((f) => Math.hypot(f.c.x, f.c.y) < 1e-9)).toBe(true);
+  });
+});
