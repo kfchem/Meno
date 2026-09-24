@@ -163,10 +163,14 @@ describe("wedge geometry", () => {
       [1, 2],
       [2, 1],
     ]);
+    const chainBonds: Bond[] = [
+      wedge,
+      { a1: 1, a2: 2, order: 1, stereo: "none" },
+    ];
     const adj = new Map([
-      [0, [1]],
-      [1, [0, 2]],
-      [2, [1]],
+      [0, [chainBonds[0]]],
+      [1, [chainBonds[0], chainBonds[1]]],
+      [2, [chainBonds[1]]],
     ]);
     const o = raw();
     const { polys } = buildBondPrimitives(
@@ -204,6 +208,10 @@ describe("wedge geometry", () => {
       { id: 2, x: 1.5, y: 0, el: "C" },
       { id: 3, x: -1.41, y: -0.51, el: "C" },
     ];
+    const shallowBonds: Bond[] = [
+      { a1: 1, a2: 0, order: 1, stereo: "up" },
+      { a1: 0, a2: 2, order: 1, stereo: "none" },
+    ];
     const shallowDeg = new Map([
       [0, 2],
       [1, 3],
@@ -212,16 +220,16 @@ describe("wedge geometry", () => {
     const o = raw();
     const { polys } = buildBondPrimitives(
       shallow,
-      { a1: 1, a2: 0, order: 1, stereo: "up" },
+      shallowBonds[0],
       o,
       ZOOM,
       shallowDeg,
       undefined,
       undefined,
       new Map([
-        [0, [1, 2]],
-        [1, [0]],
-        [2, [0]],
+        [0, [shallowBonds[0], shallowBonds[1]]],
+        [1, [shallowBonds[0]]],
+        [2, [shallowBonds[1]]],
       ]),
     );
     const base = polys[0].points.filter((p) => p.x < 0.75);
@@ -441,5 +449,75 @@ describe("how a bond ends", () => {
       40,
     );
     expect(fills).toHaveLength(0);
+  });
+});
+
+describe("a hashed wedge and its neighbours", () => {
+  const ZOOM = 40;
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" }, // stereocentre
+    { id: 2, x: 1.5, y: 0, el: "C" },
+  ];
+  const deg = new Map([
+    [0, 3],
+    [1, 1],
+  ]);
+  const hashed: Bond = { a1: 0, a2: 1, order: 1, stereo: "down" };
+
+  it("puts a hash on the atom at the narrow end", () => {
+    const o = opts();
+    const { lines } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
+    const mid = lines.map((l) => ({
+      x: (l.x1 + l.x2) / 2,
+      len: Math.hypot(l.x2 - l.x1, l.y2 - l.y1),
+    }));
+    const narrow = mid.reduce((a, b) => (b.len < a.len ? b : a));
+    const wideEnd = mid.reduce((a, b) => (b.len > a.len ? b : a));
+    // the thin end is the stereocentre; a hash short of it reads as a gap
+    expect(narrow.x).toBeCloseTo(0, 6);
+    expect(narrow.len).toBeCloseTo(o.lineWidthPx, 6);
+    expect(wideEnd.x).toBeCloseTo(1.5, 6);
+    expect(wideEnd.len).toBeCloseTo(o.wedgeWidthPx, 6);
+  });
+});
+
+describe("a wedge and a bond of more than one line", () => {
+  // the wide end of the wedge sits on atom 1, where a double bond carries on
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 1.5, el: "C" },
+    { id: 2, x: 0, y: 0, el: "C" },
+    { id: 3, x: 1.5, y: 0, el: "C" },
+    { id: 4, x: -1.3, y: -0.75, el: "C" },
+  ];
+  const bonds: Bond[] = [
+    { a1: 0, a2: 1, order: 1, stereo: "up", stereoOrient: "reverse" },
+    { a1: 1, a2: 2, order: 2, stereo: "none" },
+    { a1: 1, a2: 3, order: 1, stereo: "none" },
+  ];
+
+  it("cuts past the far line, so neither line ends in mid air", () => {
+    const o = opts();
+    const { polys, lines } = buildAllPrimitives(atoms, bonds, o, 40);
+    const wedge = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    // the double bond runs along +x from the atom; its lines sit either side
+    const ys = lines
+      .filter((l) => l.x1 > -0.1 && l.x2 > 1)
+      .map((l) => l.y1);
+    expect(ys.length).toBe(2);
+    const lowest = Math.min(...ys);
+    // the wedge reaches below the lower line, so its end is covered
+    const under = Math.min(...wedge.points.map((p) => p.y));
+    expect(under).toBeLessThanOrEqual(lowest);
+  });
+
+  it("runs a line of a double bond up to the atom the wedge covers", () => {
+    const o = opts();
+    const { lines } = buildAllPrimitives(atoms, bonds, o, 40);
+    // both lines start at the atom, not held back from it
+    for (const l of lines.filter((s) => s.x1 > -0.1 && s.x2 > 1)) {
+      expect(l.x1).toBeCloseTo(0, 6);
+    }
   });
 });

@@ -186,6 +186,14 @@ function buildTripleLines(
 type Cut = { on: Vec2; dir: Vec2; key: number };
 
 /**
+ * A bond carrying on from the wide end of a wedge: which way it goes, and how
+ * far it reaches either side of its own line. A double bond reaches past its
+ * centre by the gap between its two lines, and a cut that only knew about a
+ * single line would leave the outer one stranded off the wedge.
+ */
+type Neighbour = { dir: Vec2; half: number; wide: boolean };
+
+/**
  * Where the wide end of a wedge meets another bond, a square cut leaves a
  * notch on the side the bond descends to. Pick, for this side of the wedge,
  * the bond to follow and the line to cut along: one of that bond's edges,
@@ -201,17 +209,16 @@ function baseCut(
   atom: Vec2,
   side: number,
   axis: Vec2,
-  halfLineWorld: number,
-  neighbourDirs: Vec2[],
+  neighbours: Neighbour[],
 ): Cut | null {
-  if (neighbourDirs.length === 0) return null;
+  if (neighbours.length === 0) return null;
   const n = vperp(axis);
   // the neighbour furthest round to this side; with only one bond both sides
   // follow it, which is the cut parallel to that bond
   let key = -1;
   let best = -Infinity;
-  for (let i = 0; i < neighbourDirs.length; i++) {
-    const m = neighbourDirs[i];
+  for (let i = 0; i < neighbours.length; i++) {
+    const m = neighbours[i].dir;
     const d = (m.x * n.x + m.y * n.y) * side;
     if (d > best) {
       best = d;
@@ -219,11 +226,15 @@ function baseCut(
     }
   }
   if (key < 0) return null;
-  const dir = neighbourDirs[key];
+  const { dir, half, wide } = neighbours[key];
   const off = vperp(dir);
   const towardsTip = off.x * axis.x + off.y * axis.y >= 0 ? 1 : -1;
-  const edge = neighbourDirs.length === 1 ? -towardsTip : towardsTip;
-  return { on: vadd(atom, vscale(off, edge * halfLineWorld)), dir, key };
+  // Take the bond in whole when it is the only one carrying on, or when it is
+  // drawn as more than one line: a second line ends beside its own, not on the
+  // atom, so a cut that stopped at the atom would leave it stranded.
+  const takeWhole = neighbours.length === 1 || wide;
+  const edge = takeWhole ? -towardsTip : towardsTip;
+  return { on: vadd(atom, vscale(off, edge * half)), dir, key };
 }
 
 /**
@@ -378,7 +389,7 @@ function buildWedgeTriangle(
   p2: Vec2,
   baseHalfWorld: number,
   tipHalfWorld: number,
-  baseNeighbourDirs: Vec2[] = [],
+  baseNeighbours: Neighbour[] = [],
   round = false,
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
@@ -392,9 +403,8 @@ function buildWedgeTriangle(
   const tip = vadd(p2, vscale(dir, tipHalf));
   const tipL = vadd(tip, nt);
   const tipR = vsub(tip, nt);
-  const halfLine = Math.min(tipHalfWorld, baseHalfWorld);
-  const cutL = baseCut(p1, 1, dir, halfLine, baseNeighbourDirs);
-  const cutR = baseCut(p1, -1, dir, halfLine, baseNeighbourDirs);
+  const cutL = baseCut(p1, 1, dir, baseNeighbours);
+  const cutR = baseCut(p1, -1, dir, baseNeighbours);
   // How far a corner may slide to reach the cut. Real structures need up to
   // about 1.3 times the wedge's half width (a bond leaving at 140 degrees to
   // the wedge); beyond that the bond runs so close to the wedge's own
@@ -409,7 +419,7 @@ function buildWedgeTriangle(
   // atom, and the cap that fills the join there would bulge out of it. Reach
   // the cap's width past the atom instead, so the end covers it.
   const back =
-    baseNeighbourDirs.length > 0
+    baseNeighbours.length > 0
       ? vscale(dir, -Math.min(tipHalfWorld, baseHalfWorld))
       : { x: 0, y: 0 };
   const baseL = mitredL ?? vadd(squareL, back);
@@ -457,8 +467,10 @@ function buildHashedWedgeSegments(
   const apexR = vadd(p2, vscale(n, -tipHalf));
   const out: LineSeg[] = [];
   for (let i = 0; i < steps; i++) {
-    // Place separator lines at equal distances from base to apex
-    const u = (i + 0.5) / steps;
+    // Hashes at equal distances, the first at the wide end and the last on
+    // the atom at the narrow end: a hash short of it reads as a gap between
+    // the wedge and the bonds there, where a solid wedge runs right in.
+    const u = steps > 1 ? i / (steps - 1) : 0.5;
     // Points at the same ratio along left (baseL→apex) and right (baseR→apex) edges
     const Lp = vadd(baseL, vscale(vsub(apexL, baseL), u));
     const Rp = vadd(baseR, vscale(vsub(apexR, baseR), u));
@@ -615,7 +627,8 @@ export function buildBondPrimitives(
   deg?: Map<number, number>,
   inRing?: boolean,
   autoSgn?: number,
-  adj?: Map<number, number[]>
+  adjBonds?: Map<number, Bond[]>,
+  wedgeBaseAtoms?: Set<number>
 ): { lines: LineSeg[]; polys: Poly[] } {
   const a = atoms[bond.a1];
   const c = atoms[bond.a2];
@@ -658,14 +671,26 @@ export function buildBondPrimitives(
       const baseIdx = baseAtP1 ? bond.a1 : bond.a2;
       const tipIdx = baseAtP1 ? bond.a2 : bond.a1;
       const baseAtom = atoms[baseIdx];
-      const neighbourDirs: Vec2[] = [];
+      const neighbours: Neighbour[] = [];
       if (!hasLabel(baseAtom.el)) {
-        for (const other of adj?.get(baseIdx) ?? []) {
+        const half = pxToWorld(lwPx * 0.5, zoom);
+        const doubleHalf = toWorld(opts.doubleOffsetPx, zoom, units) * 0.5;
+        const tripleHalf = toWorld(opts.tripleOffsetPx, zoom, units);
+        for (const b of adjBonds?.get(baseIdx) ?? []) {
+          const other = b.a1 === baseIdx ? b.a2 : b.a1;
           if (other === tipIdx || other === baseIdx) continue;
           const o = atoms[other];
           if (!o) continue;
           const d = vsub({ x: o.x, y: o.y }, { x: baseAtom.x, y: baseAtom.y });
-          if (vlen(d) > 1e-9) neighbourDirs.push(vnorm(d));
+          if (vlen(d) < 1e-9) continue;
+          // how far that bond reaches either side of its own line
+          const spread =
+            b.order === 3 ? tripleHalf : b.order === 2 ? doubleHalf : 0;
+          neighbours.push({
+            dir: vnorm(d),
+            half: half + spread,
+            wide: spread > 0,
+          });
         }
       }
       const tri = buildWedgeTriangle(
@@ -673,7 +698,7 @@ export function buildBondPrimitives(
         bp2,
         baseHalf,
         tipHalf,
-        neighbourDirs,
+        neighbours,
         (opts.joinStyle ?? "round") === "round",
       );
       polys.push(tri);
@@ -714,8 +739,15 @@ export function buildBondPrimitives(
     const d1 = (deg?.get(bond.a1) || 1) - 1;
     const d2 = (deg?.get(bond.a2) || 1) - 1;
     const ringShort = inRing === true;
-    const shortenA = ringShort || d1 > d2 || (d1 === d2 && d1 > 0);
-    const shortenB = ringShort || d2 > d1 || (d1 === d2 && d2 > 0);
+    // The wide end of a wedge covers the atom and a little beyond, so a line
+    // held back from that atom starts inside nothing and floats free of the
+    // drawing. Run it to the atom and let the wedge cover its end.
+    const atWedge1 = wedgeBaseAtoms?.has(bond.a1) ?? false;
+    const atWedge2 = wedgeBaseAtoms?.has(bond.a2) ?? false;
+    const shortenA =
+      !atWedge1 && (ringShort || d1 > d2 || (d1 === d2 && d1 > 0));
+    const shortenB =
+      !atWedge2 && (ringShort || d2 > d1 || (d1 === d2 && d2 > 0));
     const ps1 = shortenA ? vadd(p1, vscale(dir, shorten)) : p1;
     const ps2 = shortenB ? vadd(p2, vscale(dir, -shorten)) : p2;
 
@@ -837,6 +869,12 @@ export function buildAllPrimitives(
   const fills: Circle[] = [];
   const deg = degreeMap(bonds);
   // adjacency by index
+  // bonds at each atom, and just the neighbours, which the ring search uses
+  const adjBonds = new Map<number, Bond[]>();
+  for (const b of bonds) {
+    adjBonds.set(b.a1, [...(adjBonds.get(b.a1) || []), b]);
+    adjBonds.set(b.a2, [...(adjBonds.get(b.a2) || []), b]);
+  }
   const adj = new Map<number, number[]>();
   for (const b of bonds) {
     adj.set(b.a1, [...(adj.get(b.a1) || []), b.a2]);
@@ -1063,7 +1101,8 @@ export function buildAllPrimitives(
       deg,
       inRing,
       autoSgn,
-      adj
+      adjBonds,
+      wedgeEnds
     );
     lines.push(...r.lines);
     polys.push(...r.polys);
