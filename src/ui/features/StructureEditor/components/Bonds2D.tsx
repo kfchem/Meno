@@ -6,7 +6,8 @@ import {
   layoutMolecule,
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
-import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { editorLayoutOptions } from "../layoutOptions";
 
 export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
   const { camera } = useThree();
@@ -75,11 +76,8 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
         : aromaticEnabled
         ? true
         : false;
-    const opts: LayoutOptions = acsWorldOptions(atomsL, bondsL, {
+    const opts: LayoutOptions = editorLayoutOptions(atomsL, bondsL, {
       ...options,
-      units: "world",
-      // Guarantee a minimum on-screen thickness from layout side to avoid 0px widths at extreme zoom states
-      minLinePx: 1.25,
       aromaticCircle,
     });
     // Use live zoom for layout as well to avoid a lag between layout widthPx and thickness conversion

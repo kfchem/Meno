@@ -3,12 +3,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
-import { acsWorldOptions } from "../../../../lib/chem/acs";
 import {
   type Atom as LAtom,
   type Bond as LBond,
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
+import { editorLayoutOptions } from "../layoutOptions";
 
 export default function LabelEditor2D() {
   const { camera } = useThree();
@@ -122,7 +122,7 @@ export default function LabelEditor2D() {
     return out;
   }, [model.bonds, atomsL]);
   const opts: LayoutOptions = useMemo(
-    () => acsWorldOptions(atomsL, bondsL, { units: "world" }),
+    () => editorLayoutOptions(atomsL, bondsL),
     [atomsL, bondsL]
   );
   // Keep last position during fade-out

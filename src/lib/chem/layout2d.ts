@@ -59,6 +59,10 @@ export type Poly = { points: Vec2[] };
 /** A piece of a label; `sub` marks a subscript such as the 2 in NH2. */
 export type TextRun = { text: string; sub?: boolean };
 
+/** How a subscript is drawn, as a fraction of the label's font size. */
+export const SUB_SCALE = 0.7;
+export const SUB_DROP = 0.28;
+
 export type TextItem = {
   x: number;
   y: number;
@@ -82,6 +86,12 @@ export type Layout = {
   circles: Circle[];
   fills: Circle[];
   bounds: { min: Vec2; max: Vec2 };
+  /**
+   * Pixels per coordinate unit this layout was built for. Sizes the layout
+   * reports in pixels (a line's width, a label's font in px units) divide by
+   * it to land back in the coordinates everything else is in.
+   */
+  zoom: number;
 };
 
 export function pxToWorld(px: number, zoom: number): number {
@@ -1069,6 +1079,7 @@ export function layoutMolecule(
     circles: prim.circles,
     fills: prim.fills,
     bounds,
+    zoom,
   };
 }
 
@@ -1103,46 +1114,91 @@ function escapeXml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/**
+ * Rough advance width of a character, as a fraction of the font size. The
+ * canvas measures text properly; here there is nothing to measure against, so
+ * this only has to place the hydrogens beside an element symbol - the symbol
+ * itself is anchored on its atom and does not depend on it.
+ */
+function advanceEm(ch: string): number {
+  if (ch >= "0" && ch <= "9") return 0.556;
+  if (ch >= "a" && ch <= "z") return 0.55;
+  return 0.667;
+}
+
+function runWidth(text: string, size: number): number {
+  let w = 0;
+  for (const ch of text) w += advanceEm(ch) * size;
+  return w;
+}
+
+/** A label as the canvas draws it: runs, subscripts, symbol on the atom. */
+function svgLabel(
+  t: TextItem,
+  fontSize: number,
+  fontFamily: string,
+  fill: string,
+): string {
+  const runs = t.runs ?? [{ text: t.text }];
+  const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
+  const sizeOf = (i: number) => fontSize * (runs[i].sub ? SUB_SCALE : 1);
+  const dropOf = (i: number) => (runs[i].sub ? fontSize * SUB_DROP : 0);
+  // The element symbol sits on the atom; the rest follows on either side.
+  let x = t.x - runWidth(runs[anchor].text, fontSize) / 2;
+  for (let i = 0; i < anchor; i++) x -= runWidth(runs[i].text, sizeOf(i));
+  let out = "";
+  for (let i = 0; i < runs.length; i++) {
+    const size = sizeOf(i);
+    out +=
+      `<text x="${x}" y="${-t.y + dropOf(i)}" font-family="${fontFamily}"` +
+      ` font-size="${size}" fill="${fill}" stroke="none" text-anchor="start"` +
+      ` dominant-baseline="central">${escapeXml(runs[i].text)}</text>`;
+    x += runWidth(runs[i].text, size);
+  }
+  return out;
+}
+
+/**
+ * The same drawing as the canvas, as SVG. Everything is written in the
+ * coordinates the layout is in: a line's width and a label's font size are
+ * converted out of pixels with the zoom the layout was built for, so the
+ * drawing keeps its proportions at any size it is shown at. The px size the
+ * layout was built for is kept as the SVG's own width and height.
+ */
 export function createSVG(layout: Layout, opts: LayoutOptions): string {
-  const b = expandBounds(layout.bounds, pxToWorld(opts.paddingPx, 1));
+  const zoom = layout.zoom > 0 ? layout.zoom : 1;
+  const toCoord = (px: number) => px / zoom;
+  const b = expandBounds(layout.bounds, toCoord(opts.paddingPx));
   const width = b.max.x - b.min.x;
   const height = b.max.y - b.min.y;
   const vb = `${b.min.x} ${-b.max.y} ${width} ${height}`;
   const stroke = "black";
   const fontFamily = "Arial, Helvetica, sans-serif";
+  const strokeWidth = toWorld(opts.lineWidthPx, zoom, opts.units);
+  const fontSize = toWorld(opts.fontPx, zoom, opts.units);
   let s = "";
-  s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" fill="none">`;
+  s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}"` +
+    ` width="${width * zoom}" height="${height * zoom}" fill="none">`;
   // filled join caps
-  for (const c of (layout as any).fills || []) {
-    const rAttr = `${c.r}`;
+  for (const c of layout.fills || []) {
     s += `<circle cx="${c.c.x}" cy="${-c.c
-      .y}" r="${rAttr}" fill="${stroke}" stroke="none" />`;
+      .y}" r="${c.r}" fill="${stroke}" stroke="none" />`;
   }
   for (const p of layout.polys) {
-    const d = toSvgPath(p);
-    s += `<path d="${d}" fill="${stroke}" stroke="none" />`;
+    s += `<path d="${toSvgPath(p)}" fill="${stroke}" stroke="none" />`;
   }
-  for (const c of (layout as any).circles || []) {
-    const rAttr = `${c.r}`;
-    const lw =
-      opts.units === "px" ? `${opts.lineWidthPx}px` : `${opts.lineWidthPx}`;
+  for (const c of layout.circles || []) {
     s += `<circle cx="${c.c.x}" cy="${-c.c
-      .y}" r="${rAttr}" fill="none" stroke="${stroke}" stroke-width="${lw}" vector-effect="non-scaling-stroke" />`;
+      .y}" r="${c.r}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" />`;
   }
   for (const l of layout.lines) {
-    const w = l.widthPx > 0 ? l.widthPx : 1;
-    const wAttr = opts.units === "px" ? `${w}px` : `${w}`;
-    s += `<line x1="${l.x1}" y1="${-l.y1}" x2="${
-      l.x2
-    }" y2="${-l.y2}" stroke="${stroke}" stroke-width="${wAttr}" vector-effect="non-scaling-stroke" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="2" />`;
+    const w = toCoord(l.widthPx > 0 ? l.widthPx : 1);
+    s += `<line x1="${l.x1}" y1="${-l.y1}" x2="${l.x2}" y2="${-l.y2}"` +
+      ` stroke="${stroke}" stroke-width="${w}" stroke-linecap="butt"` +
+      ` stroke-linejoin="miter" stroke-miterlimit="2" />`;
   }
   for (const t of layout.texts) {
-    const f = opts.units === "px" ? `${t.fontPx}px` : `${t.fontPx}`;
-    s += `<text x="${
-      t.x
-    }" y="${-t.y}" font-family="${fontFamily}" font-size="${f}" text-anchor="middle" dominant-baseline="central">${escapeXml(
-      t.text
-    )}</text>`;
+    s += svgLabel(t, fontSize, fontFamily, stroke);
   }
   s += `</svg>`;
   return s;

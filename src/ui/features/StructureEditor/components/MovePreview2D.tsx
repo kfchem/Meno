@@ -6,7 +6,6 @@ import { COLORS, ALPHA } from "../../../theme/colors";
 import {
   ACS_RATIOS,
   NOMINAL_BOND_LENGTH,
-  acsWorldOptions,
 } from "../../../../lib/chem/acs";
 import {
   buildBondPrimitives,
@@ -16,6 +15,7 @@ import {
 } from "../../../../lib/chem/layout2d";
 import { computeMoveSnap } from "../utils/moveSnap";
 import { polyTriangles } from "./polyTriangles";
+import { editorLayoutOptions } from "../layoutOptions";
 
 // Preview for moving an atom without mutating coordinates during drag.
 // - Thin highlight lines (neighbor -> cursor) keep existing look.
@@ -319,10 +319,9 @@ export default function MovePreview2D() {
       }
       // Build primitives for attached bonds only, but with full deg info
       const zNow = (camera as any)?.zoom || 1;
-      const opts: LayoutOptions = acsWorldOptions(
+      const opts: LayoutOptions = editorLayoutOptions(
         atomsL as any,
-        bondsAttach as any,
-        { units: "world", minLinePx: 1.25 }
+        bondsAttach as any
       );
       type LineSeg = {
         x1: number;
