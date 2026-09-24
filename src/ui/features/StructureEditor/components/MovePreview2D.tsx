@@ -15,6 +15,7 @@ import {
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
 import { computeMoveSnap } from "../utils/moveSnap";
+import { polyTriangles } from "./polyTriangles";
 
 // Preview for moving an atom without mutating coordinates during drag.
 // - Thin highlight lines (neighbor -> cursor) keep existing look.
@@ -406,18 +407,10 @@ export default function MovePreview2D() {
         const triPositions: number[] = [];
         for (const p of outPolys) {
           if (!p.points || p.points.length < 3) continue;
-          const [p0, p1, p2] = p.points;
-          triPositions.push(
-            p0.x,
-            p0.y,
-            -0.031,
-            p1.x,
-            p1.y,
-            -0.031,
-            p2.x,
-            p2.y,
-            -0.031
-          );
+          // the outline is a cut, and possibly rounded, polygon
+          for (const i of polyTriangles(p.points)) {
+            triPositions.push(p.points[i].x, p.points[i].y, -0.031);
+          }
         }
         if (triPositions.length > 0) {
           const arr = new Float32Array(triPositions);
