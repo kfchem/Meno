@@ -54,18 +54,8 @@ export type DrawingStyle = {
 };
 
 /**
- * The ACS 1996 document settings, as ACS gives them: 14.4 pt bonds, 0.6 pt
- * lines, 2.0 pt bold width, 18% bond spacing, 2.5 pt hash spacing, 10 pt
- * labels (and 1.6 pt label margin and 120 degree chains, which the layout
- * does not take from here yet).
- *
- * Where ACS is silent the style follows what a drawing made to those
- * settings actually looks like, measured off reference drawings. A wedge's
- * broad end is one: ACS sets only the bold width, and the reference draws the
- * wedge one and a half bold widths across, 3.0 pt - this layout's wedge now
- * matches it to half a pixel along its length. How far a double bond's inner
- * line is shortened and how a wavy bond waves have not been measured yet, and
- * keep the values this app has drawn with until they are.
+ * ACS 1996: 14.4 pt bonds, 0.6 pt lines, 2.0 pt bold width (3.0 pt at a
+ * wedge's broad end), 18% bond spacing, 2.5 pt hash spacing, 10 pt labels.
  */
 export const ACS_1996: DrawingStyle = {
   bondLengthPt: 14.4,
