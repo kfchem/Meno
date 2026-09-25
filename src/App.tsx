@@ -13,11 +13,17 @@ import DocumentBridge from "./ui/views/DocumentBridge";
 import type { TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
 import { undoIntent } from "./lib/doc/shortcuts";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
   // Shown when an action is refused, e.g. the WebGL canvas budget is full.
   const [notice, setNotice] = useState<string | null>(null);
+  // Something with unsaved changes, waiting on a yes or a no.
+  const [pendingClose, setPendingClose] = useState<
+    { kind: "tab"; id: string } | { kind: "window" } | null
+  >(null);
 
   // One document per tab, for the view kinds that declare `createDocument`.
   // Documents live outside React state: each is its own store and notifies
@@ -62,6 +68,35 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const closeTab = (id: string) => {
+    documentsRef.current.delete(id);
+    dispatch({ type: "CLOSE_TAB", id });
+  };
+
+  // Closing the window - its own button, Alt+F4 - asks first when a tab
+  // holds unsaved changes. The listener reads the tabs through a ref, so it
+  // is registered once and still sees the latest ones.
+  const tabsRef = useRef(state.tabsById);
+  tabsRef.current = state.tabsById;
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let gone = false;
+    getCurrentWindow()
+      .onCloseRequested((e) => {
+        if (Object.values(tabsRef.current).some((t) => t.meta.dirty)) {
+          e.preventDefault();
+          setPendingClose({ kind: "window" });
+        }
+      })
+      .then((u) => (gone ? u() : (unlisten = u)))
+      // Outside Tauri - the browser dev server - there is no window to watch.
+      .catch(() => {});
+    return () => {
+      gone = true;
+      unlisten?.();
+    };
+  }, []);
+
   const ctl: TabsController = {
     tabOrder: state.tabOrder,
     tabsById: Object.fromEntries(
@@ -71,8 +106,8 @@ export default function App() {
     reorder: (order) => dispatch({ type: "REORDER", order }),
     select: (id) => dispatch({ type: "SELECT_TAB", id }),
     close: (id) => {
-      documentsRef.current.delete(id);
-      dispatch({ type: "CLOSE_TAB", id });
+      if (state.tabsById[id]?.meta.dirty) setPendingClose({ kind: "tab", id });
+      else closeTab(id);
     },
     add: () => {
       const t = viewRegistry.loader.create("New Tab");
@@ -125,6 +160,29 @@ export default function App() {
   return (
     <div className="h-screen w-screen flex flex-col relative">
       <TopBar ctl={ctl} />
+      {pendingClose && (
+        <ConfirmDiscard
+          title={
+            pendingClose.kind === "tab"
+              ? `Close "${state.tabsById[pendingClose.id]?.meta.label ?? "this tab"}"?`
+              : "Close Meno?"
+          }
+          message={
+            pendingClose.kind === "tab"
+              ? "Its changes have not been saved. Closing it throws them away."
+              : "Some tabs have changes that have not been saved. Closing the window throws them away."
+          }
+          discardLabel="Close without saving"
+          onCancel={() => setPendingClose(null)}
+          onDiscard={() => {
+            const p = pendingClose;
+            setPendingClose(null);
+            if (p.kind === "tab") closeTab(p.id);
+            // destroy, not close: close would only ask again.
+            else void getCurrentWindow().destroy();
+          }}
+        />
+      )}
       {notice && (
         <div
           role="alert"

@@ -12,7 +12,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import logo from "../../assets/icon.png";
 import { TabKind } from "../../lib/core";
 
-type TabMeta = { id: string; label: string };
+type TabMeta = { id: string; label: string; dirty?: boolean };
 
 export type TabsController = {
   tabOrder: string[];
@@ -125,9 +125,24 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
                   !selected && "hover:bg-gh-gray/10"
                 )}
               >
-                <span className="truncate">{tab.label}</span>
+                <span className="truncate">
+                  {tab.dirty && (
+                    <span
+                      className="mr-1 text-gh-gray"
+                      aria-label="Unsaved changes"
+                      title="Unsaved changes"
+                    >
+                      ●
+                    </span>
+                  )}
+                  {tab.label}
+                </span>
                 <button
-                  onPointerDown={(e) => {
+                  // Closing on the press made a tab easy to lose while
+                  // reaching to drag it: a full click closes, and the press
+                  // is kept from starting a drag.
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
                     e.stopPropagation();
                     close(id);
                   }}
