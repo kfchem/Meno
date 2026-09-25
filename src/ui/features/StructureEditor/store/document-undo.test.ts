@@ -80,6 +80,50 @@ describe("editor store over a document", () => {
     expect(state().model.atoms).toHaveLength(0);
   });
 
+  const ethanal = {
+    atoms: [
+      { id: 1, x: 0, y: 0, r: 0.9, el: "C" },
+      { id: 2, x: 1.5, y: 0, r: 0.9, el: "O" },
+    ],
+    bonds: [{ id: 3, a: 1, b: 2, order: 2 as const }],
+  };
+  const arrow = { x: 4, y: 0, angle: 0, length: 3 };
+
+  it("opens a tab's file as where the document starts, not as an edit", () => {
+    const { doc, state } = editor();
+    state().openModel(ethanal, arrow);
+
+    expect(state().model.atoms).toHaveLength(2);
+    expect(state().arrows).toHaveLength(1);
+    // nothing to undo, nothing unsaved
+    expect(doc.history()).toMatchObject({ undoDepth: 0, dirty: false });
+    expect(doc.undo()).toBe(false);
+    expect(state().model.atoms).toHaveLength(2);
+
+    // an edit after it undoes back to the file, not to an empty canvas
+    state().addAtom(3, 0, "N");
+    expect(doc.history().dirty).toBe(true);
+    doc.undo();
+    expect(state().model.atoms).toHaveLength(2);
+    expect(doc.history().dirty).toBe(false);
+  });
+
+  it("brings a reaction's arrow in with its molecules, as one step", () => {
+    const replaced = editor();
+    replaced.state().replaceModel(ethanal, arrow);
+    expect(replaced.doc.history().undoDepth).toBe(1);
+    expect(replaced.state().arrows).toMatchObject([{ x: 4, y: 0, length: 3 }]);
+    replaced.doc.undo();
+    expect(replaced.state().arrows).toHaveLength(0);
+    expect(replaced.state().model.atoms).toHaveLength(0);
+
+    const appended = editor();
+    appended.state().appendModel(ethanal, arrow);
+    expect(appended.doc.history().undoDepth).toBe(1);
+    appended.doc.undo();
+    expect(appended.state().arrows).toHaveLength(0);
+  });
+
   it("merges repeated moves of one atom into a single step", () => {
     const { doc, state } = editor();
     const id = state().addAtom(0, 0, "C");
