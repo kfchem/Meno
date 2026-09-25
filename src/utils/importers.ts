@@ -1,4 +1,5 @@
 import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
+import { kekuleOrders } from "../lib/chem/kekulize";
 import {
   parseSDF,
   parseXYZ,
@@ -349,11 +350,12 @@ export function convertMolToEditorModel(m: ParsedMol, scale: number) {
   }));
   // Assign bond IDs after atom IDs to avoid collisions with atoms
   const bondIdBase = atoms.length;
+  const orders = kekuleOrders(m.atoms, m.bonds);
   const bonds: EditorBond[] = m.bonds.map((b, i) => ({
     id: bondIdBase + i + 1,
     a: b.a1 + 1,
     b: b.a2 + 1,
-    order: clampOrder(b.order),
+    order: orders[i],
     stereo: mapStereo(b as any),
   }));
   // centroid
@@ -410,7 +412,8 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
         el: normalizeEl(a.element),
       });
     }
-    for (const b of m.bonds) {
+    const orders = kekuleOrders(m.atoms, m.bonds);
+    m.bonds.forEach((b, i) => {
       // Parsed indices are 0-based; our per-molecule atoms were assigned ids base..(base+atoms-1).
       // Therefore, map directly as base + index (no +1).
       const a1 = base + b.a1;
@@ -419,10 +422,10 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
         id: idCounter++,
         a: a1,
         b: a2,
-        order: clampOrder(b.order),
+        order: orders[i],
         stereo: mapStereo(b as any),
       });
-    }
+    });
   }
   // centroid after scaling
   let cx = 0,
@@ -445,12 +448,6 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
  * - Drop any bond that references a missing atom after remap
  */
 // normalizeEditorModel: removed (not used)
-
-function clampOrder(o: number): 1 | 2 | 3 {
-  if (o >= 3) return 3;
-  if (o >= 2) return 2;
-  return 1;
-}
 
 function normalizeEl(el: string): string {
   if (!el) return "C";

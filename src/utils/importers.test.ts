@@ -4,6 +4,7 @@ import {
   parseRXNGroups,
   readMoleculesFromText,
   buildEditorModelFromRXN,
+  moleculesToEditorModel,
 } from "./importers";
 import sampleSdf from "../assets/KEF20633.sdf?raw";
 import sampleRxn from "../assets/KEF20633.rxn?raw";
@@ -117,6 +118,46 @@ describe("parseRXNGroups", () => {
     for (const b of model.bonds) {
       expect(ids.has(b.a)).toBe(true);
       expect(ids.has(b.b)).toBe(true);
+    }
+  });
+});
+
+// Pyridine with its ring bonds marked aromatic (MDL bond type 4), as some
+// programs write it, rather than as alternating single and double bonds.
+const aromaticPyridine = [
+  "pyridine",
+  "  aromatic bonds",
+  "",
+  "  6  6  0     0  0  0  0  0  0999 V2000",
+  "    1.2990    0.7500    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0",
+  "    1.2990   -0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+  "    0.0000   -1.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+  "   -1.2990   -0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+  "   -1.2990    0.7500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+  "    0.0000    1.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+  "  1  2  4  0  0  0  0",
+  "  2  3  4  0  0  0  0",
+  "  3  4  4  0  0  0  0",
+  "  4  5  4  0  0  0  0",
+  "  5  6  4  0  0  0  0",
+  "  6  1  4  0  0  0  0",
+  "M  END",
+].join("\n");
+
+describe("aromatic bonds on import", () => {
+  it("come in as a Kekulé ring, not as triple bonds", () => {
+    const { model } = moleculesToEditorModel(
+      readMoleculesFromText(aromaticPyridine, "mol"),
+    );
+    const orders = model.bonds.map((b) => b.order);
+    expect(orders).not.toContain(3);
+    expect(orders.filter((o) => o === 2)).toHaveLength(3);
+    // every ring atom, the N included, carries one of them
+    for (const a of model.atoms) {
+      const doubles = model.bonds.filter(
+        (b) => b.order === 2 && (b.a === a.id || b.b === a.id),
+      );
+      expect(doubles).toHaveLength(1);
     }
   });
 });
