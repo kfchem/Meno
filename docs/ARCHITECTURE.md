@@ -109,8 +109,11 @@ What is left before the editor counts as finished, and in what order, is in
   is its own component in `components/` (`Bonds2D`, `Atoms2D`, `Wedges2D`,
   `Labels2D`, previews, hover overlays, `PanZoom2D`, `FitToContent2D`, …).
 - **Depiction**: `lib/chem/layout2d.ts` turns atoms/bonds into line segments,
-  polygons, text and circles; `lib/chem/acs.ts` provides ACS-style proportions
-  scaled to `NOMINAL_BOND_LENGTH` world units.
+  polygons, text and circles. How big everything is comes from a drawing
+  style (`lib/chem/style.ts`): each length in points or as a fraction of the
+  bond length, layered from a default up, with ACS 1996 as the preset.
+  `lib/chem/acs.ts` turns that preset into layout options at
+  `NOMINAL_BOND_LENGTH` world units.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
 - **Frame loop**: the canvas runs `frameloop="demand"` at a fixed `CANVAS_DPR`
   (2x). React commits (store changes) request a frame automatically; anything

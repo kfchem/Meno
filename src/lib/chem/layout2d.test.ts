@@ -223,12 +223,13 @@ describe("wedge geometry", () => {
   });
 
   it("leaves the wide end square when a bond runs along the wedge", () => {
-    // the bond at the wide end doubles back at a shallow angle: cutting to it
-    // would draw the wedge out into a spike
+    // the bond at the wide end carries on within 8 degrees of the wedge's
+    // own line: cutting to it would draw the wedge out into a spike. (At the
+    // ACS width a bond 20 degrees off is still cut to cleanly.)
     const shallow: Atom[] = [
       { id: 1, x: 0, y: 0, el: "C" },
       { id: 2, x: 1.5, y: 0, el: "C" },
-      { id: 3, x: -1.41, y: -0.51, el: "C" },
+      { id: 3, x: -1.4854, y: -0.2088, el: "C" },
     ];
     const shallowBonds: Bond[] = [
       { a1: 1, a2: 0, order: 1, stereo: "up" },

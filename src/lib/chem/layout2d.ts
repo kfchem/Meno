@@ -24,10 +24,7 @@ export type LayoutOptions = {
   doubleShortenPx: number;
   tripleOffsetPx: number;
   wedgeWidthPx: number;
-  wedgeLengthPx: number;
   hashCount: number;
-  hashStartPx: number;
-  hashEndPx: number;
   wavyAmpPx: number;
   wavyFreq: number;
   fontPx: number;
