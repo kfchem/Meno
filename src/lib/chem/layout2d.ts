@@ -1166,6 +1166,77 @@ export function buildBondPrimitives(
   return { lines, polys };
 }
 
+/**
+ * Where bonds meet, and where one simply ends, the drawing is finished off:
+ * with a cap of half a line width when joins are round, and with a mitre
+ * between the bonds when they are sharp. Not every atom wants one.
+ *
+ * `caps` are the atoms a round cap belongs on and `mitres` the atoms a sharp
+ * join is built at, with the directions of the plain bonds arriving there.
+ * The drag preview draws the atom it is carrying itself, so it asks the same
+ * question of the same function rather than guessing: a dot the drawing does
+ * not have must not appear for as long as the atom is moving.
+ */
+export function joinsAtAtoms(
+  atoms: Atom[],
+  bonds: Bond[],
+  opts: LayoutOptions,
+  deg: Map<number, number>,
+): { caps: Set<number>; mitres: Map<number, Vec2[]> } {
+  // A double bond drawn centred has no line along the bond itself, so nothing
+  // of it reaches the atom for a cap to round off: a cap there is a dot in
+  // mid air between the two lines.
+  const onAxis = (b: Bond) =>
+    b.order !== 2 ||
+    (b.doubleMode !== undefined &&
+      b.doubleMode !== "auto" &&
+      b.doubleMode !== "center");
+  const reaching = new Map<number, number>();
+  for (const b of bonds) {
+    if (!onAxis(b)) continue;
+    reaching.set(b.a1, (reaching.get(b.a1) ?? 0) + 1);
+    reaching.set(b.a2, (reaching.get(b.a2) ?? 0) + 1);
+  }
+  const plainDirs = new Map<number, Vec2[]>();
+  const plainEnds = new Set<number>();
+  for (const b of bonds) {
+    // A wedge is a shape of its own, and a hashed one is a row of hashes:
+    // a cap at either would sit past the last of them as a loose dot.
+    if (b.stereo === "up" || b.stereo === "down") continue;
+    if (!onAxis(b)) continue;
+    plainEnds.add(b.a1);
+    plainEnds.add(b.a2);
+    const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
+    const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
+    if (vlen(vsub(q, p)) < 1e-9) continue;
+    plainDirs.set(b.a1, [...(plainDirs.get(b.a1) ?? []), vnorm(vsub(q, p))]);
+    plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
+  }
+  // The wide end of a solid wedge covers the join at its atom itself, either
+  // by reaching past it or by being cut along the bonds there; a cap on top of
+  // that only bulges out of the wedge.
+  const wedgeEnds = new Set<number>();
+  for (const b of bonds) {
+    if (b.stereo === "up") wedgeEnds.add(wedgeBaseAtom(b, deg));
+  }
+  const caps = new Set<number>();
+  const mitres = new Map<number, Vec2[]>();
+  for (let i = 0; i < atoms.length; i++) {
+    const d = deg.get(i) || 0;
+    const showLabel = opts.showCarbonLabels || atoms[i].el !== "C";
+    // A label takes the bond's end with it, and a wedge's wide end covers its
+    // own join, so neither wants anything here.
+    if (showLabel || wedgeEnds.has(i)) continue;
+    // A free end of a plain bond, or any atom bonds meet at - including one
+    // where only wedges meet, whose thin ends are each a bond wide and do
+    // not fill the join between them on their own. Something has to reach
+    // the atom for the cap to round off, though.
+    if (plainEnds.has(i) || (d >= 2 && (reaching.get(i) ?? 0) > 0)) caps.add(i);
+    if (d >= 2) mitres.set(i, plainDirs.get(i) ?? []);
+  }
+  return { caps, mitres };
+}
+
 export function buildAllPrimitives(
   atoms: Atom[],
   bonds: Bond[],
@@ -1393,59 +1464,15 @@ export function buildAllPrimitives(
   // line width at every end, so a join and the end of a chain are rounded to
   // the same degree. Sharp: a flat end, and a mitre where two bonds meet.
   const roundJoins = (opts.joinStyle ?? "round") === "round";
-  const plainDirs = new Map<number, Vec2[]>();
-  const plainEnds = new Set<number>();
-  // A double bond drawn centred has no line along the bond itself, so nothing
-  // of it reaches the atom for a cap to round off: a cap there is a dot in
-  // mid air between the two lines.
-  const onAxis = (b: Bond) =>
-    b.order !== 2 ||
-    (b.doubleMode !== undefined &&
-      b.doubleMode !== "auto" &&
-      b.doubleMode !== "center");
-  const reaching = new Map<number, number>();
-  for (const b of bonds) {
-    if (!onAxis(b)) continue;
-    reaching.set(b.a1, (reaching.get(b.a1) ?? 0) + 1);
-    reaching.set(b.a2, (reaching.get(b.a2) ?? 0) + 1);
+  const joins = joinsAtAtoms(atoms, bonds, opts, deg);
+  for (const i of roundJoins ? joins.caps : []) {
+    fills.push({ c: { x: atoms[i].x, y: atoms[i].y }, r: rWorld });
   }
-  for (const b of bonds) {
-    // A wedge is a shape of its own, and a hashed one is a row of hashes:
-    // a cap at either would sit past the last of them as a loose dot.
-    if (b.stereo === "up" || b.stereo === "down") continue;
-    if (!onAxis(b)) continue;
-    plainEnds.add(b.a1);
-    plainEnds.add(b.a2);
-    const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
-    const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
-    if (vlen(vsub(q, p)) < 1e-9) continue;
-    plainDirs.set(b.a1, [...(plainDirs.get(b.a1) ?? []), vnorm(vsub(q, p))]);
-    plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
-  }
-  // The wide end of a solid wedge covers the join at its atom itself, either
-  // by reaching past it or by being cut along the bonds there; a cap on top of
-  // that only bulges out of the wedge.
-  const wedgeEnds = new Set<number>();
-  for (const b of bonds) {
-    if (b.stereo === "up") wedgeEnds.add(wedgeBaseAtom(b, deg));
-  }
-  for (let i = 0; i < atoms.length; i++) {
-    const d = deg.get(i) || 0;
-    const showLabel = opts.showCarbonLabels || atoms[i].el !== "C";
-    // A label takes the bond's end with it, and a wedge's wide end covers its
-    // own join, so neither wants anything here.
-    if (showLabel || wedgeEnds.has(i)) continue;
-    const c = { x: atoms[i].x, y: atoms[i].y };
-    if (roundJoins) {
-      // A free end of a plain bond, or any atom bonds meet at - including one
-      // where only wedges meet, whose thin ends are each a bond wide and do
-      // not fill the join between them on their own. Something has to reach
-      // the atom for the cap to round off, though.
-      if (plainEnds.has(i) || (d >= 2 && (reaching.get(i) ?? 0) > 0)) {
-        fills.push({ c, r: rWorld });
-      }
-    } else if (d >= 2) {
-      polys.push(...mitreJoinPolys(c, plainDirs.get(i) ?? [], rWorld));
+  if (!roundJoins) {
+    for (const [i, dirs] of joins.mitres) {
+      polys.push(
+        ...mitreJoinPolys({ x: atoms[i].x, y: atoms[i].y }, dirs, rWorld),
+      );
     }
   }
   // build lines/polys

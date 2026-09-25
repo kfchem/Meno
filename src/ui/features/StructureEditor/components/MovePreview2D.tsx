@@ -9,6 +9,7 @@ import {
 } from "../../../../lib/chem/acs";
 import {
   buildBondPrimitives,
+  joinsAtAtoms,
   type LayoutOptions,
   type Atom as LAtom,
   type Bond as LBond,
@@ -275,6 +276,9 @@ export default function MovePreview2D() {
       mThin.visible = thinCount > 0;
       mThin.instanceMatrix.needsUpdate = true;
     }
+    // Whether the atom being dragged is one the drawing puts a cap on; worked
+    // out with the rest of the preview, below.
+    let capHere = false;
     // 2) thick preview from layout at snapped position: reflects multi-bonds and hashed wedges
     if (
       deg > 0 &&
@@ -331,6 +335,14 @@ export default function MovePreview2D() {
         atomsL as any,
         bondsAttach as any
       );
+      // Whether the drawing caps this atom, asked of the rule the drawing
+      // itself uses, over the whole molecule rather than the bonds at hand.
+      capHere = joinsAtAtoms(
+        atomsL as any,
+        bondsAll as any,
+        opts,
+        degMap
+      ).caps.has(mi);
       type LineSeg = {
         x1: number;
         y1: number;
@@ -445,9 +457,11 @@ export default function MovePreview2D() {
     }
 
     // The cap that rounds off a bond end, carried to where the atom is being
-    // dragged: every bond end has one now, not only a join of two or more,
-    // and the one in the drawing is hidden while the drag is on.
-    if (deg >= 1 && joinDot.current) {
+    // dragged - the one in the drawing is hidden while the drag is on. Only
+    // where the drawing has one: an atom carrying a wedge's wide end, a label
+    // or nothing but centred double bonds has none, and a dot appearing there
+    // for as long as the atom moves is a dot the drawing never draws.
+    if (capHere && joinDot.current) {
       const rWorld = thickW * 0.5;
       joinDot.current.position.set(pxPrev, pyPrev, -0.035);
       joinDot.current.scale.set(rWorld, rWorld, 1);
