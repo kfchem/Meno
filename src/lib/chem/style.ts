@@ -55,7 +55,8 @@ export type DrawingStyle = {
 
 /**
  * ACS 1996: 14.4 pt bonds, 0.6 pt lines, 2.0 pt bold width (3.0 pt at a
- * wedge's broad end), 18% bond spacing, 2.5 pt hash spacing, 10 pt labels.
+ * wedge's broad end), 18% bond spacing, 2.5 pt hash spacing, 10 pt labels,
+ * square ends and mitred joins.
  */
 export const ACS_1996: DrawingStyle = {
   bondLengthPt: 14.4,
@@ -67,7 +68,7 @@ export const ACS_1996: DrawingStyle = {
   wavyAmplitude: ofBond(0.07),
   wavyPeriod: ofBond(1 / 1.4),
   fontSize: pt(10),
-  ends: "round",
+  ends: "square",
 };
 
 /** A wedge's broad end: as set, or one and a half bold widths. */

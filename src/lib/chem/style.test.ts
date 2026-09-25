@@ -18,7 +18,7 @@ describe("drawing style", () => {
     expect(ACS_1996.bondSpacing).toEqual(ofBond(0.18));
     expect(ACS_1996.hashSpacing).toEqual(pt(2.5));
     expect(ACS_1996.fontSize).toEqual(pt(10));
-    expect(ACS_1996.ends).toBe("round");
+    expect(ACS_1996.ends).toBe("square");
   });
 
   it("takes a length in points or as a fraction of the bond, alike", () => {
@@ -63,8 +63,8 @@ describe("drawing style", () => {
     // a triple bond's outer lines are one bond spacing out, like a double's
     expect(o.tripleOffsetPx).toBe(o.doubleOffsetPx);
     expect(o.fontPx).toBeCloseTo((10 / 14.4) * L, 12);
-    expect(o.joinStyle).toBe("round");
-    expect(layoutOptionsFor({ ...ACS_1996, ends: "square" }, L).joinStyle).toBe("sharp");
+    expect(o.joinStyle).toBe("sharp");
+    expect(layoutOptionsFor({ ...ACS_1996, ends: "round" }, L).joinStyle).toBe("round");
     // as many hashes as 2.5 pt spacing fits along a 14.4 pt bond
     expect(o.hashCount).toBe(7);
   });
