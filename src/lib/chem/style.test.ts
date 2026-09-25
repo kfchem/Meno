@@ -4,6 +4,7 @@ import {
   bondFraction,
   inPoints,
   layoutOptionsFor,
+  wedgeWidthOf,
   ofBond,
   pt,
   resolveStyle,
@@ -35,6 +36,14 @@ describe("drawing style", () => {
     expect(inPoints(longer.bondSpacing, longer)).toBeCloseTo(5.184, 12);
   });
 
+  it("keeps a wedge one and a half bold widths across, unless told otherwise", () => {
+    expect(inPoints(wedgeWidthOf(ACS_1996), ACS_1996)).toBeCloseTo(3.0, 12);
+    const bolder = resolveStyle(ACS_1996, { boldWidth: pt(3) });
+    expect(inPoints(wedgeWidthOf(bolder), bolder)).toBeCloseTo(4.5, 12);
+    const set = resolveStyle(ACS_1996, { wedgeWidth: ofBond(0.25) });
+    expect(wedgeWidthOf(set)).toEqual(ofBond(0.25));
+  });
+
   it("lays styles over one another, the last on top, skipping what a layer leaves unset", () => {
     const doc = { lineWidth: pt(1) };
     const bond = { lineWidth: undefined, ends: "square" as const };
@@ -48,7 +57,8 @@ describe("drawing style", () => {
     const L = 1.8;
     const o = layoutOptionsFor(ACS_1996, L);
     expect(o.lineWidthPx).toBeCloseTo((0.6 / 14.4) * L, 12);
-    expect(o.wedgeWidthPx).toBeCloseTo((2.0 / 14.4) * L, 12);
+    // a wedge's broad end is one and a half bold widths: 3.0 pt
+    expect(o.wedgeWidthPx).toBeCloseTo((3.0 / 14.4) * L, 12);
     expect(o.doubleOffsetPx).toBeCloseTo(0.18 * L, 12);
     // a triple bond's outer lines are one bond spacing out, like a double's
     expect(o.tripleOffsetPx).toBe(o.doubleOffsetPx);

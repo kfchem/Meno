@@ -26,8 +26,13 @@ export type DrawingStyle = {
   /** Bond length, in points. Every "bond" length is a fraction of it. */
   bondLengthPt: number;
   lineWidth: Length;
-  /** The broad end of a wedge; bold bonds too, once there are any. */
+  /** A bold bond's width, once there are any. */
   boldWidth: Length;
+  /**
+   * A wedge's broad end. Left unset, it is one and a half bold widths, and
+   * follows the bold width when that changes.
+   */
+  wedgeWidth?: Length;
   /** Between the lines of a double or triple bond, centre to centre. */
   bondSpacing: Length;
   /** How far the inner line of a double bond stops short of each end. */
@@ -50,7 +55,10 @@ export type DrawingStyle = {
 
 /**
  * The ACS 1996 document settings: 14.4 pt bonds, 0.6 pt lines, 2.0 pt bold
- * width, 18% bond spacing, 2.5 pt hash spacing, 10 pt labels.
+ * width, 18% bond spacing, 2.5 pt hash spacing, 10 pt labels. A wedge drawn
+ * to them is 3.0 pt at its broad end, one and a half bold widths - measured
+ * off a reference drawing, whose wedge this matches to half a pixel along its
+ * length.
  *
  * ACS says nothing about how far a double bond's inner line is shortened or
  * how a wavy bond waves; those keep the values this app has drawn with.
@@ -67,6 +75,13 @@ export const ACS_1996: DrawingStyle = {
   fontSize: pt(10),
   ends: "round",
 };
+
+/** A wedge's broad end: as set, or one and a half bold widths. */
+export function wedgeWidthOf(style: DrawingStyle): Length {
+  if (style.wedgeWidth) return style.wedgeWidth;
+  const bold = style.boldWidth;
+  return { value: bold.value * 1.5, unit: bold.unit };
+}
 
 /** A length as a fraction of the style's bond length. */
 export function bondFraction(length: Length, style: DrawingStyle): number {
@@ -111,7 +126,7 @@ export function layoutOptionsFor(
     doubleShortenPx: at(style.innerLineShortening),
     // A triple bond's outer lines sit one bond spacing either side.
     tripleOffsetPx: at(style.bondSpacing),
-    wedgeWidthPx: at(style.boldWidth),
+    wedgeWidthPx: at(wedgeWidthOf(style)),
     // Hashes as many as the spacing fits along a bond of the nominal length.
     // The count is fixed per bond until the layout places them by spacing.
     hashCount: Math.max(3, Math.round(1 / bondFraction(style.hashSpacing, style)) + 1),
