@@ -2,6 +2,10 @@
 
 A lightweight, cross‑platform desktop app for chemical structure editing and viewing with a prototype workflow canvas. Built with Tauri v2 (Rust) and React/TypeScript.
 
+Meno is meant to let a chemist draw a molecule, understand its three-dimensional
+structure, test a hypothesis by calculation and take the next idea from the result
+as one continuous line of thought — see [what Meno is for](docs/PURPOSE.md).
+
 — Status: Pre‑alpha. Interfaces and file formats may change without notice.
 
 ## Features

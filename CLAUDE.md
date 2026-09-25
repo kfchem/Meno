@@ -1,3 +1,9 @@
+## What this is for
+
+Read [`docs/PURPOSE.md`](docs/PURPOSE.md) before deciding anything of substance.
+It says what Meno is for and what counts as good here; judge any feature, and
+any way of implementing one, by how much it serves that.
+
 ## Autonomous development workflow
 
 For each development task:
