@@ -129,6 +129,41 @@ public static class NativeGui {
 
 $script:Window = [IntPtr]::Zero
 
+function Get-MenoBuild {
+    # Where `npm run tauri build` leaves the app on this platform.
+    return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../src-tauri/target/release/Meno.exe"))
+}
+
+function Start-MenoProcess {
+    param([Parameter(Mandatory)] [string] $Path)
+    Start-Process -FilePath $Path | Out-Null
+}
+
+function Close-MenoProcess {
+    <#
+      .SYNOPSIS
+      Ask a running copy to close its window, and put it down if it will not.
+    #>
+    param([Parameter(Mandatory)] [System.Diagnostics.Process] $Process)
+    $Process.CloseMainWindow() | Out-Null
+    if (-not $Process.WaitForExit(4000)) { $Process.Kill() }
+}
+
+function Complete-FileDialog {
+    <#
+      .SYNOPSIS
+      The system's open dialog is on its way up: choose this file in it.
+
+      .DESCRIPTION
+      It opens with the focus in its name field, which takes a whole path.
+    #>
+    param([Parameter(Mandatory)] [string] $Path)
+    Start-Sleep -Milliseconds 1800
+    Send-MenoText -Text $Path
+    Send-MenoKey -Key Enter
+    Start-Sleep -Milliseconds 1500
+}
+
 function Get-MenoWindow {
     <#
       .SYNOPSIS
@@ -318,6 +353,7 @@ function Wait-MenoSettled {
     return $false
 }
 
-Export-ModuleMember -Function Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
+Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
+    Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
     ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Invoke-MenoWheel,
     Send-MenoText, Send-MenoKey, Wait-MenoSettled
