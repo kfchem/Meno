@@ -5,6 +5,7 @@ import { useEditor } from "../store";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { computeMoveSnap } from "../utils/moveSnap";
 import { ATOM_PICK_RADIUS_RATIO } from "../constants";
+import { commitInstanceMatrices } from "./instances";
 
 export function Atoms2D() {
   const {
@@ -98,7 +99,7 @@ export function Atoms2D() {
       tmpM.makeScale(rWorld, rWorld, 1).setPosition(a.x, a.y, 1e-3);
       inst.current.setMatrixAt(i, tmpM);
     }
-    inst.current.instanceMatrix.needsUpdate = true;
+    commitInstanceMatrices(inst.current);
   }, [model.atoms, model.bonds, tmpM]);
 
   return (
