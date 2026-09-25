@@ -15,7 +15,7 @@ and in particular:
   spacing, wedge shape, hash spacing, rounding at ends and joins, label font
   and size - adjustable, with ACS 1996 as the preset rather than the only
   option.
-- **CSV export** of structures and their properties.
+- **SVG export**, drawn exactly as on the canvas.
 - **Pasting into Word and PowerPoint** as an object.
 
 ## How it is worked
@@ -35,7 +35,7 @@ and in particular:
   that has to answer within a frame. No Python in the drawing path.
 - **RDKit** decides chemistry: valence and implicit hydrogens with charges,
   aromaticity, SMILES, clean-up (2D coordinates), stereo perception and CIP
-  labels, and the properties a CSV export carries. It runs in the Python
+  labels. It runs in the Python
   sidecar, in an environment the bundled `uv` builds on first launch;
   downloading it then, rather than shipping it, keeps Meno itself small, and
   the workflow side will need far more packages than this. Calls are
@@ -120,10 +120,9 @@ All hover-based, as above.
 - Import that keeps charges, isotopes, radicals, atom lists and S-groups, and
   V3000 reactions.
 - SMILES in and out.
-- CSV export: a row per structure, with the columns chosen from what RDKit
-  can report.
-- SVG and PNG export, drawn exactly as on the canvas (the current SVG export
-  is unmounted and loses double-bond sides and wedge direction).
+- SVG export, drawn exactly as on the canvas - with the drawing style it was
+  drawn in - and PNG. The current SVG export is unmounted, and loses
+  double-bond sides and wedge direction.
 - The clipboard, for Word and PowerPoint: a vector picture in each platform's
   own form (EMF on Windows, PDF on macOS), PNG and MOL alongside it.
 
@@ -143,6 +142,5 @@ All hover-based, as above.
 - **"As an object" in Word and PowerPoint**: a crisp vector picture, or one
   that opens back into Meno for editing? The second is an OLE server on
   Windows, and Office for Mac has nothing equivalent.
-- **CSV columns**: which properties by default.
 - **Name to structure, and back**: part of a high-end editor, but outside
   RDKit.
