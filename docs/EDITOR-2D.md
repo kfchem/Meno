@@ -53,7 +53,7 @@ Status: **done** (merged), **PR** (open), or blank.
 |---|---|
 | Atoms that cannot be picked up (stale bounding sphere, audit H2) | PR #23 |
 | OH/HO flipping near vertical, at rest and mid-drag | PR #24 |
-| Aromatic bonds (MOL order 4) imported as triple bonds | |
+| Aromatic bonds (MOL order 4) imported as triple bonds | PR #27 |
 | Opening a file counts as an edit: the tab is dirty at once, and undo empties the canvas | |
 | Closing a tab throws edits away without asking; the dirty mark is never shown (audit G2) | |
 | A double-click draw is two or three undo steps, not one | PR #26 |
