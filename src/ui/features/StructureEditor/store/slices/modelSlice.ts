@@ -1,7 +1,7 @@
 import { NOMINAL_BOND_LENGTH } from "../../../../../lib/chem/acs";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
-import type { StructureDocument } from "../../document";
+import type { ImportedArrow, StructureDocument } from "../../document";
 import { EditorState, Bond, Arrow, Model } from "../types";
 import { StoreApi } from "zustand";
 
@@ -122,8 +122,27 @@ export const createModelSlice = (
     );
   },
 
-  replaceModel: (next: Model) => {
-    doc.edit("open structure", (d) => ops.replaceModel(d, next));
+  /**
+   * The structure a tab opens with. That is where the document starts, not
+   * an edit made to it: nothing to undo, nothing unsaved.
+   */
+  openModel: (next: Model, arrow?: ImportedArrow) => {
+    doc.reset(
+      ops.withImportedArrow(ops.replaceModel(doc.getState(), next), arrow),
+      "open structure",
+    );
+    get().forgetInteraction();
+  },
+
+  /** A file opened over what the canvas holds: one step, arrow and all. */
+  replaceModel: (next: Model, arrow?: ImportedArrow) => {
+    doc.edit("open structure", (d) =>
+      ops.withImportedArrow(ops.replaceModel(d, next), arrow),
+    );
+    get().forgetInteraction();
+  },
+
+  forgetInteraction: () => {
     // Interaction state does not survive a new structure.
     set((prev: EditorState) => ({
       ...prev,
@@ -142,8 +161,10 @@ export const createModelSlice = (
     }));
   },
 
-  appendModel: (next: Model) => {
-    doc.edit("add structure", (d) => ops.appendModel(d, next));
+  appendModel: (next: Model, arrow?: ImportedArrow) => {
+    doc.edit("add structure", (d) =>
+      ops.withImportedArrow(ops.appendModel(d, next), arrow),
+    );
     set((prev: EditorState) => ({
       ...prev,
       hovered: { atomId: null, bondId: null },

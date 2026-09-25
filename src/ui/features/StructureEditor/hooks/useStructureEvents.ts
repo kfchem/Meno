@@ -59,13 +59,21 @@ export function useStructureEvents(
     })),
   });
 
-  const replayReplace = (mdl: { atoms: any[]; bonds: any[] }) => {
-    store.getState().replaceModel(toModel(mdl));
-  };
-
-  const replayAppend = (mdl: { atoms: any[]; bonds: any[] }) => {
-    store.getState().appendModel(toModel(mdl));
-  };
+  // A file's reaction arrow, moved by (dx, dy) along with its atoms, and
+  // placed in the same edit as they are.
+  const importedArrow = (
+    a: { x1: number; y1: number; x2: number; y2: number } | undefined,
+    dx: number,
+    dy: number,
+  ) =>
+    a
+      ? {
+          x: (a.x1 + a.x2) / 2 + dx,
+          y: (a.y1 + a.y2) / 2 + dy,
+          angle: 0,
+          length: Math.hypot(a.x2 - a.x1, a.y2 - a.y1),
+        }
+      : undefined;
 
   // Effect: Initial Payload
   const importedInitial = useRef(false);
@@ -88,18 +96,14 @@ export function useStructureEvents(
           })),
           bonds: result.model.bonds,
         };
-        replayReplace(shifted);
-        if (result.arrow) {
-          const cx = (result.arrow.x1 + result.arrow.x2) / 2;
-          const cy = (result.arrow.y1 + result.arrow.y2) / 2;
-          const len = Math.hypot(
-            result.arrow.x2 - result.arrow.x1,
-            result.arrow.y2 - result.arrow.y1,
+        // The file the tab was opened with is where its document starts:
+        // nothing to undo, nothing unsaved.
+        store
+          .getState()
+          .openModel(
+            toModel(shifted),
+            importedArrow(result.arrow, -result.centroid.x, -result.centroid.y),
           );
-          try {
-            store.getState().addArrow(cx, cy, 0, len);
-          } catch {}
-        }
       } catch (e) {
         reportImportError("initial payload", e);
       }
@@ -277,18 +281,10 @@ export function useStructureEvents(
         bonds: result.model.bonds,
       };
 
-      replayAppend(shifted);
+      store
+        .getState()
+        .appendModel(toModel(shifted), importedArrow(result.arrow, dx, dy));
       setImportError(null);
-
-      if (result.arrow) {
-        const cx = (result.arrow.x1 + result.arrow.x2) / 2 + dx;
-        const cy = (result.arrow.y1 + result.arrow.y2) / 2 + dy;
-        const len = Math.hypot(
-          result.arrow.x2 - result.arrow.x1,
-          result.arrow.y2 - result.arrow.y1,
-        );
-        store.getState().addArrow(cx, cy, 0, len);
-      }
     } catch (err) {
       reportImportError("append", err);
     }
@@ -308,17 +304,14 @@ export function useStructureEvents(
         })),
         bonds: result.model.bonds,
       };
-      replayReplace(shifted);
-      setImportError(null);
-      if (result.arrow) {
-        const cx = (result.arrow.x1 + result.arrow.x2) / 2;
-        const cy = (result.arrow.y1 + result.arrow.y2) / 2;
-        const len = Math.hypot(
-          result.arrow.x2 - result.arrow.x1,
-          result.arrow.y2 - result.arrow.y1,
+      // Over what the canvas holds: an edit, so a wrong file can be undone.
+      store
+        .getState()
+        .replaceModel(
+          toModel(shifted),
+          importedArrow(result.arrow, -result.centroid.x, -result.centroid.y),
         );
-        store.getState().addArrow(cx, cy, 0, len);
-      }
+      setImportError(null);
     } catch (err) {
       reportImportError("replace", err);
     }

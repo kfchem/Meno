@@ -256,6 +256,17 @@ export function appendModel(
 
 // --- arrows ----------------------------------------------------------------
 
+/** The reaction arrow a file brings with it, where it lies once placed. */
+export type ImportedArrow = { x: number; y: number; angle: number; length: number };
+
+/** `doc` with the file's arrow added, if it brought one. */
+export function withImportedArrow(
+  doc: StructureDocument,
+  arrow?: ImportedArrow,
+): StructureDocument {
+  return arrow ? addArrow(doc, arrow.x, arrow.y, arrow.angle, arrow.length) : doc;
+}
+
 export function addArrow(
   doc: StructureDocument,
   x: number,

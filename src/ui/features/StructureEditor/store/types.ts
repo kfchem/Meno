@@ -1,3 +1,5 @@
+import type { ImportedArrow } from "../document";
+
 export type Atom = { id: number; x: number; y: number; r: number; el: string };
 export type Bond = {
   id: number;
@@ -110,8 +112,14 @@ export type EditorState = {
   updateMovePointer: (x: number, y: number) => void;
   setMoveDragPreview: (x: number, y: number) => void;
   endMoveDrag: () => void;
-  replaceModel: (next: Model) => void;
-  appendModel: (next: Model) => void;
+  /** The structure a tab opens with: where its document starts, not an edit. */
+  openModel: (next: Model, arrow?: ImportedArrow) => void;
+  /** A file opened over the canvas's contents, as one undo step. */
+  replaceModel: (next: Model, arrow?: ImportedArrow) => void;
+  /** A file dropped onto the canvas, added as one undo step. */
+  appendModel: (next: Model, arrow?: ImportedArrow) => void;
+  /** Clears hover, selection and gestures after the structure is replaced. */
+  forgetInteraction: () => void;
   addArrow: (x: number, y: number, angle?: number, length?: number) => number;
   updateArrow: (id: number, patch: Partial<Arrow>) => void;
   removeArrow: (id: number) => void;
