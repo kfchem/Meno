@@ -1,0 +1,17 @@
+{
+  "//": "The tool imports the app's own chemistry code, so it is typechecked against it: drift there should break the build, not the sheet.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts", "../../src/lib/chem/**/*.ts", "../../src/utils/**/*.ts"],
+  "exclude": ["../../src/**/*.test.ts"]
+}
