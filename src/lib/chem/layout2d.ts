@@ -240,16 +240,38 @@ function buildTripleLines(
 
 /**
  * A line as a point and a direction; the cut the wide end of a wedge follows.
+ * `reach` is how far a corner may travel to land on it - see WEDGE_MITRE_REACH.
  */
-type Cut = { on: Vec2; dir: Vec2; key: number };
+type Cut = { on: Vec2; dir: Vec2; key: number; reach: number };
 
 /**
- * A bond carrying on from the wide end of a wedge: which way it goes, and how
- * far it reaches either side of its own line. A double bond reaches past its
- * centre by the gap between its two lines, and a cut that only knew about a
- * single line would leave the outer one stranded off the wedge.
+ * A bond carrying on from the wide end of a wedge: which way it goes, how far
+ * it reaches either side of its own line, and how long it is. A double bond
+ * reaches past its centre by the gap between its two lines, and a cut that
+ * only knew about a single line would leave the outer one stranded off the
+ * wedge.
  */
-type Neighbour = { dir: Vec2; half: number; wide: boolean };
+type Neighbour = { dir: Vec2; half: number; wide: boolean; len: number };
+
+/**
+ * A bond that runs nearly straight on through the wide end of a wedge cannot
+ * be followed: its edge is almost the wedge's own, so the corner that chases
+ * it runs off towards infinity. Past this angle between the two the wide end
+ * is cut square across instead.
+ */
+const WEDGE_CUT_MAX_DEG = 175;
+const WEDGE_CUT_MIN_SIN = Math.sin(
+  ((180 - WEDGE_CUT_MAX_DEG) * Math.PI) / 180,
+);
+
+/**
+ * How far along the bond it follows a corner of the wide end may travel. This
+ * is a mitre limit: the shallower the angle, the further the corner has to go
+ * to meet the bond's edge, and letting it run would swallow the bond whole.
+ * Half the bond keeps the join inside the bond that makes it; beyond that the
+ * wide end is cut square and the bond leaves it with a step.
+ */
+const WEDGE_MITRE_REACH = 0.5;
 
 /**
  * Where the wide end of a wedge meets another bond, a square cut leaves a
@@ -284,17 +306,19 @@ function baseCut(
     }
   }
   if (key < 0) return null;
-  const { dir, half, wide } = neighbours[key];
+  const { dir, half, wide, len } = neighbours[key];
   // A bond running nearly straight on through the wide end cannot usefully be
   // cut along: its line is almost the wedge's own, and following it would
   // draw the end out into a spike. Square across the wedge is what carries
   // such a bond out of it, and the other side still follows its own bond.
-  // The turn is at 150 degrees, so everything short of that is followed.
-  if (Math.abs(vcross(dir, axis)) < 0.5) {
+  if (Math.abs(vcross(dir, axis)) < WEDGE_CUT_MIN_SIN) {
     return {
       on: vadd(atom, vscale(axis, -half)),
       dir: vperp(axis),
       key,
+      // square across the axis: the corner only has to come back as far as
+      // the cut itself, whatever the bond does
+      reach: half * 4,
     };
   }
   const off = vperp(dir);
@@ -304,13 +328,20 @@ function baseCut(
   // atom, so a cut that stopped at the atom would leave it stranded.
   const takeWhole = neighbours.length === 1 || wide;
   const edge = takeWhole ? -towardsTip : towardsTip;
-  return { on: vadd(atom, vscale(off, edge * half)), dir, key };
+  return {
+    on: vadd(atom, vscale(off, edge * half)),
+    dir,
+    key,
+    reach: len * WEDGE_MITRE_REACH,
+  };
 }
 
 /**
  * Where a double bond meets another at an atom, the line beside each of them
  * should meet its neighbour's rather than stop short of it: run on to where
- * the two would cross. Returns the point to end at, or the one given.
+ * the two would cross. Returns the point to end at, or the one given, and
+ * says whether it found a line to meet: two thick lines that end on the same
+ * point still want a cap over the corner they leave open.
  */
 function mitreOffsetEnd(
   atoms: Atom[],
@@ -323,7 +354,7 @@ function mitreOffsetEnd(
   sideOf: (b: Bond) => number[],
   others: Bond[],
   limit: number,
-): Vec2 {
+): { at: Vec2; met: boolean } {
   const at = { x: atoms[atIdx].x, y: atoms[atIdx].y };
   const mine = { on: vadd(from, vscale(vperp(along), offset)), dir: along };
   let best: Vec2 | null = null;
@@ -335,13 +366,19 @@ function mitreOffsetEnd(
     const d = vsub({ x: o.x, y: o.y }, at);
     if (vlen(d) < 1e-9) continue;
     const dir = vnorm(d);
+    // Offsets are reported against the bond's own direction, a1 to a2. Here
+    // the direction runs from this atom outwards, which is the other way
+    // round when the bond ends at this atom rather than starting from it, and
+    // a line taken to the wrong side of it is one no end will ever meet.
+    const flip = b.a1 === atIdx ? 1 : -1;
     // the two bonds' own directions from the atom; a line belongs to the
     // side of the corner its offset leans towards
     const bisect = vnorm(vadd(outward, dir));
     const sideMine = Math.sign(
       vperp(along).x * offset * bisect.x + vperp(along).y * offset * bisect.y,
     );
-    for (const off of sideOf(b)) {
+    for (const raw of sideOf(b)) {
+      const off = raw * flip;
       const sideOther = Math.sign(
         vperp(dir).x * off * bisect.x + vperp(dir).y * off * bisect.y,
       );
@@ -358,7 +395,7 @@ function mitreOffsetEnd(
       bestD = dist;
     }
   }
-  return best ?? fallback;
+  return { at: best ?? fallback, met: best != null };
 }
 
 /**
@@ -393,7 +430,7 @@ function centredPair(
   atoms: Atom[],
   adjBonds?: Map<number, Bond[]>,
   doubleSides?: Map<Bond, number | undefined>,
-): LineSeg[] {
+): { lines: LineSeg[]; joins: Vec2[] } {
   const half = off * 0.5;
   const limit = off * 2;
   const sideOf = (b: Bond) => doubleOffsets(b, off, doubleSides);
@@ -402,6 +439,7 @@ function centredPair(
       (b) => b !== bond && b.order === 2 && b.stereo !== "up" && b.stereo !== "down",
     );
   const out: LineSeg[] = [];
+  const joins: Vec2[] = [];
   for (const sgn of [1, -1]) {
     const o = vscale(n, half * sgn);
     const a = vadd(p1, o);
@@ -430,9 +468,17 @@ function centredPair(
       others(bond.a2),
       limit,
     );
-    out.push({ x1: endA.x, y1: endA.y, x2: endB.x, y2: endB.y, widthPx });
+    if (endA.met) joins.push(endA.at);
+    if (endB.met) joins.push(endB.at);
+    out.push({
+      x1: endA.at.x,
+      y1: endA.at.y,
+      x2: endB.at.x,
+      y2: endB.at.y,
+      widthPx,
+    });
   }
-  return out;
+  return { lines: out, joins };
 }
 
 /** Where two cuts cross: the point both bonds' outlines meet at. */
@@ -455,7 +501,6 @@ function cornerOnCut(
   corner: Vec2,
   tipCorner: Vec2,
   intoWedge: number,
-  pastAtom: number,
 ): Vec2 | null {
   if (!cut) return null;
   const e = vnorm(vsub(tipCorner, corner));
@@ -463,7 +508,7 @@ function cornerOnCut(
   // nearly parallel to the edge: the cut would run off to infinity
   if (Math.abs(den) < 1e-6) return null;
   const t = vcross(vsub(cut.on, corner), cut.dir) / den;
-  if (t > intoWedge || t < -pastAtom) return null;
+  if (t > intoWedge || t < -cut.reach) return null;
   return vadd(corner, vscale(e, t));
 }
 
@@ -611,15 +656,18 @@ function buildWedgeTriangle(
   const tipR = vsub(tip, nt);
   const cutL = baseCut(p1, 1, dir, baseNeighbours);
   const cutR = baseCut(p1, -1, dir, baseNeighbours);
-  // How far a corner may slide to reach the cut: enough for a bond at 150
-  // degrees to the wedge, which needs about 1.8 times its half width. Past
-  // that angle the cut is square across the wedge instead.
-  const intoWedge = baseHalfWorld * 2;
-  const pastAtom = baseHalfWorld * 2;
+  // A corner may slide towards the tip as far as the tip and no further, and
+  // back past the atom as far as the cut it follows allows.
+  const side = vlen(vsub(tipL, vadd(p1, nb)));
   const squareL = vadd(p1, nb);
   const squareR = vsub(p1, nb);
-  const mitredL = cornerOnCut(cutL, squareL, tipL, intoWedge, pastAtom);
-  const mitredR = cornerOnCut(cutR, squareR, tipR, intoWedge, pastAtom);
+  const cornerL = cornerOnCut(cutL, squareL, tipL, side);
+  const cornerR = cornerOnCut(cutR, squareR, tipR, side);
+  // Either both corners follow their cut or neither does. One alone leaves the
+  // wide end slewed across the wedge, which at some angles no longer covers
+  // the atom at all and cuts the bonds there adrift.
+  const mitredL = cornerR ? cornerL : null;
+  const mitredR = cornerL ? cornerR : null;
   // A square end left at an atom other bonds meet would stop right at the
   // atom, and the cap that fills the join there would bulge out of it. Reach
   // the cap's width past the atom instead, so the end covers it.
@@ -871,7 +919,7 @@ export function buildBondPrimitives(
   adjBonds?: Map<number, Bond[]>,
   labelBoxes?: Map<number, LabelBox>,
   doubleSides?: Map<Bond, number | undefined>
-): { lines: LineSeg[]; polys: Poly[] } {
+): { lines: LineSeg[]; polys: Poly[]; joins?: Vec2[] } {
   const a = atoms[bond.a1];
   const c = atoms[bond.a2];
   const p1o = { x: a.x, y: a.y };
@@ -944,6 +992,7 @@ export function buildBondPrimitives(
             dir: vnorm(d),
             half: half + spread,
             wide: spread > 0,
+            len: vlen(d),
           });
         }
       }
@@ -1009,122 +1058,90 @@ export function buildBondPrimitives(
     const ps2 = shortenB ? vadd(p2, vscale(dir, -shorten)) : p2;
 
     const mode = bond.doubleMode || "auto";
-    if (mode === "center") {
-      // Symmetric placement: two lines at ±off/2 from the axis, each run on
+    // Which side the second line goes: null puts one either side, at half
+    // the offset, and a number puts a single one that far off the axis.
+    const sgn =
+      mode === "center"
+        ? null
+        : mode === "left"
+          ? 1
+          : mode === "right"
+            ? -1
+            : autoSgn == null || !isFinite(autoSgn)
+              ? null
+              : autoSgn >= 0
+                ? 1
+                : -1;
+    if (sgn == null) {
+      // Symmetric placement: two lines at +/-off/2 from the axis, each run on
       // to meet its neighbour's where two double bonds share an atom
-      lines.push(
-        ...centredPair(
-          p1,
-          p2,
-          dir,
-          n,
-          off,
-          lwPx,
-          bond,
-          atoms,
-          adjBonds,
-          doubleSides,
-        ),
-      );
-      return { lines, polys };
-    } else if (mode === "auto") {
-      // Auto: if balanced or no substituents -> center; if biased -> short line on denser side
-      // autoSgn: +1 means +n side, -1 means -n side; undefined means centered
-      if (autoSgn == null || !isFinite(autoSgn)) {
-        lines.push(
-          ...centredPair(
-          p1,
-          p2,
-          dir,
-          n,
-          off,
-          lwPx,
-          bond,
-          atoms,
-          adjBonds,
-          doubleSides,
-        ),
-        );
-        return { lines, polys };
-      }
-      const sgn = autoSgn >= 0 ? +1 : -1;
-      const l1: LineSeg = {
-        x1: p1.x,
-        y1: p1.y,
-        x2: p2.x,
-        y2: p2.y,
-        widthPx: lwPx,
-      };
-      const o = vscale(n, off * sgn);
-      // Meet the line of a double bond next door where they share an atom,
-      // rather than stopping short of it: two double bonds in a row read as a
-      // chain that way, and as four loose lines otherwise.
-      const others = (idx: number) =>
-        (adjBonds?.get(idx) ?? []).filter(
-          (nb) =>
-            nb !== bond &&
-            nb.order === 2 &&
-            nb.stereo !== "up" &&
-            nb.stereo !== "down",
-        );
-      const sideOf = (nb: Bond) => doubleOffsets(nb, off, doubleSides);
-      const ps1b = mitreOffsetEnd(
-        atoms,
-        bond.a1,
+      const pair = centredPair(
         p1,
-        dir,
-        dir,
-        off * sgn,
-        vadd(ps1, o),
-        sideOf,
-        others(bond.a1),
-        off * 2,
-      );
-      const ps2b = mitreOffsetEnd(
-        atoms,
-        bond.a2,
         p2,
         dir,
-        vscale(dir, -1),
-        off * sgn,
-        vadd(ps2, o),
-        sideOf,
-        others(bond.a2),
-        off * 2,
+        n,
+        off,
+        lwPx,
+        bond,
+        atoms,
+        adjBonds,
+        doubleSides,
       );
-      const l2: LineSeg = {
-        x1: ps1b.x,
-        y1: ps1b.y,
-        x2: ps2b.x,
-        y2: ps2b.y,
-        widthPx: lwPx,
-      };
-      lines.push(l1, l2);
-      return { lines, polys };
-    } else {
-      // Skew placement (left/right): full-length axis line + short line on one side
-      const l1: LineSeg = {
-        x1: p1.x,
-        y1: p1.y,
-        x2: p2.x,
-        y2: p2.y,
-        widthPx: lwPx,
-      };
-      // Side selection: left=+1, right=-1
-      const sgn = mode === "left" ? +1 : -1;
-      const o = vscale(n, off * sgn);
-      const ps1b = vadd(ps1, o);
-      const ps2b = vadd(ps2, o);
-      const l2: LineSeg = {
-        x1: ps1b.x,
-        y1: ps1b.y,
-        x2: ps2b.x,
-        y2: ps2b.y,
-        widthPx: lwPx,
-      };
-      lines.push(l1, l2);
-      return { lines, polys };
+      lines.push(...pair.lines);
+      return { lines, polys, joins: pair.joins };
     }
+    // Skew placement: the bond's own line, and a second one to one side of
+    // it. That one meets the line of a double bond next door where they share
+    // an atom, rather than stopping short of it: two double bonds in a row
+    // read as a chain that way, and as four loose lines otherwise.
+    const o = vscale(n, off * sgn);
+    const others = (idx: number) =>
+      (adjBonds?.get(idx) ?? []).filter(
+        (nb) =>
+          nb !== bond &&
+          nb.order === 2 &&
+          nb.stereo !== "up" &&
+          nb.stereo !== "down",
+      );
+    const sideOf = (nb: Bond) => doubleOffsets(nb, off, doubleSides);
+    const ps1b = mitreOffsetEnd(
+      atoms,
+      bond.a1,
+      p1,
+      dir,
+      dir,
+      off * sgn,
+      vadd(ps1, o),
+      sideOf,
+      others(bond.a1),
+      off * 2,
+    );
+    const ps2b = mitreOffsetEnd(
+      atoms,
+      bond.a2,
+      p2,
+      dir,
+      vscale(dir, -1),
+      off * sgn,
+      vadd(ps2, o),
+      sideOf,
+      others(bond.a2),
+      off * 2,
+    );
+    lines.push(
+      { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx },
+      {
+        x1: ps1b.at.x,
+        y1: ps1b.at.y,
+        x2: ps2b.at.x,
+        y2: ps2b.at.y,
+        widthPx: lwPx,
+      },
+    );
+    const joins: Vec2[] = [];
+    if (ps1b.met) joins.push(ps1b.at);
+    if (ps2b.met) joins.push(ps2b.at);
+    return { lines, polys, joins };
   }
   if (bond.order === 3) {
     // Triple bond outer offset matches the double-bond offset
@@ -1455,6 +1472,10 @@ export function buildAllPrimitives(
     );
     lines.push(...r.lines);
     polys.push(...r.polys);
+    // Two lines of neighbouring double bonds run on to the same point, but a
+    // point is all they share: the corner they turn is left open, the way any
+    // two thick lines meeting end to end would. Cap it as a join is capped.
+    for (const j of r.joins ?? []) fills.push({ c: j, r: rWorld });
   }
   return { lines, polys, circles, fills };
 }

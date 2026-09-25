@@ -796,3 +796,132 @@ describe("double bonds in a row", () => {
     expect(gap).toBeLessThan(o.lineWidthPx);
   });
 });
+
+describe("a wedge's wide end, at every angle a bond can leave it", () => {
+  const ZOOM = 40;
+  // The wide end sits at atom 1 - atom 0 carries three bonds, so it is the
+  // narrow end - and one bond carries on from it at `deg` to the wedge.
+  const bend = (deg: number) => {
+    const L = 1.8;
+    const a = (deg * Math.PI) / 180;
+    const atoms: Atom[] = [
+      { id: 0, x: 0, y: 0, el: "C" },
+      { id: 1, x: L, y: 0, el: "C" },
+      { id: 2, x: L + L * Math.cos(Math.PI - a), y: L * Math.sin(Math.PI - a), el: "C" },
+      { id: 3, x: -L * 0.5, y: L * 0.87, el: "C" },
+      { id: 4, x: -L * 0.5, y: -L * 0.87, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1, stereo: "up" },
+      { a1: 1, a2: 2, order: 1, stereo: "none" },
+      { a1: 0, a2: 3, order: 1, stereo: "none" },
+      { a1: 0, a2: 4, order: 1, stereo: "none" },
+    ];
+    return { atoms, bonds };
+  };
+  const wedgeOf = (deg: number) => {
+    const { atoms, bonds } = bend(deg);
+    const { polys } = buildAllPrimitives(atoms, bonds, opts({ joinStyle: "sharp" }), ZOOM);
+    return polys.reduce((big, p) => (polyArea(p.points) > polyArea(big.points) ? p : big));
+  };
+  const inside = (pts: Vec2[], q: Vec2) => {
+    let hit = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const a = pts[i];
+      const b = pts[j];
+      if (
+        a.y > q.y !== b.y > q.y &&
+        q.x < ((b.x - a.x) * (q.y - a.y)) / (b.y - a.y) + a.x
+      ) {
+        hit = !hit;
+      }
+    }
+    return hit;
+  };
+
+  it("always covers the atom, so the bonds there are never cut adrift", () => {
+    // 145 degrees used to cut along the bond on one side only, which slewed
+    // the end across the wedge and left the atom outside it
+    for (let deg = 90; deg <= 180; deg += 5) {
+      expect([deg, inside(wedgeOf(deg).points, { x: 1.8, y: 0 })]).toEqual([deg, true]);
+    }
+  });
+
+  it("follows the bond while the angle allows, and squares off past that", () => {
+    // a cut along the bond leans the end over; a square one is across the axis
+    const lean = (deg: number) => {
+      const pts = wedgeOf(deg).points.filter((p) => p.x > 0.9);
+      const dy = Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y));
+      const dx = Math.max(...pts.map((p) => p.x)) - Math.min(...pts.map((p) => p.x));
+      return dx / dy;
+    };
+    expect(lean(120)).toBeGreaterThan(0.4);
+    expect(lean(150)).toBeGreaterThan(0.4);
+    // nothing to follow: the bond is nearly the wedge's own line
+    expect(lean(180)).toBeLessThan(0.1);
+  });
+});
+
+describe("two double bonds sharing an atom", () => {
+  // An explicit side is relative to the bond's own direction, so writing the
+  // second bond the other way round genuinely puts its line on the far side
+  // of the corner, with nothing there to meet. Auto and centre are read off
+  // the drawing itself and must hold whichever way the bond is written.
+  const modes: [Bond["doubleMode"] | undefined, boolean[]][] = [
+    [undefined, [false, true]],
+    ["center", [false, true]],
+    ["left", [false]],
+    ["right", [false]],
+  ];
+  // Written both ways round: the shared atom is the second bond's a1 in one
+  // and its a2 in the other, and an offset read off the wrong end of a bond
+  // puts its line on the side no other line will ever meet.
+  const pair = (deg: number, mode: Bond["doubleMode"] | undefined, flip: boolean) => {
+    const L = 1.8;
+    const a = (deg * Math.PI) / 180;
+    const atoms: Atom[] = [
+      { id: 0, x: 0, y: 0, el: "C" },
+      { id: 1, x: L, y: 0, el: "C" },
+      { id: 2, x: L + L * Math.cos(Math.PI - a), y: L * Math.sin(Math.PI - a), el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 2, stereo: "none", doubleMode: mode },
+      flip
+        ? { a1: 2, a2: 1, order: 2, stereo: "none", doubleMode: mode }
+        : { a1: 1, a2: 2, order: 2, stereo: "none", doubleMode: mode },
+    ];
+    return { atoms, bonds };
+  };
+
+  it("runs each line on to meet its neighbour's", () => {
+    for (const [mode, flips] of modes) {
+      for (const flip of flips) {
+        for (const deg of [90, 120, 150]) {
+          const { atoms, bonds } = pair(deg, mode, flip);
+          const o = opts();
+          const { lines } = buildAllPrimitives(atoms, bonds, o, 40);
+          const at = { x: 1.8, y: 0 };
+          // ends near the shared atom, but not on it: those are the lines
+          // beside the bonds, which have to meet one another
+          const loose = lines
+            .flatMap((l) => [
+              { x: l.x1, y: l.y1 },
+              { x: l.x2, y: l.y2 },
+            ])
+            .filter((p) => {
+              const d = Math.hypot(p.x - at.x, p.y - at.y);
+              return d > 1e-6 && d < 1;
+            });
+          const why = `${mode ?? "auto"} ${deg} ${flip ? "flipped" : ""}`;
+          expect([why, loose.length % 2]).toEqual([why, 0]);
+          for (const p of loose) {
+            const met = loose.some(
+              (q) => q !== p && Math.hypot(q.x - p.x, q.y - p.y) < 1e-6,
+            );
+            expect([why, met]).toEqual([why, true]);
+          }
+        }
+      }
+    }
+  });
+});
