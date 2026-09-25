@@ -89,6 +89,26 @@ describe("buildTextLabels", () => {
     expect(label.runs?.[label.anchorRun ?? 0]).toEqual({ text: "O" });
   });
 
+  it("writes OH for a bond within 10 degrees of vertical, whichever way it leans", () => {
+    // the neighbour sits `deg` degrees right of straight up (or down) from O
+    const at = (deg: number, below = false): Atom[] => {
+      const t = (deg * Math.PI) / 180;
+      return [
+        { id: 1, x: 0, y: 0, el: "O" },
+        { id: 2, x: 1.3 * Math.sin(t), y: (below ? -1.3 : 1.3) * Math.cos(t), el: "C" },
+      ];
+    };
+    const text = (atoms: Atom[]) => buildTextLabels(atoms, opts(), oneBond)[0].text;
+    for (const below of [false, true]) {
+      expect(text(at(0, below))).toBe("OH");
+      expect(text(at(1e-4, below))).toBe("OH");
+      expect(text(at(9.9, below))).toBe("OH");
+      expect(text(at(-30, below))).toBe("OH");
+      expect(text(at(10.1, below))).toBe("HO");
+      expect(text(at(30, below))).toBe("HO");
+    }
+  });
+
   it("leaves carbons unlabelled and can be switched off", () => {
     expect(buildTextLabels(hydroxyl, opts(), oneBond)).toHaveLength(1);
     const plain = buildTextLabels(
