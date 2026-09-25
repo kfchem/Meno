@@ -81,8 +81,10 @@ available:
 | `Save-Step -Name` | a numbered screenshot |
 | `Invoke-MenoClick -X -Y [-Count]` | client coordinates, not screen |
 | `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-AtStep]` | press, travel, release |
+| `Move-MenoPointer -X -Y` | hover |
 | `Invoke-MenoWheel -X -Y -Notches` | zoom; positive is away from you, in |
 | `Send-MenoText`, `Send-MenoKey` | typing |
+| `Send-MenoShortcut -Key [-Shift]` | Ctrl (Windows) or Cmd (Mac) with a key: `Z` is undo |
 | `Get-ClientSize`, `Wait-MenoSettled` | |
 
 Coordinates are pixels of the window's own screenshot, so they can be read
@@ -152,6 +154,9 @@ What turned out not to be the same:
   a double click is two posts counted 1 and 2; left at 1, the page sees two
   single clicks and no `dblclick`.
 - **A move with the button down is a drag event**, and posted as such.
+- **A shortcut presses its modifier.** A key event that only carries the
+  Command flag never reaches the page. Cmd goes down as a key of its own,
+  then the key, then Cmd comes up.
 - **A wheel notch is not a unit macOS has.** WebKit turns one line of scroll
   into 40 pixels, where Chromium, and so WebView2, gives a page 100 for a notch
   of a Windows wheel. A notch here is posted as 100 pixels, so `-Notches 5`

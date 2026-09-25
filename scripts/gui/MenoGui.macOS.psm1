@@ -54,6 +54,7 @@ public static class MacGui {
   [DllImport(CG)] static extern void CGEventSetFlags(IntPtr e, ulong flags);
   [DllImport(CG)] static extern void CGEventSetLocation(IntPtr e, CGPoint at);
   [DllImport(CG)] static extern void CGEventPost(uint tap, IntPtr e);
+  [DllImport(CG)] static extern IntPtr CGEventSourceCreate(int stateId);
 
   [DllImport(AX)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool AXIsProcessTrusted();
   [DllImport(AX)] static extern IntPtr AXUIElementCreateApplication(int pid);
@@ -298,6 +299,27 @@ public static class MacGui {
       Post(e);
       if (down) Thread.Sleep(20);
     }
+  }
+
+  // A shortcut has to press its modifiers. A key event that only carries the
+  // Command flag never reaches the page; the modifier goes down as a key of
+  // its own first, and comes up after, the way a hand does it.
+  public static void Chord(ushort[] modifiers, ulong[] flags, ushort key) {
+    IntPtr src = CGEventSourceCreate(1);        // kCGEventSourceStateHIDSystemState
+    try {
+      ulong held = 0;
+      for (int i = 0; i < modifiers.Length; i++) { held |= flags[i]; ChordKey(src, modifiers[i], true, held); }
+      ChordKey(src, key, true, held);
+      ChordKey(src, key, false, held);
+      for (int i = modifiers.Length - 1; i >= 0; i--) { held &= ~flags[i]; ChordKey(src, modifiers[i], false, held); }
+    } finally { if (src != IntPtr.Zero) CFRelease(src); }
+  }
+
+  static void ChordKey(IntPtr src, ushort code, bool down, ulong flags) {
+    IntPtr e = CGEventCreateKeyboardEvent(src, code, down);
+    if (e != IntPtr.Zero) CGEventSetFlags(e, flags);
+    Post(e);
+    Thread.Sleep(15);
   }
 }
 '@
@@ -568,6 +590,24 @@ function Invoke-MenoDrag {
     Start-Sleep -Milliseconds 200
 }
 
+function Move-MenoPointer {
+    <#
+      .SYNOPSIS
+      Put the pointer over a point and leave it there: hover.
+
+      .DESCRIPTION
+      It arrives from a few pixels to the left, so the page sees a move over
+      the point rather than a pointer that was simply found there.
+    #>
+    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y)
+    $p = ConvertTo-Screen $X $Y
+    Assert-MenoFront
+    [MacGui]::MoveTo($p.X - 4, $p.Y)
+    Start-Sleep -Milliseconds 60
+    [MacGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 200
+}
+
 function Invoke-MenoWheel {
     <#
       .SYNOPSIS
@@ -606,6 +646,27 @@ function Send-MenoKey {
     # Virtual key codes of the ANSI layout; these four are the same on all of them.
     $code = @{ Enter = 36; Escape = 53; Tab = 48; Backspace = 51 }[$Key]
     [MacGui]::TapKey([uint16] $code)
+    Start-Sleep -Milliseconds 150
+}
+
+function Send-MenoShortcut {
+    <#
+      .SYNOPSIS
+      The platform's shortcut key - Cmd here, Ctrl on Windows - with a letter
+      or a digit, and Shift if asked: Send-MenoShortcut Z is undo.
+    #>
+    param([Parameter(Mandatory)] [ValidatePattern("^[A-Za-z0-9]$")] [string] $Key, [switch] $Shift)
+    Assert-MenoFront
+    # Virtual key codes of the ANSI layout, which is where letters and digits
+    # sit on the others too.
+    $codes = @{
+        A = 0; S = 1; D = 2; F = 3; H = 4; G = 5; Z = 6; X = 7; C = 8; V = 9; B = 11; Q = 12; W = 13
+        E = 14; R = 15; Y = 16; T = 17; O = 31; U = 32; I = 34; P = 35; L = 37; J = 38; K = 40; N = 45; M = 46
+        "1" = 18; "2" = 19; "3" = 20; "4" = 21; "5" = 23; "6" = 22; "7" = 26; "8" = 28; "9" = 25; "0" = 29
+    }
+    $mods = @([uint16] 55); $flags = @([uint64] 0x100000)          # Command
+    if ($Shift) { $mods += [uint16] 56; $flags += [uint64] 0x20000 } # Shift
+    [MacGui]::Chord([uint16[]] $mods, [uint64[]] $flags, [uint16] $codes[$Key.ToUpperInvariant()])
     Start-Sleep -Milliseconds 150
 }
 
@@ -706,5 +767,5 @@ function Wait-MenoSettled {
 
 Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
     Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
-    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Invoke-MenoWheel,
-    Send-MenoText, Send-MenoKey, Wait-MenoSettled
+    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel,
+    Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled

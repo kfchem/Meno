@@ -101,6 +101,24 @@ public static class NativeGui {
     Send(new[] { down, up });
   }
 
+  // A shortcut: the modifiers down in order, the key, and the modifiers up
+  // in reverse - the order a hand presses them - in one SendInput call.
+  public static void Chord(ushort[] modifiers, ushort vk) {
+    INPUT[] seq = new INPUT[modifiers.Length * 2 + 2];
+    int n = 0;
+    foreach (ushort m in modifiers) seq[n++] = Key(m, false);
+    seq[n++] = Key(vk, false);
+    seq[n++] = Key(vk, true);
+    for (int i = modifiers.Length - 1; i >= 0; i--) seq[n++] = Key(modifiers[i], true);
+    Send(seq);
+  }
+
+  static INPUT Key(ushort vk, bool up) {
+    INPUT i = new INPUT(); i.type = INPUT_KEYBOARD; i.ki.wVk = vk;
+    if (up) i.ki.dwFlags = KEYEVENTF_KEYUP;
+    return i;
+  }
+
   public static void TapKey(ushort vk) {
     INPUT down = new INPUT(); down.type = INPUT_KEYBOARD; down.ki.wVk = vk;
     INPUT up = down; up.ki.dwFlags = KEYEVENTF_KEYUP;
@@ -306,6 +324,23 @@ function Invoke-MenoDrag {
     Start-Sleep -Milliseconds 200
 }
 
+function Move-MenoPointer {
+    <#
+      .SYNOPSIS
+      Put the pointer over a point and leave it there: hover.
+
+      .DESCRIPTION
+      It arrives from a few pixels to the left, so the page sees a move over
+      the point rather than a pointer that was simply found there.
+    #>
+    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y)
+    $p = ConvertTo-Screen $X $Y
+    [NativeGui]::MoveTo($p.X - 4, $p.Y)
+    Start-Sleep -Milliseconds 60
+    [NativeGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 200
+}
+
 function Invoke-MenoWheel {
     param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Notches = 1)
     $p = ConvertTo-Screen $X $Y
@@ -327,6 +362,20 @@ function Send-MenoKey {
     param([Parameter(Mandatory)] [ValidateSet("Enter", "Escape", "Tab", "Backspace")] [string] $Key)
     $vk = @{ Enter = 0x0D; Escape = 0x1B; Tab = 0x09; Backspace = 0x08 }[$Key]
     [NativeGui]::TapKey([ushort] $vk)
+    Start-Sleep -Milliseconds 150
+}
+
+function Send-MenoShortcut {
+    <#
+      .SYNOPSIS
+      The platform's shortcut key - Ctrl here, Cmd on a Mac - with a letter
+      or a digit, and Shift if asked: Send-MenoShortcut Z is undo.
+    #>
+    param([Parameter(Mandatory)] [ValidatePattern("^[A-Za-z0-9]$")] [string] $Key, [switch] $Shift)
+    $mods = @([uint16] 0x11)                  # VK_CONTROL
+    if ($Shift) { $mods += [uint16] 0x10 }    # VK_SHIFT
+    # A letter's or digit's virtual key is its upper-case ASCII code.
+    [NativeGui]::Chord([uint16[]] $mods, [uint16][char] $Key.ToUpperInvariant())
     Start-Sleep -Milliseconds 150
 }
 
@@ -355,5 +404,5 @@ function Wait-MenoSettled {
 
 Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
     Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
-    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Invoke-MenoWheel,
-    Send-MenoText, Send-MenoKey, Wait-MenoSettled
+    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel,
+    Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled
