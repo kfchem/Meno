@@ -56,8 +56,9 @@ Status: **done** (merged), **PR** (open), or blank.
 | Aromatic bonds (MOL order 4) imported as triple bonds | |
 | Opening a file counts as an edit: the tab is dirty at once, and undo empties the canvas | |
 | Closing a tab throws edits away without asking; the dirty mark is never shown (audit G2) | |
-| A double-click draw is two or three undo steps, not one | |
+| A double-click draw is two or three undo steps, not one | PR #26 |
 | Wavy bonds notched at every joint (audit H3) | |
+| A carbon with no bonds is not drawn at all (ACS writes CH4) | |
 
 ### 2. Drawing style as data, and one way of drawing
 
