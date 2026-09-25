@@ -76,7 +76,12 @@ export type TextItem = {
    * right of the atom and HO to its left.
    */
   anchorRun?: number;
+  /** The atom this label belongs to, by index. */
+  atom?: number;
 };
+
+/** How far a label reaches around its atom. */
+export type LabelBox = { left: number; right: number; half: number };
 export type Circle = { c: Vec2; r: number; key?: string };
 
 export type Layout = {
@@ -98,6 +103,24 @@ export function pxToWorld(px: number, zoom: number): number {
   return px / Math.max(zoom, 1e-6);
 }
 
+/**
+ * Rough advance width of a character, as a fraction of the font size. The
+ * canvas measures text properly; here there is nothing to measure against, so
+ * this only has to place the hydrogens beside an element symbol - the symbol
+ * itself is anchored on its atom and does not depend on it.
+ */
+function advanceEm(ch: string): number {
+  if (ch >= "0" && ch <= "9") return 0.556;
+  if (ch >= "a" && ch <= "z") return 0.55;
+  return 0.667;
+}
+
+function runWidth(text: string, size: number): number {
+  let w = 0;
+  for (const ch of text) w += advanceEm(ch) * size;
+  return w;
+}
+
 export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
   let minX = Infinity,
     minY = Infinity,
@@ -111,6 +134,41 @@ export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
   }
   if (!isFinite(minX)) return { min: { x: -1, y: -1 }, max: { x: 1, y: 1 } };
   return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
+}
+
+/** How far a label reaches either side of its atom, and above and below. */
+export function labelBox(t: TextItem, fontSize: number): LabelBox {
+  const runs = t.runs ?? [{ text: t.text }];
+  const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
+  const size = (i: number) => fontSize * (runs[i].sub ? SUB_SCALE : 1);
+  let left = runWidth(runs[anchor].text, fontSize) / 2;
+  let right = left;
+  for (let i = 0; i < anchor; i++) left += runWidth(runs[i].text, size(i));
+  for (let i = anchor + 1; i < runs.length; i++) {
+    right += runWidth(runs[i].text, size(i));
+  }
+  // roughly half the height of a capital, with a little room to spare
+  return { left, right, half: fontSize * 0.45 };
+}
+
+/** The box a label takes up, so the drawing's bounds can make room for it. */
+function expandBoundsForLabels(
+  bounds: { min: Vec2; max: Vec2 },
+  texts: TextItem[],
+  fontSize: number,
+): { min: Vec2; max: Vec2 } {
+  const out = {
+    min: { x: bounds.min.x, y: bounds.min.y },
+    max: { x: bounds.max.x, y: bounds.max.y },
+  };
+  for (const t of texts) {
+    const { left, right, half } = labelBox(t, fontSize);
+    out.min.x = Math.min(out.min.x, t.x - left);
+    out.max.x = Math.max(out.max.x, t.x + right);
+    out.min.y = Math.min(out.min.y, t.y - half);
+    out.max.y = Math.max(out.max.y, t.y + half);
+  }
+  return out;
 }
 
 function toWorld(
@@ -182,8 +240,38 @@ function buildTripleLines(
 
 /**
  * A line as a point and a direction; the cut the wide end of a wedge follows.
+ * `reach` is how far a corner may travel to land on it - see WEDGE_MITRE_REACH.
  */
-type Cut = { on: Vec2; dir: Vec2; key: number };
+type Cut = { on: Vec2; dir: Vec2; key: number; reach: number };
+
+/**
+ * A bond carrying on from the wide end of a wedge: which way it goes, how far
+ * it reaches either side of its own line, and how long it is. A double bond
+ * reaches past its centre by the gap between its two lines, and a cut that
+ * only knew about a single line would leave the outer one stranded off the
+ * wedge.
+ */
+type Neighbour = { dir: Vec2; half: number; wide: boolean; len: number };
+
+/**
+ * A bond that runs nearly straight on through the wide end of a wedge cannot
+ * be followed: its edge is almost the wedge's own, so the corner that chases
+ * it runs off towards infinity. Past this angle between the two the wide end
+ * is cut square across instead.
+ */
+const WEDGE_CUT_MAX_DEG = 175;
+const WEDGE_CUT_MIN_SIN = Math.sin(
+  ((180 - WEDGE_CUT_MAX_DEG) * Math.PI) / 180,
+);
+
+/**
+ * How far along the bond it follows a corner of the wide end may travel. This
+ * is a mitre limit: the shallower the angle, the further the corner has to go
+ * to meet the bond's edge, and letting it run would swallow the bond whole.
+ * Half the bond keeps the join inside the bond that makes it; beyond that the
+ * wide end is cut square and the bond leaves it with a step.
+ */
+const WEDGE_MITRE_REACH = 0.5;
 
 /**
  * Where the wide end of a wedge meets another bond, a square cut leaves a
@@ -201,17 +289,16 @@ function baseCut(
   atom: Vec2,
   side: number,
   axis: Vec2,
-  halfLineWorld: number,
-  neighbourDirs: Vec2[],
+  neighbours: Neighbour[],
 ): Cut | null {
-  if (neighbourDirs.length === 0) return null;
+  if (neighbours.length === 0) return null;
   const n = vperp(axis);
   // the neighbour furthest round to this side; with only one bond both sides
   // follow it, which is the cut parallel to that bond
   let key = -1;
   let best = -Infinity;
-  for (let i = 0; i < neighbourDirs.length; i++) {
-    const m = neighbourDirs[i];
+  for (let i = 0; i < neighbours.length; i++) {
+    const m = neighbours[i].dir;
     const d = (m.x * n.x + m.y * n.y) * side;
     if (d > best) {
       best = d;
@@ -219,11 +306,187 @@ function baseCut(
     }
   }
   if (key < 0) return null;
-  const dir = neighbourDirs[key];
+  const { dir, half, wide, len } = neighbours[key];
+  // A bond running nearly straight on through the wide end cannot usefully be
+  // cut along: its line is almost the wedge's own, and following it would
+  // draw the end out into a spike. Square across the wedge is what carries
+  // such a bond out of it, and the other side still follows its own bond.
+  if (Math.abs(vcross(dir, axis)) < WEDGE_CUT_MIN_SIN) {
+    return {
+      on: vadd(atom, vscale(axis, -half)),
+      dir: vperp(axis),
+      key,
+      // square across the axis: the corner only has to come back as far as
+      // the cut itself, whatever the bond does
+      reach: half * 4,
+    };
+  }
   const off = vperp(dir);
   const towardsTip = off.x * axis.x + off.y * axis.y >= 0 ? 1 : -1;
-  const edge = neighbourDirs.length === 1 ? -towardsTip : towardsTip;
-  return { on: vadd(atom, vscale(off, edge * halfLineWorld)), dir, key };
+  // Take the bond in whole when it is the only one carrying on, or when it is
+  // drawn as more than one line: a second line ends beside its own, not on the
+  // atom, so a cut that stopped at the atom would leave it stranded.
+  const takeWhole = neighbours.length === 1 || wide;
+  const edge = takeWhole ? -towardsTip : towardsTip;
+  return {
+    on: vadd(atom, vscale(off, edge * half)),
+    dir,
+    key,
+    reach: len * WEDGE_MITRE_REACH,
+  };
+}
+
+/**
+ * Where a double bond meets another at an atom, the line beside each of them
+ * should meet its neighbour's rather than stop short of it: run on to where
+ * the two would cross. Returns the point to end at, or the one given, and
+ * says whether it found a line to meet: two thick lines that end on the same
+ * point still want a cap over the corner they leave open.
+ */
+function mitreOffsetEnd(
+  atoms: Atom[],
+  atIdx: number,
+  from: Vec2,
+  along: Vec2,
+  outward: Vec2,
+  offset: number,
+  fallback: Vec2,
+  sideOf: (b: Bond) => number[],
+  others: Bond[],
+  limit: number,
+): { at: Vec2; met: boolean } {
+  const at = { x: atoms[atIdx].x, y: atoms[atIdx].y };
+  const mine = { on: vadd(from, vscale(vperp(along), offset)), dir: along };
+  let best: Vec2 | null = null;
+  let bestD = Infinity;
+  for (const b of others) {
+    const far = b.a1 === atIdx ? b.a2 : b.a1;
+    const o = atoms[far];
+    if (!o) continue;
+    const d = vsub({ x: o.x, y: o.y }, at);
+    if (vlen(d) < 1e-9) continue;
+    const dir = vnorm(d);
+    // Offsets are reported against the bond's own direction, a1 to a2. Here
+    // the direction runs from this atom outwards, which is the other way
+    // round when the bond ends at this atom rather than starting from it, and
+    // a line taken to the wrong side of it is one no end will ever meet.
+    const flip = b.a1 === atIdx ? 1 : -1;
+    // the two bonds' own directions from the atom; a line belongs to the
+    // side of the corner its offset leans towards
+    const bisect = vnorm(vadd(outward, dir));
+    const sideMine = Math.sign(
+      vperp(along).x * offset * bisect.x + vperp(along).y * offset * bisect.y,
+    );
+    for (const raw of sideOf(b)) {
+      const off = raw * flip;
+      const sideOther = Math.sign(
+        vperp(dir).x * off * bisect.x + vperp(dir).y * off * bisect.y,
+      );
+      // only ever meet the line on the same side of the corner
+      if (sideMine * sideOther < 0) continue;
+      const line = { on: vadd(at, vscale(vperp(dir), off)), dir };
+      const den = vcross(mine.dir, line.dir);
+      if (Math.abs(den) < 1e-6) continue;
+      const s = vcross(vsub(line.on, mine.on), line.dir) / den;
+      const p = vadd(mine.on, vscale(mine.dir, s));
+      const dist = vlen(vsub(p, at));
+      if (dist > limit || dist >= bestD) continue;
+      best = p;
+      bestD = dist;
+    }
+  }
+  return { at: best ?? fallback, met: best != null };
+}
+
+/**
+ * The two lines of a double bond drawn centred, each carried on to meet the
+ * line of a neighbouring double bond where they share an atom. Left to stop
+ * short, consecutive double bonds read as four loose lines rather than a
+ * chain.
+ */
+/** Where the lines of a double bond sit, either side of its own line. */
+function doubleOffsets(
+  b: Bond,
+  off: number,
+  doubleSides?: Map<Bond, number | undefined>,
+): number[] {
+  if (b.order !== 2) return [];
+  const mode = b.doubleMode || "auto";
+  if (mode === "center") return [off * 0.5, -off * 0.5];
+  if (mode === "left") return [off];
+  if (mode === "right") return [-off];
+  const sgn = doubleSides?.get(b);
+  return sgn == null ? [off * 0.5, -off * 0.5] : [off * sgn];
+}
+
+function centredPair(
+  p1: Vec2,
+  p2: Vec2,
+  dir: Vec2,
+  n: Vec2,
+  off: number,
+  widthPx: number,
+  bond: Bond,
+  atoms: Atom[],
+  adjBonds?: Map<number, Bond[]>,
+  doubleSides?: Map<Bond, number | undefined>,
+): { lines: LineSeg[]; joins: Vec2[] } {
+  const half = off * 0.5;
+  const limit = off * 2;
+  const sideOf = (b: Bond) => doubleOffsets(b, off, doubleSides);
+  const others = (idx: number) =>
+    (adjBonds?.get(idx) ?? []).filter(
+      (b) => b !== bond && b.order === 2 && b.stereo !== "up" && b.stereo !== "down",
+    );
+  const out: LineSeg[] = [];
+  const joins: Vec2[] = [];
+  for (const sgn of [1, -1]) {
+    const o = vscale(n, half * sgn);
+    const a = vadd(p1, o);
+    const b = vadd(p2, o);
+    const endA = mitreOffsetEnd(
+      atoms,
+      bond.a1,
+      p1,
+      dir,
+      dir,
+      half * sgn,
+      a,
+      sideOf,
+      others(bond.a1),
+      limit,
+    );
+    const endB = mitreOffsetEnd(
+      atoms,
+      bond.a2,
+      p2,
+      dir,
+      vscale(dir, -1),
+      half * sgn,
+      b,
+      sideOf,
+      others(bond.a2),
+      limit,
+    );
+    if (endA.met) joins.push(endA.at);
+    if (endB.met) joins.push(endB.at);
+    out.push({
+      x1: endA.at.x,
+      y1: endA.at.y,
+      x2: endB.at.x,
+      y2: endB.at.y,
+      widthPx,
+    });
+  }
+  return { lines: out, joins };
+}
+
+/** Where two cuts cross: the point both bonds' outlines meet at. */
+function cutsCross(a: Cut, b: Cut): Vec2 | null {
+  const den = vcross(a.dir, b.dir);
+  if (Math.abs(den) < 1e-6) return null;
+  const s = vcross(vsub(b.on, a.on), b.dir) / den;
+  return vadd(a.on, vscale(a.dir, s));
 }
 
 /**
@@ -238,7 +501,6 @@ function cornerOnCut(
   corner: Vec2,
   tipCorner: Vec2,
   intoWedge: number,
-  pastAtom: number,
 ): Vec2 | null {
   if (!cut) return null;
   const e = vnorm(vsub(tipCorner, corner));
@@ -246,7 +508,7 @@ function cornerOnCut(
   // nearly parallel to the edge: the cut would run off to infinity
   if (Math.abs(den) < 1e-6) return null;
   const t = vcross(vsub(cut.on, corner), cut.dir) / den;
-  if (t > intoWedge || t < -pastAtom) return null;
+  if (t > intoWedge || t < -cut.reach) return null;
   return vadd(corner, vscale(e, t));
 }
 
@@ -378,7 +640,7 @@ function buildWedgeTriangle(
   p2: Vec2,
   baseHalfWorld: number,
   tipHalfWorld: number,
-  baseNeighbourDirs: Vec2[] = [],
+  baseNeighbours: Neighbour[] = [],
   round = false,
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
@@ -392,24 +654,25 @@ function buildWedgeTriangle(
   const tip = vadd(p2, vscale(dir, tipHalf));
   const tipL = vadd(tip, nt);
   const tipR = vsub(tip, nt);
-  const halfLine = Math.min(tipHalfWorld, baseHalfWorld);
-  const cutL = baseCut(p1, 1, dir, halfLine, baseNeighbourDirs);
-  const cutR = baseCut(p1, -1, dir, halfLine, baseNeighbourDirs);
-  // How far a corner may slide to reach the cut. Real structures need up to
-  // about 1.3 times the wedge's half width (a bond leaving at 140 degrees to
-  // the wedge); beyond that the bond runs so close to the wedge's own
-  // direction that cutting to it would draw the end out into a spike.
-  const intoWedge = baseHalfWorld * 1.5;
-  const pastAtom = baseHalfWorld * 1.5;
+  const cutL = baseCut(p1, 1, dir, baseNeighbours);
+  const cutR = baseCut(p1, -1, dir, baseNeighbours);
+  // A corner may slide towards the tip as far as the tip and no further, and
+  // back past the atom as far as the cut it follows allows.
+  const side = vlen(vsub(tipL, vadd(p1, nb)));
   const squareL = vadd(p1, nb);
   const squareR = vsub(p1, nb);
-  const mitredL = cornerOnCut(cutL, squareL, tipL, intoWedge, pastAtom);
-  const mitredR = cornerOnCut(cutR, squareR, tipR, intoWedge, pastAtom);
+  const cornerL = cornerOnCut(cutL, squareL, tipL, side);
+  const cornerR = cornerOnCut(cutR, squareR, tipR, side);
+  // Either both corners follow their cut or neither does. One alone leaves the
+  // wide end slewed across the wedge, which at some angles no longer covers
+  // the atom at all and cuts the bonds there adrift.
+  const mitredL = cornerR ? cornerL : null;
+  const mitredR = cornerL ? cornerR : null;
   // A square end left at an atom other bonds meet would stop right at the
   // atom, and the cap that fills the join there would bulge out of it. Reach
   // the cap's width past the atom instead, so the end covers it.
   const back =
-    baseNeighbourDirs.length > 0
+    baseNeighbours.length > 0
       ? vscale(dir, -Math.min(tipHalfWorld, baseHalfWorld))
       : { x: 0, y: 0 };
   const baseL = mitredL ?? vadd(squareL, back);
@@ -420,16 +683,26 @@ function buildWedgeTriangle(
   const soften = [!mitredL];
   if (mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key) {
     // Two bonds carry on from the wide end, so the cut follows one on each
-    // side and dents in to the atom between them. Taking it to the atom
-    // rather than to where the two outlines cross keeps the dent inside what
-    // the join fill covers, so no sliver of background shows through.
+    // side and turns between them.
     const edge = vsub(baseR, baseL);
     const n = vperp(edge);
     const towardsTip = n.x * dir.x + n.y * dir.y >= 0 ? 1 : -1;
-    const dent = vsub(p1, baseL);
-    if ((dent.x * n.x + dent.y * n.y) * towardsTip > 0) {
+    const inwards =
+      ((p1.x - baseL.x) * n.x + (p1.y - baseL.y) * n.y) * towardsTip > 0;
+    if (inwards) {
+      // the turn is inwards: stop at the atom rather than at where the two
+      // outlines cross, which is further out than anything else there reaches
+      // and would show a sliver of background through the join
       points.push(p1);
       soften.push(false);
+    } else {
+      // the turn is outwards - a bond carrying straight on through the wide
+      // end puts it there - so follow both cuts to where they meet
+      const cross = cutsCross(cutL, cutR);
+      if (cross && vlen(vsub(cross, p1)) <= baseHalfWorld) {
+        points.push(cross);
+        soften.push(false);
+      }
     }
   }
   points.push(baseR, tipR, tipL);
@@ -439,12 +712,19 @@ function buildWedgeTriangle(
   };
 }
 
+/**
+ * Hashes across a wedge, `p1` the wide end and `p2` the narrow one. Both are
+ * the bond's own ends, before anything is trimmed for a label: the hashes are
+ * placed on that, and `span` then says how much of it is actually drawn, so a
+ * label takes hashes away rather than squeezing them together.
+ */
 function buildHashedWedgeSegments(
   p1: Vec2,
   p2: Vec2,
   baseHalfWorld: number,
   steps: number,
-  tipHalfWorld = 0
+  tipHalfWorld = 0,
+  span?: { from: number; to: number }
 ): LineSeg[] {
   // Same outline as the solid wedge, drawn as separate hashes. The narrow end
   // keeps a bond's width so the last hash does not shrink to a dot.
@@ -455,10 +735,17 @@ function buildHashedWedgeSegments(
   const tipHalf = Math.min(tipHalfWorld, baseHalfWorld * 0.5);
   const apexL = vadd(p2, vscale(n, tipHalf));
   const apexR = vadd(p2, vscale(n, -tipHalf));
+  const full = vlen(vsub(p2, p1));
+  const from = span ? span.from : 0;
+  const to = span ? span.to : full;
   const out: LineSeg[] = [];
   for (let i = 0; i < steps; i++) {
-    // Place separator lines at equal distances from base to apex
-    const u = (i + 0.5) / steps;
+    // Hashes at equal distances, the first at the wide end and the last on
+    // the atom at the narrow end: a hash short of it reads as a gap between
+    // the wedge and the bonds there, where a solid wedge runs right in.
+    const u = steps > 1 ? i / (steps - 1) : 0.5;
+    const along = u * full;
+    if (along < from - 1e-9 || along > to + 1e-9) continue;
     // Points at the same ratio along left (baseL→apex) and right (baseR→apex) edges
     const Lp = vadd(baseL, vscale(vsub(apexL, baseL), u));
     const Rp = vadd(baseR, vscale(vsub(apexR, baseR), u));
@@ -467,17 +754,27 @@ function buildHashedWedgeSegments(
   return out;
 }
 
+/**
+ * A wavy bond. `phase` carries the bond's own length and how far into it the
+ * drawn part starts, so that trimming for a label shortens the wave rather
+ * than squeezing the same number of turns into less room.
+ */
 function buildWavySegments(
   p1: Vec2,
   p2: Vec2,
   ampPx: number,
   freq: number,
   zoom: number,
-  units: "px" | "world" | undefined
+  units: "px" | "world" | undefined,
+  phase?: { start: number; full: number }
 ): LineSeg[] {
   const dir = vnorm(vsub(p2, p1));
   const n = vperp(dir);
   const L = vlen(vsub(p2, p1));
+  // A whole number of half turns, so the wave meets the bond's own line at
+  // both ends: an end left mid-turn sits beside the atom, and the cap that
+  // rounds it off then looks loose.
+  const turns = Math.max(0.5, Math.round(freq * 2) / 2);
   const steps = Math.max(8, Math.floor(L / Math.max(pxToWorld(6, zoom), 1e-6)));
   const amp = toWorld(ampPx, zoom, units);
   const out: LineSeg[] = [];
@@ -485,7 +782,9 @@ function buildWavySegments(
   for (let k = 0; k <= steps; k++) {
     const t = k / steps;
     const base = vadd(p1, vscale(dir, L * t));
-    const off = Math.sin(2 * Math.PI * freq * t);
+    const u =
+      phase && phase.full > 1e-9 ? (phase.start + L * t) / phase.full : t;
+    const off = Math.sin(2 * Math.PI * turns * u);
     const pt = vadd(base, vscale(n, amp * off));
     if (prev) {
       out.push({ x1: prev.x, y1: prev.y, x2: pt.x, y2: pt.y, widthPx: 0 });
@@ -562,6 +861,7 @@ export function buildTextLabels(
         fontPx: opts.fontPx,
         runs: [{ text: a.el }],
         anchorRun: 0,
+        atom: i,
       });
       continue;
     }
@@ -580,6 +880,7 @@ export function buildTextLabels(
       fontPx: opts.fontPx,
       runs,
       anchorRun: neighboursRight ? runs.length - 1 : 0,
+      atom: i,
     });
   }
   return out;
@@ -615,8 +916,10 @@ export function buildBondPrimitives(
   deg?: Map<number, number>,
   inRing?: boolean,
   autoSgn?: number,
-  adj?: Map<number, number[]>
-): { lines: LineSeg[]; polys: Poly[] } {
+  adjBonds?: Map<number, Bond[]>,
+  labelBoxes?: Map<number, LabelBox>,
+  doubleSides?: Map<Bond, number | undefined>
+): { lines: LineSeg[]; polys: Poly[]; joins?: Vec2[] } {
   const a = atoms[bond.a1];
   const c = atoms[bond.a2];
   const p1o = { x: a.x, y: a.y };
@@ -627,19 +930,31 @@ export function buildBondPrimitives(
   let lwPx = units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx;
   const minPx = Math.max(0.5, opts.minLinePx ?? 1);
   if (!(lwPx >= minPx)) lwPx = minPx;
-  // Shorten bonds at atom ends that have labels to avoid overlap with text.
-  // Labels are drawn centered on atom position with font size opts.fontPx.
-  // Use a fraction of font size (and a small margin) as trimming length.
+  // Stop a bond short of a label so the two do not overlap. How far depends
+  // on which way the bond leaves: OH reaches further to the right than up, so
+  // measuring by font size alone lets a bond run into a wide label from one
+  // side and leaves a gap from another.
   const hasLabel = (el: string) => opts.showCarbonLabels || el !== "C";
   const fontWorld = toWorld(opts.fontPx, zoom, units);
-  const trimBase = Math.max(0, fontWorld * 0.5);
   // Additional clearance ≈ half the line thickness (in world units)
   const trimMargin = pxToWorld(lwPx * 0.5, zoom);
-  const trimA0 = hasLabel(a.el) ? trimBase + trimMargin : 0;
-  const trimB0 = hasLabel(c.el) ? trimBase + trimMargin : 0;
   const dir0 = vsub(p2o, p1o);
   const L0 = vlen(dir0);
   const dir = L0 > 1e-9 ? vscale(dir0, 1 / L0) : { x: 1, y: 0 };
+  /** How far the label at an atom reaches along the bond, either way. */
+  const labelReach = (idx: number, el: string, towards: Vec2) => {
+    if (!hasLabel(el)) return 0;
+    const box = idx >= 0 ? labelBoxes?.get(idx) : undefined;
+    if (!box) return Math.max(0, fontWorld * 0.5) + trimMargin;
+    // the box around the atom, met along the bond
+    const sx = towards.x >= 0 ? box.right : box.left;
+    const tx = Math.abs(towards.x) > 1e-9 ? sx / Math.abs(towards.x) : Infinity;
+    const ty =
+      Math.abs(towards.y) > 1e-9 ? box.half / Math.abs(towards.y) : Infinity;
+    return Math.min(tx, ty) + trimMargin;
+  };
+  const trimA0 = labelReach(bond.a1, a.el, dir);
+  const trimB0 = labelReach(bond.a2, c.el, vscale(dir, -1));
   const trimA = Math.min(trimA0, Math.max(0, L0 * 0.45));
   const trimB = Math.min(trimB0, Math.max(0, L0 * 0.45));
   const p1 = vadd(p1o, vscale(dir, trimA));
@@ -658,14 +973,27 @@ export function buildBondPrimitives(
       const baseIdx = baseAtP1 ? bond.a1 : bond.a2;
       const tipIdx = baseAtP1 ? bond.a2 : bond.a1;
       const baseAtom = atoms[baseIdx];
-      const neighbourDirs: Vec2[] = [];
+      const neighbours: Neighbour[] = [];
       if (!hasLabel(baseAtom.el)) {
-        for (const other of adj?.get(baseIdx) ?? []) {
+        const half = pxToWorld(lwPx * 0.5, zoom);
+        const doubleHalf = toWorld(opts.doubleOffsetPx, zoom, units) * 0.5;
+        const tripleHalf = toWorld(opts.tripleOffsetPx, zoom, units);
+        for (const b of adjBonds?.get(baseIdx) ?? []) {
+          const other = b.a1 === baseIdx ? b.a2 : b.a1;
           if (other === tipIdx || other === baseIdx) continue;
           const o = atoms[other];
           if (!o) continue;
           const d = vsub({ x: o.x, y: o.y }, { x: baseAtom.x, y: baseAtom.y });
-          if (vlen(d) > 1e-9) neighbourDirs.push(vnorm(d));
+          if (vlen(d) < 1e-9) continue;
+          // how far that bond reaches either side of its own line
+          const spread =
+            b.order === 3 ? tripleHalf : b.order === 2 ? doubleHalf : 0;
+          neighbours.push({
+            dir: vnorm(d),
+            half: half + spread,
+            wide: spread > 0,
+            len: vlen(d),
+          });
         }
       }
       const tri = buildWedgeTriangle(
@@ -673,18 +1001,25 @@ export function buildBondPrimitives(
         bp2,
         baseHalf,
         tipHalf,
-        neighbourDirs,
+        neighbours,
         (opts.joinStyle ?? "round") === "round",
       );
       polys.push(tri);
       return { lines, polys };
     } else {
+      // Place the hashes on the bond itself and draw the part that is left
+      // after any label has taken its share.
+      const bp1o = baseAtP1 ? p1o : p2o;
+      const bp2o = baseAtP1 ? p2o : p1o;
+      const trimBase = baseAtP1 ? trimA : trimB;
+      const trimTip = baseAtP1 ? trimB : trimA;
       const segs = buildHashedWedgeSegments(
-        bp1,
-        bp2,
+        bp1o,
+        bp2o,
         baseHalf,
         Math.max(5, Math.floor(opts.hashCount * 0.9)),
-        tipHalf
+        tipHalf,
+        { from: trimBase, to: L0 - trimTip }
       );
       for (let i = 0; i < segs.length; i++) segs[i].widthPx = lwPx;
       lines.push(...segs);
@@ -693,7 +1028,10 @@ export function buildBondPrimitives(
   }
   if (bond.stereo === "wavy") {
     lines.push(
-      ...buildWavySegments(p1, p2, opts.wavyAmpPx, opts.wavyFreq, zoom, units)
+      ...buildWavySegments(p1, p2, opts.wavyAmpPx, opts.wavyFreq, zoom, units, {
+        start: trimA,
+        full: L0,
+      })
     );
     for (const l of lines) l.widthPx = lwPx;
     return { lines, polys };
@@ -720,109 +1058,183 @@ export function buildBondPrimitives(
     const ps2 = shortenB ? vadd(p2, vscale(dir, -shorten)) : p2;
 
     const mode = bond.doubleMode || "auto";
-    if (mode === "center") {
-      // Symmetric placement: two lines at ±off/2 from the axis
-      const o1 = vscale(n, off * 0.5);
-      const o2 = vscale(n, -off * 0.5);
-      const lA: LineSeg = {
-        x1: p1.x + o1.x,
-        y1: p1.y + o1.y,
-        x2: p2.x + o1.x,
-        y2: p2.y + o1.y,
-        widthPx: lwPx,
-      };
-      const lB: LineSeg = {
-        x1: p1.x + o2.x,
-        y1: p1.y + o2.y,
-        x2: p2.x + o2.x,
-        y2: p2.y + o2.y,
-        widthPx: lwPx,
-      };
-      lines.push(lA, lB);
-      return { lines, polys };
-    } else if (mode === "auto") {
-      // Auto: if balanced or no substituents -> center; if biased -> short line on denser side
-      // autoSgn: +1 means +n side, -1 means -n side; undefined means centered
-      if (autoSgn == null || !isFinite(autoSgn)) {
-        // Center (two lines symmetric)
-        const o1 = vscale(n, off * 0.5);
-        const o2 = vscale(n, -off * 0.5);
-        lines.push(
-          {
-            x1: p1.x + o1.x,
-            y1: p1.y + o1.y,
-            x2: p2.x + o1.x,
-            y2: p2.y + o1.y,
-            widthPx: lwPx,
-          },
-          {
-            x1: p1.x + o2.x,
-            y1: p1.y + o2.y,
-            x2: p2.x + o2.x,
-            y2: p2.y + o2.y,
-            widthPx: lwPx,
-          }
-        );
-        return { lines, polys };
-      }
-      const sgn = autoSgn >= 0 ? +1 : -1;
-      const l1: LineSeg = {
-        x1: p1.x,
-        y1: p1.y,
-        x2: p2.x,
-        y2: p2.y,
-        widthPx: lwPx,
-      };
-      const o = vscale(n, off * sgn);
-      const ps1b = vadd(ps1, o);
-      const ps2b = vadd(ps2, o);
-      const l2: LineSeg = {
-        x1: ps1b.x,
-        y1: ps1b.y,
-        x2: ps2b.x,
-        y2: ps2b.y,
-        widthPx: lwPx,
-      };
-      lines.push(l1, l2);
-      return { lines, polys };
-    } else {
-      // Skew placement (left/right): full-length axis line + short line on one side
-      const l1: LineSeg = {
-        x1: p1.x,
-        y1: p1.y,
-        x2: p2.x,
-        y2: p2.y,
-        widthPx: lwPx,
-      };
-      // Side selection: left=+1, right=-1
-      const sgn = mode === "left" ? +1 : -1;
-      const o = vscale(n, off * sgn);
-      const ps1b = vadd(ps1, o);
-      const ps2b = vadd(ps2, o);
-      const l2: LineSeg = {
-        x1: ps1b.x,
-        y1: ps1b.y,
-        x2: ps2b.x,
-        y2: ps2b.y,
-        widthPx: lwPx,
-      };
-      lines.push(l1, l2);
-      return { lines, polys };
+    // Which side the second line goes: null puts one either side, at half
+    // the offset, and a number puts a single one that far off the axis.
+    const sgn =
+      mode === "center"
+        ? null
+        : mode === "left"
+          ? 1
+          : mode === "right"
+            ? -1
+            : autoSgn == null || !isFinite(autoSgn)
+              ? null
+              : autoSgn >= 0
+                ? 1
+                : -1;
+    if (sgn == null) {
+      // Symmetric placement: two lines at +/-off/2 from the axis, each run on
+      // to meet its neighbour's where two double bonds share an atom
+      const pair = centredPair(
+        p1,
+        p2,
+        dir,
+        n,
+        off,
+        lwPx,
+        bond,
+        atoms,
+        adjBonds,
+        doubleSides,
+      );
+      lines.push(...pair.lines);
+      return { lines, polys, joins: pair.joins };
     }
+    // Skew placement: the bond's own line, and a second one to one side of
+    // it. That one meets the line of a double bond next door where they share
+    // an atom, rather than stopping short of it: two double bonds in a row
+    // read as a chain that way, and as four loose lines otherwise.
+    const o = vscale(n, off * sgn);
+    const others = (idx: number) =>
+      (adjBonds?.get(idx) ?? []).filter(
+        (nb) =>
+          nb !== bond &&
+          nb.order === 2 &&
+          nb.stereo !== "up" &&
+          nb.stereo !== "down",
+      );
+    const sideOf = (nb: Bond) => doubleOffsets(nb, off, doubleSides);
+    const ps1b = mitreOffsetEnd(
+      atoms,
+      bond.a1,
+      p1,
+      dir,
+      dir,
+      off * sgn,
+      vadd(ps1, o),
+      sideOf,
+      others(bond.a1),
+      off * 2,
+    );
+    const ps2b = mitreOffsetEnd(
+      atoms,
+      bond.a2,
+      p2,
+      dir,
+      vscale(dir, -1),
+      off * sgn,
+      vadd(ps2, o),
+      sideOf,
+      others(bond.a2),
+      off * 2,
+    );
+    lines.push(
+      { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx },
+      {
+        x1: ps1b.at.x,
+        y1: ps1b.at.y,
+        x2: ps2b.at.x,
+        y2: ps2b.at.y,
+        widthPx: lwPx,
+      },
+    );
+    const joins: Vec2[] = [];
+    if (ps1b.met) joins.push(ps1b.at);
+    if (ps2b.met) joins.push(ps2b.at);
+    return { lines, polys, joins };
   }
   if (bond.order === 3) {
     // Triple bond outer offset matches the double-bond offset
     const off = toWorld(opts.doubleOffsetPx, zoom, units);
-    const [o1, o2, o3] = buildTripleLines(p1, p2, off);
+    // The outer lines are held back from an atom other bonds meet, the way a
+    // double bond's second line is: run to the atom and they cross whatever
+    // else arrives there.
+    const shorten = Math.max(0, toWorld(opts.doubleShortenPx || 0, zoom, units));
+    const back1 = (deg?.get(bond.a1) || 1) > 1 ? shorten : 0;
+    const back2 = (deg?.get(bond.a2) || 1) > 1 ? shorten : 0;
+    const q1 = vadd(p1, vscale(dir, back1));
+    const q2 = vadd(p2, vscale(dir, -back2));
+    const [o1, , o3] = buildTripleLines(q1, q2, off);
     lines.push(
       { x1: o1.x1, y1: o1.y1, x2: o1.x2, y2: o1.y2, widthPx: lwPx },
-      { x1: o2.x1, y1: o2.y1, x2: o2.x2, y2: o2.y2, widthPx: lwPx },
+      { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx },
       { x1: o3.x1, y1: o3.y1, x2: o3.x2, y2: o3.y2, widthPx: lwPx }
     );
     return { lines, polys };
   }
   lines.push({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx });
   return { lines, polys };
+}
+
+/**
+ * Where bonds meet, and where one simply ends, the drawing is finished off:
+ * with a cap of half a line width when joins are round, and with a mitre
+ * between the bonds when they are sharp. Not every atom wants one.
+ *
+ * `caps` are the atoms a round cap belongs on and `mitres` the atoms a sharp
+ * join is built at, with the directions of the plain bonds arriving there.
+ * The drag preview draws the atom it is carrying itself, so it asks the same
+ * question of the same function rather than guessing: a dot the drawing does
+ * not have must not appear for as long as the atom is moving.
+ */
+export function joinsAtAtoms(
+  atoms: Atom[],
+  bonds: Bond[],
+  opts: LayoutOptions,
+  deg: Map<number, number>,
+): { caps: Set<number>; mitres: Map<number, Vec2[]> } {
+  // A double bond drawn centred has no line along the bond itself, so nothing
+  // of it reaches the atom for a cap to round off: a cap there is a dot in
+  // mid air between the two lines.
+  const onAxis = (b: Bond) =>
+    b.order !== 2 ||
+    (b.doubleMode !== undefined &&
+      b.doubleMode !== "auto" &&
+      b.doubleMode !== "center");
+  const reaching = new Map<number, number>();
+  for (const b of bonds) {
+    if (!onAxis(b)) continue;
+    reaching.set(b.a1, (reaching.get(b.a1) ?? 0) + 1);
+    reaching.set(b.a2, (reaching.get(b.a2) ?? 0) + 1);
+  }
+  const plainDirs = new Map<number, Vec2[]>();
+  const plainEnds = new Set<number>();
+  for (const b of bonds) {
+    // A wedge is a shape of its own, and a hashed one is a row of hashes:
+    // a cap at either would sit past the last of them as a loose dot.
+    if (b.stereo === "up" || b.stereo === "down") continue;
+    if (!onAxis(b)) continue;
+    plainEnds.add(b.a1);
+    plainEnds.add(b.a2);
+    const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
+    const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
+    if (vlen(vsub(q, p)) < 1e-9) continue;
+    plainDirs.set(b.a1, [...(plainDirs.get(b.a1) ?? []), vnorm(vsub(q, p))]);
+    plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
+  }
+  // The wide end of a solid wedge covers the join at its atom itself, either
+  // by reaching past it or by being cut along the bonds there; a cap on top of
+  // that only bulges out of the wedge.
+  const wedgeEnds = new Set<number>();
+  for (const b of bonds) {
+    if (b.stereo === "up") wedgeEnds.add(wedgeBaseAtom(b, deg));
+  }
+  const caps = new Set<number>();
+  const mitres = new Map<number, Vec2[]>();
+  for (let i = 0; i < atoms.length; i++) {
+    const d = deg.get(i) || 0;
+    const showLabel = opts.showCarbonLabels || atoms[i].el !== "C";
+    // A label takes the bond's end with it, and a wedge's wide end covers its
+    // own join, so neither wants anything here.
+    if (showLabel || wedgeEnds.has(i)) continue;
+    // A free end of a plain bond, or any atom bonds meet at - including one
+    // where only wedges meet, whose thin ends are each a bond wide and do
+    // not fill the join between them on their own. Something has to reach
+    // the atom for the cap to round off, though.
+    if (plainEnds.has(i) || (d >= 2 && (reaching.get(i) ?? 0) > 0)) caps.add(i);
+    if (d >= 2) mitres.set(i, plainDirs.get(i) ?? []);
+  }
+  return { caps, mitres };
 }
 
 export function buildAllPrimitives(
@@ -837,6 +1249,77 @@ export function buildAllPrimitives(
   const fills: Circle[] = [];
   const deg = degreeMap(bonds);
   // adjacency by index
+  // Which side the second line of each double bond takes. Worked out for all
+  // of them before any is drawn, so that a bond can meet its neighbour's line
+  // where they share an atom instead of stopping short of it.
+  const doubleSides = new Map<Bond, number | undefined>();
+  for (const b of bonds) {
+    if (b.order !== 2) continue;
+    if (b.doubleMode !== undefined && b.doubleMode !== "auto") continue;
+    const p1 = { x: atoms[b.a1].x, y: atoms[b.a1].y };
+    const p2 = { x: atoms[b.a2].x, y: atoms[b.a2].y };
+    const axis = vsub(p2, p1);
+    const L0 = vlen(axis);
+    const dir = L0 > 1e-9 ? vscale(axis, 1 / L0) : { x: 1, y: 0 };
+    const n = vperp(dir); // Treat +n as "left"
+    const neigh1 = bonds
+      .filter((o) => o !== b && (o.a1 === b.a1 || o.a2 === b.a1))
+      .map((o) => (o.a1 === b.a1 ? o.a2 : o.a1));
+    const neigh2 = bonds
+      .filter((o) => o !== b && (o.a1 === b.a2 || o.a2 === b.a2))
+      .map((o) => (o.a1 === b.a2 ? o.a2 : o.a1));
+    const EPS = Math.max(1e-4, L0 * 0.06); // Ignore near-axis to suppress flipping
+    let plus = 0;
+    let minus = 0;
+    for (const [from, list] of [
+      [p1, neigh1],
+      [p2, neigh2],
+    ] as [Vec2, number[]][]) {
+      for (const o of list) {
+        const v = { x: atoms[o].x - from.x, y: atoms[o].y - from.y };
+        const s = v.x * n.x + v.y * n.y;
+        if (s > EPS) plus++;
+        else if (s < -EPS) minus++;
+      }
+    }
+    let sgn: number | undefined = plus === minus ? undefined : plus > minus ? 1 : -1;
+    if (sgn != null) {
+      // A bond of its own width beside the second line leaves no room for it.
+      const clearance = (side: number) => {
+        let worst = Math.PI;
+        for (const [from, list] of [
+          [p1, neigh1],
+          [p2, neigh2],
+        ] as [Vec2, number[]][]) {
+          for (const o of list) {
+            const v = vnorm({ x: atoms[o].x - from.x, y: atoms[o].y - from.y });
+            if ((v.x * n.x + v.y * n.y) * side <= 0) continue;
+            const along = Math.abs(v.x * dir.x + v.y * dir.y);
+            worst = Math.min(worst, Math.acos(Math.min(1, along)));
+          }
+        }
+        return worst;
+      };
+      const CROWDED = Math.PI / 4;
+      const here = clearance(sgn);
+      const there = clearance(-sgn);
+      if (here < CROWDED && there > here) sgn = -sgn;
+    }
+    doubleSides.set(b, sgn);
+  }
+
+  // bonds at each atom, and just the neighbours, which the ring search uses
+  // measure the labels once: the bonds are trimmed to them
+  const fontWorld = toWorld(opts.fontPx, zoom, opts.units);
+  const labelBoxes = new Map<number, LabelBox>();
+  for (const tx of buildTextLabels(atoms, opts, bonds)) {
+    if (tx.atom != null) labelBoxes.set(tx.atom, labelBox(tx, fontWorld));
+  }
+  const adjBonds = new Map<number, Bond[]>();
+  for (const b of bonds) {
+    adjBonds.set(b.a1, [...(adjBonds.get(b.a1) || []), b]);
+    adjBonds.set(b.a2, [...(adjBonds.get(b.a2) || []), b]);
+  }
   const adj = new Map<number, number[]>();
   for (const b of bonds) {
     adj.set(b.a1, [...(adj.get(b.a1) || []), b.a2]);
@@ -977,35 +1460,20 @@ export function buildAllPrimitives(
     opts.units === "world"
       ? opts.lineWidthPx * 0.5
       : pxToWorld(widthPx * 0.5, zoom); // restore previous size
-  // Where bonds meet, fill the join: a round cap, or a mitre. Bond ends are
-  // left alone, so a chain still ends flat. A cap sits inside the cut face of
-  // a wedge's wide end, which is exactly a cap's radius away.
+  // How a plain bond ends, and how plain bonds meet. Round: a cap of half a
+  // line width at every end, so a join and the end of a chain are rounded to
+  // the same degree. Sharp: a flat end, and a mitre where two bonds meet.
   const roundJoins = (opts.joinStyle ?? "round") === "round";
-  const plainDirs = new Map<number, Vec2[]>();
+  const joins = joinsAtAtoms(atoms, bonds, opts, deg);
+  for (const i of roundJoins ? joins.caps : []) {
+    fills.push({ c: { x: atoms[i].x, y: atoms[i].y }, r: rWorld });
+  }
   if (!roundJoins) {
-    for (const b of bonds) {
-      if (b.stereo === "up" || b.stereo === "down") continue;
-      const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
-      const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
-      if (vlen(vsub(q, p)) < 1e-9) continue;
-      plainDirs.set(b.a1, [...(plainDirs.get(b.a1) ?? []), vnorm(vsub(q, p))]);
-      plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
+    for (const [i, dirs] of joins.mitres) {
+      polys.push(
+        ...mitreJoinPolys({ x: atoms[i].x, y: atoms[i].y }, dirs, rWorld),
+      );
     }
-  }
-  // The wide end of a solid wedge covers the join at its atom itself, either
-  // by reaching past it or by being cut along the bonds there; a cap on top of
-  // that only bulges out of the wedge.
-  const wedgeEnds = new Set<number>();
-  for (const b of bonds) {
-    if (b.stereo === "up") wedgeEnds.add(wedgeBaseAtom(b, deg));
-  }
-  for (let i = 0; i < atoms.length; i++) {
-    const d = deg.get(i) || 0;
-    const showLabel = opts.showCarbonLabels || atoms[i].el !== "C";
-    if (d < 2 || showLabel || wedgeEnds.has(i)) continue;
-    const c = { x: atoms[i].x, y: atoms[i].y };
-    if (roundJoins) fills.push({ c, r: rWorld });
-    else polys.push(...mitreJoinPolys(c, plainDirs.get(i) ?? [], rWorld));
   }
   // build lines/polys
   for (const b of bonds) {
@@ -1014,39 +1482,9 @@ export function buildAllPrimitives(
     const key = u < v ? `${u}-${v}` : `${v}-${u}`;
     const inRing = ringEdges.has(key);
     const beff: Bond = aromaticEdges.has(key) ? { ...b, order: 1 } : b;
-    // autoSgn: count substituents on both ends (excluding the opposite endpoint) and decide by +n vs -n totals
-    let autoSgn: number | undefined = undefined;
-    if (
-      beff.order === 2 &&
-      (beff.doubleMode === undefined || beff.doubleMode === "auto")
-    ) {
-      const p1 = { x: atoms[b.a1].x, y: atoms[b.a1].y };
-      const p2 = { x: atoms[b.a2].x, y: atoms[b.a2].y };
-      const axis = vsub(p2, p1);
-      const L0 = vlen(axis);
-      const dir = L0 > 1e-9 ? vscale(axis, 1 / L0) : { x: 1, y: 0 };
-      const n = vperp(dir); // Treat +n as "left"
-      const neigh1 = (adj.get(b.a1) || []).filter((x) => x !== b.a2);
-      const neigh2 = (adj.get(b.a2) || []).filter((x) => x !== b.a1);
-      const EPS = Math.max(1e-4, L0 * 0.06); // Ignore near-axis to suppress flipping
-      let plus = 0,
-        minus = 0;
-      for (const o of neigh1) {
-        const v = { x: atoms[o].x - p1.x, y: atoms[o].y - p1.y };
-        const s = v.x * n.x + v.y * n.y;
-        if (s > EPS) plus++;
-        else if (s < -EPS) minus++;
-      }
-      for (const o of neigh2) {
-        const v = { x: atoms[o].x - p2.x, y: atoms[o].y - p2.y };
-        const s = v.x * n.x + v.y * n.y;
-        if (s > EPS) plus++;
-        else if (s < -EPS) minus++;
-      }
-      // Center only when the counts are exactly equal (or both zero); otherwise keep skew
-      if (plus === minus) autoSgn = undefined; // -> center
-      else autoSgn = plus > minus ? +1 : -1;
-    }
+    // which side the second line of a double bond takes, worked out for every
+    // one of them first so that each knows what its neighbours are doing
+    const autoSgn = doubleSides.get(b);
     const r = buildBondPrimitives(
       atoms,
       beff,
@@ -1055,10 +1493,16 @@ export function buildAllPrimitives(
       deg,
       inRing,
       autoSgn,
-      adj
+      adjBonds,
+      labelBoxes,
+      doubleSides
     );
     lines.push(...r.lines);
     polys.push(...r.polys);
+    // Two lines of neighbouring double bonds run on to the same point, but a
+    // point is all they share: the corner they turn is left open, the way any
+    // two thick lines meeting end to end would. Cap it as a join is capped.
+    for (const j of r.joins ?? []) fills.push({ c: j, r: rWorld });
   }
   return { lines, polys, circles, fills };
 }
@@ -1069,9 +1513,16 @@ export function layoutMolecule(
   opts: LayoutOptions,
   zoom: number
 ): Layout {
-  const bounds = computeBounds(atoms);
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
   const texts = buildTextLabels(atoms, opts, bonds);
+  // A label hangs off its atom, so the drawing is wider than the atoms are:
+  // leave it out and a label at the edge is cut off, on the canvas as in an
+  // export.
+  const bounds = expandBoundsForLabels(
+    computeBounds(atoms),
+    texts,
+    toWorld(opts.fontPx, zoom, opts.units),
+  );
   return {
     lines: prim.lines,
     polys: prim.polys,
@@ -1112,24 +1563,6 @@ function escapeXml(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-/**
- * Rough advance width of a character, as a fraction of the font size. The
- * canvas measures text properly; here there is nothing to measure against, so
- * this only has to place the hydrogens beside an element symbol - the symbol
- * itself is anchored on its atom and does not depend on it.
- */
-function advanceEm(ch: string): number {
-  if (ch >= "0" && ch <= "9") return 0.556;
-  if (ch >= "a" && ch <= "z") return 0.55;
-  return 0.667;
-}
-
-function runWidth(text: string, size: number): number {
-  let w = 0;
-  for (const ch of text) w += advanceEm(ch) * size;
-  return w;
 }
 
 /** A label as the canvas draws it: runs, subscripts, symbol on the atom. */

@@ -9,6 +9,7 @@ import {
 } from "../../../../lib/chem/acs";
 import {
   buildBondPrimitives,
+  joinsAtAtoms,
   type LayoutOptions,
   type Atom as LAtom,
   type Bond as LBond,
@@ -275,6 +276,9 @@ export default function MovePreview2D() {
       mThin.visible = thinCount > 0;
       mThin.instanceMatrix.needsUpdate = true;
     }
+    // Whether the atom being dragged is one the drawing puts a cap on; worked
+    // out with the rest of the preview, below.
+    let capHere = false;
     // 2) thick preview from layout at snapped position: reflects multi-bonds and hashed wedges
     if (
       deg > 0 &&
@@ -317,12 +321,28 @@ export default function MovePreview2D() {
         adj.set(b.a1, [...(adj.get(b.a1) || []), b.a2]);
         adj.set(b.a2, [...(adj.get(b.a2) || []), b.a1]);
       }
+      // The bonds at each atom, and which atoms carry the wide end of a
+      // wedge: without these a wedge is drawn with a square end while it is
+      // dragged and snaps into shape when it is dropped.
+      const adjBonds = new Map<number, any[]>();
+      for (const b of bondsAll) {
+        adjBonds.set(b.a1, [...(adjBonds.get(b.a1) || []), b]);
+        adjBonds.set(b.a2, [...(adjBonds.get(b.a2) || []), b]);
+      }
       // Build primitives for attached bonds only, but with full deg info
       const zNow = (camera as any)?.zoom || 1;
       const opts: LayoutOptions = editorLayoutOptions(
         atomsL as any,
         bondsAttach as any
       );
+      // Whether the drawing caps this atom, asked of the rule the drawing
+      // itself uses, over the whole molecule rather than the bonds at hand.
+      capHere = joinsAtAtoms(
+        atomsL as any,
+        bondsAll as any,
+        opts,
+        degMap
+      ).caps.has(mi);
       type LineSeg = {
         x1: number;
         y1: number;
@@ -374,7 +394,8 @@ export default function MovePreview2D() {
           zNow,
           degMap,
           /*inRing*/ false,
-          autoSgn
+          autoSgn,
+          adjBonds as any
         );
         outLines.push(...prim.lines);
         outPolys.push(...prim.polys);
@@ -435,8 +456,12 @@ export default function MovePreview2D() {
       }
     }
 
-    // joint dot at snapped endpoint for deg >= 2 (replaces hidden base join caps)
-    if (deg >= 2 && joinDot.current) {
+    // The cap that rounds off a bond end, carried to where the atom is being
+    // dragged - the one in the drawing is hidden while the drag is on. Only
+    // where the drawing has one: an atom carrying a wedge's wide end, a label
+    // or nothing but centred double bonds has none, and a dot appearing there
+    // for as long as the atom moves is a dot the drawing never draws.
+    if (capHere && joinDot.current) {
       const rWorld = thickW * 0.5;
       joinDot.current.position.set(pxPrev, pyPrev, -0.035);
       joinDot.current.scale.set(rWorld, rWorld, 1);
@@ -462,6 +487,7 @@ export default function MovePreview2D() {
         ref={thinInst}
         key={"mv-lines-" + countCap}
         args={[undefined as any, undefined as any, countCap]}
+        frustumCulled={false}
         visible={false}
       >
         <planeGeometry args={[1, 1]} />
@@ -478,6 +504,7 @@ export default function MovePreview2D() {
         ref={thickInst}
         key={"mv-thick-" + countCap}
         args={[undefined as any, undefined as any, countCap]}
+        frustumCulled={false}
         visible={false}
       >
         <planeGeometry args={[1, 1]} />
@@ -492,6 +519,7 @@ export default function MovePreview2D() {
         ref={hashInst}
         key={"mv-hash-" + hashCap}
         args={[undefined as any, undefined as any, hashCap]}
+        frustumCulled={false}
         visible={false}
       >
         <planeGeometry args={[1, 1]} />
@@ -502,7 +530,7 @@ export default function MovePreview2D() {
         />
       </instancedMesh>
       {/* Solid wedge triangles for 'up' stereo */}
-      <mesh ref={wedgeSolidMesh} visible={false}>
+      <mesh ref={wedgeSolidMesh} frustumCulled={false} visible={false}>
         <bufferGeometry ref={wedgeSolidGeo} />
         <meshBasicMaterial
           color={COLORS.bond}
@@ -512,7 +540,7 @@ export default function MovePreview2D() {
         />
       </mesh>
       {/* Joint dot at snapped endpoint (deg>=2) */}
-      <mesh ref={joinDot} visible={false}>
+      <mesh ref={joinDot} frustumCulled={false} visible={false}>
         <circleGeometry args={[1, 32]} />
         <meshBasicMaterial
           color={COLORS.bond}
@@ -522,7 +550,7 @@ export default function MovePreview2D() {
           depthWrite={false}
         />
       </mesh>
-      <mesh ref={cursorDot} visible={false}>
+      <mesh ref={cursorDot} frustumCulled={false} visible={false}>
         <circleGeometry args={[1, 32]} />
         <meshBasicMaterial
           color={COLORS.highlight}
@@ -534,7 +562,7 @@ export default function MovePreview2D() {
         />
       </mesh>
       {/* outline disabled: we match highlight color/opacity and draw behind bonds */}
-      <mesh ref={cursorDotOutline} visible={false}>
+      <mesh ref={cursorDotOutline} frustumCulled={false} visible={false}>
         <ringGeometry args={[0.9, 1, 48]} />
         <meshBasicMaterial
           color={COLORS.highlight}

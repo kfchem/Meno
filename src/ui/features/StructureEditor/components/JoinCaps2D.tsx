@@ -51,15 +51,8 @@ export default function JoinCaps2D({
     [atoms, bonds, opts, zoom]
   );
 
-  // Determine if we should suppress only the moving atom's cap (for deg>=2)
+  // the atom being dragged; the preview draws it, so its cap is not wanted here
   const movingId = moveDrag.active ? moveDrag.atomId : null;
-  const movingDeg = useMemo(() => {
-    if (movingId == null) return 0;
-    return model.bonds.reduce(
-      (acc, b) => acc + (b.a === movingId || b.b === movingId ? 1 : 0),
-      0
-    );
-  }, [model.bonds, movingId]);
   const movingPos = useMemo(() => {
     if (movingId == null) return null as { x: number; y: number } | null;
     const a = atoms.find((aa) => aa.id === movingId);
@@ -70,8 +63,10 @@ export default function JoinCaps2D({
     <group>
       {(layout as any).fills
         ?.filter((c: any) => {
-          if (movingId == null || movingDeg < 2 || !movingPos) return true;
-          // Skip only the cap at the moving atom itself; keep neighbor caps
+          if (movingId == null || !movingPos) return true;
+          // Skip the cap at the moving atom itself, whatever it carries: the
+          // preview draws that atom where the pointer is, and a cap left at
+          // the old place is a dot adrift. Its neighbours keep theirs.
           const dx = c.c.x - movingPos.x;
           const dy = c.c.y - movingPos.y;
           return Math.hypot(dx, dy) > 1e-6;
