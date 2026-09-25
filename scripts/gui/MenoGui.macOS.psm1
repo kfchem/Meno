@@ -663,8 +663,20 @@ function Complete-FileDialog {
     if (-not $Path.StartsWith("/")) { throw "the path has to be absolute: '$Path'" }
     $panel = Wait-DialogWindows -What "the open panel" -Until { param($d) $d.Count -ge 1 }
     $before = $panel.Count
-    Send-MenoText -Text "/"
-    $sheet = Wait-DialogWindows -What "the 'Go to the folder' sheet" -Until { param($d) $d.Count -gt $before }.GetNewClosure()
+    # The panel is a window before it takes keys: a '/' sent while it is still
+    # sliding in goes nowhere. Let it come to rest first, and if the sheet
+    # still does not come, ask again - but only while there is no sheet, or
+    # the second '/' would land in its field.
+    Wait-WindowSettled -Id $panel[0].Id -TimeoutMs 3000 -QuietMs 250 | Out-Null
+    $sheet = $null
+    for ($try = 1; $try -le 3 -and -not $sheet; $try++) {
+        Send-MenoText -Text "/"
+        try {
+            $sheet = Wait-DialogWindows -What "the 'Go to the folder' sheet" -TimeoutMs 2500 -Until { param($d) $d.Count -gt $before }.GetNewClosure()
+        } catch {
+            if ($try -eq 3) { throw }
+        }
+    }
     Start-Sleep -Milliseconds 300
     Send-MenoText -Text $Path.Substring(1)
     # The suggestion under the field is the lookup having happened; wait for
