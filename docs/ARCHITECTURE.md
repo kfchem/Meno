@@ -91,6 +91,9 @@ component state, and it is still lost when their tab closes.
 
 ## 2D structure editor (`ui/features/StructureEditor`)
 
+What is left before the editor counts as finished, and in what order, is in
+[`EDITOR-2D.md`](./EDITOR-2D.md).
+
 - **State**: the structure itself - atoms, bonds, arrows, aromatic circles and
   the id counters - lives in the tab's document (`document.ts`), which is what
   undo, redo and saving act on. A Zustand store per canvas (`store/index.tsx`)
