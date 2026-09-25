@@ -2,6 +2,12 @@ import * as THREE from "three";
 import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
+import {
+  layoutMolecule,
+  type Atom as LAtom,
+  type Bond as LBond,
+} from "../../../../lib/chem/layout2d";
+import { editorLayoutOptions } from "../layoutOptions";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -29,16 +35,37 @@ export default function FitToContent2D({
       lastTriggerRef.current = trigger;
       return;
     }
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
-    for (const a of atoms) {
-      if (a.x < minX) minX = a.x;
-      if (a.y < minY) minY = a.y;
-      if (a.x > maxX) maxX = a.x;
-      if (a.y > maxY) maxY = a.y;
+    // What the drawing reaches, not where the atoms are: a label hangs off
+    // its atom - the H of an OH, the 2 of an NH2 - and fitting to the atoms
+    // alone cuts it off at the edge. The layout already works this out.
+    const index = new Map<number, number>();
+    const la: LAtom[] = atoms.map((a, i) => {
+      index.set(a.id, i);
+      return { id: a.id, x: a.x, y: a.y, el: a.el };
+    });
+    const lb: LBond[] = [];
+    for (const b of model.bonds) {
+      const a1 = index.get(b.a as number);
+      const a2 = index.get(b.b as number);
+      if (a1 == null || a2 == null) continue;
+      lb.push({
+        a1,
+        a2,
+        order: b.order as 1 | 2 | 3,
+        stereo: b.stereo ?? "none",
+        doubleMode: b.doubleMode,
+        stereoOrient: b.stereoOrient,
+      });
     }
+    // The layout's sizes are in world units here, so they do not depend on
+    // the zoom: one pass is enough, and there is no bounds-needs-zoom-needs-
+    // bounds to untangle.
+    const opts = editorLayoutOptions(la, lb);
+    const bounds = layoutMolecule(la, lb, opts, cam.zoom || 1).bounds;
+    const minX = bounds.min.x;
+    const minY = bounds.min.y;
+    const maxX = bounds.max.x;
+    const maxY = bounds.max.y;
     if (!isFinite(minX)) return;
     const spanX = Math.max(maxX - minX, 1e-3);
     const spanY = Math.max(maxY - minY, 1e-3);
@@ -58,7 +85,8 @@ export default function FitToContent2D({
     lastTriggerRef.current = trigger;
     // size changes should also refit
   }, [
-    model.atoms.length,
+    model.atoms,
+    model.bonds,
     camera,
     size.width,
     size.height,
