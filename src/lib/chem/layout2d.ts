@@ -820,6 +820,14 @@ export function implicitHydrogens(el: string, bondOrderSum: number): number {
   return Math.max(0, valence - bondOrderSum);
 }
 
+/**
+ * How far from vertical, either way, the bonds of a labelled atom may lean and
+ * still count as vertical for placing its hydrogens: 10 degrees. Not 15:
+ * bonds snap to 15-degree steps, and the edge of the band should not sit on
+ * one of them.
+ */
+const SIN_VERTICAL_BAND = Math.sin((10 * Math.PI) / 180);
+
 export function buildTextLabels(
   atoms: Atom[],
   opts: LayoutOptions,
@@ -868,8 +876,13 @@ export function buildTextLabels(
     const hydrogens: TextRun[] =
       h > 1 ? [{ text: "H" }, { text: String(h), sub: true }] : [{ text: "H" }];
     // Keep the hydrogens clear of the bonds: if the neighbours sit to the
-    // right, write HO rather than OH.
-    const neighboursRight = (away.get(i)?.x ?? 0) > 1e-6;
+    // right, write HO rather than OH. Within a band either side of vertical
+    // they sit neither side, and OH it is - otherwise a bond that leans a
+    // hair to the right flips the label, and a dragged atom swinging through
+    // vertical flickers between the two.
+    const toward = away.get(i) ?? { x: 0, y: 0 };
+    const neighboursRight =
+      toward.x > Math.hypot(toward.x, toward.y) * SIN_VERTICAL_BAND;
     const runs = neighboursRight
       ? [...hydrogens, { text: a.el }]
       : [{ text: a.el }, ...hydrogens];
