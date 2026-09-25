@@ -189,11 +189,11 @@ export function useStructureEvents(
         const near = store
           .getState()
           .findAtomNear(nx, ny, NOMINAL_BOND_LENGTH * 0.3, base.id);
+        // One gesture, one undo step: the atom and its bond together.
         if (near != null) {
           st.connectAtoms(base.id, near, 1);
         } else {
-          const nid = st.addAtom(nx, ny, "C", 0.9);
-          st.addBond(base.id, nid, 1);
+          st.addAtomBonded(base.id, nx, ny, "C", 1);
         }
         return;
       }
@@ -212,9 +212,7 @@ export function useStructureEvents(
     const ay = ndc.y - dy;
     const bx = ndc.x + dx;
     const by = ndc.y + dy;
-    const idA = st.addAtom(ax, ay, "C", 0.9);
-    const idB = st.addAtom(bx, by, "C", 0.9);
-    st.addBond(idA, idB, 1);
+    st.addBondedPair({ x: ax, y: ay, el: "C" }, { x: bx, y: by, el: "C" }, 1);
     try {
       store.getState().suppressDoubleClick(320);
     } catch {}
