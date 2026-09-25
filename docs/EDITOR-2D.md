@@ -69,11 +69,36 @@ terms, and holds three instances per bond where a hashed wedge needs seven.
 Meanwhile the resting layers drop the dragged atom's bonds, which can turn a
 neighbouring wedge round mid-drag.
 
-Both go together, because both touch every layer:
+Both go together, because both touch every layer.
 
-- A **drawing style** object - every length and ratio `acs.ts` and the layout
-  options carry today, plus cap and join rounding - held per document, with
-  ACS 1996 as a preset and a settings panel to change it.
+**The drawing style**, as the maintainer set it out:
+
+- **What it covers.** Bond length; line width; the width of a wedge's broad
+  end and of a bold bond; double- and triple-bond spacing and how far the
+  inner line is shortened; hash spacing; wavy amplitude and period; how ends
+  and joins are finished; the label's font, size and clearance from its
+  bonds; whether implicit hydrogens and terminal carbons are written; rings
+  as circles or as Kekulé structures; colour, bold and italic.
+- **Hashes at a fixed spacing.** A longer hashed bond gets more hashes, not
+  wider gaps. Today the count is fixed and the gaps stretch.
+- **More bond types.** Besides single, double, triple, wedge, hashed wedge and
+  wavy: a plain bold bond, a bold dashed bond, a thin dashed bond, and a
+  dative (coordinate) bond.
+- **Rounding is all or nothing.** When ends and joins are round, every end is
+  round - double and triple bonds included, which today are not. When they
+  are square, every one is square.
+- **Units.** Every length can be given in points or as a fraction of the bond
+  length, whichever the user prefers.
+- **Scope.** An application default; a document's own style over it; and
+  per-bond and per-atom overrides over that (a coloured atom, a bold bond).
+- **Defaults.** ACS 1996, exactly, as the preset the default starts from.
+  The values used today are not quite it (line width is 5% of the bond
+  length where ACS gives 0.6 pt of 14.4 pt, about 4.2%; double-bond spacing
+  20% where ACS gives 18%), so switching to the style moves the picture
+  slightly - on purpose.
+
+**One way of drawing:**
+
 - **The preview drawn by the resting code**: the model with the dragged atom
   moved, laid out by `layoutMolecule` and drawn by the same layers. Nothing
   about a drag is drawn any other way.
