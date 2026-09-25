@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
+import { commitInstanceMatrices } from "./instances";
 
 export default function BondsPick2D() {
   useThree();
@@ -203,7 +204,7 @@ export default function BondsPick2D() {
       );
       m.setMatrixAt(i, tmpM);
     }
-    m.instanceMatrix.needsUpdate = true;
+    commitInstanceMatrices(m);
   }, [model.atoms, model.bonds, tmpM, tmpQ]);
 
   return (
