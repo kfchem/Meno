@@ -4,6 +4,8 @@ import { useCallback, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { createSVG, layoutMolecule } from "../../../lib/chem/layout2d";
 import { writeMolfile, writeSdf } from "../../../lib/chem/molWriter";
+import { styleOf, type DrawingStyle } from "../../../lib/chem/style";
+import { useAppSettings } from "../../../lib/settings/appSettings";
 import { editorLayoutOptions, layoutBonds } from "./layoutOptions";
 import { useEditorStore } from "./store";
 import type { EditorState, Model } from "./store/types";
@@ -26,20 +28,23 @@ export function structureFileText(model: Model, path: string): string {
 }
 
 /**
- * CSS pixels to the world unit when a drawing is exported: ACS 1996's 14.4 pt
- * to the bond, at 96 px to the inch, so a picture placed in a document comes
- * in at the size ACS 1996 draws it.
+ * CSS pixels to the world unit when a drawing is exported: the style's bond
+ * length, at 96 px to the inch, so a picture placed in a document comes in
+ * at the size the style draws it - 14.4 pt to the bond in ACS 1996.
  */
-export const EXPORT_PX_PER_WORLD = (14.4 * 96) / 72 / NOMINAL_BOND_LENGTH;
+export function exportPxPerWorld(style: DrawingStyle): number {
+  return (style.bondLengthPt * 96) / 72 / NOMINAL_BOND_LENGTH;
+}
 
 /**
- * The drawing as SVG, exactly as the canvas lays it out, at ACS 1996's own
+ * The drawing as SVG, exactly as the canvas lays it out, at the style's own
  * size. Lines keep their true width however thin - the canvas's on-screen
  * minimum is for the screen - and the margin round it is a few pixels.
  */
 export function drawingSvg(
   model: Model,
   aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
+  style: DrawingStyle,
 ): string {
   const atoms = model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el }));
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
@@ -51,12 +56,12 @@ export function drawingSvg(
     enabled.length > 0
       ? { enabled: new Set(enabled) }
       : !!aromatic.aromaticEnabled;
-  const opts = editorLayoutOptions(atoms, bonds, {
+  const opts = editorLayoutOptions(style, {
     aromaticCircle,
     minLinePx: 0,
     paddingPx: 4,
   });
-  return createSVG(layoutMolecule(atoms, bonds, opts, EXPORT_PX_PER_WORLD), opts);
+  return createSVG(layoutMolecule(atoms, bonds, opts, exportPxPerWorld(style)), opts);
 }
 
 /**
@@ -116,7 +121,11 @@ export function useFileActions() {
           defaultPath: saved ? `${stem(saved)}.svg` : "structure.svg",
           filters: [{ name: "SVG picture", extensions: ["svg"] }],
         });
-        if (path) await writeTextFile(path, drawingSvg(store.getState().model, store.getState()));
+        if (!path) return;
+        const state = store.getState();
+        // The style the canvas is drawn in: the document's own, or the app's.
+        const style = styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle);
+        await writeTextFile(path, drawingSvg(state.model, state, style));
       }),
     [attempt, store],
   );

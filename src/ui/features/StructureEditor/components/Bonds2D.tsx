@@ -5,7 +5,7 @@ import { useDrawnLayout } from "./drawnLayoutContext";
 
 /** The drawing's lines, from the shared layout: bonds, hashes, waves. */
 export function Bonds2D() {
-  const { layout } = useDrawnLayout();
+  const { layout, opts } = useDrawnLayout();
   const inst = useRef<THREE.InstancedMesh>(null!);
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
   const tmpQ = useMemo(() => new THREE.Quaternion(), []);
@@ -59,7 +59,7 @@ export function Bonds2D() {
     >
       <planeGeometry args={[1, 1]} />
       <meshBasicMaterial
-        color="black"
+        color={opts.bondColor ?? "black"}
         vertexColors={false}
         toneMapped={false}
       />
