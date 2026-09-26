@@ -3,6 +3,7 @@ import * as ops from "../../document";
 import type { StructureDocument } from "../../document";
 import { EditorState } from "../types";
 import { StoreApi } from "zustand";
+import type { StyleChoice } from "../../../../../lib/chem/style";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -73,6 +74,12 @@ export function createUiSlice(
 
     setAromaticEnabled: (v: boolean) => {
       doc.edit("aromatic circles", (d) => ops.setAromaticEnabled(d, v));
+    },
+
+    setDocumentStyle: (style: StyleChoice | undefined, coalesceKey?: string) => {
+      doc.edit("drawing style", (d) => ops.setDocumentStyle(d, style), {
+        coalesceKey,
+      });
     },
 
     toggleAromatic: () => {

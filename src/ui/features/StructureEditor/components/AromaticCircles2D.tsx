@@ -9,10 +9,12 @@ import {
 } from "../../../../lib/chem/layout2d";
 import CapJoinLine from "./CapJoinLine";
 import { editorLayoutOptions } from "../layoutOptions";
+import { useDrawingStyle } from "../useDrawingStyle";
 import { useDrawnLayout } from "./drawnLayoutContext";
 
 export default function AromaticCircles2D() {
   const { camera, invalidate } = useThree();
+  const style = useDrawingStyle();
   const { toggleAromatic, toggleRing, aromaticEnabled, aromaticRings } =
     useEditor();
   // the rings' circles come with the rest of the drawing
@@ -39,8 +41,8 @@ export default function AromaticCircles2D() {
   // Separate preview layout to discover ring centers even when enabled=false
   const prevOpts: LayoutOptions = useMemo(
     () =>
-      editorLayoutOptions(atoms, bonds, { aromaticCircle: true }),
-    [atoms, bonds]
+      editorLayoutOptions(style, { aromaticCircle: true }),
+    [style]
   );
   const previewLayout = useMemo(
     () => layoutMolecule(atoms, bonds, prevOpts, zoom),

@@ -207,3 +207,33 @@ describe("editor store over a document", () => {
     expect(state().model.atoms).toHaveLength(0);
   });
 });
+
+describe("a document's own drawing style", () => {
+  it("is an edit like any other: mirrored, undone, and one step for a run of changes to one setting", () => {
+    const { doc, state } = editor();
+    expect(state().docStyle).toBeUndefined();
+
+    state().setDocumentStyle({ preset: "rsc", changes: {} });
+    expect(doc.getState().style).toEqual({ preset: "rsc", changes: {} });
+    expect(state().docStyle).toEqual({ preset: "rsc", changes: {} });
+    const depth = doc.history().undoDepth;
+
+    // a slider dragged through three values
+    for (const v of [0.5, 0.6, 0.7]) {
+      state().setDocumentStyle(
+        { preset: "rsc", changes: { lineThickness: { value: v, unit: "pt" } } },
+        "style:lineThickness",
+      );
+    }
+    expect(doc.history().undoDepth).toBe(depth + 1);
+    doc.undo();
+    expect(state().docStyle).toEqual({ preset: "rsc", changes: {} });
+
+    // back to the app's style
+    state().setDocumentStyle(undefined);
+    expect("style" in doc.getState()).toBe(false);
+    expect(state().docStyle).toBeUndefined();
+    doc.undo();
+    expect(state().docStyle).toEqual({ preset: "rsc", changes: {} });
+  });
+});

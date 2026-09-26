@@ -3,10 +3,8 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { COLORS, ALPHA } from "../../../theme/colors";
-import {
-  ACS_RATIOS,
-  NOMINAL_BOND_LENGTH,
-} from "../../../../lib/chem/acs";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { useDrawnLayout } from "./drawnLayoutContext";
 import { computeMoveSnap } from "../utils/moveSnap";
 
 // Preview for moving an atom without mutating coordinates during drag.
@@ -20,6 +18,8 @@ export default function MovePreview2D() {
   const { model, moveDrag } = useEditor();
   const setMoveDragPreview = useEditor((s) => s.setMoveDragPreview);
   const { camera, invalidate } = useThree();
+  // The drawing's own line, in world units.
+  const lineWidthWorld = useDrawnLayout().opts.lineWidthPx;
   const thinInst = useRef<THREE.InstancedMesh>(null!);
   const cursorDot = useRef<THREE.Mesh>(null!);
   const cursorDotOutline = useRef<THREE.Mesh>(null!);
@@ -82,11 +82,7 @@ export default function MovePreview2D() {
 
     const L = NOMINAL_BOND_LENGTH;
     const zoom = (camera as any)?.zoom || 1;
-    const lineWidthWorld = L * ACS_RATIOS.lineWidth;
-    const thinW = Math.max(
-      lineWidthWorld,
-      (ACS_RATIOS.minLinePx || 1) / Math.max(zoom, 1e-6)
-    );
+    const thinW = Math.max(lineWidthWorld, 1 / Math.max(zoom, 1e-6));
 
     // opacity for thin highlights; reduce overlap darkening
     const baseOpacity = ALPHA.highlight;

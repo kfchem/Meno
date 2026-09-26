@@ -5,6 +5,7 @@ import {
   MinusIcon,
   StopIcon,
   ChevronDownIcon,
+  Cog6ToothIcon,
 } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import { useMemo, MouseEvent, useRef, useState, useEffect } from "react";
@@ -218,6 +219,16 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
             </div>
           )}
         </div>
+
+        <button
+          aria-label="Settings"
+          title="Settings"
+          onMouseDown={stop}
+          onClick={() => openByKind?.("settings", { label: "Settings" })}
+          className="h-7 w-7 ml-1 rounded-md flex items-center justify-center text-gh-gray hover:bg-gray-200 hover:text-gh-black"
+        >
+          <Cog6ToothIcon className="h-4.5 w-4.5" />
+        </button>
 
         <div className="ml-2 h-full flex">
           <button

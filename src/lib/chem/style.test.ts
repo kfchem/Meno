@@ -4,7 +4,7 @@ import {
   bondFraction,
   inPoints,
   layoutOptionsFor,
-  wedgeWidthOf,
+  wedgeBroadEndOf,
   ofBond,
   pt,
   presetById,
@@ -15,10 +15,10 @@ import {
 describe("drawing style", () => {
   it("is ACS 1996 by default, to the letter", () => {
     expect(ACS_1996.bondLengthPt).toBe(14.4);
-    expect(ACS_1996.lineWidth).toEqual(pt(0.6));
-    expect(ACS_1996.boldWidth).toEqual(pt(2.0));
-    expect(ACS_1996.bondSpacing).toEqual(ofBond(0.18));
-    expect(ACS_1996.hashSpacing).toEqual(pt(2.5));
+    expect(ACS_1996.lineThickness).toEqual(pt(0.6));
+    expect(ACS_1996.boldThickness).toEqual(pt(2.0));
+    expect(ACS_1996.doubleGap).toEqual(ofBond(0.18));
+    expect(ACS_1996.hashInterval).toEqual(pt(2.5));
     expect(ACS_1996.fontSize).toEqual(pt(10));
     expect(ACS_1996.ends).toBe("square");
   });
@@ -33,26 +33,26 @@ describe("drawing style", () => {
 
   it("keeps a length in points fixed when the bond length changes, and a fraction in step", () => {
     const longer = resolveStyle(ACS_1996, { bondLengthPt: 28.8 });
-    expect(inPoints(longer.lineWidth, longer)).toBe(0.6);
-    expect(bondFraction(longer.lineWidth, longer)).toBeCloseTo(1 / 48, 12);
-    expect(inPoints(longer.bondSpacing, longer)).toBeCloseTo(5.184, 12);
+    expect(inPoints(longer.lineThickness, longer)).toBe(0.6);
+    expect(bondFraction(longer.lineThickness, longer)).toBeCloseTo(1 / 48, 12);
+    expect(inPoints(longer.doubleGap, longer)).toBeCloseTo(5.184, 12);
   });
 
   it("keeps a wedge one and a half bold widths across, unless told otherwise", () => {
-    expect(inPoints(wedgeWidthOf(ACS_1996), ACS_1996)).toBeCloseTo(3.0, 12);
-    const bolder = resolveStyle(ACS_1996, { boldWidth: pt(3) });
-    expect(inPoints(wedgeWidthOf(bolder), bolder)).toBeCloseTo(4.5, 12);
-    const set = resolveStyle(ACS_1996, { wedgeWidth: ofBond(0.25) });
-    expect(wedgeWidthOf(set)).toEqual(ofBond(0.25));
+    expect(inPoints(wedgeBroadEndOf(ACS_1996), ACS_1996)).toBeCloseTo(3.0, 12);
+    const bolder = resolveStyle(ACS_1996, { boldThickness: pt(3) });
+    expect(inPoints(wedgeBroadEndOf(bolder), bolder)).toBeCloseTo(4.5, 12);
+    const set = resolveStyle(ACS_1996, { wedgeBroadEnd: ofBond(0.25) });
+    expect(wedgeBroadEndOf(set)).toEqual(ofBond(0.25));
   });
 
   it("lays styles over one another, the last on top, skipping what a layer leaves unset", () => {
-    const doc = { lineWidth: pt(1) };
-    const bond = { lineWidth: undefined, ends: "square" as const };
+    const doc = { lineThickness: pt(1) };
+    const bond = { lineThickness: undefined, ends: "square" as const };
     const s = resolveStyle(ACS_1996, doc, undefined, bond);
-    expect(s.lineWidth).toEqual(pt(1));
+    expect(s.lineThickness).toEqual(pt(1));
     expect(s.ends).toBe("square");
-    expect(s.boldWidth).toEqual(ACS_1996.boldWidth);
+    expect(s.boldThickness).toEqual(ACS_1996.boldThickness);
   });
 
   it("draws with the style's sizes, at the bond length it is given", () => {
@@ -80,17 +80,17 @@ describe("style presets", () => {
     expect(STYLE_PRESETS.map((p) => p.id)).toEqual(["acs1996", "rsc", "wiley", "nature"]);
     const rsc = presetById("rsc").style;
     expect(rsc.bondLengthPt).toBe(12.2);
-    expect(rsc.lineWidth).toEqual(pt(0.45));
-    expect(rsc.boldWidth).toEqual(pt(1.6));
-    expect(rsc.hashSpacing).toEqual(pt(1.75));
-    expect(rsc.labelMargin).toEqual(pt(1.25));
-    expect(rsc.bondSpacing).toEqual(ofBond(0.2));
+    expect(rsc.lineThickness).toEqual(pt(0.45));
+    expect(rsc.boldThickness).toEqual(pt(1.6));
+    expect(rsc.hashInterval).toEqual(pt(1.75));
+    expect(rsc.labelClearance).toEqual(pt(1.25));
+    expect(rsc.doubleGap).toEqual(ofBond(0.2));
     expect(rsc.fontFamily).toBe("Helvetica");
     expect(rsc.fontSize).toEqual(pt(7));
     const nature = presetById("nature").style;
     // 0.381 cm bonds, 0.021 cm lines, 6 pt Arial
     expect(nature.bondLengthPt).toBeCloseTo(10.8, 1);
-    expect(inPoints(nature.lineWidth, nature)).toBeCloseTo(0.595, 3);
+    expect(inPoints(nature.lineThickness, nature)).toBeCloseTo(0.595, 3);
     expect(nature.fontSize).toEqual(pt(6));
     const wiley = presetById("wiley").style;
     expect(wiley.bondLengthPt).toBe(14.4);
@@ -101,8 +101,8 @@ describe("style presets", () => {
   it("keeps ACS 1996's proportions for what a journal style does not state", () => {
     // a wavy bond's turns are the same fraction of the bond in RSC's style
     const rsc = presetById("rsc").style;
-    expect(bondFraction(rsc.wavyPeriod, rsc)).toBeCloseTo(
-      bondFraction(ACS_1996.wavyPeriod, ACS_1996),
+    expect(bondFraction(rsc.wavelength, rsc)).toBeCloseTo(
+      bondFraction(ACS_1996.wavelength, ACS_1996),
       12,
     );
   });
@@ -127,8 +127,8 @@ describe("style presets", () => {
       wedgeCutMaxAngle: 170,
       wedgeCornerReach: 0.4,
       aromaticCircleSize: 0.6,
-      tripleSpacing: ofBond(0.12),
-      hashFirstGap: pt(1),
+      tripleGap: ofBond(0.12),
+      hashStartOffset: pt(1),
     };
     const o = layoutOptionsFor(style, 1.8);
     expect(o.bondColor).toBe("#123456");

@@ -8,6 +8,7 @@ import {
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
 import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
+import { useDrawingStyle } from "../useDrawingStyle";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -17,6 +18,7 @@ export default function FitToContent2D({
   trigger?: number;
 }) {
   const { model, autoFitSuspended } = useEditor();
+  const style = useDrawingStyle();
   const { camera, size, invalidate } = useThree();
   // Only auto-fit when content appears (0 -> >0) or when trigger changes.
   const lastCountRef = useRef(0);
@@ -47,7 +49,7 @@ export default function FitToContent2D({
     // The layout's sizes are in world units here, so they do not depend on
     // the zoom: one pass is enough, and there is no bounds-needs-zoom-needs-
     // bounds to untangle.
-    const opts = editorLayoutOptions(la, lb);
+    const opts = editorLayoutOptions(style);
     const bounds = layoutMolecule(la, lb, opts, cam.zoom || 1).bounds;
     const minX = bounds.min.x;
     const minY = bounds.min.y;
@@ -74,6 +76,7 @@ export default function FitToContent2D({
   }, [
     model.atoms,
     model.bonds,
+    style,
     camera,
     size.width,
     size.height,
