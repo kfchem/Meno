@@ -38,7 +38,7 @@ describe("writeMolfile", () => {
     const mol = writeMolfile(model, { title: "test" });
     const lines = mol.split("\n");
     expect(lines[0]).toBe("test");
-    expect(lines[3]).toMatch(/^  7  6  0  0  0  0  0  0  0  0999 V2000$/);
+    expect(lines[3]).toMatch(/^ {2}7 {2}6( {2}0){8}999 V2000$/);
     expect(lines[4]).toMatch(/^ {4}0\.0000 {4}0\.0000 {4}0\.0000 C {3}0 {2}0/);
     expect(mol).toContain("M  END");
   });
