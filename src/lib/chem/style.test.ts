@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IBM_PLEX_SANS } from "./fonts/ibmPlexSans";
 import {
   ACS_1996,
   bondFraction,
@@ -7,13 +8,14 @@ import {
   wedgeBroadEndOf,
   ofBond,
   pt,
+  DEFAULT_STYLE_CHOICE,
   presetById,
   resolveStyle,
   STYLE_PRESETS,
 } from "./style";
 
 describe("drawing style", () => {
-  it("is ACS 1996 by default, to the letter", () => {
+  it("has ACS 1996 to the letter", () => {
     expect(ACS_1996.bondLengthPt).toBe(14.4);
     expect(ACS_1996.lineThickness).toEqual(pt(0.6));
     expect(ACS_1996.boldThickness).toEqual(pt(2.0));
@@ -76,8 +78,8 @@ describe("drawing style", () => {
 });
 
 describe("style presets", () => {
-  it("offers ACS 1996, RSC, Wiley and Nature, each by its own numbers", () => {
-    expect(STYLE_PRESETS.map((p) => p.id)).toEqual(["acs1996", "rsc", "wiley", "nature"]);
+  it("offers Meno's own, ACS 1996, RSC, Wiley and Nature, each by its own numbers", () => {
+    expect(STYLE_PRESETS.map((p) => p.id)).toEqual(["meno", "acs1996", "rsc", "wiley", "nature"]);
     const rsc = presetById("rsc").style;
     expect(rsc.bondLengthPt).toBe(12.2);
     expect(rsc.lineThickness).toEqual(pt(0.45));
@@ -96,6 +98,19 @@ describe("style presets", () => {
     expect(wiley.bondLengthPt).toBe(14.4);
     expect(wiley.fontSize).toEqual(pt(8));
     expect(presetById("nonsense")).toBe(STYLE_PRESETS[0]);
+  });
+
+  it("makes Meno's own ACS 1996 with round ends in IBM Plex Sans, a capital sitting on its atom as in ACS 1996", () => {
+    const { style } = presetById("meno");
+    expect(DEFAULT_STYLE_CHOICE.preset).toBe("meno");
+    const { ends, fontFamily, labelBaseline, ...rest } = style;
+    const { ends: e, fontFamily: f, labelBaseline: b, ...acs } = ACS_1996;
+    expect(rest).toEqual(acs);
+    expect([ends, fontFamily]).toEqual(["round", "IBM Plex Sans"]);
+    expect([e, f, b]).toEqual(["square", "Arial", 0.4]);
+    // the middle of a capital the same distance below the atom in both
+    const arialCap = 1467 / 2048;
+    expect(labelBaseline - IBM_PLEX_SANS.capHeight / 1000 / 2).toBeCloseTo(0.4 - arialCap / 2, 3);
   });
 
   it("keeps ACS 1996's proportions for what a journal style does not state", () => {

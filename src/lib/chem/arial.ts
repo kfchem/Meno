@@ -8,6 +8,7 @@
  *
  * Generated from Arial.ttf.
  */
+import { advanceIn, inkHullIn, type LabelFontMetrics } from "./labelFonts";
 
 export const UNITS_PER_EM = 2048;
 /** The height of a capital letter. */
@@ -167,26 +168,25 @@ const HULLS: Record<string, number[]> = {
 const FALLBACK_ADVANCE = 1366;
 const FALLBACK_HULL = [100, 0, 1266, 0, 1266, CAP_HEIGHT, 100, CAP_HEIGHT];
 
-/** How far a character advances the pen, in ems. */
+export const ARIAL: LabelFontMetrics = {
+  family: "Arial",
+  unitsPerEm: UNITS_PER_EM,
+  capHeight: CAP_HEIGHT,
+  advances: ADVANCES,
+  hulls: HULLS,
+  fallbackAdvance: FALLBACK_ADVANCE,
+  fallbackHull: FALLBACK_HULL,
+};
+
+/** How far a character advances the pen in Arial, in ems. */
 export function advanceEm(ch: string): number {
-  const code = ch.codePointAt(0) ?? 0;
-  const units =
-    code >= 0x20 && code <= 0x7e ? ADVANCES[code - 0x20] : FALLBACK_ADVANCE;
-  return units / UNITS_PER_EM;
+  return advanceIn(ARIAL, ch);
 }
 
 /**
- * The convex outline of a character's ink, in ems from its origin on the
- * baseline, y up; empty for a space.
+ * The convex outline of a character's ink in Arial, in ems from its origin
+ * on the baseline, y up; empty for a space.
  */
 export function inkHullEm(ch: string): { x: number; y: number }[] {
-  if (ch === " ") return [];
-  const code = ch.codePointAt(0) ?? 0;
-  const flat =
-    code >= 0x20 && code <= 0x7e ? (HULLS[ch] ?? []) : FALLBACK_HULL;
-  const out: { x: number; y: number }[] = [];
-  for (let i = 0; i + 1 < flat.length; i += 2) {
-    out.push({ x: flat[i] / UNITS_PER_EM, y: flat[i + 1] / UNITS_PER_EM });
-  }
-  return out;
+  return inkHullIn(ARIAL, ch);
 }

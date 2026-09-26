@@ -10,11 +10,11 @@ import { useDrawnLayout } from "./drawnLayoutContext";
 export default function Labels2D() {
   const { layout, opts, zoom } = useDrawnLayout();
 
-  // Set in Arial, where the layout has placed each run: the font the layout
-  // measures in is the one drawn with, so nothing needs measuring here.
-  // Until the font is known nothing is drawn, rather than a label in some
-  // other font that then jumps.
-  const font = useLabelFont();
+  // Set in the style's typeface, where the layout has placed each run: the
+  // font the layout measures in is the one drawn with, so nothing needs
+  // measuring here. Until the font is known nothing is drawn, rather than a
+  // label in some other font that then jumps.
+  const font = useLabelFont(opts.fontFamily ?? "Arial");
   if (font === null) return null;
   return (
     <group>
