@@ -58,6 +58,11 @@ export type EditorState = {
     atomId: number | null;
     pointer: { x: number; y: number } | null;
     mode: "snap" | "free";
+    /**
+     * Where the new atom is previewed (after snapping), published by
+     * ExtendPreview2D so the drawing can lay the new bond out there.
+     */
+    preview?: { x: number; y: number } | null;
   };
   panHold: { active: boolean; pointerId: number | null };
   suppressDblClickUntil: number;
@@ -115,6 +120,7 @@ export type EditorState = {
   ) => void;
   updateMovePointer: (x: number, y: number) => void;
   setMoveDragPreview: (x: number, y: number) => void;
+  setExtendPreview: (x: number, y: number) => void;
   endMoveDrag: () => void;
   /** The structure a tab opens with: where its document starts, not an edit. */
   openModel: (next: Model, arrow?: ImportedArrow) => void;
