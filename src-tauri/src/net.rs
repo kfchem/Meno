@@ -203,7 +203,9 @@ impl TaskHandle {
         let Some(port) = self.net.0.port.get() else {
             return;
         };
-        let proxy = format!("http://{}@127.0.0.1:{port}", self.token);
+        // The token as the password: Python's urllib sends proxy
+        // credentials only when there is one.
+        let proxy = format!("http://meno:{}@127.0.0.1:{port}", self.token);
         for key in ["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"] {
             cmd.env(key, &proxy).env(key.to_lowercase(), &proxy);
         }
@@ -260,7 +262,8 @@ pub struct ProxyRequest {
 }
 
 /// Reads the head of a request to the proxy: its method, where to, and the
-/// token in its credentials (Basic, the token as the user name).
+/// token in its credentials (Basic: the password, or the user name when
+/// there is no password).
 pub fn parse_request(head: &str) -> Option<ProxyRequest> {
     let mut lines = head.split("\r\n");
     let mut first = lines.next()?.split_whitespace();
@@ -282,7 +285,8 @@ pub fn parse_request(head: &str) -> Option<ProxyRequest> {
         let encoded = value.trim().strip_prefix("Basic ")?;
         let decoded = decode_base64(encoded.trim())?;
         let text = String::from_utf8(decoded).ok()?;
-        Some(text.split(':').next().unwrap_or("").to_string())
+        let (user, password) = text.split_once(':').unwrap_or((&text, ""));
+        Some(if password.is_empty() { user } else { password }.to_string())
     });
     Some(ProxyRequest {
         method,
@@ -530,6 +534,9 @@ mod tests {
         let plain = parse_request("GET http://example.com/x HTTP/1.1\r\n\r\n").unwrap();
         assert_eq!((plain.method.as_str(), plain.host.as_str(), plain.port), ("GET", "example.com", 80));
         assert_eq!(plain.token, None);
+        // the token as the password, as Meno gives it
+        let as_password = "CONNECT pypi.org:443 HTTP/1.1\r\nProxy-Authorization: Basic bWVubzp0b2tlbg==\r\n\r\n";
+        assert_eq!(parse_request(as_password).unwrap().token.as_deref(), Some("token"));
         let v6 = parse_request("CONNECT [2001:db8::1]:8443 HTTP/1.1\r\n\r\n").unwrap();
         assert_eq!((v6.host.as_str(), v6.port), ("2001:db8::1", 8443));
         assert_eq!(parse_request(""), None);
@@ -574,7 +581,7 @@ mod tests {
     async fn ask(port: u16, to: u16, token: Option<&str>) -> (TcpStream, String) {
         let mut c = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
         let auth = token
-            .map(|t| format!("Proxy-Authorization: Basic {}\r\n", encode_base64(format!("{t}:").as_bytes())))
+            .map(|t| format!("Proxy-Authorization: Basic {}\r\n", encode_base64(format!("meno:{t}").as_bytes())))
             .unwrap_or_default();
         c.write_all(format!("CONNECT 127.0.0.1:{to} HTTP/1.1\r\n{auth}\r\n").as_bytes())
             .await
@@ -664,7 +671,7 @@ mod tests {
             .map(|(k, v)| (k.to_string_lossy().into_owned(), v.map(|v| v.to_string_lossy().into_owned())))
             .collect();
         let proxy = env["HTTPS_PROXY"].clone().unwrap();
-        assert!(proxy.starts_with("http://") && proxy.ends_with("@127.0.0.1:4567"));
+        assert!(proxy.starts_with("http://meno:") && proxy.ends_with("@127.0.0.1:4567"));
         assert_eq!(env["https_proxy"], Some(proxy));
         assert_eq!(env["NO_PROXY"].as_deref(), Some("localhost,127.0.0.1,::1"));
     }
