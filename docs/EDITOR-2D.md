@@ -81,7 +81,7 @@ Both go together, because both touch every layer.
   bonds; whether implicit hydrogens and terminal carbons are written; rings
   as circles or as Kekulé structures; colour, bold and italic.
 - **Hashes at a fixed spacing.** A longer hashed bond gets more hashes, not
-  wider gaps. Today the count is fixed and the gaps stretch.
+  wider gaps (PR #33).
 - **More bond types.** Besides single, double, triple, wedge, hashed wedge and
   wavy: a plain bold bond, a bold dashed bond, a thin dashed bond, and a
   dative (coordinate) bond.
