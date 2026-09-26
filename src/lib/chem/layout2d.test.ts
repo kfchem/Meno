@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  bondKind,
   buildAllPrimitives,
   buildBondPrimitives,
   joinsAtAtoms,
   buildTextLabels,
   implicitHydrogens,
+  labelHulls,
   layoutMolecule,
   mitreJoinPolys,
+  placeLabel,
   roundPolyCorners,
   type Atom,
   type Bond,
@@ -14,10 +17,38 @@ import {
   type LineSeg,
   type Vec2,
 } from "./layout2d";
-import { acsWorldOptions } from "./acs";
+import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "./acs";
+import { advanceEm } from "./arial";
 
 const opts = (over: Partial<LayoutOptions> = {}): LayoutOptions =>
   acsWorldOptions([], [], { units: "world", ...over });
+
+/**
+ * The hashes of a hashed wedge lying along +x, from their trapezoids: where
+ * each sits along the bond, and how far across it reaches at either edge.
+ */
+const hashesOf = (polys: { points: Vec2[] }[]) =>
+  polys
+    .filter((p) => p.points.length === 4)
+    .map((p) => {
+      const xs = p.points.map((q) => q.x);
+      const near = Math.min(...xs);
+      const far = Math.max(...xs);
+      const across = (x: number) => {
+        const ys = p.points
+          .filter((q) => Math.abs(q.x - x) < 1e-9)
+          .map((q) => q.y);
+        return Math.max(...ys) - Math.min(...ys);
+      };
+      return {
+        near,
+        far,
+        at: (near + far) / 2,
+        nearWidth: across(near),
+        farWidth: across(far),
+      };
+    })
+    .sort((a, b) => a.at - b.at);
 
 const polyArea = (pts: Vec2[]) => {
   let s = 0;
@@ -49,6 +80,39 @@ describe("implicitHydrogens", () => {
 });
 
 describe("buildTextLabels", () => {
+  it("writes the hydrogens below when bonds rise on both sides, above when they fall", () => {
+    const L = NOMINAL_BOND_LENGTH;
+    const v = (deg: number) => ({ x: L * Math.cos((deg * Math.PI) / 180), y: L * Math.sin((deg * Math.PI) / 180) });
+    const at = (a: number, b: number) => {
+      const atoms: Atom[] = [
+        { id: 1, x: 0, y: 0, el: "N" },
+        { id: 2, ...v(a), el: "C" },
+        { id: 3, ...v(b), el: "C" },
+      ];
+      const [nh] = buildTextLabels(atoms, opts(), [
+        { a1: 0, a2: 1, order: 1 },
+        { a1: 0, a2: 2, order: 1 },
+      ]);
+      return nh;
+    };
+    expect(at(150, 30).stack).toBe("below");
+    expect(at(210, 330).stack).toBe("above");
+    // one side free: the hydrogens go there, on the same line
+    expect(at(150, 270).stack).toBeUndefined();
+    expect(at(150, 270).text).toBe("NH");
+  });
+
+  it("writes a carbon with no bonds as CH4, and a bonded one not at all", () => {
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 5, y: 0, el: "C" },
+      { id: 3, x: 6.5, y: 0, el: "C" },
+    ];
+    const labels = buildTextLabels(atoms, opts(), [{ a1: 1, a2: 2, order: 1 }]);
+    expect(labels.map((t) => t.text)).toEqual(["CH4"]);
+    expect(labels[0].atom).toBe(0);
+  });
+
   // O bonded to a carbon that sits up and to the left
   const hydroxyl: Atom[] = [
     { id: 1, x: 0, y: 0, el: "C" },
@@ -273,16 +337,39 @@ describe("wedge geometry", () => {
     expect(base[0].x).toBeCloseTo(base[1].x, 12);
   });
 
-  it("gives the hashed wedge a last hash of bond width", () => {
+  it("starts a hashed wedge a line width wide, not at a point", () => {
     const o = raw();
     const hashed: Bond = { ...wedge, stereo: "down" };
-    const { lines } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
-    expect(lines.length).toBeGreaterThan(3);
-    const widths = lines.map((l) => Math.hypot(l.x2 - l.x1, l.y2 - l.y1));
-    const narrowest = Math.min(...widths);
-    // a pointed wedge used to end in a hash of almost no length
-    expect(narrowest).toBeGreaterThan(o.lineWidthPx * 0.5);
-    expect(Math.max(...widths)).toBeLessThanOrEqual(o.wedgeWidthPx + 1e-9);
+    const { polys } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
+    const hashes = hashesOf(polys);
+    expect(hashes.length).toBeGreaterThan(3);
+    // a pointed wedge used to begin with a hash of almost no length
+    expect(hashes[0].nearWidth).toBeCloseTo(o.lineWidthPx, 9);
+    for (const h of hashes) {
+      expect(h.farWidth).toBeLessThanOrEqual(o.wedgeWidthPx + 1e-9);
+    }
+  });
+
+  it("stops a wedge's narrow end at a label where a line would stop", () => {
+    const labelled: Atom[] = [{ ...atoms[0], el: "N" }, atoms[1]];
+    const plain: Bond = { a1: 0, a2: 1, order: 1 };
+    const lineStart = (o: LayoutOptions) => {
+      const [l] = buildBondPrimitives(labelled, plain, o, ZOOM, deg).lines;
+      return Math.min(l.x1, l.x2);
+    };
+    const tip = (o: LayoutOptions) =>
+      Math.min(
+        ...buildBondPrimitives(labelled, wedge, o, ZOOM, deg).polys[0].points.map(
+          (p) => p.x,
+        ),
+      );
+    // square: flat, just where the line stops
+    const square = raw();
+    expect(lineStart(square)).toBeGreaterThan(0);
+    expect(tip(square)).toBeCloseTo(lineStart(square), 9);
+    // round: rounded about that point, as the line's cap is
+    const round = opts({ joinStyle: "round" });
+    expect(tip(round)).toBeCloseTo(lineStart(round) - round.lineWidthPx / 2, 6);
   });
 });
 
@@ -487,20 +574,96 @@ describe("a hashed wedge and its neighbours", () => {
   ]);
   const hashed: Bond = { a1: 0, a2: 1, order: 1, stereo: "down" };
 
-  it("puts a hash on the atom at the narrow end", () => {
+  it("cuts the hashes from a wedge, one hash spacing out to flush with the wide end", () => {
     const o = opts();
-    const { lines } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
-    const mid = lines.map((l) => ({
-      x: (l.x1 + l.x2) / 2,
-      len: Math.hypot(l.x2 - l.x1, l.y2 - l.y1),
-    }));
-    const narrow = mid.reduce((a, b) => (b.len < a.len ? b : a));
-    const wideEnd = mid.reduce((a, b) => (b.len > a.len ? b : a));
-    // the thin end is the stereocentre; a hash short of it reads as a gap
-    expect(narrow.x).toBeCloseTo(0, 6);
-    expect(narrow.len).toBeCloseTo(o.lineWidthPx, 6);
-    expect(wideEnd.x).toBeCloseTo(1.5, 6);
-    expect(wideEnd.len).toBeCloseTo(o.wedgeWidthPx, 6);
+    const { lines, polys } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
+    // square ends: each hash is a trapezoid, not a line
+    expect(lines).toHaveLength(0);
+    const hashes = hashesOf(polys);
+    const lw = o.lineWidthPx;
+    const s = o.hashSpacingPx;
+    // the first one hash spacing out from the stereocentre, the last flush
+    // with the wide end, and as many between as fit a hash spacing apart
+    expect(hashes[0].near).toBeCloseTo(s, 9);
+    expect(hashes[hashes.length - 1].far).toBeCloseTo(1.5, 9);
+    expect(hashes).toHaveLength(1 + Math.floor((1.5 - s - lw) / s));
+    const gaps = hashes.slice(1).map((h, i) => h.at - hashes[i].at);
+    for (const g of gaps) {
+      expect(g).toBeCloseTo(gaps[0], 9);
+      expect(g).toBeGreaterThanOrEqual(s);
+    }
+    // each a line width deep, its ends on an outline running from a line
+    // width at the first hash to the full broad end at the last
+    const width = (x: number) =>
+      lw + ((o.wedgeWidthPx - lw) * (x - s)) / (1.5 - s);
+    for (const h of hashes) {
+      expect(h.far - h.near).toBeCloseTo(lw, 9);
+      expect(h.nearWidth).toBeCloseTo(width(h.near), 9);
+      expect(h.farWidth).toBeCloseTo(width(h.far), 9);
+    }
+  });
+
+  it("rounds each hash when ends are round, as far across as the trapezoid at its middle", () => {
+    const o = opts({ joinStyle: "round" });
+    const square = hashesOf(
+      buildBondPrimitives(atoms, hashed, opts(), ZOOM, deg).polys,
+    );
+    const { lines, polys, ends } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
+    expect(polys).toHaveLength(0);
+    expect(lines).toHaveLength(square.length);
+    // a cap on each end of each hash
+    expect(ends).toHaveLength(2 * lines.length);
+    lines.forEach((l, i) => {
+      const h = square[i];
+      expect((l.x1 + l.x2) / 2).toBeCloseTo(h.at, 9);
+      // the caps reach half a line width past either end
+      expect(Math.hypot(l.x2 - l.x1, l.y2 - l.y1) + o.lineWidthPx).toBeCloseTo(
+        (h.nearWidth + h.farWidth) / 2,
+        9,
+      );
+    });
+  });
+
+  it("starts the hashes where a label at the stereocentre leaves off", () => {
+    const o = opts();
+    const labelled: Atom[] = [{ ...atoms[0], el: "N" }, atoms[1]];
+    const [line] = buildBondPrimitives(
+      labelled,
+      { a1: 0, a2: 1, order: 1 },
+      o,
+      ZOOM,
+      deg,
+    ).lines;
+    const from = Math.min(line.x1, line.x2);
+    expect(from).toBeGreaterThan(o.hashSpacingPx);
+    const hashes = hashesOf(buildBondPrimitives(labelled, hashed, o, ZOOM, deg).polys);
+    // flush with where a line would start, and a line width wide there: the
+    // wedge starts again from the label rather than losing its narrow end
+    expect(hashes[0].near).toBeCloseTo(from, 9);
+    expect(hashes[0].nearWidth).toBeCloseTo(o.lineWidthPx, 9);
+    const last = hashes[hashes.length - 1];
+    expect(last.far).toBeCloseTo(1.5, 9);
+    expect(last.farWidth).toBeCloseTo(o.wedgeWidthPx, 9);
+  });
+
+  it("widens the hashes to the full broad end at a label at the wide end", () => {
+    const o = opts();
+    const labelled: Atom[] = [atoms[0], { ...atoms[1], el: "O" }];
+    const [line] = buildBondPrimitives(
+      labelled,
+      { a1: 0, a2: 1, order: 1 },
+      o,
+      ZOOM,
+      deg,
+    ).lines;
+    const to = Math.max(line.x1, line.x2);
+    expect(to).toBeLessThan(1.5);
+    const hashes = hashesOf(buildBondPrimitives(labelled, hashed, o, ZOOM, deg).polys);
+    expect(hashes[0].near).toBeCloseTo(o.hashSpacingPx, 9);
+    // it ends where a line would, as broad there as it ever is
+    const last = hashes[hashes.length - 1];
+    expect(last.far).toBeCloseTo(to, 9);
+    expect(last.farWidth).toBeCloseTo(o.wedgeWidthPx, 9);
   });
 });
 
@@ -555,22 +718,25 @@ describe("a label must not change how a bond is drawn", () => {
     { id: 1, x: 0, y: 0, el: "C" },
     { id: 2, x: 1.5, y: 0, el },
   ];
-  const spacing = (lines: { x1: number; x2: number }[]) => {
-    const xs = lines.map((l) => (l.x1 + l.x2) / 2).sort((a, b) => a - b);
-    return xs.slice(1).map((x, i) => x - xs[i]);
-  };
+  const spacing = (hashes: { at: number }[]) =>
+    hashes.slice(1).map((h, i) => h.at - hashes[i].at);
 
-  it("keeps the hashes of a hashed wedge equally spaced", () => {
+  it("spaces a hashed wedge's hashes evenly, never closer than the hash spacing", () => {
     const o = opts();
     const bond: Bond = { a1: 0, a2: 1, order: 1, stereo: "down" };
-    const plain = buildBondPrimitives(pair("C"), bond, o, ZOOM, deg).lines;
-    const labelled = buildBondPrimitives(pair("O"), bond, o, ZOOM, deg).lines;
+    const plain = hashesOf(buildBondPrimitives(pair("C"), bond, o, ZOOM, deg).polys);
+    const labelled = hashesOf(
+      buildBondPrimitives(pair("O"), bond, o, ZOOM, deg).polys,
+    );
     // the bond to a labelled atom is shorter, so it carries fewer hashes -
-    // but the gap between them is the same
+    // each set evenly spaced, and never closer than the hash spacing
     expect(labelled.length).toBeLessThan(plain.length);
-    const a = spacing(plain);
-    const b = spacing(labelled);
-    expect(b[0]).toBeCloseTo(a[0], 6);
+    for (const gaps of [spacing(plain), spacing(labelled)]) {
+      for (const g of gaps) {
+        expect(g).toBeCloseTo(gaps[0], 9);
+        expect(g).toBeGreaterThanOrEqual(o.hashSpacingPx - 1e-9);
+      }
+    }
   });
 
   it("keeps the wave of a wavy bond the same length", () => {
@@ -615,20 +781,23 @@ describe("labels and the room they need", () => {
 
   it("stops where the label actually reaches, not at a fixed distance", () => {
     const o = opts();
-    const endingAt = (el: string) =>
+    const endingAt = (el: string, over: Partial<LayoutOptions> = {}) =>
       layoutMolecule(
         [
           { id: 1, x: 0, y: 0, el: "C" },
           { id: 2, x: 1.5, y: 0, el },
         ],
         bonds,
-        o,
+        { ...o, ...over },
         40,
       ).lines[0].x2;
     // a wide symbol takes more room than a narrow one, side on
     expect(endingAt("Br")).toBeLessThan(endingAt("I"));
     // and the hydrogens, which hang the other way, take none of it
-    expect(endingAt("O")).toBeCloseTo(endingAt("I"), 6);
+    expect(endingAt("O")).toBeCloseTo(
+      endingAt("O", { showImplicitHydrogens: false }),
+      6,
+    );
   });
 
   it("does not hold a bond off a label it barely meets", () => {
@@ -646,6 +815,179 @@ describe("labels and the room they need", () => {
     const gap = Math.min(above.y1, above.y2);
     expect(gap).toBeLessThan(o.fontPx * 0.6);
     expect(gap).toBeGreaterThan(0);
+  });
+});
+
+describe("a label as ACS 1996 sets it", () => {
+  const size = 10;
+  const label = (runs: { text: string; sub?: boolean }[], anchorRun = 0) => ({
+    x: 0,
+    y: 0,
+    text: runs.map((r) => r.text).join(""),
+    fontPx: size,
+    runs,
+    anchorRun,
+  });
+
+  it("centres the element symbol on the atom, on a baseline 0.4 of the size below it", () => {
+    const [n] = placeLabel(label([{ text: "N" }]), size);
+    expect(n.x).toBeCloseTo((-advanceEm("N") * size) / 2, 12);
+    expect(n.y).toBeCloseTo(-4, 12);
+    expect(n.size).toBe(size);
+  });
+
+  it("sets what follows at Arial's advances, a subscript at 75% and 2.25 below", () => {
+    const [n, h, two] = placeLabel(
+      label([{ text: "N" }, { text: "H" }, { text: "2", sub: true }]),
+      size,
+    );
+    expect(h.x).toBeCloseTo(n.x + advanceEm("N") * size, 12);
+    expect(h.y).toBe(n.y);
+    expect(two.x).toBeCloseTo(h.x + advanceEm("H") * size, 12);
+    expect(two.size).toBeCloseTo(7.5, 12);
+    expect(two.y).toBeCloseTo(n.y - 2.25, 12);
+  });
+
+  it("puts a two-letter symbol's first letter on the atom, as it does the C of CH3", () => {
+    const [cl] = placeLabel(label([{ text: "Cl" }]), size);
+    expect(cl.x).toBeCloseTo((-advanceEm("C") * size) / 2, 12);
+  });
+
+  it("centres the whole symbol when asked, as between two bonds straight out to the sides", () => {
+    const [cl] = placeLabel({ ...label([{ text: "Cl" }]), centreSymbol: true }, size);
+    expect(cl.x).toBeCloseTo(-((advanceEm("C") + advanceEm("l")) * size) / 2, 12);
+    const L = NOMINAL_BOND_LENGTH;
+    const labelFor = (angles: number[]) => {
+      const atoms: Atom[] = [
+        { id: 0, x: 0, y: 0, el: "Cl" },
+        ...angles.map((d, k) => ({
+          id: k + 1,
+          x: L * Math.cos((d * Math.PI) / 180),
+          y: L * Math.sin((d * Math.PI) / 180),
+          el: "C",
+        })),
+      ];
+      const bonds: Bond[] = angles.map((_, k) => ({ a1: 0, a2: k + 1, order: 1 }));
+      return buildTextLabels(atoms, opts(), bonds)[0];
+    };
+    expect(labelFor([0, 180]).centreSymbol).toBe(true);
+    // a zigzag's bonds are 30 degrees off the horizontal: the C stays on the atom
+    expect(labelFor([30, 150]).centreSymbol).toBeUndefined();
+    expect(labelFor([150]).centreSymbol).toBeUndefined();
+  });
+
+  it("stacks the hydrogens on a line below, the H centred under the symbol", () => {
+    const stacked = { ...label([{ text: "C" }, { text: "H" }, { text: "2", sub: true }]), stack: "below" as const };
+    const [c, h, two] = placeLabel(stacked, size);
+    expect(c.y).toBeCloseTo(-4, 12);
+    expect(h.x).toBeCloseTo((-advanceEm("H") * size) / 2, 12);
+    expect(h.y).toBeCloseTo(-4 - 8.57, 12);
+    expect(two.x).toBeCloseTo(h.x + advanceEm("H") * size, 12);
+    expect(two.y).toBeCloseTo(h.y - 2.25, 12);
+    const above = placeLabel({ ...stacked, stack: "above" }, size);
+    expect(above[1].y).toBeCloseTo(-4 + 8.57, 12);
+  });
+
+  it("keeps the symbol on the atom when the hydrogens go first", () => {
+    const [h, o] = placeLabel(label([{ text: "H" }, { text: "O" }], 1), size);
+    expect(o.x).toBeCloseTo((-advanceEm("O") * size) / 2, 12);
+    expect(h.x).toBeCloseTo(o.x - advanceEm("H") * size, 12);
+  });
+
+  it("gives a letter's ink as its outline, on the baseline", () => {
+    const [hull] = labelHulls(label([{ text: "N" }]), size);
+    // an N fills its box: 156 to 1311 across, and up to 1466, in 2048ths
+    const xs = hull.map((p) => p.x);
+    const ys = hull.map((p) => p.y);
+    const left = (-advanceEm("N") * size) / 2;
+    expect(Math.min(...xs)).toBeCloseTo(left + (156 / 2048) * size, 9);
+    expect(Math.max(...xs)).toBeCloseTo(left + (1311 / 2048) * size, 9);
+    expect(Math.min(...ys)).toBeCloseTo(-4, 9);
+    expect(Math.max(...ys)).toBeCloseTo(-4 + (1466 / 2048) * size, 9);
+  });
+});
+
+describe("how far a bond stops short of a label", () => {
+  const ZOOM = 40;
+  const deg = new Map([
+    [0, 1],
+    [1, 3],
+  ]);
+  // an N with three bonds, so it is written without hydrogens, and a bond
+  // of the length the style is set for
+  const L = NOMINAL_BOND_LENGTH;
+  const fromAngle = (deg: number): Atom[] => {
+    const a = (deg * Math.PI) / 180;
+    return [
+      { id: 1, x: L * Math.cos(a), y: L * Math.sin(a), el: "C" },
+      { id: 2, x: 0, y: 0, el: "N" },
+    ];
+  };
+  const bond: Bond = { a1: 0, a2: 1, order: 1 };
+  const nHulls = (o: LayoutOptions) =>
+    labelHulls(
+      { x: 0, y: 0, text: "N", fontPx: o.fontPx, runs: [{ text: "N" }] },
+      o.fontPx,
+    );
+
+  it("stops the margin beyond the furthest the letters reach along the bond, from any side", () => {
+    const o = opts();
+    for (let angle = 0; angle < 360; angle += 15) {
+      const atoms = fromAngle(angle);
+      const [line] = buildBondPrimitives(atoms, bond, o, ZOOM, deg).lines;
+      const d = { x: atoms[0].x / L, y: atoms[0].y / L };
+      let reach = -Infinity;
+      for (const hull of nHulls(o)) {
+        for (const p of hull) reach = Math.max(reach, p.x * d.x + p.y * d.y);
+      }
+      expect(Math.hypot(line.x2, line.y2)).toBeCloseTo(reach + o.labelMarginPx!, 9);
+    }
+  });
+
+  it("stops a bond meeting an N's side at a slant as far out as its corner reaches", () => {
+    const o = opts();
+    // 30 degrees below the horizontal: the N's bottom corner reaches further
+    // along the bond than its side does, and it is what the bond clears
+    const [line] = buildBondPrimitives(fromAngle(330), bond, o, ZOOM, deg).lines;
+    const n = nHulls(o)[0];
+    const right = Math.max(...n.map((p) => p.x));
+    const bottom = Math.min(...n.map((p) => p.y));
+    const d = { x: Math.cos(-Math.PI / 6), y: Math.sin(-Math.PI / 6) };
+    const corner = right * d.x + bottom * d.y;
+    expect(Math.hypot(line.x2, line.y2)).toBeCloseTo(corner + o.labelMarginPx!, 9);
+    // which reaches further along the bond than the side itself does
+    expect(corner).toBeGreaterThan(right * d.x);
+  });
+
+  it("stops a line from straight above the margin over the capital's top", () => {
+    const o = opts();
+    const [line] = buildBondPrimitives(fromAngle(90), bond, o, ZOOM, deg).lines;
+    const top = -o.fontPx * 0.4 + (1466 / 2048) * o.fontPx;
+    expect(line.y2).toBeCloseTo(top + o.labelMarginPx!, 9);
+  });
+
+  it("lets two labels share no more than nine tenths of the bond between them", () => {
+    const o = opts();
+    // two wide labels on a short bond: neither may take its full clearance
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "Br" },
+      { id: 2, x: 0.6, y: 0, el: "Br" },
+    ];
+    const [line] = buildBondPrimitives(atoms, bond, o, ZOOM).lines;
+    expect(line.x2 - line.x1).toBeCloseTo(0.6 * 0.1, 9);
+  });
+
+  it("follows the letters: closer to an O's round side than to an N's corner", () => {
+    const o = opts();
+    const at = (el: string, angle: number) => {
+      const atoms = fromAngle(angle);
+      atoms[1].el = el;
+      const [line] = buildBondPrimitives(atoms, bond, o, ZOOM, deg).lines;
+      return Math.hypot(line.x2, line.y2);
+    };
+    // an O is round and an N square: side on the two are nearly as wide,
+    // but at 45 degrees the O's curve leaves more room
+    expect(at("O", 45)).toBeLessThan(at("N", 45));
   });
 });
 
@@ -680,19 +1022,215 @@ describe("a wedge with a bond carrying straight on", () => {
 });
 
 describe("a wavy bond", () => {
-  it("comes back to the bond's own line at both ends", () => {
+  const o = opts();
+  const L = NOMINAL_BOND_LENGTH;
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: L, y: 0, el: "C" },
+  ];
+  const wavy: Bond = { a1: 0, a2: 1, order: 1, stereo: "wavy" };
+  const points = (lines: LineSeg[]) => [
+    { x: lines[0].x1, y: lines[0].y1 },
+    ...lines.map((l) => ({ x: l.x2, y: l.y2 })),
+  ];
+  const half = () => o.wavyPeriodPx / 2;
+
+  it("is half circles either side of the line, the first to the right going out", () => {
+    // the stereocentre is the atom with more bonds: here the second
+    const deg = new Map([
+      [0, 1],
+      [1, 3],
+    ]);
+    const { lines } = buildBondPrimitives(atoms, wavy, o, 40, deg);
+    const pts = points(lines).map((p) => ({ u: L - p.x, v: p.y }));
+    // it starts on the line at the stereocentre
+    expect(pts[0].u).toBeCloseTo(0, 9);
+    expect(pts[0].v).toBeCloseTo(0, 9);
+    // going out along -x, the right is +y
+    const firstTurn = pts.filter((p) => p.u > 0 && p.u < half());
+    expect(Math.min(...firstTurn.map((p) => p.v))).toBeGreaterThan(-1e-9);
+    // every point lies on the half circle of its turn, alternately either side
+    expect(o.wavyAmpPx).toBeCloseTo(half() / 2, 9);
+    for (const p of pts) {
+      const k = Math.min(Math.floor(p.u / half() + 1e-9), 1e9);
+      const centre = (k + 0.5) * half();
+      const r = Math.hypot(p.u - centre, p.v);
+      const onPrevious = Math.hypot(p.u - (k - 0.5) * half(), p.v);
+      expect(Math.min(Math.abs(r - half() / 2), Math.abs(onPrevious - half() / 2))).toBeLessThan(1e-9);
+      if (Math.abs(p.v) > 1e-6) expect(Math.sign(p.v)).toBe(k % 2 === 0 ? 1 : -1);
+    }
+  });
+
+  it("is as many quarter turns as fit between the atoms", () => {
+    const { lines } = buildBondPrimitives(atoms, wavy, o, 40);
+    const pts = points(lines);
+    const quarter = half() / 2;
+    const reach = Math.floor(L / quarter + 1e-9) * quarter;
+    const end = pts[pts.length - 1];
+    expect(end.x).toBeCloseTo(reach, 9);
+    // an odd number of quarters ends at the top of a turn, off the line
+    const quarters = Math.round(reach / quarter);
+    if (quarters % 2 === 1) expect(Math.abs(end.y)).toBeCloseTo(o.wavyAmpPx, 9);
+    else expect(end.y).toBeCloseTo(0, 9);
+  });
+
+  it("leaves its far end free, to be finished like any other", () => {
+    const round = opts({ joinStyle: "round" });
+    const { lines, ends } = buildBondPrimitives(atoms, wavy, round, 40);
+    const last = lines[lines.length - 1];
+    expect(ends).toContainEqual({ x: last.x2, y: last.y2 });
+  });
+});
+
+describe("bold, hashed, dashed and dative bonds", () => {
+  const L = NOMINAL_BOND_LENGTH;
+  const ZOOM = 40;
+  const pair: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: L, y: 0, el: "C" },
+  ];
+  const deg = new Map([
+    [0, 3],
+    [1, 1],
+  ]);
+  const one = (extra: Partial<Bond>): Bond => ({ a1: 0, a2: 1, order: 1, ...extra });
+
+  it("draws stereo first, then a single bond's display, then a dative arrow", () => {
+    expect(bondKind(one({ stereo: "up", display: "bold" }))).toBe("wedge");
+    expect(bondKind(one({ display: "bold", dative: true }))).toBe("bold");
+    expect(bondKind(one({ dative: true }))).toBe("dative");
+    expect(bondKind({ ...one({ display: "dashed" }), order: 2 })).toBe("lines");
+    expect(bondKind(one({ display: "plain" }))).toBe("lines");
+  });
+
+  it("draws a bold bond as a bar the bold width across, square where nothing carries on", () => {
     const o = opts();
+    const { lines, polys } = buildBondPrimitives(pair, one({ display: "bold" }), o, ZOOM, deg);
+    expect(lines).toHaveLength(0);
+    expect(polys).toHaveLength(1);
+    const ys = polys[0].points.map((p) => p.y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(o.boldWidthPx!, 9);
+    const xs = polys[0].points.map((p) => p.x);
+    expect(Math.min(...xs)).toBeCloseTo(0, 9);
+    expect(Math.max(...xs)).toBeCloseTo(L, 9);
+  });
+
+  it("cuts a bold bond's end in a V between two bonds carrying on from its atom", () => {
+    const o = opts();
+    // the bar runs up from atom 0, between bonds up to the left and right
+    const a = (deg: number) => (deg * Math.PI) / 180;
     const atoms: Atom[] = [
       { id: 1, x: 0, y: 0, el: "C" },
-      { id: 2, x: 1.5, y: 0, el: "C" },
+      { id: 2, x: 0, y: L, el: "C" },
+      { id: 3, x: L * Math.cos(a(150)), y: L * Math.sin(a(150)), el: "C" },
+      { id: 4, x: L * Math.cos(a(30)), y: L * Math.sin(a(30)), el: "C" },
     ];
-    const bond: Bond = { a1: 0, a2: 1, order: 1, stereo: "wavy" };
-    const { lines } = buildBondPrimitives(atoms, [bond][0], o, 40);
-    const first = lines[0];
-    const last = lines[lines.length - 1];
-    // a cap sits on the atom, so the wave has to end there too
-    expect(first.y1).toBeCloseTo(0, 9);
-    expect(last.y2).toBeCloseTo(0, 6);
+    const bonds: Bond[] = [
+      one({ display: "bold" }),
+      { a1: 0, a2: 2, order: 1 },
+      { a1: 0, a2: 3, order: 1 },
+    ];
+    const { polys } = buildAllPrimitives(atoms, bonds, o, ZOOM);
+    const bar = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    // the V's point is where the two bonds' inner edges cross, just above
+    // the atom, and the bonds' own lines fill in below it
+    const low = bar.points.reduce((m, p) => (p.y < m.y ? p : m));
+    expect(low.x).toBeCloseTo(0, 9);
+    expect(low.y).toBeCloseTo(o.lineWidthPx / 2 / Math.cos(Math.PI / 6), 9);
+    // and its corners sit on the near edges of the two bonds
+    const corners = bar.points.filter((p) => p.y < L / 2 && Math.abs(p.x) > 1e-6);
+    expect(corners).toHaveLength(2);
+    for (const p of corners) {
+      const d = { x: Math.cos(a(p.x < 0 ? 150 : 30)), y: Math.sin(a(p.x < 0 ? 150 : 30)) };
+      const off = Math.abs(p.x * d.y - p.y * d.x);
+      expect(off).toBeCloseTo(o.lineWidthPx / 2, 9);
+    }
+  });
+
+  it("rounds a bold bond's free end into a half circle when ends are round", () => {
+    const o = opts({ joinStyle: "round" });
+    const { polys } = buildBondPrimitives(pair, one({ display: "bold" }), o, ZOOM, deg);
+    const far = polys[0].points.filter((p) => p.x > L - o.boldWidthPx!);
+    for (const p of far) {
+      expect(Math.hypot(p.x - (L - o.boldWidthPx! / 2), p.y)).toBeLessThanOrEqual(
+        o.boldWidthPx! / 2 + 1e-9,
+      );
+    }
+  });
+
+  it("sets out a hashed bond's hashes as a hashed wedge's, all the bold width long", () => {
+    const o = opts();
+    const { lines, polys } = buildBondPrimitives(pair, one({ display: "hashed" }), o, ZOOM, deg);
+    expect(lines).toHaveLength(0);
+    const hashes = hashesOf(polys);
+    const s = o.hashSpacingPx;
+    expect(hashes[0].near).toBeCloseTo(s, 9);
+    expect(hashes[hashes.length - 1].far).toBeCloseTo(L, 9);
+    expect(hashes).toHaveLength(1 + Math.floor((L - s - o.lineWidthPx) / s));
+    for (const h of hashes) {
+      expect(h.nearWidth).toBeCloseTo(o.boldWidthPx!, 9);
+      expect(h.farWidth).toBeCloseTo(o.boldWidthPx!, 9);
+    }
+  });
+
+  it("starts a hashed bond from the atom with more bonds", () => {
+    const o = opts();
+    const flipped = new Map([
+      [0, 1],
+      [1, 3],
+    ]);
+    const hashes = hashesOf(
+      buildBondPrimitives(pair, one({ display: "hashed" }), o, ZOOM, flipped).polys,
+    );
+    expect(hashes[0].near).toBeCloseTo(0, 9);
+    expect(hashes[hashes.length - 1].far).toBeCloseTo(L - o.hashSpacingPx, 9);
+  });
+
+  it("dashes a dashed bond from end to end, the gaps even and never short", () => {
+    const o = opts();
+    const { lines } = buildBondPrimitives(pair, one({ display: "dashed" }), o, ZOOM, deg);
+    expect(lines.length).toBeGreaterThan(2);
+    expect(lines[0].x1).toBeCloseTo(0, 9);
+    expect(lines[lines.length - 1].x2).toBeCloseTo(L, 9);
+    for (const l of lines) expect(l.x2 - l.x1).toBeCloseTo(o.dashLengthPx!, 9);
+    const gaps = lines.slice(1).map((l, i) => l.x1 - lines[i].x2);
+    for (const g of gaps) {
+      expect(g).toBeCloseTo(gaps[0], 9);
+      expect(g).toBeGreaterThanOrEqual(o.dashGapPx! - 1e-9);
+    }
+  });
+
+  it("draws a dative bond as an arrow from the first atom to the second", () => {
+    const o = opts();
+    const { lines, polys } = buildBondPrimitives(pair, one({ dative: true }), o, ZOOM, deg);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].x1).toBeCloseTo(0, 9);
+    const [head] = polys;
+    expect(head.points).toHaveLength(3);
+    // its point on the acceptor, its base a head's length back
+    expect(Math.max(...head.points.map((p) => p.x))).toBeCloseTo(L, 9);
+    expect(Math.min(...head.points.map((p) => p.x))).toBeCloseTo(L - o.dativeHeadLengthPx!, 9);
+    const ys = head.points.map((p) => p.y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(o.dativeHeadWidthPx!, 9);
+  });
+
+  it("takes no hydrogens from either end of a dative bond", () => {
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "N" },
+      { id: 2, x: L, y: 0, el: "B" },
+    ];
+    const labels = buildTextLabels(atoms, opts(), [one({ dative: true })]);
+    expect(labels.map((t) => t.text).sort()).toEqual(["BH3", "H3N"]);
+  });
+
+  it("puts no cap on a bold or hashed bond's atom, nor on a dative arrow's point", () => {
+    const o = opts({ joinStyle: "round" });
+    for (const extra of [{ display: "bold" as const }, { display: "hashed" as const }, { dative: true }]) {
+      const { fills } = buildAllPrimitives(pair, [one(extra)], o, ZOOM);
+      expect(fills.some((f) => Math.hypot(f.c.x - L, f.c.y) < 1e-9)).toBe(false);
+    }
   });
 });
 

@@ -56,6 +56,8 @@ export function useStructureEvents(
       stereo: b.stereo ?? "none",
       stereoOrient: b.stereoOrient ?? "principle",
       ...(b.doubleMode ? { doubleMode: b.doubleMode } : {}),
+      ...(b.display ? { display: b.display } : {}),
+      ...(b.dative ? { dative: true } : {}),
     })),
   });
 

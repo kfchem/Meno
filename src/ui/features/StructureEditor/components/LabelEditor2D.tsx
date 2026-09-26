@@ -8,7 +8,7 @@ import {
   type Bond as LBond,
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
-import { editorLayoutOptions } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 
 export default function LabelEditor2D() {
   const { camera } = useThree();
@@ -111,15 +111,7 @@ export default function LabelEditor2D() {
   const bondsL: LBond[] = useMemo(() => {
     const idToIndex = new Map<number, number>();
     atomsL.forEach((a, i) => idToIndex.set(a.id, i));
-    const out: LBond[] = [];
-    for (const b of model.bonds) {
-      const i1 = idToIndex.get(b.a as number);
-      const i2 = idToIndex.get(b.b as number);
-      if (i1 == null || i2 == null) continue;
-      const order: 1 | 2 | 3 = typeof b.order === "number" ? b.order : 1;
-      out.push({ a1: i1, a2: i2, order, stereo: "none" });
-    }
-    return out;
+    return layoutBonds(model.bonds, idToIndex);
   }, [model.bonds, atomsL]);
   const opts: LayoutOptions = useMemo(
     () => editorLayoutOptions(atomsL, bondsL),
@@ -132,8 +124,8 @@ export default function LabelEditor2D() {
   // Label(Text) uses world-unit font size; on screen it is scaled by zoom
   // Html(transform=false) renders in screen CSS px; to match appearance: px = world * zoom
   const fontSizePx = opts.fontPx * Math.max(zoom, 1e-6);
-  const fontFamily =
-    "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
+  // The label it edits is set in Arial (ACS 1996)
+  const fontFamily = "Arial, Helvetica, sans-serif";
   // Measure text width and fit input width
   const measRef = useRef<{
     canvas: HTMLCanvasElement;

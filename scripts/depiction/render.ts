@@ -61,6 +61,8 @@ function fromFile(path: string, format: string): Structure {
       a2,
       order: (b.order ?? 1) as 1 | 2 | 3,
       stereo: (b.stereo ?? "none") as Bond["stereo"],
+      ...(b.stereoOrient ? { stereoOrient: b.stereoOrient } : {}),
+      ...(b.dative ? { dative: true } : {}),
     });
   }
   return { atoms, bonds };
