@@ -58,7 +58,7 @@ Status: **done** (merged), **PR** (open), or blank.
 | Closing a tab throws edits away without asking; the dirty mark is never shown (audit G2) | PR #29 |
 | A double-click draw is two or three undo steps, not one | PR #26 |
 | Wavy bonds notched at every joint (audit H3) | |
-| A carbon with no bonds is not drawn at all (ACS writes CH4) | |
+| A carbon with no bonds is not drawn at all (ACS writes CH4) | PR #37 |
 
 ### 2. Drawing style as data, and one way of drawing
 
