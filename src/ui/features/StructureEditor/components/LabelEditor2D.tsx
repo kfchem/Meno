@@ -211,6 +211,10 @@ export default function LabelEditor2D() {
           id={`atom-label-${labelEdit.atomId ?? ""}`}
           name={`atom-label-${labelEdit.atomId ?? ""}`}
           autoComplete="off"
+          // a label as typed: "--" stays "--", a quote stays straight
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           autoFocus
           value={labelEdit.value}
           onPointerDown={(e) => {
