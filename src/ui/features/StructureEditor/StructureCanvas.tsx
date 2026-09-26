@@ -19,13 +19,17 @@ import {
   LabelEditor2D,
   HoverOverlay2D,
 } from "./components";
-// ExportSvg2D UI removed from overlay; functionality remains available in component file
 import {
+  ArrowDownTrayIcon,
   ArrowsPointingInIcon,
   ExclamationTriangleIcon,
   FolderOpenIcon,
+  PhotoIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { useEffect } from "react";
+import { saveIntent } from "../../../lib/doc/shortcuts";
+import { useFileActions } from "./fileActions";
 import { CANVAS_DPR } from "./constants";
 import { DrawnLayoutProvider } from "./components/DrawnLayout";
 import type { DocumentStore } from "../../../lib/doc";
@@ -63,6 +67,23 @@ function StructureCanvasContent({
 
   const onCreated = useCanvasSetup(camRef, domRef);
 
+  // Save and export. Ctrl/Cmd+S belongs to the tab in front, like undo.
+  const files = useFileActions();
+  const { save, saveAs } = files;
+  useEffect(() => {
+    if (!active) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const intent = saveIntent(e);
+      if (!intent) return;
+      e.preventDefault();
+      void (intent === "save" ? save() : saveAs());
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, save, saveAs]);
+  const alert = importError ?? files.error;
+  const dismissAlert = importError ? dismissImportError : files.dismissError;
+
   return (
     <div
       className="w-full h-full relative"
@@ -86,19 +107,19 @@ function StructureCanvasContent({
         }}
       />
       {/* Import error */}
-      {importError && (
+      {alert && (
         <div
           role="alert"
           className="absolute top-3 left-1/2 -translate-x-1/2 z-50 max-w-[90%] flex items-start gap-2 rounded-md border border-gh-line bg-white/95 shadow-sm px-3 py-2 text-xs text-gh-black"
         >
           <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-accel-accent" />
-          <span className="break-words">{importError}</span>
+          <span className="break-words">{alert}</span>
           <button
             aria-label="Dismiss"
             title="Dismiss"
             onClick={(e) => {
               e.stopPropagation();
-              dismissImportError();
+              dismissAlert();
             }}
             className="h-4 w-4 shrink-0 rounded-full hover:bg-gh-line"
           >
@@ -126,6 +147,28 @@ function StructureCanvasContent({
           className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
         >
           <FolderOpenIcon className="h-5 w-5 text-gh-black" />
+        </button>
+        <button
+          aria-label="Save structure"
+          title="Save (Ctrl/Cmd+S; with Shift, Save As)"
+          onClick={(e) => {
+            e.stopPropagation();
+            void (e.shiftKey ? saveAs() : save());
+          }}
+          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
+        >
+          <ArrowDownTrayIcon className="h-5 w-5 text-gh-black" />
+        </button>
+        <button
+          aria-label="Export as SVG"
+          title="Export the drawing as an SVG picture"
+          onClick={(e) => {
+            e.stopPropagation();
+            void files.exportSvg();
+          }}
+          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
+        >
+          <PhotoIcon className="h-5 w-5 text-gh-black" />
         </button>
       </div>
       <Canvas
