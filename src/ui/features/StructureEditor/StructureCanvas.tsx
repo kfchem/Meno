@@ -27,6 +27,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { CANVAS_DPR } from "./constants";
+import { DrawnLayoutProvider } from "./components/DrawnLayout";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 
@@ -149,28 +150,31 @@ function StructureCanvasContent({
         <ambientLight intensity={0.8} />
         <color attach="background" args={["#ffffff"]} />
         <FitToContent2D trigger={fitNonce} />
-        {/* Bonds */}
-        <Bonds2D />
-        <Atoms2D />
-        {/* Bond picking */}
-        <BondsPick2D />
-        {/* Join caps */}
-        <JoinCaps2D />
-        {/* Shapes and labels */}
-        <AromaticCircles2D />
-        <Wedges2D />
-        {/* Atom hover rings */}
-        <AtomsHoverRings2D />
-        <Labels2D />
-        {/* Label editor */}
-        <LabelEditor2D />
-        {/* Hover overlay */}
-        <ExtendPreview2D />
-        {/* Move preview */}
-        <MovePreview2D />
-        <HoverOverlay2D />
-        {/* Free arrows (no semantics) */}
-        <Arrows2D />
+        {/* The drawing, laid out once for every layer below to draw from */}
+        <DrawnLayoutProvider>
+          {/* Bonds */}
+          <Bonds2D />
+          <Atoms2D />
+          {/* Bond picking */}
+          <BondsPick2D />
+          {/* Join caps */}
+          <JoinCaps2D />
+          {/* Shapes and labels */}
+          <AromaticCircles2D />
+          <Wedges2D />
+          {/* Atom hover rings */}
+          <AtomsHoverRings2D />
+          <Labels2D />
+          {/* Label editor */}
+          <LabelEditor2D />
+          {/* Hover overlay */}
+          <ExtendPreview2D />
+          {/* Move preview */}
+          <MovePreview2D />
+          <HoverOverlay2D />
+          {/* Free arrows (no semantics) */}
+          <Arrows2D />
+        </DrawnLayoutProvider>
         <PanZoom2D />
       </Canvas>
     </div>

@@ -108,6 +108,13 @@ What is left before the editor counts as finished, and in what order, is in
 - **Rendering**: an orthographic react-three-fiber `<Canvas>`; each visual layer
   is its own component in `components/` (`Bonds2D`, `Atoms2D`, `Wedges2D`,
   `Labels2D`, previews, hover overlays, `PanZoom2D`, `FitToContent2D`, …).
+  `DrawnLayoutProvider` lays the drawing out once - the model, with an atom
+  being dragged or a bond being drawn out where the gesture has them - and
+  the drawing layers read that one layout (`useDrawnLayout`). The move and
+  extend previews only work out where the atom goes and publish it
+  (`moveDrag.preview`, `extend.preview`); they draw nothing of the molecule
+  themselves, so a gesture looks exactly as its result will. Model bonds
+  reach the layout through `layoutBond(s)` in `layoutOptions.ts`.
 - **Depiction**: `lib/chem/layout2d.ts` turns atoms/bonds into line segments,
   polygons, text and circles. How big everything is comes from a drawing
   style (`lib/chem/style.ts`): each length in points or as a fraction of the

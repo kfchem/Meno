@@ -108,6 +108,16 @@ export function createInteractionSlice(set: SetState, get: GetState) {
             : Date.now()) + 120,
       })),
 
+    setExtendPreview: (x: number, y: number) =>
+      set((prev: EditorState) => {
+        if (!prev.extend.active) return prev;
+        const cur = prev.extend.preview;
+        if (cur && Math.abs(cur.x - x) < 1e-4 && Math.abs(cur.y - y) < 1e-4) {
+          return prev;
+        }
+        return { ...prev, extend: { ...prev.extend, preview: { x, y } } };
+      }),
+
     setExtendMode: (mode: "snap" | "free") =>
       set((prev: EditorState) => ({
         ...prev,

@@ -102,8 +102,8 @@ Both go together, because both touch every layer.
 
 - **The preview drawn by the resting code**: the model with the dragged atom
   moved, laid out by `layoutMolecule` and drawn by the same layers. Nothing
-  about a drag is drawn any other way.
-- `ExtendPreview2D` goes the same way.
+  about a drag is drawn any other way. (PR #38)
+- `ExtendPreview2D` goes the same way. (PR #38)
 
 ### 3. RDKit in the sidecar
 
