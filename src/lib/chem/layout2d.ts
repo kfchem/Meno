@@ -399,6 +399,37 @@ function toWorld(
   return units === "world" ? n : pxToWorld(n, zoom);
 }
 
+/**
+ * The bounds, grown to take in everything the bonds draw: the outer lines of
+ * a triple bond, a wedge's broad end and a wavy bond's swing all reach past
+ * the atoms, and an export cut at the atoms clips them.
+ */
+function expandBoundsForBonds(
+  bounds: { min: Vec2; max: Vec2 },
+  prim: { lines: LineSeg[]; polys: Poly[]; circles: Circle[]; fills: Circle[] },
+  zoom: number,
+): { min: Vec2; max: Vec2 } {
+  const out = {
+    min: { x: bounds.min.x, y: bounds.min.y },
+    max: { x: bounds.max.x, y: bounds.max.y },
+  };
+  const take = (x: number, y: number, r: number) => {
+    out.min.x = Math.min(out.min.x, x - r);
+    out.max.x = Math.max(out.max.x, x + r);
+    out.min.y = Math.min(out.min.y, y - r);
+    out.max.y = Math.max(out.max.y, y + r);
+  };
+  for (const l of prim.lines) {
+    // a line's width is in pixels whatever the drawing's units
+    const half = pxToWorld(l.widthPx, zoom) / 2;
+    take(l.x1, l.y1, half);
+    take(l.x2, l.y2, half);
+  }
+  for (const p of prim.polys) for (const q of p.points) take(q.x, q.y, 0);
+  for (const c of [...prim.circles, ...prim.fills]) take(c.c.x, c.c.y, c.r);
+  return out;
+}
+
 function vsub(a: Vec2, b: Vec2): Vec2 {
   return { x: a.x - b.x, y: a.y - b.y };
 }
@@ -2331,11 +2362,15 @@ export function layoutMolecule(
   // A label hangs off its atom, so the drawing is wider than the atoms are:
   // leave it out and a label at the edge is cut off, on the canvas as in an
   // export.
-  const bounds = expandBoundsForLabels(
-    computeBounds(atoms),
-    texts,
-    toWorld(opts.fontPx, zoom, opts.units),
-    labelSetOf(opts),
+  const bounds = expandBoundsForBonds(
+    expandBoundsForLabels(
+      computeBounds(atoms),
+      texts,
+      toWorld(opts.fontPx, zoom, opts.units),
+      labelSetOf(opts),
+    ),
+    prim,
+    zoom,
   );
   return {
     lines: prim.lines,
@@ -2383,7 +2418,8 @@ function escapeXml(text: string): string {
 export function fontStack(family: string): string {
   if (family === "Arial") return "Arial, Helvetica, sans-serif";
   if (family === "Helvetica") return "Helvetica, Arial, sans-serif";
-  return `${family}, Arial, sans-serif`;
+  const name = /\s/.test(family) ? `'${family}'` : family;
+  return `${name}, Arial, sans-serif`;
 }
 
 /** A label as the canvas draws it: set by `placeLabel`, run by run. */
