@@ -370,8 +370,8 @@ describe("joinStyle", () => {
     { a1: 2, a2: 4, order: 1, stereo: "none" },
   ];
 
-  it("rounds the wedge and caps the joins by default", () => {
-    const o = opts();
+  it("rounds the wedge and caps the joins when ends are round", () => {
+    const o = opts({ joinStyle: "round" });
     const { polys, fills } = buildAllPrimitives(atoms, bonds, o, 40);
     expect(fills.length).toBeGreaterThan(0);
     // a cap at the plain corner, and the wedge drawn as arcs not corners
@@ -386,7 +386,7 @@ describe("joinStyle", () => {
         polyArea(p.points) > polyArea(big.points) ? p : big,
       );
     };
-    const cut = wedgeOf(opts()).points;
+    const cut = wedgeOf(opts({ joinStyle: "round" })).points;
     const square = wedgeOf(opts({ joinStyle: "sharp" })).points;
     // the wide end is cut along two bonds, so those corners and the dent are
     // left as they are; only the free narrow end is rounded
@@ -448,7 +448,7 @@ describe("how a bond ends", () => {
     fills.some((f) => Math.hypot(f.c.x - a.x, f.c.y - a.y) < 1e-9);
 
   it("rounds a free end as much as a join", () => {
-    const o = opts();
+    const o = opts({ joinStyle: "round" });
     const { fills } = buildAllPrimitives(atoms, bonds, o, 40);
     expect(capAt(fills, atoms[0])).toBe(true); // the end of the chain
     expect(capAt(fills, atoms[1])).toBe(true); // where the bonds meet
@@ -456,7 +456,7 @@ describe("how a bond ends", () => {
   });
 
   it("leaves a hashed wedge and a label alone", () => {
-    const { fills } = buildAllPrimitives(atoms, bonds, opts(), 40);
+    const { fills } = buildAllPrimitives(atoms, bonds, opts({ joinStyle: "round" }), 40);
     // a cap past the last hash would read as a loose dot
     expect(capAt(fills, atoms[2])).toBe(false);
     // a label takes the bond's end with it
@@ -720,7 +720,7 @@ describe("where bonds crowd each other", () => {
   });
 
   it("keeps a wedge's join filled where only wedges meet", () => {
-    const o = opts();
+    const o = opts({ joinStyle: "round" });
     // a stereocentre carrying nothing but wedges
     const atoms: Atom[] = [
       { id: 1, x: 0, y: 0, el: "C" },
@@ -736,6 +736,65 @@ describe("where bonds crowd each other", () => {
     const { fills } = buildAllPrimitives(atoms, bonds, o, 40);
     // the thin ends are each a bond wide and do not fill the join on their own
     expect(fills.some((f) => Math.hypot(f.c.x, f.c.y) < 1e-9)).toBe(true);
+  });
+});
+
+describe("round or square, never some of each", () => {
+  // a chain carrying one of everything: a double, a triple, a hashed wedge,
+  // a wavy bond, and a label at the end of a plain bond
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: 1.3, y: 0.75, el: "C" },
+    { id: 3, x: 2.6, y: 0, el: "C" },
+    { id: 4, x: 3.9, y: 0.75, el: "C" },
+    { id: 5, x: 5.2, y: 0, el: "C" },
+    { id: 6, x: 2.6, y: -1.5, el: "C" },
+    { id: 7, x: 0, y: -1.5, el: "C" },
+    { id: 8, x: 1.3, y: 2.25, el: "O" },
+  ];
+  const bonds: Bond[] = [
+    { a1: 0, a2: 1, order: 2, doubleMode: "right" },
+    { a1: 1, a2: 2, order: 1 },
+    { a1: 2, a2: 3, order: 3 },
+    { a1: 3, a2: 4, order: 1 },
+    { a1: 2, a2: 5, order: 1, stereo: "down" },
+    { a1: 0, a2: 6, order: 1, stereo: "wavy" },
+    { a1: 1, a2: 7, order: 1 },
+  ];
+  const lineEnds = (lines: { x1: number; y1: number; x2: number; y2: number }[]) =>
+    lines.flatMap((l) => [
+      { x: l.x1, y: l.y1 },
+      { x: l.x2, y: l.y2 },
+    ]);
+  const near = (fills: { c: Vec2 }[], p: Vec2) =>
+    fills.some((f) => Math.hypot(f.c.x - p.x, f.c.y - p.y) < 1e-9);
+
+  it("rounds every line's ends when ends are round", () => {
+    const o = opts({ joinStyle: "round" });
+    const { lines, fills } = buildAllPrimitives(atoms, bonds, o, 40);
+    // every end of every line has a cap over it - second lines, the triple's
+    // outer ones, each hash, each piece of the wave, and the line stopping
+    // short of the O - except where it meets an atom that is capped anyway
+    const atomsAt = atoms.map((a) => ({ x: a.x, y: a.y }));
+    for (const e of lineEnds(lines)) {
+      const atAtom = atomsAt.some((p) => Math.hypot(p.x - e.x, p.y - e.y) < 1e-9);
+      if (!atAtom) expect(near(fills, e)).toBe(true);
+    }
+  });
+
+  it("puts nothing round in the drawing when ends are square", () => {
+    const o = opts({ joinStyle: "sharp" });
+    const { fills, polys } = buildAllPrimitives(atoms, bonds, o, 40);
+    expect(fills).toHaveLength(0);
+    // the corners along the wave are mitred instead: more polygons than the
+    // atoms' own joins account for
+    const noWave = buildAllPrimitives(
+      atoms,
+      bonds.map((b) => (b.stereo === "wavy" ? { ...b, stereo: "none" as const } : b)),
+      o,
+      40,
+    ).polys;
+    expect(polys.length).toBeGreaterThan(noWave.length);
   });
 });
 

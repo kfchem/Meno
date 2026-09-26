@@ -337,7 +337,8 @@ export default function MovePreview2D() {
       );
       // Whether the drawing caps this atom, asked of the rule the drawing
       // itself uses, over the whole molecule rather than the bonds at hand.
-      capHere = joinsAtAtoms(
+      // Square ends have no caps at all, so nothing round follows the atom.
+      capHere = (opts.joinStyle ?? "round") === "round" && joinsAtAtoms(
         atomsL as any,
         bondsAll as any,
         opts,

@@ -53,6 +53,23 @@ export type LineSeg = {
   widthPx: number;
 };
 export type Poly = { points: Vec2[] };
+/** Where a line of the drawing runs into another's end, and which way it leaves that point. */
+export type Meet = { at: Vec2; dir: Vec2 };
+/** A corner within one stroke - a wavy bond's - and the ways its two pieces leave it. */
+export type Bend = { at: Vec2; dirs: Vec2[] };
+/**
+ * What one bond draws, and where its lines need finishing off: `ends` are
+ * line ends nothing else meets, `meets` the points where its lines run into
+ * a neighbour's, `bends` the corners along a wavy bond. The drawing rounds
+ * them all or squares them all, never some of each.
+ */
+export type BondPrimitives = {
+  lines: LineSeg[];
+  polys: Poly[];
+  meets?: Meet[];
+  ends?: Vec2[];
+  bends?: Bend[];
+};
 /** A piece of a label; `sub` marks a subscript such as the 2 in NH2. */
 export type TextRun = { text: string; sub?: boolean };
 
@@ -427,7 +444,7 @@ function centredPair(
   atoms: Atom[],
   adjBonds?: Map<number, Bond[]>,
   doubleSides?: Map<Bond, number | undefined>,
-): { lines: LineSeg[]; joins: Vec2[] } {
+): { lines: LineSeg[]; meets: Meet[]; ends: Vec2[] } {
   const half = off * 0.5;
   const limit = off * 2;
   const sideOf = (b: Bond) => doubleOffsets(b, off, doubleSides);
@@ -436,7 +453,8 @@ function centredPair(
       (b) => b !== bond && b.order === 2 && b.stereo !== "up" && b.stereo !== "down",
     );
   const out: LineSeg[] = [];
-  const joins: Vec2[] = [];
+  const meets: Meet[] = [];
+  const ends: Vec2[] = [];
   for (const sgn of [1, -1]) {
     const o = vscale(n, half * sgn);
     const a = vadd(p1, o);
@@ -465,8 +483,11 @@ function centredPair(
       others(bond.a2),
       limit,
     );
-    if (endA.met) joins.push(endA.at);
-    if (endB.met) joins.push(endB.at);
+    const along = vnorm(vsub(endB.at, endA.at));
+    if (endA.met) meets.push({ at: endA.at, dir: along });
+    else ends.push(endA.at);
+    if (endB.met) meets.push({ at: endB.at, dir: vscale(along, -1) });
+    else ends.push(endB.at);
     out.push({
       x1: endA.at.x,
       y1: endA.at.y,
@@ -475,7 +496,7 @@ function centredPair(
       widthPx,
     });
   }
-  return { lines: out, joins };
+  return { lines: out, meets, ends };
 }
 
 /** Where two cuts cross: the point both bonds' outlines meet at. */
@@ -929,7 +950,7 @@ export function buildBondPrimitives(
   adjBonds?: Map<number, Bond[]>,
   labelBoxes?: Map<number, LabelBox>,
   doubleSides?: Map<Bond, number | undefined>
-): { lines: LineSeg[]; polys: Poly[]; joins?: Vec2[] } {
+): BondPrimitives {
   const a = atoms[bond.a1];
   const c = atoms[bond.a2];
   const p1o = { x: a.x, y: a.y };
@@ -969,6 +990,11 @@ export function buildBondPrimitives(
   const trimB = Math.min(trimB0, Math.max(0, L0 * 0.45));
   const p1 = vadd(p1o, vscale(dir, trimA));
   const p2 = vadd(p2o, vscale(dir, -trimB));
+  // Where a label has taken the bond's end, the line simply stops there, and
+  // that end is finished off like any other free end.
+  const labelEnds: Vec2[] = [];
+  if (hasLabel(a.el) && trimA > 0) labelEnds.push(p1);
+  if (hasLabel(c.el) && trimB > 0) labelEnds.push(p2);
   if (bond.stereo === "up" || bond.stereo === "down") {
     const baseAtP1 = wedgeBaseAtom(bond, deg) === bond.a1;
     const baseHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
@@ -1033,7 +1059,11 @@ export function buildBondPrimitives(
       );
       for (let i = 0; i < segs.length; i++) segs[i].widthPx = lwPx;
       lines.push(...segs);
-      return { lines, polys };
+      const ends = segs.flatMap((l) => [
+        { x: l.x1, y: l.y1 },
+        { x: l.x2, y: l.y2 },
+      ]);
+      return { lines, polys, ends };
     }
   }
   if (bond.stereo === "wavy") {
@@ -1044,12 +1074,26 @@ export function buildBondPrimitives(
       })
     );
     for (const l of lines) l.widthPx = lwPx;
-    return { lines, polys };
+    // A wave is short straight pieces end to end; the corner between two of
+    // them wants the same finish as a join, or it shows as a nick.
+    const bends: Bend[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const prev = lines[i - 1];
+      const next = lines[i];
+      bends.push({
+        at: { x: next.x1, y: next.y1 },
+        dirs: [
+          vnorm({ x: prev.x1 - prev.x2, y: prev.y1 - prev.y2 }),
+          vnorm({ x: next.x2 - next.x1, y: next.y2 - next.y1 }),
+        ],
+      });
+    }
+    return { lines, polys, bends, ends: labelEnds };
   }
   if (bond.order === 1) {
     // No trimming: ensure bonds meet cleanly at atoms
     lines.push({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx });
-    return { lines, polys };
+    return { lines, polys, ends: labelEnds };
   }
   if (bond.order === 2) {
     const off = toWorld(opts.doubleOffsetPx, zoom, units);
@@ -1098,7 +1142,7 @@ export function buildBondPrimitives(
         doubleSides,
       );
       lines.push(...pair.lines);
-      return { lines, polys, joins: pair.joins };
+      return { lines, polys, meets: pair.meets, ends: pair.ends };
     }
     // Skew placement: the bond's own line, and a second one to one side of
     // it. That one meets the line of a double bond next door where they share
@@ -1148,10 +1192,14 @@ export function buildBondPrimitives(
         widthPx: lwPx,
       },
     );
-    const joins: Vec2[] = [];
-    if (ps1b.met) joins.push(ps1b.at);
-    if (ps2b.met) joins.push(ps2b.at);
-    return { lines, polys, joins };
+    const meets: Meet[] = [];
+    const ends: Vec2[] = [...labelEnds];
+    const along = vnorm(vsub(ps2b.at, ps1b.at));
+    if (ps1b.met) meets.push({ at: ps1b.at, dir: along });
+    else ends.push(ps1b.at);
+    if (ps2b.met) meets.push({ at: ps2b.at, dir: vscale(along, -1) });
+    else ends.push(ps2b.at);
+    return { lines, polys, meets, ends };
   }
   if (bond.order === 3) {
     // Triple bond outer offset matches the double-bond offset
@@ -1170,10 +1218,17 @@ export function buildBondPrimitives(
       { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx },
       { x1: o3.x1, y1: o3.y1, x2: o3.x2, y2: o3.y2, widthPx: lwPx }
     );
-    return { lines, polys };
+    const ends = [
+      ...labelEnds,
+      { x: o1.x1, y: o1.y1 },
+      { x: o1.x2, y: o1.y2 },
+      { x: o3.x1, y: o3.y1 },
+      { x: o3.x2, y: o3.y2 },
+    ];
+    return { lines, polys, ends };
   }
   lines.push({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx });
-  return { lines, polys };
+  return { lines, polys, ends: labelEnds };
 }
 
 /**
@@ -1486,6 +1541,9 @@ export function buildAllPrimitives(
     }
   }
   // build lines/polys
+  const meets: Meet[] = [];
+  const freeEnds: Vec2[] = [];
+  const bends: Bend[] = [];
   for (const b of bonds) {
     const u = atoms[b.a1].id,
       v = atoms[b.a2].id;
@@ -1509,10 +1567,30 @@ export function buildAllPrimitives(
     );
     lines.push(...r.lines);
     polys.push(...r.polys);
-    // Two lines of neighbouring double bonds run on to the same point, but a
-    // point is all they share: the corner they turn is left open, the way any
-    // two thick lines meeting end to end would. Cap it as a join is capped.
-    for (const j of r.joins ?? []) fills.push({ c: j, r: rWorld });
+    meets.push(...(r.meets ?? []));
+    freeEnds.push(...(r.ends ?? []));
+    bends.push(...(r.bends ?? []));
+  }
+  // Every end and corner the joins at atoms have not already seen to:
+  // rounded all, or squared all. Two lines of neighbouring double bonds run
+  // on to the same point, but a point is all they share, so the corner they
+  // turn needs finishing as much as a wave's does. A free end needs nothing
+  // when ends are square: a line already stops flat.
+  if (roundJoins) {
+    for (const m of meets) fills.push({ c: m.at, r: rWorld });
+    for (const e of freeEnds) fills.push({ c: e, r: rWorld });
+    for (const b of bends) fills.push({ c: b.at, r: rWorld });
+  } else {
+    const byPoint = new Map<string, { at: Vec2; dirs: Vec2[] }>();
+    for (const m of meets) {
+      const key = `${m.at.x.toFixed(6)},${m.at.y.toFixed(6)}`;
+      const g = byPoint.get(key) ?? { at: m.at, dirs: [] };
+      g.dirs.push(m.dir);
+      byPoint.set(key, g);
+    }
+    for (const g of [...byPoint.values(), ...bends]) {
+      polys.push(...mitreJoinPolys(g.at, g.dirs, rWorld));
+    }
   }
   return { lines, polys, circles, fills };
 }
