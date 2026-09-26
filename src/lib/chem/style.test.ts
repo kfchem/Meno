@@ -96,8 +96,15 @@ describe("style presets", () => {
     expect(inPoints(nature.lineThickness, nature)).toBeCloseTo(0.595, 3);
     expect(nature.fontSize).toEqual(pt(6));
     const wiley = presetById("wiley").style;
-    expect(wiley.bondLengthPt).toBe(14.4);
-    expect(wiley.fontSize).toEqual(pt(8));
+    // 0.6 cm bonds, 0.026 cm lines, 0.092 cm bold bonds and hashes, 12 pt Arial kept 0.071 cm clear
+    const inCm = (l: Parameters<typeof inPoints>[0]) => (inPoints(l, wiley) / 72) * 2.54;
+    expect((wiley.bondLengthPt / 72) * 2.54).toBeCloseTo(0.6, 9);
+    expect(inCm(wiley.lineThickness)).toBeCloseTo(0.026, 9);
+    expect(inCm(wiley.boldThickness)).toBeCloseTo(0.092, 9);
+    expect(inCm(wiley.hashInterval)).toBeCloseTo(0.092, 9);
+    expect(inCm(wiley.labelClearance)).toBeCloseTo(0.071, 9);
+    expect(wiley.doubleGap).toEqual(ofBond(0.18));
+    expect([wiley.fontFamily, wiley.fontSize]).toEqual(["Arial", pt(12)]);
     expect(presetById("nonsense")).toBe(STYLE_PRESETS[0]);
   });
 

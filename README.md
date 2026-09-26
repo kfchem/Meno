@@ -76,7 +76,7 @@ Known limitations (pre-alpha):
 
 This repository is licensed under the **Apache License 2.0**. See [`LICENSE`](./LICENSE).
 
-Meno's typefaces, IBM Plex Sans, IBM Plex Sans JP and IBM Plex Mono (`src/assets/fonts/`), are © IBM Corp. and licensed under the SIL Open Font License 1.1; see [`src/assets/fonts/IBM-Plex-OFL.txt`](./src/assets/fonts/IBM-Plex-OFL.txt).
+Meno's typefaces, IBM Plex Sans, IBM Plex Sans JP and IBM Plex Mono (`src/assets/fonts/`), are © IBM Corp. and licensed under the SIL Open Font License 1.1; see [`src-tauri/resources/licenses/IBM-Plex-OFL.txt`](./src-tauri/resources/licenses/IBM-Plex-OFL.txt), which the app carries with it. The font files are bundled unchanged, and carry the same notice in their own metadata.
 
 ## Acknowledgments
 
