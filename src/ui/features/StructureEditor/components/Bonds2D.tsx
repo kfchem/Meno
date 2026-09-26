@@ -1,95 +1,33 @@
 import * as THREE from "three";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
-import { useEditor } from "../store";
-import {
-  layoutMolecule,
-  type LayoutOptions,
-} from "../../../../lib/chem/layout2d";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { editorLayoutOptions } from "../layoutOptions";
+import { useDrawnLayout } from "./drawnLayoutContext";
 
-export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
-  const { camera } = useThree();
-  const ortho = camera as THREE.OrthographicCamera;
-  const [zoomVal, setZoomVal] = useState<number>(ortho.zoom || 1);
-  useFrame(() => {
-    const z = (camera as THREE.OrthographicCamera).zoom || 1;
-    if (z !== zoomVal) setZoomVal(z);
-  });
-  const { model, aromaticEnabled, aromaticRings, moveDrag } = useEditor();
+/** The drawing's lines, from the shared layout: bonds, hashes, waves. */
+export function Bonds2D() {
+  const { layout } = useDrawnLayout();
   const inst = useRef<THREE.InstancedMesh>(null!);
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
   const tmpQ = useMemo(() => new THREE.Quaternion(), []);
-  // Capacity: worst case is a hashed ("down" stereo) wedge, which alone can
-  // emit ~7 segments (see buildHashedWedgeSegments), or a wavy bond, whose
-  // segment count grows with bond length/zoom and is unbounded. Start from a
-  // generous per-bond estimate and self-correct below if a layout ever needs
-  // more room than currently allocated, instead of assuming a fixed max of 3
-  // (triple-bond) segments per bond, which silently overflows the instanced
-  // mesh's vertex buffer for stereo/wavy bonds and blanks the whole canvas.
+  // Capacity: a wavy bond's segment count grows with bond length and zoom
+  // and is unbounded, and a hashed bond emits a segment per hash when ends
+  // are round. Start from a generous per-line estimate and grow below if a
+  // layout ever needs more room, rather than overflowing the instanced
+  // mesh's buffer, which blanks the whole canvas.
   const [countCap, setCountCap] = useState(() =>
-    Math.max(model.bonds.length * 8, 1)
+    Math.max(layout.lines.length * 2, 64),
   );
 
   useEffect(() => {
     const m = inst.current;
     if (!m) return;
-    // Use live camera zoom to avoid a one-frame lag right after fit/replace
-    const zNow = (camera as THREE.OrthographicCamera).zoom || 1;
-    const atomsL = model.atoms.map((a) => ({
-      id: a.id,
-      x: a.x,
-      y: a.y,
-      el: a.el,
-    }));
-    const idToIndex = new Map<number, number>();
-    for (let i = 0; i < model.atoms.length; i++)
-      idToIndex.set(model.atoms[i].id, i);
-    // If moving, hide only bonds attached to the moving atom from the base rendering.
-    const movingId = moveDrag.active ? moveDrag.atomId : null;
-    const srcBonds =
-      movingId != null
-        ? model.bonds.filter((b) => b.a !== movingId && b.b !== movingId)
-        : model.bonds;
-    const bondsL = srcBonds
-      .map((b) => {
-        const i1 = idToIndex.get(b.a);
-        const i2 = idToIndex.get(b.b);
-        if (i1 == null || i2 == null) return null;
-        return {
-          a1: i1,
-          a2: i2,
-          order: b.order as 1 | 2 | 3,
-          stereo: (b.stereo ?? "none") as "up" | "down" | "wavy" | "none",
-          doubleMode: (b as any).doubleMode ?? "auto",
-          stereoOrient: (b as any).stereoOrient ?? ("principle" as const),
-        };
-      })
-      .filter(Boolean) as any;
-    const keys = Object.keys(aromaticRings || {}).filter(
-      (k) => aromaticRings[k]
-    );
-    const aromaticCircle =
-      keys.length > 0
-        ? { enabled: new Set(keys) }
-        : aromaticEnabled
-        ? true
-        : false;
-    const opts: LayoutOptions = editorLayoutOptions(atomsL, bondsL, {
-      ...options,
-      aromaticCircle,
-    });
-    // Use live zoom for layout as well to avoid a lag between layout widthPx and thickness conversion
-    const layout = layoutMolecule(atomsL, bondsL, opts, zNow);
     const segs = layout.lines;
     if (segs.length > countCap) {
-      // Current instanced mesh is too small for this layout (e.g. a hashed
-      // wedge or a long wavy bond). Grow capacity and bail; the effect will
-      // rerun once the larger mesh has mounted.
+      // Grow and bail; the effect runs again once the larger mesh is up.
       setCountCap(Math.max(segs.length, countCap * 2));
       return;
     }
+    const zoom = Math.max(layout.zoom, 1e-6);
     m.count = segs.length;
     for (let i = 0; i < segs.length; i++) {
       const s = segs[i];
@@ -97,30 +35,20 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
         dy = s.y2 - s.y1;
       const len = Math.hypot(dx, dy);
       const ang = Math.atan2(dy, dx);
-      // Compute thickness using the latest camera zoom, and clamp to a small world minimum
-      const thickWorldRaw = s.widthPx / Math.max(zNow, 1e-6);
-      const MIN_WORLD_THICK = Math.max(1e-3, NOMINAL_BOND_LENGTH * 0.02); // ~2% of nominal bond length
-      const thickWorld = Math.max(thickWorldRaw, MIN_WORLD_THICK);
+      // A line's width comes in pixels at the zoom the layout was built for;
+      // keep a small world minimum under it.
+      const MIN_WORLD_THICK = Math.max(1e-3, NOMINAL_BOND_LENGTH * 0.02);
+      const thickWorld = Math.max(s.widthPx / zoom, MIN_WORLD_THICK);
       tmpQ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), ang);
       tmpM.compose(
         new THREE.Vector3((s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2, 0),
         tmpQ,
-        new THREE.Vector3(len, thickWorld, 1)
+        new THREE.Vector3(len, thickWorld, 1),
       );
       m.setMatrixAt(i, tmpM);
     }
     m.instanceMatrix.needsUpdate = true;
-  }, [
-    model.atoms,
-    model.bonds,
-    options,
-    zoomVal,
-    aromaticEnabled,
-    aromaticRings,
-    moveDrag.active,
-    moveDrag.atomId,
-    countCap,
-  ]);
+  }, [layout, countCap, tmpM, tmpQ]);
 
   return (
     <instancedMesh

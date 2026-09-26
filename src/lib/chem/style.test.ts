@@ -63,9 +63,12 @@ describe("drawing style", () => {
     // a triple bond's outer lines are one bond spacing out, like a double's
     expect(o.tripleOffsetPx).toBe(o.doubleOffsetPx);
     expect(o.fontPx).toBeCloseTo((10 / 14.4) * L, 12);
+    expect(o.labelMarginPx).toBeCloseTo((1.6 / 14.4) * L, 12);
+    // a wavy bond's turns are half circles: the amplitude a quarter period
+    expect(o.wavyPeriodPx).toBeCloseTo((3.76 / 14.4) * L, 12);
+    expect(o.wavyAmpPx).toBeCloseTo(o.wavyPeriodPx / 4, 12);
     expect(o.joinStyle).toBe("sharp");
     expect(layoutOptionsFor({ ...ACS_1996, ends: "round" }, L).joinStyle).toBe("round");
-    // as many hashes as 2.5 pt spacing fits along a 14.4 pt bond
-    expect(o.hashCount).toBe(7);
+    expect(o.hashSpacingPx).toBeCloseTo((2.5 / 14.4) * L, 12);
   });
 });

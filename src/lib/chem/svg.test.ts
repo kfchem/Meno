@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createSVG, layoutMolecule, type Atom, type Bond } from "./layout2d";
+import {
+  createSVG,
+  layoutMolecule,
+  placeLabel,
+  type Atom,
+  type Bond,
+} from "./layout2d";
 import { acsWorldOptions } from "./acs";
 
 const atoms: Atom[] = [
@@ -73,20 +79,26 @@ describe("createSVG", () => {
     );
   });
 
-  it("draws a label the way the canvas does: runs, and the symbol on the atom", () => {
+  it("sets a label as the canvas does: in Arial, run by run, on its baseline", () => {
     const o = opts();
     const layout = layoutMolecule(atoms, bonds, o, 60);
     const svg = createSVG(layout, o);
     const label = layout.texts.find((t) => t.text.startsWith("N"))!;
     // the count is a subscript, so it is its own smaller piece
     expect(label.runs?.some((r) => r.sub)).toBe(true);
-    const sizes = numbers(svg, "font-size");
-    expect(sizes).toContain(o.fontPx);
-    expect(sizes.some((s) => Math.abs(s - o.fontPx * 0.7) < 1e-9)).toBe(true);
-    // the element symbol straddles the atom
-    const xs = numbers(svg, "x");
-    const symbol = xs.find((x) => Math.abs(x - label.x) < o.fontPx)!;
-    expect(symbol).toBeLessThan(label.x);
-    expect(symbol).toBeGreaterThan(label.x - o.fontPx);
+    const runs = placeLabel(label, o.fontPx);
+    const texts = [
+      ...svg.matchAll(
+        /<text x="([-\d.e]+)" y="([-\d.e]+)" font-family="([^"]*)" font-size="([-\d.e]+)"[^>]*>([^<]*)</g,
+      ),
+    ];
+    expect(texts.map((m) => m[5])).toEqual(runs.map((r) => r.text));
+    texts.forEach((m, i) => {
+      expect(Number(m[1])).toBeCloseTo(runs[i].x, 9);
+      // SVG's y runs down
+      expect(Number(m[2])).toBeCloseTo(-runs[i].y, 9);
+      expect(m[3].startsWith("Arial")).toBe(true);
+      expect(Number(m[4])).toBeCloseTo(runs[i].size, 9);
+    });
   });
 });

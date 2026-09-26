@@ -1,100 +1,44 @@
 import * as THREE from "three";
-import { useFrame, useThree } from "@react-three/fiber";
-import { useMemo, useState } from "react";
-import { useEditor } from "../store";
-import {
-  layoutMolecule,
-  type LayoutOptions,
-  type Atom as LAtom,
-  type Bond as LBond,
-} from "../../../../lib/chem/layout2d";
+import { useEffect, useMemo } from "react";
 import { polyTriangles } from "./polyTriangles";
-import { editorLayoutOptions } from "../layoutOptions";
+import { useDrawnLayout } from "./drawnLayoutContext";
 
-export default function Wedges2D({
-  options,
-}: {
-  options?: Partial<LayoutOptions>;
-}) {
-  const { camera } = useThree();
-  const { model, moveDrag } = useEditor();
-  const [zoom, setZoom] = useState((camera as THREE.OrthographicCamera).zoom);
-  useFrame(() => {
-    const z = (camera as THREE.OrthographicCamera).zoom;
-    if (z !== zoom) setZoom(z);
-  });
-
-  const atoms: LAtom[] = useMemo(
-    () => model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el })),
-    [model.atoms]
-  );
-  const bonds: LBond[] = useMemo(() => {
-    const idToIndex = new Map<number, number>();
-    atoms.forEach((a, i) => idToIndex.set(a.id, i));
-    const out: LBond[] = [];
-    const movingId = moveDrag.active ? moveDrag.atomId : null;
-    const srcBonds =
-      movingId != null
-        ? model.bonds.filter((b) => b.a !== movingId && b.b !== movingId)
-        : model.bonds;
-    for (const b of srcBonds) {
-      const i1 = idToIndex.get(b.a as number);
-      const i2 = idToIndex.get(b.b as number);
-      if (i1 == null || i2 == null) continue;
-      const stereo = (b as any).stereo ?? ("none" as const);
-      const order: 1 | 2 | 3 = b.order as 1 | 2 | 3;
-      const doubleMode = (b as any).doubleMode ?? "auto";
-      const stereoOrient = (b as any).stereoOrient ?? ("principle" as const);
-      out.push({
-        a1: i1,
-        a2: i2,
-        order,
-        stereo,
-        doubleMode,
-        stereoOrient,
-      } as any);
+/**
+ * The drawing's filled shapes, from the shared layout: wedges, bold bonds,
+ * hashes cut as trapezoids, arrowheads, and the mitres where lines meet. All
+ * of them in one mesh, rebuilt when the layout changes - which is every frame
+ * of a drag - with the old geometry let go each time.
+ */
+export default function Wedges2D() {
+  const { layout } = useDrawnLayout();
+  const geometry = useMemo(() => {
+    const positions: number[] = [];
+    for (const p of layout.polys) {
+      if (p.points.length < 3) continue;
+      for (const i of polyTriangles(p.points)) {
+        positions.push(p.points[i].x, p.points[i].y, 0);
+      }
     }
-    return out;
-  }, [model.bonds, atoms, moveDrag.active, moveDrag.atomId]);
-
-  const opts: LayoutOptions = useMemo(
-    () => editorLayoutOptions(atoms, bonds, options),
-    [atoms, bonds, options]
-  );
-  const layout = useMemo(
-    () => layoutMolecule(atoms, bonds, opts, zoom),
-    [atoms, bonds, opts, zoom]
-  );
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    return g;
+  }, [layout]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   return (
-    <group>
-      {layout.polys.map((p, i) => {
-        if (p.points.length < 3) return null;
-        const g = new THREE.BufferGeometry().setFromPoints(
-          p.points.map((pt) => new THREE.Vector3(pt.x, pt.y, 0))
-        );
-        g.setIndex(polyTriangles(p.points));
-        return (
-          <mesh
-            key={`poly-${i}`}
-            geometry={g}
-            renderOrder={20}
-            // Let BondsPick2D handle pointer events instead of this mesh
-            raycast={
-              (/* raycaster, intersects */) => {
-                /* no-op to disable picking */
-              }
-            }
-          >
-            <meshBasicMaterial
-              color="black"
-              depthTest={false}
-              depthWrite={false}
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-        );
-      })}
-    </group>
+    <mesh
+      geometry={geometry}
+      renderOrder={20}
+      frustumCulled={false}
+      // Let BondsPick2D handle pointer events instead of this mesh
+      raycast={() => {}}
+    >
+      <meshBasicMaterial
+        color="black"
+        depthTest={false}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }

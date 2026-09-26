@@ -57,8 +57,8 @@ Status: **done** (merged), **PR** (open), or blank.
 | Opening a file counts as an edit: the tab is dirty at once, and undo empties the canvas | PR #28 |
 | Closing a tab throws edits away without asking; the dirty mark is never shown (audit G2) | PR #29 |
 | A double-click draw is two or three undo steps, not one | PR #26 |
-| Wavy bonds notched at every joint (audit H3) | |
-| A carbon with no bonds is not drawn at all (ACS writes CH4) | |
+| Wavy bonds notched at every joint (audit H3) | PR #31 |
+| A carbon with no bonds is not drawn at all (ACS writes CH4) | PR #37 |
 
 ### 2. Drawing style as data, and one way of drawing
 
@@ -81,7 +81,7 @@ Both go together, because both touch every layer.
   bonds; whether implicit hydrogens and terminal carbons are written; rings
   as circles or as Kekulé structures; colour, bold and italic.
 - **Hashes at a fixed spacing.** A longer hashed bond gets more hashes, not
-  wider gaps. Today the count is fixed and the gaps stretch.
+  wider gaps (PR #33).
 - **More bond types.** Besides single, double, triple, wedge, hashed wedge and
   wavy: a plain bold bond, a bold dashed bond, a thin dashed bond, and a
   dative (coordinate) bond.
@@ -102,8 +102,8 @@ Both go together, because both touch every layer.
 
 - **The preview drawn by the resting code**: the model with the dragged atom
   moved, laid out by `layoutMolecule` and drawn by the same layers. Nothing
-  about a drag is drawn any other way.
-- `ExtendPreview2D` goes the same way.
+  about a drag is drawn any other way. (PR #38)
+- `ExtendPreview2D` goes the same way. (PR #38)
 
 ### 3. RDKit in the sidecar
 
@@ -142,13 +142,13 @@ All hover-based, as above.
 ### 5. Files, clipboard and export
 
 - Save and Save As (MOL/SDF), Ctrl+S, and closing asks when there is
-  something to lose.
+  something to lose. (PR #43)
 - Import that keeps charges, isotopes, radicals, atom lists and S-groups, and
   V3000 reactions.
 - SMILES in and out.
 - SVG export, drawn exactly as on the canvas - with the drawing style it was
-  drawn in - and PNG. The current SVG export is unmounted, and loses
-  double-bond sides and wedge direction.
+  drawn in - and PNG. The SVG export draws what the canvas draws (PR #36),
+  at ACS 1996's own size, from a button beside Save (PR #43); PNG to come.
 - The clipboard, for Word and PowerPoint: a vector picture in each platform's
   own form (EMF on Windows, PDF on macOS), PNG and MOL alongside it.
 

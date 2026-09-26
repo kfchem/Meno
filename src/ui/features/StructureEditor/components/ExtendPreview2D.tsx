@@ -5,14 +5,17 @@ import { useEditor } from "../store";
 import { COLORS, ALPHA } from "../../../theme/colors";
 import { ACS_RATIOS, NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
+// Preview for drawing a new bond out of an atom.
+// - Works out where the new atom goes, springing to the snapped angle, and
+//   publishes that as the gesture's preview: the drawing itself (DrawnLayout)
+//   lays out the new bond and atom there, joined to the rest as they will be
+//   once dropped.
+// - Draws only what is not the drawing: a thin highlight line to the pointer.
 export default function ExtendPreview2D() {
   const { model, extend } = useEditor();
+  const setExtendPreview = useEditor((s) => s.setExtendPreview);
   const { camera, invalidate } = useThree();
   const thin = useRef<THREE.Mesh>(null!);
-  const thick = useRef<THREE.Mesh>(null!);
-  const dotA = useRef<THREE.Mesh>(null!);
-  const dotAOutline = useRef<THREE.Mesh>(null!);
-  const dotB = useRef<THREE.Mesh>(null!);
   const q = useMemo(() => new THREE.Quaternion(), []);
   // Animated orientation (angle-only) with spring-bounce; length stays constant (L)
   const curAngRef = useRef(0);
@@ -36,11 +39,8 @@ export default function ExtendPreview2D() {
         ? model.atoms.find((a) => a.id === extend.atomId)
         : undefined;
     const ptr = extend.pointer;
-    if (!extend.active || !base || !thin.current || !thick.current || !ptr) {
+    if (!extend.active || !base || !thin.current || !ptr) {
       if (thin.current) thin.current.visible = false;
-      if (thick.current) thick.current.visible = false;
-      if (dotA.current) dotA.current.visible = false;
-      if (dotB.current) dotB.current.visible = false;
       angVelRef.current = 0;
       lastActive.current = false;
       transRef.current.active = false;
@@ -86,7 +86,9 @@ export default function ExtendPreview2D() {
       transRef.current.startLen = L;
     }
 
-    // Free mode rendering (with optional one-shot transition)
+    // Where the new atom goes this frame
+    let end = { x: ptr.x, y: ptr.y };
+    // Free mode (with optional one-shot transition)
     if (extend.mode === "free") {
       const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
       if (transRef.current.active) {
@@ -107,23 +109,16 @@ export default function ExtendPreview2D() {
           wrapDelta(transRef.current.startAng, ang) * s;
         const lenBlend =
           transRef.current.startLen + (len - transRef.current.startLen) * s;
-        q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), angBlend);
-        const bx = Math.cos(angBlend) * (lenBlend * 0.5);
-        const by = Math.sin(angBlend) * (lenBlend * 0.5);
-        thick.current.position.set(base.x + bx, base.y + by, -0.03);
-        thick.current.quaternion.copy(q);
-        thick.current.scale.set(Math.max(lenBlend, 1e-6), thickWorld, 1);
-        thick.current.visible = true;
+        end = {
+          x: base.x + Math.cos(angBlend) * lenBlend,
+          y: base.y + Math.sin(angBlend) * lenBlend,
+        };
         if (transRef.current.t >= 1) {
           transRef.current.active = false;
         }
       } else {
         // steady free (no snap, no bounce)
-        q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), ang);
-        thick.current.position.set(base.x + dx * 0.5, base.y + dy * 0.5, -0.03);
-        thick.current.quaternion.copy(q);
-        thick.current.scale.set(Math.max(len, 1e-6), thickWorld, 1);
-        thick.current.visible = true;
+        end = { x: ptr.x, y: ptr.y };
       }
       lastActive.current = true;
       lastAtomId.current = base.id;
@@ -152,37 +147,19 @@ export default function ExtendPreview2D() {
       angVelRef.current += angAcc * dt;
       curAngRef.current += angVelRef.current * dt;
 
-      // Apply transform with constant length L
+      // constant length L
       const curAng = curAngRef.current;
-      const nx = Math.cos(curAng),
-        ny = Math.sin(curAng);
-      q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), curAng);
-      thick.current.position.set(
-        base.x + L * nx * 0.5,
-        base.y + L * ny * 0.5,
-        -0.03
-      );
-      thick.current.quaternion.copy(q);
-      thick.current.scale.set(L, thickWorld, 1);
-      thick.current.visible = true;
+      end = {
+        x: base.x + L * Math.cos(curAng),
+        y: base.y + L * Math.sin(curAng),
+      };
       lastActive.current = true;
       lastAtomId.current = base.id;
     }
 
-    // joint dot at the base side (match half thickness as radius)
-    const rWorld = thickWorld * 0.5;
-    if (dotA.current) {
-      // Place base joint dot behind bonds and match highlight style
-      dotA.current.position.set(base.x, base.y, -0.035);
-      dotA.current.scale.set(rWorld, rWorld, 1);
-      dotA.current.visible = true;
-      if (dotAOutline.current) {
-        dotAOutline.current.visible = false;
-      }
-    }
-    // hide far-end dot to avoid confusion
-    if (dotB.current) {
-      dotB.current.visible = false;
+    // The drawing lays the new bond out there.
+    if (Number.isFinite(end.x) && Number.isFinite(end.y)) {
+      setExtendPreview(end.x, end.y);
     }
     // remember mode for next frame
     lastModeRef.current = extend.mode;
@@ -198,46 +175,6 @@ export default function ExtendPreview2D() {
           opacity={ALPHA.highlight}
           depthWrite={false}
           depthTest={true}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh ref={thick} visible={false}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial
-          color={COLORS.bond}
-          transparent={false}
-          toneMapped={false}
-        />
-      </mesh>
-      {/* joint dots */}
-      <mesh ref={dotA} visible={false}>
-        <circleGeometry args={[1, 32]} />
-        <meshBasicMaterial
-          color={COLORS.bond}
-          transparent={false}
-          toneMapped={false}
-          depthTest={true}
-          depthWrite={false}
-        />
-      </mesh>
-      <mesh ref={dotAOutline} visible={false}>
-        <ringGeometry args={[0.9, 1, 48]} />
-        <meshBasicMaterial
-          color={COLORS.highlight}
-          transparent
-          opacity={ALPHA.highlight}
-          depthTest={true}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
-      <mesh ref={dotB} visible={false}>
-        <circleGeometry args={[1, 32]} />
-        <meshBasicMaterial
-          color={COLORS.highlight}
-          transparent
-          opacity={0.3}
-          depthWrite={false}
           toneMapped={false}
         />
       </mesh>

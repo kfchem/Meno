@@ -75,6 +75,7 @@ function bondOnto(
   el: string,
   stereo: Bond["stereo"],
   order: 1 | 2 | 3 = 1,
+  extra: Partial<Bond> = {},
 ): Structure {
   return {
     atoms: [
@@ -84,9 +85,32 @@ function bondOnto(
       { id: 3, x: -L * 0.5, y: -L * 0.87, el: "C" },
     ],
     bonds: [
-      { a1: 0, a2: 1, order, stereo },
+      { a1: 0, a2: 1, order, stereo, ...extra },
       { a1: 0, a2: 2, order: 1, stereo: "none" },
       { a1: 0, a2: 3, order: 1, stereo: "none" },
+    ],
+  };
+}
+
+/**
+ * A bold bond from an atom carrying two more bonds, each `deg` round from the
+ * bar, to one whose two more bonds leave it at the usual 120 degrees.
+ */
+function boldBetween(deg: number): Structure {
+  const a0: Atom = { id: 0, x: 0, y: 0, el: "C" };
+  const a1: Atom = { id: 1, x: L, y: 0, el: "C" };
+  const out = (from: Atom, towards: number, id: number): Atom => {
+    const a = (towards * Math.PI) / 180;
+    return { id, x: from.x + L * Math.cos(a), y: from.y + L * Math.sin(a), el: "C" };
+  };
+  return {
+    atoms: [a0, a1, out(a0, deg, 2), out(a0, -deg, 3), out(a1, 60, 4), out(a1, -60, 5)],
+    bonds: [
+      { a1: 0, a2: 1, order: 1, display: "bold" },
+      { a1: 0, a2: 2, order: 1 },
+      { a1: 0, a2: 3, order: 1 },
+      { a1: 1, a2: 4, order: 1 },
+      { a1: 1, a2: 5, order: 1 },
     ],
   };
 }
@@ -133,15 +157,30 @@ export const sweeps: Sweep[] = [
         ["double", "none", 2],
         ["triple", "none", 3],
         ["wedge", "up", 1],
-        ["hashed", "down", 1],
+        ["hashed wedge", "down", 1],
         ["wavy", "wavy", 1],
-      ] as [string, Bond["stereo"], 1 | 2 | 3][]
-    ).flatMap(([name, stereo, order]) =>
+        ["bold", "none", 1, { display: "bold" }],
+        ["hashed", "none", 1, { display: "hashed" }],
+        ["dashed", "none", 1, { display: "dashed" }],
+        ["dative", "none", 1, { dative: true }],
+      ] as [string, Bond["stereo"], 1 | 2 | 3, Partial<Bond>?][]
+    ).flatMap(([name, stereo, order, extra]) =>
       ["C", "O", "N", "Br"].map((el) => ({
         label: `${name} → ${el}`,
-        structure: bondOnto(el, stereo, order),
+        structure: bondOnto(el, stereo, order, extra),
       })),
     ),
+  },
+  {
+    title: "A bold bond between atoms that carry two more bonds each",
+    note:
+      "Both ends are cut along the bonds carrying on, as a wedge's wide end " +
+      "is: in a V where they lean alongside the bar, as in a ring, and " +
+      "dented where they lean away from it. The angle is at the left end.",
+    frames: [45, 60, 75, 90, 105, 120, 135, 150, 165].map((d) => ({
+      label: `${d}°`,
+      structure: boldBetween(d),
+    })),
   },
 ];
 

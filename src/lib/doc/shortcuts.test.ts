@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { undoIntent } from "./shortcuts";
+import { saveIntent, undoIntent } from "./shortcuts";
 
 const key = (over: Partial<Parameters<typeof undoIntent>[0]> = {}) => ({
   key: "z",
@@ -31,5 +31,18 @@ describe("undoIntent", () => {
   it("claims the text view's textarea, which a document backs", () => {
     expect(undoIntent(key({ target: { tagName: "TEXTAREA" } }))).toBe("undo");
     expect(undoIntent(key({ target: null }))).toBe("undo");
+  });
+});
+
+describe("saveIntent", () => {
+  it("saves on Ctrl/Cmd+S and saves as with Shift", () => {
+    expect(saveIntent({ key: "s", ctrlKey: true })).toBe("save");
+    expect(saveIntent({ key: "S", metaKey: true })).toBe("save");
+    expect(saveIntent({ key: "s", metaKey: true, shiftKey: true })).toBe("saveAs");
+  });
+
+  it("leaves other keys and a bare S alone", () => {
+    expect(saveIntent({ key: "s" })).toBeNull();
+    expect(saveIntent({ key: "a", ctrlKey: true })).toBeNull();
   });
 });
