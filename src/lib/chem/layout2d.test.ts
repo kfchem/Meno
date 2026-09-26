@@ -807,6 +807,36 @@ describe("double bonds, as ACS 1996 draws them", () => {
     expect(t2).toBeCloseTo(L - off() / Math.tan(Math.PI / 3), 6);
   });
 
+  it("never shortens double bonds that carry on in a straight line", () => {
+    // 0 == 1 == 2 in a line, each placement in turn
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.5, y: 0, el: "C" },
+      { id: 3, x: 3, y: 0, el: "C" },
+    ];
+    for (const mode of ["left", "right", "center"] as const) {
+      const bonds: Bond[] = [
+        { a1: 0, a2: 1, order: 2, doubleMode: mode },
+        { a1: 1, a2: 2, order: 2, doubleMode: mode },
+      ];
+      const { lines } = buildAllPrimitives(atoms, bonds, o(), 40);
+      // every line off the axis runs from one atom's end to the other's:
+      // together they cover 0..3 on each side without a gap
+      const off = lines.filter((l) => Math.abs(l.y1) > 1e-9);
+      for (const y of new Set(off.map((l) => l.y1.toFixed(9)))) {
+        const row = off
+          .filter((l) => l.y1.toFixed(9) === y)
+          .map((l) => [Math.min(l.x1, l.x2), Math.max(l.x1, l.x2)])
+          .sort((p, q) => p[0] - q[0]);
+        expect(row[0][0]).toBeCloseTo(0, 9);
+        for (let i = 1; i < row.length; i++) {
+          expect(row[i][0]).toBeCloseTo(row[i - 1][1], 9);
+        }
+        expect(row[row.length - 1][1]).toBeCloseTo(3, 9);
+      }
+    }
+  });
+
   it("runs a centred double bond's lines on to the plain bonds either side", () => {
     // 1 == 2, centred, with a plain bond leaving 2 on each side
     const atoms: Atom[] = [
