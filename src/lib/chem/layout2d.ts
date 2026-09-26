@@ -21,7 +21,6 @@ export type Vec2 = { x: number; y: number };
 export type LayoutOptions = {
   lineWidthPx: number;
   doubleOffsetPx: number;
-  doubleShortenPx: number;
   tripleOffsetPx: number;
   wedgeWidthPx: number;
   hashCount: number;
@@ -213,6 +212,9 @@ function vcross(a: Vec2, b: Vec2): number {
   return a.x * b.y - a.y * b.x;
 }
 
+function vdot(a: Vec2, b: Vec2): number {
+  return a.x * b.x + a.y * b.y;
+}
 function vperp(a: Vec2): Vec2 {
   return { x: -a.y, y: a.x };
 }
@@ -413,6 +415,67 @@ function mitreOffsetEnd(
 }
 
 /**
+ * How far the line beside a double bond stops short of an atom. Where it runs
+ * inside the angle the bond makes with another bond there, it ends on the
+ * bisector of that angle - its offset over the tangent of half the angle, so
+ * 1.5 pt at a 120 degree corner in ACS proportions. With nothing on its side
+ * it runs right up to the atom.
+ */
+function sideLineBack(
+  atoms: Atom[],
+  atIdx: number,
+  outward: Vec2,
+  side: Vec2,
+  offset: number,
+  others: Bond[],
+): number {
+  const at = atoms[atIdx];
+  let back = 0;
+  for (const b of others) {
+    const o = atoms[b.a1 === atIdx ? b.a2 : b.a1];
+    if (!o) continue;
+    const d = vsub({ x: o.x, y: o.y }, { x: at.x, y: at.y });
+    if (vlen(d) < 1e-9) continue;
+    const u = vnorm(d);
+    if (vdot(u, side) <= 1e-9) continue;
+    const theta = Math.acos(Math.max(-1, Math.min(1, vdot(u, outward))));
+    if (theta < 1e-6) continue;
+    back = Math.max(back, offset / Math.tan(theta / 2));
+  }
+  return back;
+}
+
+/** A plain bond: one line, no stereo, nothing else to it. */
+function isPlainSingle(b: Bond): boolean {
+  return b.order === 1 && (b.stereo == null || b.stereo === "none");
+}
+
+/**
+ * Where the line of a centred double bond that lies `offset` off it (on the
+ * side of its own a1-to-a2 normal) meets a plain bond leaving `atIdx` along
+ * `u`: on that bond's own line. The double bond and the plain one each ask
+ * this with the same arguments, so they agree on the point exactly.
+ */
+function centredMeetPoint(
+  atoms: Atom[],
+  dbl: Bond,
+  atIdx: number,
+  offset: number,
+  u: Vec2,
+): Vec2 | null {
+  const a = atoms[dbl.a1];
+  const c = atoms[dbl.a2];
+  const at = atoms[atIdx];
+  const d = vnorm(vsub({ x: c.x, y: c.y }, { x: a.x, y: a.y }));
+  const n = vperp(d);
+  const den = vcross(d, u);
+  if (Math.abs(den) < 1e-6) return null;
+  // at + n*offset + t*d lies on at + k*u
+  const t = (-offset * vcross(n, u)) / den;
+  return vadd({ x: at.x, y: at.y }, vadd(vscale(n, offset), vscale(d, t)));
+}
+
+/**
  * The two lines of a double bond drawn centred, each carried on to meet the
  * line of a neighbouring double bond where they share an atom. Left to stop
  * short, consecutive double bonds read as four loose lines rather than a
@@ -483,11 +546,56 @@ function centredPair(
       others(bond.a2),
       limit,
     );
+    // Not met by a double bond's line: run on to the plain bond on this
+    // line's side, the way ACS 1996 draws a centred double bond. That bond
+    // still reaches the atom, so the line ends on it partway, and the corner
+    // is finished between the line and that bond both ways.
+    const plainEnd = (
+      atIdx: number,
+      outward: Vec2,
+      end: { at: Vec2; met: boolean },
+    ): { at: Vec2; met: boolean; through?: Vec2 } => {
+      if (end.met) return end;
+      const atom = atoms[atIdx];
+      if (atom.el !== "C") return end;
+      let best: Vec2 | null = null;
+      let bestU: Vec2 | null = null;
+      let bestT = -Infinity;
+      for (const nb of adjBonds?.get(atIdx) ?? []) {
+        if (nb === bond || !isPlainSingle(nb)) continue;
+        const far = atoms[nb.a1 === atIdx ? nb.a2 : nb.a1];
+        if (!far) continue;
+        const u0 = vsub({ x: far.x, y: far.y }, { x: atom.x, y: atom.y });
+        if (vlen(u0) < 1e-9) continue;
+        const u = vnorm(u0);
+        if (Math.sign(vdot(u, n)) !== Math.sign(sgn)) continue;
+        const pt = centredMeetPoint(atoms, bond, atIdx, half * sgn, u);
+        if (!pt) continue;
+        // the first plain bond the line reaches, coming in from the bond
+        const t = vdot(vsub(pt, { x: atom.x, y: atom.y }), outward);
+        if (t > bestT) {
+          best = pt;
+          bestU = u;
+          bestT = t;
+        }
+      }
+      return best && bestU ? { at: best, met: true, through: bestU } : end;
+    };
+    const endA2 = plainEnd(bond.a1, dir, endA);
+    const endB2 = plainEnd(bond.a2, vscale(dir, -1), endB);
+    endA.at = endA2.at;
+    endA.met = endA2.met;
+    endB.at = endB2.at;
+    endB.met = endB2.met;
     const along = vnorm(vsub(endB.at, endA.at));
     if (endA.met) meets.push({ at: endA.at, dir: along });
     else ends.push(endA.at);
     if (endB.met) meets.push({ at: endB.at, dir: vscale(along, -1) });
     else ends.push(endB.at);
+    for (const e of [endA2, endB2]) {
+      if (!e.through) continue;
+      meets.push({ at: e.at, dir: e.through }, { at: e.at, dir: vscale(e.through, -1) });
+    }
     out.push({
       x1: endA.at.x,
       y1: endA.at.y,
@@ -945,7 +1053,9 @@ export function buildBondPrimitives(
   opts: LayoutOptions,
   zoom: number,
   deg?: Map<number, number>,
-  inRing?: boolean,
+  // Where a second line stops no longer depends on whether the bond is in a
+  // ring - the angles at its atoms decide - but callers still pass it.
+  _inRing?: boolean,
   autoSgn?: number,
   adjBonds?: Map<number, Bond[]>,
   labelBoxes?: Map<number, LabelBox>,
@@ -1099,17 +1209,6 @@ export function buildBondPrimitives(
     const off = toWorld(opts.doubleOffsetPx, zoom, units);
     const dir = vnorm(vsub(p2, p1));
     const n = vperp(dir);
-    const shorten = Math.max(
-      0,
-      toWorld(opts.doubleShortenPx || 0, zoom, units)
-    );
-    const d1 = (deg?.get(bond.a1) || 1) - 1;
-    const d2 = (deg?.get(bond.a2) || 1) - 1;
-    const ringShort = inRing === true;
-    const shortenA = ringShort || d1 > d2 || (d1 === d2 && d1 > 0);
-    const shortenB = ringShort || d2 > d1 || (d1 === d2 && d2 > 0);
-    const ps1 = shortenA ? vadd(p1, vscale(dir, shorten)) : p1;
-    const ps2 = shortenB ? vadd(p2, vscale(dir, -shorten)) : p2;
 
     const mode = bond.doubleMode || "auto";
     // Which side the second line goes: null puts one either side, at half
@@ -1147,8 +1246,29 @@ export function buildBondPrimitives(
     // Skew placement: the bond's own line, and a second one to one side of
     // it. That one meets the line of a double bond next door where they share
     // an atom, rather than stopping short of it: two double bonds in a row
-    // read as a chain that way, and as four loose lines otherwise.
+    // read as a chain that way, and as four loose lines otherwise. Elsewhere
+    // it stops on the bisector of the angle it runs inside, and runs up to an
+    // atom with nothing on its side - in a ring, both ends; in a chain, the
+    // end inside the zigzag. A label takes both lines' ends alike.
     const o = vscale(n, off * sgn);
+    const around = (idx: number) =>
+      (adjBonds?.get(idx) ?? []).filter((nb) => nb !== bond);
+    const back1 = hasLabel(a.el)
+      ? 0
+      : sideLineBack(atoms, bond.a1, dir, vscale(n, sgn), off, around(bond.a1));
+    const back2 = hasLabel(c.el)
+      ? 0
+      : sideLineBack(
+          atoms,
+          bond.a2,
+          vscale(dir, -1),
+          vscale(n, sgn),
+          off,
+          around(bond.a2),
+        );
+    const room = Math.max(0, vlen(vsub(p2, p1)) * 0.45);
+    const ps1 = vadd(p1, vscale(dir, Math.min(back1, room)));
+    const ps2 = vadd(p2, vscale(dir, -Math.min(back2, room)));
     const others = (idx: number) =>
       (adjBonds?.get(idx) ?? []).filter(
         (nb) =>
@@ -1204,15 +1324,9 @@ export function buildBondPrimitives(
   if (bond.order === 3) {
     // Triple bond outer offset matches the double-bond offset
     const off = toWorld(opts.doubleOffsetPx, zoom, units);
-    // The outer lines are held back from an atom other bonds meet, the way a
-    // double bond's second line is: run to the atom and they cross whatever
-    // else arrives there.
-    const shorten = Math.max(0, toWorld(opts.doubleShortenPx || 0, zoom, units));
-    const back1 = (deg?.get(bond.a1) || 1) > 1 ? shorten : 0;
-    const back2 = (deg?.get(bond.a2) || 1) > 1 ? shorten : 0;
-    const q1 = vadd(p1, vscale(dir, back1));
-    const q2 = vadd(p2, vscale(dir, -back2));
-    const [o1, , o3] = buildTripleLines(q1, q2, off);
+    // The outer lines run the bond's whole length, square to the atoms at
+    // either end, as ACS 1996 draws them.
+    const [o1, , o3] = buildTripleLines(p1, p2, off);
     lines.push(
       { x1: o1.x1, y1: o1.y1, x2: o1.x2, y2: o1.y2, widthPx: lwPx },
       { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx },
@@ -1247,15 +1361,19 @@ export function joinsAtAtoms(
   bonds: Bond[],
   opts: LayoutOptions,
   deg: Map<number, number>,
+  doubleSides?: Map<Bond, number | undefined>,
 ): { caps: Set<number>; mitres: Map<number, Vec2[]> } {
   // A double bond drawn centred has no line along the bond itself, so nothing
   // of it reaches the atom for a cap to round off: a cap there is a dot in
-  // mid air between the two lines.
+  // mid air between the two lines. Which way an automatic one went is known
+  // once the sides are worked out; without them, it is taken as centred.
   const onAxis = (b: Bond) =>
     b.order !== 2 ||
-    (b.doubleMode !== undefined &&
-      b.doubleMode !== "auto" &&
-      b.doubleMode !== "center");
+    (doubleSides
+      ? doubleOffsets(b, 1, doubleSides).length === 1
+      : b.doubleMode !== undefined &&
+        b.doubleMode !== "auto" &&
+        b.doubleMode !== "center");
   const reaching = new Map<number, number>();
   for (const b of bonds) {
     if (!onAxis(b)) continue;
@@ -1529,7 +1647,7 @@ export function buildAllPrimitives(
   // line width at every end, so a join and the end of a chain are rounded to
   // the same degree. Sharp: a flat end, and a mitre where two bonds meet.
   const roundJoins = (opts.joinStyle ?? "round") === "round";
-  const joins = joinsAtAtoms(atoms, bonds, opts, deg);
+  const joins = joinsAtAtoms(atoms, bonds, opts, deg, doubleSides);
   for (const i of roundJoins ? joins.caps : []) {
     fills.push({ c: { x: atoms[i].x, y: atoms[i].y }, r: rWorld });
   }
