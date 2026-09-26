@@ -1318,7 +1318,9 @@ export function buildTextLabels(
   // an atom carries, the second which side to write them on.
   const orderSum = new Map<number, number>();
   const away = new Map<number, Vec2>();
+  const bonded = new Set<number>();
   const note = (i: number, j: number, order: number) => {
+    bonded.add(i);
     orderSum.set(i, (orderSum.get(i) ?? 0) + order);
     const from = atoms[i];
     const to = atoms[j];
@@ -1338,7 +1340,9 @@ export function buildTextLabels(
   const out: TextItem[] = [];
   for (let i = 0; i < atoms.length; i++) {
     const a = atoms[i];
-    const show = opts.showCarbonLabels || a.el !== "C";
+    // A carbon with no bonds has nothing to stand for it but its label: ACS
+    // 1996 writes methane CH4.
+    const show = opts.showCarbonLabels || a.el !== "C" || !bonded.has(i);
     if (!show) continue;
     const h =
       opts.showImplicitHydrogens === false
