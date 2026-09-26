@@ -26,7 +26,7 @@ export type DrawingStyle = {
   /** Bond length, in points. Every "bond" length is a fraction of it. */
   bondLengthPt: number;
   lineWidth: Length;
-  /** A bold bond's width, once there are any. */
+  /** A bold bond's width, and the length of a hashed bond's hashes. */
   boldWidth: Length;
   /**
    * A wedge's broad end. Left unset, it is one and a half bold widths, and
@@ -37,6 +37,12 @@ export type DrawingStyle = {
   bondSpacing: Length;
   /** Between the hashes of a hashed wedge. */
   hashSpacing: Length;
+  /** A dashed bond's dashes, and the least gap between two of them. */
+  dashLength: Length;
+  dashGap: Length;
+  /** The head of a dative bond's arrow: how long, and how wide at its base. */
+  dativeHeadLength: Length;
+  dativeHeadWidth: Length;
   /** How far a wavy bond swings either side of its line. */
   wavyAmplitude: Length;
   /** One whole wave of a wavy bond. */
@@ -54,8 +60,8 @@ export type DrawingStyle = {
 };
 
 /**
- * ACS 1996: 14.4 pt bonds, 0.6 pt lines, 2.0 pt bold width (3.0 pt at a
- * wedge's broad end), 18% bond spacing, 2.5 pt hash spacing, wavy bonds of
+ * ACS 1996: 14.4 pt bonds, 0.6 pt lines, 2.0 pt bold width (the same for a
+ * hashed bond's hashes, and 3.0 pt at a wedge's broad end), 18% bond spacing, 2.5 pt hash spacing, wavy bonds of
  * half circles 1.88 pt across, 10 pt Arial labels kept 1.6 pt clear of
  * their bonds, square ends and mitred joins.
  */
@@ -65,6 +71,12 @@ export const ACS_1996: DrawingStyle = {
   boldWidth: pt(2.0),
   bondSpacing: ofBond(0.18),
   hashSpacing: pt(2.5),
+  // Not yet settled against ACS 1996: a dashed bond's dashes and a dative
+  // bond's arrowhead.
+  dashLength: pt(1.5),
+  dashGap: pt(1.0),
+  dativeHeadLength: pt(3.0),
+  dativeHeadWidth: pt(2.0),
   wavyAmplitude: pt(0.94),
   wavyPeriod: pt(3.76),
   fontSize: pt(10),
@@ -123,6 +135,11 @@ export function layoutOptionsFor(
     tripleOffsetPx: at(style.bondSpacing),
     wedgeWidthPx: at(wedgeWidthOf(style)),
     hashSpacingPx: at(style.hashSpacing),
+    boldWidthPx: at(style.boldWidth),
+    dashLengthPx: at(style.dashLength),
+    dashGapPx: at(style.dashGap),
+    dativeHeadLengthPx: at(style.dativeHeadLength),
+    dativeHeadWidthPx: at(style.dativeHeadWidth),
     wavyAmpPx: at(style.wavyAmplitude),
     wavyPeriodPx: at(style.wavyPeriod),
     fontPx: at(style.fontSize),

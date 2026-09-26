@@ -17,8 +17,34 @@ export type Bond = {
   doubleMode?: "auto" | "center" | "left" | "right";
   // Wedge orientation principle vs. reverse principle
   stereoOrient?: "principle" | "reverse";
+  /**
+   * How a single bond with no stereo is drawn: as a plain line (the
+   * default), as a bold bar, as hashes across it, or dashed along it.
+   */
+  display?: BondDisplay;
+  /** A dative bond, drawn as an arrow from `a1`, the donor, to `a2`. */
+  dative?: boolean;
 };
 export type Vec2 = { x: number; y: number };
+
+export type BondDisplay = "plain" | "bold" | "hashed" | "dashed";
+
+/**
+ * How a bond is actually drawn: stereo first, then a single bond's display,
+ * then as a dative arrow; a double or triple bond is always its lines.
+ */
+export function bondKind(
+  b: Bond,
+): "wedge" | "hashedWedge" | "wavy" | "bold" | "hashed" | "dashed" | "dative" | "lines" {
+  if (b.stereo === "up") return "wedge";
+  if (b.stereo === "down") return "hashedWedge";
+  if (b.stereo === "wavy") return "wavy";
+  if (b.order !== 1) return "lines";
+  if (b.display === "bold" || b.display === "hashed" || b.display === "dashed") {
+    return b.display;
+  }
+  return b.dative ? "dative" : "lines";
+}
 
 export type LayoutOptions = {
   lineWidthPx: number;
@@ -27,6 +53,17 @@ export type LayoutOptions = {
   wedgeWidthPx: number;
   /** Least distance between the hashes of a hashed wedge, centre to centre. */
   hashSpacingPx: number;
+  /**
+   * A bold bond's width, and the length of a hashed bond's hashes. Left
+   * unset, two thirds of a wedge's broad end.
+   */
+  boldWidthPx?: number;
+  /** A dashed bond's dashes, and the least gap between them. */
+  dashLengthPx?: number;
+  dashGapPx?: number;
+  /** The head of a dative bond's arrow: how long, and how wide at its base. */
+  dativeHeadLengthPx?: number;
+  dativeHeadWidthPx?: number;
   /** How far a wavy bond swings either side of its line. */
   wavyAmpPx: number;
   /** One whole wave of a wavy bond: a turn to either side. */
@@ -908,10 +945,87 @@ export function mitreJoinPolys(
 }
 
 /**
+ * A broad end at `p`: the wide end of a wedge, or either end of a bold bond,
+ * `half` either side of the bond, which leaves `p` along `dir`. It is cut
+ * along the bonds that continue from the atom - following each of them where
+ * there are two, which dents the middle of the cut inwards - and square
+ * across where nothing does. `farL` and `farR` are the corners at the other
+ * end, on the left and right of `dir`, which no corner may slide past;
+ * `capHalf` is how far a square end reaches back past an atom other bonds
+ * meet at, to cover the join there.
+ *
+ * Returns the end's outline from its left corner to its right, and which of
+ * those points are free corners that rounding may soften.
+ */
+function broadEnd(
+  p: Vec2,
+  dir: Vec2,
+  half: number,
+  neighbours: Neighbour[],
+  farL: Vec2,
+  farR: Vec2,
+  capHalf: number,
+): { points: Vec2[]; soften: boolean[] } {
+  const nb = vscale(vperp(dir), half);
+  const cutL = baseCut(p, 1, dir, neighbours);
+  const cutR = baseCut(p, -1, dir, neighbours);
+  // A corner may slide towards the far end as far as the far corner and no
+  // further, and back past the atom as far as the cut it follows allows.
+  const squareL = vadd(p, nb);
+  const squareR = vsub(p, nb);
+  const cornerL = cornerOnCut(cutL, squareL, farL, vlen(vsub(farL, squareL)));
+  const cornerR = cornerOnCut(cutR, squareR, farR, vlen(vsub(farR, squareR)));
+  // Either both corners follow their cut or neither does. One alone leaves the
+  // end slewed across the bond, which at some angles no longer covers the
+  // atom at all and cuts the bonds there adrift.
+  const mitredL = cornerR ? cornerL : null;
+  const mitredR = cornerL ? cornerR : null;
+  // A square end left at an atom other bonds meet would stop right at the
+  // atom, and the cap that fills the join there would bulge out of it. Reach
+  // the cap's width past the atom instead, so the end covers it.
+  const back =
+    neighbours.length > 0
+      ? vscale(dir, -Math.min(capHalf, half))
+      : { x: 0, y: 0 };
+  const baseL = mitredL ?? vadd(squareL, back);
+  const baseR = mitredR ?? vadd(squareR, back);
+  const points = [baseL];
+  // A corner cut along a bond carries on into that bond, so it is not a free
+  // corner and must stay as it is; the rest may be softened.
+  const soften = [!mitredL];
+  if (mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key) {
+    // Two bonds carry on from the end, so the cut follows one on each side
+    // and turns between them.
+    const edge = vsub(baseR, baseL);
+    const n = vperp(edge);
+    const outwards = n.x * dir.x + n.y * dir.y >= 0 ? 1 : -1;
+    const inwards =
+      ((p.x - baseL.x) * n.x + (p.y - baseL.y) * n.y) * outwards > 0;
+    if (inwards) {
+      // the turn is inwards: stop at the atom rather than at where the two
+      // outlines cross, which is further out than anything else there reaches
+      // and would show a sliver of background through the join
+      points.push(p);
+      soften.push(false);
+    } else {
+      // the turn is outwards - a bond carrying straight on through the end
+      // puts it there - so follow both cuts to where they meet
+      const cross = cutsCross(cutL, cutR);
+      if (cross && vlen(vsub(cross, p)) <= half) {
+        points.push(cross);
+        soften.push(false);
+      }
+    }
+  }
+  points.push(baseR);
+  soften.push(!mitredR);
+  return { points, soften };
+}
+
+/**
  * Solid wedge. Neither end is a point: the narrow end is as wide as a plain
  * bond so the join at an atom is as clean as a line-to-line one, and the wide
- * end is cut along the bonds that continue from its atom - following each of
- * them where there are two, which dents the middle of the cut inwards.
+ * end is a broad end, cut along the bonds that continue from its atom.
  * `tipAtLabel` says a label has taken the narrow end, which then stops where
  * a line would.
  */
@@ -928,7 +1042,6 @@ function buildWedgeTriangle(
   // Keep a taper even when the minimum line width would otherwise make the
   // narrow end as wide as the base (very low zoom).
   const tipHalf = Math.min(tipHalfWorld, baseHalfWorld * 0.5);
-  const nb = vscale(vperp(dir), baseHalfWorld);
   const nt = vscale(vperp(dir), tipHalf);
   // Reach just past the atom so the flat tip overlaps the bonds meeting there,
   // the way a mitred line join does. At a label there is nothing to overlap:
@@ -937,61 +1050,48 @@ function buildWedgeTriangle(
   const tip = vadd(p2, vscale(dir, tipAtLabel && !round ? 0 : tipHalf));
   const tipL = vadd(tip, nt);
   const tipR = vsub(tip, nt);
-  const cutL = baseCut(p1, 1, dir, baseNeighbours);
-  const cutR = baseCut(p1, -1, dir, baseNeighbours);
-  // A corner may slide towards the tip as far as the tip and no further, and
-  // back past the atom as far as the cut it follows allows.
-  const side = vlen(vsub(tipL, vadd(p1, nb)));
-  const squareL = vadd(p1, nb);
-  const squareR = vsub(p1, nb);
-  const cornerL = cornerOnCut(cutL, squareL, tipL, side);
-  const cornerR = cornerOnCut(cutR, squareR, tipR, side);
-  // Either both corners follow their cut or neither does. One alone leaves the
-  // wide end slewed across the wedge, which at some angles no longer covers
-  // the atom at all and cuts the bonds there adrift.
-  const mitredL = cornerR ? cornerL : null;
-  const mitredR = cornerL ? cornerR : null;
-  // A square end left at an atom other bonds meet would stop right at the
-  // atom, and the cap that fills the join there would bulge out of it. Reach
-  // the cap's width past the atom instead, so the end covers it.
-  const back =
-    baseNeighbours.length > 0
-      ? vscale(dir, -Math.min(tipHalfWorld, baseHalfWorld))
-      : { x: 0, y: 0 };
-  const baseL = mitredL ?? vadd(squareL, back);
-  const baseR = mitredR ?? vadd(squareR, back);
-  const points = [baseL];
-  // A corner cut along a bond carries on into that bond, so it is not a free
-  // corner and must stay as it is; the rest may be softened.
-  const soften = [!mitredL];
-  if (mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key) {
-    // Two bonds carry on from the wide end, so the cut follows one on each
-    // side and turns between them.
-    const edge = vsub(baseR, baseL);
-    const n = vperp(edge);
-    const towardsTip = n.x * dir.x + n.y * dir.y >= 0 ? 1 : -1;
-    const inwards =
-      ((p1.x - baseL.x) * n.x + (p1.y - baseL.y) * n.y) * towardsTip > 0;
-    if (inwards) {
-      // the turn is inwards: stop at the atom rather than at where the two
-      // outlines cross, which is further out than anything else there reaches
-      // and would show a sliver of background through the join
-      points.push(p1);
-      soften.push(false);
-    } else {
-      // the turn is outwards - a bond carrying straight on through the wide
-      // end puts it there - so follow both cuts to where they meet
-      const cross = cutsCross(cutL, cutR);
-      if (cross && vlen(vsub(cross, p1)) <= baseHalfWorld) {
-        points.push(cross);
-        soften.push(false);
-      }
-    }
-  }
-  points.push(baseR, tipR, tipL);
-  soften.push(!mitredR, true, true);
+  const base = broadEnd(
+    p1,
+    dir,
+    baseHalfWorld,
+    baseNeighbours,
+    tipL,
+    tipR,
+    tipHalfWorld,
+  );
+  const points = [...base.points, tipR, tipL];
+  const soften = [...base.soften, true, true];
   return {
     points: round ? roundPolyCorners(points, tipHalf, soften) : points,
+  };
+}
+
+/**
+ * A bold bond, as ACS 1996 draws it: a bar `half` either side of the line,
+ * each end a broad end cut along the bonds continuing from its atom, as a
+ * wedge's wide end is. Round ends round its free corners by half its width,
+ * so an end that meets nothing is a half circle.
+ */
+function buildBoldBar(
+  p1: Vec2,
+  p2: Vec2,
+  half: number,
+  lineHalf: number,
+  neighbours1: Neighbour[],
+  neighbours2: Neighbour[],
+  round: boolean,
+): Poly {
+  const dir = vnorm(vsub(p2, p1));
+  const n = vscale(vperp(dir), half);
+  // each end may reach no further than the middle of the bar
+  const mid = vscale(vadd(p1, p2), 0.5);
+  const end1 = broadEnd(p1, dir, half, neighbours1, vadd(mid, n), vsub(mid, n), lineHalf);
+  const back = vscale(dir, -1);
+  const end2 = broadEnd(p2, back, half, neighbours2, vsub(mid, n), vadd(mid, n), lineHalf);
+  const points = [...end1.points, ...end2.points];
+  const soften = [...end1.soften, ...end2.soften];
+  return {
+    points: round ? roundPolyCorners(points, half, soften) : points,
   };
 }
 
@@ -1000,8 +1100,8 @@ function buildWedgeTriangle(
  * over `start`..`end` of the bond, measured from the narrow atom.
  *
  * ACS 1996 draws it as a solid wedge cut into hashes: an outline running from
- * a line width at `start` to the full broad end at `end`, and each hash the
- * part of it one line width deep - a trapezoid, its ends following the
+ * `startHalf` either side at `start` - half a line width, for a wedge - to
+ * `wideHalf` at `end`, and each hash the part of it one line width deep - a trapezoid, its ends following the
  * outline. The first hash sits flush with `start` and the last with `end`,
  * and as many lie between as fit at least the hash spacing apart, spread
  * evenly. Round ends make each hash a line with a cap at either end instead,
@@ -1012,6 +1112,7 @@ function buildHashes(
   dir: Vec2,
   start: number,
   end: number,
+  startHalf: number,
   wideHalf: number,
   spacing: number,
   lineWidth: number,
@@ -1029,7 +1130,7 @@ function buildHashes(
     spacing > 0 ? 1 + Math.floor((last - first) / spacing + 1e-9) : 1;
   // half the outline's width, a distance `at` from the narrow atom
   const halfAt = (at: number) =>
-    Math.max(0, lineWidth / 2 + (wideHalf - lineWidth / 2) * ((at - from) / (end - from)));
+    Math.max(0, startHalf + (wideHalf - startHalf) * ((at - from) / (end - from)));
   const point = (at: number, side: number) =>
     vadd(narrow, vadd(vscale(dir, at), vscale(n, side)));
   for (let k = 0; k < count; k++) {
@@ -1054,6 +1155,59 @@ function buildHashes(
     }
   }
   return out;
+}
+
+/**
+ * A dashed bond: dashes of `dash` along the line from `p1` to `p2`, one flush
+ * with each end and as many between as leave gaps of at least `gap`, spread
+ * evenly.
+ */
+function buildDashes(p1: Vec2, p2: Vec2, dash: number, gap: number): LineSeg[] {
+  const d = vsub(p2, p1);
+  const L = vlen(d);
+  if (!(L > 0)) return [];
+  const seg = (a: number, b: number): LineSeg => {
+    const u = vscale(d, 1 / L);
+    const s = vadd(p1, vscale(u, a));
+    const e = vadd(p1, vscale(u, b));
+    return { x1: s.x, y1: s.y, x2: e.x, y2: e.y, widthPx: 0 };
+  };
+  if (!(dash > 0) || L <= dash + Math.max(gap, 0) + dash) return [seg(0, L)];
+  const count = Math.max(2, Math.floor((L + gap) / (dash + gap) + 1e-9));
+  const g = (L - count * dash) / (count - 1);
+  const out: LineSeg[] = [];
+  for (let k = 0; k < count; k++) {
+    const at = k * (dash + g);
+    out.push(seg(at, at + dash));
+  }
+  return out;
+}
+
+/**
+ * A dative bond: a line from the donor `from` to the acceptor `to`, and a
+ * filled head at the acceptor's end, its point where the line would end.
+ */
+function buildDativeArrow(
+  from: Vec2,
+  to: Vec2,
+  headLength: number,
+  headHalf: number,
+): { line: LineSeg | null; head: Poly } {
+  const d = vsub(to, from);
+  const L = vlen(d);
+  const u = L > 0 ? vscale(d, 1 / L) : { x: 1, y: 0 };
+  const length = Math.min(headLength, L);
+  const base = vsub(to, vscale(u, length));
+  const n = vscale(vperp(u), headHalf);
+  // the line runs into the head, so no sliver shows between them
+  const into = vsub(to, vscale(u, length / 2));
+  return {
+    line:
+      L > length
+        ? { x1: from.x, y1: from.y, x2: into.x, y2: into.y, widthPx: 0 }
+        : null,
+    head: { points: [vadd(base, n), to, vsub(base, n)] },
+  };
 }
 
 /**
@@ -1174,7 +1328,9 @@ export function buildTextLabels(
     away.set(i, { x: acc.x + d.x, y: acc.y + d.y });
   };
   for (const b of bonds) {
-    const order = b.order ?? 1;
+    // a dative bond lends a pair rather than sharing one: it takes no
+    // hydrogen from either end, so H3N->BH3 keeps all six
+    const order = bondKind(b) === "dative" ? 0 : (b.order ?? 1);
     note(b.a1, b.a2, order);
     note(b.a2, b.a1, order);
   }
@@ -1308,6 +1464,125 @@ export function buildBondPrimitives(
   const labelEnds: Vec2[] = [];
   if (hasLabel(a.el) && trimA > 0) labelEnds.push(p1);
   if (hasLabel(c.el) && trimB > 0) labelEnds.push(p2);
+  const round = (opts.joinStyle ?? "round") === "round";
+  /**
+   * The bonds carrying on from `at`, other than to `other`, to cut a broad
+   * end along. A labelled atom has none: the bond stops short of the label,
+   * so there is no join to make.
+   */
+  const neighboursAt = (at: number, other: number): Neighbour[] => {
+    const atom = atoms[at];
+    const out: Neighbour[] = [];
+    if (!atom || hasLabel(atom.el)) return out;
+    const doubleHalf = toWorld(opts.doubleOffsetPx, zoom, units) * 0.5;
+    const tripleHalf = toWorld(opts.tripleOffsetPx, zoom, units);
+    for (const b of adjBonds?.get(at) ?? []) {
+      const far = b.a1 === at ? b.a2 : b.a1;
+      if (far === other || far === at) continue;
+      const o = atoms[far];
+      if (!o) continue;
+      const d = vsub({ x: o.x, y: o.y }, { x: atom.x, y: atom.y });
+      if (vlen(d) < 1e-9) continue;
+      // how far that bond reaches either side of its own line
+      const spread = b.order === 3 ? tripleHalf : b.order === 2 ? doubleHalf : 0;
+      out.push({
+        dir: vnorm(d),
+        half: lineHalf + spread,
+        wide: spread > 0,
+        len: vlen(d),
+      });
+    }
+    return out;
+  };
+  const kind = bondKind(bond);
+  const boldHalf =
+    (opts.boldWidthPx != null
+      ? toWorld(opts.boldWidthPx, zoom, units)
+      : (toWorld(opts.wedgeWidthPx, zoom, units) * 2) / 3) / 2;
+  if (kind === "bold") {
+    // each end, as broad as the bar, clears a label there
+    const t1 = labelReach(bond.a1, a.el, dir, boldHalf);
+    const t2 = labelReach(bond.a2, c.el, vscale(dir, -1), boldHalf);
+    polys.push(
+      buildBoldBar(
+        vadd(p1o, vscale(dir, t1)),
+        vsub(p2o, vscale(dir, t2)),
+        boldHalf,
+        lineHalf,
+        neighboursAt(bond.a1, bond.a2),
+        neighboursAt(bond.a2, bond.a1),
+        round,
+      ),
+    );
+    return { lines, polys };
+  }
+  if (kind === "hashed") {
+    // Hashes as long as a bold bond is wide, set out as a hashed wedge's are:
+    // from the atom with more bonds, one hash spacing out, or from a label
+    // there, to flush with the far end.
+    const fromA = (deg?.get(bond.a1) || 0) >= (deg?.get(bond.a2) || 0);
+    const towards = fromA ? dir : vscale(dir, -1);
+    const tStart = labelReach(fromA ? bond.a1 : bond.a2, (fromA ? a : c).el, towards, boldHalf);
+    const tEnd = labelReach(fromA ? bond.a2 : bond.a1, (fromA ? c : a).el, vscale(towards, -1), boldHalf);
+    const spacing = toWorld(opts.hashSpacingPx, zoom, units);
+    const hashes = buildHashes(
+      fromA ? p1o : p2o,
+      towards,
+      tStart > 0 ? tStart : spacing,
+      L0 - tEnd,
+      boldHalf,
+      boldHalf,
+      spacing,
+      pxToWorld(lwPx, zoom),
+      round,
+    );
+    for (const l of hashes.lines) l.widthPx = lwPx;
+    lines.push(...hashes.lines);
+    polys.push(...hashes.polys);
+    return { lines, polys, ends: hashes.ends };
+  }
+  if (kind === "dashed") {
+    const spacing = toWorld(opts.hashSpacingPx, zoom, units);
+    const dash =
+      opts.dashLengthPx != null
+        ? toWorld(opts.dashLengthPx, zoom, units)
+        : spacing * 0.6;
+    const gap =
+      opts.dashGapPx != null ? toWorld(opts.dashGapPx, zoom, units) : spacing * 0.4;
+    const dashes = buildDashes(p1, p2, dash, gap);
+    for (const l of dashes) l.widthPx = lwPx;
+    lines.push(...dashes);
+    // every dash's ends are free, bar the ones on an atom, whose join sees to
+    // them
+    const ends: Vec2[] = [...labelEnds];
+    dashes.forEach((l, i) => {
+      if (i > 0) ends.push({ x: l.x1, y: l.y1 });
+      if (i < dashes.length - 1) ends.push({ x: l.x2, y: l.y2 });
+    });
+    return { lines, polys, ends };
+  }
+  if (kind === "dative") {
+    const headLength =
+      opts.dativeHeadLengthPx != null
+        ? toWorld(opts.dativeHeadLengthPx, zoom, units)
+        : boldHalf * 3;
+    const headHalf =
+      opts.dativeHeadWidthPx != null
+        ? toWorld(opts.dativeHeadWidthPx, zoom, units) / 2
+        : boldHalf;
+    const arrow = buildDativeArrow(p1, p2, headLength, headHalf);
+    if (arrow.line) {
+      arrow.line.widthPx = lwPx;
+      lines.push(arrow.line);
+    }
+    polys.push(arrow.head);
+    // the head's point is its own end; a label at the donor takes the line's
+    return {
+      lines,
+      polys,
+      ends: hasLabel(a.el) && trimA > 0 ? [p1] : [],
+    };
+  }
   if (bond.stereo === "up" || bond.stereo === "down") {
     const baseAtP1 = wedgeBaseAtom(bond, deg) === bond.a1;
     const baseHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
@@ -1332,37 +1607,14 @@ export function buildBondPrimitives(
       // so there is no join to make.
       const baseIdx = baseAtP1 ? bond.a1 : bond.a2;
       const tipIdx = baseAtP1 ? bond.a2 : bond.a1;
-      const baseAtom = atoms[baseIdx];
-      const neighbours: Neighbour[] = [];
-      if (!hasLabel(baseAtom.el)) {
-        const half = pxToWorld(lwPx * 0.5, zoom);
-        const doubleHalf = toWorld(opts.doubleOffsetPx, zoom, units) * 0.5;
-        const tripleHalf = toWorld(opts.tripleOffsetPx, zoom, units);
-        for (const b of adjBonds?.get(baseIdx) ?? []) {
-          const other = b.a1 === baseIdx ? b.a2 : b.a1;
-          if (other === tipIdx || other === baseIdx) continue;
-          const o = atoms[other];
-          if (!o) continue;
-          const d = vsub({ x: o.x, y: o.y }, { x: baseAtom.x, y: baseAtom.y });
-          if (vlen(d) < 1e-9) continue;
-          // how far that bond reaches either side of its own line
-          const spread =
-            b.order === 3 ? tripleHalf : b.order === 2 ? doubleHalf : 0;
-          neighbours.push({
-            dir: vnorm(d),
-            half: half + spread,
-            wide: spread > 0,
-            len: vlen(d),
-          });
-        }
-      }
+      const neighbours = neighboursAt(baseIdx, tipIdx);
       const tri = buildWedgeTriangle(
         bp1,
         bp2,
         baseHalf,
         tipHalf,
         neighbours,
-        (opts.joinStyle ?? "round") === "round",
+        round,
         hasLabel(atoms[tipIdx].el) && trimNarrow > 0,
       );
       polys.push(tri);
@@ -1377,6 +1629,7 @@ export function buildBondPrimitives(
         vnorm(vsub(wideO, narrowO)),
         trimNarrow > 0 ? trimNarrow : spacing,
         L0 - trimWide,
+        pxToWorld(lwPx, zoom) / 2,
         baseHalf,
         spacing,
         pxToWorld(lwPx, zoom),
@@ -1612,17 +1865,31 @@ export function joinsAtAtoms(
   const plainDirs = new Map<number, Vec2[]>();
   const plainEnds = new Set<number>();
   for (const b of bonds) {
-    // A wedge is a shape of its own, and a hashed one is a row of hashes:
-    // a cap at either would sit past the last of them as a loose dot.
-    if (b.stereo === "up" || b.stereo === "down") continue;
+    // A wedge or a bold bond is a shape of its own, and a hashed one is a row
+    // of hashes: a cap at any of them would sit past its end as a loose dot.
+    const kind = bondKind(b);
+    if (
+      kind === "wedge" ||
+      kind === "hashedWedge" ||
+      kind === "bold" ||
+      kind === "hashed"
+    ) {
+      continue;
+    }
     if (!onAxis(b)) continue;
-    plainEnds.add(b.a1);
-    plainEnds.add(b.a2);
+    // a dative bond's line ends at the donor; at the acceptor its arrow's
+    // point is the end, and a cap there would blunt it
+    const ends = kind === "dative" ? [b.a1] : [b.a1, b.a2];
     const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
     const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
+    for (const e of ends) plainEnds.add(e);
     if (vlen(vsub(q, p)) < 1e-9) continue;
-    plainDirs.set(b.a1, [...(plainDirs.get(b.a1) ?? []), vnorm(vsub(q, p))]);
-    plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
+    if (ends.includes(b.a1)) {
+      plainDirs.set(b.a1, [...(plainDirs.get(b.a1) ?? []), vnorm(vsub(q, p))]);
+    }
+    if (ends.includes(b.a2)) {
+      plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
+    }
   }
   // The wide end of a solid wedge covers the join at its atom itself, either
   // by reaching past it or by being cut along the bonds there; a cap on top of
