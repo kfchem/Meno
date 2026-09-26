@@ -19,6 +19,11 @@ export type EditorBond = {
   b: number;
   order: 1 | 2 | 3;
   stereo?: "up" | "down" | "wavy" | "none";
+  /**
+   * Set when the file puts a wedge's narrow end where the drawing would not
+   * by itself - at the atom with fewer bonds.
+   */
+  stereoOrient?: "principle" | "reverse";
   /** A coordination bond (MOL bond type 9), drawn as an arrow from `a` to `b`. */
   dative?: boolean;
 };
@@ -356,12 +361,14 @@ export function convertMolToEditorModel(m: ParsedMol, scale: number) {
   // Assign bond IDs after atom IDs to avoid collisions with atoms
   const bondIdBase = atoms.length;
   const orders = kekuleOrders(m.atoms, m.bonds);
+  const reversed = wedgesNarrowAtFewerBonds(m.bonds);
   const bonds: EditorBond[] = m.bonds.map((b, i) => ({
     id: bondIdBase + i + 1,
     a: b.a1 + 1,
     b: b.a2 + 1,
     order: orders[i],
     stereo: mapStereo(b as any),
+    ...(reversed[i] ? { stereoOrient: "reverse" as const } : {}),
     ...(b.order === COORDINATION_BOND ? { dative: true } : {}),
   }));
   // centroid
@@ -419,6 +426,7 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
       });
     }
     const orders = kekuleOrders(m.atoms, m.bonds);
+    const reversed = wedgesNarrowAtFewerBonds(m.bonds);
     m.bonds.forEach((b, i) => {
       // Parsed indices are 0-based; our per-molecule atoms were assigned ids base..(base+atoms-1).
       // Therefore, map directly as base + index (no +1).
@@ -430,6 +438,7 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
         b: a2,
         order: orders[i],
         stereo: mapStereo(b as any),
+        ...(reversed[i] ? { stereoOrient: "reverse" as const } : {}),
         ...(b.order === COORDINATION_BOND ? { dative: true } : {}),
       });
     });
@@ -461,6 +470,26 @@ function normalizeEl(el: string): string {
   const s = String(el).trim();
   if (!s) return "C";
   return s[0].toUpperCase() + s.slice(1).toLowerCase();
+}
+
+/**
+ * Which wedges a file draws with their narrow end on the atom with fewer
+ * bonds. A MOL file puts a wedge's narrow end at its first atom; the drawing
+ * puts it at the atom with more bonds unless told otherwise, so these are
+ * the ones to tell.
+ */
+function wedgesNarrowAtFewerBonds(
+  bonds: readonly { a1: number; a2: number; stereoCode?: number }[],
+): boolean[] {
+  const deg = new Map<number, number>();
+  for (const b of bonds) {
+    deg.set(b.a1, (deg.get(b.a1) ?? 0) + 1);
+    deg.set(b.a2, (deg.get(b.a2) ?? 0) + 1);
+  }
+  return bonds.map((b) => {
+    const wedge = b.stereoCode === 1 || b.stereoCode === 6;
+    return wedge && (deg.get(b.a1) ?? 0) < (deg.get(b.a2) ?? 0);
+  });
 }
 
 function mapStereo(
