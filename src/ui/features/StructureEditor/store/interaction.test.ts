@@ -46,3 +46,35 @@ describe("move drag preview", () => {
     expect(store.getState().moveDrag).toBe(before);
   });
 });
+
+describe("extend preview", () => {
+  const extending = () => {
+    const store = createEditorStore(createStructureDocument());
+    const id = store.getState().addAtom(0, 0, "C");
+    store.getState().startExtend(id);
+    return { store, id };
+  };
+
+  it("follows where the new atom is previewed", () => {
+    const { store } = extending();
+    store.getState().setExtendPreview(1.5, 0);
+    expect(store.getState().extend.preview).toEqual({ x: 1.5, y: 0 });
+  });
+
+  it("ignores movement too small to see", () => {
+    const { store } = extending();
+    store.getState().setExtendPreview(1.5, 0);
+    const before = store.getState().extend;
+    store.getState().setExtendPreview(1.5 + 1e-6, 1e-6);
+    expect(store.getState().extend).toBe(before);
+  });
+
+  it("is dropped when the gesture ends, and ignored when there is none", () => {
+    const { store } = extending();
+    store.getState().setExtendPreview(1.5, 0);
+    store.getState().cancelExtend();
+    expect(store.getState().extend.preview ?? null).toBeNull();
+    store.getState().setExtendPreview(3, 3);
+    expect(store.getState().extend.preview ?? null).toBeNull();
+  });
+});
