@@ -35,8 +35,6 @@ export type DrawingStyle = {
   wedgeWidth?: Length;
   /** Between the lines of a double or triple bond, centre to centre. */
   bondSpacing: Length;
-  /** How far the inner line of a double bond stops short of each end. */
-  innerLineShortening: Length;
   /** Between the hashes of a hashed wedge. */
   hashSpacing: Length;
   /** How far a wavy bond swings either side of its line. */
@@ -63,7 +61,6 @@ export const ACS_1996: DrawingStyle = {
   lineWidth: pt(0.6),
   boldWidth: pt(2.0),
   bondSpacing: ofBond(0.18),
-  innerLineShortening: ofBond(0.1),
   hashSpacing: pt(2.5),
   wavyAmplitude: ofBond(0.07),
   wavyPeriod: ofBond(1 / 1.4),
@@ -118,7 +115,6 @@ export function layoutOptionsFor(
   const options: LayoutOptions = {
     lineWidthPx: at(style.lineWidth),
     doubleOffsetPx: at(style.bondSpacing),
-    doubleShortenPx: at(style.innerLineShortening),
     // A triple bond's outer lines sit one bond spacing either side.
     tripleOffsetPx: at(style.bondSpacing),
     wedgeWidthPx: at(wedgeWidthOf(style)),

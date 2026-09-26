@@ -11,6 +11,7 @@ import {
   type Atom,
   type Bond,
   type LayoutOptions,
+  type LineSeg,
   type Vec2,
 } from "./layout2d";
 import { acsWorldOptions } from "./acs";
@@ -523,10 +524,10 @@ describe("a wedge and a bond of more than one line", () => {
     const wedge = polys.reduce((big, p) =>
       polyArea(p.points) > polyArea(big.points) ? p : big,
     );
-    // the double bond runs along +x from the atom; its lines sit either side
-    const ys = lines
-      .filter((l) => l.x1 > -0.1 && l.x2 > 1)
-      .map((l) => l.y1);
+    // the double bond runs along +x from the atom; its lines sit either side.
+    // The lower one runs on past the atom to meet the plain bond leaving it
+    // on that side, so only where they end is asked.
+    const ys = lines.filter((l) => l.x2 > 1).map((l) => l.y2);
     expect(ys.length).toBe(2);
     const lowest = Math.min(...ys);
     // the wedge reaches below the lower line, so its end is covered
@@ -696,7 +697,7 @@ describe("a wavy bond", () => {
 });
 
 describe("where bonds crowd each other", () => {
-  it("holds a triple bond's outer lines back from a join", () => {
+  it("runs a triple bond's outer lines its whole length, as ACS 1996 does", () => {
     const o = opts();
     const atoms: Atom[] = [
       { id: 1, x: 0, y: 0, el: "C" },
@@ -712,10 +713,10 @@ describe("where bonds crowd each other", () => {
     const middle = triple.find((l) => Math.abs(l.y1) < 1e-9)!;
     const outer = triple.filter((l) => Math.abs(l.y1) > 1e-9);
     expect(outer).toHaveLength(2);
-    // the free end runs the full length; the end where a bond joins does not
+    // square to the atom at both ends, the one another bond joins as well
     for (const l of outer) {
       expect(l.x1).toBeCloseTo(middle.x1, 9);
-      expect(l.x2).toBeLessThan(middle.x2 - 1e-6);
+      expect(l.x2).toBeCloseTo(middle.x2, 9);
     }
   });
 
@@ -736,6 +737,106 @@ describe("where bonds crowd each other", () => {
     const { fills } = buildAllPrimitives(atoms, bonds, o, 40);
     // the thin ends are each a bond wide and do not fill the join on their own
     expect(fills.some((f) => Math.hypot(f.c.x, f.c.y) < 1e-9)).toBe(true);
+  });
+});
+
+describe("double bonds, as ACS 1996 draws them", () => {
+  const o = () => opts({ joinStyle: "sharp" });
+  const off = () => o().doubleOffsetPx; // world units: the options are in world
+  const hexagon = (): Atom[] =>
+    [0, 1, 2, 3, 4, 5].map((k) => ({
+      id: k + 1,
+      x: 1.5 * Math.cos((Math.PI / 3) * k),
+      y: 1.5 * Math.sin((Math.PI / 3) * k),
+      el: "C",
+    }));
+  const ringBonds = (): Bond[] =>
+    [0, 1, 2, 3, 4, 5].map((k) => ({
+      a1: k,
+      a2: (k + 1) % 6,
+      order: k === 0 ? 2 : 1,
+    }));
+  const along = (l: LineSeg, p: Vec2, q: Vec2) => {
+    // where a line's ends fall along p->q, as distances from p
+    const d = { x: (q.x - p.x) / Math.hypot(q.x - p.x, q.y - p.y), y: (q.y - p.y) / Math.hypot(q.x - p.x, q.y - p.y) };
+    const t = (x: number, y: number) => (x - p.x) * d.x + (y - p.y) * d.y;
+    return [t(l.x1, l.y1), t(l.x2, l.y2)].sort((a, b) => a - b);
+  };
+
+  it("stops a ring's inner line on the bisectors of its corners", () => {
+    const atoms = hexagon();
+    const { lines } = buildAllPrimitives(atoms, ringBonds(), o(), 40);
+    const p = atoms[0];
+    const q = atoms[1];
+    const inner = lines.find((l) => {
+      const mid = { x: (l.x1 + l.x2) / 2, y: (l.y1 + l.y2) / 2 };
+      return Math.hypot(mid.x, mid.y) < 1.2 && Math.hypot(mid.x, mid.y) > 0.5;
+    })!;
+    const [t1, t2] = along(inner, p, q);
+    const back = off() / Math.tan(Math.PI / 3); // half of 120 degrees
+    expect(t1).toBeCloseTo(back, 9);
+    expect(t2).toBeCloseTo(1.5 - back, 9);
+  });
+
+  it("shortens a chain's second line only at the end inside the zigzag", () => {
+    // 0 -- 1 == 2 -- 3, zigzag at exactly 120 degrees
+    const w = 1.5 * Math.cos(Math.PI / 6);
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: w, y: 0.75, el: "C" },
+      { id: 3, x: 2 * w, y: 0, el: "C" },
+      { id: 4, x: 3 * w, y: 0.75, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1 },
+      // "left" of 1->2 is the side 3 is on
+      { a1: 1, a2: 2, order: 2, doubleMode: "left" },
+      { a1: 2, a2: 3, order: 1 },
+    ];
+    const { lines } = buildAllPrimitives(atoms, bonds, o(), 40);
+    const p = atoms[1];
+    const q = atoms[2];
+    const second = lines.find(
+      (l) => Math.abs((l.y1 + l.y2) / 2 - 0.375) > 0.05 && l.x1 > 1 && l.x2 < 2.7,
+    )!;
+    const [t1, t2] = along(second, p, q);
+    const L = 1.5;
+    // outside the corner at 1: right up to the atom
+    expect(t1).toBeCloseTo(0, 9);
+    // inside the corner at 2 (120 degrees): stopped on its bisector
+    expect(t2).toBeCloseTo(L - off() / Math.tan(Math.PI / 3), 6);
+  });
+
+  it("runs a centred double bond's lines on to the plain bonds either side", () => {
+    // 1 == 2, centred, with a plain bond leaving 2 on each side
+    const atoms: Atom[] = [
+      { id: 1, x: -1.5, y: 0, el: "C" },
+      { id: 2, x: 0, y: 0, el: "C" },
+      { id: 3, x: 0.75, y: 1.3, el: "C" },
+      { id: 4, x: 0.75, y: -1.3, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 2, doubleMode: "center" },
+      { a1: 1, a2: 2, order: 1 },
+      { a1: 1, a2: 3, order: 1 },
+    ];
+    const { lines, fills, polys } = buildAllPrimitives(atoms, bonds, o(), 40);
+    const h = off() / 2;
+    for (const [far, side] of [[2, 1], [3, -1]] as const) {
+      const u = { x: atoms[far].x / 1.5, y: atoms[far].y / 1.5 };
+      // where the line on this side meets the plain bond's own line
+      const k = h / Math.abs(u.y);
+      const meet = { x: u.x * k, y: side * h };
+      const dbl = lines.find((l) => Math.abs(l.y1 - side * h) < 1e-9 && Math.abs(l.y2 - side * h) < 1e-9)!;
+      expect(Math.max(dbl.x1, dbl.x2)).toBeCloseTo(meet.x, 9);
+      // the plain bond still reaches the atom itself
+      const plain = lines.find((l) => Math.hypot(l.x2 - atoms[far].x, l.y2 - atoms[far].y) < 1e-9)!;
+      expect(plain.x1).toBeCloseTo(0, 9);
+      expect(plain.y1).toBeCloseTo(0, 9);
+    }
+    // nothing round anywhere with square ends; the corners are mitred
+    expect(fills).toHaveLength(0);
+    expect(polys.length).toBeGreaterThan(0);
   });
 });
 
