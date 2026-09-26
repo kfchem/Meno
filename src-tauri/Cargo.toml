@@ -26,3 +26,4 @@ uuid = { version = "1", features = ["v4"] }
 which = "6"
 tauri-plugin-fs = "2"
 tauri-plugin-os = "2"
+tauri-plugin-dialog = "2"

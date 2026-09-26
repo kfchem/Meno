@@ -142,13 +142,13 @@ All hover-based, as above.
 ### 5. Files, clipboard and export
 
 - Save and Save As (MOL/SDF), Ctrl+S, and closing asks when there is
-  something to lose.
+  something to lose. (PR #43)
 - Import that keeps charges, isotopes, radicals, atom lists and S-groups, and
   V3000 reactions.
 - SMILES in and out.
 - SVG export, drawn exactly as on the canvas - with the drawing style it was
-  drawn in - and PNG. The current SVG export is unmounted, and loses
-  double-bond sides and wedge direction.
+  drawn in - and PNG. The SVG export draws what the canvas draws (PR #36),
+  at ACS 1996's own size, from a button beside Save (PR #43); PNG to come.
 - The clipboard, for Word and PowerPoint: a vector picture in each platform's
   own form (EMF on Windows, PDF on macOS), PNG and MOL alongside it.
 

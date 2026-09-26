@@ -13,6 +13,11 @@ export function createUiSlice(
   get: GetState,
 ) {
   return {
+    markSavedAs: (path: string) => {
+      set((prev: EditorState) => ({ ...prev, savedPath: path }));
+      doc.markSaved();
+    },
+
     beginLabelEdit: (atomId: number, initial = "", forceLower = false) =>
       set((prev: EditorState) => {
         const base = prev.model.atoms.find((a) => a.id === atomId);

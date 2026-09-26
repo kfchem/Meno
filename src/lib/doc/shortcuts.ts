@@ -28,6 +28,13 @@ function isNativeEditingTarget(target: unknown): boolean {
   return tag === "INPUT" || tag === "SELECT";
 }
 
+/** Ctrl/Cmd+S saves; Ctrl/Cmd+Shift+S saves as. */
+export function saveIntent(event: KeyLike): "save" | "saveAs" | null {
+  if (!(event.ctrlKey || event.metaKey)) return null;
+  if ((event.key || "").toLowerCase() !== "s") return null;
+  return event.shiftKey ? "saveAs" : "save";
+}
+
 /** Ctrl/Cmd+Z undoes; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. */
 export function undoIntent(event: KeyLike): UndoIntent {
   if (!(event.ctrlKey || event.metaKey)) return null;

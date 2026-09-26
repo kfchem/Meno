@@ -120,6 +120,13 @@ export type EditorState = {
   ) => void;
   updateMovePointer: (x: number, y: number) => void;
   setMoveDragPreview: (x: number, y: number) => void;
+  /**
+   * The file this canvas was last saved to, which Save writes to again; none
+   * until it has been saved once.
+   */
+  savedPath: string | null;
+  /** The document has just been written to `path`: it is saved there. */
+  markSavedAs: (path: string) => void;
   setExtendPreview: (x: number, y: number) => void;
   endMoveDrag: () => void;
   /** The structure a tab opens with: where its document starts, not an edit. */

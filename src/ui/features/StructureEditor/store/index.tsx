@@ -77,6 +77,7 @@ export function createEditorStore(
     extend: { active: false, atomId: null, pointer: null, mode: "snap" },
     panHold: { active: false, pointerId: null },
     suppressDblClickUntil: 0,
+    savedPath: null,
 
     ...createModelSlice(doc, set, get),
     ...createSelectionSlice(set),
