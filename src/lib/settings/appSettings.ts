@@ -19,10 +19,19 @@ import { acceptStyleChoice } from "../chem/styleFields";
 export type AppSettings = {
   /** The drawing style a structure is drawn in unless its document has its own. */
   drawingStyle: StyleChoice;
+  network: NetworkSettings;
+};
+
+export type NetworkSettings = {
+  /** Nothing leaves the computer. */
+  offline: boolean;
+  /** The purposes the user has allowed to use the network. */
+  granted: string[];
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   drawingStyle: DEFAULT_STYLE_CHOICE,
+  network: { offline: false, granted: [] },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -32,7 +41,29 @@ const FORMAT = 1;
 export function acceptAppSettings(raw: unknown): AppSettings {
   if (typeof raw !== "object" || raw === null) return DEFAULT_APP_SETTINGS;
   const r = raw as Record<string, unknown>;
-  return { drawingStyle: acceptStyleChoice(r.drawingStyle) };
+  return {
+    drawingStyle: acceptStyleChoice(r.drawingStyle),
+    network: acceptNetwork(r.network),
+  };
+}
+
+function acceptNetwork(raw: unknown): NetworkSettings {
+  if (typeof raw !== "object" || raw === null)
+    return DEFAULT_APP_SETTINGS.network;
+  const { offline, granted } = raw as Record<string, unknown>;
+  return {
+    offline: offline === true,
+    granted: Array.isArray(granted)
+      ? [
+          ...new Set(
+            granted.filter(
+              (p): p is string =>
+                typeof p === "string" && /^[a-z0-9:-]{1,64}$/.test(p),
+            ),
+          ),
+        ]
+      : [],
+  };
 }
 
 export function settingsFileText(settings: AppSettings): string {
@@ -68,6 +99,7 @@ type SettingsState = AppSettings & {
   /** What went wrong reading or writing the file, if anything. */
   error: string | null;
   setDrawingStyle: (choice: StyleChoice) => void;
+  setNetwork: (network: NetworkSettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -78,8 +110,8 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle } = get();
-      writeSettingsText(settingsFileText({ drawingStyle })).then(
+      const { drawingStyle, network } = get();
+      writeSettingsText(settingsFileText({ drawingStyle, network })).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
       );
@@ -91,6 +123,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     error: null,
     setDrawingStyle: (drawingStyle) => {
       set({ drawingStyle });
+      scheduleSave();
+    },
+    setNetwork: (network) => {
+      set({ network });
       scheduleSave();
     },
   };

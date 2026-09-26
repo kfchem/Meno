@@ -1,0 +1,146 @@
+import {
+  ArrowDownTrayIcon,
+  CheckCircleIcon,
+  NoSymbolIcon,
+  XCircleIcon,
+} from "@heroicons/react/24/outline";
+import clsx from "clsx";
+import { useEffect, useMemo, useState } from "react";
+import {
+  formatBytes,
+  purposeName,
+  useNetwork,
+  type NetConnection,
+  type NetTask,
+} from "../../lib/net/network";
+
+/** How long a finished task, or a refusal, stays in view. */
+const LINGER_MS = 6000;
+
+/**
+ * The network as it is used, in the corner of the window: a card for each
+ * task while it runs - what it is, where it connects, how much has come in
+ * - and for a while after, and a card for each connection refused. A click
+ * opens the full record.
+ */
+export default function NetworkToasts({ onOpen }: { onOpen: () => void }) {
+  const tasks = useNetwork((s) => s.tasks);
+  const connections = useNetwork((s) => s.connections);
+  const [now, setNow] = useState(() => Date.now());
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+
+  const cards = useMemo(() => {
+    const byTask = new Map<string, NetConnection[]>();
+    for (const c of connections) {
+      if (c.taskId) byTask.set(c.taskId, [...(byTask.get(c.taskId) ?? []), c]);
+    }
+    const out: {
+      key: string;
+      task?: NetTask;
+      conns: NetConnection[];
+      at: number;
+    }[] = [];
+    for (const task of Object.values(tasks)) {
+      const conns = byTask.get(task.id) ?? [];
+      // the user's own code shows only once it reaches out
+      if (task.purpose === "python-code" && conns.length === 0) continue;
+      const lastActive = Math.max(
+        task.ended ?? now,
+        ...conns.map((c) => c.ended ?? now),
+      );
+      if (task.ended && now - lastActive > LINGER_MS) continue;
+      out.push({ key: task.id, task, conns, at: task.started });
+    }
+    for (const c of connections) {
+      if (c.outcome !== "blocked" || now - (c.ended ?? c.started) > LINGER_MS)
+        continue;
+      out.push({ key: `blocked-${c.id}`, conns: [c], at: c.started });
+    }
+    return out
+      .filter((c) => !dismissed.has(c.key))
+      .sort((a, b) => a.at - b.at)
+      .slice(-4);
+  }, [tasks, connections, now, dismissed]);
+
+  // tick while anything is in view, so finished cards leave on time
+  useEffect(() => {
+    if (cards.length === 0) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [cards.length]);
+
+  if (cards.length === 0) return null;
+  return (
+    <div className="absolute right-3 bottom-3 z-[90] flex flex-col gap-2 w-80 pointer-events-none">
+      {cards.map(({ key, task, conns }) => {
+        const blocked = !task;
+        const hosts = [
+          ...new Set(
+            conns.filter((c) => c.outcome !== "blocked").map((c) => c.host),
+          ),
+        ];
+        const received = conns.reduce((n, c) => n + c.received, 0);
+        const refused = conns.filter((c) => c.outcome === "blocked").length;
+        const failed = task?.outcome === "failed";
+        const running = task && !task.ended;
+        const Icon = blocked
+          ? NoSymbolIcon
+          : running
+            ? ArrowDownTrayIcon
+            : failed
+              ? XCircleIcon
+              : CheckCircleIcon;
+        return (
+          <button
+            key={key}
+            role="status"
+            onClick={onOpen}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setDismissed((d) => new Set(d).add(key));
+            }}
+            title="Open the network record (right-click to dismiss)"
+            className="pointer-events-auto text-left rounded-lg border border-gh-line bg-white/95 shadow-md px-3 py-2 text-xs text-gh-black hover:bg-white"
+          >
+            <div className="flex items-center gap-2">
+              <Icon
+                className={clsx(
+                  "h-4 w-4 shrink-0",
+                  blocked || failed ? "text-accel-accent" : "text-accel-base",
+                  running && "animate-pulse",
+                )}
+              />
+              <span className="font-medium truncate">
+                {blocked
+                  ? `Kept from the network: ${conns[0].host}`
+                  : task.label || purposeName(task.purpose)}
+              </span>
+            </div>
+            <div className="mt-1 pl-6 text-gh-gray leading-snug">
+              {blocked ? (
+                <span>{conns[0].reason ?? "refused"}</span>
+              ) : (
+                <>
+                  <span>
+                    {conns.length === 0
+                      ? running
+                        ? "Starting…"
+                        : "No connections"
+                      : `${formatBytes(received)} from ${hosts.join(", ") || "—"}`}
+                  </span>
+                  {refused > 0 && (
+                    <span className="text-accel-accent">
+                      {" "}
+                      · {refused} refused
+                    </span>
+                  )}
+                  {!running && <span> · {failed ? "failed" : "done"}</span>}
+                </>
+              )}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

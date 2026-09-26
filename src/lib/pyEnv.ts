@@ -7,6 +7,7 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
+import { askToConnect } from "./net/network";
 
 async function sha256(s: string) {
   const buf = await crypto.subtle.digest(
@@ -53,6 +54,15 @@ type PyEnvInfo = {
   venvPythonRel: string;
   stampPath: string;
   pythonVersion: string;
+  /** What its downloads are for, as the user allows them, and in words. */
+  purpose: string;
+  label: string;
+};
+
+/** What each profile is for, in words. */
+const PROFILE_USE: Record<PyProfile, string> = {
+  console: "the console",
+  node: "workflows",
 };
 
 async function baseInfo(
@@ -69,6 +79,8 @@ async function baseInfo(
     venvPythonRel: os === "windows" ? "Scripts/python.exe" : "bin/python",
     stampPath: `uv/stamps/${profile}.json`,
     pythonVersion: pyVer,
+    purpose: `python-env:${profile}`,
+    label: `Setting up Python for ${PROFILE_USE[profile]}`,
   };
 }
 
@@ -120,6 +132,28 @@ export async function ensurePyEnv(
     stamp.py !== info.pythonVersion;
 
   if (needSetup) {
+    // The first time, the user says whether it may download at all.
+    const packages = lockText
+      .split(/\r?\n/)
+      .filter((line) => /^[A-Za-z0-9_.-]+==/.test(line)).length;
+    const allowed = await askToConnect({
+      purpose: info.purpose,
+      title: `Download Python for ${PROFILE_USE[profile]}?`,
+      detail:
+        `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, ` +
+        `with the ${packages} packages it needs, in its data folder. ` +
+        `uv, which comes with Meno, downloads them - once:`,
+      sources: [
+        "Python itself, from Astral, who make uv (releases.astral.sh)",
+        "the packages, from the Python Package Index (pypi.org, files.pythonhosted.org)",
+      ],
+    });
+    if (!allowed) {
+      throw new Error(
+        `${info.label} needs the network, and was not allowed it` +
+          " (Meno is offline, or the download was declined).",
+      );
+    }
     await invoke("py_env_setup_uv", { payload: info });
     await writeJsonSafe(
       info.stampPath,

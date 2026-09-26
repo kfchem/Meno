@@ -5,9 +5,11 @@ import plexSans from "../../assets/fonts/IBMPlexSans-Regular.ttf?url";
 import plexSansJp from "../../assets/fonts/IBMPlexSansJP-Regular.ttf?url";
 import { drawableByTextRenderer } from "./drawable";
 import "./textRenderer";
+import { noteBlocked } from "../../lib/net/network";
 import {
   addFallbackGlyphs,
   DEFAULT_LABEL_FAMILY,
+  labelFont,
   readGlyphs,
   registerGlyphs,
 } from "../../lib/chem/labelFonts";
@@ -190,4 +192,25 @@ export function useSystemTypefaces(): string[] {
     };
   }, []);
   return families;
+}
+
+const noted = new Set<string>();
+
+/**
+ * Puts on the network's record the characters of `texts` that no font of
+ * Meno's has: the canvas's text renderer would look for them on its own,
+ * outside, and the window's security policy keeps it from doing so - they
+ * are left out. Each is noted once.
+ */
+export function noteUncovered(family: string, texts: readonly string[]): void {
+  const font = labelFont(family);
+  const missing = [...new Set(texts.join(""))].filter(
+    (ch) => ch.trim() !== "" && !noted.has(ch) && !font.has(ch),
+  );
+  if (missing.length === 0) return;
+  for (const ch of missing) noted.add(ch);
+  void noteBlocked(
+    "cdn.jsdelivr.net",
+    `the canvas would have looked for a font with ${missing.join(" ")}, which no font of Meno's has; left out`,
+  );
 }

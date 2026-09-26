@@ -15,7 +15,15 @@ import type { DocumentStore } from "./lib/doc";
 import { undoIntent } from "./lib/doc/shortcuts";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
-import { loadAppSettings } from "./lib/settings/appSettings";
+import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
+import {
+  applyNetworkSettings,
+  startNetwork,
+  useNetwork,
+} from "./lib/net/network";
+import ConsentDialog from "./ui/network/ConsentDialog";
+import NetworkToasts from "./ui/network/NetworkToasts";
+import { showSettingsSection } from "./ui/features/SettingsPanel/section";
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
@@ -43,9 +51,20 @@ export default function App() {
     return doc;
   }, []);
 
-  // The application's settings - the drawing style among them - read once.
+  // The application's settings - the drawing style among them - read once,
+  // and the network brought into line with them: offline or not, and what
+  // has been allowed. From then on, a change to either is saved.
   useEffect(() => {
-    void loadAppSettings();
+    void (async () => {
+      await startNetwork();
+      await loadAppSettings();
+      await applyNetworkSettings(useAppSettings.getState().network);
+    })();
+    return useNetwork.subscribe((s, prev) => {
+      if (!useAppSettings.getState().loaded) return;
+      if (s.offline === prev.offline && s.granted === prev.granted) return;
+      useAppSettings.getState().setNetwork({ offline: s.offline, granted: s.granted });
+    });
   }, []);
 
   // Undo/redo belong to the active tab, not to the app as a whole.
@@ -228,6 +247,13 @@ export default function App() {
           />
         );
       })}
+      <NetworkToasts
+        onOpen={() => {
+          showSettingsSection("network");
+          void ctl.openByKind?.("settings", { label: "Settings" });
+        }}
+      />
+      <ConsentDialog />
       <Deck
         order={state.mountOrder}
         tabs={state.tabsById}
