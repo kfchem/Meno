@@ -1,10 +1,6 @@
 import "./fonts";
-import {
-  advanceIn,
-  inkHullIn,
-  labelFontMetrics,
-  type LabelFontMetrics,
-} from "./labelFonts";
+import { ARIAL } from "./arial";
+import { labelFont, type LabelFont } from "./labelFonts";
 
 export type Atom = {
   id: number;
@@ -159,12 +155,26 @@ export type TextRun = { text: string; sub?: boolean };
 export const BASELINE_DROP = 0.4;
 export const SUB_SCALE = 0.75;
 export const SUB_DROP = 0.225;
+
+/**
+ * How far below its atom a capital's middle sits, in ems: where ACS 1996's
+ * baseline puts an Arial capital's. Set by it, a capital of any typeface
+ * sits on its atom as an Arial one does.
+ */
+export const CAP_MIDDLE_DROP =
+  BASELINE_DROP - ARIAL.capHeight / ARIAL.unitsPerEm / 2;
+
+/** The baseline that sets a capital `capHeight` ems tall on its atom as ACS 1996 sets Arial's. */
+export function automaticBaseline(capHeight: number): number {
+  return capHeight / 2 + CAP_MIDDLE_DROP;
+}
 /** How far apart the lines of a stacked label are, baseline to baseline. */
 export const STACK_SPACING = 0.857;
 
 /** How a label is set, as fractions of its font size, and in what. */
 export type LabelSet = {
-  baseline: number;
+  /** Below the atom, in ems; unset, as `automaticBaseline` has it for the typeface. */
+  baseline?: number;
   subscriptSize: number;
   subscriptDrop: number;
   stackSpacing: number;
@@ -255,9 +265,9 @@ export function pxToWorld(px: number, zoom: number): number {
   return px / Math.max(zoom, 1e-6);
 }
 
-function runWidth(font: LabelFontMetrics, text: string, size: number): number {
+function runWidth(font: LabelFont, text: string, size: number): number {
   let w = 0;
-  for (const ch of text) w += advanceIn(font, ch) * size;
+  for (const ch of text) w += font.advance(ch) * size;
   return w;
 }
 
@@ -288,18 +298,19 @@ export function placeLabel(
   fontSize: number,
   set: LabelSet = ACS_LABEL_SET,
 ): PlacedRun[] {
-  const font = labelFontMetrics(set.fontFamily);
+  const font = labelFont(set.fontFamily);
   const runs = t.runs ?? [{ text: t.text }];
   const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
   const sizes = runs.map((r) => fontSize * (r.sub ? set.subscriptSize : 1));
   const widths = runs.map((r, i) => runWidth(font, r.text, sizes[i]));
   /** Where a run starts so that its first letter is centred on the atom. */
   const centredOn = (i: number) =>
-    t.x - (advanceIn(font, runs[i].text[0] ?? " ") * sizes[i]) / 2;
+    t.x - (font.advance([...runs[i].text][0] ?? " ") * sizes[i]) / 2;
   /** Where the symbol starts: its first letter on the atom, or all of it. */
   const symbolAt = () =>
     t.centreSymbol ? t.x - widths[anchor] / 2 : centredOn(anchor);
-  const baseline = t.y - fontSize * set.baseline;
+  const baseline =
+    t.y - fontSize * (set.baseline ?? automaticBaseline(font.capHeight));
   const setRun = (i: number, x: number, line: number): PlacedRun => ({
     text: runs[i].text,
     sub: !!runs[i].sub,
@@ -344,17 +355,17 @@ export function labelHulls(
   fontSize: number,
   set: LabelSet = ACS_LABEL_SET,
 ): Vec2[][] {
-  const font = labelFontMetrics(set.fontFamily);
+  const font = labelFont(set.fontFamily);
   const out: Vec2[][] = [];
   for (const run of placeLabel(t, fontSize, set)) {
     let pen = run.x - t.x;
     for (const ch of run.text) {
-      const hull = inkHullIn(font, ch).map((p) => ({
+      const hull = font.hull(ch).map((p) => ({
         x: pen + p.x * run.size,
         y: run.y - t.y + p.y * run.size,
       }));
       if (hull.length > 0) out.push(hull);
-      pen += advanceIn(font, ch) * run.size;
+      pen += font.advance(ch) * run.size;
     }
   }
   return out;
@@ -2422,12 +2433,17 @@ function escapeXml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
-/** The CSS font stack for a typeface: itself, then its nearest stand-ins. */
+/**
+ * The CSS font stack for a typeface: itself, its nearest stand-in, then
+ * IBM Plex Sans JP for what it lacks - as the canvas draws it.
+ */
 export function fontStack(family: string): string {
-  if (family === "Arial") return "Arial, Helvetica, sans-serif";
-  if (family === "Helvetica") return "Helvetica, Arial, sans-serif";
-  const name = /\s/.test(family) ? `'${family}'` : family;
-  return `${name}, Arial, sans-serif`;
+  const quote = (name: string) => (/[^A-Za-z0-9-]/.test(name) ? `'${name}'` : name);
+  const standIn =
+    family === "Arial" ? ["Helvetica"] : family === "Helvetica" ? ["Arial"] : [];
+  return [family, ...standIn, "IBM Plex Sans JP", "sans-serif"]
+    .map((name, i, all) => (i === all.length - 1 ? name : quote(name)))
+    .join(", ");
 }
 
 /** A label as the canvas draws it: set by `placeLabel`, run by run. */

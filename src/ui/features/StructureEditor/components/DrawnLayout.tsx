@@ -9,6 +9,7 @@ import {
 } from "../../../../lib/chem/layout2d";
 import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
+import { needsFallback, useTypefaces } from "../../../fonts/typefaces";
 import { DrawnLayoutContext } from "./drawnLayoutContext";
 
 /** The id the atom a bond is being drawn out to goes by until it is made. */
@@ -83,9 +84,16 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
           : false;
     return editorLayoutOptions(style, { aromaticCircle });
   }, [style, aromaticEnabled, aromaticRings]);
+  // The typeface's own letters, and Japanese ones when a label has any, are
+  // read when first needed; the layout is redone as they come in.
+  const fonts = useTypefaces(
+    style.fontFamily,
+    needsFallback(model.atoms.map((a) => a.el)),
+  );
   const layout = useMemo(
     () => layoutMolecule(atoms, bonds, opts, zoom),
-    [atoms, bonds, opts, zoom],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fonts: see above
+    [atoms, bonds, opts, zoom, fonts],
   );
   const value = useMemo(
     () => ({ atoms, bonds, opts, layout, zoom }),

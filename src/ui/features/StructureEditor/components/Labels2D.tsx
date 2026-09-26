@@ -1,6 +1,6 @@
 import { Text } from "@react-three/drei";
 import { labelSetOf, placeLabel } from "../../../../lib/chem/layout2d";
-import { useLabelFont } from "../labelFont";
+import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
 import { useDrawnLayout } from "./drawnLayoutContext";
 
 /**
@@ -14,7 +14,10 @@ export default function Labels2D() {
   // font the layout measures in is the one drawn with, so nothing needs
   // measuring here. Until the font is known nothing is drawn, rather than a
   // label in some other font that then jumps.
-  const font = useLabelFont(opts.fontFamily ?? "Arial");
+  const font = useLabelFontUrl(
+    opts.fontFamily ?? "Arial",
+    needsFallback(layout.texts.map((t) => t.text)),
+  );
   if (font === null) return null;
   return (
     <group>

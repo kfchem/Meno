@@ -116,8 +116,12 @@ export type DrawingStyle = {
   labelColor: string;
   /** How far a bond stops short of a label's letters. */
   labelClearance: Length;
-  /** How far a label's baseline sits below its atom, as a fraction of the font size. */
-  labelBaseline: number;
+  /**
+   * How far a label's baseline sits below its atom, as a fraction of the
+   * font size. Left unset, where it sets a capital of the typeface on its
+   * atom as ACS 1996 sets Arial's - 0.4 in Arial.
+   */
+  labelBaseline?: number;
   /** A subscript's size, as a fraction of the font size. */
   subscriptSize: number;
   /** How far a subscript's baseline drops, as a fraction of the font size. */
@@ -155,7 +159,6 @@ const RULES = {
   centredJoinMinAngle: 20,
   wedgeCutMaxAngle: 175,
   wedgeCornerReach: 0.5,
-  labelBaseline: 0.4,
   subscriptSize: 0.75,
   subscriptDrop: 0.225,
   stackedLineSpacing: 0.857,
@@ -265,14 +268,12 @@ export const WILEY: DrawingStyle = {
  * Meno's own style: ACS 1996's proportions, which a chemist reads without
  * noticing them, with round ends and joins and labels in IBM Plex Sans -
  * whose capital I has serifs and whose l has a tail, so that Cl never reads
- * as CI. Plex's capitals are a little shorter than Arial's, so the baseline
- * rises with them and a capital sits on its atom as it does in ACS 1996.
+ * as CI.
  */
 export const MENO: DrawingStyle = {
   ...ACS_1996,
   ends: "round",
   fontFamily: "IBM Plex Sans",
-  labelBaseline: 0.391,
 };
 
 /** A style that can be picked by name. */

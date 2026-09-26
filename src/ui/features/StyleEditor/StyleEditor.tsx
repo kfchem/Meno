@@ -26,6 +26,8 @@ import {
   SAMPLE_MOLECULE,
   sampleSvg,
 } from "../../../lib/chem/styleSamples";
+import { useTypefaces } from "../../fonts/typefaces";
+import TypefacePicker from "./TypefacePicker";
 
 /**
  * Every drawing setting, grouped, with a preview drawn by the same layout as
@@ -282,10 +284,13 @@ function Preview({
   compact?: boolean;
 }) {
   const [mag, setMag] = useState<Magnification>("fit");
+  // placed by the typeface's own letters once they have been read
+  const fonts = useTypefaces(style.fontFamily);
   const molecule = useMemo(
     // Fitted, it is drawn large and scaled down to the box.
     () => sampleSvg(SAMPLE_MOLECULE, style, mag === "fit" ? 4 : mag),
-    [style, mag],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fonts: see above
+    [style, mag, fonts],
   );
   const bonds = useMemo(
     () =>
@@ -586,19 +591,12 @@ function Control({
       );
     case "typeface":
       return (
-        <select
+        <TypefacePicker
           value={value as string}
-          aria-label={field.label}
-          onChange={(e) => set(e.target.value)}
-          className="h-7 rounded-md border border-gh-line bg-white px-2 text-sm text-gh-black"
-          style={{ fontFamily: value as string }}
-        >
-          {k.options.map((o) => (
-            <option key={o} value={o} style={{ fontFamily: o }}>
-              {o}
-            </option>
-          ))}
-        </select>
+          suggested={k.suggested}
+          label={field.label}
+          onChange={set}
+        />
       );
     case "choice":
       return (
