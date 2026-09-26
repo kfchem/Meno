@@ -124,9 +124,11 @@ export type TextRun = { text: string; sub?: boolean };
  * sits `BASELINE_DROP` below the atom, and a subscript is `SUB_SCALE` the
  * size, its baseline `SUB_DROP` below the label's.
  */
-export const BASELINE_DROP = 0.408;
+export const BASELINE_DROP = 0.4;
 export const SUB_SCALE = 0.75;
 export const SUB_DROP = 0.225;
+/** How far apart the lines of a stacked label are, baseline to baseline. */
+export const STACK_SPACING = 0.857;
 
 export type TextItem = {
   x: number;
@@ -141,6 +143,17 @@ export type TextItem = {
    * right of the atom and HO to its left.
    */
   anchorRun?: number;
+  /**
+   * The runs after the symbol set on a line of their own, below it or above
+   * it: CH2 between two bonds rising either side has its H2 underneath.
+   */
+  stack?: "below" | "above";
+  /**
+   * The whole symbol centred on the atom rather than its first letter: an Si
+   * between bonds leaving straight out to either side sits square between
+   * them.
+   */
+  centreSymbol?: boolean;
   /** The atom this label belongs to, by index. */
   atom?: number;
 };
@@ -206,29 +219,57 @@ export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
 }
 
 /**
- * A label set in Arial as ACS 1996 has it: the element symbol centred on the
- * atom, the rest following on either side at Arial's own advances, all on
- * one baseline but for subscripts.
+ * A label set in Arial as ACS 1996 has it: the first letter of the element
+ * symbol centred on the atom - the C of Cl, as of CH3 - and the rest
+ * following on either side at Arial's own advances, all on one baseline but
+ * for subscripts. A stacked label sets what follows the symbol on a line of
+ * its own, below or above, its first letter centred under the symbol's.
  */
 export function placeLabel(t: TextItem, fontSize: number): PlacedRun[] {
   const runs = t.runs ?? [{ text: t.text }];
   const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
   const sizes = runs.map((r) => fontSize * (r.sub ? SUB_SCALE : 1));
   const widths = runs.map((r, i) => runWidth(r.text, sizes[i]));
-  let x = t.x - widths[anchor] / 2;
-  for (let i = 0; i < anchor; i++) x -= widths[i];
+  /** Where a run starts so that its first letter is centred on the atom. */
+  const centredOn = (i: number) =>
+    t.x - (advanceEm(runs[i].text[0] ?? " ") * sizes[i]) / 2;
+  /** Where the symbol starts: its first letter on the atom, or all of it. */
+  const symbolAt = () =>
+    t.centreSymbol ? t.x - widths[anchor] / 2 : centredOn(anchor);
   const baseline = t.y - fontSize * BASELINE_DROP;
-  return runs.map((r, i) => {
-    const run: PlacedRun = {
-      text: r.text,
-      sub: !!r.sub,
-      x,
-      y: r.sub ? baseline - fontSize * SUB_DROP : baseline,
-      size: sizes[i],
-    };
-    x += widths[i];
-    return run;
+  const set = (i: number, x: number, line: number): PlacedRun => ({
+    text: runs[i].text,
+    sub: !!runs[i].sub,
+    x,
+    y: runs[i].sub ? line - fontSize * SUB_DROP : line,
+    size: sizes[i],
   });
+  const out: PlacedRun[] = [];
+  if (t.stack && anchor + 1 < runs.length) {
+    // the symbol, and whatever precedes it, on the first line
+    let x = symbolAt();
+    for (let i = 0; i < anchor; i++) x -= widths[i];
+    for (let i = 0; i <= anchor; i++) {
+      out.push(set(i, x, baseline));
+      x += widths[i];
+    }
+    const line =
+      baseline +
+      fontSize * STACK_SPACING * (t.stack === "below" ? -1 : 1);
+    x = centredOn(anchor + 1);
+    for (let i = anchor + 1; i < runs.length; i++) {
+      out.push(set(i, x, line));
+      x += widths[i];
+    }
+    return out;
+  }
+  let x = symbolAt();
+  for (let i = 0; i < anchor; i++) x -= widths[i];
+  for (let i = 0; i < runs.length; i++) {
+    out.push(set(i, x, baseline));
+    x += widths[i];
+  }
+  return out;
 }
 
 /**
@@ -320,102 +361,21 @@ function vperp(a: Vec2): Vec2 {
   return { x: -a.y, y: a.x };
 }
 
-function pointToSegment(p: Vec2, a: Vec2, b: Vec2): number {
-  const ab = vsub(b, a);
-  const len2 = vdot(ab, ab);
-  const t = len2 > 0 ? Math.max(0, Math.min(1, vdot(vsub(p, a), ab) / len2)) : 0;
-  return vlen(vsub(p, vadd(a, vscale(ab, t))));
-}
-
-/** Whether `p` is inside a convex polygon wound anticlockwise. */
-function insideConvex(p: Vec2, poly: Vec2[]): boolean {
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % poly.length];
-    if (vcross(vsub(b, a), vsub(p, a)) < 0) return false;
-  }
-  return true;
-}
-
-function segmentsCross(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
-  const side = (p: Vec2, q: Vec2, r: Vec2) => vcross(vsub(q, p), vsub(r, p));
-  return (
-    side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0
-  );
-}
-
-/** The distance between a segment and a convex polygon; nothing if they meet. */
-function segmentToConvex(a: Vec2, b: Vec2, poly: Vec2[]): number {
-  if (insideConvex(a, poly) || insideConvex(b, poly)) return 0;
-  let best = Infinity;
-  for (let i = 0; i < poly.length; i++) {
-    const c = poly[i];
-    const d = poly[(i + 1) % poly.length];
-    if (segmentsCross(a, b, c, d)) return 0;
-    best = Math.min(
-      best,
-      pointToSegment(a, c, d),
-      pointToSegment(b, c, d),
-      pointToSegment(c, a, b),
-    );
-  }
-  return best;
-}
-
 /**
- * How far out from an atom, along `d`, the end of a bond has to stop to keep
- * `margin` clear of every letter of the atom's label. The end reaches `half`
- * either side of the bond's line; the letters are convex outlines around the
- * atom. Going out, the distance to each only falls and then rises, so the
- * last place it is still within the margin can be found by halving.
+ * How far out from an atom, along `d`, a bond stops for the atom's label: the
+ * label margin beyond the furthest the label's letters reach in that
+ * direction. That is how ACS 1996 keeps a bond clear of a label - measured
+ * along the bond, not to the nearest letter - so a bond meeting the flat side
+ * of an N at a slant stops as far out as the N's corner reaches, while one
+ * meeting an O's round side comes in closer.
  */
-function labelClearance(
-  hulls: Vec2[][],
-  d: Vec2,
-  half: number,
-  margin: number,
-): number {
-  const n = vscale(vperp(d), half);
-  let reach = 0;
+function labelClearance(hulls: Vec2[][], d: Vec2, margin: number): number {
+  let reach = -Infinity;
   for (const hull of hulls) {
-    if (hull.length === 0) continue;
-    const gap = (t: number) => {
-      const c = vscale(d, t);
-      return segmentToConvex(vadd(c, n), vsub(c, n), hull);
-    };
-    // past this the end is further from every point of the letter than the
-    // margin, whichever way it faces
-    const far = Math.max(...hull.map(vlen)) + margin;
-    let lo = 0;
-    let hi = far;
-    for (let k = 0; k < 40; k++) {
-      const a = lo + (hi - lo) / 3;
-      const b = hi - (hi - lo) / 3;
-      if (gap(a) <= gap(b)) hi = b;
-      else lo = a;
-    }
-    const nearest = (lo + hi) / 2;
-    if (gap(nearest) >= margin) continue;
-    lo = nearest;
-    hi = far;
-    for (let k = 0; k < 40; k++) {
-      const m = (lo + hi) / 2;
-      if (gap(m) < margin) lo = m;
-      else hi = m;
-    }
-    reach = Math.max(reach, hi);
+    for (const p of hull) reach = Math.max(reach, vdot(p, d));
   }
-  return reach;
+  return reach === -Infinity ? 0 : Math.max(0, reach + margin);
 }
-
-// function trimEnds is no longer used (kept here commented for reference)
-// function trimEnds(p1: Vec2, p2: Vec2, trimWorld: number): { a: Vec2; b: Vec2 } {
-//   const dir = vnorm(vsub(p2, p1))
-//   const a = vadd(p1, vscale(dir, trimWorld))
-//   const b = vadd(p2, vscale(dir, -trimWorld))
-//   return { a, b }
-// }
-
 function buildTripleLines(
   p1: Vec2,
   p2: Vec2,
@@ -1309,6 +1269,13 @@ export function implicitHydrogens(el: string, bondOrderSum: number): number {
  */
 const SIN_VERTICAL_BAND = Math.sin((10 * Math.PI) / 180);
 
+/**
+ * How close to horizontal a bond has to leave for a symbol between two such
+ * bonds to be centred on its atom as a whole: within 25 degrees. Bonds of a
+ * zigzag, 30 degrees off, leave the first letter on the atom.
+ */
+const COS_SIDEWAYS = Math.cos((25 * Math.PI) / 180);
+
 export function buildTextLabels(
   atoms: Atom[],
   opts: LayoutOptions,
@@ -1319,6 +1286,12 @@ export function buildTextLabels(
   const orderSum = new Map<number, number>();
   const away = new Map<number, Vec2>();
   const bonded = new Set<number>();
+  // which sides of each atom its bonds leave from, outside the vertical band
+  const leftward = new Set<number>();
+  const rightward = new Set<number>();
+  // and which have a bond leaving close to straight out to the side
+  const straightLeft = new Set<number>();
+  const straightRight = new Set<number>();
   const note = (i: number, j: number, order: number) => {
     bonded.add(i);
     orderSum.set(i, (orderSum.get(i) ?? 0) + order);
@@ -1328,6 +1301,10 @@ export function buildTextLabels(
     const d = vnorm(vsub({ x: to.x, y: to.y }, { x: from.x, y: from.y }));
     const acc = away.get(i) ?? { x: 0, y: 0 };
     away.set(i, { x: acc.x + d.x, y: acc.y + d.y });
+    if (d.x < -SIN_VERTICAL_BAND) leftward.add(i);
+    if (d.x > SIN_VERTICAL_BAND) rightward.add(i);
+    if (d.x < -COS_SIDEWAYS) straightLeft.add(i);
+    if (d.x > COS_SIDEWAYS) straightRight.add(i);
   };
   for (const b of bonds) {
     // a dative bond lends a pair rather than sharing one: it takes no
@@ -1348,6 +1325,8 @@ export function buildTextLabels(
       opts.showImplicitHydrogens === false
         ? 0
         : implicitHydrogens(a.el, orderSum.get(i) ?? 0);
+    const centreSymbol =
+      straightLeft.has(i) && straightRight.has(i) ? { centreSymbol: true } : {};
     if (h <= 0) {
       out.push({
         x: a.x,
@@ -1356,6 +1335,7 @@ export function buildTextLabels(
         fontPx: opts.fontPx,
         runs: [{ text: a.el }],
         anchorRun: 0,
+        ...centreSymbol,
         atom: i,
       });
       continue;
@@ -1368,6 +1348,24 @@ export function buildTextLabels(
     // hair to the right flips the label, and a dragged atom swinging through
     // vertical flickers between the two.
     const toward = away.get(i) ?? { x: 0, y: 0 };
+    // Bonds leaving on both sides leave no side for the hydrogens: ACS 1996
+    // sets them on a line of their own, below the symbol when the bonds rise
+    // and above it when they fall.
+    if (leftward.has(i) && rightward.has(i)) {
+      const runs = [{ text: a.el }, ...hydrogens];
+      out.push({
+        x: a.x,
+        y: a.y,
+        text: runs.map((r) => r.text).join(""),
+        fontPx: opts.fontPx,
+        runs,
+        anchorRun: 0,
+        stack: toward.y >= 0 ? "below" : "above",
+        ...centreSymbol,
+        atom: i,
+      });
+      continue;
+    }
     const neighboursRight =
       toward.x > Math.hypot(toward.x, toward.y) * SIN_VERTICAL_BAND;
     const runs = neighboursRight
@@ -1443,11 +1441,12 @@ export function buildBondPrimitives(
   let lwPx = units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx;
   const minPx = Math.max(0.5, opts.minLinePx ?? 1);
   if (!(lwPx >= minPx)) lwPx = minPx;
-  // Stop a bond short of a label so the two do not overlap: its end, as wide
-  // as it is there, is kept the label margin clear of the label's letters.
-  // How far that is depends on which way the bond leaves and on the letters
+  // Stop a bond short of a label so the two do not overlap: the label margin
+  // beyond the furthest the label's letters reach along the bond. How far
+  // that is depends on which way the bond leaves and on the letters
   // themselves - a bond comes closer to the round side of an O than to the
-  // corner of an N.
+  // corner of an N - but not on how wide the bond is there, so a wedge's
+  // broad end stops where a line would.
   const hasLabel = (el: string) => opts.showCarbonLabels || el !== "C";
   const fontWorld = toWorld(opts.fontPx, zoom, units);
   const margin =
@@ -1458,8 +1457,8 @@ export function buildBondPrimitives(
   const dir0 = vsub(p2o, p1o);
   const L0 = vlen(dir0);
   const dir = L0 > 1e-9 ? vscale(dir0, 1 / L0) : { x: 1, y: 0 };
-  /** Where a bond `half` wide either side stops, leaving the atom along `towards`. */
-  const labelReach = (idx: number, el: string, towards: Vec2, half = lineHalf) => {
+  /** Where a bond stops, leaving the atom along `towards`. */
+  const labelReach = (idx: number, el: string, towards: Vec2) => {
     if (!hasLabel(el)) return 0;
     const hulls =
       (idx >= 0 ? labelShapes?.get(idx) : undefined) ??
@@ -1467,11 +1466,18 @@ export function buildBondPrimitives(
         { x: 0, y: 0, text: el, fontPx: opts.fontPx, runs: [{ text: el }] },
         fontWorld,
       );
-    const reach = labelClearance(hulls, towards, half, margin);
-    return Math.min(reach, Math.max(0, L0 * 0.45));
+    return labelClearance(hulls, towards, margin);
   };
-  const trimA = labelReach(bond.a1, a.el, dir);
-  const trimB = labelReach(bond.a2, c.el, vscale(dir, -1));
+  // Labels at both ends may not take more than nine tenths of the bond
+  // between them; if they would, each gives up its share.
+  let trimA = labelReach(bond.a1, a.el, dir);
+  let trimB = labelReach(bond.a2, c.el, vscale(dir, -1));
+  const room = L0 * 0.9;
+  if (trimA + trimB > room) {
+    const k = room / (trimA + trimB);
+    trimA *= k;
+    trimB *= k;
+  }
   const p1 = vadd(p1o, vscale(dir, trimA));
   const p2 = vadd(p2o, vscale(dir, -trimB));
   // Where a label has taken the bond's end, the line simply stops there, and
@@ -1515,13 +1521,10 @@ export function buildBondPrimitives(
       ? toWorld(opts.boldWidthPx, zoom, units)
       : (toWorld(opts.wedgeWidthPx, zoom, units) * 2) / 3) / 2;
   if (kind === "bold") {
-    // each end, as broad as the bar, clears a label there
-    const t1 = labelReach(bond.a1, a.el, dir, boldHalf);
-    const t2 = labelReach(bond.a2, c.el, vscale(dir, -1), boldHalf);
     polys.push(
       buildBoldBar(
-        vadd(p1o, vscale(dir, t1)),
-        vsub(p2o, vscale(dir, t2)),
+        p1,
+        p2,
         boldHalf,
         lineHalf,
         neighboursAt(bond.a1, bond.a2),
@@ -1537,8 +1540,8 @@ export function buildBondPrimitives(
     // there, to flush with the far end.
     const fromA = (deg?.get(bond.a1) || 0) >= (deg?.get(bond.a2) || 0);
     const towards = fromA ? dir : vscale(dir, -1);
-    const tStart = labelReach(fromA ? bond.a1 : bond.a2, (fromA ? a : c).el, towards, boldHalf);
-    const tEnd = labelReach(fromA ? bond.a2 : bond.a1, (fromA ? c : a).el, vscale(towards, -1), boldHalf);
+    const tStart = fromA ? trimA : trimB;
+    const tEnd = fromA ? trimB : trimA;
     const spacing = toWorld(opts.hashSpacingPx, zoom, units);
     const hashes = buildHashes(
       fromA ? p1o : p2o,
@@ -1603,18 +1606,11 @@ export function buildBondPrimitives(
     const baseHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
     // The narrow end is a bond's width, matching the join caps at atoms.
     const tipHalf = pxToWorld(lwPx * 0.5, zoom);
-    // A label at the wide end has to clear the whole breadth of it.
     const wideO = baseAtP1 ? p1o : p2o;
     const narrowO = baseAtP1 ? p2o : p1o;
-    const towardsNarrow = baseAtP1 ? dir : vscale(dir, -1);
-    const trimWide = labelReach(
-      baseAtP1 ? bond.a1 : bond.a2,
-      baseAtP1 ? a.el : c.el,
-      towardsNarrow,
-      baseHalf,
-    );
+    const trimWide = baseAtP1 ? trimA : trimB;
     const trimNarrow = baseAtP1 ? trimB : trimA;
-    const bp1 = vadd(wideO, vscale(towardsNarrow, trimWide));
+    const bp1 = baseAtP1 ? p1 : p2;
     const bp2 = baseAtP1 ? p2 : p1;
     if (bond.stereo === "up") {
       // Directions of the bonds continuing from the wide end, to cut it along

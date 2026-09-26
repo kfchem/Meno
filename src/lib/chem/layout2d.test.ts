@@ -50,33 +50,6 @@ const hashesOf = (polys: { points: Vec2[] }[]) =>
     })
     .sort((a, b) => a.at - b.at);
 
-/**
- * How close a segment comes to any of a label's letters, taken at a
- * thousand points along it. The letters are placed around the origin, the
- * segment is not.
- */
-const gapToLetters = (a: Vec2, b: Vec2, hulls: Vec2[][]) => {
-  const toEdge = (p: Vec2, c: Vec2, d: Vec2) => {
-    const dx = d.x - c.x;
-    const dy = d.y - c.y;
-    const t = Math.max(
-      0,
-      Math.min(1, ((p.x - c.x) * dx + (p.y - c.y) * dy) / (dx * dx + dy * dy)),
-    );
-    return Math.hypot(p.x - c.x - dx * t, p.y - c.y - dy * t);
-  };
-  let best = Infinity;
-  for (let k = 0; k <= 1000; k++) {
-    const p = { x: a.x + ((b.x - a.x) * k) / 1000, y: a.y + ((b.y - a.y) * k) / 1000 };
-    for (const h of hulls) {
-      for (let i = 0; i < h.length; i++) {
-        best = Math.min(best, toEdge(p, h[i], h[(i + 1) % h.length]));
-      }
-    }
-  }
-  return best;
-};
-
 const polyArea = (pts: Vec2[]) => {
   let s = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -107,6 +80,28 @@ describe("implicitHydrogens", () => {
 });
 
 describe("buildTextLabels", () => {
+  it("writes the hydrogens below when bonds rise on both sides, above when they fall", () => {
+    const L = NOMINAL_BOND_LENGTH;
+    const v = (deg: number) => ({ x: L * Math.cos((deg * Math.PI) / 180), y: L * Math.sin((deg * Math.PI) / 180) });
+    const at = (a: number, b: number) => {
+      const atoms: Atom[] = [
+        { id: 1, x: 0, y: 0, el: "N" },
+        { id: 2, ...v(a), el: "C" },
+        { id: 3, ...v(b), el: "C" },
+      ];
+      const [nh] = buildTextLabels(atoms, opts(), [
+        { a1: 0, a2: 1, order: 1 },
+        { a1: 0, a2: 2, order: 1 },
+      ]);
+      return nh;
+    };
+    expect(at(150, 30).stack).toBe("below");
+    expect(at(210, 330).stack).toBe("above");
+    // one side free: the hydrogens go there, on the same line
+    expect(at(150, 270).stack).toBeUndefined();
+    expect(at(150, 270).text).toBe("NH");
+  });
+
   it("writes a carbon with no bonds as CH4, and a bonded one not at all", () => {
     const atoms: Atom[] = [
       { id: 1, x: 0, y: 0, el: "C" },
@@ -665,19 +660,10 @@ describe("a hashed wedge and its neighbours", () => {
     expect(to).toBeLessThan(1.5);
     const hashes = hashesOf(buildBondPrimitives(labelled, hashed, o, ZOOM, deg).polys);
     expect(hashes[0].near).toBeCloseTo(o.hashSpacingPx, 9);
-    // as broad at its end as it ever is, and that whole breadth kept the
-    // margin clear of the label - not just its middle, as a line's is
+    // it ends where a line would, as broad there as it ever is
     const last = hashes[hashes.length - 1];
+    expect(last.far).toBeCloseTo(to, 9);
     expect(last.farWidth).toBeCloseTo(o.wedgeWidthPx, 9);
-    expect(last.far).toBeLessThan(to);
-    const [label] = buildTextLabels(labelled, o, [hashed]);
-    const half = o.wedgeWidthPx / 2;
-    const gap = gapToLetters(
-      { x: last.far - 1.5, y: -half },
-      { x: last.far - 1.5, y: half },
-      labelHulls(label, o.fontPx),
-    );
-    expect(gap).toBeCloseTo(o.labelMarginPx!, 6);
   });
 });
 
@@ -843,10 +829,10 @@ describe("a label as ACS 1996 sets it", () => {
     anchorRun,
   });
 
-  it("centres the element symbol on the atom, on a baseline 0.408 of the size below it", () => {
+  it("centres the element symbol on the atom, on a baseline 0.4 of the size below it", () => {
     const [n] = placeLabel(label([{ text: "N" }]), size);
     expect(n.x).toBeCloseTo((-advanceEm("N") * size) / 2, 12);
-    expect(n.y).toBeCloseTo(-4.08, 12);
+    expect(n.y).toBeCloseTo(-4, 12);
     expect(n.size).toBe(size);
   });
 
@@ -860,6 +846,46 @@ describe("a label as ACS 1996 sets it", () => {
     expect(two.x).toBeCloseTo(h.x + advanceEm("H") * size, 12);
     expect(two.size).toBeCloseTo(7.5, 12);
     expect(two.y).toBeCloseTo(n.y - 2.25, 12);
+  });
+
+  it("puts a two-letter symbol's first letter on the atom, as it does the C of CH3", () => {
+    const [cl] = placeLabel(label([{ text: "Cl" }]), size);
+    expect(cl.x).toBeCloseTo((-advanceEm("C") * size) / 2, 12);
+  });
+
+  it("centres the whole symbol when asked, as between two bonds straight out to the sides", () => {
+    const [cl] = placeLabel({ ...label([{ text: "Cl" }]), centreSymbol: true }, size);
+    expect(cl.x).toBeCloseTo(-((advanceEm("C") + advanceEm("l")) * size) / 2, 12);
+    const L = NOMINAL_BOND_LENGTH;
+    const labelFor = (angles: number[]) => {
+      const atoms: Atom[] = [
+        { id: 0, x: 0, y: 0, el: "Cl" },
+        ...angles.map((d, k) => ({
+          id: k + 1,
+          x: L * Math.cos((d * Math.PI) / 180),
+          y: L * Math.sin((d * Math.PI) / 180),
+          el: "C",
+        })),
+      ];
+      const bonds: Bond[] = angles.map((_, k) => ({ a1: 0, a2: k + 1, order: 1 }));
+      return buildTextLabels(atoms, opts(), bonds)[0];
+    };
+    expect(labelFor([0, 180]).centreSymbol).toBe(true);
+    // a zigzag's bonds are 30 degrees off the horizontal: the C stays on the atom
+    expect(labelFor([30, 150]).centreSymbol).toBeUndefined();
+    expect(labelFor([150]).centreSymbol).toBeUndefined();
+  });
+
+  it("stacks the hydrogens on a line below, the H centred under the symbol", () => {
+    const stacked = { ...label([{ text: "C" }, { text: "H" }, { text: "2", sub: true }]), stack: "below" as const };
+    const [c, h, two] = placeLabel(stacked, size);
+    expect(c.y).toBeCloseTo(-4, 12);
+    expect(h.x).toBeCloseTo((-advanceEm("H") * size) / 2, 12);
+    expect(h.y).toBeCloseTo(-4 - 8.57, 12);
+    expect(two.x).toBeCloseTo(h.x + advanceEm("H") * size, 12);
+    expect(two.y).toBeCloseTo(h.y - 2.25, 12);
+    const above = placeLabel({ ...stacked, stack: "above" }, size);
+    expect(above[1].y).toBeCloseTo(-4 + 8.57, 12);
   });
 
   it("keeps the symbol on the atom when the hydrogens go first", () => {
@@ -876,8 +902,8 @@ describe("a label as ACS 1996 sets it", () => {
     const left = (-advanceEm("N") * size) / 2;
     expect(Math.min(...xs)).toBeCloseTo(left + (156 / 2048) * size, 9);
     expect(Math.max(...xs)).toBeCloseTo(left + (1311 / 2048) * size, 9);
-    expect(Math.min(...ys)).toBeCloseTo(-4.08, 9);
-    expect(Math.max(...ys)).toBeCloseTo(-4.08 + (1466 / 2048) * size, 9);
+    expect(Math.min(...ys)).toBeCloseTo(-4, 9);
+    expect(Math.max(...ys)).toBeCloseTo(-4 + (1466 / 2048) * size, 9);
   });
 });
 
@@ -904,35 +930,54 @@ describe("how far a bond stops short of a label", () => {
       o.fontPx,
     );
 
-  it("keeps the end of a line the margin clear of the letters, from any side", () => {
+  it("stops the margin beyond the furthest the letters reach along the bond, from any side", () => {
     const o = opts();
     for (let angle = 0; angle < 360; angle += 15) {
       const atoms = fromAngle(angle);
       const [line] = buildBondPrimitives(atoms, bond, o, ZOOM, deg).lines;
-      // the end by the N, as wide as the line - unless the label would take
-      // more than its share of the bond, which it is not allowed to
-      const end = { x: line.x2, y: line.y2 };
-      if (Math.hypot(end.x, end.y) > 0.45 * L - 1e-9) continue;
-      const d = { x: atoms[0].x, y: atoms[0].y };
-      const len = Math.hypot(d.x, d.y);
-      const n = { x: (-d.y / len) * (o.lineWidthPx / 2), y: (d.x / len) * (o.lineWidthPx / 2) };
-      const gap = gapToLetters(
-        { x: end.x + n.x, y: end.y + n.y },
-        { x: end.x - n.x, y: end.y - n.y },
-        nHulls(o),
-      );
-      expect(gap).toBeCloseTo(o.labelMarginPx!, 6);
+      const d = { x: atoms[0].x / L, y: atoms[0].y / L };
+      let reach = -Infinity;
+      for (const hull of nHulls(o)) {
+        for (const p of hull) reach = Math.max(reach, p.x * d.x + p.y * d.y);
+      }
+      expect(Math.hypot(line.x2, line.y2)).toBeCloseTo(reach + o.labelMarginPx!, 9);
     }
+  });
+
+  it("stops a bond meeting an N's side at a slant as far out as its corner reaches", () => {
+    const o = opts();
+    // 30 degrees below the horizontal: the N's bottom corner reaches further
+    // along the bond than its side does, and it is what the bond clears
+    const [line] = buildBondPrimitives(fromAngle(330), bond, o, ZOOM, deg).lines;
+    const n = nHulls(o)[0];
+    const right = Math.max(...n.map((p) => p.x));
+    const bottom = Math.min(...n.map((p) => p.y));
+    const d = { x: Math.cos(-Math.PI / 6), y: Math.sin(-Math.PI / 6) };
+    const corner = right * d.x + bottom * d.y;
+    expect(Math.hypot(line.x2, line.y2)).toBeCloseTo(corner + o.labelMarginPx!, 9);
+    // which reaches further along the bond than the side itself does
+    expect(corner).toBeGreaterThan(right * d.x);
   });
 
   it("stops a line from straight above the margin over the capital's top", () => {
     const o = opts();
     const [line] = buildBondPrimitives(fromAngle(90), bond, o, ZOOM, deg).lines;
-    const top = -o.fontPx * 0.408 + (1466 / 2048) * o.fontPx;
+    const top = -o.fontPx * 0.4 + (1466 / 2048) * o.fontPx;
     expect(line.y2).toBeCloseTo(top + o.labelMarginPx!, 9);
   });
 
-  it("follows the letters, not a box round them: closer to an O's side than its corners allow", () => {
+  it("lets two labels share no more than nine tenths of the bond between them", () => {
+    const o = opts();
+    // two wide labels on a short bond: neither may take its full clearance
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "Br" },
+      { id: 2, x: 0.6, y: 0, el: "Br" },
+    ];
+    const [line] = buildBondPrimitives(atoms, bond, o, ZOOM).lines;
+    expect(line.x2 - line.x1).toBeCloseTo(0.6 * 0.1, 9);
+  });
+
+  it("follows the letters: closer to an O's round side than to an N's corner", () => {
     const o = opts();
     const at = (el: string, angle: number) => {
       const atoms = fromAngle(angle);
