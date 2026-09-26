@@ -58,6 +58,11 @@ export type LayoutOptions = {
    * unset, two thirds of a wedge's broad end.
    */
   boldWidthPx?: number;
+  /**
+   * How far the first hash sits from an unlabelled atom the hashes start at.
+   * Left unset, one hash spacing.
+   */
+  hashFirstGapPx?: number;
   /** A dashed bond's dashes, and the least gap between them. */
   dashLengthPx?: number;
   dashGapPx?: number;
@@ -74,6 +79,27 @@ export type LayoutOptions = {
    * of the font size - ACS 1996's 1.6 pt at 10 pt.
    */
   labelMarginPx?: number;
+  /** The typeface labels are set in; Arial when unset. */
+  fontFamily?: string;
+  /** How a label is set, as fractions of its font size; ACS 1996's when unset. */
+  labelSet?: LabelSet;
+  /** The colours bonds and labels are drawn in, as CSS; black when unset. */
+  bondColor?: string;
+  labelColor?: string;
+  /**
+   * The rules the drawing decides by, each left unset for ACS 1996's own:
+   * see the matching settings in style.ts for what each means.
+   */
+  hydrogenBandDeg?: number;
+  symbolCentringDeg?: number;
+  labelShareMax?: number;
+  doubleSideThreshold?: number;
+  doubleCrowdingDeg?: number;
+  innerLineMaxShortening?: number;
+  centredJoinMinDeg?: number;
+  wedgeCutMaxDeg?: number;
+  wedgeCornerReach?: number;
+  aromaticCircleSize?: number;
   paddingPx: number;
   showCarbonLabels: boolean;
   /** Draw the hydrogens a labelled atom carries, e.g. OH, NH2. Default: on. */
@@ -129,6 +155,32 @@ export const SUB_SCALE = 0.75;
 export const SUB_DROP = 0.225;
 /** How far apart the lines of a stacked label are, baseline to baseline. */
 export const STACK_SPACING = 0.857;
+
+/** How a label is set, as fractions of its font size, and in what. */
+export type LabelSet = {
+  baseline: number;
+  subscriptSize: number;
+  subscriptDrop: number;
+  stackSpacing: number;
+  fontFamily?: string;
+};
+
+/** ACS 1996's way of setting a label. */
+export const ACS_LABEL_SET: LabelSet = {
+  baseline: BASELINE_DROP,
+  subscriptSize: SUB_SCALE,
+  subscriptDrop: SUB_DROP,
+  stackSpacing: STACK_SPACING,
+  fontFamily: "Arial",
+};
+
+/** How labels are set under these options. */
+export function labelSetOf(opts: Pick<LayoutOptions, "labelSet" | "fontFamily">): LabelSet {
+  return {
+    ...(opts.labelSet ?? ACS_LABEL_SET),
+    fontFamily: opts.labelSet?.fontFamily ?? opts.fontFamily ?? "Arial",
+  };
+}
 
 export type TextItem = {
   x: number;
@@ -225,10 +277,14 @@ export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
  * for subscripts. A stacked label sets what follows the symbol on a line of
  * its own, below or above, its first letter centred under the symbol's.
  */
-export function placeLabel(t: TextItem, fontSize: number): PlacedRun[] {
+export function placeLabel(
+  t: TextItem,
+  fontSize: number,
+  set: LabelSet = ACS_LABEL_SET,
+): PlacedRun[] {
   const runs = t.runs ?? [{ text: t.text }];
   const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
-  const sizes = runs.map((r) => fontSize * (r.sub ? SUB_SCALE : 1));
+  const sizes = runs.map((r) => fontSize * (r.sub ? set.subscriptSize : 1));
   const widths = runs.map((r, i) => runWidth(r.text, sizes[i]));
   /** Where a run starts so that its first letter is centred on the atom. */
   const centredOn = (i: number) =>
@@ -236,12 +292,12 @@ export function placeLabel(t: TextItem, fontSize: number): PlacedRun[] {
   /** Where the symbol starts: its first letter on the atom, or all of it. */
   const symbolAt = () =>
     t.centreSymbol ? t.x - widths[anchor] / 2 : centredOn(anchor);
-  const baseline = t.y - fontSize * BASELINE_DROP;
-  const set = (i: number, x: number, line: number): PlacedRun => ({
+  const baseline = t.y - fontSize * set.baseline;
+  const setRun = (i: number, x: number, line: number): PlacedRun => ({
     text: runs[i].text,
     sub: !!runs[i].sub,
     x,
-    y: runs[i].sub ? line - fontSize * SUB_DROP : line,
+    y: runs[i].sub ? line - fontSize * set.subscriptDrop : line,
     size: sizes[i],
   });
   const out: PlacedRun[] = [];
@@ -250,15 +306,15 @@ export function placeLabel(t: TextItem, fontSize: number): PlacedRun[] {
     let x = symbolAt();
     for (let i = 0; i < anchor; i++) x -= widths[i];
     for (let i = 0; i <= anchor; i++) {
-      out.push(set(i, x, baseline));
+      out.push(setRun(i, x, baseline));
       x += widths[i];
     }
     const line =
       baseline +
-      fontSize * STACK_SPACING * (t.stack === "below" ? -1 : 1);
+      fontSize * set.stackSpacing * (t.stack === "below" ? -1 : 1);
     x = centredOn(anchor + 1);
     for (let i = anchor + 1; i < runs.length; i++) {
-      out.push(set(i, x, line));
+      out.push(setRun(i, x, line));
       x += widths[i];
     }
     return out;
@@ -266,7 +322,7 @@ export function placeLabel(t: TextItem, fontSize: number): PlacedRun[] {
   let x = symbolAt();
   for (let i = 0; i < anchor; i++) x -= widths[i];
   for (let i = 0; i < runs.length; i++) {
-    out.push(set(i, x, baseline));
+    out.push(setRun(i, x, baseline));
     x += widths[i];
   }
   return out;
@@ -276,9 +332,13 @@ export function placeLabel(t: TextItem, fontSize: number): PlacedRun[] {
  * The ink of a label, as the convex outline of each of its letters, around
  * its atom: the atom is at the origin.
  */
-export function labelHulls(t: TextItem, fontSize: number): Vec2[][] {
+export function labelHulls(
+  t: TextItem,
+  fontSize: number,
+  set: LabelSet = ACS_LABEL_SET,
+): Vec2[][] {
   const out: Vec2[][] = [];
-  for (const run of placeLabel(t, fontSize)) {
+  for (const run of placeLabel(t, fontSize, set)) {
     let pen = run.x - t.x;
     for (const ch of run.text) {
       const hull = inkHullEm(ch).map((p) => ({
@@ -293,9 +353,13 @@ export function labelHulls(t: TextItem, fontSize: number): Vec2[][] {
 }
 
 /** How far a label's ink reaches either side of its atom, and above and below. */
-export function labelBox(t: TextItem, fontSize: number): LabelBox {
+export function labelBox(
+  t: TextItem,
+  fontSize: number,
+  set: LabelSet = ACS_LABEL_SET,
+): LabelBox {
   const box = { left: 0, right: 0, top: 0, bottom: 0 };
-  for (const hull of labelHulls(t, fontSize)) {
+  for (const hull of labelHulls(t, fontSize, set)) {
     for (const p of hull) {
       box.left = Math.max(box.left, -p.x);
       box.right = Math.max(box.right, p.x);
@@ -311,13 +375,14 @@ function expandBoundsForLabels(
   bounds: { min: Vec2; max: Vec2 },
   texts: TextItem[],
   fontSize: number,
+  set: LabelSet,
 ): { min: Vec2; max: Vec2 } {
   const out = {
     min: { x: bounds.min.x, y: bounds.min.y },
     max: { x: bounds.max.x, y: bounds.max.y },
   };
   for (const t of texts) {
-    const { left, right, top, bottom } = labelBox(t, fontSize);
+    const { left, right, top, bottom } = labelBox(t, fontSize, set);
     out.min.x = Math.min(out.min.x, t.x - left);
     out.max.x = Math.max(out.max.x, t.x + right);
     out.min.y = Math.min(out.min.y, t.y - bottom);
@@ -425,9 +490,6 @@ type Neighbour = { dir: Vec2; half: number; wide: boolean; len: number };
  * is cut square across instead.
  */
 const WEDGE_CUT_MAX_DEG = 175;
-const WEDGE_CUT_MIN_SIN = Math.sin(
-  ((180 - WEDGE_CUT_MAX_DEG) * Math.PI) / 180,
-);
 
 /**
  * How far along the bond it follows a corner of the wide end may travel. This
@@ -437,6 +499,19 @@ const WEDGE_CUT_MIN_SIN = Math.sin(
  * wide end is cut square and the bond leaves it with a step.
  */
 const WEDGE_MITRE_REACH = 0.5;
+
+/** The limits a broad end's cut keeps to: see WEDGE_CUT_MAX_DEG and WEDGE_MITRE_REACH. */
+type CutRule = { minSin: number; reach: number };
+
+function cutRuleOf(opts: LayoutOptions): CutRule {
+  const maxDeg = opts.wedgeCutMaxDeg ?? WEDGE_CUT_MAX_DEG;
+  return {
+    minSin: Math.sin(((180 - maxDeg) * Math.PI) / 180),
+    reach: opts.wedgeCornerReach ?? WEDGE_MITRE_REACH,
+  };
+}
+
+const ACS_CUT_RULE: CutRule = cutRuleOf({} as LayoutOptions);
 
 /**
  * Where the wide end of a wedge meets another bond, a square cut leaves a
@@ -455,6 +530,7 @@ function baseCut(
   side: number,
   axis: Vec2,
   neighbours: Neighbour[],
+  rule: CutRule = ACS_CUT_RULE,
 ): Cut | null {
   if (neighbours.length === 0) return null;
   const n = vperp(axis);
@@ -476,7 +552,7 @@ function baseCut(
   // cut along: its line is almost the wedge's own, and following it would
   // draw the end out into a spike. Square across the wedge is what carries
   // such a bond out of it, and the other side still follows its own bond.
-  if (Math.abs(vcross(dir, axis)) < WEDGE_CUT_MIN_SIN) {
+  if (Math.abs(vcross(dir, axis)) < rule.minSin) {
     return {
       on: vadd(atom, vscale(axis, -half)),
       dir: vperp(axis),
@@ -497,7 +573,7 @@ function baseCut(
     on: vadd(atom, vscale(off, edge * half)),
     dir,
     key,
-    reach: len * WEDGE_MITRE_REACH,
+    reach: len * rule.reach,
   };
 }
 
@@ -656,6 +732,7 @@ function centredPair(
   atoms: Atom[],
   adjBonds?: Map<number, Bond[]>,
   doubleSides?: Map<Bond, number | undefined>,
+  joinMinDeg = 20,
 ): { lines: LineSeg[]; meets: Meet[]; ends: Vec2[] } {
   const half = off * 0.5;
   const limit = off * 2;
@@ -724,7 +801,7 @@ function centredPair(
         // nowhere: past 20 degrees off straight on the line meets it, closer
         // than that it stops at the atom like any line with nothing to meet.
         const behind = -vdot(vsub(pt, { x: atom.x, y: atom.y }), outward);
-        if (behind > half / Math.tan((20 * Math.PI) / 180)) continue;
+        if (behind > half / Math.tan((joinMinDeg * Math.PI) / 180)) continue;
         // the first plain bond the line reaches, coming in from the bond
         const t = vdot(vsub(pt, { x: atom.x, y: atom.y }), outward);
         if (t > bestT) {
@@ -930,10 +1007,11 @@ function broadEnd(
   farL: Vec2,
   farR: Vec2,
   capHalf: number,
+  rule: CutRule = ACS_CUT_RULE,
 ): { points: Vec2[]; soften: boolean[] } {
   const nb = vscale(vperp(dir), half);
-  const cutL = baseCut(p, 1, dir, neighbours);
-  const cutR = baseCut(p, -1, dir, neighbours);
+  const cutL = baseCut(p, 1, dir, neighbours, rule);
+  const cutR = baseCut(p, -1, dir, neighbours, rule);
   // A corner may slide towards the far end as far as the far corner and no
   // further, and back past the atom as far as the cut it follows allows.
   const squareL = vadd(p, nb);
@@ -1002,6 +1080,7 @@ function buildWedgeTriangle(
   baseNeighbours: Neighbour[] = [],
   round = false,
   tipAtLabel = false,
+  rule: CutRule = ACS_CUT_RULE,
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
   // Keep a taper even when the minimum line width would otherwise make the
@@ -1023,6 +1102,7 @@ function buildWedgeTriangle(
     tipL,
     tipR,
     tipHalfWorld,
+    rule,
   );
   const points = [...base.points, tipR, tipL];
   const soften = [...base.soften, true, true];
@@ -1045,14 +1125,15 @@ function buildBoldBar(
   neighbours1: Neighbour[],
   neighbours2: Neighbour[],
   round: boolean,
+  rule: CutRule = ACS_CUT_RULE,
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
   const n = vscale(vperp(dir), half);
   // each end may reach no further than the middle of the bar
   const mid = vscale(vadd(p1, p2), 0.5);
-  const end1 = broadEnd(p1, dir, half, neighbours1, vadd(mid, n), vsub(mid, n), lineHalf);
+  const end1 = broadEnd(p1, dir, half, neighbours1, vadd(mid, n), vsub(mid, n), lineHalf, rule);
   const back = vscale(dir, -1);
-  const end2 = broadEnd(p2, back, half, neighbours2, vsub(mid, n), vadd(mid, n), lineHalf);
+  const end2 = broadEnd(p2, back, half, neighbours2, vsub(mid, n), vadd(mid, n), lineHalf, rule);
   const points = [...end1.points, ...end2.points];
   const soften = [...end1.soften, ...end2.soften];
   return {
@@ -1267,20 +1348,16 @@ export function implicitHydrogens(el: string, bondOrderSum: number): number {
 }
 
 /**
- * How far from vertical, either way, the bonds of a labelled atom may lean and
- * still count as vertical for placing its hydrogens: 10 degrees. Not 15:
- * bonds snap to 15-degree steps, and the edge of the band should not sit on
- * one of them.
+ * The labels of the atoms that have one, and where their hydrogens go.
+ *
+ * Two angles decide it (options hydrogenBandDeg, symbolCentringDeg). How far
+ * from vertical, either way, the bonds of a labelled atom may lean and still
+ * count as vertical for placing its hydrogens: 10 degrees by default. Not
+ * 15: bonds snap to 15-degree steps, and the edge of the band should not sit
+ * on one of them. And how close to horizontal bonds on both sides have to
+ * leave for the whole symbol to be centred between them: within 25 degrees.
+ * Bonds of a zigzag, 30 degrees off, leave the first letter on the atom.
  */
-const SIN_VERTICAL_BAND = Math.sin((10 * Math.PI) / 180);
-
-/**
- * How close to horizontal a bond has to leave for a symbol between two such
- * bonds to be centred on its atom as a whole: within 25 degrees. Bonds of a
- * zigzag, 30 degrees off, leave the first letter on the atom.
- */
-const COS_SIDEWAYS = Math.cos((25 * Math.PI) / 180);
-
 export function buildTextLabels(
   atoms: Atom[],
   opts: LayoutOptions,
@@ -1288,6 +1365,9 @@ export function buildTextLabels(
 ): TextItem[] {
   // Bond orders and directions per atom: the first decides how many hydrogens
   // an atom carries, the second which side to write them on.
+  // the bands that decide where the hydrogens and the symbol go
+  const band = Math.sin(((opts.hydrogenBandDeg ?? 10) * Math.PI) / 180);
+  const sideways = Math.cos(((opts.symbolCentringDeg ?? 25) * Math.PI) / 180);
   const orderSum = new Map<number, number>();
   const away = new Map<number, Vec2>();
   const bonded = new Set<number>();
@@ -1306,10 +1386,10 @@ export function buildTextLabels(
     const d = vnorm(vsub({ x: to.x, y: to.y }, { x: from.x, y: from.y }));
     const acc = away.get(i) ?? { x: 0, y: 0 };
     away.set(i, { x: acc.x + d.x, y: acc.y + d.y });
-    if (d.x < -SIN_VERTICAL_BAND) leftward.add(i);
-    if (d.x > SIN_VERTICAL_BAND) rightward.add(i);
-    if (d.x < -COS_SIDEWAYS) straightLeft.add(i);
-    if (d.x > COS_SIDEWAYS) straightRight.add(i);
+    if (d.x < -band) leftward.add(i);
+    if (d.x > band) rightward.add(i);
+    if (d.x < -sideways) straightLeft.add(i);
+    if (d.x > sideways) straightRight.add(i);
   };
   for (const b of bonds) {
     // a dative bond lends a pair rather than sharing one: it takes no
@@ -1372,7 +1452,7 @@ export function buildTextLabels(
       continue;
     }
     const neighboursRight =
-      toward.x > Math.hypot(toward.x, toward.y) * SIN_VERTICAL_BAND;
+      toward.x > Math.hypot(toward.x, toward.y) * band;
     const runs = neighboursRight
       ? [...hydrogens, { text: a.el }]
       : [{ text: a.el }, ...hydrogens];
@@ -1470,6 +1550,7 @@ export function buildBondPrimitives(
       labelHulls(
         { x: 0, y: 0, text: el, fontPx: opts.fontPx, runs: [{ text: el }] },
         fontWorld,
+        labelSetOf(opts),
       );
     return labelClearance(hulls, towards, margin);
   };
@@ -1477,7 +1558,7 @@ export function buildBondPrimitives(
   // between them; if they would, each gives up its share.
   let trimA = labelReach(bond.a1, a.el, dir);
   let trimB = labelReach(bond.a2, c.el, vscale(dir, -1));
-  const room = L0 * 0.9;
+  const room = L0 * (opts.labelShareMax ?? 0.9);
   if (trimA + trimB > room) {
     const k = room / (trimA + trimB);
     trimA *= k;
@@ -1521,6 +1602,8 @@ export function buildBondPrimitives(
     return out;
   };
   const kind = bondKind(bond);
+  // how far the first hash sits from a bare atom the hashes start at
+  const firstGap = toWorld(opts.hashFirstGapPx ?? opts.hashSpacingPx, zoom, units);
   const boldHalf =
     (opts.boldWidthPx != null
       ? toWorld(opts.boldWidthPx, zoom, units)
@@ -1535,6 +1618,7 @@ export function buildBondPrimitives(
         neighboursAt(bond.a1, bond.a2),
         neighboursAt(bond.a2, bond.a1),
         round,
+        cutRuleOf(opts),
       ),
     );
     return { lines, polys };
@@ -1551,7 +1635,7 @@ export function buildBondPrimitives(
     const hashes = buildHashes(
       fromA ? p1o : p2o,
       towards,
-      tStart > 0 ? tStart : spacing,
+      tStart > 0 ? tStart : firstGap,
       L0 - tEnd,
       boldHalf,
       boldHalf,
@@ -1632,6 +1716,7 @@ export function buildBondPrimitives(
         neighbours,
         round,
         hasLabel(atoms[tipIdx].el) && trimNarrow > 0,
+        cutRuleOf(opts),
       );
       polys.push(tri);
       return { lines, polys };
@@ -1643,7 +1728,7 @@ export function buildBondPrimitives(
       const hashes = buildHashes(
         narrowO,
         vnorm(vsub(wideO, narrowO)),
-        trimNarrow > 0 ? trimNarrow : spacing,
+        trimNarrow > 0 ? trimNarrow : firstGap,
         L0 - trimWide,
         pxToWorld(lwPx, zoom) / 2,
         baseHalf,
@@ -1737,6 +1822,7 @@ export function buildBondPrimitives(
         atoms,
         adjBonds,
         doubleSides,
+        opts.centredJoinMinDeg ?? 20,
       );
       lines.push(...pair.lines);
       return { lines, polys, meets: pair.meets, ends: pair.ends };
@@ -1764,7 +1850,10 @@ export function buildBondPrimitives(
           off,
           around(bond.a2),
         );
-    const room = Math.max(0, vlen(vsub(p2, p1)) * 0.45);
+    const room = Math.max(
+      0,
+      vlen(vsub(p2, p1)) * (opts.innerLineMaxShortening ?? 0.45),
+    );
     const ps1 = vadd(p1, vscale(dir, Math.min(back1, room)));
     const ps2 = vadd(p2, vscale(dir, -Math.min(back2, room)));
     const others = (idx: number) =>
@@ -1963,7 +2052,8 @@ export function buildAllPrimitives(
     const neigh2 = bonds
       .filter((o) => o !== b && (o.a1 === b.a2 || o.a2 === b.a2))
       .map((o) => (o.a1 === b.a2 ? o.a2 : o.a1));
-    const EPS = Math.max(1e-4, L0 * 0.06); // Ignore near-axis to suppress flipping
+    // Ignore neighbours near the axis, so a small nudge does not flip the side
+    const EPS = Math.max(1e-4, L0 * (opts.doubleSideThreshold ?? 0.06));
     let plus = 0;
     let minus = 0;
     for (const [from, list] of [
@@ -1998,7 +2088,7 @@ export function buildAllPrimitives(
         }
         return worst;
       };
-      const CROWDED = Math.PI / 4;
+      const CROWDED = ((opts.doubleCrowdingDeg ?? 45) * Math.PI) / 180;
       const here = clearance(sgn);
       const there = clearance(-sgn);
       if (here < CROWDED && there > here) sgn = -sgn;
@@ -2011,7 +2101,9 @@ export function buildAllPrimitives(
   const fontWorld = toWorld(opts.fontPx, zoom, opts.units);
   const labelShapes = new Map<number, Vec2[][]>();
   for (const tx of buildTextLabels(atoms, opts, bonds)) {
-    if (tx.atom != null) labelShapes.set(tx.atom, labelHulls(tx, fontWorld));
+    if (tx.atom != null) {
+      labelShapes.set(tx.atom, labelHulls(tx, fontWorld, labelSetOf(opts)));
+    }
   }
   const adjBonds = new Map<number, Bond[]>();
   for (const b of bonds) {
@@ -2126,7 +2218,7 @@ export function buildAllPrimitives(
               let r = 0;
               for (const p of pts) r += Math.hypot(p.x - c.x, p.y - c.y);
               r /= 6;
-              circles.push({ c, r: r * 0.5, key: ringKey });
+              circles.push({ c, r: r * (opts.aromaticCircleSize ?? 0.5), key: ringKey });
               // Demote these 6 edges (belonging to this ring)
               for (let i = 0; i < 6; i++) {
                 const u = cycle[i];
@@ -2243,6 +2335,7 @@ export function layoutMolecule(
     computeBounds(atoms),
     texts,
     toWorld(opts.fontPx, zoom, opts.units),
+    labelSetOf(opts),
   );
   return {
     lines: prim.lines,
@@ -2286,15 +2379,23 @@ function escapeXml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/** The CSS font stack for a typeface: itself, then its nearest stand-ins. */
+export function fontStack(family: string): string {
+  if (family === "Arial") return "Arial, Helvetica, sans-serif";
+  if (family === "Helvetica") return "Helvetica, Arial, sans-serif";
+  return `${family}, Arial, sans-serif`;
+}
+
 /** A label as the canvas draws it: set by `placeLabel`, run by run. */
 function svgLabel(
   t: TextItem,
   fontSize: number,
-  fontFamily: string,
+  set: LabelSet,
   fill: string,
 ): string {
+  const fontFamily = fontStack(set.fontFamily ?? "Arial");
   let out = "";
-  for (const run of placeLabel(t, fontSize)) {
+  for (const run of placeLabel(t, fontSize, set)) {
     out +=
       `<text x="${run.x}" y="${-run.y}" font-family="${fontFamily}"` +
       ` font-size="${run.size}" fill="${fill}" stroke="none"` +
@@ -2317,8 +2418,9 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
   const width = b.max.x - b.min.x;
   const height = b.max.y - b.min.y;
   const vb = `${b.min.x} ${-b.max.y} ${width} ${height}`;
-  const stroke = "black";
-  const fontFamily = "Arial, Helvetica, sans-serif";
+  const stroke = opts.bondColor ?? "black";
+  const fill = opts.labelColor ?? "black";
+  const set = labelSetOf(opts);
   const strokeWidth = toWorld(opts.lineWidthPx, zoom, opts.units);
   const fontSize = toWorld(opts.fontPx, zoom, opts.units);
   let s = "";
@@ -2343,7 +2445,7 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
       ` stroke-linejoin="miter" stroke-miterlimit="2" />`;
   }
   for (const t of layout.texts) {
-    s += svgLabel(t, fontSize, fontFamily, stroke);
+    s += svgLabel(t, fontSize, set, fill);
   }
   s += `</svg>`;
   return s;

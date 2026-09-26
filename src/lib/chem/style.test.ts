@@ -7,7 +7,9 @@ import {
   wedgeWidthOf,
   ofBond,
   pt,
+  presetById,
   resolveStyle,
+  STYLE_PRESETS,
 } from "./style";
 
 describe("drawing style", () => {
@@ -70,5 +72,86 @@ describe("drawing style", () => {
     expect(o.joinStyle).toBe("sharp");
     expect(layoutOptionsFor({ ...ACS_1996, ends: "round" }, L).joinStyle).toBe("round");
     expect(o.hashSpacingPx).toBeCloseTo((2.5 / 14.4) * L, 12);
+  });
+});
+
+describe("style presets", () => {
+  it("offers ACS 1996, RSC, Wiley and Nature, each by its own numbers", () => {
+    expect(STYLE_PRESETS.map((p) => p.id)).toEqual(["acs1996", "rsc", "wiley", "nature"]);
+    const rsc = presetById("rsc").style;
+    expect(rsc.bondLengthPt).toBe(12.2);
+    expect(rsc.lineWidth).toEqual(pt(0.45));
+    expect(rsc.boldWidth).toEqual(pt(1.6));
+    expect(rsc.hashSpacing).toEqual(pt(1.75));
+    expect(rsc.labelMargin).toEqual(pt(1.25));
+    expect(rsc.bondSpacing).toEqual(ofBond(0.2));
+    expect(rsc.fontFamily).toBe("Helvetica");
+    expect(rsc.fontSize).toEqual(pt(7));
+    const nature = presetById("nature").style;
+    // 0.381 cm bonds, 0.021 cm lines, 6 pt Arial
+    expect(nature.bondLengthPt).toBeCloseTo(10.8, 1);
+    expect(inPoints(nature.lineWidth, nature)).toBeCloseTo(0.595, 3);
+    expect(nature.fontSize).toEqual(pt(6));
+    const wiley = presetById("wiley").style;
+    expect(wiley.bondLengthPt).toBe(14.4);
+    expect(wiley.fontSize).toEqual(pt(8));
+    expect(presetById("nonsense")).toBe(STYLE_PRESETS[0]);
+  });
+
+  it("keeps ACS 1996's proportions for what a journal style does not state", () => {
+    // a wavy bond's turns are the same fraction of the bond in RSC's style
+    const rsc = presetById("rsc").style;
+    expect(bondFraction(rsc.wavyPeriod, rsc)).toBeCloseTo(
+      bondFraction(ACS_1996.wavyPeriod, ACS_1996),
+      12,
+    );
+  });
+
+  it("hands every setting on to the layout", () => {
+    const style = {
+      ...ACS_1996,
+      bondColor: "#123456",
+      labelColor: "#654321",
+      fontFamily: "Helvetica",
+      labelBaseline: 0.3,
+      subscriptSize: 0.6,
+      subscriptDrop: 0.2,
+      stackedLineSpacing: 1.1,
+      hydrogenVerticalBand: 5,
+      symbolCentringAngle: 15,
+      labelShareMax: 0.8,
+      doubleSideThreshold: 0.1,
+      doubleCrowdingAngle: 30,
+      innerLineMaxShortening: 0.3,
+      centredJoinMinAngle: 25,
+      wedgeCutMaxAngle: 170,
+      wedgeCornerReach: 0.4,
+      aromaticCircleSize: 0.6,
+      tripleSpacing: ofBond(0.12),
+      hashFirstGap: pt(1),
+    };
+    const o = layoutOptionsFor(style, 1.8);
+    expect(o.bondColor).toBe("#123456");
+    expect(o.labelColor).toBe("#654321");
+    expect(o.fontFamily).toBe("Helvetica");
+    expect(o.labelSet).toEqual({
+      baseline: 0.3,
+      subscriptSize: 0.6,
+      subscriptDrop: 0.2,
+      stackSpacing: 1.1,
+      fontFamily: "Helvetica",
+    });
+    expect(o.hydrogenBandDeg).toBe(5);
+    expect(o.symbolCentringDeg).toBe(15);
+    expect(o.labelShareMax).toBe(0.8);
+    expect(o.doubleSideThreshold).toBe(0.1);
+    expect(o.doubleCrowdingDeg).toBe(30);
+    expect(o.innerLineMaxShortening).toBe(0.3);
+    expect(o.centredJoinMinDeg).toBe(25);
+    expect(o.wedgeCutMaxDeg).toBe(170);
+    expect(o.wedgeCornerReach).toBe(0.4);
+    expect(o.aromaticCircleSize).toBe(0.6);
+    expect(o.tripleOffsetPx).toBeCloseTo(0.12 * 1.8, 12);
+    expect(o.hashFirstGapPx).toBeCloseTo((1 / 14.4) * 1.8, 12);
   });
 });

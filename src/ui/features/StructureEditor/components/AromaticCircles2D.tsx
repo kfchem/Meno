@@ -203,7 +203,7 @@ export default function AromaticCircles2D() {
           <CapJoinLine
             key={`circ-${i}`}
             points={pts}
-            color="black"
+            color={opts.bondColor ?? "black"}
             lineWidth={lw}
             cap="butt"
             join="miter"

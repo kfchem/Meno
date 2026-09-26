@@ -10,7 +10,7 @@ import { useDrawnLayout } from "./drawnLayoutContext";
  * of a drag - with the old geometry let go each time.
  */
 export default function Wedges2D() {
-  const { layout } = useDrawnLayout();
+  const { layout, opts } = useDrawnLayout();
   const geometry = useMemo(() => {
     const positions: number[] = [];
     for (const p of layout.polys) {
@@ -34,7 +34,7 @@ export default function Wedges2D() {
       raycast={() => {}}
     >
       <meshBasicMaterial
-        color="black"
+        color={opts.bondColor ?? "black"}
         depthTest={false}
         depthWrite={false}
         side={THREE.DoubleSide}
