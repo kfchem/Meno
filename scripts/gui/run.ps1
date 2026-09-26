@@ -5,22 +5,24 @@ Run a scenario against the built app and keep what it saw.
 .DESCRIPTION
 Starts Meno, puts its window at a fixed size, runs the named scenario and
 writes its screenshots into a run folder. The scenario is an ordinary script
-with the verbs from MenoGui.psm1 available, plus Start-Meno / Open-MenoFile /
-Save-Step from here.
+with the verbs of the platform module available - MenoGui.psm1 on Windows,
+MenoGui.macOS.psm1 on a Mac - plus Start-Meno / Open-MenoFile / Save-Step from
+here.
 
-This needs a desktop: a logged-in session that is unlocked, with nothing over
-the window. It cannot run in CI, which is why nothing in the workflow calls it.
+This needs a desktop: a logged-in session that is unlocked. It cannot run in
+CI, which is why nothing in the workflow calls it.
 
 .EXAMPLE
-pwsh scripts/gui/run.ps1 -Scenario open-and-drag
-pwsh scripts/gui/run.ps1 -Scenario open-and-drag -Out .gui-runs/before
+pwsh scripts/gui/run.ps1 -Scenario drag-atoms
+pwsh scripts/gui/run.ps1 -Scenario drag-atoms -Out .gui-runs/before
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Scenario,
     [string] $Out,
-    # The installed app by default; point this at a build under test instead.
-    [string] $Exe = "$PSScriptRoot/../../src-tauri/target/release/Meno.exe",
+    # What `npm run tauri build` last produced by default; point this at
+    # another build to test that one instead.
+    [string] $Exe,
     [int] $Width = 1280,
     [int] $Height = 860,
     [switch] $KeepOpen
@@ -29,7 +31,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Import-Module "$PSScriptRoot/MenoGui.psm1" -Force
+# The same verbs on either desktop. Everything below this line, and every
+# scenario, is written against those and nothing platform-shaped.
+$onMac = $PSVersionTable.PSEdition -eq "Core" -and $IsMacOS
+Import-Module (Join-Path $PSScriptRoot $(if ($onMac) { "MenoGui.macOS.psm1" } else { "MenoGui.psm1" })) -Force
+if (-not $Exe) { $Exe = Get-MenoBuild }
 
 $scenarioPath = Join-Path $PSScriptRoot "scenarios/$Scenario.ps1"
 if (-not (Test-Path $scenarioPath)) {
@@ -72,12 +78,11 @@ function Start-Meno {
     #>
     Get-Process -Name Meno -ErrorAction SilentlyContinue | ForEach-Object {
         Write-Host "  closing a Meno that was already running (pid $($_.Id))"
-        $_.CloseMainWindow() | Out-Null
-        if (-not $_.WaitForExit(4000)) { $_.Kill() }
+        Close-MenoProcess -Process $_
     }
     Start-Sleep -Milliseconds 500
     Write-Host "  starting $Exe"
-    Start-Process -FilePath $Exe | Out-Null
+    Start-MenoProcess -Path $Exe
     Get-MenoWindow -ProcessName Meno -TimeoutSec 40 | Out-Null
     Set-MenoWindow -Width $Width -Height $Height
     # The first paint lands a moment after the window does.
@@ -96,10 +101,11 @@ function Open-MenoFile {
       button is the small round one at the bottom left instead, and pressing
       the middle of the canvas would draw on it. Pass -X and -Y for that case.
 
-      The file picker is the system dialog, so the path is typed into its name
-      field rather than clicked for. The app takes no file on its command line
-      yet; if it ever does, this becomes one argument to Start-Meno and the
-      most brittle step in the harness goes away.
+      The file picker is the system dialog, so the path is typed into it
+      rather than clicked for - how, is the platform module's business. The
+      app takes no file on its command line yet; if it ever does, this becomes
+      one argument to Start-Meno and the most brittle step in the harness goes
+      away.
     #>
     param(
         [Parameter(Mandatory)] [string] $Path,
@@ -111,10 +117,7 @@ function Open-MenoFile {
     if ($X -lt 0) { $X = [int]($c.Width / 2) }
     if ($Y -lt 0) { $Y = [int]($c.Height / 2) + 8 }
     Invoke-MenoClick -X $X -Y $Y
-    Start-Sleep -Milliseconds 1800
-    Send-MenoText -Text $full
-    Send-MenoKey -Key Enter
-    Start-Sleep -Milliseconds 1500
+    Complete-FileDialog -Path $full
     # The dialog took the foreground with it; take it back.
     Get-MenoWindow -ProcessName Meno -TimeoutSec 10 | Out-Null
     Set-MenoWindow -Width $Width -Height $Height
@@ -128,8 +131,7 @@ try {
 } finally {
     if (-not $KeepOpen) {
         Get-Process -Name Meno -ErrorAction SilentlyContinue | ForEach-Object {
-            $_.CloseMainWindow() | Out-Null
-            if (-not $_.WaitForExit(4000)) { $_.Kill() }
+            Close-MenoProcess -Process $_
         }
     }
 }

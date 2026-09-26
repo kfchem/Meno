@@ -1,0 +1,771 @@
+# Driving the built app on a macOS desktop: the same verbs as MenoGui.psm1,
+# spoken to Quartz and the accessibility API instead of to user32.
+#
+# Every function here takes coordinates in pixels of the window's own
+# screenshot, so a scenario can be written against what a shot shows. On a
+# Retina display that is two pixels to the point; the conversion to the points
+# macOS posts events in happens here and nowhere else. See README.md for the
+# verbs a platform module has to provide, and for what is different on a Mac.
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Threading;
+
+public static class MacGui {
+  const string CG = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
+  const string CF = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
+  const string AX = "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices";
+  const string ObjC = "/usr/lib/libobjc.A.dylib";
+
+  [StructLayout(LayoutKind.Sequential)] public struct CGPoint { public double X, Y; }
+  [StructLayout(LayoutKind.Sequential)] public struct CGSize { public double Width, Height; }
+  [StructLayout(LayoutKind.Sequential)] public struct CGRect { public CGPoint Origin; public CGSize Size; }
+
+  public class WindowInfo {
+    public uint Id; public int Pid; public int Layer; public string Owner;
+    public double X, Y, Width, Height;
+    public bool Contains(double x, double y) { return x >= X && y >= Y && x < X + Width && y < Y + Height; }
+  }
+
+  [DllImport(CF)] static extern void CFRelease(IntPtr o);
+  [DllImport(CF)] static extern long CFArrayGetCount(IntPtr a);
+  [DllImport(CF)] static extern IntPtr CFArrayGetValueAtIndex(IntPtr a, long i);
+  [DllImport(CF)] static extern IntPtr CFDictionaryGetValue(IntPtr d, IntPtr key);
+  [DllImport(CF)] [return: MarshalAs(UnmanagedType.I1)] static extern bool CFNumberGetValue(IntPtr n, long type, out long v);
+  [DllImport(CF)] [return: MarshalAs(UnmanagedType.I1)] static extern bool CFNumberGetValue(IntPtr n, long type, out double v);
+  [DllImport(CF)] static extern IntPtr CFStringCreateWithCString(IntPtr alloc, byte[] s, uint encoding);
+  [DllImport(CF)] [return: MarshalAs(UnmanagedType.I1)] static extern bool CFStringGetCString(IntPtr s, byte[] buf, long size, uint encoding);
+
+  [DllImport(CG)] static extern IntPtr CGWindowListCopyWindowInfo(uint option, uint relativeTo);
+  [DllImport(CG)] [return: MarshalAs(UnmanagedType.I1)] static extern bool CGRectMakeWithDictionaryRepresentation(IntPtr d, out CGRect r);
+  [DllImport(CG)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool CGPreflightScreenCaptureAccess();
+  [DllImport(CG)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool CGPreflightPostEventAccess();
+
+  [DllImport(CG)] static extern IntPtr CGEventCreateMouseEvent(IntPtr source, uint type, CGPoint at, uint button);
+  [DllImport(CG)] static extern IntPtr CGEventCreateScrollWheelEvent2(IntPtr source, uint units, uint count, int w1, int w2, int w3);
+  [DllImport(CG)] static extern IntPtr CGEventCreateKeyboardEvent(IntPtr source, ushort key, [MarshalAs(UnmanagedType.I1)] bool down);
+  [DllImport(CG)] static extern void CGEventKeyboardSetUnicodeString(IntPtr e, ulong length, ushort[] text);
+  [DllImport(CG)] static extern void CGEventSetIntegerValueField(IntPtr e, uint field, long value);
+  [DllImport(CG)] static extern void CGEventSetFlags(IntPtr e, ulong flags);
+  [DllImport(CG)] static extern void CGEventSetLocation(IntPtr e, CGPoint at);
+  [DllImport(CG)] static extern void CGEventPost(uint tap, IntPtr e);
+  [DllImport(CG)] static extern IntPtr CGEventSourceCreate(int stateId);
+
+  [DllImport(AX)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool AXIsProcessTrusted();
+  [DllImport(AX)] static extern IntPtr AXUIElementCreateApplication(int pid);
+  [DllImport(AX)] static extern int AXUIElementCopyAttributeValue(IntPtr e, IntPtr attr, out IntPtr value);
+  [DllImport(AX)] static extern int AXUIElementSetAttributeValue(IntPtr e, IntPtr attr, IntPtr value);
+  [DllImport(AX)] static extern IntPtr AXValueCreate(uint type, ref CGPoint p);
+  [DllImport(AX)] static extern IntPtr AXValueCreate(uint type, ref CGSize s);
+  [DllImport(AX)] [return: MarshalAs(UnmanagedType.I1)] static extern bool AXValueGetValue(IntPtr v, uint type, out CGPoint p);
+  [DllImport(AX)] [return: MarshalAs(UnmanagedType.I1)] static extern bool AXValueGetValue(IntPtr v, uint type, out CGSize s);
+
+  [DllImport(ObjC)] static extern IntPtr objc_getClass(string name);
+  [DllImport(ObjC)] static extern IntPtr sel_registerName(string name);
+  [DllImport(ObjC, EntryPoint = "objc_msgSend")] static extern IntPtr Send(IntPtr self, IntPtr sel);
+  [DllImport(ObjC, EntryPoint = "objc_msgSend")] static extern IntPtr SendPid(IntPtr self, IntPtr sel, int pid);
+  [DllImport(ObjC, EntryPoint = "objc_msgSend")] static extern byte SendBool(IntPtr self, IntPtr sel);
+  [DllImport(ObjC, EntryPoint = "objc_msgSend")] static extern byte SendBoolOptions(IntPtr self, IntPtr sel, ulong options);
+  [DllImport(ObjC, EntryPoint = "objc_msgSend")] static extern int SendInt(IntPtr self, IntPtr sel);
+
+  // Undocumented, and only used to name the right app in an error message.
+  [DllImport("/usr/lib/libSystem.B.dylib")] static extern int responsibility_get_pid_responsible_for_pid(int pid);
+  [DllImport("/usr/lib/libSystem.B.dylib")] static extern int proc_pidpath(int pid, byte[] buf, uint size);
+
+  const uint Utf8 = 0x08000100;               // kCFStringEncodingUTF8
+  const long SInt64 = 4, Float64 = 13;        // kCFNumberSInt64Type, kCFNumberFloat64Type
+  const uint OnScreenOnly = 1, ExcludeDesktop = 16;
+  const uint HidTap = 0;                      // kCGHIDEventTap
+  const uint EvMoved = 5, EvLeftDown = 1, EvLeftUp = 2, EvLeftDragged = 6;   // CGEventType
+  const uint ClickState = 1;                  // kCGMouseEventClickState
+  const uint PixelUnits = 0;                  // kCGScrollEventUnitPixel
+
+  static readonly Dictionary<string, IntPtr> strings = new Dictionary<string, IntPtr>();
+  static IntPtr Str(string s) {
+    IntPtr p;
+    if (!strings.TryGetValue(s, out p)) {
+      p = CFStringCreateWithCString(IntPtr.Zero, System.Text.Encoding.UTF8.GetBytes(s + "\0"), Utf8);
+      strings[s] = p;   // kept for the life of the process: there are a handful
+    }
+    return p;
+  }
+
+  static long Int(IntPtr dict, string key) {
+    IntPtr n = CFDictionaryGetValue(dict, Str(key));
+    long v = 0;
+    if (n != IntPtr.Zero) CFNumberGetValue(n, SInt64, out v);
+    return v;
+  }
+
+  static string Text(IntPtr dict, string key) {
+    IntPtr s = CFDictionaryGetValue(dict, Str(key));
+    if (s == IntPtr.Zero) return "";
+    byte[] buf = new byte[1024];
+    return CFStringGetCString(s, buf, buf.Length, Utf8)
+      ? System.Text.Encoding.UTF8.GetString(buf, 0, Array.IndexOf(buf, (byte)0)) : "";
+  }
+
+  // Every window on screen, front to back, in global points (origin at the
+  // top left of the main display). Owner names come without Screen Recording;
+  // titles do not, and nothing here needs them.
+  public static List<WindowInfo> Windows() {
+    var list = new List<WindowInfo>();
+    IntPtr arr = CGWindowListCopyWindowInfo(OnScreenOnly | ExcludeDesktop, 0);
+    if (arr == IntPtr.Zero) return list;
+    try {
+      long n = CFArrayGetCount(arr);
+      for (long i = 0; i < n; i++) {
+        IntPtr d = CFArrayGetValueAtIndex(arr, i);
+        CGRect r;
+        if (!CGRectMakeWithDictionaryRepresentation(CFDictionaryGetValue(d, Str("kCGWindowBounds")), out r)) continue;
+        list.Add(new WindowInfo {
+          Id = (uint)Int(d, "kCGWindowNumber"), Pid = (int)Int(d, "kCGWindowOwnerPID"),
+          Layer = (int)Int(d, "kCGWindowLayer"), Owner = Text(d, "kCGWindowOwnerName"),
+          X = r.Origin.X, Y = r.Origin.Y, Width = r.Size.Width, Height = r.Size.Height });
+      }
+    } finally { CFRelease(arr); }
+    return list;
+  }
+
+  // An app's windows come and go in a way its main one does not: a tab strip
+  // that is really a window, a panel parked off screen. The main window is
+  // the biggest ordinary one.
+  public static WindowInfo MainWindowOf(int pid) {
+    WindowInfo best = null;
+    foreach (var w in Windows()) {
+      if (w.Pid != pid || w.Layer != 0) continue;
+      if (best == null || w.Width * w.Height > best.Width * best.Height) best = w;
+    }
+    return best;
+  }
+
+  public static WindowInfo WindowById(uint id) {
+    foreach (var w in Windows()) if (w.Id == id) return w;
+    return null;
+  }
+
+  // Put a window where it is asked to be, through the accessibility API: the
+  // only way to move another app's window. The accessibility side does not
+  // know window numbers, so the window is the one where the number says.
+  public static void Place(int pid, uint id, double x, double y, double width, double height) {
+    WindowInfo target = WindowById(id);
+    if (target == null) throw new InvalidOperationException("window " + id + " is not on screen");
+    IntPtr app = AXUIElementCreateApplication(pid);
+    try {
+      IntPtr wins;
+      int err = AXUIElementCopyAttributeValue(app, Str("AXWindows"), out wins);
+      if (err != 0) throw new InvalidOperationException("the accessibility API would not list the app's windows (AXError " + err + ")");
+      try {
+        IntPtr win = IntPtr.Zero;
+        long n = CFArrayGetCount(wins);
+        for (long i = 0; i < n && win == IntPtr.Zero; i++) {
+          IntPtr w = CFArrayGetValueAtIndex(wins, i);
+          CGPoint p; CGSize s;
+          if (!ReadPoint(w, out p) || !ReadSize(w, out s)) continue;
+          if (Math.Abs(p.X - target.X) < 1 && Math.Abs(p.Y - target.Y) < 1 &&
+              Math.Abs(s.Width - target.Width) < 1 && Math.Abs(s.Height - target.Height) < 1) win = w;
+        }
+        if (win == IntPtr.Zero) throw new InvalidOperationException("no accessibility element for window " + id);
+        // Position, size, and position again: a window grown past the edge
+        // of the screen is pushed back, so where it lands depends on the order.
+        SetPoint(win, x, y);
+        SetSize(win, width, height);
+        SetPoint(win, x, y);
+      } finally { CFRelease(wins); }
+    } finally { CFRelease(app); }
+  }
+
+  static bool ReadPoint(IntPtr w, out CGPoint p) {
+    p = new CGPoint(); IntPtr v;
+    if (AXUIElementCopyAttributeValue(w, Str("AXPosition"), out v) != 0) return false;
+    try { return AXValueGetValue(v, 1, out p); } finally { CFRelease(v); }
+  }
+  static bool ReadSize(IntPtr w, out CGSize s) {
+    s = new CGSize(); IntPtr v;
+    if (AXUIElementCopyAttributeValue(w, Str("AXSize"), out v) != 0) return false;
+    try { return AXValueGetValue(v, 2, out s); } finally { CFRelease(v); }
+  }
+  static void SetPoint(IntPtr w, double x, double y) {
+    CGPoint p = new CGPoint { X = x, Y = y };
+    IntPtr v = AXValueCreate(1, ref p);
+    try { Check(AXUIElementSetAttributeValue(w, Str("AXPosition"), v), "move"); } finally { CFRelease(v); }
+  }
+  static void SetSize(IntPtr w, double width, double height) {
+    CGSize s = new CGSize { Width = width, Height = height };
+    IntPtr v = AXValueCreate(2, ref s);
+    try { Check(AXUIElementSetAttributeValue(w, Str("AXSize"), v), "resize"); } finally { CFRelease(v); }
+  }
+  static void Check(int err, string what) {
+    if (err != 0) throw new InvalidOperationException("the accessibility API would not " + what + " the window (AXError " + err + ")");
+  }
+
+  // NSRunningApplication and NSWorkspace, through the Objective-C runtime:
+  // AppKit has to be in the process for their classes to exist at all.
+  static bool appKit;
+  static IntPtr Cls(string name) {
+    if (!appKit) { NativeLibrary.Load("/System/Library/Frameworks/AppKit.framework/AppKit"); appKit = true; }
+    return objc_getClass(name);
+  }
+  static IntPtr Running(int pid) {
+    return SendPid(Cls("NSRunningApplication"), sel_registerName("runningApplicationWithProcessIdentifier:"), pid);
+  }
+
+  public static bool Activate(int pid) {
+    IntPtr app = Running(pid);
+    return app != IntPtr.Zero && SendBoolOptions(app, sel_registerName("activateWithOptions:"), 0) != 0;
+  }
+
+  // Quit the way the Dock asks an app to, rather than by signal.
+  public static bool Terminate(int pid) {
+    IntPtr app = Running(pid);
+    return app != IntPtr.Zero && SendBool(app, sel_registerName("terminate")) != 0;
+  }
+
+  public static int FrontmostPid() {
+    IntPtr ws = Send(Cls("NSWorkspace"), sel_registerName("sharedWorkspace"));
+    IntPtr app = Send(ws, sel_registerName("frontmostApplication"));
+    return app == IntPtr.Zero ? 0 : SendInt(app, sel_registerName("processIdentifier"));
+  }
+
+  public static string AppName(int pid) {
+    IntPtr app = Running(pid);
+    if (app == IntPtr.Zero) return "pid " + pid;
+    IntPtr s = Send(app, sel_registerName("localizedName"));
+    IntPtr utf8 = s == IntPtr.Zero ? IntPtr.Zero : Send(s, sel_registerName("UTF8String"));
+    return utf8 == IntPtr.Zero ? "pid " + pid : Marshal.PtrToStringUTF8(utf8);
+  }
+
+  // macOS grants Screen Recording and Accessibility not to this process but
+  // to the app it answers to: the terminal it was started from, or whatever
+  // spawned that. Knowing which saves a guess in the privacy settings.
+  public static string ResponsibleApp() {
+    try {
+      int pid = responsibility_get_pid_responsible_for_pid(Environment.ProcessId);
+      byte[] buf = new byte[4096];
+      if (proc_pidpath(pid, buf, (uint)buf.Length) <= 0) return null;
+      string path = System.Text.Encoding.UTF8.GetString(buf, 0, Array.IndexOf(buf, (byte)0));
+      int app = path.IndexOf(".app/", StringComparison.Ordinal);
+      return app < 0 ? path : path.Substring(0, app + 4);
+    } catch (Exception) { return null; }
+  }
+
+  static void Post(IntPtr e) {
+    if (e == IntPtr.Zero) throw new InvalidOperationException("could not make an input event");
+    try { CGEventPost(HidTap, e); } finally { CFRelease(e); }
+  }
+
+  static IntPtr Mouse(uint type, double x, double y, long clicks) {
+    IntPtr e = CGEventCreateMouseEvent(IntPtr.Zero, type, new CGPoint { X = x, Y = y }, 0);
+    if (clicks > 0 && e != IntPtr.Zero) CGEventSetIntegerValueField(e, ClickState, clicks);
+    return e;
+  }
+
+  public static void MoveTo(double x, double y) { Post(Mouse(EvMoved, x, y, 0)); }
+  // A move with the button down has to say so: it is the dragged event, not
+  // a move, that a page sees as a pointermove with the button held.
+  public static void DragTo(double x, double y) { Post(Mouse(EvLeftDragged, x, y, 0)); }
+  // The click count is the poster's to set. Left at one, a double click is
+  // two single clicks as far as the page is concerned.
+  public static void LeftDown(double x, double y, int click) { Post(Mouse(EvLeftDown, x, y, click)); }
+  public static void LeftUp(double x, double y, int click) { Post(Mouse(EvLeftUp, x, y, click)); }
+
+  public static void Scroll(double x, double y, int pixels) {
+    IntPtr e = CGEventCreateScrollWheelEvent2(IntPtr.Zero, PixelUnits, 1, pixels, 0, 0);
+    if (e != IntPtr.Zero) CGEventSetLocation(e, new CGPoint { X = x, Y = y });
+    Post(e);
+  }
+
+  // Text goes in as Unicode strings on a key event, so it does not depend on
+  // the keyboard layout the machine happens to have.
+  public static void TypeText(string text) {
+    ushort[] units = new ushort[text.Length];
+    for (int i = 0; i < text.Length; i++) units[i] = text[i];
+    foreach (bool down in new[] { true, false }) {
+      IntPtr e = CGEventCreateKeyboardEvent(IntPtr.Zero, 0, down);
+      if (e != IntPtr.Zero) { CGEventSetFlags(e, 0); CGEventKeyboardSetUnicodeString(e, (ulong)units.Length, units); }
+      Post(e);
+    }
+  }
+
+  public static void TapKey(ushort key) {
+    foreach (bool down in new[] { true, false }) {
+      IntPtr e = CGEventCreateKeyboardEvent(IntPtr.Zero, key, down);
+      if (e != IntPtr.Zero) CGEventSetFlags(e, 0);
+      Post(e);
+      if (down) Thread.Sleep(20);
+    }
+  }
+
+  // A shortcut has to press its modifiers. A key event that only carries the
+  // Command flag never reaches the page; the modifier goes down as a key of
+  // its own first, and comes up after, the way a hand does it.
+  public static void Chord(ushort[] modifiers, ulong[] flags, ushort key) {
+    IntPtr src = CGEventSourceCreate(1);        // kCGEventSourceStateHIDSystemState
+    try {
+      ulong held = 0;
+      for (int i = 0; i < modifiers.Length; i++) { held |= flags[i]; ChordKey(src, modifiers[i], true, held); }
+      ChordKey(src, key, true, held);
+      ChordKey(src, key, false, held);
+      for (int i = modifiers.Length - 1; i >= 0; i--) { held &= ~flags[i]; ChordKey(src, modifiers[i], false, held); }
+    } finally { if (src != IntPtr.Zero) CFRelease(src); }
+  }
+
+  static void ChordKey(IntPtr src, ushort code, bool down, ulong flags) {
+    IntPtr e = CGEventCreateKeyboardEvent(src, code, down);
+    if (e != IntPtr.Zero) CGEventSetFlags(e, flags);
+    Post(e);
+    Thread.Sleep(15);
+  }
+}
+'@
+
+# Nothing below works without these, and without them it fails in ways that
+# look like something else: a capture that errors, input that goes nowhere.
+function Assert-MenoAccess {
+    $missing = @()
+    if (-not [MacGui]::CGPreflightScreenCaptureAccess()) { $missing += "Screen & System Audio Recording" }
+    if (-not [MacGui]::AXIsProcessTrusted()) { $missing += "Accessibility" }
+    if ($missing) {
+        $app = [MacGui]::ResponsibleApp()
+        $who = if ($app) { "'$app'" } else { "the app this is run from (the terminal, or whatever started it)" }
+        throw ("macOS has not granted $($missing -join ' or ') to $who. Turn it on in System Settings > " +
+            "Privacy & Security, then start the run again. If it asks to quit and reopen the app, 'Later' will do: " +
+            "a new pwsh picks the permission up.")
+    }
+}
+Assert-MenoAccess
+
+$script:Window = [uint32] 0
+$script:MenoPid = 0
+# Pixels of a shot per point of screen: 2 on a Retina display. Measured off a
+# real shot rather than assumed; see Get-ShotScale.
+$script:Scale = 0.0
+
+function Get-MenoBuild {
+    # Where `npm run tauri build` leaves the app on this platform.
+    return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../src-tauri/target/release/bundle/macos/Meno.app"))
+}
+
+function Start-MenoProcess {
+    <#
+      .SYNOPSIS
+      Start a build: an app bundle through Launch Services, the way it is
+      started from the Finder, or a bare executable as it is.
+    #>
+    param([Parameter(Mandatory)] [string] $Path)
+    if ((Test-Path -PathType Container $Path) -and $Path.TrimEnd("/").EndsWith(".app")) {
+        & /usr/bin/open -n $Path
+        if ($LASTEXITCODE -ne 0) { throw "open could not start '$Path'" }
+    } else {
+        Start-Process -FilePath $Path | Out-Null
+    }
+}
+
+function Close-MenoProcess {
+    <#
+      .SYNOPSIS
+      Ask a running copy to quit, and put it down if it will not.
+    #>
+    param([Parameter(Mandatory)] [System.Diagnostics.Process] $Process)
+    [MacGui]::Terminate($Process.Id) | Out-Null
+    if (-not $Process.WaitForExit(4000)) { $Process.Kill() }
+}
+
+function Get-MenoWindow {
+    <#
+      .SYNOPSIS
+      The main window of a running process, waited for rather than assumed:
+      a freshly started app has no window for a second or two.
+    #>
+    param(
+        [string] $ProcessName = "Meno",
+        [int] $TimeoutSec = 30
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        foreach ($p in @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue)) {
+            $w = [MacGui]::MainWindowOf($p.Id)
+            if ($w) {
+                $script:MenoPid = $p.Id
+                $script:Window = $w.Id
+                return $script:Window
+            }
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    throw "no window for process '$ProcessName' after ${TimeoutSec}s"
+}
+
+function Get-WindowInfo {
+    if ($script:Window -eq 0) { throw "call Get-MenoWindow first" }
+    $w = [MacGui]::WindowById($script:Window)
+    if (-not $w) { throw "Meno's window ($script:Window) is not on screen any more" }
+    return $w
+}
+
+function Wait-MenoFront {
+    param([int] $TimeoutMs = 2000)
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
+    do {
+        if ([MacGui]::FrontmostPid() -eq $script:MenoPid) { return $true }
+        Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $deadline)
+    return $false
+}
+
+function Assert-MenoFront {
+    # Input goes to whichever app is in front and to whichever window is
+    # under the pointer, not to Meno by name. If Meno has lost the front, the
+    # next keystroke lands in some other app, so stop rather than send it.
+    if ([MacGui]::FrontmostPid() -eq $script:MenoPid) { return }
+    $front = [MacGui]::AppName([MacGui]::FrontmostPid())
+    throw "Meno is no longer in front - '$front' is - and input sent now would go there. Stopping."
+}
+
+function Set-MenoWindow {
+    <#
+      .SYNOPSIS
+      Bring the window forward and put it at a known size, so that a
+      screenshot taken now and one taken next week can be compared.
+
+      .DESCRIPTION
+      The size is in points, the unit macOS sizes windows in: 1280x860 is a
+      2560x1720 shot on a Retina display. Every other number in this module is
+      a pixel of that shot.
+    #>
+    param(
+        [int] $Width = 1280,
+        [int] $Height = 860,
+        [int] $Left = 40,
+        [int] $Top = 40
+    )
+    Get-WindowInfo | Out-Null
+    [MacGui]::Activate($script:MenoPid) | Out-Null
+    [MacGui]::Place($script:MenoPid, $script:Window, $Left, $Top, $Width, $Height)
+    Start-Sleep -Milliseconds 400
+    $w = Get-WindowInfo
+    if ([math]::Abs($w.Width - $Width) -ge 1 -or [math]::Abs($w.Height - $Height) -ge 1) {
+        throw ("asked for a ${Width}x${Height} window and got $($w.Width)x$($w.Height). macOS keeps a window " +
+            "inside the screen, and the app has a minimum size; the scenarios' coordinates are only good at the size they were read at.")
+    }
+    if (-not (Wait-MenoFront)) {
+        [MacGui]::Activate($script:MenoPid) | Out-Null
+        if (-not (Wait-MenoFront)) {
+            throw "the window would not come to the front, so input would go to '$([MacGui]::AppName([MacGui]::FrontmostPid()))' instead. Check that the screen is unlocked."
+        }
+    }
+    # The window may have moved to another display.
+    $script:Scale = 0.0
+    Get-ShotScale | Out-Null
+}
+
+function Get-ShotScale {
+    # The one number the coordinates hang on, taken from a real shot: how many
+    # of its pixels there are to a point of screen.
+    if ($script:Scale -le 0) {
+        $w = Get-WindowInfo
+        $probe = Join-Path ([System.IO.Path]::GetTempPath()) "meno-scale.png"
+        Save-MenoShot -Path $probe | Out-Null
+        $script:Scale = (Get-PngWidth $probe) / $w.Width
+    }
+    return $script:Scale
+}
+
+function Get-PngWidth {
+    param([Parameter(Mandatory)] [string] $Path)
+    $b = [System.IO.File]::ReadAllBytes($Path)
+    return ([int] $b[16] -shl 24) -bor ([int] $b[17] -shl 16) -bor ([int] $b[18] -shl 8) -bor [int] $b[19]
+}
+
+function Get-ClientOrigin {
+    # Where the window's top left is on the screen, in points. The window is
+    # all client: the app draws its own title bar.
+    $w = Get-WindowInfo
+    return @{ X = $w.X; Y = $w.Y }
+}
+
+function Get-ClientSize {
+    # In pixels of a shot, like every coordinate a scenario passes in.
+    $w = Get-WindowInfo
+    $k = Get-ShotScale
+    return @{ Width = [int][math]::Round($w.Width * $k); Height = [int][math]::Round($w.Height * $k) }
+}
+
+function ConvertTo-Screen {
+    param([int] $X, [int] $Y)
+    $w = Get-WindowInfo
+    $k = Get-ShotScale
+    if ($X -lt 0 -or $Y -lt 0 -or $X -ge $w.Width * $k -or $Y -ge $w.Height * $k) {
+        throw "($X, $Y) is outside the window, which is $([int]($w.Width * $k))x$([int]($w.Height * $k)) in shot pixels"
+    }
+    return @{ X = $w.X + $X / $k; Y = $w.Y + $Y / $k }
+}
+
+function Save-WindowShot {
+    param([Parameter(Mandatory)] [uint32] $Id, [Parameter(Mandatory)] [string] $Path)
+    $dir = Split-Path -Parent $Path
+    if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
+    # -o leaves the shadow out, -x the shutter sound.
+    $err = & /usr/sbin/screencapture -l $Id -o -x $Path 2>&1
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Path)) {
+        throw "screencapture could not take window $Id ($err). Either the window has gone, or Screen Recording has not been granted."
+    }
+    return $Path
+}
+
+function Save-MenoShot {
+    <#
+      .SYNOPSIS
+      The window's picture, taken out of the window itself.
+
+      .DESCRIPTION
+      Unlike on Windows this reads the window's own contents from the window
+      server, GPU-drawn parts and all, so another window over it does not end
+      up in the shot. It does not have to be in front for this; it does have
+      to be for input.
+    #>
+    param([Parameter(Mandatory)] [string] $Path)
+    Get-WindowInfo | Out-Null
+    return Save-WindowShot -Id $script:Window -Path $Path
+}
+
+function Invoke-MenoClick {
+    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1)
+    $p = ConvertTo-Screen $X $Y
+    Assert-MenoFront
+    [MacGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 30
+    for ($i = 1; $i -le $Count; $i++) {
+        [MacGui]::LeftDown($p.X, $p.Y, $i)
+        Start-Sleep -Milliseconds 30
+        [MacGui]::LeftUp($p.X, $p.Y, $i)
+        if ($i -lt $Count) { Start-Sleep -Milliseconds 90 }
+    }
+    Start-Sleep -Milliseconds 120
+}
+
+function Invoke-MenoDrag {
+    <#
+      .SYNOPSIS
+      Press, travel, release - with the travel broken into steps.
+
+      .DESCRIPTION
+      A jump straight from one point to the other is a single pointermove, and
+      the editor asks for several: it waits a few pixels before it calls a
+      press a drag at all, and the preview it draws follows the moves rather
+      than the release.
+    #>
+    param(
+        [Parameter(Mandatory)] [int] $FromX, [Parameter(Mandatory)] [int] $FromY,
+        [Parameter(Mandatory)] [int] $ToX, [Parameter(Mandatory)] [int] $ToY,
+        [int] $Steps = 12,
+        [int] $StepMs = 25,
+        [scriptblock] $AtStep
+    )
+    $a = ConvertTo-Screen $FromX $FromY
+    $b = ConvertTo-Screen $ToX $ToY
+    Assert-MenoFront
+    [MacGui]::MoveTo($a.X, $a.Y)
+    Start-Sleep -Milliseconds 80
+    [MacGui]::LeftDown($a.X, $a.Y, 1)
+    Start-Sleep -Milliseconds 80
+    try {
+        for ($i = 1; $i -le $Steps; $i++) {
+            $t = $i / $Steps
+            $p = ConvertTo-Screen ([int]($FromX + ($ToX - $FromX) * $t)) ([int]($FromY + ($ToY - $FromY) * $t))
+            [MacGui]::DragTo($p.X, $p.Y)
+            Start-Sleep -Milliseconds $StepMs
+            if ($AtStep) { & $AtStep $i }
+        }
+    } finally {
+        # Let go whatever happened: a button left down is a button held down
+        # for every app on the machine.
+        [MacGui]::LeftUp($b.X, $b.Y, 1)
+    }
+    Start-Sleep -Milliseconds 200
+}
+
+function Move-MenoPointer {
+    <#
+      .SYNOPSIS
+      Put the pointer over a point and leave it there: hover.
+
+      .DESCRIPTION
+      It arrives from a few pixels to the left, so the page sees a move over
+      the point rather than a pointer that was simply found there.
+    #>
+    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y)
+    $p = ConvertTo-Screen $X $Y
+    Assert-MenoFront
+    [MacGui]::MoveTo($p.X - 4, $p.Y)
+    Start-Sleep -Milliseconds 60
+    [MacGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 200
+}
+
+function Invoke-MenoWheel {
+    <#
+      .SYNOPSIS
+      Turn the wheel over a point. Positive is away from you: zoom in.
+
+      .DESCRIPTION
+      A notch is posted as 100 pixels of scroll, which is what Chromium, and so
+      WebView2, hands a page for one notch of a Windows wheel at the usual
+      three lines a notch. The Mac's own unit, a line, reaches the page
+      through WebKit as 40, so posting lines would have the same scenario zoom
+      less than half as far here.
+    #>
+    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Notches = 1)
+    $p = ConvertTo-Screen $X $Y
+    Assert-MenoFront
+    [MacGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 60
+    [MacGui]::Scroll($p.X, $p.Y, $Notches * 100)
+    Start-Sleep -Milliseconds 200
+}
+
+function Send-MenoText {
+    param([Parameter(Mandatory)] [string] $Text, [int] $CharMs = 8)
+    Assert-MenoFront
+    # A character at a time, but never half of one.
+    $e = [System.Globalization.StringInfo]::GetTextElementEnumerator($Text)
+    while ($e.MoveNext()) {
+        [MacGui]::TypeText($e.GetTextElement())
+        Start-Sleep -Milliseconds $CharMs
+    }
+}
+
+function Send-MenoKey {
+    param([Parameter(Mandatory)] [ValidateSet("Enter", "Escape", "Tab", "Backspace")] [string] $Key)
+    Assert-MenoFront
+    # Virtual key codes of the ANSI layout; these four are the same on all of them.
+    $code = @{ Enter = 36; Escape = 53; Tab = 48; Backspace = 51 }[$Key]
+    [MacGui]::TapKey([uint16] $code)
+    Start-Sleep -Milliseconds 150
+}
+
+function Send-MenoShortcut {
+    <#
+      .SYNOPSIS
+      The platform's shortcut key - Cmd here, Ctrl on Windows - with a letter
+      or a digit, and Shift if asked: Send-MenoShortcut Z is undo.
+    #>
+    param([Parameter(Mandatory)] [ValidatePattern("^[A-Za-z0-9]$")] [string] $Key, [switch] $Shift)
+    Assert-MenoFront
+    # Virtual key codes of the ANSI layout, which is where letters and digits
+    # sit on the others too.
+    $codes = @{
+        A = 0; S = 1; D = 2; F = 3; H = 4; G = 5; Z = 6; X = 7; C = 8; V = 9; B = 11; Q = 12; W = 13
+        E = 14; R = 15; Y = 16; T = 17; O = 31; U = 32; I = 34; P = 35; L = 37; J = 38; K = 40; N = 45; M = 46
+        "1" = 18; "2" = 19; "3" = 20; "4" = 21; "5" = 23; "6" = 22; "7" = 26; "8" = 28; "9" = 25; "0" = 29
+    }
+    $mods = @([uint16] 55); $flags = @([uint64] 0x100000)          # Command
+    if ($Shift) { $mods += [uint16] 56; $flags += [uint64] 0x20000 } # Shift
+    [MacGui]::Chord([uint16[]] $mods, [uint64[]] $flags, [uint16] $codes[$Key.ToUpperInvariant()])
+    Start-Sleep -Milliseconds 150
+}
+
+function Get-DialogWindows {
+    # The system's file panel, and the sheets it opens over itself, are
+    # windows of the app's own above the ordinary level. So is a tooltip -
+    # the fit button has one - which is the reason for the size.
+    return @([MacGui]::Windows() | Where-Object {
+        $_.Pid -eq $script:MenoPid -and $_.Layer -gt 0 -and $_.Width -ge 200 -and $_.Height -ge 100 })
+}
+
+function Wait-DialogWindows {
+    param([Parameter(Mandatory)] [scriptblock] $Until, [Parameter(Mandatory)] [string] $What, [int] $TimeoutMs = 8000)
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
+    do {
+        $d = @(Get-DialogWindows)
+        if (& $Until $d) { return ,$d }
+        Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $deadline)
+    throw "waited ${TimeoutMs}ms for $What"
+}
+
+function Wait-WindowSettled {
+    param([Parameter(Mandatory)] [uint32] $Id, [int] $TimeoutMs = 4000, [int] $QuietMs = 400)
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "meno-settle"
+    New-Item -ItemType Directory -Force $tmp | Out-Null
+    $a = Join-Path $tmp "a.png"
+    $b = Join-Path $tmp "b.png"
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
+    Save-WindowShot -Id $Id -Path $a | Out-Null
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds $QuietMs
+        Save-WindowShot -Id $Id -Path $b | Out-Null
+        if ((Get-FileHash $a).Hash -eq (Get-FileHash $b).Hash) { return $true }
+        Copy-Item $b $a -Force
+    }
+    return $false
+}
+
+function Complete-FileDialog {
+    <#
+      .SYNOPSIS
+      The system's open panel is up: choose this file in it.
+
+      .DESCRIPTION
+      The panel has no field to type a path into until '/' opens the "Go to
+      the folder" sheet, and that sheet takes a moment to arrive. What is
+      typed before it has does get into the field, but the sheet never looks
+      it up, and Return then does nothing at all. So: '/', wait for the sheet
+      to be a window, the rest of the path, wait for the lookup to show, then
+      Return to go there - which leaves the file selected - and Return again
+      to open it.
+    #>
+    param([Parameter(Mandatory)] [string] $Path)
+    if (-not $Path.StartsWith("/")) { throw "the path has to be absolute: '$Path'" }
+    $panel = Wait-DialogWindows -What "the open panel" -Until { param($d) $d.Count -ge 1 }
+    $before = $panel.Count
+    # The panel is a window before it takes keys: a '/' sent while it is still
+    # sliding in goes nowhere. Let it come to rest first, and if the sheet
+    # still does not come, ask again - but only while there is no sheet, or
+    # the second '/' would land in its field.
+    Wait-WindowSettled -Id $panel[0].Id -TimeoutMs 3000 -QuietMs 250 | Out-Null
+    $sheet = $null
+    for ($try = 1; $try -le 3 -and -not $sheet; $try++) {
+        Send-MenoText -Text "/"
+        try {
+            $sheet = Wait-DialogWindows -What "the 'Go to the folder' sheet" -TimeoutMs 2500 -Until { param($d) $d.Count -gt $before }.GetNewClosure()
+        } catch {
+            if ($try -eq 3) { throw }
+        }
+    }
+    Start-Sleep -Milliseconds 300
+    Send-MenoText -Text $Path.Substring(1)
+    # The suggestion under the field is the lookup having happened; wait for
+    # the sheet to stop changing, but not less than the time it takes to begin.
+    $new = $sheet | Where-Object { $_.Id -notin $panel.Id } | Select-Object -First 1
+    Start-Sleep -Milliseconds 600
+    Wait-WindowSettled -Id $new.Id -TimeoutMs 4000 -QuietMs 300 | Out-Null
+    Send-MenoKey -Key Enter
+    Wait-DialogWindows -What "the sheet to take the path (it shows no suggestion when it has not looked the path up)" -Until { param($d) $d.Count -le $before }.GetNewClosure() | Out-Null
+    Start-Sleep -Milliseconds 500
+    Send-MenoKey -Key Enter
+    Wait-DialogWindows -What "the open panel to close" -Until { param($d) $d.Count -eq 0 } | Out-Null
+}
+
+function Wait-MenoSettled {
+    <#
+      .SYNOPSIS
+      Wait until the drawing stops changing, rather than sleeping a guess.
+      Animations here run for a few hundred milliseconds after a gesture.
+    #>
+    param([int] $TimeoutMs = 4000, [int] $QuietMs = 400)
+    Get-WindowInfo | Out-Null
+    if (Wait-WindowSettled -Id $script:Window -TimeoutMs $TimeoutMs -QuietMs $QuietMs) { return $true }
+    Write-Warning "the drawing was still changing after ${TimeoutMs}ms"
+    return $false
+}
+
+Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
+    Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
+    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel,
+    Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled

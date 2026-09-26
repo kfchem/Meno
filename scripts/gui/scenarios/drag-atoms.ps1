@@ -7,7 +7,10 @@
 # None of it shows in a screenshot taken after the release.
 #
 # The coordinates are read off 03-fitted.png from the open-and-look run, at
-# the window size run.ps1 fixes. Take that run again if they ever drift.
+# the window size run.ps1 fixes, on a Mac: 1280x860 points on a Retina display,
+# so a 2560x1720 shot. Another display reads them afresh - take that run again
+# if they ever drift. The moves are the ones the scenario was first written
+# with, in the fixture's own units, so they ask the same of the editor anywhere.
 
 Start-Meno
 Open-MenoFile "$PSScriptRoot/../fixtures/depiction-check.mol"
@@ -28,7 +31,7 @@ $midDrag = { param($i) if ($i -eq 3) { Save-Step "$($script:What)-early" }
 # A plain carbon in the middle of a chain. Nothing special about it, which is
 # the point: whatever the others do, this one has to keep working.
 $script:What = "chain"
-Invoke-MenoDrag -FromX 262 -FromY 232 -ToX 262 -ToY 130 -AtStep $midDrag
+Invoke-MenoDrag -FromX 603 -FromY 438 -ToX 603 -ToY 227 -AtStep $midDrag
 Wait-MenoSettled | Out-Null
 Save-Step "chain-dropped"
 
@@ -38,7 +41,7 @@ Wait-MenoSettled | Out-Null
 # The oxygen of an OH. A label takes the bond's end away with it, so no cap
 # belongs here - neither at rest nor while it moves.
 $script:What = "label"
-Invoke-MenoDrag -FromX 617 -FromY 417 -ToX 730 -ToY 470 -AtStep $midDrag
+Invoke-MenoDrag -FromX 1344 -FromY 810 -ToX 1577 -ToY 919 -AtStep $midDrag
 Wait-MenoSettled | Out-Null
 Save-Step "label-dropped"
 
@@ -48,6 +51,6 @@ Wait-MenoSettled | Out-Null
 # The stereocentre of the wedge cluster: three wedges and a hashed one meet
 # here, and all four have to keep their shape for as long as it moves.
 $script:What = "wedge"
-Invoke-MenoDrag -FromX 172 -FromY 595 -ToX 250 -ToY 520 -AtStep $midDrag
+Invoke-MenoDrag -FromX 434 -FromY 1185 -ToX 595 -ToY 1030 -AtStep $midDrag
 Wait-MenoSettled | Out-Null
 Save-Step "wedge-dropped"
