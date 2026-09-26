@@ -965,19 +965,63 @@ describe("a wedge with a bond carrying straight on", () => {
 });
 
 describe("a wavy bond", () => {
-  it("comes back to the bond's own line at both ends", () => {
-    const o = opts();
-    const atoms: Atom[] = [
-      { id: 1, x: 0, y: 0, el: "C" },
-      { id: 2, x: 1.5, y: 0, el: "C" },
-    ];
-    const bond: Bond = { a1: 0, a2: 1, order: 1, stereo: "wavy" };
-    const { lines } = buildBondPrimitives(atoms, [bond][0], o, 40);
-    const first = lines[0];
+  const o = opts();
+  const L = NOMINAL_BOND_LENGTH;
+  const atoms: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: L, y: 0, el: "C" },
+  ];
+  const wavy: Bond = { a1: 0, a2: 1, order: 1, stereo: "wavy" };
+  const points = (lines: LineSeg[]) => [
+    { x: lines[0].x1, y: lines[0].y1 },
+    ...lines.map((l) => ({ x: l.x2, y: l.y2 })),
+  ];
+  const half = () => o.wavyPeriodPx / 2;
+
+  it("is half circles either side of the line, the first to the right going out", () => {
+    // the stereocentre is the atom with more bonds: here the second
+    const deg = new Map([
+      [0, 1],
+      [1, 3],
+    ]);
+    const { lines } = buildBondPrimitives(atoms, wavy, o, 40, deg);
+    const pts = points(lines).map((p) => ({ u: L - p.x, v: p.y }));
+    // it starts on the line at the stereocentre
+    expect(pts[0].u).toBeCloseTo(0, 9);
+    expect(pts[0].v).toBeCloseTo(0, 9);
+    // going out along -x, the right is +y
+    const firstTurn = pts.filter((p) => p.u > 0 && p.u < half());
+    expect(Math.min(...firstTurn.map((p) => p.v))).toBeGreaterThan(-1e-9);
+    // every point lies on the half circle of its turn, alternately either side
+    expect(o.wavyAmpPx).toBeCloseTo(half() / 2, 9);
+    for (const p of pts) {
+      const k = Math.min(Math.floor(p.u / half() + 1e-9), 1e9);
+      const centre = (k + 0.5) * half();
+      const r = Math.hypot(p.u - centre, p.v);
+      const onPrevious = Math.hypot(p.u - (k - 0.5) * half(), p.v);
+      expect(Math.min(Math.abs(r - half() / 2), Math.abs(onPrevious - half() / 2))).toBeLessThan(1e-9);
+      if (Math.abs(p.v) > 1e-6) expect(Math.sign(p.v)).toBe(k % 2 === 0 ? 1 : -1);
+    }
+  });
+
+  it("is as many quarter turns as fit between the atoms", () => {
+    const { lines } = buildBondPrimitives(atoms, wavy, o, 40);
+    const pts = points(lines);
+    const quarter = half() / 2;
+    const reach = Math.floor(L / quarter + 1e-9) * quarter;
+    const end = pts[pts.length - 1];
+    expect(end.x).toBeCloseTo(reach, 9);
+    // an odd number of quarters ends at the top of a turn, off the line
+    const quarters = Math.round(reach / quarter);
+    if (quarters % 2 === 1) expect(Math.abs(end.y)).toBeCloseTo(o.wavyAmpPx, 9);
+    else expect(end.y).toBeCloseTo(0, 9);
+  });
+
+  it("leaves its far end free, to be finished like any other", () => {
+    const round = opts({ joinStyle: "round" });
+    const { lines, ends } = buildBondPrimitives(atoms, wavy, round, 40);
     const last = lines[lines.length - 1];
-    // a cap sits on the atom, so the wave has to end there too
-    expect(first.y1).toBeCloseTo(0, 9);
-    expect(last.y2).toBeCloseTo(0, 6);
+    expect(ends).toContainEqual({ x: last.x2, y: last.y2 });
   });
 });
 

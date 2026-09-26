@@ -27,8 +27,10 @@ export type LayoutOptions = {
   wedgeWidthPx: number;
   /** Least distance between the hashes of a hashed wedge, centre to centre. */
   hashSpacingPx: number;
+  /** How far a wavy bond swings either side of its line. */
   wavyAmpPx: number;
-  wavyFreq: number;
+  /** One whole wave of a wavy bond: a turn to either side. */
+  wavyPeriodPx: number;
   fontPx: number;
   /**
    * How far a bond stops short of a label's letters. Left unset, it is 16%
@@ -1055,41 +1057,66 @@ function buildHashes(
 }
 
 /**
- * A wavy bond. `phase` carries the bond's own length and how far into it the
- * drawn part starts, so that trimming for a label shortens the wave rather
- * than squeezing the same number of turns into less room.
+ * A wavy bond, as ACS 1996 draws it: half circles alternately either side of
+ * the line - half ellipses, if the amplitude is not a quarter of the period -
+ * starting on the line at `from`, the stereocentre, and swinging first to the
+ * right going out. The wave is made of quarter turns, as many as fit between
+ * the two atoms, so it ends either back on the line or at the top of a turn.
+ * Only `start`..`end` of it is drawn, measured from `from`: a label cuts the
+ * wave where it is rather than squeezing it into less room.
  */
 function buildWavySegments(
-  p1: Vec2,
-  p2: Vec2,
-  ampPx: number,
-  freq: number,
+  from: Vec2,
+  to: Vec2,
+  start: number,
+  end: number,
+  amp: number,
+  period: number,
   zoom: number,
-  units: "px" | "world" | undefined,
-  phase?: { start: number; full: number }
 ): LineSeg[] {
-  const dir = vnorm(vsub(p2, p1));
-  const n = vperp(dir);
-  const L = vlen(vsub(p2, p1));
-  // A whole number of half turns, so the wave meets the bond's own line at
-  // both ends: an end left mid-turn sits beside the atom, and the cap that
-  // rounds it off then looks loose.
-  const turns = Math.max(0.5, Math.round(freq * 2) / 2);
-  const steps = Math.max(8, Math.floor(L / Math.max(pxToWorld(6, zoom), 1e-6)));
-  const amp = toWorld(ampPx, zoom, units);
-  const out: LineSeg[] = [];
-  let prev: Vec2 | null = null;
-  for (let k = 0; k <= steps; k++) {
-    const t = k / steps;
-    const base = vadd(p1, vscale(dir, L * t));
-    const u =
-      phase && phase.full > 1e-9 ? (phase.start + L * t) / phase.full : t;
-    const off = Math.sin(2 * Math.PI * turns * u);
-    const pt = vadd(base, vscale(n, amp * off));
-    if (prev) {
-      out.push({ x1: prev.x, y1: prev.y, x2: pt.x, y2: pt.y, widthPx: 0 });
+  const dir = vnorm(vsub(to, from));
+  // to the right, going out
+  const right = vscale(vperp(dir), -1);
+  const half = period / 2;
+  if (!(half > 0)) return [];
+  const quarters = Math.floor(vlen(vsub(to, from)) / (half / 2) + 1e-9);
+  const last = Math.min(end, (quarters * half) / 2);
+  if (!(last > start)) return [];
+  // A point on the wave, a distance `u` along the line: turn k runs from
+  // k half-waves out to k + 1, as an angle from 0 to pi about its middle.
+  const at = (u: number): Vec2 => {
+    const k = Math.min(Math.floor(u / half), Math.max(0, Math.ceil(last / half) - 1));
+    const phi = Math.acos(Math.max(-1, Math.min(1, 1 - (2 * (u - k * half)) / half)));
+    return waveAt(k, phi);
+  };
+  const waveAt = (k: number, phi: number): Vec2 => {
+    const along = k * half + (half / 2) * (1 - Math.cos(phi));
+    const side = (k % 2 === 0 ? 1 : -1) * amp * Math.sin(phi);
+    return vadd(from, vadd(vscale(dir, along), vscale(right, side)));
+  };
+  // Steps even in angle, so a turn stays round: about 2 px each on screen.
+  const perTurn = Math.max(
+    12,
+    Math.min(64, Math.ceil((Math.PI * Math.max(amp, half / 2) * zoom) / 2)),
+  );
+  const points: Vec2[] = [at(start)];
+  const firstTurn = Math.floor(start / half);
+  for (let k = firstTurn; k * half < last; k++) {
+    for (let i = 1; i <= perTurn; i++) {
+      const phi = (Math.PI * i) / perTurn;
+      const along = k * half + (half / 2) * (1 - Math.cos(phi));
+      if (along <= start + 1e-12) continue;
+      if (along >= last - 1e-12) break;
+      points.push(waveAt(k, phi));
     }
-    prev = pt;
+  }
+  points.push(at(last));
+  const out: LineSeg[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (vlen(vsub(b, a)) < 1e-12) continue;
+    out.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, widthPx: 0 });
   }
   return out;
 }
@@ -1362,11 +1389,19 @@ export function buildBondPrimitives(
     }
   }
   if (bond.stereo === "wavy") {
+    // The wave starts at the stereocentre: the atom with more bonds, or the
+    // first when they have as many.
+    const fromA = (deg?.get(bond.a1) || 0) >= (deg?.get(bond.a2) || 0);
     lines.push(
-      ...buildWavySegments(p1, p2, opts.wavyAmpPx, opts.wavyFreq, zoom, units, {
-        start: trimA,
-        full: L0,
-      })
+      ...buildWavySegments(
+        fromA ? p1o : p2o,
+        fromA ? p2o : p1o,
+        fromA ? trimA : trimB,
+        L0 - (fromA ? trimB : trimA),
+        toWorld(opts.wavyAmpPx, zoom, units),
+        toWorld(opts.wavyPeriodPx, zoom, units),
+        zoom,
+      )
     );
     for (const l of lines) l.widthPx = lwPx;
     // A wave is short straight pieces end to end; the corner between two of
@@ -1383,7 +1418,16 @@ export function buildBondPrimitives(
         ],
       });
     }
-    return { lines, polys, bends, ends: labelEnds };
+    // Both ends of the wave are free: the far one can stop at the top of a
+    // turn, off the line and away from the atom's own join.
+    const waveEnds =
+      lines.length > 0
+        ? [
+            { x: lines[0].x1, y: lines[0].y1 },
+            { x: lines[lines.length - 1].x2, y: lines[lines.length - 1].y2 },
+          ]
+        : [];
+    return { lines, polys, bends, ends: waveEnds };
   }
   if (bond.order === 1) {
     // No trimming: ensure bonds meet cleanly at atoms
