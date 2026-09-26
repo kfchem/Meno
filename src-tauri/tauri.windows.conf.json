@@ -4,7 +4,8 @@
     "resources": [
       "resources/py/uv.exe",
       "resources/py/*.lock",
-      "resources/workers/**/*"
+      "resources/workers/**/*",
+      "resources/licenses/*"
     ]
   }
 }
