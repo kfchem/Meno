@@ -51,9 +51,10 @@ export default function NetworkToasts({ onOpen }: { onOpen: () => void }) {
       if (task.ended && now - lastActive > LINGER_MS) continue;
       out.push({ key: task.id, task, conns, at: task.started });
     }
+    // a refusal of a task's own shows in the task's card
     for (const c of connections) {
-      if (c.outcome !== "blocked" || now - (c.ended ?? c.started) > LINGER_MS)
-        continue;
+      if (c.outcome !== "blocked" || c.taskId) continue;
+      if (now - (c.ended ?? c.started) > LINGER_MS) continue;
       out.push({ key: `blocked-${c.id}`, conns: [c], at: c.started });
     }
     return out
@@ -126,12 +127,16 @@ export default function NetworkToasts({ onOpen }: { onOpen: () => void }) {
                       ? running
                         ? "Starting…"
                         : "No connections"
-                      : `${formatBytes(received)} from ${hosts.join(", ") || "—"}`}
+                      : hosts.length === 0
+                        ? ""
+                        : `${formatBytes(received)} from ${hosts.join(", ")}`}
                   </span>
                   {refused > 0 && (
                     <span className="text-accel-accent">
-                      {" "}
-                      · {refused} refused
+                      {hosts.length > 0 ? " · " : ""}
+                      {refused} refused
+                      {hosts.length === 0 &&
+                        `: ${conns.find((c) => c.outcome === "blocked")?.reason ?? ""}`}
                     </span>
                   )}
                   {!running && <span> · {failed ? "failed" : "done"}</span>}
