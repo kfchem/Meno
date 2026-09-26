@@ -26,7 +26,7 @@ export default function DocumentStylePanel({
   return (
     <aside
       aria-label="Drawing style for this document"
-      className="w-[25rem] shrink-0 h-full border-l border-gh-line bg-white flex flex-col"
+      className="w-[25rem] max-w-[50%] shrink-0 h-full border-l border-gh-line bg-white flex flex-col"
     >
       <header className="flex items-center justify-between px-4 h-11 border-b border-gh-line">
         <h2 className="text-sm font-semibold text-gh-black">Drawing style</h2>

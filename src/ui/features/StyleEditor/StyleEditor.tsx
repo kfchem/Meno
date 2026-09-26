@@ -270,7 +270,9 @@ function summary(style: DrawingStyle): string {
 
 // --- Preview -------------------------------------------------------------------
 
-const MAGNIFICATIONS = [1, 2, 3, 4] as const;
+/** "fit" scales the drawing to the box; a number is that many times its size on the page. */
+type Magnification = "fit" | 1 | 2 | 4;
+const MAGNIFICATIONS: Magnification[] = ["fit", 1, 2, 4];
 
 function Preview({
   style,
@@ -279,18 +281,19 @@ function Preview({
   style: DrawingStyle;
   compact?: boolean;
 }) {
-  const [mag, setMag] = useState<number>(compact ? 2 : 3);
+  const [mag, setMag] = useState<Magnification>("fit");
   const molecule = useMemo(
-    () => sampleSvg(SAMPLE_MOLECULE, style, mag),
+    // Fitted, it is drawn large and scaled down to the box.
+    () => sampleSvg(SAMPLE_MOLECULE, style, mag === "fit" ? 4 : mag),
     [style, mag],
   );
   const bonds = useMemo(
     () =>
       SAMPLE_BONDS.map((s) => ({
         name: s.name,
-        svg: sampleSvg(s, style, Math.min(mag, 2)),
+        svg: sampleSvg(s, style, 2),
       })),
-    [style, mag],
+    [style],
   );
   return (
     <div>
@@ -309,9 +312,11 @@ function Preview({
               onClick={() => setMag(m)}
               aria-pressed={m === mag}
               title={
-                m === 1
-                  ? "The size it has on the page"
-                  : `${m} times the size it has on the page`
+                m === "fit"
+                  ? "Scaled to the box"
+                  : m === 1
+                    ? "The size it has on the page"
+                    : `${m} times the size it has on the page`
               }
               className={clsx(
                 "h-6 px-2 text-[11px] border-l border-gh-line first:border-l-0",
@@ -320,13 +325,18 @@ function Preview({
                   : "bg-white text-gh-gray hover:bg-gh-base",
               )}
             >
-              {m === 1 ? "Actual" : `${m}×`}
+              {m === "fit" ? "Fit" : m === 1 ? "Actual" : `${m}×`}
             </button>
           ))}
         </div>
       </div>
       <div
-        className="mt-2 rounded-lg border border-gh-line bg-white flex overflow-auto p-3 [&>svg]:m-auto [&>svg]:shrink-0"
+        className={clsx(
+          "mt-2 rounded-lg border border-gh-line bg-white flex overflow-auto p-3 [&>svg]:m-auto [&>svg]:shrink-0",
+          mag === "fit" &&
+            "[&>svg]:max-w-full [&>svg]:w-auto [&>svg]:h-auto [&>svg]:shrink",
+          mag === "fit" && (compact ? "[&>svg]:max-h-40" : "[&>svg]:max-h-64"),
+        )}
         style={{ minHeight: compact ? 120 : 200 }}
         // The SVG comes from our own layout, not from outside.
         dangerouslySetInnerHTML={{ __html: molecule }}
@@ -339,7 +349,7 @@ function Preview({
               className="rounded-md border border-gh-line bg-white flex flex-col items-center justify-end px-1 pt-2 pb-1 min-h-[3.5rem]"
             >
               <div
-                className="flex-1 flex items-center [&>svg]:max-w-full [&>svg]:h-auto"
+                className="flex-1 flex items-center [&>svg]:max-w-full [&>svg]:max-h-12 [&>svg]:w-auto [&>svg]:h-auto"
                 dangerouslySetInnerHTML={{ __html: b.svg }}
               />
               <figcaption className="text-[10px] text-gh-gray mt-1">
