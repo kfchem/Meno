@@ -23,7 +23,8 @@ export type LayoutOptions = {
   doubleOffsetPx: number;
   tripleOffsetPx: number;
   wedgeWidthPx: number;
-  hashCount: number;
+  /** Least distance between the hashes of a hashed wedge, centre to centre. */
+  hashSpacingPx: number;
   wavyAmpPx: number;
   wavyFreq: number;
   fontPx: number;
@@ -760,6 +761,8 @@ export function mitreJoinPolys(
  * bond so the join at an atom is as clean as a line-to-line one, and the wide
  * end is cut along the bonds that continue from its atom - following each of
  * them where there are two, which dents the middle of the cut inwards.
+ * `tipAtLabel` says a label has taken the narrow end, which then stops where
+ * a line would.
  */
 function buildWedgeTriangle(
   p1: Vec2,
@@ -768,6 +771,7 @@ function buildWedgeTriangle(
   tipHalfWorld: number,
   baseNeighbours: Neighbour[] = [],
   round = false,
+  tipAtLabel = false,
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
   // Keep a taper even when the minimum line width would otherwise make the
@@ -776,8 +780,10 @@ function buildWedgeTriangle(
   const nb = vscale(vperp(dir), baseHalfWorld);
   const nt = vscale(vperp(dir), tipHalf);
   // Reach just past the atom so the flat tip overlaps the bonds meeting there,
-  // the way a mitred line join does.
-  const tip = vadd(p2, vscale(dir, tipHalf));
+  // the way a mitred line join does. At a label there is nothing to overlap:
+  // a square end stops flat where the line would, and a round one is rounded
+  // about that point, as a line's cap is.
+  const tip = vadd(p2, vscale(dir, tipAtLabel && !round ? 0 : tipHalf));
   const tipL = vadd(tip, nt);
   const tipR = vsub(tip, nt);
   const cutL = baseCut(p1, 1, dir, baseNeighbours);
@@ -839,43 +845,62 @@ function buildWedgeTriangle(
 }
 
 /**
- * Hashes across a wedge, `p1` the wide end and `p2` the narrow one. Both are
- * the bond's own ends, before anything is trimmed for a label: the hashes are
- * placed on that, and `span` then says how much of it is actually drawn, so a
- * label takes hashes away rather than squeezing them together.
+ * The hashes of a hashed wedge, from `narrow` (the stereocentre) along `dir`,
+ * over `start`..`end` of the bond, measured from the narrow atom.
+ *
+ * ACS 1996 draws it as a solid wedge cut into hashes: an outline running from
+ * a line width at `start` to the full broad end at `end`, and each hash the
+ * part of it one line width deep - a trapezoid, its ends following the
+ * outline. The first hash sits flush with `start` and the last with `end`,
+ * and as many lie between as fit at least the hash spacing apart, spread
+ * evenly. Round ends make each hash a line with a cap at either end instead,
+ * reaching across the outline as far as the trapezoid does at its middle.
  */
-function buildHashedWedgeSegments(
-  p1: Vec2,
-  p2: Vec2,
-  baseHalfWorld: number,
-  steps: number,
-  tipHalfWorld = 0,
-  span?: { from: number; to: number }
-): LineSeg[] {
-  // Same outline as the solid wedge, drawn as separate hashes. The narrow end
-  // keeps a bond's width so the last hash does not shrink to a dot.
-  const dir = vnorm(vsub(p2, p1));
+function buildHashes(
+  narrow: Vec2,
+  dir: Vec2,
+  start: number,
+  end: number,
+  wideHalf: number,
+  spacing: number,
+  lineWidth: number,
+  round: boolean,
+): { lines: LineSeg[]; polys: Poly[]; ends: Vec2[] } {
+  const out = { lines: [] as LineSeg[], polys: [] as Poly[], ends: [] as Vec2[] };
+  if (!(end > 0) || !(lineWidth > 0)) return out;
+  // Too short for more than one: a single hash, flush with the wide end.
+  const from = Math.max(0, Math.min(start, end - lineWidth));
   const n = vperp(dir);
-  const baseL = vadd(p1, vscale(n, baseHalfWorld));
-  const baseR = vadd(p1, vscale(n, -baseHalfWorld));
-  const tipHalf = Math.min(tipHalfWorld, baseHalfWorld * 0.5);
-  const apexL = vadd(p2, vscale(n, tipHalf));
-  const apexR = vadd(p2, vscale(n, -tipHalf));
-  const full = vlen(vsub(p2, p1));
-  const from = span ? span.from : 0;
-  const to = span ? span.to : full;
-  const out: LineSeg[] = [];
-  for (let i = 0; i < steps; i++) {
-    // Hashes at equal distances, the first at the wide end and the last on
-    // the atom at the narrow end: a hash short of it reads as a gap between
-    // the wedge and the bonds there, where a solid wedge runs right in.
-    const u = steps > 1 ? i / (steps - 1) : 0.5;
-    const along = u * full;
-    if (along < from - 1e-9 || along > to + 1e-9) continue;
-    // Points at the same ratio along left (baseL→apex) and right (baseR→apex) edges
-    const Lp = vadd(baseL, vscale(vsub(apexL, baseL), u));
-    const Rp = vadd(baseR, vscale(vsub(apexR, baseR), u));
-    out.push({ x1: Lp.x, y1: Lp.y, x2: Rp.x, y2: Rp.y, widthPx: 0 });
+  const depth = Math.min(lineWidth, end - from);
+  const first = from + depth / 2;
+  const last = end - depth / 2;
+  const count =
+    spacing > 0 ? 1 + Math.floor((last - first) / spacing + 1e-9) : 1;
+  // half the outline's width, a distance `at` from the narrow atom
+  const halfAt = (at: number) =>
+    Math.max(0, lineWidth / 2 + (wideHalf - lineWidth / 2) * ((at - from) / (end - from)));
+  const point = (at: number, side: number) =>
+    vadd(narrow, vadd(vscale(dir, at), vscale(n, side)));
+  for (let k = 0; k < count; k++) {
+    const at = count > 1 ? first + ((last - first) * k) / (count - 1) : last;
+    if (round) {
+      const half = Math.max(0, halfAt(at) - lineWidth / 2);
+      const a = point(at, half);
+      const b = point(at, -half);
+      out.lines.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, widthPx: 0 });
+      out.ends.push(a, b);
+    } else {
+      const near = at - depth / 2;
+      const far = at + depth / 2;
+      out.polys.push({
+        points: [
+          point(near, halfAt(near)),
+          point(far, halfAt(far)),
+          point(far, -halfAt(far)),
+          point(near, -halfAt(near)),
+        ],
+      });
+    }
   }
   return out;
 }
@@ -1149,31 +1174,33 @@ export function buildBondPrimitives(
         tipHalf,
         neighbours,
         (opts.joinStyle ?? "round") === "round",
+        hasLabel(atoms[tipIdx].el) && (baseAtP1 ? trimB : trimA) > 0,
       );
       polys.push(tri);
       return { lines, polys };
     } else {
-      // Place the hashes on the bond itself and draw the part that is left
-      // after any label has taken its share.
-      const bp1o = baseAtP1 ? p1o : p2o;
-      const bp2o = baseAtP1 ? p2o : p1o;
-      const trimBase = baseAtP1 ? trimA : trimB;
-      const trimTip = baseAtP1 ? trimB : trimA;
-      const segs = buildHashedWedgeSegments(
-        bp1o,
-        bp2o,
+      // The hashes start where a label at the narrow atom leaves off, or one
+      // hash spacing out from a bare atom, and run to the wide end or the
+      // label there.
+      const wideO = baseAtP1 ? p1o : p2o;
+      const narrowO = baseAtP1 ? p2o : p1o;
+      const trimWide = baseAtP1 ? trimA : trimB;
+      const trimNarrow = baseAtP1 ? trimB : trimA;
+      const spacing = toWorld(opts.hashSpacingPx, zoom, units);
+      const hashes = buildHashes(
+        narrowO,
+        vnorm(vsub(wideO, narrowO)),
+        trimNarrow > 0 ? trimNarrow : spacing,
+        L0 - trimWide,
         baseHalf,
-        Math.max(5, Math.floor(opts.hashCount * 0.9)),
-        tipHalf,
-        { from: trimBase, to: L0 - trimTip }
+        spacing,
+        pxToWorld(lwPx, zoom),
+        (opts.joinStyle ?? "round") === "round",
       );
-      for (let i = 0; i < segs.length; i++) segs[i].widthPx = lwPx;
-      lines.push(...segs);
-      const ends = segs.flatMap((l) => [
-        { x: l.x1, y: l.y1 },
-        { x: l.x2, y: l.y2 },
-      ]);
-      return { lines, polys, ends };
+      for (const l of hashes.lines) l.widthPx = lwPx;
+      lines.push(...hashes.lines);
+      polys.push(...hashes.polys);
+      return { lines, polys, ends: hashes.ends };
     }
   }
   if (bond.stereo === "wavy") {

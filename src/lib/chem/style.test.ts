@@ -65,7 +65,6 @@ describe("drawing style", () => {
     expect(o.fontPx).toBeCloseTo((10 / 14.4) * L, 12);
     expect(o.joinStyle).toBe("sharp");
     expect(layoutOptionsFor({ ...ACS_1996, ends: "round" }, L).joinStyle).toBe("round");
-    // as many hashes as 2.5 pt spacing fits along a 14.4 pt bond
-    expect(o.hashCount).toBe(7);
+    expect(o.hashSpacingPx).toBeCloseTo((2.5 / 14.4) * L, 12);
   });
 });

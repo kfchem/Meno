@@ -118,9 +118,7 @@ export function layoutOptionsFor(
     // A triple bond's outer lines sit one bond spacing either side.
     tripleOffsetPx: at(style.bondSpacing),
     wedgeWidthPx: at(wedgeWidthOf(style)),
-    // Hashes as many as the spacing fits along a bond of the nominal length.
-    // The count is fixed per bond until the layout places them by spacing.
-    hashCount: Math.max(3, Math.round(1 / bondFraction(style.hashSpacing, style)) + 1),
+    hashSpacingPx: at(style.hashSpacing),
     wavyAmpPx: at(style.wavyAmplitude),
     wavyFreq: 1 / bondFraction(style.wavyPeriod, style),
     fontPx: at(style.fontSize),
