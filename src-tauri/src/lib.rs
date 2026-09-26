@@ -445,8 +445,9 @@ mod tests {
             .map(|(k, v)| (k.to_owned(), v.map(|v| v.to_owned())))
             .collect();
         let get = |k: &str| envs.get(std::ffi::OsStr::new(k)).cloned().flatten();
-        assert_eq!(get("UV_PYTHON_INSTALL_DIR"), Some(data.join("uv/python").into_os_string()));
-        assert_eq!(get("UV_CACHE_DIR"), Some(data.join("uv/cache").into_os_string()));
+        let under = |leaf: &str| Some(data.join("uv").join(leaf).into_os_string());
+        assert_eq!(get("UV_PYTHON_INSTALL_DIR"), under("python"));
+        assert_eq!(get("UV_CACHE_DIR"), under("cache"));
         assert_eq!(get("UV_PYTHON_PREFERENCE"), Some("only-managed".into()));
         assert_eq!(get("UV_NO_CONFIG"), Some("1".into()));
     }
