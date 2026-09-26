@@ -113,7 +113,12 @@ What is left before the editor counts as finished, and in what order, is in
   style (`lib/chem/style.ts`): each length in points or as a fraction of the
   bond length, layered from a default up, with ACS 1996 as the preset.
   `lib/chem/acs.ts` turns that preset into layout options at
-  `NOMINAL_BOND_LENGTH` world units.
+  `NOMINAL_BOND_LENGTH` world units. Labels are set in Arial, as ACS 1996
+  has them: `lib/chem/arial.ts` holds its advance widths and the outline of
+  each letter, so `placeLabel` places every run and bonds stop the label
+  margin clear of the letters without measuring anything at run time. The
+  canvas draws the runs where `placeLabel` puts them, in the system's own
+  Arial (`label_font`); the SVG names Arial.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
 - **Frame loop**: the canvas runs `frameloop="demand"` at a fixed `CANVAS_DPR`
   (2x). React commits (store changes) request a frame automatically; anything
@@ -159,6 +164,7 @@ the lock or Python version changes.
 | `ext_spawn_sidecar` | `PyConsole` | Spawn a process with piped stdio; returns an id. |
 | `ext_stdin` | `PyConsole` | Write to a sidecar's stdin. |
 | `ext_kill` | `PyConsole` | Kill a sidecar and emit `ext:exit`. |
+| `label_font` | `StructureEditor/labelFont.ts` | The system's Arial as bytes, for the canvas to set atom labels in. Nothing is bundled. |
 | `greet` | — | Template leftover, unused. |
 
 Events: `uv:log`, `uv:err` (plain strings); `ext:stdout`, `ext:stderr`,

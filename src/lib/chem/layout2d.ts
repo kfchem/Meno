@@ -1,3 +1,5 @@
+import { advanceEm, inkHullEm } from "./arial";
+
 export type Atom = {
   id: number;
   x: number;
@@ -28,6 +30,11 @@ export type LayoutOptions = {
   wavyAmpPx: number;
   wavyFreq: number;
   fontPx: number;
+  /**
+   * How far a bond stops short of a label's letters. Left unset, it is 16%
+   * of the font size - ACS 1996's 1.6 pt at 10 pt.
+   */
+  labelMarginPx?: number;
   paddingPx: number;
   showCarbonLabels: boolean;
   /** Draw the hydrogens a labelled atom carries, e.g. OH, NH2. Default: on. */
@@ -73,9 +80,14 @@ export type BondPrimitives = {
 /** A piece of a label; `sub` marks a subscript such as the 2 in NH2. */
 export type TextRun = { text: string; sub?: boolean };
 
-/** How a subscript is drawn, as a fraction of the label's font size. */
-export const SUB_SCALE = 0.7;
-export const SUB_DROP = 0.28;
+/**
+ * How a label is set, as fractions of its font size (ACS 1996): its baseline
+ * sits `BASELINE_DROP` below the atom, and a subscript is `SUB_SCALE` the
+ * size, its baseline `SUB_DROP` below the label's.
+ */
+export const BASELINE_DROP = 0.408;
+export const SUB_SCALE = 0.75;
+export const SUB_DROP = 0.225;
 
 export type TextItem = {
   x: number;
@@ -94,8 +106,24 @@ export type TextItem = {
   atom?: number;
 };
 
-/** How far a label reaches around its atom. */
-export type LabelBox = { left: number; right: number; half: number };
+/** How far a label's ink reaches from its atom: left, right, up and down. */
+export type LabelBox = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+/**
+ * A run of a label as it is set: where its pen starts, the baseline it sits
+ * on (y up, as the drawing is) and its font size.
+ */
+export type PlacedRun = {
+  text: string;
+  sub: boolean;
+  x: number;
+  y: number;
+  size: number;
+};
 export type Circle = { c: Vec2; r: number; key?: string };
 
 export type Layout = {
@@ -115,18 +143,6 @@ export type Layout = {
 
 export function pxToWorld(px: number, zoom: number): number {
   return px / Math.max(zoom, 1e-6);
-}
-
-/**
- * Rough advance width of a character, as a fraction of the font size. The
- * canvas measures text properly; here there is nothing to measure against, so
- * this only has to place the hydrogens beside an element symbol - the symbol
- * itself is anchored on its atom and does not depend on it.
- */
-function advanceEm(ch: string): number {
-  if (ch >= "0" && ch <= "9") return 0.556;
-  if (ch >= "a" && ch <= "z") return 0.55;
-  return 0.667;
 }
 
 function runWidth(text: string, size: number): number {
@@ -150,19 +166,64 @@ export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
   return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
 }
 
-/** How far a label reaches either side of its atom, and above and below. */
-export function labelBox(t: TextItem, fontSize: number): LabelBox {
+/**
+ * A label set in Arial as ACS 1996 has it: the element symbol centred on the
+ * atom, the rest following on either side at Arial's own advances, all on
+ * one baseline but for subscripts.
+ */
+export function placeLabel(t: TextItem, fontSize: number): PlacedRun[] {
   const runs = t.runs ?? [{ text: t.text }];
   const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
-  const size = (i: number) => fontSize * (runs[i].sub ? SUB_SCALE : 1);
-  let left = runWidth(runs[anchor].text, fontSize) / 2;
-  let right = left;
-  for (let i = 0; i < anchor; i++) left += runWidth(runs[i].text, size(i));
-  for (let i = anchor + 1; i < runs.length; i++) {
-    right += runWidth(runs[i].text, size(i));
+  const sizes = runs.map((r) => fontSize * (r.sub ? SUB_SCALE : 1));
+  const widths = runs.map((r, i) => runWidth(r.text, sizes[i]));
+  let x = t.x - widths[anchor] / 2;
+  for (let i = 0; i < anchor; i++) x -= widths[i];
+  const baseline = t.y - fontSize * BASELINE_DROP;
+  return runs.map((r, i) => {
+    const run: PlacedRun = {
+      text: r.text,
+      sub: !!r.sub,
+      x,
+      y: r.sub ? baseline - fontSize * SUB_DROP : baseline,
+      size: sizes[i],
+    };
+    x += widths[i];
+    return run;
+  });
+}
+
+/**
+ * The ink of a label, as the convex outline of each of its letters, around
+ * its atom: the atom is at the origin.
+ */
+export function labelHulls(t: TextItem, fontSize: number): Vec2[][] {
+  const out: Vec2[][] = [];
+  for (const run of placeLabel(t, fontSize)) {
+    let pen = run.x - t.x;
+    for (const ch of run.text) {
+      const hull = inkHullEm(ch).map((p) => ({
+        x: pen + p.x * run.size,
+        y: run.y - t.y + p.y * run.size,
+      }));
+      if (hull.length > 0) out.push(hull);
+      pen += advanceEm(ch) * run.size;
+    }
   }
-  // roughly half the height of a capital, with a little room to spare
-  return { left, right, half: fontSize * 0.45 };
+  return out;
+}
+
+/** How far a label's ink reaches either side of its atom, and above and below. */
+export function labelBox(t: TextItem, fontSize: number): LabelBox {
+  const box = { left: 0, right: 0, top: 0, bottom: 0 };
+  for (const hull of labelHulls(t, fontSize)) {
+    for (const p of hull) {
+      box.left = Math.max(box.left, -p.x);
+      box.right = Math.max(box.right, p.x);
+      box.top = Math.max(box.top, p.y);
+      box.bottom = Math.max(box.bottom, -p.y);
+    }
+  }
+  return box;
 }
 
 /** The box a label takes up, so the drawing's bounds can make room for it. */
@@ -176,11 +237,11 @@ function expandBoundsForLabels(
     max: { x: bounds.max.x, y: bounds.max.y },
   };
   for (const t of texts) {
-    const { left, right, half } = labelBox(t, fontSize);
+    const { left, right, top, bottom } = labelBox(t, fontSize);
     out.min.x = Math.min(out.min.x, t.x - left);
     out.max.x = Math.max(out.max.x, t.x + right);
-    out.min.y = Math.min(out.min.y, t.y - half);
-    out.max.y = Math.max(out.max.y, t.y + half);
+    out.min.y = Math.min(out.min.y, t.y - bottom);
+    out.max.y = Math.max(out.max.y, t.y + top);
   }
   return out;
 }
@@ -218,6 +279,94 @@ function vdot(a: Vec2, b: Vec2): number {
 }
 function vperp(a: Vec2): Vec2 {
   return { x: -a.y, y: a.x };
+}
+
+function pointToSegment(p: Vec2, a: Vec2, b: Vec2): number {
+  const ab = vsub(b, a);
+  const len2 = vdot(ab, ab);
+  const t = len2 > 0 ? Math.max(0, Math.min(1, vdot(vsub(p, a), ab) / len2)) : 0;
+  return vlen(vsub(p, vadd(a, vscale(ab, t))));
+}
+
+/** Whether `p` is inside a convex polygon wound anticlockwise. */
+function insideConvex(p: Vec2, poly: Vec2[]): boolean {
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    if (vcross(vsub(b, a), vsub(p, a)) < 0) return false;
+  }
+  return true;
+}
+
+function segmentsCross(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
+  const side = (p: Vec2, q: Vec2, r: Vec2) => vcross(vsub(q, p), vsub(r, p));
+  return (
+    side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0
+  );
+}
+
+/** The distance between a segment and a convex polygon; nothing if they meet. */
+function segmentToConvex(a: Vec2, b: Vec2, poly: Vec2[]): number {
+  if (insideConvex(a, poly) || insideConvex(b, poly)) return 0;
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const c = poly[i];
+    const d = poly[(i + 1) % poly.length];
+    if (segmentsCross(a, b, c, d)) return 0;
+    best = Math.min(
+      best,
+      pointToSegment(a, c, d),
+      pointToSegment(b, c, d),
+      pointToSegment(c, a, b),
+    );
+  }
+  return best;
+}
+
+/**
+ * How far out from an atom, along `d`, the end of a bond has to stop to keep
+ * `margin` clear of every letter of the atom's label. The end reaches `half`
+ * either side of the bond's line; the letters are convex outlines around the
+ * atom. Going out, the distance to each only falls and then rises, so the
+ * last place it is still within the margin can be found by halving.
+ */
+function labelClearance(
+  hulls: Vec2[][],
+  d: Vec2,
+  half: number,
+  margin: number,
+): number {
+  const n = vscale(vperp(d), half);
+  let reach = 0;
+  for (const hull of hulls) {
+    if (hull.length === 0) continue;
+    const gap = (t: number) => {
+      const c = vscale(d, t);
+      return segmentToConvex(vadd(c, n), vsub(c, n), hull);
+    };
+    // past this the end is further from every point of the letter than the
+    // margin, whichever way it faces
+    const far = Math.max(...hull.map(vlen)) + margin;
+    let lo = 0;
+    let hi = far;
+    for (let k = 0; k < 40; k++) {
+      const a = lo + (hi - lo) / 3;
+      const b = hi - (hi - lo) / 3;
+      if (gap(a) <= gap(b)) hi = b;
+      else lo = a;
+    }
+    const nearest = (lo + hi) / 2;
+    if (gap(nearest) >= margin) continue;
+    lo = nearest;
+    hi = far;
+    for (let k = 0; k < 40; k++) {
+      const m = (lo + hi) / 2;
+      if (gap(m) < margin) lo = m;
+      else hi = m;
+    }
+    reach = Math.max(reach, hi);
+  }
+  return reach;
 }
 
 // function trimEnds is no longer used (kept here commented for reference)
@@ -1083,7 +1232,7 @@ export function buildBondPrimitives(
   _inRing?: boolean,
   autoSgn?: number,
   adjBonds?: Map<number, Bond[]>,
-  labelBoxes?: Map<number, LabelBox>,
+  labelShapes?: Map<number, Vec2[][]>,
   doubleSides?: Map<Bond, number | undefined>
 ): BondPrimitives {
   const a = atoms[bond.a1];
@@ -1096,33 +1245,35 @@ export function buildBondPrimitives(
   let lwPx = units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx;
   const minPx = Math.max(0.5, opts.minLinePx ?? 1);
   if (!(lwPx >= minPx)) lwPx = minPx;
-  // Stop a bond short of a label so the two do not overlap. How far depends
-  // on which way the bond leaves: OH reaches further to the right than up, so
-  // measuring by font size alone lets a bond run into a wide label from one
-  // side and leaves a gap from another.
+  // Stop a bond short of a label so the two do not overlap: its end, as wide
+  // as it is there, is kept the label margin clear of the label's letters.
+  // How far that is depends on which way the bond leaves and on the letters
+  // themselves - a bond comes closer to the round side of an O than to the
+  // corner of an N.
   const hasLabel = (el: string) => opts.showCarbonLabels || el !== "C";
   const fontWorld = toWorld(opts.fontPx, zoom, units);
-  // Additional clearance ≈ half the line thickness (in world units)
-  const trimMargin = pxToWorld(lwPx * 0.5, zoom);
+  const margin =
+    opts.labelMarginPx != null
+      ? toWorld(opts.labelMarginPx, zoom, units)
+      : fontWorld * 0.16;
+  const lineHalf = pxToWorld(lwPx * 0.5, zoom);
   const dir0 = vsub(p2o, p1o);
   const L0 = vlen(dir0);
   const dir = L0 > 1e-9 ? vscale(dir0, 1 / L0) : { x: 1, y: 0 };
-  /** How far the label at an atom reaches along the bond, either way. */
-  const labelReach = (idx: number, el: string, towards: Vec2) => {
+  /** Where a bond `half` wide either side stops, leaving the atom along `towards`. */
+  const labelReach = (idx: number, el: string, towards: Vec2, half = lineHalf) => {
     if (!hasLabel(el)) return 0;
-    const box = idx >= 0 ? labelBoxes?.get(idx) : undefined;
-    if (!box) return Math.max(0, fontWorld * 0.5) + trimMargin;
-    // the box around the atom, met along the bond
-    const sx = towards.x >= 0 ? box.right : box.left;
-    const tx = Math.abs(towards.x) > 1e-9 ? sx / Math.abs(towards.x) : Infinity;
-    const ty =
-      Math.abs(towards.y) > 1e-9 ? box.half / Math.abs(towards.y) : Infinity;
-    return Math.min(tx, ty) + trimMargin;
+    const hulls =
+      (idx >= 0 ? labelShapes?.get(idx) : undefined) ??
+      labelHulls(
+        { x: 0, y: 0, text: el, fontPx: opts.fontPx, runs: [{ text: el }] },
+        fontWorld,
+      );
+    const reach = labelClearance(hulls, towards, half, margin);
+    return Math.min(reach, Math.max(0, L0 * 0.45));
   };
-  const trimA0 = labelReach(bond.a1, a.el, dir);
-  const trimB0 = labelReach(bond.a2, c.el, vscale(dir, -1));
-  const trimA = Math.min(trimA0, Math.max(0, L0 * 0.45));
-  const trimB = Math.min(trimB0, Math.max(0, L0 * 0.45));
+  const trimA = labelReach(bond.a1, a.el, dir);
+  const trimB = labelReach(bond.a2, c.el, vscale(dir, -1));
   const p1 = vadd(p1o, vscale(dir, trimA));
   const p2 = vadd(p2o, vscale(dir, -trimB));
   // Where a label has taken the bond's end, the line simply stops there, and
@@ -1135,7 +1286,18 @@ export function buildBondPrimitives(
     const baseHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
     // The narrow end is a bond's width, matching the join caps at atoms.
     const tipHalf = pxToWorld(lwPx * 0.5, zoom);
-    const bp1 = baseAtP1 ? p1 : p2;
+    // A label at the wide end has to clear the whole breadth of it.
+    const wideO = baseAtP1 ? p1o : p2o;
+    const narrowO = baseAtP1 ? p2o : p1o;
+    const towardsNarrow = baseAtP1 ? dir : vscale(dir, -1);
+    const trimWide = labelReach(
+      baseAtP1 ? bond.a1 : bond.a2,
+      baseAtP1 ? a.el : c.el,
+      towardsNarrow,
+      baseHalf,
+    );
+    const trimNarrow = baseAtP1 ? trimB : trimA;
+    const bp1 = vadd(wideO, vscale(towardsNarrow, trimWide));
     const bp2 = baseAtP1 ? p2 : p1;
     if (bond.stereo === "up") {
       // Directions of the bonds continuing from the wide end, to cut it along
@@ -1174,7 +1336,7 @@ export function buildBondPrimitives(
         tipHalf,
         neighbours,
         (opts.joinStyle ?? "round") === "round",
-        hasLabel(atoms[tipIdx].el) && (baseAtP1 ? trimB : trimA) > 0,
+        hasLabel(atoms[tipIdx].el) && trimNarrow > 0,
       );
       polys.push(tri);
       return { lines, polys };
@@ -1182,10 +1344,6 @@ export function buildBondPrimitives(
       // The hashes start where a label at the narrow atom leaves off, or one
       // hash spacing out from a bare atom, and run to the wide end or the
       // label there.
-      const wideO = baseAtP1 ? p1o : p2o;
-      const narrowO = baseAtP1 ? p2o : p1o;
-      const trimWide = baseAtP1 ? trimA : trimB;
-      const trimNarrow = baseAtP1 ? trimB : trimA;
       const spacing = toWorld(opts.hashSpacingPx, zoom, units);
       const hashes = buildHashes(
         narrowO,
@@ -1521,9 +1679,9 @@ export function buildAllPrimitives(
   // bonds at each atom, and just the neighbours, which the ring search uses
   // measure the labels once: the bonds are trimmed to them
   const fontWorld = toWorld(opts.fontPx, zoom, opts.units);
-  const labelBoxes = new Map<number, LabelBox>();
+  const labelShapes = new Map<number, Vec2[][]>();
   for (const tx of buildTextLabels(atoms, opts, bonds)) {
-    if (tx.atom != null) labelBoxes.set(tx.atom, labelBox(tx, fontWorld));
+    if (tx.atom != null) labelShapes.set(tx.atom, labelHulls(tx, fontWorld));
   }
   const adjBonds = new Map<number, Bond[]>();
   for (const b of bonds) {
@@ -1707,7 +1865,7 @@ export function buildAllPrimitives(
       inRing,
       autoSgn,
       adjBonds,
-      labelBoxes,
+      labelShapes,
       doubleSides
     );
     lines.push(...r.lines);
@@ -1798,28 +1956,19 @@ function escapeXml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
-/** A label as the canvas draws it: runs, subscripts, symbol on the atom. */
+/** A label as the canvas draws it: set by `placeLabel`, run by run. */
 function svgLabel(
   t: TextItem,
   fontSize: number,
   fontFamily: string,
   fill: string,
 ): string {
-  const runs = t.runs ?? [{ text: t.text }];
-  const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
-  const sizeOf = (i: number) => fontSize * (runs[i].sub ? SUB_SCALE : 1);
-  const dropOf = (i: number) => (runs[i].sub ? fontSize * SUB_DROP : 0);
-  // The element symbol sits on the atom; the rest follows on either side.
-  let x = t.x - runWidth(runs[anchor].text, fontSize) / 2;
-  for (let i = 0; i < anchor; i++) x -= runWidth(runs[i].text, sizeOf(i));
   let out = "";
-  for (let i = 0; i < runs.length; i++) {
-    const size = sizeOf(i);
+  for (const run of placeLabel(t, fontSize)) {
     out +=
-      `<text x="${x}" y="${-t.y + dropOf(i)}" font-family="${fontFamily}"` +
-      ` font-size="${size}" fill="${fill}" stroke="none" text-anchor="start"` +
-      ` dominant-baseline="central">${escapeXml(runs[i].text)}</text>`;
-    x += runWidth(runs[i].text, size);
+      `<text x="${run.x}" y="${-run.y}" font-family="${fontFamily}"` +
+      ` font-size="${run.size}" fill="${fill}" stroke="none"` +
+      ` text-anchor="start">${escapeXml(run.text)}</text>`;
   }
   return out;
 }

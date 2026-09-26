@@ -43,6 +43,8 @@ export type DrawingStyle = {
   wavyPeriod: Length;
   /** The size of an atom label. */
   fontSize: Length;
+  /** How far a bond stops short of a label's letters. */
+  labelMargin: Length;
   /**
    * How lines end and meet: round everywhere, or square everywhere. Never a
    * mixture - a picture with round single bonds and square double ones looks
@@ -53,8 +55,8 @@ export type DrawingStyle = {
 
 /**
  * ACS 1996: 14.4 pt bonds, 0.6 pt lines, 2.0 pt bold width (3.0 pt at a
- * wedge's broad end), 18% bond spacing, 2.5 pt hash spacing, 10 pt labels,
- * square ends and mitred joins.
+ * wedge's broad end), 18% bond spacing, 2.5 pt hash spacing, 10 pt Arial
+ * labels kept 1.6 pt clear of their bonds, square ends and mitred joins.
  */
 export const ACS_1996: DrawingStyle = {
   bondLengthPt: 14.4,
@@ -65,6 +67,7 @@ export const ACS_1996: DrawingStyle = {
   wavyAmplitude: ofBond(0.07),
   wavyPeriod: ofBond(1 / 1.4),
   fontSize: pt(10),
+  labelMargin: pt(1.6),
   ends: "square",
 };
 
@@ -122,6 +125,7 @@ export function layoutOptionsFor(
     wavyAmpPx: at(style.wavyAmplitude),
     wavyFreq: 1 / bondFraction(style.wavyPeriod, style),
     fontPx: at(style.fontSize),
+    labelMarginPx: at(style.labelMargin),
     paddingPx: 48,
     showCarbonLabels: false,
     units: "world",

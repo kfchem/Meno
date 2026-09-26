@@ -1,17 +1,17 @@
 import * as THREE from "three";
 import { Text } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useMemo, useReducer, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useEditor } from "../store";
 import {
   layoutMolecule,
-  SUB_DROP,
-  SUB_SCALE,
+  placeLabel,
   type LayoutOptions,
   type Atom as LAtom,
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
 import { editorLayoutOptions } from "../layoutOptions";
+import { useLabelFont } from "../labelFont";
 
 export default function Labels2D({
   options,
@@ -64,80 +64,35 @@ export default function Labels2D({
     [atoms, bonds, opts, zoom]
   );
 
-  // The text is drawn by troika, which carries its own font, so measuring it
-  // with the browser's puts a label off its atom by a fraction of a letter.
-  // Ask troika instead: the first frame goes up with an estimate, and each
-  // piece reports its real width as it syncs, which is then kept and used.
-  const fontFamily =
-    "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  const invalidate = useThree((s) => s.invalidate);
-  const [, relayout] = useReducer((n: number) => n + 1, 0);
-  const measured = useRef(new Map<string, number>());
-  const measRef = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    return ctx;
-  }, []);
-  const key = (text: string, fontWorld: number) =>
-    `${text}|${fontWorld.toFixed(4)}`;
-  /** Width of a piece of a label, in world units. */
-  const widthWorld = (text: string, fontWorld: number) => {
-    const known = measured.current.get(key(text, fontWorld));
-    if (known != null) return known;
-    const ctx = measRef;
-    if (!ctx) return 0;
-    const fontPx = fontWorld * Math.max(zoom, 1e-6);
-    ctx.font = `${fontPx}px ${fontFamily}`;
-    return ctx.measureText(text).width / Math.max(zoom, 1e-6);
-  };
-  const onSync = (troika: unknown, text: string, fontWorld: number) => {
-    const bounds = (troika as { textRenderInfo?: { blockBounds?: number[] } })
-      ?.textRenderInfo?.blockBounds;
-    if (!bounds) return;
-    const width = bounds[2] - bounds[0];
-    if (!(width > 0)) return;
-    const k = key(text, fontWorld);
-    if (Math.abs((measured.current.get(k) ?? -1) - width) < 1e-6) return;
-    measured.current.set(k, width);
-    relayout();
-    invalidate();
-  };
+  // Set in Arial, where the layout has placed each run: the font the layout
+  // measures in is the one drawn with, so nothing needs measuring here.
+  // Until the font is known nothing is drawn, rather than a label in some
+  // other font that then jumps.
+  const font = useLabelFont();
+  if (font === null) return null;
   return (
     <group>
       {layout.texts.map((t, i) => {
         const fontWorld =
           opts.units === "px" ? t.fontPx / Math.max(zoom, 1e-6) : t.fontPx;
-        const runs = t.runs ?? [{ text: t.text }];
-        const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
-        const sizes = runs.map((r) => fontWorld * (r.sub ? SUB_SCALE : 1));
-        const widths = runs.map((r, k) => widthWorld(r.text, sizes[k]));
-        // Put the element symbol itself on the atom, so OH hangs to the right
-        // of the atom and HO to its left.
-        let before = 0;
-        for (let k = 0; k < anchor; k++) before += widths[k];
-        let cursor = t.x - (before + widths[anchor] * 0.5);
         return (
           <group key={`txt-${i}`}>
-            {runs.map((r, k) => {
-              const x = cursor;
-              cursor += widths[k];
-              return (
-                <Text
-                  key={`run-${k}`}
-                  position={[x, t.y - (r.sub ? fontWorld * SUB_DROP : 0), 0]}
-                  fontSize={sizes[k]}
-                  color="black"
-                  anchorX="left"
-                  anchorY="middle"
-                  renderOrder={30}
-                  material-depthTest={false}
-                  material-depthWrite={false}
-                  onSync={(troika) => onSync(troika, r.text, sizes[k])}
-                >
-                  {r.text}
-                </Text>
-              );
-            })}
+            {placeLabel(t, fontWorld).map((run, k) => (
+              <Text
+                key={`run-${k}`}
+                font={font}
+                position={[run.x, run.y, 0]}
+                fontSize={run.size}
+                color="black"
+                anchorX="left"
+                anchorY="top-baseline"
+                renderOrder={30}
+                material-depthTest={false}
+                material-depthWrite={false}
+              >
+                {run.text}
+              </Text>
+            ))}
           </group>
         );
       })}
