@@ -6,25 +6,19 @@ import { useEditor } from "../store";
 import {
   layoutMolecule,
   type LayoutOptions,
-  type Atom as LAtom,
-  type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
 import CapJoinLine from "./CapJoinLine";
 import { editorLayoutOptions } from "../layoutOptions";
+import { useDrawnLayout } from "./drawnLayoutContext";
 
-export default function AromaticCircles2D({
-  options,
-}: {
-  options?: Partial<LayoutOptions>;
-}) {
+export default function AromaticCircles2D() {
   const { camera, invalidate } = useThree();
-  const { model, aromaticEnabled, aromaticRings, toggleAromatic, toggleRing } =
+  const { toggleAromatic, toggleRing, aromaticEnabled, aromaticRings } =
     useEditor();
-  const [zoom, setZoom] = useState((camera as THREE.OrthographicCamera).zoom);
+  // the rings' circles come with the rest of the drawing
+  const { atoms, bonds, opts, layout, zoom } = useDrawnLayout();
   const [now, setNow] = useState(0);
   useFrame(() => {
-    const z = (camera as THREE.OrthographicCamera).zoom;
-    if (z !== zoom) setZoom(z);
     // `now` only drives the hover ring's expand animation (~780 ms). Updating
     // it on every frame re-rendered this component continuously, which would
     // defeat on-demand rendering.
@@ -34,25 +28,6 @@ export default function AromaticCircles2D({
     }
   });
 
-  const atoms: LAtom[] = useMemo(
-    () => model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el })),
-    [model.atoms]
-  );
-  const bonds: LBond[] = useMemo(() => {
-    const idToIndex = new Map<number, number>();
-    atoms.forEach((a, i) => idToIndex.set(a.id, i));
-    const out: LBond[] = [];
-    for (const b of model.bonds) {
-      const i1 = idToIndex.get(b.a as number);
-      const i2 = idToIndex.get(b.b as number);
-      if (i1 == null || i2 == null) continue;
-      const stereo = (b as any).stereo ?? ("none" as const);
-      const order: 1 | 2 | 3 = b.order as 1 | 2 | 3;
-      out.push({ a1: i1, a2: i2, order, stereo });
-    }
-    return out;
-  }, [model.bonds, atoms]);
-
   // hover-preview ring after 500ms over ring center; enabled state is stored per-ring in store
   const [hoverCenter, setHoverCenter] = useState<{
     x: number;
@@ -61,34 +36,11 @@ export default function AromaticCircles2D({
   } | null>(null);
   const [hoverStart, setHoverStart] = useState<number | null>(null);
 
-  const opts: LayoutOptions = useMemo(() => {
-    const keys = Object.keys(aromaticRings || {}).filter(
-      (k) => aromaticRings[k]
-    );
-    const enabled =
-      keys.length > 0
-        ? { enabled: new Set(keys) }
-        : aromaticEnabled
-        ? true
-        : false;
-    return editorLayoutOptions(atoms, bonds, {
-      ...options,
-      aromaticCircle: enabled,
-    });
-  }, [atoms, bonds, options, aromaticEnabled, aromaticRings]);
-
-  const layout = useMemo(
-    () => layoutMolecule(atoms, bonds, opts, zoom),
-    [atoms, bonds, opts, zoom]
-  );
   // Separate preview layout to discover ring centers even when enabled=false
   const prevOpts: LayoutOptions = useMemo(
     () =>
-      editorLayoutOptions(atoms, bonds, {
-        ...options,
-        aromaticCircle: true,
-      }),
-    [atoms, bonds, options]
+      editorLayoutOptions(atoms, bonds, { aromaticCircle: true }),
+    [atoms, bonds]
   );
   const previewLayout = useMemo(
     () => layoutMolecule(atoms, bonds, prevOpts, zoom),

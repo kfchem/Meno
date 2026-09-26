@@ -7,36 +7,24 @@ import {
   ACS_RATIOS,
   NOMINAL_BOND_LENGTH,
 } from "../../../../lib/chem/acs";
-import {
-  buildBondPrimitives,
-  joinsAtAtoms,
-  type LayoutOptions,
-  type Atom as LAtom,
-  type Bond as LBond,
-} from "../../../../lib/chem/layout2d";
 import { computeMoveSnap } from "../utils/moveSnap";
-import { polyTriangles } from "./polyTriangles";
-import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 
 // Preview for moving an atom without mutating coordinates during drag.
-// - Thin highlight lines (neighbor -> cursor) keep existing look.
-// - Thick snapped preview (neighbor -> snapped endpoint) mirrors Extend behavior.
+// - Works out where the atom snaps to, springing towards it, and publishes
+//   that as the drag's preview: the drawing itself (DrawnLayout) lays the
+//   atom out there, bonds, wedges, joins and label alike, so a drag is drawn
+//   exactly as the drop will be.
+// - Draws only what is not the drawing: thin highlight lines from the
+//   neighbours to the pointer, and a dot at the pointer.
 export default function MovePreview2D() {
   const { model, moveDrag } = useEditor();
   const setMoveDragPreview = useEditor((s) => s.setMoveDragPreview);
   const { camera, invalidate } = useThree();
   const thinInst = useRef<THREE.InstancedMesh>(null!);
-  const thickInst = useRef<THREE.InstancedMesh>(null!);
-  // Stereo preview helpers
-  const hashInst = useRef<THREE.InstancedMesh>(null!); // hashed wedge segments ('down')
-  const wedgeSolidGeo = useRef<THREE.BufferGeometry>(null!); // triangle geometry ('up')
-  const wedgeSolidMesh = useRef<THREE.Mesh>(null!);
-  const joinDot = useRef<THREE.Mesh>(null!);
   const cursorDot = useRef<THREE.Mesh>(null!);
   const cursorDotOutline = useRef<THREE.Mesh>(null!);
-  // Allow headroom for multi-bonds (up to triple => 3 segments)
-  const countCap = Math.max(model.bonds.length * 3, 1);
-  const hashCap = Math.max(model.bonds.length * 8, 8);
+  // one thin line per neighbour of the dragged atom
+  const countCap = Math.max(model.bonds.length, 1);
   // temp transforms
   const tmpM = useRef(new THREE.Matrix4());
   const tmpQ = useRef(new THREE.Quaternion());
@@ -62,30 +50,16 @@ export default function MovePreview2D() {
     // Preview follows the pointer while dragging (on-demand rendering).
     if (moveDrag.active) invalidate();
     const mThin = thinInst.current;
-    const mThick = thickInst.current;
-    const mHash = hashInst.current;
     if (!mThin || !cursorDot.current) return;
 
     // hide by default
     mThin.count = 0;
     mThin.visible = false;
-    if (mThick) {
-      mThick.count = 0;
-      mThick.visible = false;
-    }
-    if (mHash) {
-      mHash.count = 0;
-      mHash.visible = false;
-    }
-    if (wedgeSolidMesh.current) wedgeSolidMesh.current.visible = false;
     cursorDot.current.visible = false;
-    if (joinDot.current) joinDot.current.visible = false;
     if (cursorDotOutline.current) cursorDotOutline.current.visible = false;
 
     if (!moveDrag.active || moveDrag.atomId == null || !moveDrag.pointer) {
       mThin.instanceMatrix.needsUpdate = true;
-      if (mThick) mThick.instanceMatrix.needsUpdate = true;
-      if (mHash) mHash.instanceMatrix.needsUpdate = true;
       angVelRef.current = 0;
       lastActiveRef.current = false;
       return;
@@ -95,8 +69,6 @@ export default function MovePreview2D() {
     const ptr = moveDrag.pointer;
     if (!moving || !ptr) {
       mThin.instanceMatrix.needsUpdate = true;
-      if (mThick) mThick.instanceMatrix.needsUpdate = true;
-      if (mHash) mHash.instanceMatrix.needsUpdate = true;
       return;
     }
 
@@ -115,7 +87,6 @@ export default function MovePreview2D() {
       lineWidthWorld,
       (ACS_RATIOS.minLinePx || 1) / Math.max(zoom, 1e-6)
     );
-    const thickW = thinW;
 
     // opacity for thin highlights; reduce overlap darkening
     const baseOpacity = ALPHA.highlight;
@@ -276,190 +247,9 @@ export default function MovePreview2D() {
       mThin.visible = thinCount > 0;
       mThin.instanceMatrix.needsUpdate = true;
     }
-    // Whether the atom being dragged is one the drawing puts a cap on; worked
-    // out with the rest of the preview, below.
-    let capHere = false;
-    // 2) thick preview from layout at snapped position: reflects multi-bonds and hashed wedges
-    if (
-      deg > 0 &&
-      mThick &&
-      Number.isFinite(pxPrev) &&
-      Number.isFinite(pyPrev)
-    ) {
-      // Let other layers (e.g. the atom's label) follow the same position.
+    // Where the drawing puts the atom: every layer lays it out there.
+    if (Number.isFinite(pxPrev) && Number.isFinite(pyPrev)) {
       setMoveDragPreview(pxPrev, pyPrev);
-      // Build atoms (with the moving atom temporarily at the snapped endpoint)
-      const movingId = moving.id;
-      const atomsL: LAtom[] = model.atoms.map((a) =>
-        a.id === movingId
-          ? { id: a.id, x: pxPrev, y: pyPrev, el: a.el }
-          : { id: a.id, x: a.x, y: a.y, el: a.el }
-      );
-      const idToIndex = new Map<number, number>();
-      atomsL.forEach((a, i) => idToIndex.set(a.id, i));
-      // All bonds (for correct degree/adjacency) in layout indices
-      const bondsAll: LBond[] = layoutBonds(model.bonds, idToIndex);
-      // Only bonds attached to the moving atom (in layout indices)
-      const mi = idToIndex.get(movingId)!;
-      const bondsAttach = bondsAll.filter((b) => b.a1 === mi || b.a2 === mi);
-      // Degree map (full molecule) for wedge base selection parity
-      const degMap = new Map<number, number>();
-      for (const b of bondsAll) {
-        degMap.set(b.a1, (degMap.get(b.a1) || 0) + 1);
-        degMap.set(b.a2, (degMap.get(b.a2) || 0) + 1);
-      }
-      // Adjacency (for double bond auto offset sign)
-      const adj = new Map<number, number[]>();
-      for (const b of bondsAll) {
-        adj.set(b.a1, [...(adj.get(b.a1) || []), b.a2]);
-        adj.set(b.a2, [...(adj.get(b.a2) || []), b.a1]);
-      }
-      // The bonds at each atom, and which atoms carry the wide end of a
-      // wedge: without these a wedge is drawn with a square end while it is
-      // dragged and snaps into shape when it is dropped.
-      const adjBonds = new Map<number, any[]>();
-      for (const b of bondsAll) {
-        adjBonds.set(b.a1, [...(adjBonds.get(b.a1) || []), b]);
-        adjBonds.set(b.a2, [...(adjBonds.get(b.a2) || []), b]);
-      }
-      // Build primitives for attached bonds only, but with full deg info
-      const zNow = (camera as any)?.zoom || 1;
-      const opts: LayoutOptions = editorLayoutOptions(
-        atomsL as any,
-        bondsAttach as any
-      );
-      // Whether the drawing caps this atom, asked of the rule the drawing
-      // itself uses, over the whole molecule rather than the bonds at hand.
-      // Square ends have no caps at all, so nothing round follows the atom.
-      capHere = (opts.joinStyle ?? "round") === "round" && joinsAtAtoms(
-        atomsL as any,
-        bondsAll as any,
-        opts,
-        degMap
-      ).caps.has(mi);
-      type LineSeg = {
-        x1: number;
-        y1: number;
-        x2: number;
-        y2: number;
-        widthPx: number;
-      };
-      type Poly = { points: { x: number; y: number }[] };
-      const outLines: LineSeg[] = [];
-      const outPolys: Poly[] = [];
-      for (const b of bondsAttach) {
-        // Compute autoSgn for double bonds (mimic layout2d.ts logic)
-        let autoSgn: number | undefined = undefined;
-        if (
-          b.order === 2 &&
-          (b.doubleMode === undefined || b.doubleMode === "auto")
-        ) {
-          const p1 = { x: atomsL[b.a1].x, y: atomsL[b.a1].y };
-          const p2 = { x: atomsL[b.a2].x, y: atomsL[b.a2].y };
-          const axis = { x: p2.x - p1.x, y: p2.y - p1.y };
-          const L0 = Math.hypot(axis.x, axis.y);
-          const dir =
-            L0 > 1e-9 ? { x: axis.x / L0, y: axis.y / L0 } : { x: 1, y: 0 };
-          const n = { x: -dir.y, y: dir.x };
-          const neigh1 = (adj.get(b.a1) || []).filter((x) => x !== b.a2);
-          const neigh2 = (adj.get(b.a2) || []).filter((x) => x !== b.a1);
-          const EPS = Math.max(1e-4, L0 * 0.06);
-          let plus = 0,
-            minus = 0;
-          for (const o of neigh1) {
-            const v = { x: atomsL[o].x - p1.x, y: atomsL[o].y - p1.y };
-            const s = v.x * n.x + v.y * n.y;
-            if (s > EPS) plus++;
-            else if (s < -EPS) minus++;
-          }
-          for (const o of neigh2) {
-            const v = { x: atomsL[o].x - p2.x, y: atomsL[o].y - p2.y };
-            const s = v.x * n.x + v.y * n.y;
-            if (s > EPS) plus++;
-            else if (s < -EPS) minus++;
-          }
-          if (plus === minus) autoSgn = undefined;
-          else autoSgn = plus > minus ? +1 : -1;
-        }
-        const prim = buildBondPrimitives(
-          atomsL as any,
-          b as any,
-          opts,
-          zNow,
-          degMap,
-          /*inRing*/ false,
-          autoSgn,
-          adjBonds as any
-        );
-        outLines.push(...prim.lines);
-        outPolys.push(...prim.polys);
-      }
-      // Render lines (multi-bonds + hashed wedges) with thickness in world units
-      let thickCount = 0;
-      for (let i = 0; i < outLines.length; i++) {
-        const s = outLines[i];
-        const dx = s.x2 - s.x1,
-          dy = s.y2 - s.y1;
-        const len = Math.max(1e-6, Math.hypot(dx, dy));
-        const ang = Math.atan2(dy, dx);
-        const thickWorldRaw = s.widthPx / Math.max(zNow, 1e-6);
-        const MIN_WORLD_THICK = Math.max(1e-3, NOMINAL_BOND_LENGTH * 0.02);
-        const thickWorld = Math.max(thickWorldRaw, MIN_WORLD_THICK);
-        tmpQ.current.setFromAxisAngle(new THREE.Vector3(0, 0, 1), ang);
-        tmpM.current.compose(
-          new THREE.Vector3((s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2, -0.03),
-          tmpQ.current,
-          new THREE.Vector3(len, thickWorld, 1)
-        );
-        mThick.setMatrixAt(thickCount++, tmpM.current);
-      }
-      mThick.count = thickCount;
-      mThick.visible = thickCount > 0;
-      mThick.instanceMatrix.needsUpdate = true;
-      // Render solid wedges (polygons)
-      if (wedgeSolidGeo.current && wedgeSolidMesh.current) {
-        const triPositions: number[] = [];
-        for (const p of outPolys) {
-          if (!p.points || p.points.length < 3) continue;
-          // the outline is a cut, and possibly rounded, polygon
-          for (const i of polyTriangles(p.points)) {
-            triPositions.push(p.points[i].x, p.points[i].y, -0.031);
-          }
-        }
-        if (triPositions.length > 0) {
-          const arr = new Float32Array(triPositions);
-          wedgeSolidGeo.current.setAttribute(
-            "position",
-            new THREE.BufferAttribute(arr, 3)
-          );
-          const triCount = arr.length / 9;
-          const index = new Uint32Array(triCount * 3);
-          for (let i = 0; i < triCount; i++) {
-            index[i * 3 + 0] = i * 3 + 0;
-            index[i * 3 + 1] = i * 3 + 1;
-            index[i * 3 + 2] = i * 3 + 2;
-          }
-          wedgeSolidGeo.current.setIndex(new THREE.BufferAttribute(index, 1));
-          wedgeSolidGeo.current.computeVertexNormals();
-          wedgeSolidGeo.current.computeBoundingSphere();
-          wedgeSolidMesh.current.visible = true;
-        } else {
-          wedgeSolidGeo.current.setIndex(null);
-          wedgeSolidMesh.current.visible = false;
-        }
-      }
-    }
-
-    // The cap that rounds off a bond end, carried to where the atom is being
-    // dragged - the one in the drawing is hidden while the drag is on. Only
-    // where the drawing has one: an atom carrying a wedge's wide end, a label
-    // or nothing but centred double bonds has none, and a dot appearing there
-    // for as long as the atom moves is a dot the drawing never draws.
-    if (capHere && joinDot.current) {
-      const rWorld = thickW * 0.5;
-      joinDot.current.position.set(pxPrev, pyPrev, -0.035);
-      joinDot.current.scale.set(rWorld, rWorld, 1);
-      joinDot.current.visible = true;
     }
 
     // cursor dot (deg >= 2)
@@ -494,56 +284,6 @@ export default function MovePreview2D() {
           toneMapped={false}
         />
       </instancedMesh>
-      <instancedMesh
-        ref={thickInst}
-        key={"mv-thick-" + countCap}
-        args={[undefined as any, undefined as any, countCap]}
-        frustumCulled={false}
-        visible={false}
-      >
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial
-          color={COLORS.bond}
-          transparent={false}
-          toneMapped={false}
-        />
-      </instancedMesh>
-      {/* Hashed wedge bars for 'down' stereo */}
-      <instancedMesh
-        ref={hashInst}
-        key={"mv-hash-" + hashCap}
-        args={[undefined as any, undefined as any, hashCap]}
-        frustumCulled={false}
-        visible={false}
-      >
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial
-          color={COLORS.bond}
-          transparent={false}
-          toneMapped={false}
-        />
-      </instancedMesh>
-      {/* Solid wedge triangles for 'up' stereo */}
-      <mesh ref={wedgeSolidMesh} frustumCulled={false} visible={false}>
-        <bufferGeometry ref={wedgeSolidGeo} />
-        <meshBasicMaterial
-          color={COLORS.bond}
-          side={THREE.DoubleSide}
-          depthTest={false}
-          depthWrite={false}
-        />
-      </mesh>
-      {/* Joint dot at snapped endpoint (deg>=2) */}
-      <mesh ref={joinDot} frustumCulled={false} visible={false}>
-        <circleGeometry args={[1, 32]} />
-        <meshBasicMaterial
-          color={COLORS.bond}
-          transparent={false}
-          toneMapped={false}
-          depthTest={false}
-          depthWrite={false}
-        />
-      </mesh>
       <mesh ref={cursorDot} frustumCulled={false} visible={false}>
         <circleGeometry args={[1, 32]} />
         <meshBasicMaterial
