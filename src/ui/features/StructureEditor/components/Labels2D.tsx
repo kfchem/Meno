@@ -10,7 +10,7 @@ import {
   type Atom as LAtom,
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
-import { editorLayoutOptions } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 import { useLabelFont } from "../labelFont";
 
 export default function Labels2D({
@@ -43,16 +43,7 @@ export default function Labels2D({
   const bonds: LBond[] = useMemo(() => {
     const idToIndex = new Map<number, number>();
     atoms.forEach((a, i) => idToIndex.set(a.id, i));
-    const out: LBond[] = [];
-    for (const b of model.bonds) {
-      const i1 = idToIndex.get(b.a as number);
-      const i2 = idToIndex.get(b.b as number);
-      if (i1 == null || i2 == null) continue;
-      const stereo = (b as any).stereo ?? ("none" as const);
-      const order: 1 | 2 | 3 = b.order as 1 | 2 | 3;
-      out.push({ a1: i1, a2: i2, order, stereo });
-    }
-    return out;
+    return layoutBonds(model.bonds, idToIndex);
   }, [model.bonds, atoms]);
 
   const opts: LayoutOptions = useMemo(

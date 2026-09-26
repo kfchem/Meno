@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bondKind,
   buildAllPrimitives,
   buildBondPrimitives,
   joinsAtAtoms,
@@ -1022,6 +1023,158 @@ describe("a wavy bond", () => {
     const { lines, ends } = buildBondPrimitives(atoms, wavy, round, 40);
     const last = lines[lines.length - 1];
     expect(ends).toContainEqual({ x: last.x2, y: last.y2 });
+  });
+});
+
+describe("bold, hashed, dashed and dative bonds", () => {
+  const L = NOMINAL_BOND_LENGTH;
+  const ZOOM = 40;
+  const pair: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: L, y: 0, el: "C" },
+  ];
+  const deg = new Map([
+    [0, 3],
+    [1, 1],
+  ]);
+  const one = (extra: Partial<Bond>): Bond => ({ a1: 0, a2: 1, order: 1, ...extra });
+
+  it("draws stereo first, then a single bond's display, then a dative arrow", () => {
+    expect(bondKind(one({ stereo: "up", display: "bold" }))).toBe("wedge");
+    expect(bondKind(one({ display: "bold", dative: true }))).toBe("bold");
+    expect(bondKind(one({ dative: true }))).toBe("dative");
+    expect(bondKind({ ...one({ display: "dashed" }), order: 2 })).toBe("lines");
+    expect(bondKind(one({ display: "plain" }))).toBe("lines");
+  });
+
+  it("draws a bold bond as a bar the bold width across, square where nothing carries on", () => {
+    const o = opts();
+    const { lines, polys } = buildBondPrimitives(pair, one({ display: "bold" }), o, ZOOM, deg);
+    expect(lines).toHaveLength(0);
+    expect(polys).toHaveLength(1);
+    const ys = polys[0].points.map((p) => p.y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(o.boldWidthPx!, 9);
+    const xs = polys[0].points.map((p) => p.x);
+    expect(Math.min(...xs)).toBeCloseTo(0, 9);
+    expect(Math.max(...xs)).toBeCloseTo(L, 9);
+  });
+
+  it("cuts a bold bond's end in a V between two bonds carrying on from its atom", () => {
+    const o = opts();
+    // the bar runs up from atom 0, between bonds up to the left and right
+    const a = (deg: number) => (deg * Math.PI) / 180;
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 0, y: L, el: "C" },
+      { id: 3, x: L * Math.cos(a(150)), y: L * Math.sin(a(150)), el: "C" },
+      { id: 4, x: L * Math.cos(a(30)), y: L * Math.sin(a(30)), el: "C" },
+    ];
+    const bonds: Bond[] = [
+      one({ display: "bold" }),
+      { a1: 0, a2: 2, order: 1 },
+      { a1: 0, a2: 3, order: 1 },
+    ];
+    const { polys } = buildAllPrimitives(atoms, bonds, o, ZOOM);
+    const bar = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    // the V's point is where the two bonds' inner edges cross, just above
+    // the atom, and the bonds' own lines fill in below it
+    const low = bar.points.reduce((m, p) => (p.y < m.y ? p : m));
+    expect(low.x).toBeCloseTo(0, 9);
+    expect(low.y).toBeCloseTo(o.lineWidthPx / 2 / Math.cos(Math.PI / 6), 9);
+    // and its corners sit on the near edges of the two bonds
+    const corners = bar.points.filter((p) => p.y < L / 2 && Math.abs(p.x) > 1e-6);
+    expect(corners).toHaveLength(2);
+    for (const p of corners) {
+      const d = { x: Math.cos(a(p.x < 0 ? 150 : 30)), y: Math.sin(a(p.x < 0 ? 150 : 30)) };
+      const off = Math.abs(p.x * d.y - p.y * d.x);
+      expect(off).toBeCloseTo(o.lineWidthPx / 2, 9);
+    }
+  });
+
+  it("rounds a bold bond's free end into a half circle when ends are round", () => {
+    const o = opts({ joinStyle: "round" });
+    const { polys } = buildBondPrimitives(pair, one({ display: "bold" }), o, ZOOM, deg);
+    const far = polys[0].points.filter((p) => p.x > L - o.boldWidthPx!);
+    for (const p of far) {
+      expect(Math.hypot(p.x - (L - o.boldWidthPx! / 2), p.y)).toBeLessThanOrEqual(
+        o.boldWidthPx! / 2 + 1e-9,
+      );
+    }
+  });
+
+  it("sets out a hashed bond's hashes as a hashed wedge's, all the bold width long", () => {
+    const o = opts();
+    const { lines, polys } = buildBondPrimitives(pair, one({ display: "hashed" }), o, ZOOM, deg);
+    expect(lines).toHaveLength(0);
+    const hashes = hashesOf(polys);
+    const s = o.hashSpacingPx;
+    expect(hashes[0].near).toBeCloseTo(s, 9);
+    expect(hashes[hashes.length - 1].far).toBeCloseTo(L, 9);
+    expect(hashes).toHaveLength(1 + Math.floor((L - s - o.lineWidthPx) / s));
+    for (const h of hashes) {
+      expect(h.nearWidth).toBeCloseTo(o.boldWidthPx!, 9);
+      expect(h.farWidth).toBeCloseTo(o.boldWidthPx!, 9);
+    }
+  });
+
+  it("starts a hashed bond from the atom with more bonds", () => {
+    const o = opts();
+    const flipped = new Map([
+      [0, 1],
+      [1, 3],
+    ]);
+    const hashes = hashesOf(
+      buildBondPrimitives(pair, one({ display: "hashed" }), o, ZOOM, flipped).polys,
+    );
+    expect(hashes[0].near).toBeCloseTo(0, 9);
+    expect(hashes[hashes.length - 1].far).toBeCloseTo(L - o.hashSpacingPx, 9);
+  });
+
+  it("dashes a dashed bond from end to end, the gaps even and never short", () => {
+    const o = opts();
+    const { lines } = buildBondPrimitives(pair, one({ display: "dashed" }), o, ZOOM, deg);
+    expect(lines.length).toBeGreaterThan(2);
+    expect(lines[0].x1).toBeCloseTo(0, 9);
+    expect(lines[lines.length - 1].x2).toBeCloseTo(L, 9);
+    for (const l of lines) expect(l.x2 - l.x1).toBeCloseTo(o.dashLengthPx!, 9);
+    const gaps = lines.slice(1).map((l, i) => l.x1 - lines[i].x2);
+    for (const g of gaps) {
+      expect(g).toBeCloseTo(gaps[0], 9);
+      expect(g).toBeGreaterThanOrEqual(o.dashGapPx! - 1e-9);
+    }
+  });
+
+  it("draws a dative bond as an arrow from the first atom to the second", () => {
+    const o = opts();
+    const { lines, polys } = buildBondPrimitives(pair, one({ dative: true }), o, ZOOM, deg);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].x1).toBeCloseTo(0, 9);
+    const [head] = polys;
+    expect(head.points).toHaveLength(3);
+    // its point on the acceptor, its base a head's length back
+    expect(Math.max(...head.points.map((p) => p.x))).toBeCloseTo(L, 9);
+    expect(Math.min(...head.points.map((p) => p.x))).toBeCloseTo(L - o.dativeHeadLengthPx!, 9);
+    const ys = head.points.map((p) => p.y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(o.dativeHeadWidthPx!, 9);
+  });
+
+  it("takes no hydrogens from either end of a dative bond", () => {
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "N" },
+      { id: 2, x: L, y: 0, el: "B" },
+    ];
+    const labels = buildTextLabels(atoms, opts(), [one({ dative: true })]);
+    expect(labels.map((t) => t.text).sort()).toEqual(["BH3", "H3N"]);
+  });
+
+  it("puts no cap on a bold or hashed bond's atom, nor on a dative arrow's point", () => {
+    const o = opts({ joinStyle: "round" });
+    for (const extra of [{ display: "bold" as const }, { display: "hashed" as const }, { dative: true }]) {
+      const { fills } = buildAllPrimitives(pair, [one(extra)], o, ZOOM);
+      expect(fills.some((f) => Math.hypot(f.c.x - L, f.c.y) < 1e-9)).toBe(false);
+    }
   });
 });
 

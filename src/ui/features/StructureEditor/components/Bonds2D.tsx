@@ -7,7 +7,7 @@ import {
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { editorLayoutOptions } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 
 export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
   const { camera } = useThree();
@@ -52,21 +52,7 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
       movingId != null
         ? model.bonds.filter((b) => b.a !== movingId && b.b !== movingId)
         : model.bonds;
-    const bondsL = srcBonds
-      .map((b) => {
-        const i1 = idToIndex.get(b.a);
-        const i2 = idToIndex.get(b.b);
-        if (i1 == null || i2 == null) return null;
-        return {
-          a1: i1,
-          a2: i2,
-          order: b.order as 1 | 2 | 3,
-          stereo: (b.stereo ?? "none") as "up" | "down" | "wavy" | "none",
-          doubleMode: (b as any).doubleMode ?? "auto",
-          stereoOrient: (b as any).stereoOrient ?? ("principle" as const),
-        };
-      })
-      .filter(Boolean) as any;
+    const bondsL = layoutBonds(srcBonds, idToIndex);
     const keys = Object.keys(aromaticRings || {}).filter(
       (k) => aromaticRings[k]
     );

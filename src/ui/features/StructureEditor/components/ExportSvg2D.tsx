@@ -8,42 +8,27 @@ import {
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
 import { averageBondLengthWorld } from "../../../../lib/chem/acs";
-import { editorLayoutOptions } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
+import type { Bond } from "../store/types";
 
+/**
+ * The model as the layout takes it - every bond through `layoutBonds`, as the
+ * canvas draws it, so an export keeps the side a double bond's second line
+ * takes, which way a wedge points and how a bond is displayed.
+ */
 function toLayoutInputs(model: {
   atoms: { id: number; x: number; y: number; el: string }[];
-  bonds: {
-    a: number;
-    b: number;
-    order: 1 | 2 | 3;
-    stereo?: "up" | "down" | "wavy" | "none";
-  }[];
+  bonds: Bond[];
 }): { atoms: LAtom[]; bonds: LBond[] } {
-  const atoms: LAtom[] = model.atoms.map(
-    (a: { id: number; x: number; y: number; el: string }) => ({
-      id: a.id,
-      x: a.x,
-      y: a.y,
-      el: a.el,
-    })
-  );
+  const atoms: LAtom[] = model.atoms.map((a) => ({
+    id: a.id,
+    x: a.x,
+    y: a.y,
+    el: a.el,
+  }));
   const idToIndex = new Map<number, number>();
   for (let i = 0; i < atoms.length; i++) idToIndex.set(atoms[i].id, i);
-  const bonds: LBond[] = [];
-  for (const b of model.bonds as {
-    a: number;
-    b: number;
-    order: 1 | 2 | 3;
-    stereo?: "up" | "down" | "wavy" | "none";
-  }[]) {
-    const i1 = idToIndex.get(b.a);
-    const i2 = idToIndex.get(b.b);
-    if (i1 == null || i2 == null) continue;
-    const stereo = b.stereo ?? ("none" as const);
-    const order: 1 | 2 | 3 = b.order;
-    bonds.push({ a1: i1, a2: i2, order, stereo });
-  }
-  return { atoms, bonds };
+  return { atoms, bonds: layoutBonds(model.bonds, idToIndex) };
 }
 
 // ACS style helpers centralized in lib/chem/acs
