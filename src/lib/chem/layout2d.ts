@@ -1399,6 +1399,17 @@ function wedgeBaseAtom(bond: Bond, deg?: Map<number, number>): number {
   return baseAtA ? bond.a1 : bond.a2;
 }
 
+/**
+ * Which atom a wedge's narrow end is at: the stereocentre, which a MOL file
+ * lists first.
+ */
+export function wedgeNarrowAtom(
+  bond: Bond,
+  deg?: Map<number, number>,
+): number {
+  return wedgeBaseAtom(bond, deg) === bond.a1 ? bond.a2 : bond.a1;
+}
+
 function degreeMap(bonds: Bond[]): Map<number, number> {
   const m = new Map<number, number>();
   for (const b of bonds) {
