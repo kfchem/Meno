@@ -191,16 +191,30 @@ async fn py_env_python_path_uv(app: AppHandle, payload: PyEnvInfo) -> Result<Str
     Ok(venv.to_string_lossy().into_owned())
 }
 
+/// A command running the bundled `uv`, with everything it keeps - the Python
+/// it downloads, its cache - under the app's own data directory rather than
+/// the user's, and deaf to any uv settings of the user's: Meno's environments
+/// are Meno's, and removing the app's data removes them.
+fn uv_command(uv: &Path, data: &Path) -> Command {
+    let mut cmd = Command::new(uv);
+    cmd.env("UV_PYTHON_INSTALL_DIR", data.join("uv").join("python"))
+        .env("UV_CACHE_DIR", data.join("uv").join("cache"))
+        .env("UV_PYTHON_PREFERENCE", "only-managed")
+        .env("UV_NO_CONFIG", "1");
+    cmd
+}
+
 #[tauri::command]
 async fn py_env_setup_uv(app: AppHandle, payload: PyEnvInfo) -> Result<(), String> {
     let env = validate_env_info(&payload)?;
     let uv = resource_path(&app, &env.uv)?;
     let lock = resource_path(&app, &env.lock)?;
-    let venv_dir = app_data_dir(&app)?.join(&env.venv_home);
+    let data = app_data_dir(&app)?;
+    let venv_dir = data.join(&env.venv_home);
     std::fs::create_dir_all(&venv_dir).map_err(|e| e.to_string())?;
 
     // 1) uv venv <venv_dir> --python <version>
-    let mut cmd1 = Command::new(&uv);
+    let mut cmd1 = uv_command(&uv, &data);
     cmd1.arg("venv")
         .arg(&venv_dir)
         .arg("--python")
@@ -218,7 +232,7 @@ async fn py_env_setup_uv(app: AppHandle, payload: PyEnvInfo) -> Result<(), Strin
 
     // 2) uv pip install --python <venv_py> -r requirements.lock --upgrade --no-deps
     let venv_py = venv_dir.join(&env.venv_python_rel);
-    let mut cmd2 = Command::new(&uv);
+    let mut cmd2 = uv_command(&uv, &data);
     cmd2.arg("pip")
         .arg("install")
         .arg("--python")
@@ -421,6 +435,22 @@ pub fn run() {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn uv_keeps_its_python_and_cache_under_the_app_data() {
+        let data = Path::new("/data/Meno");
+        let cmd = uv_command(Path::new("/app/uv"), data);
+        let envs: HashMap<_, _> = cmd
+            .get_envs()
+            .map(|(k, v)| (k.to_owned(), v.map(|v| v.to_owned())))
+            .collect();
+        let get = |k: &str| envs.get(std::ffi::OsStr::new(k)).cloned().flatten();
+        let under = |leaf: &str| Some(data.join("uv").join(leaf).into_os_string());
+        assert_eq!(get("UV_PYTHON_INSTALL_DIR"), under("python"));
+        assert_eq!(get("UV_CACHE_DIR"), under("cache"));
+        assert_eq!(get("UV_PYTHON_PREFERENCE"), Some("only-managed".into()));
+        assert_eq!(get("UV_NO_CONFIG"), Some("1".into()));
+    }
 
     fn env_info(uv: &str, lock: &str, venv: &str, py: &str) -> PyEnvInfo {
         PyEnvInfo {
