@@ -105,9 +105,12 @@ describe("reading a style choice back", () => {
 
 describe("changing one setting", () => {
   it("records a change, and drops it again once it is the preset's own value", () => {
-    const changed = withSetting(DEFAULT_STYLE_CHOICE, "ends", "round");
+    const acs = { preset: "acs1996", changes: {} };
+    const changed = withSetting(acs, "ends", "round");
     expect(changed.changes).toEqual({ ends: "round" });
     expect(withSetting(changed, "ends", "square").changes).toEqual({});
+    // Meno's own has round ends already
+    expect(withSetting(DEFAULT_STYLE_CHOICE, "ends", "round").changes).toEqual({});
     // a length in another unit is a change, even if it comes to the same
     expect(withSetting(DEFAULT_STYLE_CHOICE, "lineThickness", ofBond(0.6 / 14.4)).changes)
       .toHaveProperty("lineThickness");

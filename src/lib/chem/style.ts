@@ -215,8 +215,8 @@ function cm(value: number): number {
 /**
  * The Royal Society of Chemistry's single-column style: 12.2 pt bonds,
  * 0.45 pt lines, 1.6 pt bold bonds, hashes 1.75 pt apart, a double bond's
- * lines 20% of the bond apart, 7 pt Helvetica labels kept 1.25 pt clear. The rest in ACS 1996's
- * proportions.
+ * lines 20% of the bond apart, 7 pt Helvetica labels kept 1.25 pt clear.
+ * The rest in ACS 1996's proportions.
  */
 export const RSC: DrawingStyle = {
   ...RULES,
@@ -235,7 +235,8 @@ export const RSC: DrawingStyle = {
 /**
  * Nature's style for chemical structures: 0.381 cm (10.8 pt) bonds, 0.021 cm
  * lines, 0.055 cm bold bonds, hashes 0.06 cm apart, a double bond's lines
- * 18% of the bond apart, 6 pt Arial labels kept 0.042 cm clear. The rest in ACS 1996's proportions.
+ * 18% of the bond apart, 6 pt Arial labels kept 0.042 cm clear. The rest
+ * in ACS 1996's proportions.
  */
 export const NATURE: DrawingStyle = {
   ...RULES,
@@ -260,6 +261,20 @@ export const WILEY: DrawingStyle = {
   fontSize: pt(8),
 };
 
+/**
+ * Meno's own style: ACS 1996's proportions, which a chemist reads without
+ * noticing them, with round ends and joins and labels in IBM Plex Sans -
+ * whose capital I has serifs and whose l has a tail, so that Cl never reads
+ * as CI. Plex's capitals are a little shorter than Arial's, so the baseline
+ * rises with them and a capital sits on its atom as it does in ACS 1996.
+ */
+export const MENO: DrawingStyle = {
+  ...ACS_1996,
+  ends: "round",
+  fontFamily: "IBM Plex Sans",
+  labelBaseline: 0.391,
+};
+
 /** A style that can be picked by name. */
 export type StylePreset = {
   id: string;
@@ -270,6 +285,12 @@ export type StylePreset = {
 };
 
 export const STYLE_PRESETS: StylePreset[] = [
+  {
+    id: "meno",
+    name: "Meno",
+    description: "ACS 1996's proportions, round ends, IBM Plex Sans.",
+    style: MENO,
+  },
   {
     id: "acs1996",
     name: "ACS 1996",
@@ -296,7 +317,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-/** The preset with this id, or ACS 1996. */
+/** The preset with this id, or the first, Meno's own. */
 export function presetById(id: string | undefined): StylePreset {
   return STYLE_PRESETS.find((p) => p.id === id) ?? STYLE_PRESETS[0];
 }
