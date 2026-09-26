@@ -62,7 +62,8 @@ export default function App() {
     })();
     return useNetwork.subscribe((s, prev) => {
       if (!useAppSettings.getState().loaded) return;
-      if (s.offline === prev.offline && s.granted === prev.granted) return;
+      const sameGrants = s.granted.join("\n") === prev.granted.join("\n");
+      if (s.offline === prev.offline && sameGrants) return;
       useAppSettings.getState().setNetwork({ offline: s.offline, granted: s.granted });
     });
   }, []);
