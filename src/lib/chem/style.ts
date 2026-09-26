@@ -253,12 +253,24 @@ export const NATURE: DrawingStyle = {
 };
 
 /**
- * Wiley-VCH, as for Angewandte Chemie: 14.4 pt bonds, 0.6 pt lines and 8 pt
- * Arial labels. What it does not state is ACS 1996's.
+ * Wiley-VCH's template for structures in Angewandte Chemie and its sister
+ * journals: 0.6 cm (17 pt) bonds, 0.026 cm lines, 0.092 cm bold bonds and
+ * hashes, a double bond's lines 18% of the bond apart, 12 pt Arial labels
+ * kept 0.071 cm clear - drawn large, to be reduced for the page. The rest in
+ * ACS 1996's proportions.
  */
 export const WILEY: DrawingStyle = {
-  ...ACS_1996,
-  fontSize: pt(8),
+  ...RULES,
+  ...ACS_PROPORTIONS,
+  bondLengthPt: cm(0.6),
+  lineThickness: pt(cm(0.026)),
+  ends: "square",
+  doubleGap: ofBond(0.18),
+  boldThickness: pt(cm(0.092)),
+  hashInterval: pt(cm(0.092)),
+  fontFamily: "Arial",
+  fontSize: pt(12),
+  labelClearance: pt(cm(0.071)),
 };
 
 /**
