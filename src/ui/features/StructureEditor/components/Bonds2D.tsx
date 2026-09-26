@@ -22,7 +22,7 @@ export function Bonds2D({ options }: { options?: Partial<LayoutOptions> }) {
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
   const tmpQ = useMemo(() => new THREE.Quaternion(), []);
   // Capacity: worst case is a hashed ("down" stereo) wedge, which alone can
-  // emit ~7 segments (see buildHashedWedgeSegments), or a wavy bond, whose
+  // emit a segment per hash when ends are round (see buildHashes), or a wavy bond, whose
   // segment count grows with bond length/zoom and is unbounded. Start from a
   // generous per-bond estimate and self-correct below if a layout ever needs
   // more room than currently allocated, instead of assuming a fixed max of 3

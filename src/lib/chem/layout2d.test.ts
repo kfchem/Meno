@@ -19,6 +19,33 @@ import { acsWorldOptions } from "./acs";
 const opts = (over: Partial<LayoutOptions> = {}): LayoutOptions =>
   acsWorldOptions([], [], { units: "world", ...over });
 
+/**
+ * The hashes of a hashed wedge lying along +x, from their trapezoids: where
+ * each sits along the bond, and how far across it reaches at either edge.
+ */
+const hashesOf = (polys: { points: Vec2[] }[]) =>
+  polys
+    .filter((p) => p.points.length === 4)
+    .map((p) => {
+      const xs = p.points.map((q) => q.x);
+      const near = Math.min(...xs);
+      const far = Math.max(...xs);
+      const across = (x: number) => {
+        const ys = p.points
+          .filter((q) => Math.abs(q.x - x) < 1e-9)
+          .map((q) => q.y);
+        return Math.max(...ys) - Math.min(...ys);
+      };
+      return {
+        near,
+        far,
+        at: (near + far) / 2,
+        nearWidth: across(near),
+        farWidth: across(far),
+      };
+    })
+    .sort((a, b) => a.at - b.at);
+
 const polyArea = (pts: Vec2[]) => {
   let s = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -273,16 +300,39 @@ describe("wedge geometry", () => {
     expect(base[0].x).toBeCloseTo(base[1].x, 12);
   });
 
-  it("gives the hashed wedge a last hash of bond width", () => {
+  it("starts a hashed wedge a line width wide, not at a point", () => {
     const o = raw();
     const hashed: Bond = { ...wedge, stereo: "down" };
-    const { lines } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
-    expect(lines.length).toBeGreaterThan(3);
-    const widths = lines.map((l) => Math.hypot(l.x2 - l.x1, l.y2 - l.y1));
-    const narrowest = Math.min(...widths);
-    // a pointed wedge used to end in a hash of almost no length
-    expect(narrowest).toBeGreaterThan(o.lineWidthPx * 0.5);
-    expect(Math.max(...widths)).toBeLessThanOrEqual(o.wedgeWidthPx + 1e-9);
+    const { polys } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
+    const hashes = hashesOf(polys);
+    expect(hashes.length).toBeGreaterThan(3);
+    // a pointed wedge used to begin with a hash of almost no length
+    expect(hashes[0].nearWidth).toBeCloseTo(o.lineWidthPx, 9);
+    for (const h of hashes) {
+      expect(h.farWidth).toBeLessThanOrEqual(o.wedgeWidthPx + 1e-9);
+    }
+  });
+
+  it("stops a wedge's narrow end at a label where a line would stop", () => {
+    const labelled: Atom[] = [{ ...atoms[0], el: "N" }, atoms[1]];
+    const plain: Bond = { a1: 0, a2: 1, order: 1 };
+    const lineStart = (o: LayoutOptions) => {
+      const [l] = buildBondPrimitives(labelled, plain, o, ZOOM, deg).lines;
+      return Math.min(l.x1, l.x2);
+    };
+    const tip = (o: LayoutOptions) =>
+      Math.min(
+        ...buildBondPrimitives(labelled, wedge, o, ZOOM, deg).polys[0].points.map(
+          (p) => p.x,
+        ),
+      );
+    // square: flat, just where the line stops
+    const square = raw();
+    expect(lineStart(square)).toBeGreaterThan(0);
+    expect(tip(square)).toBeCloseTo(lineStart(square), 9);
+    // round: rounded about that point, as the line's cap is
+    const round = opts({ joinStyle: "round" });
+    expect(tip(round)).toBeCloseTo(lineStart(round) - round.lineWidthPx / 2, 6);
   });
 });
 
@@ -487,20 +537,96 @@ describe("a hashed wedge and its neighbours", () => {
   ]);
   const hashed: Bond = { a1: 0, a2: 1, order: 1, stereo: "down" };
 
-  it("puts a hash on the atom at the narrow end", () => {
+  it("cuts the hashes from a wedge, one hash spacing out to flush with the wide end", () => {
     const o = opts();
-    const { lines } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
-    const mid = lines.map((l) => ({
-      x: (l.x1 + l.x2) / 2,
-      len: Math.hypot(l.x2 - l.x1, l.y2 - l.y1),
-    }));
-    const narrow = mid.reduce((a, b) => (b.len < a.len ? b : a));
-    const wideEnd = mid.reduce((a, b) => (b.len > a.len ? b : a));
-    // the thin end is the stereocentre; a hash short of it reads as a gap
-    expect(narrow.x).toBeCloseTo(0, 6);
-    expect(narrow.len).toBeCloseTo(o.lineWidthPx, 6);
-    expect(wideEnd.x).toBeCloseTo(1.5, 6);
-    expect(wideEnd.len).toBeCloseTo(o.wedgeWidthPx, 6);
+    const { lines, polys } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
+    // square ends: each hash is a trapezoid, not a line
+    expect(lines).toHaveLength(0);
+    const hashes = hashesOf(polys);
+    const lw = o.lineWidthPx;
+    const s = o.hashSpacingPx;
+    // the first one hash spacing out from the stereocentre, the last flush
+    // with the wide end, and as many between as fit a hash spacing apart
+    expect(hashes[0].near).toBeCloseTo(s, 9);
+    expect(hashes[hashes.length - 1].far).toBeCloseTo(1.5, 9);
+    expect(hashes).toHaveLength(1 + Math.floor((1.5 - s - lw) / s));
+    const gaps = hashes.slice(1).map((h, i) => h.at - hashes[i].at);
+    for (const g of gaps) {
+      expect(g).toBeCloseTo(gaps[0], 9);
+      expect(g).toBeGreaterThanOrEqual(s);
+    }
+    // each a line width deep, its ends on an outline running from a line
+    // width at the first hash to the full broad end at the last
+    const width = (x: number) =>
+      lw + ((o.wedgeWidthPx - lw) * (x - s)) / (1.5 - s);
+    for (const h of hashes) {
+      expect(h.far - h.near).toBeCloseTo(lw, 9);
+      expect(h.nearWidth).toBeCloseTo(width(h.near), 9);
+      expect(h.farWidth).toBeCloseTo(width(h.far), 9);
+    }
+  });
+
+  it("rounds each hash when ends are round, as far across as the trapezoid at its middle", () => {
+    const o = opts({ joinStyle: "round" });
+    const square = hashesOf(
+      buildBondPrimitives(atoms, hashed, opts(), ZOOM, deg).polys,
+    );
+    const { lines, polys, ends } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
+    expect(polys).toHaveLength(0);
+    expect(lines).toHaveLength(square.length);
+    // a cap on each end of each hash
+    expect(ends).toHaveLength(2 * lines.length);
+    lines.forEach((l, i) => {
+      const h = square[i];
+      expect((l.x1 + l.x2) / 2).toBeCloseTo(h.at, 9);
+      // the caps reach half a line width past either end
+      expect(Math.hypot(l.x2 - l.x1, l.y2 - l.y1) + o.lineWidthPx).toBeCloseTo(
+        (h.nearWidth + h.farWidth) / 2,
+        9,
+      );
+    });
+  });
+
+  it("starts the hashes where a label at the stereocentre leaves off", () => {
+    const o = opts();
+    const labelled: Atom[] = [{ ...atoms[0], el: "N" }, atoms[1]];
+    const [line] = buildBondPrimitives(
+      labelled,
+      { a1: 0, a2: 1, order: 1 },
+      o,
+      ZOOM,
+      deg,
+    ).lines;
+    const from = Math.min(line.x1, line.x2);
+    expect(from).toBeGreaterThan(o.hashSpacingPx);
+    const hashes = hashesOf(buildBondPrimitives(labelled, hashed, o, ZOOM, deg).polys);
+    // flush with where a line would start, and a line width wide there: the
+    // wedge starts again from the label rather than losing its narrow end
+    expect(hashes[0].near).toBeCloseTo(from, 9);
+    expect(hashes[0].nearWidth).toBeCloseTo(o.lineWidthPx, 9);
+    const last = hashes[hashes.length - 1];
+    expect(last.far).toBeCloseTo(1.5, 9);
+    expect(last.farWidth).toBeCloseTo(o.wedgeWidthPx, 9);
+  });
+
+  it("widens the hashes to the full broad end at a label at the wide end", () => {
+    const o = opts();
+    const labelled: Atom[] = [atoms[0], { ...atoms[1], el: "O" }];
+    const [line] = buildBondPrimitives(
+      labelled,
+      { a1: 0, a2: 1, order: 1 },
+      o,
+      ZOOM,
+      deg,
+    ).lines;
+    const to = Math.max(line.x1, line.x2);
+    expect(to).toBeLessThan(1.5);
+    const hashes = hashesOf(buildBondPrimitives(labelled, hashed, o, ZOOM, deg).polys);
+    expect(hashes[0].near).toBeCloseTo(o.hashSpacingPx, 9);
+    // the wedge ends where the line would, as broad there as it ever is
+    const last = hashes[hashes.length - 1];
+    expect(last.far).toBeCloseTo(to, 9);
+    expect(last.farWidth).toBeCloseTo(o.wedgeWidthPx, 9);
   });
 });
 
@@ -555,22 +681,25 @@ describe("a label must not change how a bond is drawn", () => {
     { id: 1, x: 0, y: 0, el: "C" },
     { id: 2, x: 1.5, y: 0, el },
   ];
-  const spacing = (lines: { x1: number; x2: number }[]) => {
-    const xs = lines.map((l) => (l.x1 + l.x2) / 2).sort((a, b) => a - b);
-    return xs.slice(1).map((x, i) => x - xs[i]);
-  };
+  const spacing = (hashes: { at: number }[]) =>
+    hashes.slice(1).map((h, i) => h.at - hashes[i].at);
 
-  it("keeps the hashes of a hashed wedge equally spaced", () => {
+  it("spaces a hashed wedge's hashes evenly, never closer than the hash spacing", () => {
     const o = opts();
     const bond: Bond = { a1: 0, a2: 1, order: 1, stereo: "down" };
-    const plain = buildBondPrimitives(pair("C"), bond, o, ZOOM, deg).lines;
-    const labelled = buildBondPrimitives(pair("O"), bond, o, ZOOM, deg).lines;
+    const plain = hashesOf(buildBondPrimitives(pair("C"), bond, o, ZOOM, deg).polys);
+    const labelled = hashesOf(
+      buildBondPrimitives(pair("O"), bond, o, ZOOM, deg).polys,
+    );
     // the bond to a labelled atom is shorter, so it carries fewer hashes -
-    // but the gap between them is the same
+    // each set evenly spaced, and never closer than the hash spacing
     expect(labelled.length).toBeLessThan(plain.length);
-    const a = spacing(plain);
-    const b = spacing(labelled);
-    expect(b[0]).toBeCloseTo(a[0], 6);
+    for (const gaps of [spacing(plain), spacing(labelled)]) {
+      for (const g of gaps) {
+        expect(g).toBeCloseTo(gaps[0], 9);
+        expect(g).toBeGreaterThanOrEqual(o.hashSpacingPx - 1e-9);
+      }
+    }
   });
 
   it("keeps the wave of a wavy bond the same length", () => {
