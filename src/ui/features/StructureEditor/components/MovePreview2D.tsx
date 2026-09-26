@@ -16,7 +16,7 @@ import {
 } from "../../../../lib/chem/layout2d";
 import { computeMoveSnap } from "../utils/moveSnap";
 import { polyTriangles } from "./polyTriangles";
-import { editorLayoutOptions } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 
 // Preview for moving an atom without mutating coordinates during drag.
 // - Thin highlight lines (neighbor -> cursor) keep existing look.
@@ -298,14 +298,7 @@ export default function MovePreview2D() {
       const idToIndex = new Map<number, number>();
       atomsL.forEach((a, i) => idToIndex.set(a.id, i));
       // All bonds (for correct degree/adjacency) in layout indices
-      const bondsAll: LBond[] = model.bonds.map((b) => ({
-        a1: idToIndex.get(b.a as number)!,
-        a2: idToIndex.get(b.b as number)!,
-        order: (b.order as 1 | 2 | 3) ?? 1,
-        stereo: (b.stereo ?? "none") as "up" | "down" | "wavy" | "none",
-        doubleMode: (b as any).doubleMode ?? "auto",
-        stereoOrient: (b as any).stereoOrient ?? ("principle" as const),
-      }));
+      const bondsAll: LBond[] = layoutBonds(model.bonds, idToIndex);
       // Only bonds attached to the moving atom (in layout indices)
       const mi = idToIndex.get(movingId)!;
       const bondsAttach = bondsAll.filter((b) => b.a1 === mi || b.a2 === mi);

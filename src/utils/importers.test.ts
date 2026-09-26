@@ -161,3 +161,26 @@ describe("aromatic bonds on import", () => {
     }
   });
 });
+
+describe("coordination bonds on import", () => {
+  it("come in as dative single bonds, from the first atom to the second", () => {
+    // ammonia borane, H3N->BH3, with the MOL bond type for a coordination bond
+    const mol = [
+      "",
+      "  test",
+      "",
+      "  2  1  0     0  0  0  0  0  0999 V2000",
+      "    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0",
+      "    1.5000    0.0000    0.0000 B   0  0  0  0  0  0  0  0  0  0  0  0",
+      "  1  2  9  0  0  0  0",
+      "M  END",
+    ].join("\n");
+    const { model } = moleculesToEditorModel(readMoleculesFromText(mol, "mol"));
+    expect(model.bonds).toHaveLength(1);
+    const [b] = model.bonds;
+    expect(b.order).toBe(1);
+    expect(b.dative).toBe(true);
+    const n = model.atoms.find((a) => a.el === "N")!;
+    expect(b.a).toBe(n.id);
+  });
+});

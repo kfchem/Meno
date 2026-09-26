@@ -8,7 +8,7 @@ import {
   type Bond as LBond,
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
-import { editorLayoutOptions } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 
 export default function LabelEditor2D() {
   const { camera } = useThree();
@@ -111,15 +111,7 @@ export default function LabelEditor2D() {
   const bondsL: LBond[] = useMemo(() => {
     const idToIndex = new Map<number, number>();
     atomsL.forEach((a, i) => idToIndex.set(a.id, i));
-    const out: LBond[] = [];
-    for (const b of model.bonds) {
-      const i1 = idToIndex.get(b.a as number);
-      const i2 = idToIndex.get(b.b as number);
-      if (i1 == null || i2 == null) continue;
-      const order: 1 | 2 | 3 = typeof b.order === "number" ? b.order : 1;
-      out.push({ a1: i1, a2: i2, order, stereo: "none" });
-    }
-    return out;
+    return layoutBonds(model.bonds, idToIndex);
   }, [model.bonds, atomsL]);
   const opts: LayoutOptions = useMemo(
     () => editorLayoutOptions(atomsL, bondsL),
