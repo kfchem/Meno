@@ -23,7 +23,8 @@ export type LayoutOptions = {
   doubleOffsetPx: number;
   tripleOffsetPx: number;
   wedgeWidthPx: number;
-  hashCount: number;
+  /** Least distance between the hashes of a hashed wedge, centre to centre. */
+  hashSpacingPx: number;
   wavyAmpPx: number;
   wavyFreq: number;
   fontPx: number;
@@ -839,43 +840,42 @@ function buildWedgeTriangle(
 }
 
 /**
- * Hashes across a wedge, `p1` the wide end and `p2` the narrow one. Both are
- * the bond's own ends, before anything is trimmed for a label: the hashes are
- * placed on that, and `span` then says how much of it is actually drawn, so a
- * label takes hashes away rather than squeezing them together.
+ * Hashes across a wedge, from `narrow` (the stereocentre) to `wide`: the
+ * bond's own ends, before anything is trimmed for a label. `span` says how
+ * much of it is actually drawn, measured from the narrow end.
+ *
+ * ACS 1996 spaces them by the hash spacing: as many as fit at least that far
+ * apart along the drawn length, spread evenly over it, the last flush with
+ * the wide end and none on the narrow atom. Each is as long as the wedge is
+ * wide where it sits - nothing at the narrow atom, the full broad end at the
+ * wide one - so a label takes hashes away rather than making them bigger.
  */
 function buildHashedWedgeSegments(
-  p1: Vec2,
-  p2: Vec2,
-  baseHalfWorld: number,
-  steps: number,
-  tipHalfWorld = 0,
-  span?: { from: number; to: number }
+  narrow: Vec2,
+  wide: Vec2,
+  wideHalf: number,
+  spacing: number,
+  lineWidth: number,
+  span?: { from: number; to: number },
 ): LineSeg[] {
-  // Same outline as the solid wedge, drawn as separate hashes. The narrow end
-  // keeps a bond's width so the last hash does not shrink to a dot.
-  const dir = vnorm(vsub(p2, p1));
+  const dir = vnorm(vsub(wide, narrow));
   const n = vperp(dir);
-  const baseL = vadd(p1, vscale(n, baseHalfWorld));
-  const baseR = vadd(p1, vscale(n, -baseHalfWorld));
-  const tipHalf = Math.min(tipHalfWorld, baseHalfWorld * 0.5);
-  const apexL = vadd(p2, vscale(n, tipHalf));
-  const apexR = vadd(p2, vscale(n, -tipHalf));
-  const full = vlen(vsub(p2, p1));
-  const from = span ? span.from : 0;
-  const to = span ? span.to : full;
+  const full = vlen(vsub(wide, narrow));
+  // where the last hash's centre sits when nothing is trimmed
+  const reach = full - lineWidth / 2;
+  const start = Math.max(0, span ? span.from : 0);
+  const end = Math.min(full, span ? span.to : full) - lineWidth / 2;
+  const length = end - start;
+  if (!(length > 0) || !(reach > 0) || !(spacing > 0)) return [];
+  const count = Math.max(1, Math.floor(length / spacing + 1e-9));
   const out: LineSeg[] = [];
-  for (let i = 0; i < steps; i++) {
-    // Hashes at equal distances, the first at the wide end and the last on
-    // the atom at the narrow end: a hash short of it reads as a gap between
-    // the wedge and the bonds there, where a solid wedge runs right in.
-    const u = steps > 1 ? i / (steps - 1) : 0.5;
-    const along = u * full;
-    if (along < from - 1e-9 || along > to + 1e-9) continue;
-    // Points at the same ratio along left (baseL→apex) and right (baseR→apex) edges
-    const Lp = vadd(baseL, vscale(vsub(apexL, baseL), u));
-    const Rp = vadd(baseR, vscale(vsub(apexR, baseR), u));
-    out.push({ x1: Lp.x, y1: Lp.y, x2: Rp.x, y2: Rp.y, widthPx: 0 });
+  for (let k = 1; k <= count; k++) {
+    const at = start + (length * k) / count;
+    const half = Math.min(wideHalf, (wideHalf * at) / reach);
+    const c = vadd(narrow, vscale(dir, at));
+    const a = vadd(c, vscale(n, half));
+    const b = vsub(c, vscale(n, half));
+    out.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, widthPx: 0 });
   }
   return out;
 }
@@ -1155,17 +1155,17 @@ export function buildBondPrimitives(
     } else {
       // Place the hashes on the bond itself and draw the part that is left
       // after any label has taken its share.
-      const bp1o = baseAtP1 ? p1o : p2o;
-      const bp2o = baseAtP1 ? p2o : p1o;
-      const trimBase = baseAtP1 ? trimA : trimB;
-      const trimTip = baseAtP1 ? trimB : trimA;
+      const wideO = baseAtP1 ? p1o : p2o;
+      const narrowO = baseAtP1 ? p2o : p1o;
+      const trimWide = baseAtP1 ? trimA : trimB;
+      const trimNarrow = baseAtP1 ? trimB : trimA;
       const segs = buildHashedWedgeSegments(
-        bp1o,
-        bp2o,
+        narrowO,
+        wideO,
         baseHalf,
-        Math.max(5, Math.floor(opts.hashCount * 0.9)),
-        tipHalf,
-        { from: trimBase, to: L0 - trimTip }
+        toWorld(opts.hashSpacingPx, zoom, units),
+        pxToWorld(lwPx, zoom),
+        { from: trimNarrow, to: L0 - trimWide },
       );
       for (let i = 0; i < segs.length; i++) segs[i].widthPx = lwPx;
       lines.push(...segs);

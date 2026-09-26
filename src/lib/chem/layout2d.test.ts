@@ -487,20 +487,28 @@ describe("a hashed wedge and its neighbours", () => {
   ]);
   const hashed: Bond = { a1: 0, a2: 1, order: 1, stereo: "down" };
 
-  it("puts a hash on the atom at the narrow end", () => {
+  it("spreads the hashes from the narrow atom to flush with the wide end", () => {
     const o = opts();
     const { lines } = buildBondPrimitives(atoms, hashed, o, ZOOM, deg);
-    const mid = lines.map((l) => ({
-      x: (l.x1 + l.x2) / 2,
-      len: Math.hypot(l.x2 - l.x1, l.y2 - l.y1),
-    }));
-    const narrow = mid.reduce((a, b) => (b.len < a.len ? b : a));
-    const wideEnd = mid.reduce((a, b) => (b.len > a.len ? b : a));
-    // the thin end is the stereocentre; a hash short of it reads as a gap
-    expect(narrow.x).toBeCloseTo(0, 6);
-    expect(narrow.len).toBeCloseTo(o.lineWidthPx, 6);
-    expect(wideEnd.x).toBeCloseTo(1.5, 6);
-    expect(wideEnd.len).toBeCloseTo(o.wedgeWidthPx, 6);
+    const mid = lines
+      .map((l) => ({
+        x: (l.x1 + l.x2) / 2,
+        len: Math.hypot(l.x2 - l.x1, l.y2 - l.y1),
+      }))
+      .sort((a, b) => a.x - b.x);
+    // as many as fit at least a hash spacing apart, spread evenly
+    const reach = 1.5 - o.lineWidthPx / 2;
+    const count = Math.floor(reach / o.hashSpacingPx);
+    expect(mid).toHaveLength(count);
+    mid.forEach((m, i) => {
+      expect(m.x).toBeCloseTo((reach * (i + 1)) / count, 9);
+      // as long as the wedge is wide there: nothing at the narrow atom
+      expect(m.len).toBeCloseTo((o.wedgeWidthPx * m.x) / reach, 9);
+    });
+    // none on the narrow atom; the last one flush with the wide end
+    expect(mid[0].x).toBeGreaterThan(o.hashSpacingPx - 1e-9);
+    expect(mid[mid.length - 1].x + o.lineWidthPx / 2).toBeCloseTo(1.5, 9);
+    expect(mid[mid.length - 1].len).toBeCloseTo(o.wedgeWidthPx, 9);
   });
 });
 
@@ -560,17 +568,20 @@ describe("a label must not change how a bond is drawn", () => {
     return xs.slice(1).map((x, i) => x - xs[i]);
   };
 
-  it("keeps the hashes of a hashed wedge equally spaced", () => {
+  it("spaces a hashed wedge's hashes evenly, never closer than the hash spacing", () => {
     const o = opts();
     const bond: Bond = { a1: 0, a2: 1, order: 1, stereo: "down" };
     const plain = buildBondPrimitives(pair("C"), bond, o, ZOOM, deg).lines;
     const labelled = buildBondPrimitives(pair("O"), bond, o, ZOOM, deg).lines;
     // the bond to a labelled atom is shorter, so it carries fewer hashes -
-    // but the gap between them is the same
+    // each set evenly spaced, and never closer than the hash spacing
     expect(labelled.length).toBeLessThan(plain.length);
-    const a = spacing(plain);
-    const b = spacing(labelled);
-    expect(b[0]).toBeCloseTo(a[0], 6);
+    for (const gaps of [spacing(plain), spacing(labelled)]) {
+      for (const g of gaps) {
+        expect(g).toBeCloseTo(gaps[0], 9);
+        expect(g).toBeGreaterThanOrEqual(o.hashSpacingPx - 1e-9);
+      }
+    }
   });
 
   it("keeps the wave of a wavy bond the same length", () => {
