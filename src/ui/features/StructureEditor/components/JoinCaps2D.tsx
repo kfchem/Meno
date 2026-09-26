@@ -14,6 +14,7 @@ export default function JoinCaps2D() {
           <circleGeometry args={[c.r, 24]} />
           <meshBasicMaterial
             color={opts.bondColor ?? "black"}
+            toneMapped={false}
             transparent
             opacity={1}
             depthTest={false}

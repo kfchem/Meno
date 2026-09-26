@@ -35,6 +35,7 @@ export default function Wedges2D() {
     >
       <meshBasicMaterial
         color={opts.bondColor ?? "black"}
+        toneMapped={false}
         depthTest={false}
         depthWrite={false}
         side={THREE.DoubleSide}

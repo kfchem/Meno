@@ -33,6 +33,7 @@ export default function Labels2D() {
                 anchorX="left"
                 anchorY="top-baseline"
                 renderOrder={30}
+                material-toneMapped={false}
                 material-depthTest={false}
                 material-depthWrite={false}
               >
