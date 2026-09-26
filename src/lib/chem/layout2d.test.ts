@@ -1234,6 +1234,53 @@ describe("bold, hashed, dashed and dative bonds", () => {
   });
 });
 
+describe("a single bond on the end of a double bond", () => {
+  const L = NOMINAL_BOND_LENGTH;
+  // A - B = C, C straight out from B along +x, A at `deg` round from it
+  const drawn = (deg: number) => {
+    const a = (deg * Math.PI) / 180;
+    const atoms: Atom[] = [
+      { id: 1, x: L * Math.cos(a), y: L * Math.sin(a), el: "C" },
+      { id: 2, x: 0, y: 0, el: "C" },
+      { id: 3, x: L, y: 0, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 1, a2: 2, order: 2 },
+    ];
+    return { atoms, ...buildAllPrimitives(atoms, bonds, opts(), 40) };
+  };
+  // the double bond's lines: the ones lying along x, off to the right of B
+  const doubleLines = (lines: LineSeg[]) =>
+    lines.filter((l) => Math.abs(l.y1 - l.y2) < 1e-9 && Math.max(l.x1, l.x2) > L / 2);
+
+  it("keeps the second line on the single bond's side, however far round it leans", () => {
+    for (const deg of [90, 120, 135, 150, 165, 175, 185, 195, 210, 225, 240, 270]) {
+      const side = Math.sign(Math.sin((deg * Math.PI) / 180));
+      const ys = doubleLines(drawn(deg).lines).map((l) => l.y1);
+      expect(ys).toHaveLength(2);
+      // one line on the bond's own axis, the other on the single bond's side
+      expect(ys.some((y) => Math.abs(y) < 1e-9)).toBe(true);
+      expect(Math.sign(ys.find((y) => Math.abs(y) > 1e-9)!)).toBe(side);
+    }
+  });
+
+  it("centres the double bond when the single bond carries straight on, and stretches nothing", () => {
+    for (const deg of [179, 180, 181]) {
+      const { lines } = drawn(deg);
+      const ys = doubleLines(lines).map((l) => l.y1);
+      expect(ys[0]).toBeCloseTo(-ys[1], 9);
+      // every line stays within the three atoms' reach
+      for (const l of lines) {
+        for (const x of [l.x1, l.x2]) {
+          expect(x).toBeGreaterThanOrEqual(-L - 1e-6);
+          expect(x).toBeLessThanOrEqual(L + 1e-6);
+        }
+      }
+    }
+  });
+});
+
 describe("where bonds crowd each other", () => {
   it("runs a triple bond's outer lines its whole length, as ACS 1996 does", () => {
     const o = opts();
