@@ -107,6 +107,17 @@ describe("implicitHydrogens", () => {
 });
 
 describe("buildTextLabels", () => {
+  it("writes a carbon with no bonds as CH4, and a bonded one not at all", () => {
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 5, y: 0, el: "C" },
+      { id: 3, x: 6.5, y: 0, el: "C" },
+    ];
+    const labels = buildTextLabels(atoms, opts(), [{ a1: 1, a2: 2, order: 1 }]);
+    expect(labels.map((t) => t.text)).toEqual(["CH4"]);
+    expect(labels[0].atom).toBe(0);
+  });
+
   // O bonded to a carbon that sits up and to the left
   const hydroxyl: Atom[] = [
     { id: 1, x: 0, y: 0, el: "C" },
