@@ -108,9 +108,9 @@ Both go together, because both touch every layer.
 ### 3. RDKit in the sidecar
 
 - A `uv` binary for macOS alongside `uv.exe`, and each platform's bundle
-  carrying only its own (a Mac build currently ships the 57 MB `uv.exe`).
+  carrying only its own (a Mac build currently ships the 57 MB `uv.exe`). (PR #42)
 - The managed Python and uv's cache kept under the app's data directory, not
-  the user's.
+  the user's. (PR #42)
 - A `chem` profile: RDKit and its dependencies, locked for every platform with
   hashes and installed with them checked; warmed up once after installing
   (the first import of RDKit takes about 15 s on a Mac, later ones 0.15 s).

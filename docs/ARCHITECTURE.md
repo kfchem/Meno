@@ -44,7 +44,10 @@ src/
 src-tauri/
   src/lib.rs              Tauri commands (see table below)
   capabilities/           permission sets for the main window
-  resources/py/           uv.exe and requirements lock files per profile
+  resources/py/           uv (macOS, Apple silicon) and uv.exe (Windows), uv
+                          0.12.19, and requirements lock files per profile;
+                          tauri.<platform>.conf.json bundles only that
+                          platform's uv
   resources/workers/      Python worker scripts
 ```
 
@@ -148,7 +151,10 @@ PyConsole ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_set
 
 The venv lives under the app data dir at `uv/<profile>/venv`; a stamp file
 (`uv/stamps/<profile>.json`) stores the lock-file hash so setup reruns only when
-the lock or Python version changes.
+the lock or Python version changes. uv runs with its Python downloads
+(`uv/python`) and cache (`uv/cache`) under the app data dir too, only
+uv-managed Pythons, and no user uv configuration (`uv_command` in `lib.rs`):
+nothing of Meno's environments lands in the user's own directories.
 
 ### Tauri commands
 
