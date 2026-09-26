@@ -1,4 +1,10 @@
-import { advanceEm, inkHullEm } from "./arial";
+import "./fonts";
+import {
+  advanceIn,
+  inkHullIn,
+  labelFontMetrics,
+  type LabelFontMetrics,
+} from "./labelFonts";
 
 export type Atom = {
   id: number;
@@ -249,9 +255,9 @@ export function pxToWorld(px: number, zoom: number): number {
   return px / Math.max(zoom, 1e-6);
 }
 
-function runWidth(text: string, size: number): number {
+function runWidth(font: LabelFontMetrics, text: string, size: number): number {
   let w = 0;
-  for (const ch of text) w += advanceEm(ch) * size;
+  for (const ch of text) w += advanceIn(font, ch) * size;
   return w;
 }
 
@@ -271,10 +277,10 @@ export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
 }
 
 /**
- * A label set in Arial as ACS 1996 has it: the first letter of the element
- * symbol centred on the atom - the C of Cl, as of CH3 - and the rest
- * following on either side at Arial's own advances, all on one baseline but
- * for subscripts. A stacked label sets what follows the symbol on a line of
+ * A label set as ACS 1996 has it: the first letter of the element symbol
+ * centred on the atom - the C of Cl, as of CH3 - and the rest following on
+ * either side at the typeface's own advances, all on one baseline but for
+ * subscripts. A stacked label sets what follows the symbol on a line of
  * its own, below or above, its first letter centred under the symbol's.
  */
 export function placeLabel(
@@ -282,13 +288,14 @@ export function placeLabel(
   fontSize: number,
   set: LabelSet = ACS_LABEL_SET,
 ): PlacedRun[] {
+  const font = labelFontMetrics(set.fontFamily);
   const runs = t.runs ?? [{ text: t.text }];
   const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
   const sizes = runs.map((r) => fontSize * (r.sub ? set.subscriptSize : 1));
-  const widths = runs.map((r, i) => runWidth(r.text, sizes[i]));
+  const widths = runs.map((r, i) => runWidth(font, r.text, sizes[i]));
   /** Where a run starts so that its first letter is centred on the atom. */
   const centredOn = (i: number) =>
-    t.x - (advanceEm(runs[i].text[0] ?? " ") * sizes[i]) / 2;
+    t.x - (advanceIn(font, runs[i].text[0] ?? " ") * sizes[i]) / 2;
   /** Where the symbol starts: its first letter on the atom, or all of it. */
   const symbolAt = () =>
     t.centreSymbol ? t.x - widths[anchor] / 2 : centredOn(anchor);
@@ -337,16 +344,17 @@ export function labelHulls(
   fontSize: number,
   set: LabelSet = ACS_LABEL_SET,
 ): Vec2[][] {
+  const font = labelFontMetrics(set.fontFamily);
   const out: Vec2[][] = [];
   for (const run of placeLabel(t, fontSize, set)) {
     let pen = run.x - t.x;
     for (const ch of run.text) {
-      const hull = inkHullEm(ch).map((p) => ({
+      const hull = inkHullIn(font, ch).map((p) => ({
         x: pen + p.x * run.size,
         y: run.y - t.y + p.y * run.size,
       }));
       if (hull.length > 0) out.push(hull);
-      pen += advanceEm(ch) * run.size;
+      pen += advanceIn(font, ch) * run.size;
     }
   }
   return out;
