@@ -172,6 +172,31 @@ export const sweeps: Sweep[] = [
     ),
   },
   {
+    title: "A single bond on the end of a double bond, swung round",
+    note:
+      "The second line stays on the single bond's side however far round " +
+      "it leans; within a few degrees of straight on the double bond is " +
+      "centred, and its lines stop at the atom rather than reaching for a " +
+      "bond they would meet far away.",
+    frames: [90, 120, 150, 165, 175, 179, 180, 181, 185, 195, 210, 240].map((d) => {
+      const a = (d * Math.PI) / 180;
+      return {
+        label: `${d}°`,
+        structure: {
+          atoms: [
+            { id: 0, x: L * Math.cos(a), y: L * Math.sin(a), el: "C" },
+            { id: 1, x: 0, y: 0, el: "C" },
+            { id: 2, x: L, y: 0, el: "C" },
+          ],
+          bonds: [
+            { a1: 0, a2: 1, order: 1 },
+            { a1: 1, a2: 2, order: 2 },
+          ],
+        },
+      };
+    }),
+  },
+  {
     title: "A bold bond between atoms that carry two more bonds each",
     note:
       "Both ends are cut along the bonds carrying on, as a wedge's wide end " +

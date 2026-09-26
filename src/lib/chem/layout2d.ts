@@ -720,6 +720,11 @@ function centredPair(
         if (Math.sign(vdot(u, n)) !== Math.sign(sgn)) continue;
         const pt = centredMeetPoint(atoms, bond, atIdx, half * sgn, u);
         if (!pt) continue;
+        // A bond leaving nearly straight on is met far behind the atom, or
+        // nowhere: past 20 degrees off straight on the line meets it, closer
+        // than that it stops at the atom like any line with nothing to meet.
+        const behind = -vdot(vsub(pt, { x: atom.x, y: atom.y }), outward);
+        if (behind > half / Math.tan((20 * Math.PI) / 180)) continue;
         // the first plain bond the line reaches, coming in from the bond
         const t = vdot(vsub(pt, { x: atom.x, y: atom.y }), outward);
         if (t > bestT) {
@@ -1974,18 +1979,21 @@ export function buildAllPrimitives(
     }
     let sgn: number | undefined = plus === minus ? undefined : plus > minus ? 1 : -1;
     if (sgn != null) {
-      // A bond of its own width beside the second line leaves no room for it.
+      // A bond leaning in along the double bond, close beside where the
+      // second line would run, leaves no room for it. Only one leaning along
+      // it: a bond leaving backwards, however close to straight on, is
+      // nowhere near the second line.
       const clearance = (side: number) => {
         let worst = Math.PI;
-        for (const [from, list] of [
-          [p1, neigh1],
-          [p2, neigh2],
-        ] as [Vec2, number[]][]) {
+        for (const [from, list, along] of [
+          [p1, neigh1, dir],
+          [p2, neigh2, vscale(dir, -1)],
+        ] as [Vec2, number[], Vec2][]) {
           for (const o of list) {
             const v = vnorm({ x: atoms[o].x - from.x, y: atoms[o].y - from.y });
             if ((v.x * n.x + v.y * n.y) * side <= 0) continue;
-            const along = Math.abs(v.x * dir.x + v.y * dir.y);
-            worst = Math.min(worst, Math.acos(Math.min(1, along)));
+            const cos = Math.max(-1, Math.min(1, vdot(v, along)));
+            worst = Math.min(worst, Math.acos(cos));
           }
         }
         return worst;
