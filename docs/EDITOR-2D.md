@@ -92,6 +92,14 @@ Both go together, because both touch every layer.
   length, whichever the user prefers.
 - **Scope.** An application default; a document's own style over it; and
   per-bond and per-atom overrides over that (a coloured atom, a bold bond).
+- **Where it is set.** Settings holds the application's style, and the
+  canvas's Drawing style button gives a document one of its own. Either is
+  a preset - ACS 1996, RSC, Wiley or Nature - and what was changed from it;
+  every setting has its name, description, unit and range in
+  `styleFields.ts`, and the preview is drawn by the same layout as the
+  canvas. The application's style is kept in `settings.json` in the app's
+  data folder; a document's stays with its tab, as MOL and SD files hold the
+  structure only. (PR #46) Per-atom and per-bond overrides are to come.
 - **Defaults.** ACS 1996, exactly, as the preset the default starts from.
   The values used today are not quite it (line width is 5% of the bond
   length where ACS gives 0.6 pt of 14.4 pt, about 4.2%; double-bond spacing

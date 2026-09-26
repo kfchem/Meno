@@ -1,4 +1,5 @@
 import type { ImportedArrow } from "../document";
+import type { StyleChoice } from "../../../../lib/chem/style";
 
 export type Atom = { id: number; x: number; y: number; r: number; el: string };
 export type Bond = {
@@ -36,6 +37,8 @@ export type EditorState = {
   autoFitSuspended: boolean;
   aromaticEnabled: boolean; // legacy/global
   aromaticRings: Record<string, boolean>; // per-ring enabled flags by ringKey
+  /** The document's own drawing style, if it has one (see useDrawingStyle). */
+  docStyle?: StyleChoice;
   labelEdit: {
     active: boolean;
     atomId: number | null;
@@ -158,6 +161,12 @@ export type EditorState = {
   commitLabelEdit: () => void;
   cancelLabelEdit: () => void;
   setAromaticEnabled: (v: boolean) => void;
+  /**
+   * Gives the document its own drawing style, or the application's again
+   * (undefined). Changes sharing `coalesceKey` - a drag along a slider - are
+   * one undo step.
+   */
+  setDocumentStyle: (style: StyleChoice | undefined, coalesceKey?: string) => void;
   toggleAromatic: () => void;
   setRingEnabled: (key: string, v: boolean) => void;
   toggleRing: (key: string) => void;

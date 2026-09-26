@@ -3,12 +3,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
-import {
-  type Atom as LAtom,
-  type Bond as LBond,
-  type LayoutOptions,
-} from "../../../../lib/chem/layout2d";
-import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
+import { fontStack, type LayoutOptions } from "../../../../lib/chem/layout2d";
+import { editorLayoutOptions } from "../layoutOptions";
+import { useDrawingStyle } from "../useDrawingStyle";
 
 export default function LabelEditor2D() {
   const { camera } = useThree();
@@ -87,6 +84,10 @@ export default function LabelEditor2D() {
       if (labelEdit.active) return;
       if (!hovered.atomId) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Typing into a box elsewhere - a setting beside the canvas - is not
+      // typing a label.
+      const t = e.target as HTMLElement | null;
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
       const ch = e.key;
       if (ch && ch.length === 1 && /[a-zA-Z]/.test(ch)) {
         // First char uppercase; subsequent chars as typed
@@ -104,19 +105,8 @@ export default function LabelEditor2D() {
     return model.atoms.find((a) => a.id === labelEdit.atomId) || null;
   }, [model.atoms, labelEdit.atomId]);
   // Font size logic similar to Labels2D (world units; perceived size stable with zoom)
-  const atomsL: LAtom[] = useMemo(
-    () => model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el })),
-    [model.atoms]
-  );
-  const bondsL: LBond[] = useMemo(() => {
-    const idToIndex = new Map<number, number>();
-    atomsL.forEach((a, i) => idToIndex.set(a.id, i));
-    return layoutBonds(model.bonds, idToIndex);
-  }, [model.bonds, atomsL]);
-  const opts: LayoutOptions = useMemo(
-    () => editorLayoutOptions(atomsL, bondsL),
-    [atomsL, bondsL]
-  );
+  const style = useDrawingStyle();
+  const opts: LayoutOptions = useMemo(() => editorLayoutOptions(style), [style]);
   // Keep last position during fade-out
   useEffect(() => {
     if (atom) lastPosRef.current = { x: atom.x, y: atom.y };
@@ -124,8 +114,8 @@ export default function LabelEditor2D() {
   // Label(Text) uses world-unit font size; on screen it is scaled by zoom
   // Html(transform=false) renders in screen CSS px; to match appearance: px = world * zoom
   const fontSizePx = opts.fontPx * Math.max(zoom, 1e-6);
-  // The label it edits is set in Arial (ACS 1996)
-  const fontFamily = "Arial, Helvetica, sans-serif";
+  // Typed in the typeface the label will be set in
+  const fontFamily = fontStack(style.fontFamily);
   // Measure text width and fit input width
   const measRef = useRef<{
     canvas: HTMLCanvasElement;
@@ -146,7 +136,7 @@ export default function LabelEditor2D() {
   };
   const textWidthPx = useMemo(
     () => measureTextPx(labelEdit.value),
-    [labelEdit.value, fontSizePx]
+    [labelEdit.value, fontSizePx, fontFamily]
   );
   // First char half width (px) for offsetting left-aligned editor to match single-uppercase position
   const firstCharHalfWidthPx = useMemo(() => {
@@ -155,7 +145,7 @@ export default function LabelEditor2D() {
     ctx.font = `${fontSizePx}px ${fontFamily}`;
     const ch = (labelEdit.value && labelEdit.value[0]) || "H";
     return ctx.measureText(ch).width * 0.5;
-  }, [labelEdit.value, fontSizePx]);
+  }, [labelEdit.value, fontSizePx, fontFamily]);
   // Only two-letter element symbols are centered; single uppercase is left-aligned
   const isTwoLetterElementSymbol = (s: string) => /^[A-Z][a-z]$/.test(s);
   const alignCenter = isTwoLetterElementSymbol(

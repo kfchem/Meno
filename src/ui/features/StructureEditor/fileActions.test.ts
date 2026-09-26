@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { drawingSvg, EXPORT_PX_PER_WORLD, structureFileText } from "./fileActions";
+import { drawingSvg, exportPxPerWorld, structureFileText } from "./fileActions";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
+import { ACS_1996, RSC } from "../../../lib/chem/style";
 import type { Model } from "./store/types";
 
 const L = NOMINAL_BOND_LENGTH;
@@ -24,13 +25,25 @@ describe("structureFileText", () => {
 });
 
 describe("drawingSvg", () => {
-  const svg = drawingSvg(model, { aromaticEnabled: false, aromaticRings: {} });
+  const aromatic = { aromaticEnabled: false, aromaticRings: {} };
+  const svg = drawingSvg(model, aromatic, ACS_1996);
 
-  it("comes out at ACS 1996's own size: 14.4 pt to the bond at 96 px to the inch", () => {
-    expect(EXPORT_PX_PER_WORLD * L).toBeCloseTo((14.4 * 96) / 72, 9);
+  it("comes out at the style's own size: 14.4 pt to the bond at 96 px to the inch in ACS 1996", () => {
+    const scale = exportPxPerWorld(ACS_1996);
+    expect(scale * L).toBeCloseTo((14.4 * 96) / 72, 9);
     const width = Number(/width="([\d.e]+)"/.exec(svg)![1]);
     const box = /viewBox="([-\d.e ]+)"/.exec(svg)![1].split(" ").map(Number);
-    expect(width).toBeCloseTo(box[2] * EXPORT_PX_PER_WORLD, 6);
+    expect(width).toBeCloseTo(box[2] * scale, 6);
+    // RSC's bonds are 12.2 pt
+    expect(exportPxPerWorld(RSC) * L).toBeCloseTo((12.2 * 96) / 72, 9);
+  });
+
+  it("draws in the style it is given", () => {
+    const rsc = drawingSvg(model, aromatic, { ...RSC, bondColor: "#336699" });
+    expect(rsc).toContain('font-family="Helvetica');
+    expect(rsc).toContain('stroke="#336699"');
+    const w = Number(/stroke-width="([\d.e]+)"/.exec(rsc)![1]);
+    expect(w).toBeCloseTo((0.45 / 12.2) * L, 9);
   });
 
   it("keeps a line its true width, however thin that is in pixels", () => {
