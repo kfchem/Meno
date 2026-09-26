@@ -1,14 +1,15 @@
 import React from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { NOMINAL_BOND_LENGTH, ACS_RATIOS } from "../../../../lib/chem/acs";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { useDrawnLayout } from "./drawnLayoutContext";
 
 export default function ReactionArrow2D({
   x1,
   y1,
   x2,
   y2,
-  color = "black",
+  color,
   z = 0,
 }: {
   x1: number;
@@ -19,6 +20,9 @@ export default function ReactionArrow2D({
   z?: number;
 }) {
   const ref = React.useRef<THREE.Mesh | null>(null);
+  // Drawn with the bonds' line, in their colour unless told otherwise.
+  const { opts } = useDrawnLayout();
+  const fill = color ?? opts.bondColor ?? "black";
 
   useFrame(() => {
     if (!ref.current) return;
@@ -29,7 +33,7 @@ export default function ReactionArrow2D({
   const len = Math.hypot(dx, dy) || 1;
   const angle = Math.atan2(dy, dx);
 
-  const shaftWidth = Math.max(1e-3, NOMINAL_BOND_LENGTH * ACS_RATIOS.lineWidth);
+  const shaftWidth = Math.max(1e-3, opts.lineWidthPx);
   const headLen = Math.min(len * 0.25, NOMINAL_BOND_LENGTH * 0.8);
   const headWidth = shaftWidth * 6;
 
@@ -38,7 +42,7 @@ export default function ReactionArrow2D({
       <mesh position={[Math.max((len - headLen) / 2, 0), 0, 0]}>
         <boxGeometry args={[Math.max(len - headLen, 0), shaftWidth, 0.01]} />
         <meshBasicMaterial
-          color={color}
+          color={fill}
           toneMapped={false}
           depthTest={false}
           depthWrite={false}
@@ -60,7 +64,7 @@ export default function ReactionArrow2D({
           ]}
         />
         <meshBasicMaterial
-          color={color}
+          color={fill}
           toneMapped={false}
           depthTest={false}
           depthWrite={false}

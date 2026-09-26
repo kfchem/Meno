@@ -8,6 +8,7 @@ import {
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
 import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
+import { useDrawingStyle } from "../useDrawingStyle";
 import { DrawnLayoutContext } from "./drawnLayoutContext";
 
 /** The id the atom a bond is being drawn out to goes by until it is made. */
@@ -35,6 +36,7 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
   const extend = useEditor((s) => s.extend);
   const aromaticEnabled = useEditor((s) => s.aromaticEnabled);
   const aromaticRings = useEditor((s) => s.aromaticRings);
+  const style = useDrawingStyle();
 
   const draggedId =
     moveDrag.active && moveDrag.preview ? moveDrag.atomId : null;
@@ -79,8 +81,8 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
         : aromaticEnabled
           ? true
           : false;
-    return editorLayoutOptions(atoms, bonds, { aromaticCircle });
-  }, [atoms, bonds, aromaticEnabled, aromaticRings]);
+    return editorLayoutOptions(style, { aromaticCircle });
+  }, [style, aromaticEnabled, aromaticRings]);
   const layout = useMemo(
     () => layoutMolecule(atoms, bonds, opts, zoom),
     [atoms, bonds, opts, zoom],

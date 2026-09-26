@@ -25,9 +25,11 @@ import {
   ExclamationTriangleIcon,
   FolderOpenIcon,
   PhotoIcon,
+  SwatchIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import DocumentStylePanel from "./DocumentStylePanel";
 import { saveIntent } from "../../../lib/doc/shortcuts";
 import { useFileActions } from "./fileActions";
 import { CANVAS_DPR } from "./constants";
@@ -40,11 +42,16 @@ function StructureCanvasContent({
   tabId,
   initialPayload,
   initialFilename,
+  styleOpen,
+  toggleStyle,
 }: {
   active: boolean;
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
+  /** Whether the drawing-style panel is open beside the canvas. */
+  styleOpen: boolean;
+  toggleStyle: () => void;
 }) {
   const fitNonce = useEditor((s) => s.fitNonce);
   const requestFit = useEditor((s) => s.requestFit);
@@ -83,10 +90,11 @@ function StructureCanvasContent({
   }, [active, save, saveAs]);
   const alert = importError ?? files.error;
   const dismissAlert = importError ? dismissImportError : files.dismissError;
+  const ownStyle = useEditor((s) => s.docStyle != null);
 
   return (
     <div
-      className="w-full h-full relative"
+      className="flex-1 min-w-0 h-full relative"
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDropAppend}
       onMouseDownCapture={handleMouseDownCapture}
@@ -170,6 +178,30 @@ function StructureCanvasContent({
         >
           <PhotoIcon className="h-5 w-5 text-gh-black" />
         </button>
+        <button
+          aria-label="Drawing style"
+          aria-pressed={styleOpen}
+          title={
+            ownStyle
+              ? "Drawing style (this document has its own)"
+              : "Drawing style"
+          }
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleStyle();
+          }}
+          className={
+            "relative h-9 w-9 rounded-full border shadow-sm flex items-center justify-center " +
+            (styleOpen
+              ? "border-accel-base bg-accel-lightbase"
+              : "border-gh-line bg-white/90 hover:bg-gray-100")
+          }
+        >
+          <SwatchIcon className="h-5 w-5 text-gh-black" />
+          {ownStyle && (
+            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-accel-base" />
+          )}
+        </button>
       </div>
       <Canvas
         key={tabId}
@@ -239,14 +271,24 @@ export default function StructureCanvas({
   /** The tab's document; omitted for canvases embedded in other views. */
   document?: DocumentStore<StructureDocument>;
 }) {
+  // The document's drawing style opens in a panel beside the canvas rather
+  // than over it, so the drawing stays in view while it changes.
+  const [styleOpen, setStyleOpen] = useState(false);
   return (
     <EditorProvider tabId={tabId} document={document}>
-      <StructureCanvasContent
-        active={active}
-        tabId={tabId}
-        initialPayload={initialPayload}
-        initialFilename={initialFilename}
-      />
+      <div className="w-full h-full flex">
+        <StructureCanvasContent
+          active={active}
+          tabId={tabId}
+          initialPayload={initialPayload}
+          initialFilename={initialFilename}
+          styleOpen={styleOpen}
+          toggleStyle={() => setStyleOpen((v) => !v)}
+        />
+        {styleOpen && (
+          <DocumentStylePanel onClose={() => setStyleOpen(false)} />
+        )}
+      </div>
     </EditorProvider>
   );
 }

@@ -33,6 +33,7 @@ function mirrorOf(doc: StructureDocument) {
     aromaticRings: doc.aromaticRings,
     nextId: doc.nextId,
     nextArrowId: doc.nextArrowId,
+    docStyle: doc.style,
   };
 }
 

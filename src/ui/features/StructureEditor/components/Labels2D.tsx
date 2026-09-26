@@ -1,5 +1,5 @@
 import { Text } from "@react-three/drei";
-import { placeLabel } from "../../../../lib/chem/layout2d";
+import { labelSetOf, placeLabel } from "../../../../lib/chem/layout2d";
 import { useLabelFont } from "../labelFont";
 import { useDrawnLayout } from "./drawnLayoutContext";
 
@@ -23,16 +23,17 @@ export default function Labels2D() {
           opts.units === "px" ? t.fontPx / Math.max(zoom, 1e-6) : t.fontPx;
         return (
           <group key={`txt-${i}`}>
-            {placeLabel(t, fontWorld).map((run, k) => (
+            {placeLabel(t, fontWorld, labelSetOf(opts)).map((run, k) => (
               <Text
                 key={`run-${k}`}
                 font={font}
                 position={[run.x, run.y, 0]}
                 fontSize={run.size}
-                color="black"
+                color={opts.labelColor ?? "black"}
                 anchorX="left"
                 anchorY="top-baseline"
                 renderOrder={30}
+                material-toneMapped={false}
                 material-depthTest={false}
                 material-depthWrite={false}
               >

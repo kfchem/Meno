@@ -1,15 +1,5 @@
 import type { Atom as LAtom, Bond as LBond, LayoutOptions } from "./layout2d";
-import { ACS_1996, bondFraction, layoutOptionsFor } from "./style";
-
-/**
- * The two ratios the drag and extend previews still read for themselves;
- * they go when those draw through the layout like everything else. Both come
- * from ACS_1996, so they cannot drift from it.
- */
-export const ACS_RATIOS = {
-  lineWidth: bondFraction(ACS_1996.lineWidth, ACS_1996),
-  minLinePx: 1,
-} as const;
+import { ACS_1996, layoutOptionsFor } from "./style";
 
 // Fixed nominal bond length in world units used by StructureEditor
 // This replaces on-the-fly averaging for interactive operations.

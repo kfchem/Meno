@@ -57,6 +57,8 @@ export default function CapJoinLine({
     ;(mat as any).linecap = cap
     ;(mat as any).linejoin = join
     ;(mat as any).miterLimit = miterLimit
+    // Drawn in exactly the colour asked for, like every other layer
+    mat.toneMapped = false
     mat.depthTest = depthTest
     mat.depthWrite = depthWrite
     mat.needsUpdate = true
