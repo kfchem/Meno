@@ -63,6 +63,7 @@ describe("drawing style", () => {
     // a triple bond's outer lines are one bond spacing out, like a double's
     expect(o.tripleOffsetPx).toBe(o.doubleOffsetPx);
     expect(o.fontPx).toBeCloseTo((10 / 14.4) * L, 12);
+    expect(o.labelMarginPx).toBeCloseTo((1.6 / 14.4) * L, 12);
     expect(o.joinStyle).toBe("sharp");
     expect(layoutOptionsFor({ ...ACS_1996, ends: "round" }, L).joinStyle).toBe("round");
     expect(o.hashSpacingPx).toBeCloseTo((2.5 / 14.4) * L, 12);

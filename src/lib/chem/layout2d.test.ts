@@ -5,8 +5,10 @@ import {
   joinsAtAtoms,
   buildTextLabels,
   implicitHydrogens,
+  labelHulls,
   layoutMolecule,
   mitreJoinPolys,
+  placeLabel,
   roundPolyCorners,
   type Atom,
   type Bond,
@@ -14,7 +16,8 @@ import {
   type LineSeg,
   type Vec2,
 } from "./layout2d";
-import { acsWorldOptions } from "./acs";
+import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "./acs";
+import { advanceEm } from "./arial";
 
 const opts = (over: Partial<LayoutOptions> = {}): LayoutOptions =>
   acsWorldOptions([], [], { units: "world", ...over });
@@ -45,6 +48,33 @@ const hashesOf = (polys: { points: Vec2[] }[]) =>
       };
     })
     .sort((a, b) => a.at - b.at);
+
+/**
+ * How close a segment comes to any of a label's letters, taken at a
+ * thousand points along it. The letters are placed around the origin, the
+ * segment is not.
+ */
+const gapToLetters = (a: Vec2, b: Vec2, hulls: Vec2[][]) => {
+  const toEdge = (p: Vec2, c: Vec2, d: Vec2) => {
+    const dx = d.x - c.x;
+    const dy = d.y - c.y;
+    const t = Math.max(
+      0,
+      Math.min(1, ((p.x - c.x) * dx + (p.y - c.y) * dy) / (dx * dx + dy * dy)),
+    );
+    return Math.hypot(p.x - c.x - dx * t, p.y - c.y - dy * t);
+  };
+  let best = Infinity;
+  for (let k = 0; k <= 1000; k++) {
+    const p = { x: a.x + ((b.x - a.x) * k) / 1000, y: a.y + ((b.y - a.y) * k) / 1000 };
+    for (const h of hulls) {
+      for (let i = 0; i < h.length; i++) {
+        best = Math.min(best, toEdge(p, h[i], h[(i + 1) % h.length]));
+      }
+    }
+  }
+  return best;
+};
 
 const polyArea = (pts: Vec2[]) => {
   let s = 0;
@@ -623,10 +653,19 @@ describe("a hashed wedge and its neighbours", () => {
     expect(to).toBeLessThan(1.5);
     const hashes = hashesOf(buildBondPrimitives(labelled, hashed, o, ZOOM, deg).polys);
     expect(hashes[0].near).toBeCloseTo(o.hashSpacingPx, 9);
-    // the wedge ends where the line would, as broad there as it ever is
+    // as broad at its end as it ever is, and that whole breadth kept the
+    // margin clear of the label - not just its middle, as a line's is
     const last = hashes[hashes.length - 1];
-    expect(last.far).toBeCloseTo(to, 9);
     expect(last.farWidth).toBeCloseTo(o.wedgeWidthPx, 9);
+    expect(last.far).toBeLessThan(to);
+    const [label] = buildTextLabels(labelled, o, [hashed]);
+    const half = o.wedgeWidthPx / 2;
+    const gap = gapToLetters(
+      { x: last.far - 1.5, y: -half },
+      { x: last.far - 1.5, y: half },
+      labelHulls(label, o.fontPx),
+    );
+    expect(gap).toBeCloseTo(o.labelMarginPx!, 6);
   });
 });
 
@@ -744,20 +783,23 @@ describe("labels and the room they need", () => {
 
   it("stops where the label actually reaches, not at a fixed distance", () => {
     const o = opts();
-    const endingAt = (el: string) =>
+    const endingAt = (el: string, over: Partial<LayoutOptions> = {}) =>
       layoutMolecule(
         [
           { id: 1, x: 0, y: 0, el: "C" },
           { id: 2, x: 1.5, y: 0, el },
         ],
         bonds,
-        o,
+        { ...o, ...over },
         40,
       ).lines[0].x2;
     // a wide symbol takes more room than a narrow one, side on
     expect(endingAt("Br")).toBeLessThan(endingAt("I"));
     // and the hydrogens, which hang the other way, take none of it
-    expect(endingAt("O")).toBeCloseTo(endingAt("I"), 6);
+    expect(endingAt("O")).toBeCloseTo(
+      endingAt("O", { showImplicitHydrogens: false }),
+      6,
+    );
   });
 
   it("does not hold a bond off a label it barely meets", () => {
@@ -775,6 +817,120 @@ describe("labels and the room they need", () => {
     const gap = Math.min(above.y1, above.y2);
     expect(gap).toBeLessThan(o.fontPx * 0.6);
     expect(gap).toBeGreaterThan(0);
+  });
+});
+
+describe("a label as ACS 1996 sets it", () => {
+  const size = 10;
+  const label = (runs: { text: string; sub?: boolean }[], anchorRun = 0) => ({
+    x: 0,
+    y: 0,
+    text: runs.map((r) => r.text).join(""),
+    fontPx: size,
+    runs,
+    anchorRun,
+  });
+
+  it("centres the element symbol on the atom, on a baseline 0.408 of the size below it", () => {
+    const [n] = placeLabel(label([{ text: "N" }]), size);
+    expect(n.x).toBeCloseTo((-advanceEm("N") * size) / 2, 12);
+    expect(n.y).toBeCloseTo(-4.08, 12);
+    expect(n.size).toBe(size);
+  });
+
+  it("sets what follows at Arial's advances, a subscript at 75% and 2.25 below", () => {
+    const [n, h, two] = placeLabel(
+      label([{ text: "N" }, { text: "H" }, { text: "2", sub: true }]),
+      size,
+    );
+    expect(h.x).toBeCloseTo(n.x + advanceEm("N") * size, 12);
+    expect(h.y).toBe(n.y);
+    expect(two.x).toBeCloseTo(h.x + advanceEm("H") * size, 12);
+    expect(two.size).toBeCloseTo(7.5, 12);
+    expect(two.y).toBeCloseTo(n.y - 2.25, 12);
+  });
+
+  it("keeps the symbol on the atom when the hydrogens go first", () => {
+    const [h, o] = placeLabel(label([{ text: "H" }, { text: "O" }], 1), size);
+    expect(o.x).toBeCloseTo((-advanceEm("O") * size) / 2, 12);
+    expect(h.x).toBeCloseTo(o.x - advanceEm("H") * size, 12);
+  });
+
+  it("gives a letter's ink as its outline, on the baseline", () => {
+    const [hull] = labelHulls(label([{ text: "N" }]), size);
+    // an N fills its box: 156 to 1311 across, and up to 1466, in 2048ths
+    const xs = hull.map((p) => p.x);
+    const ys = hull.map((p) => p.y);
+    const left = (-advanceEm("N") * size) / 2;
+    expect(Math.min(...xs)).toBeCloseTo(left + (156 / 2048) * size, 9);
+    expect(Math.max(...xs)).toBeCloseTo(left + (1311 / 2048) * size, 9);
+    expect(Math.min(...ys)).toBeCloseTo(-4.08, 9);
+    expect(Math.max(...ys)).toBeCloseTo(-4.08 + (1466 / 2048) * size, 9);
+  });
+});
+
+describe("how far a bond stops short of a label", () => {
+  const ZOOM = 40;
+  const deg = new Map([
+    [0, 1],
+    [1, 3],
+  ]);
+  // an N with three bonds, so it is written without hydrogens, and a bond
+  // of the length the style is set for
+  const L = NOMINAL_BOND_LENGTH;
+  const fromAngle = (deg: number): Atom[] => {
+    const a = (deg * Math.PI) / 180;
+    return [
+      { id: 1, x: L * Math.cos(a), y: L * Math.sin(a), el: "C" },
+      { id: 2, x: 0, y: 0, el: "N" },
+    ];
+  };
+  const bond: Bond = { a1: 0, a2: 1, order: 1 };
+  const nHulls = (o: LayoutOptions) =>
+    labelHulls(
+      { x: 0, y: 0, text: "N", fontPx: o.fontPx, runs: [{ text: "N" }] },
+      o.fontPx,
+    );
+
+  it("keeps the end of a line the margin clear of the letters, from any side", () => {
+    const o = opts();
+    for (let angle = 0; angle < 360; angle += 15) {
+      const atoms = fromAngle(angle);
+      const [line] = buildBondPrimitives(atoms, bond, o, ZOOM, deg).lines;
+      // the end by the N, as wide as the line - unless the label would take
+      // more than its share of the bond, which it is not allowed to
+      const end = { x: line.x2, y: line.y2 };
+      if (Math.hypot(end.x, end.y) > 0.45 * L - 1e-9) continue;
+      const d = { x: atoms[0].x, y: atoms[0].y };
+      const len = Math.hypot(d.x, d.y);
+      const n = { x: (-d.y / len) * (o.lineWidthPx / 2), y: (d.x / len) * (o.lineWidthPx / 2) };
+      const gap = gapToLetters(
+        { x: end.x + n.x, y: end.y + n.y },
+        { x: end.x - n.x, y: end.y - n.y },
+        nHulls(o),
+      );
+      expect(gap).toBeCloseTo(o.labelMarginPx!, 6);
+    }
+  });
+
+  it("stops a line from straight above the margin over the capital's top", () => {
+    const o = opts();
+    const [line] = buildBondPrimitives(fromAngle(90), bond, o, ZOOM, deg).lines;
+    const top = -o.fontPx * 0.408 + (1466 / 2048) * o.fontPx;
+    expect(line.y2).toBeCloseTo(top + o.labelMarginPx!, 9);
+  });
+
+  it("follows the letters, not a box round them: closer to an O's side than its corners allow", () => {
+    const o = opts();
+    const at = (el: string, angle: number) => {
+      const atoms = fromAngle(angle);
+      atoms[1].el = el;
+      const [line] = buildBondPrimitives(atoms, bond, o, ZOOM, deg).lines;
+      return Math.hypot(line.x2, line.y2);
+    };
+    // an O is round and an N square: side on the two are nearly as wide,
+    // but at 45 degrees the O's curve leaves more room
+    expect(at("O", 45)).toBeLessThan(at("N", 45));
   });
 });
 
