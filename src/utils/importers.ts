@@ -19,8 +19,13 @@ export type EditorBond = {
   b: number;
   order: 1 | 2 | 3;
   stereo?: "up" | "down" | "wavy" | "none";
+  /** A coordination bond (MOL bond type 9), drawn as an arrow from `a` to `b`. */
+  dative?: boolean;
 };
 export type EditorModel = { atoms: EditorAtom[]; bonds: EditorBond[] };
+
+/** MOL's bond type for a coordination (dative) bond. */
+const COORDINATION_BOND = 9;
 
 const normalizeNewlines = (s: string) => s.replace(/\r\n?/g, "\n");
 
@@ -357,6 +362,7 @@ export function convertMolToEditorModel(m: ParsedMol, scale: number) {
     b: b.a2 + 1,
     order: orders[i],
     stereo: mapStereo(b as any),
+    ...(b.order === COORDINATION_BOND ? { dative: true } : {}),
   }));
   // centroid
   let cx = 0,
@@ -424,6 +430,7 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
         b: a2,
         order: orders[i],
         stereo: mapStereo(b as any),
+        ...(b.order === COORDINATION_BOND ? { dative: true } : {}),
       });
     });
   }

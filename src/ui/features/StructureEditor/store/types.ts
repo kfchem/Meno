@@ -9,6 +9,10 @@ export type Bond = {
   stereo?: "up" | "down" | "wavy" | "none";
   doubleMode?: "auto" | "center" | "left" | "right";
   stereoOrient?: "principle" | "reverse";
+  /** How a single bond with no stereo is drawn; plain when unset. */
+  display?: "plain" | "bold" | "hashed" | "dashed";
+  /** A dative bond, drawn as an arrow from `a`, the donor, to `b`. */
+  dative?: boolean;
 };
 
 export type Sel = { atoms: Set<number>; bonds: Set<number> };

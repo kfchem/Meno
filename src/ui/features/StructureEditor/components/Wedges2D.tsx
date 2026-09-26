@@ -9,7 +9,7 @@ import {
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
 import { polyTriangles } from "./polyTriangles";
-import { editorLayoutOptions } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 
 export default function Wedges2D({
   options,
@@ -31,30 +31,12 @@ export default function Wedges2D({
   const bonds: LBond[] = useMemo(() => {
     const idToIndex = new Map<number, number>();
     atoms.forEach((a, i) => idToIndex.set(a.id, i));
-    const out: LBond[] = [];
     const movingId = moveDrag.active ? moveDrag.atomId : null;
     const srcBonds =
       movingId != null
         ? model.bonds.filter((b) => b.a !== movingId && b.b !== movingId)
         : model.bonds;
-    for (const b of srcBonds) {
-      const i1 = idToIndex.get(b.a as number);
-      const i2 = idToIndex.get(b.b as number);
-      if (i1 == null || i2 == null) continue;
-      const stereo = (b as any).stereo ?? ("none" as const);
-      const order: 1 | 2 | 3 = b.order as 1 | 2 | 3;
-      const doubleMode = (b as any).doubleMode ?? "auto";
-      const stereoOrient = (b as any).stereoOrient ?? ("principle" as const);
-      out.push({
-        a1: i1,
-        a2: i2,
-        order,
-        stereo,
-        doubleMode,
-        stereoOrient,
-      } as any);
-    }
-    return out;
+    return layoutBonds(srcBonds, idToIndex);
   }, [model.bonds, atoms, moveDrag.active, moveDrag.atomId]);
 
   const opts: LayoutOptions = useMemo(

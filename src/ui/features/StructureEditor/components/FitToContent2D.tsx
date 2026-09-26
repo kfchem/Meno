@@ -7,7 +7,7 @@ import {
   type Atom as LAtom,
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
-import { editorLayoutOptions } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -43,20 +43,7 @@ export default function FitToContent2D({
       index.set(a.id, i);
       return { id: a.id, x: a.x, y: a.y, el: a.el };
     });
-    const lb: LBond[] = [];
-    for (const b of model.bonds) {
-      const a1 = index.get(b.a as number);
-      const a2 = index.get(b.b as number);
-      if (a1 == null || a2 == null) continue;
-      lb.push({
-        a1,
-        a2,
-        order: b.order as 1 | 2 | 3,
-        stereo: b.stereo ?? "none",
-        doubleMode: b.doubleMode,
-        stereoOrient: b.stereoOrient,
-      });
-    }
+    const lb: LBond[] = layoutBonds(model.bonds, index);
     // The layout's sizes are in world units here, so they do not depend on
     // the zoom: one pass is enough, and there is no bounds-needs-zoom-needs-
     // bounds to untangle.
