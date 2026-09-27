@@ -19,7 +19,7 @@ import {
   turnSide,
   type Grown,
 } from "./assemble";
-import { dist, segmentsCross } from "./geometry";
+import { dist, mirror, segmentsCross } from "./geometry";
 import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { placeRingSystem, ringSystemVariants } from "./ringSystem";
@@ -108,6 +108,7 @@ export function layout2D(input: LayoutInput): Layout2D {
       const improved = improve(mol, cand.pos, cand.score, flipsHere, sides, score);
       if (improved.score < best.score - 1e-9) best = improved;
     }
+    best = rejoin(mol, piece, best.pos, best.score, score);
     best = untangle(mol, piece, best.pos, best.score, score);
     squareUp(mol, piece, best.pos);
     const xs = piece.map((a) => best.pos.get(a)!.x);
@@ -240,6 +241,77 @@ function squareUp(mol: Molecule, piece: number[], pos: Grown): void {
     const p = pos.get(a)!;
     pos.set(a, { x: p.x * c - p.y * sn, y: p.x * sn + p.y * c });
   }
+}
+
+/**
+ * Where a part with rings of its own hangs from the rest by a single bond
+ * - a sugar on its glycosidic oxygen, taxol's side chain on its ester -
+ * each part is drawn well on its own and then joined: the part may be
+ * turned a little about the atom it hangs from, or about its own atom at
+ * the join, where the whole reads better for it, though the angle there
+ * then gives a little from 120 degrees.
+ */
+function rejoin(
+  mol: Molecule,
+  piece: number[],
+  start: Grown,
+  startScore: number,
+  score: (pos: Grown) => number,
+): { pos: Grown; score: number } {
+  let pos = start;
+  let current = startScore;
+  const here = new Set(piece);
+  const joins = [...mol.bondIndex.entries()]
+    .filter(([k, i]) => !mol.ringBonds.has(k) && mol.bonds[i].order === 1)
+    .map(([k]) => k.split(",").map(Number) as [number, number])
+    .filter(([a]) => here.has(a));
+  for (let pass = 0; pass < 2; pass++) {
+    let better = false;
+    for (const [a, b] of joins) {
+      for (const [from, to] of [
+        [a, b],
+        [b, a],
+      ]) {
+        const side = sideAtoms(mol, from, to);
+        if (side.length < 4 || side.length > piece.length / 2) continue;
+        if (!side.some((v) => mol.systemOf[v] >= 0)) continue;
+        const beyond = side.filter((v) => v !== to);
+        // a little either way about either end of the join; and the part
+        // turned right round about its own atom there, in steps of the
+        // lattice, where it is a ring that has a way it should face (a
+        // sugar: its oxygen up, its anomeric carbon right)
+        const moves: [number, number[], number][] = [];
+        for (const t of [20, -20, 30, -30]) {
+          moves.push([t, side, from], [t, beyond, to]);
+        }
+        if (mol.systemOf[to] >= 0) {
+          for (const t of [60, -60, 90, -90, 120, -120, 150, -150, 180]) moves.push([t, beyond, to]);
+        }
+        // and, for a ring, the same seen from its other face: mirrored across
+        // the join first - a turn alone cannot change which way round it is
+        const faces = mol.systemOf[to] >= 0 ? [false, true] : [false];
+        for (const mirrored of faces) {
+          for (const [t, group, pivot] of mirrored ? moves.filter(([, g]) => g === beyond) : moves) {
+            const trial = new Map(pos);
+            if (mirrored) {
+              const p0 = trial.get(from)!;
+              const p1 = trial.get(to)!;
+              for (const v of beyond) trial.set(v, mirror(trial.get(v)!, p0, p1));
+            }
+            turnSide(trial, group, trial.get(pivot)!, (t * Math.PI) / 180);
+            const s = score(trial);
+            if (s < current - 1e-6) {
+              pos = trial;
+              current = s;
+              better = true;
+            }
+          }
+        }
+      }
+    }
+    if (!better) break;
+  }
+  return { pos, score: current };
 }
 
 /** Atoms in the way of each other: on top of one another, on a bond, or at the ends of crossing bonds. */

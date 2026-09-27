@@ -70,7 +70,8 @@ export function placeStereo(
   const wedges: Wedge[] = [];
   const hydrogens: { on: number; at: Point }[] = [];
   const used = new Set<string>();
-  const wedgedAtoms = new Set<number>();
+  const wideEnds = new Set<number>();
+  const narrowEnds = new Set<number>();
   const centres = [...tetra.keys()].filter((c) => pos.has(c));
   const ringBond = (a: number, b: number) => mol.ringBonds.has(key(a, b));
 
@@ -84,10 +85,12 @@ export function placeStereo(
     const hasH = t.neighbours.includes(-1);
     type Choice = { to: number; rank: number };
     const choices: Choice[] = [];
-    // a wedge sharing an atom with one already drawn makes a run of them,
-    // which reads as the chain being out of the page, not the centre
+    // a wedge starting where another ends, or ending where another starts,
+    // makes a run of them, which reads as the chain being out of the page
+    // rather than the centre (two meeting at their wide ends - a glycoside's
+    // oxygen - are nothing of the kind)
     const touches = (a: number, b: number) =>
-      wedgedAtoms.has(a) || wedgedAtoms.has(b) ? 10 : 0;
+      (wideEnds.has(a) ? 10 : 0) + (narrowEnds.has(b) ? 10 : 0);
     for (const n of mol.neighbours[c]) {
       if (used.has(key(c, n))) continue;
       const inRing = ringBond(c, n);
@@ -107,7 +110,7 @@ export function placeStereo(
     // stereo - or one that would make a run of wedges.
     const outOfRings = mol.neighbours[c].filter((n) => !ringBond(c, n));
     if (hasH && (mol.systemOf[c] >= 0 && outOfRings.length === 0)) choices.push({ to: -1, rank: -10 });
-    else if (hasH) choices.push({ to: -1, rank: 5 + (wedgedAtoms.has(c) ? 10 : 0) });
+    else if (hasH) choices.push({ to: -1, rank: 5 + (wideEnds.has(c) ? 10 : 0) });
     choices.sort((p, q) => p.rank - q.rank || p.to - q.to);
 
     let hPos: Point | null = null;
@@ -161,11 +164,11 @@ export function placeStereo(
         const drawn = t.neighbours.map((n) => (n === -1 && choice.to !== -1 ? null : place(n)));
         if (drawnVolume(at, drawn, lift) === t.volume) {
           wedges.push({ from: c, to: choice.to, stereo });
-          wedgedAtoms.add(c);
+          narrowEnds.add(c);
           if (choice.to === -1) hydrogens.push({ on: c, at: upright(c, stereo) ?? hPos! });
           else {
             used.add(key(c, choice.to));
-            wedgedAtoms.add(choice.to);
+            wideEnds.add(choice.to);
           }
           done = true;
           break;

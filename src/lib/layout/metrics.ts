@@ -756,6 +756,13 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         if (!own) continue;
         const carbons = neighbours[c].filter((b) => el[b] === "C").length;
         if (x[c] < rx + 0.25 * L) readingOrder += carbons <= 1 ? 1 : 0.5;
+        // and the carbons numbered on from it clockwise round the ring, as
+        // the Haworth projection has them: the face it is seen from
+        const next = neighbours[c].find((b) => r.includes(b) && b !== ox[0]);
+        if (next != null) {
+          const turn = (x[c] - rx) * (y[next] - ry) - (y[c] - ry) * (x[next] - rx);
+          if (turn > 0) readingOrder += carbons <= 1 ? 1 : 0.5;
+        }
       }
     }
     // an acid's C=O up: the way it is always drawn
