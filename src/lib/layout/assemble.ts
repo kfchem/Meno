@@ -115,8 +115,27 @@ export function grow(
 
   const systemsHere = [...new Set(piece.map((a) => mol.systemOf[a]).filter((s) => s >= 0))];
   if (systemsHere.length) {
+    // The frame: the ring system the molecule is built round - nearest all
+    // the rest of it (atorvastatin's pyrrole, not one of its phenyls) -
+    // and of those the largest.
+    const reach = (s: number) => {
+      const d = new Map<number, number>();
+      const q = [...mol.systems[s].atoms];
+      q.forEach((a) => d.set(a, 0));
+      for (let h = 0; h < q.length; h++) {
+        for (const v of mol.neighbours[q[h]]) {
+          if (!d.has(v)) {
+            d.set(v, d.get(q[h])! + 1);
+            q.push(v);
+          }
+        }
+      }
+      return Math.max(...d.values());
+    };
+    const far = new Map(systemsHere.map((s) => [s, reach(s)]));
     const root = systemsHere.sort(
       (p, q) =>
+        far.get(p)! - far.get(q)! ||
         mol.systems[q].atoms.length - mol.systems[p].atoms.length ||
         mol.systems[q].rings.length - mol.systems[p].rings.length,
     )[0];

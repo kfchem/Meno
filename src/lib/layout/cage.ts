@@ -140,7 +140,7 @@ function viewCost(pts: Point[], bonds: [number, number][]): number {
   for (let i = 0; i < pts.length; i++) {
     for (let j = i + 1; j < pts.length; j++) {
       if (bonded.has(`${i},${j}`)) continue;
-      if (Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) / mean < 0.45) cost += 10;
+      if (Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) / mean < 0.6) cost += 10;
     }
     for (const [a, b] of bonds) {
       if (a === i || b === i) continue;
@@ -149,7 +149,7 @@ function viewCost(pts: Point[], bonds: [number, number][]): number {
       const l2 = vx * vx + vy * vy;
       const t = l2 ? Math.max(0, Math.min(1, ((pts[i].x - pts[a].x) * vx + (pts[i].y - pts[a].y) * vy) / l2)) : 0;
       const d = Math.hypot(pts[i].x - (pts[a].x + t * vx), pts[i].y - (pts[a].y + t * vy));
-      if (d / mean < 0.2) cost += 5;
+      if (d / mean < 0.3) cost += 5;
     }
   }
   for (let i = 0; i < bonds.length; i++) {
@@ -229,6 +229,16 @@ function look(
   };
 }
 
+/** The solid a cage system is taken to be: its atoms' places in three dimensions. */
+export function solidOf(mol: Molecule, sys: RingSystem): Map<number, Vec3> {
+  const index = new Map(sys.atoms.map((a, i) => [a, i]));
+  const hop = hops(mol, sys.atoms);
+  const D = hop.map((row) => row.map(span));
+  let X = settle(majorise(classical(D), D), hop);
+  if (handedness(mol, sys.atoms, index, X) < 0) X = X.map(([x, y, z]) => [x, y, -z] as Vec3);
+  return new Map(sys.atoms.map((a, i) => [a, X[i]]));
+}
+
 export function projectCage(mol: Molecule, sys: RingSystem): CageView {
   const atoms = sys.atoms;
   const index = new Map(atoms.map((a, i) => [a, i]));
@@ -259,8 +269,69 @@ export function projectCage(mol: Molecule, sys: RingSystem): CageView {
       bestUp = view.up;
     }
   };
+  // Every six-membered ring of the solid seen the way a chair or a boat is
+  // always drawn: its mean plane edge on from a little above, two of its
+  // opposite atoms the ends, left and right - the textbook chair, from
+  // which cages (adamantane is four of them) are drawn.
+  for (const r of sys.rings.map((i) => mol.rings[i]).filter((r) => r.length === 6)) {
+    const P = r.map((a) => X[index.get(a)!]);
+    const c: Vec3 = [0, 1, 2].map((k) => P.reduce((sum, p) => sum + p[k], 0) / 6) as Vec3;
+    // the mean plane's normal, from the ring's turn
+    let nrm: Vec3 = [0, 0, 0];
+    for (let i = 0; i < 6; i++) {
+      const u: Vec3 = [P[i][0] - c[0], P[i][1] - c[1], P[i][2] - c[2]];
+      const v: Vec3 = [P[(i + 1) % 6][0] - c[0], P[(i + 1) % 6][1] - c[1], P[(i + 1) % 6][2] - c[2]];
+      const w = crossV(u, v);
+      nrm = [nrm[0] + w[0], nrm[1] + w[1], nrm[2] + w[2]];
+    }
+    nrm = normalise(nrm);
+    for (let i = 0; i < 3; i++) {
+      const d: Vec3 = [P[i + 3][0] - P[i][0], P[i + 3][1] - P[i][1], P[i + 3][2] - P[i][2]];
+      const k = dotV(d, nrm);
+      const e1 = normalise([d[0] - k * nrm[0], d[1] - k * nrm[1], d[2] - k * nrm[2]]);
+      const e2 = crossV(nrm, e1);
+      for (const up of [1, -1]) {
+        for (const front of [1, -1]) {
+          for (const elev of [15, 20, 25]) {
+            const ce = Math.cos((elev * Math.PI) / 180);
+            const se = Math.sin((elev * Math.PI) / 180);
+            const n2: Vec3 = [nrm[0] * up, nrm[1] * up, nrm[2] * up];
+            const toViewer = normalise([0, 1, 2].map((j) => ce * front * e2[j] + se * n2[j]) as Vec3);
+            consider(look(X, toViewer, n2), 0.02 * Math.abs(elev - 20));
+          }
+        }
+      }
+    }
+  }
+  // A cage with an atom on an axis of its symmetry - adamantane's
+  // bridgeheads, cubane's corners - seen along that axis, tilted a little
+  // so nothing hides behind: the hexagon with a Y inside that it always is.
+  if (sys.rings.length >= 3) {
+    const c: Vec3 = [0, 1, 2].map((k) => X.reduce((sum, p) => sum + p[k], 0) / X.length) as Vec3;
+    for (let i = 0; i < X.length; i++) {
+      const axis = normalise([X[i][0] - c[0], X[i][1] - c[1], X[i][2] - c[2]]);
+      const helper: Vec3 = Math.abs(axis[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      const p1 = normalise(crossV(axis, helper));
+      const p2 = crossV(axis, p1);
+      for (const tilt of [8, 12, 16]) {
+        for (let k = 0; k < 6; k++) {
+          const t = (tilt * Math.PI) / 180;
+          const phi = (k * Math.PI) / 3;
+          const side: Vec3 = [0, 1, 2].map((j) => Math.cos(phi) * p1[j] + Math.sin(phi) * p2[j]) as Vec3;
+          const toViewer = normalise([0, 1, 2].map((j) => Math.cos(t) * axis[j] + Math.sin(t) * side[j]) as Vec3);
+          consider(look(X, toViewer, side), 0.02 * Math.abs(tilt - 12));
+        }
+      }
+    }
+  }
+  // a textbook view - a chair, a boat, down an axis - that hides no atom is
+  // taken as it is: that is how the cage is drawn, even where some other
+  // view crosses fewer bonds
+  const textbook = bestCost < 10;
   const axes = bicycleAxes(mol, sys, X, index);
-  if (axes) {
+  if (textbook) {
+    // (kept)
+  } else if (axes) {
     const { e1, e2, e3 } = axes;
     for (const elev of [15, 20, 25, 30, 40]) {
       for (const az of [0, 10, -10, 20, -20, 30, -30]) {
