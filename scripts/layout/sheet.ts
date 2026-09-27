@@ -28,6 +28,7 @@ import {
   scoreParts,
   type LayoutMetrics,
 } from "../../src/lib/layout/metrics";
+import { layout2D } from "../../src/lib/layout/engine";
 import type { Molecule } from "./fetch";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +37,12 @@ const outDir = resolve(root, ".layout");
 
 type Graph = {
   atoms: { el: string; charge: number; hs: number }[];
-  bonds: { a: number; b: number; order: number }[];
+  bonds: {
+    a: number;
+    b: number;
+    order: number;
+    stereo?: { refs: [number, number]; cis: boolean };
+  }[];
 };
 type Laid = {
   /** The molecule as this engine draws it: with the H atoms it adds. */
@@ -126,6 +132,7 @@ const partNames: Record<keyof ReturnType<typeof scoreParts>, string> = {
   aspect: "tall",
   macroAspect: "macrocycle tall",
   readingOrder: "reading order",
+  ringOrder: "ring order",
 };
 
 const fmt = (m: LayoutMetrics) => {
@@ -140,7 +147,7 @@ const fmt = (m: LayoutMetrics) => {
     `bonds ±${(m.bondSpread * 100).toFixed(1)}% · angles ${m.angleError.toFixed(1)}° · rings ${m.ringError.toFixed(3)} · macrocycle ${m.macroAngleError.toFixed(1)}°`,
     `tilt ${m.tilt.toFixed(1)}° · askew ${m.gridError.toFixed(1)}° · substituents ${m.substituentError.toFixed(1)}° · wedges on rings ${m.ringWedges}`,
     `chains folded ${m.chainFold.toFixed(2)}, splayed ${m.chainSplay.toFixed(0)}°, off level ${m.chainTilt.toFixed(0)}° · long axis ${m.axisTilt.toFixed(0)}°`,
-    `height/width ${m.aspect.toFixed(2)}, macrocycle ${m.macroAspect.toFixed(2)} · reading order ${m.readingOrder}`,
+    `height/width ${m.aspect.toFixed(2)}, macrocycle ${m.macroAspect.toFixed(2)} · reading order ${m.readingOrder} · ring order ${m.ringOrder}`,
   ].join("<br>");
 };
 
@@ -156,7 +163,22 @@ const baselines = new Map<string, Baseline>(
   (JSON.parse(readFileSync(basePath, "utf8")).molecules as Baseline[]).map((b) => [b.name, b]),
 );
 
-const engines = ["CoordGen", "RDKit"];
+const engines = ["Meno", "CoordGen", "RDKit"];
+
+/** Meno's own layout of a molecule, timed. */
+function meno(g: Graph): Laid {
+  const t = performance.now();
+  const { x, y } = layout2D(g);
+  const ms = Math.round((performance.now() - t) * 10) / 10;
+  return { graph: g, x, y, wedges: [], ms };
+}
+
+// --only=Name,Name draws just those molecules
+const only = process.argv
+  .find((a) => a.startsWith("--only="))
+  ?.slice(7)
+  .split(",")
+  .map((s) => s.toLowerCase());
 const totals = new Map<string, { score: number; overlaps: number; crossings: number; n: number }>();
 /** Mean score by category, then engine. */
 const byCategory = new Map<string, Map<string, { score: number; n: number }>>();
@@ -166,6 +188,8 @@ let category = "";
 for (const m of listed) {
   const base = baselines.get(m.name);
   if (!base) continue;
+  if (only && !only.some((o) => m.name.toLowerCase().startsWith(o))) continue;
+  base.layouts.Meno = meno(base.graph);
   if (m.category !== category) {
     category = m.category;
     rows.push(`<h2>${escape(category)}</h2>`);
@@ -221,7 +245,7 @@ const page = `<!doctype html>
 <title>Meno layout benchmark</title>
 <style>
   :root { color-scheme: light }
-  body { margin: 0 auto; padding: 2rem 1.5rem 4rem; max-width: 1400px; background: #fff; color: #111;
+  body { margin: 0 auto; padding: 2rem 1.5rem 4rem; max-width: 1800px; background: #fff; color: #111;
          font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif }
   h1 { font-size: 1.3rem; margin: 0 0 .25rem }
   .lede { color: #555; max-width: 75ch }
@@ -229,7 +253,7 @@ const page = `<!doctype html>
   section { border-top: 1px solid #e5e7eb; padding-top: 1rem; margin-top: 1.25rem }
   h3 { font-size: .95rem; margin: 0 0 .5rem }
   .cid { color: #777; font-weight: normal; font-size: 12px }
-  .row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem }
+  .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem }
   figure { margin: 0; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; background: #fff }
   .art { display: flex; align-items: center; justify-content: center; height: 300px; padding: .5rem }
   .art svg, .art img { max-width: 100%; max-height: 100%; height: auto }

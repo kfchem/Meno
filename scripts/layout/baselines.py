@@ -25,22 +25,38 @@ here = pathlib.Path(__file__).resolve().parent
 root = here.parents[1]
 
 
+def cis_trans(b):
+    """A double bond's stereo as a layout engine needs it: an atom on each
+    end, and whether those two are cis. RDKit's E and Z are taken against the
+    neighbours it records for the bond, which rank highest (CIP)."""
+    stereo = b.GetStereo()
+    refs = list(b.GetStereoAtoms())
+    if stereo == Chem.BondStereo.STEREONONE or len(refs) != 2:
+        return None
+    cis = stereo in (Chem.BondStereo.STEREOZ, Chem.BondStereo.STEREOCIS)
+    return {"refs": refs, "cis": cis}
+
+
 def graph(mol):
     kek = Chem.Mol(mol)
     Chem.Kekulize(kek, clearAromaticFlags=True)
+    bonds = []
+    for b in kek.GetBonds():
+        bond = {
+            "a": b.GetBeginAtomIdx(),
+            "b": b.GetEndAtomIdx(),
+            "order": {1.0: 1, 2.0: 2, 3.0: 3}.get(b.GetBondTypeAsDouble(), 1),
+        }
+        stereo = cis_trans(mol.GetBondWithIdx(b.GetIdx())) if bond["order"] == 2 else None
+        if stereo:
+            bond["stereo"] = stereo
+        bonds.append(bond)
     return {
         "atoms": [
             {"el": a.GetSymbol(), "charge": a.GetFormalCharge(), "hs": a.GetTotalNumHs()}
             for a in kek.GetAtoms()
         ],
-        "bonds": [
-            {
-                "a": b.GetBeginAtomIdx(),
-                "b": b.GetEndAtomIdx(),
-                "order": {1.0: 1, 2.0: 2, 3.0: 3}.get(b.GetBondTypeAsDouble(), 1),
-            }
-            for b in kek.GetBonds()
-        ],
+        "bonds": bonds,
     }
 
 
