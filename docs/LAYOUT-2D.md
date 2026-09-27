@@ -55,7 +55,10 @@ they hang from.
   corner points out, inside it where the corner points in, which is why a
   macrolide is drawn with groups inside its ring. The atoms carrying the
   larger groups take the corners pointing out, and the shape is chosen,
-  among the few that lie well, for the room it leaves inside.
+  among the few that lie well, for the room it leaves inside. A ring fused
+  on its side sits where the shape turns (both ends of that side corners
+  pointing out), a ring it runs through at three atoms stands outside a
+  corner pointing in, and every double bond in it keeps its cis or trans.
 - **Rings of rings**: a macrocycle that runs through other rings rather
   than along their sides - a porphyrin's through its pyrroles, a
   cyclodextrin's through its glucoses - is set round a circle, each ring
@@ -66,19 +69,26 @@ they hang from.
   without crowding or crossings (adamantane, cubane, quinuclidine) is
   drawn as the solid it is, seen from the side that hides no atom.
 - **Chains**: zigzag, each turn the other way from the last. A trans double
-  bond carries the zigzag on; a cis one turns it back. A triple bond, or
-  two double bonds on one atom, runs straight.
+  bond carries the zigzag on; a cis one is a step in it - the chain read as
+  the straight chain it would be without it, carrying on the same way (a
+  fatty acid, a lipid's acyl chains). A triple bond, or two double bonds on
+  one atom, runs straight.
 - **At an atom in no ring**: its bonds evenly spread - three at 120 degrees,
   four at 90.
-- **At a ring atom**: the other bonds split the room outside the ring
-  evenly: one straight out, along the bisector; two either side of it. A
-  substituent never takes the 120-degree side of a zigzag's corner; only a
-  small ring's own angles excuse it.
+- **At a ring atom**: one bond out goes straight out, along the bisector;
+  two (a gem-dimethyl) go close together, 60 degrees apart about it; more
+  split the room evenly. A substituent never takes the 120-degree side of
+  a zigzag's corner; only a small ring's own angles excuse it.
+- **Parts joined**: where two parts each with rings of their own meet at a
+  single bond - a sugar on its glycosidic oxygen, taxol's side chain on
+  its ester - each is drawn well on its own and then joined, the angle at
+  the join giving way to them.
 
 ## 3. Square to the page
 
-The largest ring system is the frame, and it is set square on the
-lattice. A ring hung off it that cannot be square as well is left askew
+The ring system the molecule is built round - the one nearest all the
+rest of it, the largest of those - is the frame, and it is set square on
+the lattice. A ring hung off it that cannot be square as well is left askew
 rather than the frame tilted to meet it halfway. A frame whose own rings
 cannot all be square together (fluorene's two benzene rings either side of
 a five-membered one) is set with its long axis level.
@@ -110,7 +120,7 @@ images - the drawing takes the one that reads best (section 4).
     up) and the NH2 below;
   - sugars (below).
 - **Rings hung on a macrocycle** - the sugars of a macrolide - to its right
-  and below it, where the eye goes after reading the ring.
+  and below it: the aglycone at the upper left, read first.
 
 ### Sugars and nucleosides
 
@@ -119,8 +129,9 @@ ring oxygen at the back becomes the top, the anomeric carbon (C1) is on the
 right, and a group above the ring is a wedge, one below it a hash. Set on
 the lattice, a pyranose has its ring oxygen at the top vertex, C1 upper
 right and C5, with C6, upper left; a furanose has its oxygen at the apex.
-The anomeric carbon is always on the right: a ring is drawn from the face
-that puts it there. Glycosidic bonds then run from left to right, from C1
+The anomeric carbon is always on the right, and the ring's carbons are
+numbered on from it clockwise: a ring is drawn from the face that has them
+so. Glycosidic bonds then run from left to right, from C1
 of one ring to the next; where two anomeric carbons are linked (sucrose),
 the aldose keeps its C1 on the right and the ketose gives way. In a nucleoside the base, on C1', is on the right, and the chain from
 C5' - the phosphates of ATP - runs off to the left.
