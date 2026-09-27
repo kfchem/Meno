@@ -446,11 +446,27 @@ export function untangle(
     .filter(([k, i]) => !mol.ringBonds.has(k) && mol.bonds[i].order === 1)
     .map(([k]) => k.split(",").map(Number) as [number, number])
     .filter(([a]) => pos.has(a));
+  // and a carbonyl's O, turned off its line where it lies on an atom and
+  // nothing else will clear it (a macrocycle's amide against a ring of it)
+  const carbonyls = [...mol.bondIndex.entries()]
+    .filter(([k, i]) => !mol.ringBonds.has(k) && mol.bonds[i].order === 2)
+    .map(([, i]) => mol.bonds[i])
+    .flatMap(({ a, b }) =>
+      mol.el[a] === "C" && mol.neighbours[b].length === 1
+        ? [[a, b] as [number, number]]
+        : mol.el[b] === "C" && mol.neighbours[a].length === 1
+          ? [[b, a] as [number, number]]
+          : [],
+    )
+    .filter(([a]) => pos.has(a));
   for (let round = 0; round < 6; round++) {
     const hit = clashing(mol, piece, pos);
     if (!hit.size) break;
+    const onAtom = (o: number) =>
+      piece.some((v) => v !== o && !mol.neighbours[o].includes(v) && dist(pos.get(v)!, pos.get(o)!) < 0.6);
+    const turnable = [...acyclic, ...carbonyls.filter(([, o]) => onAtom(o))];
     let better = false;
-    for (const [a, b] of acyclic) {
+    for (const [a, b] of turnable) {
       for (const [from, to] of [
         [a, b],
         [b, a],

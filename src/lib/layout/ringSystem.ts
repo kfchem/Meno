@@ -22,6 +22,7 @@ import {
   len,
   norm,
   scale,
+  segmentsCross,
   splitWidestGap,
   sub,
   type Point,
@@ -45,10 +46,24 @@ function squareStart(n: number): number {
 }
 
 /** How many ways a ring system can be laid out: one per macrocycle shape offered. */
+/**
+ * A system of macrocycles strung through six-membered rings with chains
+ * between (vancomycin) starts from the ring the most of them run through:
+ * the macrocycles are then chains drawn between rings already regular.
+ * That ring, or null for any other system.
+ */
+function hubOf(rings: number[][]): number[] | null {
+  const macro = rings.filter((r) => r.length >= MACROCYCLE);
+  if (macro.length < 2) return null;
+  const runsThrough = (r: number[]) => macro.filter((m) => r.filter((a) => m.includes(a)).length >= 3).length;
+  const hubs = rings.filter((r) => r.length === 6 && runsThrough(r) >= 2);
+  return hubs.sort((p, q) => runsThrough(q) - runsThrough(p))[0] ?? null;
+}
+
 export function ringSystemVariants(mol: Molecule, sys: RingSystem): number {
   const rings = sys.rings.map((i) => mol.rings[i]);
   const big = Math.max(0, ...rings.map((r) => r.length));
-  if (big < MACROCYCLE) return 1;
+  if (big < MACROCYCLE || hubOf(rings)) return 1;
   return macrocycleShapes(big).length;
 }
 
@@ -85,7 +100,7 @@ export function placeRingSystem(
     return q.length - p.length;
   });
   // (or the ring asked for: a bridged system is tried from each)
-  const first = start != null ? mol.rings[start] : ordered[0];
+  const first = start != null ? mol.rings[start] : hubOf(rings) ?? ordered[0];
 
   // a macrocycle that runs mostly through other rings is a ring of rings,
   // round a circle; one that runs through a ring or two on its way
@@ -96,7 +111,7 @@ export function placeRingSystem(
       .flatMap((r) => r.filter((a) => first.includes(a))),
   );
   const shapes = first.length >= MACROCYCLE ? macrocycleShapes(first.length) : [];
-  if (first.length >= MACROCYCLE && through.size >= 0.4 * first.length) {
+  if (first.length >= MACROCYCLE && through.size >= 0.4 * first.length && shortLinks(first, through)) {
     ringOfBlocks(mol, first, rings, pos).forEach((i) => placedRing.add(i));
   } else if (first.length >= MACROCYCLE) {
     const shape = shapes[variant % shapes.length];
@@ -157,10 +172,27 @@ export function placeRingSystem(
       }
     });
     if (next < 0) break;
-    placeRing(rings[next], pos);
+    placeRing(rings[next], pos, rings);
     placedRing.add(next);
   }
   return pos;
+}
+
+/**
+ * Whether the rings a macrocycle runs through are each linked to the next
+ * by no more than two atoms - a porphyrin's meso carbons, a cyclodextrin's
+ * glycosidic oxygens - so that it is rings strung together, and nothing
+ * else, rather than a chain with rings in it (vancomycin's peptide).
+ */
+function shortLinks(ring: number[], through: Set<number>): boolean {
+  const start = ring.findIndex((a) => through.has(a));
+  if (start < 0) return false;
+  let run = 0;
+  for (let k = 1; k <= ring.length; k++) {
+    if (through.has(ring[(start + k) % ring.length])) run = 0;
+    else if (++run > 2) return false;
+  }
+  return true;
 }
 
 /**
@@ -389,7 +421,7 @@ function macrocycleFit(
 }
 
 /** Places the atoms of a ring not yet placed, given those that are. */
-function placeRing(ring: number[], pos: Map<number, Point>): void {
+function placeRing(ring: number[], pos: Map<number, Point>, rings: number[][] = []): void {
   const n = ring.length;
   const placed = ring.map((a) => pos.has(a));
   const count = placed.filter(Boolean).length;
@@ -406,8 +438,202 @@ function placeRing(ring: number[], pos: Map<number, Point>): void {
       run.push(ring[j]);
       j = (j + 1) % n;
     }
-    placeRun(ring[i], ring[j], run, n, pos);
+    // a macrocycle's run is a chain, drawn as one: a zigzag, never an arc
+    if (n >= MACROCYCLE && run.length >= 3) placeChainRun(ring[i], ring[j], run, pos, rings);
+    else placeRun(ring[i], ring[j], run, n, pos);
   }
+}
+
+/**
+ * A run of a macrocycle between two atoms already placed, drawn as a chain:
+ * each bond turned sixty degrees from the last, zigzag where it can be and
+ * cornering where it must, clear of what is placed and crossing none of
+ * it, bulging away from it - and the last atom set a bond from both its
+ * neighbours to close onto the far end. Found by a beam search over the
+ * ways each bond can turn.
+ */
+function placeChainRun(
+  from: number,
+  to: number,
+  run: number[],
+  pos: Map<number, Point>,
+  rings: number[][] = [],
+): void {
+  // the six-membered rings the run passes through, yet to be drawn: where
+  // it does, it turns as the hexagon does, the same way at each atom
+  const hexagon = (u: number, v: number, w: number) =>
+    rings.findIndex((r) => r.length === 6 && r.includes(u) && r.includes(v) && r.includes(w));
+  const a = pos.get(from)!;
+  const b = pos.get(to)!;
+  const k = run.length;
+  const placed = [...pos.entries()].filter(([v]) => v !== from && v !== to).map(([, p]) => p);
+  const middle = placed.length ? centroid(placed) : scale(add(a, b), 0.5);
+  const bonds: [Point, Point][] = [];
+  // (the bonds among placed atoms are those a bond's length apart)
+  const pts = [...pos.values()];
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      if (Math.abs(dist(pts[i], pts[j]) - 1) < 0.05) bonds.push([pts[i], pts[j]]);
+    }
+  }
+  const crowd = (p: Point) => {
+    let c = 0;
+    for (const o of placed) {
+      const d = dist(p, o);
+      if (d < 0.6) c += 50;
+      else if (d < 0.9) c += 10 * (0.9 - d);
+    }
+    return c;
+  };
+  const crosses = (p: Point, q: Point) =>
+    bonds.reduce((c, [u, v]) => c + (segmentsCross(p, q, u, v) ? 1 : 0), 0);
+  // Where the rest of a hexagon the run enters will fall, once drawn round
+  // from three of its atoms, u, v and w in order along the run: those of
+  // its atoms neither on the run nor placed.
+  const rest = (r: number, u: Point, v: Point, w: Point, vAtom: number, wAtom: number): Point[] => {
+    const ring = rings[r];
+    const c = add(v, norm(add(sub(u, v), sub(w, v))));
+    const iv = ring.indexOf(vAtom);
+    const step = ring[(iv + 1) % 6] === wAtom ? 1 : -1;
+    const turnTo = Math.sign(cross(sub(v, c), sub(w, c)));
+    const out: Point[] = [];
+    for (let d = 1; d < 6; d++) {
+      const atom = ring[(iv + step * d + 6) % 6];
+      if (run.includes(atom) || atom === from || atom === to || pos.has(atom)) continue;
+      out.push(add(c, dir(angleOf(sub(v, c)) + turnTo * d * (Math.PI / 3))));
+    }
+    return out;
+  };
+  type State = { at: Point[]; t: number; turn: number; ring: number; ghosts: Point[]; cost: number };
+  let beam: State[] = [];
+  for (let s = 0; s < 12; s++) {
+    const t = (s * Math.PI) / 6;
+    const p = add(a, dir(t));
+    beam.push({ at: [p], t, turn: 0, ring: -1, ghosts: [], cost: crowd(p) + 5 * crosses(a, p) });
+  }
+  // (a point too near where a hexagon's rest will fall)
+  const onGhost = (p: Point, ghosts: Point[]) => ghosts.reduce((c, g) => c + (dist(p, g) < 0.9 ? 20 : 0), 0);
+  const WIDTH = 400;
+  for (let step = 1; step < k - 1; step++) {
+    const next: State[] = [];
+    const left = k - step; // bonds still to go after this atom, to b
+    // the turn made at run[step - 1], between the atoms either side of it
+    const before = step >= 2 ? run[step - 2] : from;
+    const ring = hexagon(before, run[step - 1], run[step]);
+    for (const st of beam) {
+      for (const turn of [1, -1]) {
+        // (inside a hexagon, the same way as the turn before it there)
+        if (ring >= 0 && st.ring === ring && turn !== st.turn) continue;
+        const t = st.t + (turn * Math.PI) / 3;
+        const last = st.at[st.at.length - 1];
+        const p = add(last, dir(t));
+        // (still able to reach the far end)
+        if (dist(p, b) > left + 1e-9) continue;
+        let cost = st.cost + crowd(p) + 5 * crosses(last, p) + onGhost(p, st.ghosts);
+        for (let j = 0; j < st.at.length - 1; j++) if (dist(p, st.at[j]) < 0.9) cost += 20;
+        // a zigzag turns each way in turn; a corner is two turns alike
+        if (turn === st.turn && ring < 0) cost += 0.3;
+        // entering a hexagon: room for the rest of it, kept from then on
+        let ghosts = st.ghosts;
+        if (ring >= 0 && st.ring !== ring) {
+          const u = step >= 2 ? st.at[step - 2] : a;
+          const fresh = rest(ring, u, last, p, run[step - 1], run[step]);
+          for (const g of fresh) {
+            cost += crowd(g);
+            for (const q of [a, ...st.at, p]) if (dist(q, g) < 0.9) cost += 20;
+          }
+          ghosts = [...ghosts, ...fresh];
+        }
+        next.push({ at: [...st.at, p], t, turn, ring, ghosts, cost });
+      }
+    }
+    next.sort((p, q) => p.cost - q.cost);
+    beam = next.slice(0, WIDTH);
+    if (!beam.length) break;
+  }
+  let best: Point[] | null = null;
+  let bestCost = Infinity;
+  const angle = (u: Point, v: Point, w: Point) => {
+    const x1 = sub(u, v);
+    const x2 = sub(w, v);
+    return Math.acos(Math.max(-1, Math.min(1, (x1.x * x2.x + x1.y * x2.y) / (len(x1) * len(x2)))));
+  };
+  for (const st of beam) {
+    const last = st.at[st.at.length - 1];
+    const closes = k === 1 ? [] : apexOf(last, b);
+    for (const p of closes) {
+      const at = [...st.at, p];
+      let cost = st.cost + crowd(p) + 5 * (crosses(last, p) + crosses(p, b)) + onGhost(p, st.ghosts);
+      for (let j = 0; j < at.length - 2; j++) if (dist(p, at[j]) < 0.9) cost += 20;
+      // the angles the closing bends, against 120 degrees
+      const prev = at.length >= 3 ? at[at.length - 3] : a;
+      for (const [u, v, w] of [
+        [prev, last, p],
+        [last, p, b],
+      ]) {
+        cost += ((angle(u, v, w) - (2 * Math.PI) / 3) / (Math.PI / 6)) ** 2;
+      }
+      // room at each end among the bonds already there
+      for (const [end, first] of [
+        [a, at[0]],
+        [b, p],
+      ] as const) {
+        for (const o of placed) {
+          if (Math.abs(dist(o, end) - 1) > 0.05) continue;
+          const t = angle(o, end, first);
+          if (t < (100 * Math.PI) / 180) cost += 3 * ((100 * Math.PI) / 180 - t);
+        }
+      }
+      // away from what is placed
+      cost -= 0.3 * len(sub(centroid(at), middle));
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = at;
+      }
+    }
+  }
+  if (!best) {
+    placeRun(from, to, run, run.length + 2, pos);
+    return;
+  }
+  // the strain of closing it shared out along the chain: bonds 1, each
+  // chain atom's neighbours a 120-degree angle apart, clear of what is
+  // placed - the rings the run passes through left as they are
+  const line = [a, ...best.map((p) => ({ ...p })), b];
+  const ids = [from, ...run, to];
+  const free = ids.map((v, i) => i > 0 && i < ids.length - 1 && !rings.some((r) => r.length < MACROCYCLE && r.includes(v)));
+  const pull = (i: number, j: number, target: number, k: number) => {
+    if (!free[i] && !free[j]) return;
+    const d = sub(line[j], line[i]);
+    const l = len(d) || 1e-9;
+    const f = ((l - target) / l) * k;
+    const [wi, wj] = free[i] && free[j] ? [0.5, 0.5] : free[i] ? [1, 0] : [0, 1];
+    line[i] = add(line[i], scale(d, f * wi));
+    line[j] = sub(line[j], scale(d, f * wj));
+  };
+  for (let it = 0; it < 300; it++) {
+    for (let i = 0; i + 1 < line.length; i++) pull(i, i + 1, 1, 0.5);
+    for (let i = 0; i + 2 < line.length; i++) if (free[i + 1]) pull(i, i + 2, Math.sqrt(3), 0.15);
+    for (let i = 0; i < line.length; i++) {
+      if (!free[i]) continue;
+      for (const o of placed) {
+        const d = sub(line[i], o);
+        const l = len(d);
+        if (l < 0.9 && l > 1e-9) line[i] = add(line[i], scale(d, ((0.9 - l) / l) * 0.3));
+      }
+    }
+  }
+  run.forEach((atom, i) => pos.set(atom, line[i + 1]));
+}
+
+/** The points a bond's length from both `p` and `q`. */
+function apexOf(p: Point, q: Point): Point[] {
+  const d = dist(p, q);
+  if (d > 2 || d < 1e-9) return [];
+  const m = scale(add(p, q), 0.5);
+  const h = Math.sqrt(Math.max(0, 1 - (d / 2) ** 2));
+  const u = { x: -(q.y - p.y) / d, y: (q.x - p.x) / d };
+  return [add(m, scale(u, h)), add(m, scale(u, -h))];
 }
 
 /** A ring touching what is placed at one atom: set on the far side of it. */

@@ -266,6 +266,40 @@ describe("layout2D", () => {
     }
   });
 
+  it("draws macrocycles strung through benzene rings as chains, never round", () => {
+    // a benzene hub, a macrocycle through it and each of two more benzenes
+    // by an ether and a chain of six
+    const benzene = (o: number): [number, number, number][] =>
+      [0, 1, 2, 3, 4, 5].map((i) => [o + i, o + ((i + 1) % 6), i % 2 ? 1 : 2]);
+    const bonds: [number, number, number?][] = [
+      ...benzene(0), ...benzene(6), ...benzene(12),
+      [0, 18], [18, 6], [9, 19], [19, 20], [20, 21], [21, 22], [22, 28], [28, 29], [29, 2],
+      [5, 23], [23, 12], [15, 24], [24, 25], [25, 26], [26, 27], [27, 30], [30, 31], [31, 3],
+    ];
+    const skeleton = carbons(32, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((a, i) => (i === 18 || i === 23 ? { el: "O" } : a)),
+    };
+    const { x, y } = layout2D(input);
+    for (const l of bondLengths(input)) expect(Math.abs(l - 1)).toBeLessThan(0.05);
+    const m = layoutMetrics({ x, y, edges: input.bonds.map(({ a, b }) => [a, b] as const) });
+    expect(m.overlaps + m.crossings).toBe(0);
+    expect(m.ringError).toBeLessThan(0.01);
+    // the chains zigzags - their angles 120 degrees, most of them exactly,
+    // none opened out toward an arc's (154 degrees round a ring of 14)
+    const angles = [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31].map((c) => {
+      const [p, q] = input.bonds.filter(({ a, b }) => a === c || b === c).map(({ a, b }) => (a === c ? b : a));
+      const t = Math.abs(Math.atan2(y[p] - y[c], x[p] - x[c]) - Math.atan2(y[q] - y[c], x[q] - x[c]));
+      return (Math.min(t, 2 * Math.PI - t) * 180) / Math.PI;
+    });
+    for (const t of angles) {
+      expect(t).toBeGreaterThan(100);
+      expect(t).toBeLessThan(145);
+    }
+    expect(angles.filter((t) => Math.abs(t - 120) < 2).length).toBeGreaterThanOrEqual(0.6 * angles.length);
+  });
+
   it("draws a ring system with a ring fused on a side flat, its bridge across a ring", () => {
     // 9,10-dihydro-9,10-ethanoanthracene: the bridge (14, 15) across the
     // middle ring of an anthracene

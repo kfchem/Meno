@@ -60,10 +60,15 @@ they hang from.
   on its side sits where the shape turns (both ends of that side corners
   pointing out), a ring it runs through at three atoms stands outside a
   corner pointing in, and every double bond in it keeps its cis or trans.
-- **Rings of rings**: a macrocycle that runs through other rings rather
-  than along their sides - a porphyrin's through its pyrroles, a
-  cyclodextrin's through its glucoses - is set round a circle, each ring
-  it runs through regular and outside it.
+- **Rings of rings**: a macrocycle that is rings strung together and
+  nothing else - a porphyrin's pyrroles, a cyclodextrin's glucoses, each
+  linked to the next by an atom or two - is set round a circle, each ring
+  it runs through regular and outside it. One with chains between its
+  rings (vancomycin's peptide) is a chain like any other macrocycle:
+  where several run through the same ring, that ring is drawn first and
+  each macrocycle is a zigzag from ring to ring, turning as a hexagon
+  does where it runs through one, so that the ring comes out regular,
+  and kept clear of where the rest of that ring will fall.
 - **Bridged systems**: where a ring is fused on a side as well - morphine,
   artemisinin, taxol - the system is drawn flat: the smaller ring of a
   bridged pair regular, the larger arcing round it with the bridge inside
