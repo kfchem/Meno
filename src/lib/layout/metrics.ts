@@ -683,7 +683,14 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       const oxy = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 1);
       const onto = neighbours[a].filter((b) => el[b] !== "O");
       if (oxo.length !== 1 || oxy.length !== 1 || onto.length !== 1) continue;
-      if (inRing.has(onto[0]) || leaf(onto[0])) continue;
+      if (leaf(onto[0])) continue;
+      // an acid on a ring: to the right of the middle, but lightly - a
+      // ring's substituents go where the ring puts them
+      if (inRing.has(onto[0])) {
+        const isAcid = oxy.some((o) => (g.hydrogens?.[o] ?? 0) > 0 || neighbours[o].length === 1);
+        if (isAcid && x[a] < cx - 0.25 * L) readingOrder += 0.5;
+        continue;
+      }
       let prev = a;
       let cur = onto[0];
       for (let i = 0; i < n && through(cur); i++) {
@@ -770,6 +777,15 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   if (live.length) {
     const main = live.reduce((b, s) => (s.size > b.size ? s : b));
     const mc = centre(main);
+    // a polycycle of three rings or more - what the molecule is - to the
+    // left of the smaller ring systems hung on it (reserpine's ester)
+    const others = live.filter((sys) => sys !== main);
+    const mainRings = rings.filter((r) => r.every((a) => main.has(a))).length;
+    if (mainRings >= 3 && others.length) {
+      const ox = others.reduce((sum, sys) => sum + centre(sys).x * sys.size, 0) /
+        others.reduce((sum, sys) => sum + sys.size, 0);
+      if (mc.x > ox + L) readingOrder++;
+    }
     // a ring system with a chain out of it: the rings to the left, the
     // chain read after them
     for (const s of strands) {
@@ -851,6 +867,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
           const down = p.y < ry - 0.1 * L;
           if (!(right && up)) breach += 0.5;
           if (left && down) breach += 0.5;
+          else if (left) breach += 0.25;
         });
         best = Math.min(best, breach);
       }

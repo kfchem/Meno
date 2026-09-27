@@ -140,11 +140,24 @@ function layoutSystem(
   // a small bridged bicycle - norbornane, tropane, quinuclidine - is drawn
   // in perspective, the way it always is
   if (isSmallBicycle(mol, sys)) return projectCage(mol, sys);
-  const flat = placeRingSystem(mol, sys);
+  let flat = placeRingSystem(mol, sys);
   const rings = sys.rings.map((r) => mol.rings[r]);
   const bridged = rings.some((r, j) =>
     rings.some((q, k) => k > j && q.filter((a) => r.includes(a)).length >= 3 && q.length < 9 && r.length < 9),
   );
+  // a bridged system laid flat from each of its rings in turn: which ring
+  // stays regular and which arcs round it decides whether it reads
+  if (bridged && !rings.some((r) => r.length >= 9)) {
+    let least = flatCost(mol, sys, flat);
+    for (const r of sys.rings) {
+      const trial = placeRingSystem(mol, sys, 0, r);
+      const cost = flatCost(mol, sys, trial);
+      if (cost < least - 1e-9) {
+        least = cost;
+        flat = trial;
+      }
+    }
+  }
   if ((!bridged && rings.length < 3) || sys.atoms.length > 20) return { pos: flat };
   if (rings.some((r) => r.length >= 9)) return { pos: flat };
   const flatScore = flatCost(mol, sys, flat);

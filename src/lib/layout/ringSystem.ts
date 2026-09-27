@@ -56,7 +56,12 @@ export function ringSystemVariants(mol: Molecule, sys: RingSystem): number {
   return macrocycleShapes(big).length + (threaded ? 1 : 0);
 }
 
-export function placeRingSystem(mol: Molecule, sys: RingSystem, variant = 0): Map<number, Point> {
+export function placeRingSystem(
+  mol: Molecule,
+  sys: RingSystem,
+  variant = 0,
+  start?: number,
+): Map<number, Point> {
   const pos = new Map<number, Point>();
   const rings = sys.rings.map((i) => mol.rings[i]);
   const placedRing = new Set<number>();
@@ -73,7 +78,7 @@ export function placeRingSystem(mol: Molecule, sys: RingSystem, variant = 0): Ma
   // the bridge inside - taxol's A ring, and its eight-membered B
   const bridgedFrom = (r: number[]) =>
     rings.some((q) => q !== r && q.length > r.length && q.filter((a) => r.includes(a)).length >= 3) ? 1 : 0;
-  const first = [...rings].sort((p, q) => {
+  const ordered = [...rings].sort((p, q) => {
     const pm = p.length >= MACROCYCLE ? p.length : 0;
     const qm = q.length >= MACROCYCLE ? q.length : 0;
     if (pm !== qm) return qm - pm;
@@ -82,7 +87,9 @@ export function placeRingSystem(mol: Molecule, sys: RingSystem, variant = 0): Ma
     const f = fusedCount(q) - fusedCount(p);
     if (f) return f;
     return q.length - p.length;
-  })[0];
+  });
+  // (or the ring asked for: a bridged system is tried from each)
+  const first = start != null ? mol.rings[start] : ordered[0];
 
   // a macrocycle that runs mostly through other rings is a ring of rings,
   // round a circle; one that runs through a ring or two on its way
@@ -109,6 +116,32 @@ export function placeRingSystem(mol: Molecule, sys: RingSystem, variant = 0): Ma
   }
   placedRing.add(rings.indexOf(first));
 
+  // A bridged pair of rings has three bridges between its bridgeheads: the
+  // path they share and each one's own. The shortest is drawn inside the
+  // other two (taxol's gem-dimethyl carbon, artemisinin's peroxide). Where
+  // it is one ring's own path, that ring waits until the other is down, so
+  // the other is laid out whole and the bridge crosses it.
+  const waitsFor = new Map<number, number>();
+  rings.forEach((r, i) =>
+    rings.forEach((q, j) => {
+      if (i === j) return;
+      const shared = r.filter((a) => q.includes(a));
+      if (shared.length < 3) return;
+      const own = r.filter((a) => !q.includes(a));
+      const theirs = q.filter((a) => !r.includes(a));
+      const ends = shared.filter((a) => {
+        const k = r.indexOf(a);
+        return !shared.includes(r[(k + 1) % r.length]) || !shared.includes(r[(k - 1 + r.length) % r.length]);
+      });
+      const inner = shared.filter((a) => !ends.includes(a));
+      // on a tie, the bridge that is fused to nothing else goes inside
+      const elsewhere = (path: number[]) =>
+        path.filter((a) => rings.some((o) => o !== r && o !== q && o.includes(a))).length;
+      const weigh = (path: number[]) => path.length + 0.1 * elsewhere(path);
+      if (weigh(own) < weigh(theirs) && weigh(own) < weigh(inner)) waitsFor.set(i, j);
+    }),
+  );
+
   while (placedRing.size < rings.length) {
     // next: the ring most fused to what is placed - on a side before a
     // bridge, a bridge before one touching at an atom (spiro)
@@ -118,7 +151,9 @@ export function placeRingSystem(mol: Molecule, sys: RingSystem, variant = 0): Ma
       if (placedRing.has(i)) return;
       const shared = r.filter((a) => pos.has(a)).length;
       if (!shared) return;
+      const waiting = waitsFor.has(i) && !placedRing.has(waitsFor.get(i)!);
       const rank =
+        (waiting ? -5000 : 0) +
         (shared === 2 ? 1000 : shared > 2 ? 500 : 0) +
         (r.length === 6 ? 50 : 0) +
         (r.length < MACROCYCLE ? 20 : 0) -
