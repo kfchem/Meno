@@ -1772,3 +1772,35 @@ describe("which atoms are finished off at all", () => {
     expect(got.has(3)).toBe(true); // a plain bond reaches here
   });
 });
+
+describe("a cage in perspective", () => {
+  // two bonds crossing in an X: 0-1 behind, 2-3 in front
+  const atoms = (withDepth: boolean): Atom[] => [
+    { id: 0, x: -1, y: -1, el: "C", ...(withDepth ? { z: -1 } : {}) },
+    { id: 1, x: 1, y: 1, el: "C", ...(withDepth ? { z: -1 } : {}) },
+    { id: 2, x: -1, y: 1, el: "C", ...(withDepth ? { z: 1 } : {}) },
+    { id: 3, x: 1, y: -1, el: "C", ...(withDepth ? { z: 1 } : {}) },
+  ];
+  const bonds: Bond[] = [
+    { a1: 0, a2: 1, order: 1, stereo: "none" },
+    { a1: 2, a2: 3, order: 1, stereo: "none" },
+  ];
+
+  it("breaks the bond behind where it passes under the one in front", () => {
+    const { lines } = buildAllPrimitives(atoms(true), bonds, opts(), 40);
+    // the back bond in two pieces, neither reaching the middle; the front whole
+    const back = lines.filter((l) => Math.sign(l.x2 - l.x1) === Math.sign(l.y2 - l.y1));
+    const front = lines.filter((l) => Math.sign(l.x2 - l.x1) !== Math.sign(l.y2 - l.y1));
+    expect(back).toHaveLength(2);
+    expect(front).toHaveLength(1);
+    for (const l of back) {
+      const nearest = Math.min(Math.hypot(l.x1, l.y1), Math.hypot(l.x2, l.y2));
+      expect(nearest).toBeGreaterThan(0.05);
+    }
+  });
+
+  it("draws crossing bonds whole where nothing says which is in front", () => {
+    const { lines } = buildAllPrimitives(atoms(false), bonds, opts(), 40);
+    expect(lines).toHaveLength(2);
+  });
+});

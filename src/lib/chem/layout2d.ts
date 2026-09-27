@@ -9,6 +9,12 @@ export type Atom = {
   el: string;
   charge?: number;
   isotope?: number;
+  /**
+   * How near the atom is to the viewer, where the structure is drawn in
+   * perspective (a cage): a bond passing behind another is broken where it
+   * crosses it.
+   */
+  z?: number;
 };
 export type Bond = {
   a1: number;
@@ -2340,10 +2346,11 @@ export function buildAllPrimitives(
       labelShapes,
       doubleSides
     );
-    lines.push(...r.lines);
+    const behind = brokenBehind(atoms, bonds, b, r.lines, rWorld);
+    lines.push(...behind.lines);
     polys.push(...r.polys);
     meets.push(...(r.meets ?? []));
-    freeEnds.push(...(r.ends ?? []));
+    freeEnds.push(...(r.ends ?? []), ...behind.ends);
     bends.push(...(r.bends ?? []));
   }
   // Every end and corner the joins at atoms have not already seen to:
@@ -2368,6 +2375,80 @@ export function buildAllPrimitives(
     }
   }
   return { lines, polys, circles, fills };
+}
+
+/**
+ * A bond's lines, broken where the bond passes behind another - both drawn
+ * in perspective, their atoms' `z` saying which is nearer where they cross.
+ * The gap is wide enough to read as the one bond going under the other.
+ * Returns the lines, and the ends the breaks make.
+ */
+function brokenBehind(
+  atoms: Atom[],
+  bonds: Bond[],
+  bond: Bond,
+  lines: LineSeg[],
+  halfWidth: number,
+): { lines: LineSeg[]; ends: Vec2[] } {
+  const a = atoms[bond.a1];
+  const c = atoms[bond.a2];
+  if (a?.z == null || c?.z == null) return { lines, ends: [] };
+  const gap = halfWidth * 5;
+  // where the bond crosses the ones in front of it, as fractions along it
+  const cuts: number[] = [];
+  const p = { x: a.x, y: a.y };
+  const d = { x: c.x - a.x, y: c.y - a.y };
+  for (const o of bonds) {
+    if (o === bond) continue;
+    if (o.a1 === bond.a1 || o.a1 === bond.a2 || o.a2 === bond.a1 || o.a2 === bond.a2) continue;
+    const e = atoms[o.a1];
+    const f = atoms[o.a2];
+    if (e?.z == null || f?.z == null) continue;
+    const q = { x: e.x, y: e.y };
+    const g = { x: f.x - e.x, y: f.y - e.y };
+    const den = vcross(d, g);
+    if (Math.abs(den) < 1e-9) continue;
+    const t = vcross(vsub(q, p), g) / den;
+    const u = vcross(vsub(q, p), d) / den;
+    if (t <= 0 || t >= 1 || u <= 0 || u >= 1) continue;
+    const mine = a.z + (c.z - a.z) * t;
+    const theirs = e.z + (f.z - e.z) * u;
+    if (mine < theirs - 1e-6) cuts.push(t);
+  }
+  if (!cuts.length) return { lines, ends: [] };
+  const out: LineSeg[] = [];
+  const ends: Vec2[] = [];
+  for (const l of lines) {
+    // each line of the bond, cut where the crossing falls along it
+    const ld = { x: l.x2 - l.x1, y: l.y2 - l.y1 };
+    const ll = vlen(ld);
+    if (ll < 1e-9) {
+      out.push(l);
+      continue;
+    }
+    let pieces: [number, number][] = [[0, 1]];
+    for (const t0 of cuts) {
+      const cross = { x: p.x + d.x * t0, y: p.y + d.y * t0 };
+      const t = vdot(vsub(cross, { x: l.x1, y: l.y1 }), ld) / (ll * ll);
+      const half = gap / ll;
+      pieces = pieces.flatMap(([s0, s1]): [number, number][] => {
+        if (t + half <= s0 || t - half >= s1) return [[s0, s1]];
+        const kept: [number, number][] = [];
+        if (t - half > s0) kept.push([s0, t - half]);
+        if (t + half < s1) kept.push([t + half, s1]);
+        return kept;
+      });
+    }
+    const at = (s: number) => ({ x: l.x1 + (l.x2 - l.x1) * s, y: l.y1 + (l.y2 - l.y1) * s });
+    for (const [s0, s1] of pieces) {
+      const from = at(s0);
+      const to = at(s1);
+      out.push({ ...l, x1: from.x, y1: from.y, x2: to.x, y2: to.y });
+      if (s0 > 0) ends.push(from);
+      if (s1 < 1) ends.push(to);
+    }
+  }
+  return { lines: out, ends };
 }
 
 export function layoutMolecule(
