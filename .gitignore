@@ -26,6 +26,7 @@ dist-ssr
 .gui-runs/
 
 .depiction/
+.layout/
 
 # Python's bytecode, from running the workers or their tests
 __pycache__/

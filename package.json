@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc && tsc -p scripts/depiction/tsconfig.json && tsc -p scripts/fonts/tsconfig.json",
+    "typecheck": "tsc && tsc -p scripts/depiction/tsconfig.json && tsc -p scripts/fonts/tsconfig.json && tsc -p scripts/layout/tsconfig.json",
     "font-metrics": "tsx scripts/fonts/labelMetrics.ts",
     "lint": "eslint .",
     "test": "vitest run",
     "check:tauri": "node scripts/check-tauri-versions.mjs",
     "depiction": "tsx scripts/depiction/render.ts",
+    "layout-bench": "tsx scripts/layout/sheet.ts",
+    "layout-fetch": "tsx scripts/layout/fetch.ts",
     "tauri": "tauri"
   },
   "dependencies": {
