@@ -23,7 +23,7 @@ import { dist, segmentsCross } from "./geometry";
 import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { placeRingSystem, ringSystemVariants } from "./ringSystem";
-import { flatCost, projectCage } from "./cage";
+import { flatCost, isSmallBicycle, projectCage } from "./cage";
 import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
 import type { Point } from "./geometry";
 
@@ -32,12 +32,24 @@ export type { LayoutInput } from "./perceive";
 export type Layout2D = {
   x: number[];
   y: number[];
+  /**
+   * How near each atom of a cage drawn in perspective is to the viewer
+   * (null elsewhere): a bond passing behind another is drawn broken there.
+   */
+  depth: (number | null)[];
 } & Stereo;
 
 export function layout2D(input: LayoutInput): Layout2D {
   const mol = perceive(input);
   const local = new Map<number, Map<number, Point>>();
-  mol.systems.forEach((_, i) => local.set(i, layoutSystem(mol, i)));
+  const depth = new Array<number | null>(mol.n).fill(null);
+  const hints = new Map<number, Map<number, Point>>();
+  mol.systems.forEach((_, i) => {
+    const laid = layoutSystem(mol, i);
+    local.set(i, laid.pos);
+    laid.depth?.forEach((d, a) => (depth[a] = d));
+    laid.hints?.forEach((m, a) => hints.set(a, m));
+  });
   const sides = sidesOf(mol);
   const flips = flippable(mol, sides);
   // a macrocycle's shape chosen for what hangs from it: each shape offered
@@ -58,7 +70,7 @@ export function layout2D(input: LayoutInput): Layout2D {
       let top: Grown | null = null;
       let topScore = Infinity;
       for (const frame of FRAMES) {
-        const pos = grow(mol, piece, local, frame, sides);
+        const pos = grow(mol, piece, local, frame, sides, hints);
         const s = score(pos);
         if (s < topScore) {
           topScore = s;
@@ -85,7 +97,7 @@ export function layout2D(input: LayoutInput): Layout2D {
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
     const tried = FRAMES.map((frame) => {
-      const pos = grow(mol, piece, local, frame, sides);
+      const pos = grow(mol, piece, local, frame, sides, hints);
       return { pos, score: score(pos) };
     }).sort((p, q) => p.score - q.score);
     let best = tried[0];
@@ -108,10 +120,11 @@ export function layout2D(input: LayoutInput): Layout2D {
     }
     right = Math.max(...piece.map((a) => x[a]));
   }
+  // a stereocentre in a cage drawn in perspective shows itself there
   const tetra = new Map<number, Tetrahedral>();
-  input.atoms.forEach((a, i) => a.tetra && tetra.set(i, a.tetra));
+  input.atoms.forEach((a, i) => a.tetra && depth[i] == null && tetra.set(i, a.tetra));
   const final = new Map(x.map((v, i) => [i, { x: v, y: y[i] }]));
-  return { x, y, ...placeStereo(mol, final, tetra) };
+  return { x, y, depth, ...placeStereo(mol, final, tetra) };
 }
 
 /**
@@ -119,19 +132,25 @@ export function layout2D(input: LayoutInput): Layout2D {
  * lie flat - a bridge crowding or crossing the ring it spans, the faces of
  * cubane - as the cage it is, in perspective: whichever reads better.
  */
-function layoutSystem(mol: Molecule, i: number): Map<number, Point> {
+function layoutSystem(
+  mol: Molecule,
+  i: number,
+): { pos: Map<number, Point>; depth?: Map<number, number>; hints?: Map<number, Map<number, Point>> } {
   const sys = mol.systems[i];
+  // a small bridged bicycle - norbornane, tropane, quinuclidine - is drawn
+  // in perspective, the way it always is
+  if (isSmallBicycle(mol, sys)) return projectCage(mol, sys);
   const flat = placeRingSystem(mol, sys);
   const rings = sys.rings.map((r) => mol.rings[r]);
   const bridged = rings.some((r, j) =>
     rings.some((q, k) => k > j && q.filter((a) => r.includes(a)).length >= 3 && q.length < 9 && r.length < 9),
   );
-  if ((!bridged && rings.length < 3) || sys.atoms.length > 20) return flat;
-  if (rings.some((r) => r.length >= 9)) return flat;
+  if ((!bridged && rings.length < 3) || sys.atoms.length > 20) return { pos: flat };
+  if (rings.some((r) => r.length >= 9)) return { pos: flat };
   const flatScore = flatCost(mol, sys, flat);
-  if (flatScore < 2) return flat;
+  if (flatScore < 2) return { pos: flat };
   const cage = projectCage(mol, sys);
-  return cage.cost < flatScore ? cage.pos : flat;
+  return cage.cost < flatScore ? cage : { pos: flat };
 }
 
 /** Tries each single bond the other way round, keeping what scores better, until nothing does. */

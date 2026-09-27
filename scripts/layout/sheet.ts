@@ -56,6 +56,8 @@ type Laid = {
   y: number[];
   wedges: { bond: number; narrow: number; stereo: "up" | "down" }[];
   ms: number;
+  /** Depth, for a cage drawn in perspective: a bond behind another is broken. */
+  depth?: (number | null)[];
 };
 type Baseline = {
   name: string;
@@ -78,6 +80,7 @@ function draw(g: Graph, laid: Laid): string {
     x: laid.x[i] * k,
     y: laid.y[i] * k,
     el: a.el,
+    ...(laid.depth?.[i] != null ? { z: laid.depth[i]! * k } : {}),
   }));
   const degree = new Map<number, number>();
   for (const { a, b } of g.bonds) {
@@ -193,7 +196,7 @@ function meno(g: Graph): Laid {
     );
     return { bond, narrow: w.from, stereo: w.stereo };
   });
-  return { graph, x, y, wedges, ms };
+  return { graph, x, y, wedges, ms, depth: out.depth };
 }
 
 // --only=Name,Name draws just those molecules

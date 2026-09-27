@@ -102,9 +102,12 @@ export function grow(
   local: Map<number, Map<number, Point>>,
   frame: Frame,
   sides: Map<string, number>,
+  hints: Map<number, Map<number, Point>> = new Map(),
 ): Grown {
   const pos: Grown = new Map();
   const queue: number[] = [];
+  // how each ring system's own frame was set down: to carry its hints over
+  const transforms = new Map<number, (p: Point) => Point>();
   const setFrame = (p: Point): Point => {
     const q = frame.mirrored ? { x: -p.x, y: p.y } : p;
     return rotate(q, frame.turn);
@@ -119,6 +122,7 @@ export function grow(
     )[0];
     const L = local.get(root)!;
     const c = centroid([...L.values()]);
+    transforms.set(root, (p) => setFrame(sub(p, c)));
     for (const [a, p] of L) pos.set(a, setFrame(sub(p, c)));
     queue.push(...mol.systems[root].atoms);
   } else {
@@ -141,7 +145,7 @@ export function grow(
     const order = [...along, ...others];
     order.forEach((v, k) => {
       const t = slots[k] ?? slots[slots.length - 1];
-      placeChild(mol, pos, local, queue, middle, v, setFrameAngle(frame, t));
+      placeChild(mol, pos, local, queue, middle, v, setFrameAngle(frame, t), transforms, hints);
     });
     queue.push(...order);
   }
@@ -153,9 +157,22 @@ export function grow(
     const placed = mol.neighbours[a].filter((v) => pos.has(v));
     const at = pos.get(a)!;
     const taken = placed.map((v) => angleOf(sub(pos.get(v)!, at)));
-    const assigned = assign(mol, pos, sides, a, placed, taken, children);
-    for (const [child, t] of assigned) {
-      placeChild(mol, pos, local, queue, a, child, t);
+    // a cage's bonds out go where the solid puts them
+    const hinted = hints.get(a);
+    const T = transforms.get(mol.systemOf[a]);
+    const byHint: [number, number][] = [];
+    if (hinted && T) {
+      for (const c of children) {
+        const h = hinted.get(c);
+        if (h) byHint.push([c, angleOf(sub(T(h), at))]);
+      }
+    }
+    const rest = children.filter((c) => !byHint.some(([h]) => h === c));
+    const assigned = rest.length
+      ? assign(mol, pos, sides, a, placed, [...taken, ...byHint.map(([, t]) => t)], rest)
+      : [];
+    for (const [child, t] of [...byHint, ...assigned]) {
+      placeChild(mol, pos, local, queue, a, child, t, transforms, hints);
     }
   }
   return pos;
@@ -318,6 +335,8 @@ function placeChild(
   a: number,
   child: number,
   t: number,
+  transforms: Map<number, (p: Point) => Point>,
+  hints: Map<number, Map<number, Point>>,
 ): void {
   const at = add(pos.get(a)!, dir(t));
   const s = mol.systemOf[child];
@@ -339,8 +358,12 @@ function placeChild(
     out.length,
   );
   const mid = slots.reduce((sum, x) => sum + x, 0) / slots.length;
-  const slot = [...slots].sort((p, q) => Math.abs(wrap(p - mid)) - Math.abs(wrap(q - mid)))[0];
+  const hinted = hints.get(child)?.get(a);
+  const slot = hinted
+    ? angleOf(sub(hinted, c0))
+    : [...slots].sort((p, q) => Math.abs(wrap(p - mid)) - Math.abs(wrap(q - mid)))[0];
   const turn = t + Math.PI - slot;
+  transforms.set(s, (p) => add(at, rotate(sub(p, c0), turn)));
   for (const [v, p] of L) {
     if (pos.has(v)) continue;
     pos.set(v, add(at, rotate(sub(p, c0), turn)));

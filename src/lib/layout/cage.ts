@@ -98,6 +98,37 @@ function majorise(X: Vec3[], D: number[][]): Vec3[] {
   return P;
 }
 
+/**
+ * The solid as it really is: bonds 1, atoms two bonds apart at a
+ * tetrahedral 1.63, and nothing else nearer than 1.9 - eased in from the
+ * rough placement until those hold.
+ */
+function settle(X: Vec3[], hop: number[][]): Vec3[] {
+  const n = X.length;
+  const P = X.map((p) => [...p] as Vec3);
+  const pull = (i: number, j: number, target: number, k: number, onlyApart: boolean) => {
+    const d: Vec3 = [P[j][0] - P[i][0], P[j][1] - P[i][1], P[j][2] - P[i][2]];
+    const l = Math.hypot(...d) || 1e-9;
+    if (onlyApart && l >= target) return;
+    const f = ((l - target) / l) * 0.5 * k;
+    for (let c = 0; c < 3; c++) {
+      P[i][c] += d[c] * f;
+      P[j][c] -= d[c] * f;
+    }
+  };
+  for (let it = 0; it < 400; it++) {
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const h = hop[i][j];
+        if (h === 1) pull(i, j, 1, 1, false);
+        else if (h === 2) pull(i, j, 1.633, 0.6, false);
+        else pull(i, j, 1.9, 0.3, true);
+      }
+    }
+  }
+  return P;
+}
+
 /** How badly a flat view reads: atoms hidden or on bonds, bonds crossing, bonds uneven. */
 function viewCost(pts: Point[], bonds: [number, number][]): number {
   const lens = bonds.map(([a, b]) => Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y));
@@ -126,7 +157,8 @@ function viewCost(pts: Point[], bonds: [number, number][]): number {
       const [a, b] = bonds[i];
       const [c, d] = bonds[j];
       if (a === c || a === d || b === c || b === d) continue;
-      if (segmentsCross(pts[a], pts[b], pts[c], pts[d])) cost += 2;
+      // a bond passing behind another is drawn broken there, which reads
+      if (segmentsCross(pts[a], pts[b], pts[c], pts[d])) cost += 1;
     }
   }
   return cost;
@@ -136,7 +168,68 @@ function viewCost(pts: Point[], bonds: [number, number][]): number {
  * The cage seen from its best side, in the ring system's atoms, bonds
  * scaled to about 1; and how well that view reads (lower better).
  */
-export function projectCage(mol: Molecule, sys: RingSystem): { pos: Map<number, Point>; cost: number } {
+export type CageView = {
+  pos: Map<number, Point>;
+  /**
+   * Where each bond out of the cage points, as seen: the neighbour's place
+   * at a bond's length, in the same frame - the solid's own tetrahedral
+   * directions, the stereocentres' as their configuration puts them.
+   */
+  hints: Map<number, Map<number, Point>>;
+  /** How near each atom is to the viewer: a bond passing behind another is broken there. */
+  depth: Map<number, number>;
+  cost: number;
+};
+
+/**
+ * The bridged bicycle's own view, the way it is always drawn - norbornane,
+ * camphor, tropane, quinuclidine: the two bridgeheads level, the shortest
+ * bridge on top, the other two in front and behind, seen from a little
+ * above and a little to one side. Null if the system is not a bicycle.
+ */
+function bicycleAxes(mol: Molecule, sys: RingSystem, X: Vec3[], index: Map<number, number>) {
+  if (sys.rings.length !== 2) return null;
+  const [r1, r2] = sys.rings.map((i) => mol.rings[i]);
+  const shared = r1.filter((a) => r2.includes(a));
+  if (shared.length < 3) return null;
+  const ends = shared.filter((a) => mol.neighbours[a].filter((b) => shared.includes(b)).length === 1);
+  if (ends.length !== 2) return null;
+  const bridges = [
+    shared.filter((a) => !ends.includes(a)),
+    r1.filter((a) => !shared.includes(a)),
+    r2.filter((a) => !shared.includes(a)),
+  ].sort((p, q) => p.length - q.length);
+  const at = (a: number) => X[index.get(a)!];
+  const b1 = at(ends[0]);
+  const b2 = at(ends[1]);
+  const mid: Vec3 = [(b1[0] + b2[0]) / 2, (b1[1] + b2[1]) / 2, (b1[2] + b2[2]) / 2];
+  const e1 = normalise([b2[0] - b1[0], b2[1] - b1[1], b2[2] - b1[2]]);
+  const top = bridges[0].map(at);
+  const c: Vec3 = [0, 1, 2].map((k) => top.reduce((sum, p) => sum + p[k], 0) / top.length - mid[k]) as Vec3;
+  const along = dotV(c, e1);
+  const e3 = normalise([c[0] - along * e1[0], c[1] - along * e1[1], c[2] - along * e1[2]]);
+  const e2 = crossV(e3, e1);
+  return { e1, e2, e3 };
+}
+
+/** The view along `toViewer`, the screen's up as near `up` as it can be. */
+function look(
+  X: Vec3[],
+  toViewer: Vec3,
+  up: Vec3,
+): { pts: Point[]; depth: number[]; toViewer: Vec3; up: Vec3 } {
+  const k = dotV(up, toViewer);
+  const sy = normalise([up[0] - k * toViewer[0], up[1] - k * toViewer[1], up[2] - k * toViewer[2]]);
+  const sx = crossV(sy, toViewer);
+  return {
+    pts: X.map((p) => ({ x: dotV(p, sx), y: dotV(p, sy) })),
+    depth: X.map((p) => dotV(p, toViewer)),
+    toViewer,
+    up: sy,
+  };
+}
+
+export function projectCage(mol: Molecule, sys: RingSystem): CageView {
   const atoms = sys.atoms;
   const index = new Map(atoms.map((a, i) => [a, i]));
   const bonds: [number, number][] = [];
@@ -144,34 +237,171 @@ export function projectCage(mol: Molecule, sys: RingSystem): { pos: Map<number, 
     const [a, b] = k.split(",").map(Number);
     if (index.has(a) && index.has(b)) bonds.push([index.get(a)!, index.get(b)!]);
   }
-  const D = hops(mol, atoms).map((row) => row.map(span));
-  const X = majorise(classical(D), D);
+  const hop = hops(mol, atoms);
+  const D = hop.map((row) => row.map(span));
+  let X = settle(majorise(classical(D), D), hop);
+  // the solid is found from distances, which cannot tell a shape from its
+  // mirror image: the one whose stereocentres are as given is taken
+  if (handedness(mol, atoms, index, X) < 0) X = X.map(([x, y, z]) => [x, y, -z] as Vec3);
 
   let best: Point[] = [];
+  let bestDepth: number[] = [];
   let bestCost = Infinity;
-  const views = 600;
-  for (let k = 0; k < views; k++) {
-    // directions spread evenly over the sphere
-    const z = 1 - (2 * (k + 0.5)) / views;
-    const r = Math.sqrt(1 - z * z);
-    const t = k * Math.PI * (3 - Math.sqrt(5));
-    const v: Vec3 = [r * Math.cos(t), r * Math.sin(t), z];
-    // two directions square to it
-    const helper: Vec3 = Math.abs(v[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
-    const u1 = normalise(crossV(helper, v));
-    const u2 = crossV(v, u1);
-    const pts = X.map((p) => ({ x: dotV(p, u1), y: dotV(p, u2) }));
-    const cost = viewCost(pts, bonds);
+  let bestView: Vec3 = [0, 0, 1];
+  let bestUp: Vec3 = [0, 1, 0];
+  const consider = (view: { pts: Point[]; depth: number[]; toViewer: Vec3; up: Vec3 }, bias = 0) => {
+    const cost = viewCost(view.pts, bonds) + bias;
     if (cost < bestCost - 1e-9) {
       bestCost = cost;
-      best = pts;
+      best = view.pts;
+      bestDepth = view.depth;
+      bestView = view.toViewer;
+      bestUp = view.up;
+    }
+  };
+  const axes = bicycleAxes(mol, sys, X, index);
+  if (axes) {
+    const { e1, e2, e3 } = axes;
+    for (const elev of [15, 20, 25, 30, 40]) {
+      for (const az of [0, 10, -10, 20, -20, 30, -30]) {
+        const ce = Math.cos((elev * Math.PI) / 180);
+        const se = Math.sin((elev * Math.PI) / 180);
+        const ca = Math.cos((az * Math.PI) / 180);
+        const sa = Math.sin((az * Math.PI) / 180);
+        const toViewer = normalise([0, 1, 2].map((i) => ce * (ca * e2[i] + sa * e1[i]) + se * e3[i]) as Vec3);
+        // a little above and to the side reads best; straight on hides the back
+        consider(look(X, toViewer, e3), 0.02 * Math.abs(elev - 25) + 0.01 * Math.abs(Math.abs(az) - 15));
+      }
+    }
+  } else {
+    const views = 600;
+    for (let k = 0; k < views; k++) {
+      // directions spread evenly over the sphere
+      const z = 1 - (2 * (k + 0.5)) / views;
+      const r = Math.sqrt(1 - z * z);
+      const t = k * Math.PI * (3 - Math.sqrt(5));
+      const v: Vec3 = [r * Math.cos(t), r * Math.sin(t), z];
+      const helper: Vec3 = Math.abs(v[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      consider(look(X, v, helper));
     }
   }
   const lens = bonds.map(([a, b]) => Math.hypot(best[a].x - best[b].x, best[a].y - best[b].y));
   const mean = lens.reduce((s, v) => s + v, 0) / lens.length;
   const pos = new Map<number, Point>();
-  atoms.forEach((a, i) => pos.set(a, { x: best[i].x / mean, y: best[i].y / mean }));
-  return { pos, cost: bestCost };
+  const depth = new Map<number, number>();
+  atoms.forEach((a, i) => {
+    pos.set(a, { x: best[i].x / mean, y: best[i].y / mean });
+    depth.set(a, bestDepth[i] / mean);
+  });
+  // the bonds out, placed in the solid and seen from the same side
+  const hints = new Map<number, Map<number, Point>>();
+  const toViewer = bestView;
+  const sy = bestUp;
+  const sx = crossV(sy, toViewer);
+  atoms.forEach((a, i) => {
+    const out = mol.neighbours[a].filter((b) => !index.has(b));
+    if (!out.length) return;
+    const dirs = outward(mol, a, i, X, index, out);
+    const m = new Map<number, Point>();
+    out.forEach((b, k) => {
+      const d = dirs[k];
+      const flat = { x: dotV(d, sx), y: dotV(d, sy) };
+      const l = Math.hypot(flat.x, flat.y) || 1;
+      // seen end on, a bond still shows at half its length
+      const shown = Math.max(0.5, l);
+      m.set(b, {
+        x: pos.get(a)!.x + (flat.x / l) * shown,
+        y: pos.get(a)!.y + (flat.y / l) * shown,
+      });
+    });
+    hints.set(a, m);
+  });
+  return { pos, depth, hints, cost: bestCost };
+}
+
+/**
+ * Whether the solid's stereocentres at its bridgeheads - those whose four
+ * bonds the cage itself fixes, three of them inside it - are as their
+ * configurations say (+1), the mirror image (-1), or have none to say (0).
+ */
+function handedness(mol: Molecule, atoms: number[], index: Map<number, number>, X: Vec3[]): number {
+  let vote = 0;
+  atoms.forEach((a, i) => {
+    const t = mol.tetra.get(a);
+    if (!t) return;
+    const inside = mol.neighbours[a].filter((b) => index.has(b));
+    if (inside.length < 3) return;
+    const out = mol.neighbours[a].filter((b) => !index.has(b));
+    const dirs = outward(mol, a, i, X, index, out);
+    const v = t.neighbours.slice(0, 3).map((n): Vec3 => {
+      if (index.has(n)) {
+        const q = X[index.get(n)!];
+        return [q[0] - X[i][0], q[1] - X[i][1], q[2] - X[i][2]];
+      }
+      const k = out.indexOf(n);
+      return k >= 0 ? dirs[k] : dirs[0];
+    });
+    const vol = dotV(v[0], crossV(v[1], v[2]));
+    vote += Math.sign(vol) === t.volume ? 1 : -1;
+  });
+  return Math.sign(vote);
+}
+
+/**
+ * The directions, in the solid, of an atom's bonds out of the cage: the
+ * tetrahedron's free corners (or, beside a double bond, the plane's), the
+ * one a stereocentre's configuration asks for where there is a choice.
+ */
+function outward(
+  mol: Molecule,
+  a: number,
+  i: number,
+  X: Vec3[],
+  index: Map<number, number>,
+  out: number[],
+): Vec3[] {
+  const inside = mol.neighbours[a].filter((b) => index.has(b));
+  const unit = (b: number): Vec3 => {
+    const q = X[index.get(b)!];
+    return normalise([q[0] - X[i][0], q[1] - X[i][1], q[2] - X[i][2]]);
+  };
+  const us = inside.map(unit);
+  const sum: Vec3 = [0, 1, 2].map((c) => us.reduce((s, u) => s + u[c], 0)) as Vec3;
+  const away = normalise([-sum[0], -sum[1], -sum[2]]);
+  if (us.length >= 3 || us.length < 2) return out.map(() => away);
+  // two bonds in the cage: the two free corners either side of their plane
+  const across = normalise(crossV(us[0], us[1]));
+  const k = Math.cos((54.75 * Math.PI) / 180);
+  const j = Math.sin((54.75 * Math.PI) / 180);
+  const corners: Vec3[] = [
+    [0, 1, 2].map((c) => away[c] * k + across[c] * j) as Vec3,
+    [0, 1, 2].map((c) => away[c] * k - across[c] * j) as Vec3,
+  ];
+  const double = out.some((b) => {
+    const bi = mol.bondIndex.get(a < b ? `${a},${b}` : `${b},${a}`);
+    return bi != null && mol.bonds[bi].order === 2;
+  });
+  if (double) return out.map(() => away);
+  if (out.length >= 2) return out.map((_, k2) => corners[k2 % 2]);
+  // one bond out and an H: the corner the configuration asks for
+  const t = mol.tetra.get(a);
+  if (!t) return [away];
+  const at = (n: number, corner: Vec3): Vec3 =>
+    n === out[0] ? corner : n === -1 ? [0, 1, 2].map((c) => -corner[c] + 2 * away[c] * k) as Vec3 : unit(n);
+  for (const corner of corners) {
+    const other = corners.find((c) => c !== corner)!;
+    const v = t.neighbours.slice(0, 3).map((n) => (n === -1 ? other : at(n, corner)));
+    const vol = dotV(v[0], crossV(v[1], v[2]));
+    if (Math.sign(vol) === t.volume) return [corner];
+  }
+  return [away];
+}
+
+/** Whether a ring system is a small bridged bicycle - norbornane, tropane, quinuclidine - drawn in perspective. */
+export function isSmallBicycle(mol: Molecule, sys: RingSystem): boolean {
+  if (sys.rings.length !== 2) return false;
+  const [r1, r2] = sys.rings.map((i) => mol.rings[i]);
+  return r1.filter((a) => r2.includes(a)).length >= 3 && Math.max(r1.length, r2.length) <= 7;
 }
 
 const dotV = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

@@ -49,6 +49,8 @@ export type Molecule = {
   ringBonds: Set<string>;
   /** Connected pieces (a salt's ions), as atom lists. */
   pieces: number[][];
+  /** Each stereocentre's configuration, as given. */
+  tetra: Map<number, Tetrahedral>;
 };
 
 export const key = (a: number, b: number): string => (a < b ? `${a},${b}` : `${b},${a}`);
@@ -120,6 +122,9 @@ export function perceive(input: LayoutInput): Molecule {
     systemOf,
     ringBonds,
     pieces,
+    tetra: new Map(
+      input.atoms.flatMap((a, i): [number, Tetrahedral][] => (a.tetra ? [[i, a.tetra]] : [])),
+    ),
   };
 }
 
