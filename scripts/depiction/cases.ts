@@ -57,12 +57,19 @@ function wedgeWithNeighbour(deg: number): Structure {
   };
 }
 
-/** Two double bonds sharing an atom, at `deg` between them. */
-function doublePair(deg: number, mode: Bond["doubleMode"]): Structure {
-  const a0: Atom = { id: 0, x: 0, y: 0, el: "C" };
-  const a1: Atom = { id: 1, x: L, y: 0, el: "C" };
+/**
+ * Two double bonds sharing an atom, at `deg` between them: carbons, or the
+ * elements given, shared atom in the middle.
+ */
+function doublePair(
+  deg: number,
+  mode: Bond["doubleMode"],
+  els: [string, string, string] = ["C", "C", "C"],
+): Structure {
+  const a0: Atom = { id: 0, x: 0, y: 0, el: els[0] };
+  const a1: Atom = { id: 1, x: L, y: 0, el: els[1] };
   return {
-    atoms: [a0, a1, bend(a1, deg, 2)],
+    atoms: [a0, a1, bend(a1, deg, 2, els[2])],
     bonds: [
       { a1: 0, a2: 1, order: 2, stereo: "none", doubleMode: mode },
       { a1: 1, a2: 2, order: 2, stereo: "none", doubleMode: mode },
@@ -141,6 +148,20 @@ export const sweeps: Sweep[] = [
       [90, 120, 150, 180].map((d) => ({
         label: `${mode} ${d}°`,
         structure: doublePair(d, mode === "auto" ? undefined : mode),
+      })),
+    ),
+  },
+  {
+    title: "Two double bonds sharing a label",
+    note:
+      "The label takes both bonds' ends, so each line stops where the label " +
+      "cuts it and meets nothing: run on to meet its neighbour's, it would " +
+      "cross the letters. A sulfonyl drawn a hair off straight through is " +
+      "where that showed.",
+    frames: (["auto", "center", "left", "right"] as const).flatMap((mode) =>
+      [90, 120, 150, 179, 180].map((d) => ({
+        label: `${mode} ${d}°`,
+        structure: doublePair(d, mode === "auto" ? undefined : mode, ["O", "S", "O"]),
       })),
     ),
   },

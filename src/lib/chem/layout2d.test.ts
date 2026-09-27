@@ -1720,6 +1720,38 @@ describe("two double bonds sharing an atom", () => {
       }
     }
   });
+
+  it("stops each line where a label they share cuts it, meeting nothing there", () => {
+    // O=S=O, and C=C=C with the carbons labelled: the label takes the lines'
+    // ends, so the first bond is drawn the same whether the second is double
+    // or single. Run on to meet the other bond's lines, they cross the
+    // letters - most plainly at a sulfonyl drawn nearly straight through.
+    const cases: [string[], Partial<LayoutOptions>][] = [
+      [["O", "S", "O"], {}],
+      [["C", "C", "C"], { showCarbonLabels: true }],
+    ];
+    for (const [els, over] of cases) {
+      for (const mode of ["center", "left", "right"] as const) {
+        for (const deg of [90, 120, 179.99, 180]) {
+          const ends = (second: 1 | 2) => {
+            const { atoms, bonds } = pair(deg, "center", false);
+            els.forEach((el, i) => (atoms[i].el = el));
+            bonds[0].doubleMode = mode;
+            bonds[1].order = second;
+            const { lines } = buildAllPrimitives(atoms, bonds, opts(over), 40);
+            // the first bond's lines: level, on the near side of the atom
+            return lines
+              .filter((l) => Math.abs(l.y1 - l.y2) < 1e-9)
+              .filter((l) => Math.min(l.x1, l.x2) < 1.8 - 1e-6)
+              .map((l) => [Math.max(l.x1, l.x2), l.y1].map((v) => +v.toFixed(6)))
+              .sort((a, b) => a[1] - b[1]);
+          };
+          const why = `${els.join("")} ${mode} ${deg}`;
+          expect([why, ends(2)]).toEqual([why, ends(1)]);
+        }
+      }
+    }
+  });
 });
 
 describe("which atoms are finished off at all", () => {
