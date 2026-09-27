@@ -44,6 +44,11 @@ struct PyEnvInfo {
     label: String,
 }
 
+/// Whether a lock file pins its packages by hash as well as by version.
+fn lock_is_hashed(lock: &str) -> bool {
+    lock.lines().any(|line| line.trim_start().starts_with("--hash="))
+}
+
 /// The purpose a setup's downloads go under: one of the Python environments'
 /// own, never another's - the user's code needs no asking, a setup does.
 fn setup_purpose(info: &PyEnvInfo) -> Result<String, String> {
@@ -179,6 +184,12 @@ fn validate_sidecar(
         .ok_or_else(|| "sidecar script has no parent directory".into())
 }
 
+/// The file name of the worker script a sidecar runs.
+fn worker_name(args: &[String]) -> Option<&str> {
+    let script = args.iter().find(|a| !PYTHON_FLAGS.contains(&a.as_str()))?;
+    Path::new(script).file_name()?.to_str()
+}
+
 fn resource_path(app: &AppHandle, rel: &Path) -> Result<PathBuf, String> {
     app.path()
         .resolve(rel, BaseDirectory::Resource)
@@ -278,6 +289,11 @@ async fn py_env_setup_uv(
         .arg("--no-deps")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // A lock with hashes is installed with every file checked against them.
+    let lock_text = std::fs::read_to_string(&lock).map_err(|e| format!("read lock: {e}"))?;
+    if lock_is_hashed(&lock_text) {
+        cmd2.arg("--require-hashes");
+    }
     no_window(&mut cmd2);
     task.route(&mut cmd2);
     let mut child2 = cmd2.spawn().map_err(|e| format!("spawn uv pip: {}", e))?;
@@ -367,9 +383,18 @@ async fn ext_spawn_sidecar(
     let mut cmd = Command::new(&entry);
     cmd.args(&payload.args).current_dir(cwd);
     no_window(&mut cmd);
-    // Whatever the code run in it reaches for goes through the proxy, seen
-    // and logged, and not at all offline; it lasts as long as the sidecar.
-    let task = net.begin("python-code", "Python run in the console").ok();
+    // Whatever the code run in the console reaches for goes through the
+    // proxy, seen and logged, and not at all offline; it lasts as long as
+    // the sidecar. The other workers run no one's code and need no network:
+    // they are pointed at the proxy with no task, so an attempt is refused
+    // and on the record.
+    let console = worker_name(&payload.args) == Some("interactive_worker.py");
+    let task = if console {
+        net.begin("python-code", "Python run in the console").ok()
+    } else {
+        net.route_nowhere(&mut cmd);
+        None
+    };
     if let Some(task) = &task {
         task.route(&mut cmd);
     }
@@ -498,6 +523,16 @@ pub fn run() {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn tells_a_hashed_lock_and_which_worker_a_sidecar_runs() {
+        assert!(lock_is_hashed("rdkit==2026.3.6 \\\n    --hash=sha256:abc\n"));
+        assert!(!lock_is_hashed("numpy==2.3.2\n    # via accel\n"));
+        let args = |s: &[&str]| s.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        assert_eq!(worker_name(&args(&["-u", "/r/workers/chem_worker.py"])), Some("chem_worker.py"));
+        assert_eq!(worker_name(&args(&["/r/workers/interactive_worker.py", "x"])), Some("interactive_worker.py"));
+        assert_eq!(worker_name(&args(&["-u"])), None);
+    }
 
     #[test]
     fn a_setup_downloads_only_under_a_python_environments_purpose() {

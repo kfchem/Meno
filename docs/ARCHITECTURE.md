@@ -169,6 +169,13 @@ PyConsole ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_set
              ext_kill(id)
 ```
 
+The chemistry worker (`resources/workers/chem_worker.py`) is a sidecar of
+the `chem` profile, started by `lib/rdkit/worker.ts` and asked through
+`lib/rdkit/client.ts`: JSON lines, a fixed set of requests (ping,
+to_smiles, from_smiles, clean, analyse), MOL blocks in and out. It runs no
+code it is sent, and the app keeps it off the network. Its tests need RDKit
+and run by hand (`scripts/chem/test_chem_worker.py`).
+
 The venv lives under the app data dir at `uv/<profile>/venv`; a stamp file
 (`uv/stamps/<profile>.json`) stores the lock-file hash so setup reruns only when
 the lock or Python version changes. uv runs with its Python downloads
@@ -211,6 +218,10 @@ path it is given:
   inside `<app data>/uv/`; `args` may start with `-u` / `-B`, followed by an
   absolute `.py` script inside `resources/workers/`; later arguments go to the
   script unchanged.
+- A sidecar running the console's worker is a `python-code` task on the
+  network; any other worker is pointed at the proxy with no task, so what it
+  reaches for is refused and on the record.
+- A lock with hashes (`--hash=`) is installed with `--require-hashes`.
 - Sidecars are reaped when their stdout closes or on `ext_kill`, and all of
   them are killed when the app exits.
 

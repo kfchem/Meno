@@ -202,6 +202,28 @@ impl Net {
     }
 }
 
+/// Sets a child's proxy variables to `proxy`, both cases, and lets it reach
+/// only the machine itself directly.
+fn point_at_proxy(cmd: &mut Command, proxy: &str) {
+    for key in ["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"] {
+        cmd.env(key, proxy).env(key.to_lowercase(), proxy);
+    }
+    for key in ["NO_PROXY", "no_proxy"] {
+        cmd.env(key, "localhost,127.0.0.1,::1");
+    }
+}
+
+impl Net {
+    /// Points a child that has no business on the network - the chemistry
+    /// worker - at the proxy with no task's token: whatever it reaches for
+    /// is refused, and goes on the record.
+    pub fn route_nowhere(&self, cmd: &mut Command) {
+        if let Some(port) = self.0.port.get() {
+            point_at_proxy(cmd, &format!("http://127.0.0.1:{port}"));
+        }
+    }
+}
+
 /// A task under way. Ended - as failed, unless said otherwise - when dropped.
 pub struct TaskHandle {
     net: Net,
@@ -212,18 +234,10 @@ pub struct TaskHandle {
 impl TaskHandle {
     /// Points a child process's connections at the proxy, as this task's.
     pub fn route(&self, cmd: &mut Command) {
-        let Some(port) = self.net.0.port.get() else {
-            return;
-        };
-        // The token as the password: Python's urllib sends proxy
-        // credentials only when there is one.
-        let proxy = format!("http://meno:{}@127.0.0.1:{port}", self.token);
-        for key in ["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"] {
-            cmd.env(key, &proxy).env(key.to_lowercase(), &proxy);
-        }
-        // only the machine itself is reached directly
-        for key in ["NO_PROXY", "no_proxy"] {
-            cmd.env(key, "localhost,127.0.0.1,::1");
+        if let Some(port) = self.net.0.port.get() {
+            // The token as the password: Python's urllib sends proxy
+            // credentials only when there is one.
+            point_at_proxy(cmd, &format!("http://meno:{}@127.0.0.1:{port}", self.token));
         }
     }
 
@@ -701,6 +715,20 @@ mod tests {
             let blocked = net.0.recent.lock().unwrap().iter().filter(|c| c.outcome == "blocked").count();
             assert_eq!(blocked, 2);
         });
+    }
+
+    #[test]
+    fn routes_a_child_that_needs_no_network_to_the_proxy_without_a_token() {
+        let net = Net::default();
+        let _ = net.0.port.set(4567);
+        let mut cmd = Command::new("true");
+        net.route_nowhere(&mut cmd);
+        let proxy = cmd
+            .get_envs()
+            .find(|(k, _)| k.to_string_lossy().eq_ignore_ascii_case("HTTPS_PROXY"))
+            .and_then(|(_, v)| v)
+            .map(|v| v.to_string_lossy().into_owned());
+        assert_eq!(proxy.as_deref(), Some("http://127.0.0.1:4567"));
     }
 
     #[test]

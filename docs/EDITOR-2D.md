@@ -131,10 +131,13 @@ Both go together, because both touch every layer.
 - A `chem` profile: RDKit and its dependencies, locked for every platform with
   hashes and installed with them checked; warmed up once after installing
   (the first import of RDKit takes about 15 s on a Mac, later ones 0.15 s).
+  The download asks first and goes on the network's record like any other.
+  (PR #52)
 - A dedicated worker that answers a fixed set of requests (not the console's
-  run-any-code worker), and a typed, asynchronous client for it on the TS
-  side.
-- A MOL V3000 writer in TS.
+  run-any-code worker) - SMILES in and out, clean-up, and per atom and bond
+  hydrogens, valence errors, aromaticity and CIP labels - kept off the
+  network, and a typed, asynchronous client for it on the TS side. (PR #52)
+- A MOL V3000 writer in TS. (PR #40)
 
 ### 4. Editing a chemist expects
 
@@ -162,7 +165,7 @@ All hover-based, as above.
   something to lose. (PR #43)
 - Import that keeps charges, isotopes, radicals, atom lists and S-groups, and
   V3000 reactions.
-- SMILES in and out.
+- SMILES in and out. (PR #52: a SMILES card on the canvas)
 - SVG export, drawn exactly as on the canvas - with the drawing style it was
   drawn in - and PNG. The SVG export draws what the canvas draws (PR #36),
   at ACS 1996's own size, from a button beside Save (PR #43); PNG to come.

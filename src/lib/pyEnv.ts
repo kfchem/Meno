@@ -18,7 +18,7 @@ async function sha256(s: string) {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
-export type PyProfile = "console" | "node";
+export type PyProfile = "console" | "node" | "chem";
 
 async function ensureDir(rel: string, baseDir: BaseDirectory) {
   const parts = rel.split("/").filter(Boolean);
@@ -63,6 +63,14 @@ type PyEnvInfo = {
 const PROFILE_USE: Record<PyProfile, string> = {
   console: "the console",
   node: "workflows",
+  chem: "chemistry",
+};
+
+/** Each profile's lock file, among the app's resources. */
+const PROFILE_LOCK: Record<PyProfile, string> = {
+  console: "resources/py/requirements.console.lock",
+  node: "resources/py/requirements.node.lock",
+  chem: "resources/py/requirements.chem.lock",
 };
 
 async function baseInfo(
@@ -80,7 +88,10 @@ async function baseInfo(
     stampPath: `uv/stamps/${profile}.json`,
     pythonVersion: pyVer,
     purpose: `python-env:${profile}`,
-    label: `Setting up Python for ${PROFILE_USE[profile]}`,
+    label:
+      profile === "chem"
+        ? "Setting up RDKit for chemistry"
+        : `Setting up Python for ${PROFILE_USE[profile]}`,
   };
 }
 
@@ -88,10 +99,7 @@ export async function ensurePyEnv(
   profile: PyProfile,
   opts?: { lockPath?: string; pythonVersion?: string }
 ): Promise<string> {
-  const defaultLock =
-    profile === "console"
-      ? "resources/py/requirements.console.lock"
-      : "resources/py/requirements.node.lock";
+  const defaultLock = PROFILE_LOCK[profile];
   const fallbackLock = "resources/py/requirements.lock";
   const useDefault = await exists(defaultLock, {
     baseDir: BaseDirectory.Resource,
@@ -136,13 +144,21 @@ export async function ensurePyEnv(
     const packages = lockText
       .split(/\r?\n/)
       .filter((line) => /^[A-Za-z0-9_.-]+==/.test(line)).length;
+    const hashed = /^\s*--hash=/m.test(lockText);
     const allowed = await askToConnect({
       purpose: info.purpose,
-      title: `Download Python for ${PROFILE_USE[profile]}?`,
+      title:
+        profile === "chem"
+          ? "Download RDKit for chemistry?"
+          : `Download Python for ${PROFILE_USE[profile]}?`,
       detail:
-        `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, ` +
+        (profile === "chem"
+          ? "Meno's chemistry - hydrogens and valence, SMILES, clean-up, stereo labels - " +
+            `runs on RDKit, in a Python ${info.pythonVersion} of its own `
+          : `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, `) +
         `with the ${packages} packages it needs, in its data folder. ` +
-        `uv, which comes with Meno, downloads them - once:`,
+        `uv, which comes with Meno, downloads them - once` +
+        (hashed ? ", every file checked against the fingerprint Meno carries for it:" : ":"),
       sources: [
         "Python itself, from Astral, who make uv (releases.astral.sh)",
         "the packages, from the Python Package Index (pypi.org, files.pythonhosted.org)",
