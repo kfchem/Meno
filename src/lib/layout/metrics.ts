@@ -68,12 +68,17 @@ export type LayoutMetrics = {
    */
   gridError: number;
   /**
-   * How far, on average, a ring atom's other bonds - substituents, an H at a
-   * ring fusion - are from splitting the room outside the ring evenly, in
-   * degrees.
+   * How far, on average, a ring atom's other bonds are from where they go:
+   * one straight out, two 60 degrees apart about straight out (a
+   * gem-dimethyl), more splitting the room outside the ring evenly; an H at
+   * a ring fusion upright. In degrees.
    */
   substituentError: number;
-  /** How far long chains are folded rather than drawn out straight, 0 to 1. */
+  /**
+   * How far long chains are folded rather than drawn out straight, 0 to 1 -
+   * and half as much again for each place a chain turns back on itself at
+   * a cis double bond.
+   */
   chainFold: number;
   /** How far long chains are from running parallel, as lipids' do, in degrees. */
   chainSplay: number;
@@ -133,7 +138,7 @@ export const SCORE_WEIGHTS = {
   chainFold: 10,
   chainSplay: 0.05,
   chainTilt: 0.08,
-  axisTilt: 0.05,
+  axisTilt: 0.1,
   aspect: 5,
   macroAspect: 5,
   readingOrder: 3,
@@ -469,8 +474,14 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     const rel = outside
       .map((b) => (((dir(b) - start) % TAU) + TAU) % TAU)
       .sort((p, q) => p - q);
+    // two on one ring atom close together, 60 degrees apart about straight
+    // out; otherwise splitting the room evenly
+    const ideal = (k: number) =>
+      m === 2 && gap > Math.PI / 2
+        ? gap / 2 + (k === 0 ? -1 : 1) * Math.min(Math.PI / 6, gap / 4)
+        : (gap * (k + 1)) / (m + 1);
     rel.forEach((r, k) => {
-      subSum += Math.abs(deg(r - (gap * (k + 1)) / (m + 1)));
+      subSum += Math.abs(deg(r - ideal(k)));
       subCount++;
     });
   }
@@ -534,7 +545,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       from = i;
     }
   }
-  const chainFold = foldCount ? foldSum / foldCount : 0;
+  let chainFold = foldCount ? foldSum / foldCount : 0;
   const cx = x.reduce((sum, v) => sum + v, 0) / Math.max(n, 1);
   const cy = y.reduce((sum, v) => sum + v, 0) / Math.max(n, 1);
   // long chains, pointed away from the middle, against running parallel
@@ -578,6 +589,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   };
   const walked = new Set<string>();
   const strands: number[][] = [];
+  let reversals = 0;
   for (let e = 0; e < n; e++) {
     if (leaf(e) || through(e)) continue;
     for (const first of neighbours[e]) {
@@ -597,19 +609,32 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       if (head != null) path.unshift(head);
       const tail = carryOn(path[path.length - 1], path[path.length - 2]);
       if (tail != null) path.push(tail);
-      // a cis double bond turns a chain rightly: measure either side of it
+      // A cis double bond turns a chain rightly: measure either side of it.
+      // But a chain is read as the straight chain it would be without it -
+      // a fatty acid's cis bond is a step in a straight chain - so the part
+      // after it carries on the way the part before it went, never back.
       let from = 0;
+      const pieces: number[][] = [];
       for (let i = 1; i + 2 < path.length; i++) {
         const [p, a, b, q] = [path[i - 1], path[i], path[i + 1], path[i + 2]];
         if (orderAt(a, b) !== 2) continue;
         const side = (r: number) =>
           Math.sign((x[b] - x[a]) * (y[r] - y[a]) - (y[b] - y[a]) * (x[r] - x[a]));
         if (side(p) * side(q) > 0) {
-          strands.push(path.slice(from, i + 1));
+          pieces.push(path.slice(from, i + 1));
           from = i + 1;
         }
       }
-      strands.push(path.slice(from));
+      pieces.push(path.slice(from));
+      strands.push(...pieces);
+      const heading = (s: number[]) => ({ x: x[s[s.length - 1]] - x[s[0]], y: y[s[s.length - 1]] - y[s[0]] });
+      for (let k = 1; k < pieces.length; k++) {
+        const u = heading(pieces[k - 1]);
+        const v = heading(pieces[k]);
+        if (pieces[k - 1].length >= 3 && pieces[k].length >= 3 && u.x * v.x + u.y * v.y < 0) {
+          reversals++;
+        }
+      }
     }
   }
   // A zigzag's axis runs through the midpoints of its bonds, and it should
@@ -644,6 +669,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     tiltBonds += k;
   }
   const chainTilt = tiltBonds ? tiltSum / tiltBonds : 0;
+  chainFold += 0.5 * reversals;
 
   const width = Math.max(...x) - Math.min(...x);
   const height = Math.max(...y) - Math.min(...y);

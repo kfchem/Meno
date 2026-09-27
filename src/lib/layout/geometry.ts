@@ -91,6 +91,14 @@ export function splitOutside(
     }
   });
   if (gap < 0) return splitWidestGap(taken, count);
+  // two on one ring atom - a gem-dimethyl - close together, 60 degrees
+  // apart either side of straight out, as they are always drawn; not
+  // spread evenly over the room
+  if (count === 2 && gap > Math.PI / 2) {
+    const mid = from + gap / 2;
+    const half = Math.min(Math.PI / 6, gap / 4);
+    return [mid - half, mid + half];
+  }
   return Array.from({ length: count }, (_, i) => from + (gap * (i + 1)) / (count + 1));
 }
 
