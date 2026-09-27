@@ -82,7 +82,7 @@ public static class MacGui {
   const uint OnScreenOnly = 1, ExcludeDesktop = 16;
   const uint HidTap = 0;                      // kCGHIDEventTap
   const uint EvMoved = 5, EvLeftDown = 1, EvLeftUp = 2, EvLeftDragged = 6;   // CGEventType
-  const uint EvRightDown = 3, EvRightUp = 4, RightButton = 1;
+  const uint EvRightDown = 3, EvRightUp = 4, EvRightDragged = 7, RightButton = 1;
   const uint ClickState = 1;                  // kCGMouseEventClickState
   const uint PixelUnits = 0;                  // kCGScrollEventUnitPixel
 
@@ -276,11 +276,30 @@ public static class MacGui {
   public static void LeftUp(double x, double y, int click) { Post(Mouse(EvLeftUp, x, y, click)); }
   public static void RightDown(double x, double y) { Post(Mouse(EvRightDown, x, y, 1, RightButton)); }
   public static void RightUp(double x, double y) { Post(Mouse(EvRightUp, x, y, 1, RightButton)); }
+  public static void RightDragTo(double x, double y) { Post(Mouse(EvRightDragged, x, y, 0, RightButton)); }
 
   public static void Scroll(double x, double y, int pixels) {
     IntPtr e = CGEventCreateScrollWheelEvent2(IntPtr.Zero, PixelUnits, 1, pixels, 0, 0);
     if (e != IntPtr.Zero) CGEventSetLocation(e, new CGPoint { X = x, Y = y });
     Post(e);
+  }
+
+  // Two fingers on a trackpad: a stroke of small continuous steps, begun,
+  // carried on and ended as the trackpad's own are. The page sees the
+  // opposite sign to the wheel's: a positive dy scrolls down.
+  const uint ScrollIsContinuous = 88, ScrollPhase = 99;
+  public static void Swipe(double x, double y, int dx, int dy, int steps) {
+    for (int i = 0; i <= steps + 1; i++) {
+      long phase = i == 0 ? 1 : i > steps ? 4 : 2;   // began, changed, ended
+      int sx = phase == 4 ? 0 : dx / steps, sy = phase == 4 ? 0 : dy / steps;
+      IntPtr e = CGEventCreateScrollWheelEvent2(IntPtr.Zero, PixelUnits, 2, -sy, -sx, 0);
+      if (e == IntPtr.Zero) continue;
+      CGEventSetLocation(e, new CGPoint { X = x, Y = y });
+      CGEventSetIntegerValueField(e, ScrollIsContinuous, 1);
+      CGEventSetIntegerValueField(e, ScrollPhase, phase);
+      Post(e);
+      Thread.Sleep(16);
+    }
   }
 
   // Text goes in as Unicode strings on a key event, so it does not depend on
@@ -575,27 +594,28 @@ function Invoke-MenoDrag {
         [Parameter(Mandatory)] [int] $ToX, [Parameter(Mandatory)] [int] $ToY,
         [int] $Steps = 12,
         [int] $StepMs = 25,
-        [scriptblock] $AtStep
+        [scriptblock] $AtStep,
+        [switch] $Right
     )
     $a = ConvertTo-Screen $FromX $FromY
     $b = ConvertTo-Screen $ToX $ToY
     Assert-MenoFront
     [MacGui]::MoveTo($a.X, $a.Y)
     Start-Sleep -Milliseconds 80
-    [MacGui]::LeftDown($a.X, $a.Y, 1)
+    if ($Right) { [MacGui]::RightDown($a.X, $a.Y) } else { [MacGui]::LeftDown($a.X, $a.Y, 1) }
     Start-Sleep -Milliseconds 80
     try {
         for ($i = 1; $i -le $Steps; $i++) {
             $t = $i / $Steps
             $p = ConvertTo-Screen ([int]($FromX + ($ToX - $FromX) * $t)) ([int]($FromY + ($ToY - $FromY) * $t))
-            [MacGui]::DragTo($p.X, $p.Y)
+            if ($Right) { [MacGui]::RightDragTo($p.X, $p.Y) } else { [MacGui]::DragTo($p.X, $p.Y) }
             Start-Sleep -Milliseconds $StepMs
             if ($AtStep) { & $AtStep $i }
         }
     } finally {
         # Let go whatever happened: a button left down is a button held down
         # for every app on the machine.
-        [MacGui]::LeftUp($b.X, $b.Y, 1)
+        if ($Right) { [MacGui]::RightUp($b.X, $b.Y) } else { [MacGui]::LeftUp($b.X, $b.Y, 1) }
     }
     Start-Sleep -Milliseconds 200
 }
@@ -615,6 +635,24 @@ function Move-MenoPointer {
     [MacGui]::MoveTo($p.X - 4, $p.Y)
     Start-Sleep -Milliseconds 60
     [MacGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 200
+}
+
+function Invoke-MenoSwipe {
+    <#
+      .SYNOPSIS
+      Two fingers on a trackpad over a point: scroll by DX, DY pixels in small
+      steps. A positive DY scrolls down, as it would a page.
+    #>
+    param(
+        [Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y,
+        [int] $DX = 0, [int] $DY = 0, [int] $Steps = 10
+    )
+    $p = ConvertTo-Screen $X $Y
+    Assert-MenoFront
+    [MacGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 60
+    [MacGui]::Swipe($p.X, $p.Y, $DX, $DY, $Steps)
     Start-Sleep -Milliseconds 200
 }
 
@@ -777,5 +815,5 @@ function Wait-MenoSettled {
 
 Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
     Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
-    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel,
+    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel, Invoke-MenoSwipe,
     Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled
