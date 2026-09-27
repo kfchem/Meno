@@ -102,7 +102,7 @@ function draw(g: Graph, laid: Laid): string {
   return createSVG(layoutMolecule(atoms, bonds, opts, ZOOM), opts);
 }
 
-function measure(g: Graph, laid: Laid): LayoutMetrics {
+function measure(g: Graph, laid: Laid, base: Baseline): LayoutMetrics {
   return layoutMetrics({
     x: laid.x,
     y: laid.y,
@@ -113,6 +113,9 @@ function measure(g: Graph, laid: Laid): LayoutMetrics {
     labelled: g.atoms.map((a) => a.el !== "C" || a.charge !== 0),
     elements: g.atoms.map((a) => a.el),
     hydrogens: g.atoms.map((a) => a.hs),
+    cisTrans: base.graph.bonds.flatMap((b, i) =>
+      b.stereo ? [{ bond: i, refs: b.stereo.refs, cis: b.stereo.cis }] : [],
+    ),
   });
 }
 
@@ -123,6 +126,7 @@ const escape = (s: string) =>
 const partNames: Record<keyof ReturnType<typeof scoreParts>, string> = {
   overlaps: "overlaps",
   crossings: "crossings",
+  wrongDoubles: "wrong cis/trans",
   clashes: "clashes",
   crowdedLabels: "crowded labels",
   ringWedges: "wedges on rings",
@@ -151,7 +155,7 @@ const fmt = (m: LayoutMetrics) => {
     .map(([k, v]) => `${partNames[k as keyof typeof partNames]} ${v.toFixed(1)}`);
   return [
     `<b>score ${m.score.toFixed(1)}</b>${parts.length ? ` = ${parts.join(" + ")}` : ""}`,
-    `overlaps ${m.overlaps} · crossings ${m.crossings} · clashes ${m.clashes} · crowded labels ${m.crowdedLabels}`,
+    `overlaps ${m.overlaps} · crossings ${m.crossings} · clashes ${m.clashes} · crowded labels ${m.crowdedLabels} · wrong cis/trans ${m.wrongDoubles}`,
     `bonds ±${(m.bondSpread * 100).toFixed(1)}% · angles ${m.angleError.toFixed(1)}° · rings ${m.ringError.toFixed(3)} · macrocycle ${m.macroAngleError.toFixed(1)}°`,
     `tilt ${m.tilt.toFixed(1)}° · askew ${m.gridError.toFixed(1)}° · substituents ${m.substituentError.toFixed(1)}° · wedges on rings ${m.ringWedges}`,
     `chains folded ${m.chainFold.toFixed(2)}, splayed ${m.chainSplay.toFixed(0)}°, off level ${m.chainTilt.toFixed(0)}° · long axis ${m.axisTilt.toFixed(0)}°`,
@@ -227,7 +231,7 @@ for (const m of listed) {
   const cells = engines.map((e) => {
     const laid = base.layouts[e];
     if (!laid) return "";
-    const metrics = measure(laid.graph, laid);
+    const metrics = measure(laid.graph, laid, base);
     (scores[m.name] ??= {})[e] = metrics;
     const cat = byCategory.get(m.category) ?? new Map();
     const c = cat.get(e) ?? { score: 0, n: 0 };

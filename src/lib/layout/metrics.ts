@@ -23,6 +23,11 @@ export type Geometry = {
   hydrogens?: readonly number[];
   /** The rings, where the caller has them already (they depend only on the bonds). */
   rings?: readonly (readonly number[])[];
+  /**
+   * Double bonds whose configuration is known, by bond index: an atom on
+   * each end and whether they are cis.
+   */
+  cisTrans?: readonly { bond: number; refs: readonly [number, number]; cis: boolean }[];
 };
 
 export type LayoutMetrics = {
@@ -36,6 +41,8 @@ export type LayoutMetrics = {
   overlaps: number;
   /** Bonds crossing bonds they do not share an atom with. */
   crossings: number;
+  /** Double bonds drawn cis that are trans, or the other way: not this molecule at all. */
+  wrongDoubles: number;
   /** Atoms lying on a bond they are not part of (within 0.3 of a bond). */
   clashes: number;
   /**
@@ -112,6 +119,7 @@ export type LayoutMetrics = {
 export const SCORE_WEIGHTS = {
   overlaps: 10,
   crossings: 5,
+  wrongDoubles: 50,
   clashes: 3,
   crowdedLabels: 5,
   ringWedges: 2,
@@ -866,6 +874,16 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     }
   }
 
+  let wrongDoubles = 0;
+  for (const { bond, refs, cis } of g.cisTrans ?? []) {
+    const [a, b] = edges[bond];
+    const onA = neighbours[a].includes(refs[0]) && refs[0] !== b ? refs[0] : refs[1];
+    const onB = onA === refs[0] ? refs[1] : refs[0];
+    const side = (r: number) =>
+      Math.sign((x[b] - x[a]) * (y[r] - y[a]) - (y[b] - y[a]) * (x[r] - x[a]));
+    if ((side(onA) === side(onB)) !== cis) wrongDoubles++;
+  }
+
   let overlaps = 0;
   for (let a = 0; a < n; a++) {
     for (let b = a + 1; b < n; b++) {
@@ -898,6 +916,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     ringError,
     overlaps,
     crossings,
+    wrongDoubles,
     clashes,
     macroAngleError,
     ringWedges,

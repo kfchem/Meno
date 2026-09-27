@@ -330,9 +330,15 @@ export function scorer(mol: Molecule, piece: number[]): (pos: Grown) => number {
   const index = new Map(piece.map((a, i) => [a, i]));
   const edges: [number, number][] = [];
   const orders: number[] = [];
+  const cisTrans: { bond: number; refs: [number, number]; cis: boolean }[] = [];
   for (const [k, i] of mol.bondIndex) {
     const [a, b] = k.split(",").map(Number);
     if (!index.has(a)) continue;
+    const st = mol.bonds[i].stereo;
+    if (st && mol.bonds[i].order === 2) {
+      // (the bond's ends in the same order as the edge, the refs with them)
+      cisTrans.push({ bond: edges.length, refs: [index.get(st.refs[0])!, index.get(st.refs[1])!], cis: st.cis });
+    }
     edges.push([index.get(a)!, index.get(b)!]);
     orders.push(mol.bonds[i].order);
   }
@@ -352,5 +358,6 @@ export function scorer(mol: Molecule, piece: number[]): (pos: Grown) => number {
       hydrogens,
       labelled,
       rings,
+      cisTrans,
     }).score;
 }

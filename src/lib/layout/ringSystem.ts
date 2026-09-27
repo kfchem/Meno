@@ -49,11 +49,7 @@ export function ringSystemVariants(mol: Molecule, sys: RingSystem): number {
   const rings = sys.rings.map((i) => mol.rings[i]);
   const big = Math.max(0, ...rings.map((r) => r.length));
   if (big < MACROCYCLE) return 1;
-  const macro = rings.find((r) => r.length === big)!;
-  // one that runs through a ring on its way may also be tried round a
-  // circle, last, where the zigzag cannot take the ring it runs through
-  const threaded = rings.some((r) => r !== macro && r.filter((a) => macro.includes(a)).length >= 3);
-  return macrocycleShapes(big).length + (threaded ? 1 : 0);
+  return macrocycleShapes(big).length;
 }
 
 export function placeRingSystem(
@@ -100,10 +96,7 @@ export function placeRingSystem(
       .flatMap((r) => r.filter((a) => first.includes(a))),
   );
   const shapes = first.length >= MACROCYCLE ? macrocycleShapes(first.length) : [];
-  if (
-    first.length >= MACROCYCLE &&
-    (through.size >= 0.4 * first.length || (through.size > 0 && variant >= shapes.length))
-  ) {
+  if (first.length >= MACROCYCLE && through.size >= 0.4 * first.length) {
     ringOfBlocks(mol, first, rings, pos).forEach((i) => placedRing.add(i));
   } else if (first.length >= MACROCYCLE) {
     const shape = shapes[variant % shapes.length];
@@ -326,32 +319,65 @@ function macrocycleFit(
       }
       weight += 1 + 0.5 * (seen.size - 2);
     }
-    // a ring fused on this atom needs room outside too
-    if (rings.some((r) => r !== ring && r.includes(a))) weight += 3;
     return weight;
   });
-  // a ring the macrocycle runs through (three atoms or more of it) wants a
-  // corner of the shape: its atoms inside that run turning outward, the way
-  // a regular ring's do
-  const inner: number[] = [];
+  // A ring the macrocycle runs through (three atoms or more of it): through
+  // three, across a corner of it, the ring stands outside the macrocycle
+  // where that corner points in - its middle atom on a corner pointing in;
+  // through more, the ring can only lie inside a corner pointing out.
+  // A ring fused on a side: a regular ring there needs both ends of that
+  // side to be corners pointing out - at one pointing in, its next side
+  // would run along the macrocycle's own bond. Along a zigzag the corners
+  // alternate, so fused rings go where the shape turns, at its corners.
+  const pointIn: number[] = [];
+  const pointOut: number[] = [];
   for (const r of rings) {
     if (r === ring) continue;
     const shared = ring.map((a, i) => (r.includes(a) ? i : -1)).filter((i) => i >= 0);
+    if (shared.length === 2) pointOut.push(...shared);
     if (shared.length < 3) continue;
     for (const i of shared) {
-      if (r.includes(ring[(i - 1 + n) % n]) && r.includes(ring[(i + 1) % n])) inner.push(i);
+      if (!r.includes(ring[(i - 1 + n) % n]) || !r.includes(ring[(i + 1) % n])) continue;
+      (shared.length === 3 ? pointIn : pointOut).push(i);
     }
   }
+  // a double bond in the ring keeps its cis or trans: taken against the
+  // ring atoms either side of it (a substituent is on the other side from
+  // its ring neighbour, so a configuration given against it is turned round)
+  const fixed: { i: number; cis: boolean }[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % n];
+    const bi = mol.bondIndex.get(a < b ? `${a},${b}` : `${b},${a}`);
+    const st = bi != null ? mol.bonds[bi].stereo : undefined;
+    if (!st || mol.bonds[bi!].order !== 2) continue;
+    const before = ring[(i - 1 + n) % n];
+    const after = ring[(i + 2) % n];
+    const onA = mol.neighbours[a].includes(st.refs[0]) && st.refs[0] !== b ? st.refs[0] : st.refs[1];
+    const onB = onA === st.refs[0] ? st.refs[1] : st.refs[0];
+    const cis = st.cis !== (onA !== before) !== (onB !== after);
+    fixed.push({ i, cis });
+  }
+  const at = (shift: number, way: number, k: number) => shape[(((shift + way * k) % n) + n) % n];
   let best = { shift: 0, way: 1 };
   let bestCost = Infinity;
   for (const way of [1, -1]) {
     for (let shift = 0; shift < n; shift++) {
       let cost = 0;
+      for (const { i, cis } of fixed) {
+        const pa = at(shift, way, i);
+        const pb = at(shift, way, i + 1);
+        const side = (k: number) => Math.sign(cross(sub(pb, pa), sub(at(shift, way, k), pa)));
+        if ((side(i - 1) === side(i + 2)) !== cis) cost += 1000;
+      }
       for (let i = 0; i < n; i++) {
         if (inward[(((shift + way * i) % n) + n) % n]) cost += load[i];
       }
-      for (const i of inner) {
-        if (inward[(((shift + way * i) % n) + n) % n]) cost += 8;
+      for (const i of pointIn) {
+        if (!inward[(((shift + way * i) % n) + n) % n]) cost += 20;
+      }
+      for (const i of pointOut) {
+        if (inward[(((shift + way * i) % n) + n) % n]) cost += 20;
       }
       if (cost < bestCost - 1e-9) {
         bestCost = cost;
