@@ -243,12 +243,22 @@ function pointToSegment(
 export function layoutMetrics(g: Geometry): LayoutMetrics {
   const { x, y, edges } = g;
   const n = x.length;
-  const solid = (...atoms: number[]) => atoms.every((a) => g.perspective?.[a]);
+  // (a bond, or any pair of atoms, by a number: a string would be built
+  // for every pair every time the drawing is measured)
+  const pair = (p: number, q: number) => (p < q ? p * n + q : q * n + p);
+  const persp = g.perspective;
+  const solid = (...atoms: number[]) => !!persp && atoms.every((a) => persp[a]);
+  const solid2 = (a: number, b: number) => !!persp && !!persp[a] && !!persp[b];
   // one bond in front of the other, where the drawing gives depth
+  const z = g.depth;
   const passes = (a: number, b: number, c: number, d: number) => {
-    const z = [a, b, c, d].map((v) => g.depth?.[v]);
-    if (z.some((v) => v == null)) return false;
-    return Math.abs((z[0]! + z[1]!) / 2 - (z[2]! + z[3]!) / 2) > 0.25;
+    if (!z) return false;
+    const za = z[a];
+    const zb = z[b];
+    const zc = z[c];
+    const zd = z[d];
+    if (za == null || zb == null || zc == null || zd == null) return false;
+    return Math.abs((za + zb) / 2 - (zc + zd) / 2) > 0.25;
   };
   // (a bond to a drawn H is drawn short, by choice: it is left out)
   const isH = (a: number) => g.elements?.[a] === "H";
@@ -276,13 +286,13 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     for (const t of touching) systems[t] = new Set();
   }
   const live = systems.filter((s) => s.size > 0);
-  const bonded = new Set(edges.map(([a, b]) => (a < b ? `${a},${b}` : `${b},${a}`)));
+  const bonded = new Set(edges.map(([a, b]) => pair(a, b)));
   const neighbours: number[][] = Array.from({ length: n }, () => []);
-  const orderOf = new Map<string, number>();
+  const orderOf = new Map<number, number>();
   edges.forEach(([a, b], e) => {
     neighbours[a].push(b);
     neighbours[b].push(a);
-    orderOf.set(a < b ? `${a},${b}` : `${b},${a}`, g.orders?.[e] ?? 1);
+    orderOf.set(pair(a, b), g.orders?.[e] ?? 1);
   });
 
   // angles: at an atom in no ring, its bonds evenly spread (a pair at 120°,
@@ -300,7 +310,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     );
     let ideal = TAU / nb.length;
     if (nb.length === 2) {
-      const o = nb.map((b) => orderOf.get(a < b ? `${a},${b}` : `${b},${a}`) ?? 1);
+      const o = nb.map((b) => orderOf.get(pair(a, b)) ?? 1);
       const linear = o.includes(3) || (o[0] === 2 && o[1] === 2);
       ideal = linear ? Math.PI : (2 * Math.PI) / 3;
       // either way round: the smaller gap against the ideal
@@ -348,16 +358,16 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   }
   const macroAngleError = macroCount ? macroSum / macroCount : 0;
 
-  const ringBonds = new Set<string>();
+  const ringBonds = new Set<number>();
   for (const r of rings) {
     r.forEach((a, i) => {
       const b = r[(i + 1) % r.length];
-      ringBonds.add(a < b ? `${a},${b}` : `${b},${a}`);
+      ringBonds.add(pair(a, b));
     });
   }
   const ringWedges = (g.wedged ?? []).filter((e) => {
     const [a, b] = edges[e] ?? [];
-    return a != null && ringBonds.has(a < b ? `${a},${b}` : `${b},${a}`);
+    return a != null && ringBonds.has(pair(a, b));
   }).length;
 
   let crowdedLabels = 0;
@@ -365,7 +375,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     for (let a = 0; a < n; a++) {
       if (!g.labelled[a]) continue;
       for (let b = a + 1; b < n; b++) {
-        if (!g.labelled[b] || bonded.has(`${a},${b}`)) continue;
+        if (!g.labelled[b] || bonded.has(pair(a, b))) continue;
         if (Math.hypot(x[a] - x[b], y[a] - y[b]) < 0.8 * L) crowdedLabels++;
       }
     }
@@ -377,8 +387,8 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   // it), which is drawn in perspective. The turn that brings those bonds
   // nearest to it is how far the drawing is tilted, and what is left after
   // that turn how far its parts are askew.
-  const fitsLattice = new Set<string>();
-  const offLattice = new Set<string>();
+  const fitsLattice = new Set<number>();
+  const offLattice = new Set<number>();
   const square = (r: readonly number[]) =>
     (r.length === 4 || r.length === 6) &&
     rings.every((q) => q === r || q.filter((a) => r.includes(a)).length <= 2);
@@ -386,7 +396,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     const fits = square(r);
     r.forEach((a, i) => {
       const b = r[(i + 1) % r.length];
-      (fits ? fitsLattice : offLattice).add(a < b ? `${a},${b}` : `${b},${a}`);
+      (fits ? fitsLattice : offLattice).add(pair(a, b));
     });
   }
   // The eye takes the largest ring system as the frame the drawing is
@@ -400,13 +410,13 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     rings
       .filter((r) => r.length === 4)
       .flatMap((r) => edges.filter(([a, b]) => r.includes(a) && r.includes(b)))
-      .map(([a, b]) => (a < b ? `${a},${b}` : `${b},${a}`)),
+      .map(([a, b]) => pair(a, b)),
   );
   const fitting = live.filter((sys) => rings.some((r) => square(r) && r.every((a) => sys.has(a))));
   const frameSize = Math.max(0, ...fitting.map((sys) => sys.size));
   const frames = fitting.filter((sys) => sys.size === frameSize);
   for (const [a, b] of edges) {
-    const k = a < b ? `${a},${b}` : `${b},${a}`;
+    const k = pair(a, b);
     if (offLattice.has(k) && !fitsLattice.has(k)) continue;
     // a solid's bonds, and those out of it, lie as it is seen
     if (g.perspective?.[a] || g.perspective?.[b]) continue;
@@ -526,7 +536,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   // chains: runs of atoms in no ring, each with two bonds
   const chainAtom = (a: number) => !inRing.has(a) && neighbours[a].length === 2;
   const orderAt = (a: number, b: number) =>
-    orderOf.get(a < b ? `${a},${b}` : `${b},${a}`) ?? 1;
+    orderOf.get(pair(a, b)) ?? 1;
   const runs: number[][] = [];
   const done = new Set<number>();
   for (let a = 0; a < n; a++) {
@@ -623,14 +633,14 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       .sort((a, b) => rank(a) - rank(b) || bendAt(p, t, a) - bendAt(p, t, b) || a - b);
     return free[0] ?? null;
   };
-  const walked = new Set<string>();
+  const walked = new Set<number>();
   const strands: number[][] = [];
   let reversals = 0;
   for (let e = 0; e < n; e++) {
     if (leaf(e) || through(e)) continue;
     for (const first of neighbours[e]) {
       if (leaf(first)) continue;
-      const key = e < first ? `${e},${first}` : `${first},${e}`;
+      const key = pair(e, first);
       if (walked.has(key) || ringBonds.has(key)) continue;
       const path = [e, first];
       walked.add(key);
@@ -638,7 +648,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         const cur = path[path.length - 1];
         const next = neighbours[cur].find((b) => b !== path[path.length - 2] && !leaf(b));
         if (next == null || path.includes(next)) break;
-        walked.add(cur < next ? `${cur},${next}` : `${next},${cur}`);
+        walked.add(pair(cur, next));
         path.push(next);
       }
       const head = carryOn(path[0], path[1]);
@@ -983,26 +993,51 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   let overlaps = 0;
   for (let a = 0; a < n; a++) {
     for (let b = a + 1; b < n; b++) {
-      if (bonded.has(`${a},${b}`) || solid(a, b)) continue;
-      if (Math.hypot(x[a] - x[b], y[a] - y[b]) < 0.5 * L) overlaps++;
+      const dx = x[a] - x[b];
+      const dy = y[a] - y[b];
+      if (dx * dx + dy * dy >= 0.25 * L * L) continue;
+      if (bonded.has(pair(a, b)) || solid2(a, b)) continue;
+      overlaps++;
     }
   }
 
+  // (each bond's box, to pass over pairs far apart without more ado)
+  const E = edges.length;
+  const lox = new Float64Array(E);
+  const hix = new Float64Array(E);
+  const loy = new Float64Array(E);
+  const hiy = new Float64Array(E);
+  edges.forEach(([a, b], e) => {
+    lox[e] = Math.min(x[a], x[b]);
+    hix[e] = Math.max(x[a], x[b]);
+    loy[e] = Math.min(y[a], y[b]);
+    hiy[e] = Math.max(y[a], y[b]);
+  });
   let crossings = 0;
-  for (let i = 0; i < edges.length; i++) {
+  for (let i = 0; i < E; i++) {
     const [a, b] = edges[i];
-    for (let j = i + 1; j < edges.length; j++) {
+    for (let j = i + 1; j < E; j++) {
+      if (lox[j] > hix[i] || hix[j] < lox[i] || loy[j] > hiy[i] || hiy[j] < loy[i]) continue;
       const [c, d] = edges[j];
-      if (a === c || a === d || b === c || b === d || solid(a, b, c, d) || passes(a, b, c, d)) continue;
-      if (segmentsCross(x[a], y[a], x[b], y[b], x[c], y[c], x[d], y[d])) crossings++;
+      if (a === c || a === d || b === c || b === d) continue;
+      if (!segmentsCross(x[a], y[a], x[b], y[b], x[c], y[c], x[d], y[d])) continue;
+      if (solid(a, b, c, d) || passes(a, b, c, d)) continue;
+      crossings++;
     }
   }
 
   let clashes = 0;
+  const near = 0.3 * L;
   for (let p = 0; p < n; p++) {
-    for (const [a, b] of edges) {
-      if (p === a || p === b || solid(p, a, b)) continue;
-      if (pointToSegment(x[p], y[p], x[a], y[a], x[b], y[b]) < 0.3 * L) clashes++;
+    const px = x[p];
+    const py = y[p];
+    for (let e = 0; e < E; e++) {
+      if (px < lox[e] - near || px > hix[e] + near || py < loy[e] - near || py > hiy[e] + near) continue;
+      const [a, b] = edges[e];
+      if (p === a || p === b) continue;
+      if (pointToSegment(px, py, x[a], y[a], x[b], y[b]) >= near) continue;
+      if (solid(p, a, b)) continue;
+      clashes++;
     }
   }
 
