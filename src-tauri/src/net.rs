@@ -675,13 +675,25 @@ mod tests {
         let task = net.begin("python-code", "Python").unwrap();
         let mut cmd = Command::new("true");
         task.route(&mut cmd);
+        // by name, whatever its case: on Windows HTTPS_PROXY and
+        // https_proxy are one variable
         let env: HashMap<_, _> = cmd
             .get_envs()
-            .map(|(k, v)| (k.to_string_lossy().into_owned(), v.map(|v| v.to_string_lossy().into_owned())))
+            .map(|(k, v)| {
+                let name = k.to_string_lossy().to_uppercase();
+                (name, v.map(|v| v.to_string_lossy().into_owned()))
+            })
             .collect();
         let proxy = env["HTTPS_PROXY"].clone().unwrap();
         assert!(proxy.starts_with("http://meno:") && proxy.ends_with("@127.0.0.1:4567"));
-        assert_eq!(env["https_proxy"], Some(proxy));
+        for name in ["HTTP_PROXY", "ALL_PROXY"] {
+            assert_eq!(env[name].as_ref(), Some(&proxy), "{name}");
+        }
         assert_eq!(env["NO_PROXY"].as_deref(), Some("localhost,127.0.0.1,::1"));
+        // elsewhere the lower-case names are set too, as some programs read only those
+        if !cfg!(windows) {
+            let lower: Vec<_> = cmd.get_envs().map(|(k, _)| k.to_string_lossy().into_owned()).collect();
+            assert!(lower.iter().any(|k| k == "https_proxy"));
+        }
     }
 }
