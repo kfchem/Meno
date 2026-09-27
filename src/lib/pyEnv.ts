@@ -88,7 +88,10 @@ async function baseInfo(
     stampPath: `uv/stamps/${profile}.json`,
     pythonVersion: pyVer,
     purpose: `python-env:${profile}`,
-    label: `Setting up Python for ${PROFILE_USE[profile]}`,
+    label:
+      profile === "chem"
+        ? "Setting up RDKit for chemistry"
+        : `Setting up Python for ${PROFILE_USE[profile]}`,
   };
 }
 
