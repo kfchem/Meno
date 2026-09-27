@@ -51,7 +51,7 @@ before, not a record of how particular molecules are drawn.
 | bond lengths | how much bond lengths vary |
 | angles | how far angles at chain atoms are from ideal |
 | rings | how far rings of up to eight are from regular polygons |
-| macrocycle angles | how far the angles round a ring of nine or more are from a zigzag's 120° - a macrocycle drawn as a round polygon is far off |
+| macrocycle angles | how far the angles round a ring of nine or more are from a zigzag's 120° - a macrocycle drawn as a round polygon is far off; a ring that runs through other rings (a porphyrin's) is a ring of rings, and not counted |
 | substituents | how far a ring atom's other bonds are from splitting the room outside the ring evenly: an H at a ring fusion drawn straight out, not aslant |
 | wedges on rings | wedges and hashes on ring bonds, where they read badly |
 

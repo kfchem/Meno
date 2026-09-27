@@ -194,13 +194,14 @@ describe("how a drawing sits", () => {
 
 describe("conventions the rules give", () => {
   it("wants a sugar's ring oxygen at the top", () => {
-    // a pyranose ring, oxygen at the apex, with OH on three ring carbons
+    // a pyranose ring, oxygen at the apex, with OH on three ring carbons -
+    // the anomeric one, next to the oxygen, upper right
     const h = polygon(6, 0, 0, Math.PI / 2);
     const x = [...h.x];
     const y = [...h.y];
     const edges = [...h.edges];
     const elements = ["O", "C", "C", "C", "C", "C"];
-    for (const i of [1, 2, 3]) {
+    for (const i of [5, 4, 3]) {
       x.push(h.x[i] * 2);
       y.push(h.y[i] * 2);
       edges.push([i, x.length - 1]);
@@ -208,7 +209,8 @@ describe("conventions the rules give", () => {
     }
     const sugar = { x, y, edges, elements, hydrogens: elements.map(() => 1) };
     expect(layoutMetrics(sugar).readingOrder).toBe(0);
-    expect(layoutMetrics(turned(sugar, 180)).readingOrder).toBe(1);
+    // upside down, the oxygen is at the bottom and the anomeric carbon left of it
+    expect(layoutMetrics(turned(sugar, 180)).readingOrder).toBe(1.5);
   });
 
   it("wants fused rings in a row, the rest above and to the right", () => {

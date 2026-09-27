@@ -41,7 +41,8 @@ export type LayoutMetrics = {
   /**
    * How far, on average, the angles round a large ring (nine or more) are
    * from a zigzag's 120 degrees, either way - a macrocycle drawn as a round
-   * polygon is far off - in degrees.
+   * polygon is far off - in degrees. Not a ring that runs through other
+   * rings (a porphyrin's, a cyclodextrin's): that is a ring of rings.
    */
   macroAngleError: number;
   /** Wedges and hashes on ring bonds, where they are hard to read. */
@@ -281,7 +282,11 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   const inSmall = new Set(rings.filter((r) => r.length <= 8).flat());
   let macroSum = 0;
   let macroCount = 0;
-  for (const r of rings.filter((r) => r.length >= 9)) {
+  // (not one that runs through other rings - a porphyrin's, a
+  // cyclodextrin's: that is a ring of rings, set round a circle)
+  const threaded = (r: number[]) =>
+    rings.some((q) => q.length < r.length && q.filter((a) => r.includes(a)).length >= 3);
+  for (const r of rings.filter((r) => r.length >= 9 && !threaded(r))) {
     r.forEach((a, i) => {
       if (inSmall.has(a)) return;
       const p = r[(i + r.length - 1) % r.length];
@@ -674,6 +679,28 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       else if (x[cur] > x[a] + 0.25 * L) wrongWay++;
     }
     readingOrder += Math.max(0, wrongWay - rightWay);
+    // the backbone of an amino acid or a peptide from N to C, left to
+    // right, as sequences are written: at each carbon bearing an N and a
+    // carbonyl carbon, the N to the left of it. Round a cyclic peptide half
+    // must run back, so again only the excess counts.
+    let forward = 0;
+    let backward = 0;
+    for (let a = 0; a < n; a++) {
+      if (el[a] !== "C") continue;
+      const nitrogen = neighbours[a].find((b) => el[b] === "N");
+      const carbonyl = neighbours[a].find(
+        (b) =>
+          el[b] === "C" &&
+          neighbours[b].some((c) => el[c] === "O" && orderAt(b, c) === 2) &&
+          neighbours[b].some((c) => (el[c] === "O" || el[c] === "N") && orderAt(b, c) === 1),
+      );
+      if (nitrogen == null || carbonyl == null) continue;
+      if (x[nitrogen] < x[carbonyl] - 0.25 * L) forward++;
+      else if (x[nitrogen] > x[carbonyl] + 0.25 * L) backward++;
+    }
+    readingOrder += Math.max(0, backward - forward);
+    let anomericRight = 0;
+    let anomericLeft = 0;
     // a sugar - a ring of five or six with one oxygen in it, and oxygens on
     // its carbons - drawn as its Haworth projection seen from above: the
     // ring oxygen at the back, which is the top
@@ -687,7 +714,20 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       if (hydroxylated < 2) continue;
       const ry = r.reduce((sum, a) => sum + y[a], 0) / r.length;
       if (y[ox[0]] < ry + 0.25 * L) readingOrder++;
+      // and its anomeric carbon - on the ring oxygen, with an oxygen or a
+      // nitrogen of its own: a glycoside's link, a nucleoside's base - on
+      // the right of it
+      for (const c of neighbours[ox[0]]) {
+        if (!r.includes(c)) continue;
+        const own = neighbours[c].some((b) => !r.includes(b) && (el[b] === "O" || el[b] === "N"));
+        if (!own) continue;
+        if (x[c] > x[ox[0]] + 0.1 * L) anomericRight++;
+        else if (x[c] < x[ox[0]] - 0.1 * L) anomericLeft++;
+      }
     }
+    // two sugars linked by their anomeric carbons (sucrose) cannot both
+    // have them on the right: only the excess counts
+    readingOrder += 0.5 * Math.max(0, anomericLeft - anomericRight);
   }
   const centre = (s: Set<number>) => {
     let sx = 0;
