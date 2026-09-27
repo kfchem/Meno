@@ -243,7 +243,9 @@ const page = `<!doctype html>
 <h1>Meno layout benchmark</h1>
 <p class="lede">Each molecule's Wikipedia structure, the reference to draw as well as, beside each layout
 engine's, every layout drawn by Meno in ACS 1996. Lower scores are better: overlaps, crossings and atoms
-on bonds count most, then uneven bonds, rings off regular and angles off ideal. Written by
+on bonds count most; then how the drawing sits - turned off the lattice, chains off level, out of reading
+order - and its shape - uneven bonds, rings off regular, angles off ideal. Each caption shows what its
+score is made of, the largest part first. Written by
 <code>npm run layout-bench</code>; nothing here is checked in, and the Wikipedia images are shown from
 Wikimedia Commons under the licences given.</p>
 <table><tr><th>engine</th><th>mean score</th><th>overlaps</th><th>crossings</th></tr>${summary}</table>
