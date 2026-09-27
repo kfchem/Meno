@@ -28,6 +28,13 @@ export type Geometry = {
    * each end and whether they are cis.
    */
   cisTrans?: readonly { bond: number; refs: readonly [number, number]; cis: boolean }[];
+  /**
+   * The atoms of a cage drawn in perspective, where known. Among themselves
+   * they are measured as the drawing of a solid, not of a flat structure:
+   * rings foreshortened, bonds of a bridge longer, and a bond behind
+   * another crossing it (drawn broken there) are how a solid looks.
+   */
+  perspective?: readonly boolean[];
 };
 
 export type LayoutMetrics = {
@@ -227,10 +234,11 @@ function pointToSegment(
 export function layoutMetrics(g: Geometry): LayoutMetrics {
   const { x, y, edges } = g;
   const n = x.length;
+  const solid = (...atoms: number[]) => atoms.every((a) => g.perspective?.[a]);
   // (a bond to a drawn H is drawn short, by choice: it is left out)
   const isH = (a: number) => g.elements?.[a] === "H";
   const lengths = edges
-    .filter(([a, b]) => !isH(a) && !isH(b))
+    .filter(([a, b]) => !isH(a) && !isH(b) && !solid(a, b))
     .map(([a, b]) => Math.hypot(x[a] - x[b], y[a] - y[b]));
   const L = median(lengths);
   const mean = lengths.reduce((s, v) => s + v, 0) / Math.max(lengths.length, 1);
@@ -289,7 +297,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   }
   const angleError = angleCount ? angleSum / angleCount : 0;
 
-  const small = rings.filter((r) => r.length <= 8);
+  const small = rings.filter((r) => r.length <= 8 && !solid(...r));
   const ringError = small.length
     ? small.reduce((s, r) => s + ringIrregularity(x, y, r, L), 0) / small.length
     : 0;
@@ -374,6 +382,8 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   for (const [a, b] of edges) {
     const k = a < b ? `${a},${b}` : `${b},${a}`;
     if (offLattice.has(k) && !fitsLattice.has(k)) continue;
+    // a solid's bonds, and those out of it, lie as it is seen
+    if (g.perspective?.[a] || g.perspective?.[b]) continue;
     const frame = frames.length
       ? fitsLattice.has(k) && frames.some((sys) => sys.has(a) && sys.has(b))
       : true;
@@ -921,7 +931,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   let overlaps = 0;
   for (let a = 0; a < n; a++) {
     for (let b = a + 1; b < n; b++) {
-      if (bonded.has(`${a},${b}`)) continue;
+      if (bonded.has(`${a},${b}`) || solid(a, b)) continue;
       if (Math.hypot(x[a] - x[b], y[a] - y[b]) < 0.5 * L) overlaps++;
     }
   }
@@ -931,7 +941,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     const [a, b] = edges[i];
     for (let j = i + 1; j < edges.length; j++) {
       const [c, d] = edges[j];
-      if (a === c || a === d || b === c || b === d) continue;
+      if (a === c || a === d || b === c || b === d || solid(a, b, c, d)) continue;
       if (segmentsCross(x[a], y[a], x[b], y[b], x[c], y[c], x[d], y[d])) crossings++;
     }
   }
@@ -939,7 +949,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   let clashes = 0;
   for (let p = 0; p < n; p++) {
     for (const [a, b] of edges) {
-      if (p === a || p === b) continue;
+      if (p === a || p === b || solid(p, a, b)) continue;
       if (pointToSegment(x[p], y[p], x[a], y[a], x[b], y[b]) < 0.3 * L) clashes++;
     }
   }

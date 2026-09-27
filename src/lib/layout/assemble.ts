@@ -103,6 +103,7 @@ export function grow(
   frame: Frame,
   sides: Map<string, number>,
   hints: Map<number, Map<number, Point>> = new Map(),
+  upright: ReadonlySet<number> = new Set(),
 ): Grown {
   const pos: Grown = new Map();
   const queue: number[] = [];
@@ -141,8 +142,11 @@ export function grow(
     )[0];
     const L = local.get(root)!;
     const c = centroid([...L.values()]);
-    transforms.set(root, (p) => setFrame(sub(p, c)));
-    for (const [a, p] of L) pos.set(a, setFrame(sub(p, c)));
+    // a cage drawn in perspective stays upright, as it was drawn: only
+    // seen from its other side, if the frame is mirrored
+    const set = upright.has(root) ? (p: Point) => keepUpright(frame, p) : setFrame;
+    transforms.set(root, (p) => set(sub(p, c)));
+    for (const [a, p] of L) pos.set(a, set(sub(p, c)));
     queue.push(...mol.systems[root].atoms);
   } else {
     const { middle, path } = middleOfLongestPath(mol, piece);
@@ -164,7 +168,7 @@ export function grow(
     const order = [...along, ...others];
     order.forEach((v, k) => {
       const t = slots[k] ?? slots[slots.length - 1];
-      placeChild(mol, pos, local, queue, middle, v, setFrameAngle(frame, t), transforms, hints);
+      placeChild(mol, pos, local, queue, middle, v, setFrameAngle(frame, t), transforms, hints, upright, frame);
     });
     queue.push(...order);
   }
@@ -186,15 +190,28 @@ export function grow(
         if (h) byHint.push([c, angleOf(sub(T(h), at))]);
       }
     }
+    // an upright cage hung from here comes in along its own bond out, as
+    // it is drawn: that bond's way is set by the cage, not by this atom
+    for (const c of children) {
+      const s = mol.systemOf[c];
+      const back = hints.get(c)?.get(a);
+      if (s < 0 || !upright.has(s) || !back || byHint.some(([h]) => h === c)) continue;
+      byHint.push([c, angleOf(keepUpright(frame, sub(local.get(s)!.get(c)!, back)))]);
+    }
     const rest = children.filter((c) => !byHint.some(([h]) => h === c));
     const assigned = rest.length
       ? assign(mol, pos, sides, a, placed, [...taken, ...byHint.map(([, t]) => t)], rest)
       : [];
     for (const [child, t] of [...byHint, ...assigned]) {
-      placeChild(mol, pos, local, queue, a, child, t, transforms, hints);
+      placeChild(mol, pos, local, queue, a, child, t, transforms, hints, upright, frame);
     }
   }
   return pos;
+}
+
+/** A point of an upright cage's own drawing as the frame sets it: mirrored with it, never turned. */
+function keepUpright(frame: Frame, p: Point): Point {
+  return frame.mirrored ? { x: -p.x, y: p.y } : p;
 }
 
 function setFrameAngle(frame: Frame, t: number): number {
@@ -356,6 +373,8 @@ function placeChild(
   t: number,
   transforms: Map<number, (p: Point) => Point>,
   hints: Map<number, Map<number, Point>>,
+  upright: ReadonlySet<number> = new Set(),
+  frame: Frame = { turn: 0, mirrored: false },
 ): void {
   const at = add(pos.get(a)!, dir(t));
   const s = mol.systemOf[child];
@@ -366,6 +385,15 @@ function placeChild(
   }
   const L = local.get(s)!;
   const c0 = L.get(child)!;
+  if (upright.has(s)) {
+    transforms.set(s, (p) => add(at, keepUpright(frame, sub(p, c0))));
+    for (const [v, p] of L) {
+      if (pos.has(v)) continue;
+      pos.set(v, add(at, keepUpright(frame, sub(p, c0))));
+      queue.push(v);
+    }
+    return;
+  }
   // the way out of the ring system at `child`, in its own frame
   const ringNb = mol.neighbours[child].filter((v) => L.has(v));
   const out = mol.neighbours[child].filter((v) => !L.has(v));

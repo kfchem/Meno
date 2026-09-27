@@ -76,6 +76,13 @@ before, not a record of how particular molecules are drawn.
 | folded chains, splayed chains | long chains folded up rather than drawn out, and not running parallel as lipids' do |
 | reading order | an acid at the end of a chain on the right; a ring system to the left of the chains out of it; the rings hung on a macrocycle to its right and below it |
 
+A cage Meno draws in perspective (adamantane, norbornane, quinuclidine) is
+measured as the drawing of a solid: among its own atoms, its foreshortened
+rings, the longer bond of a bridge seen from in front, and a bond passing
+behind another - drawn broken there - are how a solid looks, and are not
+counted as faults. The other drawings have no depth to go by, and are
+measured in full.
+
 The score still does not see everything a chemist does - whether a skeleton
 is turned the way it is always drawn, a steroid's A ring at the lower left
 among them - so the sheet shows the reference beside every drawing.

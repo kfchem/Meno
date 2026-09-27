@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { layout2D } from "./engine";
 import { macrocycleShape } from "./macrocycle";
 import { layoutMetrics } from "./metrics";
-import type { LayoutBond, LayoutInput } from "./perceive";
+import { perceive, type LayoutBond, type LayoutInput } from "./perceive";
+import { solidOf } from "./cage";
 
 /** Carbons joined by the bonds given, as [a, b, order?]. */
 function carbons(n: number, bonds: [number, number, number?][], extra: Partial<LayoutBond>[] = []): LayoutInput {
@@ -139,22 +140,78 @@ describe("layout2D", () => {
     expect(m.overlaps + m.crossings).toBe(0);
   });
 
-  it("draws a cage in perspective, every atom in view", () => {
-    // adamantane: four bridgeheads (0-3), six CH2 between them
+  it("draws adamantane as it is always drawn: a chair, its axial bonds upright to the fourth bridgehead", () => {
+    // four bridgeheads (0-3), six CH2 between them
     const cage = carbons(10, [
       [0, 4], [4, 1], [1, 5], [5, 2], [2, 6], [6, 0],
       [0, 7], [7, 3], [1, 8], [8, 3], [2, 9], [9, 3],
     ]);
-    const { x, y } = layout2D(cage);
-    for (let i = 0; i < 10; i++) {
-      for (let j = i + 1; j < 10; j++) {
-        expect(Math.hypot(x[i] - x[j], y[i] - y[j])).toBeGreaterThan(0.3);
-      }
+    const { x, y, depth } = layout2D(cage);
+    for (const l of bondLengths(cage)) expect(l).toBeCloseTo(1, 3);
+    const upright = cage.bonds.filter(({ a, b }) => Math.abs(x[a] - x[b]) < 1e-6);
+    expect(upright).toHaveLength(3);
+    // one bond passes behind another, and is drawn broken there
+    const m = layoutMetrics({ x, y, edges: cage.bonds.map(({ a, b }) => [a, b] as const) });
+    expect(m.crossings).toBe(1);
+    expect(m.overlaps).toBe(0);
+    expect(depth.every((d) => d != null)).toBe(true);
+  });
+
+  it("draws norbornane as a boat with its bridge above it", () => {
+    // bridgeheads 0 and 3; the bridge 6
+    const norbornane = carbons(7, [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 3]]);
+    const { x, y } = layout2D(norbornane);
+    expect(Math.max(...y)).toBeCloseTo(y[6], 6);
+    // straight above the front bridgehead, a bond's length from the back one
+    const lengths = [0, 3].map((h) => Math.hypot(x[6] - x[h], y[6] - y[h])).sort((p, q) => p - q);
+    expect(lengths[0]).toBeCloseTo(1, 3);
+    expect(lengths[1]).toBeCloseTo(Math.sqrt(3), 3);
+    expect([0, 3].some((h) => Math.abs(x[6] - x[h]) < 1e-6)).toBe(true);
+  });
+
+  it("draws a cage as the solid it is, not its mirror image", () => {
+    // camphor: C1 (0) with its methyl (8), the ketone at C2 (1), C4 (3) the
+    // other bridgehead, C7 (6) with its two methyls - and each hand of it
+    for (const volume of [1, -1] as const) {
+      const skeleton = carbons(11, [
+        [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 3], [1, 7, 2], [0, 8], [6, 9], [6, 10],
+      ]);
+      const camphor: LayoutInput = {
+        ...skeleton,
+        atoms: skeleton.atoms.map((a, i) =>
+          i === 7 ? { el: "O" } : i === 3 ? { el: "C", tetra: { neighbours: [2, 4, 6, -1], volume } } : a,
+        ),
+      };
+      const mol = perceive(camphor);
+      const solid = solidOf(mol, mol.systems[0]);
+      const { x, y, depth } = layout2D(camphor);
+      // the linear map that takes the solid (about its middle) to the drawing
+      // (x, y and depth) best turns it the right way: a mirror would not
+      const atoms = mol.systems[0].atoms;
+      const mid = (f: (a: number) => number) => atoms.reduce((s, a) => s + f(a), 0) / atoms.length;
+      const from = atoms.map((a) => {
+        const p = solid.get(a)!;
+        return [0, 1, 2].map((k) => p[k] - mid((b) => solid.get(b)![k]));
+      });
+      const to = atoms.map((a) => [x[a] - mid((b) => x[b]), y[a] - mid((b) => y[b]), depth[a]! - mid((b) => depth[b]!)]);
+      const cross = (u: number, v: number) => from.reduce((s, p, i) => s + p[u] * to[i][v], 0);
+      const M = [0, 1, 2].map((u) => [0, 1, 2].map((v) => cross(u, v)));
+      const det =
+        M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) -
+        M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+        M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+      expect(det).toBeGreaterThan(0);
     }
-    for (const l of bondLengths(cage)) {
-      expect(l).toBeGreaterThan(0.5);
-      expect(l).toBeLessThan(1.6);
-    }
+  });
+
+  it("draws a ring system with a ring fused on a side flat, though it is bridged too", () => {
+    // bicyclo[2.2.2]octane with a benzene ring fused on one bridge
+    const bonds: [number, number, number?][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 7], [7, 3],
+      [1, 8, 2], [8, 9], [9, 10, 2], [10, 11], [11, 12, 2], [12, 2],
+    ];
+    const { depth } = layout2D(carbons(13, bonds));
+    expect(depth.every((d) => d == null)).toBe(true);
   });
 
   it("sets the pieces of a salt side by side", () => {

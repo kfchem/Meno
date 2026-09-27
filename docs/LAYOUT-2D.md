@@ -63,11 +63,27 @@ they hang from.
   than along their sides - a porphyrin's through its pyrroles, a
   cyclodextrin's through its glucoses - is set round a circle, each ring
   it runs through regular and outside it.
-- **Bridged systems**: the smaller ring of a bridged pair regular, the
-  larger arcing round it with the bridge inside - taxol's A ring, its B
-  ring round the gem-dimethyl bridge. A cage that will not lie flat
-  without crowding or crossings (adamantane, cubane, quinuclidine) is
-  drawn as the solid it is, seen from the side that hides no atom.
+- **Bridged systems**: where a ring is fused on a side as well - morphine,
+  artemisinin, taxol - the system is drawn flat: the smaller ring of a
+  bridged pair regular, the larger arcing round it with the bridge inside
+  (taxol's A ring, its B ring round the gem-dimethyl bridge).
+- **Cages**: a system whose rings are all bridged, each sharing three atoms
+  or more with another (norbornane, camphor, tropane, quinuclidine,
+  adamantane), or a polyhedron (cubane), is drawn in perspective, as the
+  solid it is, and upright. It is built on one of its six-membered rings,
+  drawn as a chair or a boat always is: two zigzags of three atoms, their
+  bonds 15 degrees off level, the back one above the front one and joined
+  to it by two bonds 60 degrees steep - a chair's zigzags pointing opposite
+  ways, a boat's the same way. Every bond is one length and opposite bonds
+  are parallel. The ring's axial bonds (a boat's flagpoles) are upright;
+  an atom bridging two of its atoms (norbornane's C7) stands straight
+  above the front one, a bond's length from the back one; the rest is
+  eased into place. Adamantane is then a chair with its three axial bonds
+  rising to the fourth bridgehead; bicyclo[2.2.2]octane a boat with its
+  third bridge rising from both bridgeheads. A bond passing behind another
+  is drawn broken there. Bonds out of the ring follow it - an equatorial
+  bond parallel to the ring bonds but one, an axial one upright - and what
+  hangs from the cage hangs from its front where it can.
 - **Chains**: zigzag, each turn the other way from the last. A trans double
   bond carries the zigzag on; a cis one is a step in it - the chain read as
   the straight chain it would be without it, carrying on the same way (a
@@ -163,7 +179,8 @@ When parts clash, in this order:
 
 1. Find the rings (smallest set of smallest rings) and the ring systems -
    fused, bridged, spiro - and the chains between them.
-2. Lay each ring system out in its own frame, square on the lattice.
+2. Lay each ring system out in its own frame, square on the lattice - or,
+   for a cage, in perspective and upright.
 3. Grow the structure out from the largest ring system (or, with no ring,
    from the middle of its longest chain), placing each bond by the rules of
    section 2 and choosing among free placements by section 5.

@@ -19,11 +19,11 @@ import {
   turnSide,
   type Grown,
 } from "./assemble";
-import { dist, mirror, segmentsCross } from "./geometry";
+import { dist, mirror, segmentsCross, sub } from "./geometry";
 import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { placeRingSystem, ringSystemVariants } from "./ringSystem";
-import { flatCost, isSmallBicycle, projectCage } from "./cage";
+import { flatCost, isCage, projectCage } from "./cage";
 import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
 import type { Point } from "./geometry";
 
@@ -44,21 +44,31 @@ export function layout2D(input: LayoutInput): Layout2D {
   const local = new Map<number, Map<number, Point>>();
   const depth = new Array<number | null>(mol.n).fill(null);
   const hints = new Map<number, Map<number, Point>>();
+  // the ring systems drawn in perspective: kept upright, as drawn
+  const upright = new Set<number>();
   mol.systems.forEach((_, i) => {
     const laid = layoutSystem(mol, i);
     local.set(i, laid.pos);
     laid.depth?.forEach((d, a) => (depth[a] = d));
     laid.hints?.forEach((m, a) => hints.set(a, m));
+    if (laid.depth) upright.add(i);
   });
+  const fixed = (atoms: readonly number[]) => atoms.some((a) => upright.has(mol.systemOf[a]));
   const sides = sidesOf(mol);
-  const flips = flippable(mol, sides);
+  // (a flip mirrors a side across a bond's line, which would tip a cage over)
+  const flips = flippable(mol, sides).filter(([a, b]) => {
+    const beyondB = sides.get(`${a}>${b}`) ?? 0;
+    const beyondA = sides.get(`${b}>${a}`) ?? 0;
+    const [from, to] = beyondB <= beyondA ? [a, b] : [b, a];
+    return !fixed(sideAtoms(mol, from, to));
+  });
   // a macrocycle's shape chosen for what hangs from it: each shape offered
   // tried, grown in every frame, and the best kept
   mol.systems.forEach((sys, i) => {
     const count = ringSystemVariants(mol, sys);
     if (count < 2) return;
     const piece = mol.pieces.find((p) => p.includes(sys.atoms[0]))!;
-    const score = scorer(mol, piece);
+    const score = scorer(mol, piece, depth);
     let best = 0;
     let bestScore = Infinity;
     const here = new Set(piece);
@@ -70,7 +80,7 @@ export function layout2D(input: LayoutInput): Layout2D {
       let top: Grown | null = null;
       let topScore = Infinity;
       for (const frame of FRAMES) {
-        const pos = grow(mol, piece, local, frame, sides, hints);
+        const pos = grow(mol, piece, local, frame, sides, hints, upright);
         const s = score(pos);
         if (s < topScore) {
           topScore = s;
@@ -78,7 +88,7 @@ export function layout2D(input: LayoutInput): Layout2D {
         }
       }
       const better = improve(mol, top!, topScore, flipsHere, sides, score);
-      const s = untangle(mol, piece, better.pos, better.score, score).score;
+      const s = untangle(mol, piece, better.pos, better.score, score, fixed).score;
       if (s < bestScore) {
         bestScore = s;
         best = v;
@@ -93,11 +103,11 @@ export function layout2D(input: LayoutInput): Layout2D {
   // the largest piece first, the rest after it to the right
   const pieces = [...mol.pieces].sort((p, q) => q.length - p.length);
   for (const piece of pieces) {
-    const score = scorer(mol, piece);
+    const score = scorer(mol, piece, depth);
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
     const tried = FRAMES.map((frame) => {
-      const pos = grow(mol, piece, local, frame, sides, hints);
+      const pos = grow(mol, piece, local, frame, sides, hints, upright);
       return { pos, score: score(pos) };
     }).sort((p, q) => p.score - q.score);
     let best = tried[0];
@@ -108,9 +118,9 @@ export function layout2D(input: LayoutInput): Layout2D {
       const improved = improve(mol, cand.pos, cand.score, flipsHere, sides, score);
       if (improved.score < best.score - 1e-9) best = improved;
     }
-    best = rejoin(mol, piece, best.pos, best.score, score);
-    best = untangle(mol, piece, best.pos, best.score, score);
-    squareUp(mol, piece, best.pos);
+    best = rejoin(mol, piece, best.pos, best.score, score, fixed);
+    best = untangle(mol, piece, best.pos, best.score, score, fixed);
+    if (!fixed(piece)) squareUp(mol, piece, best.pos);
     const xs = piece.map((a) => best.pos.get(a)!.x);
     const ys = piece.map((a) => best.pos.get(a)!.y);
     const shift = (right ? right + 1.5 : 0) - Math.min(...xs);
@@ -121,6 +131,28 @@ export function layout2D(input: LayoutInput): Layout2D {
     }
     right = Math.max(...piece.map((a) => x[a]));
   }
+  // a cage seen from its other side (the frame mirrored) is nearer where
+  // it was further: the drawing is the solid turned round, not its mirror image
+  mol.systems.forEach((sys, i) => {
+    if (!upright.has(i)) return;
+    const L = local.get(i)!;
+    // the way round the widest triangle of its atoms goes, before and after
+    const [o, ...rest] = sys.atoms;
+    const turn = (p: (a: number) => Point, a: number, b: number) => {
+      const u = sub(p(a), p(o));
+      const v = sub(p(b), p(o));
+      return u.x * v.y - u.y * v.x;
+    };
+    let widest: [number, number] = [rest[0], rest[1]];
+    for (const a of rest) {
+      for (const b of rest) {
+        if (Math.abs(turn((v) => L.get(v)!, a, b)) > Math.abs(turn((v) => L.get(v)!, ...widest))) widest = [a, b];
+      }
+    }
+    const before = turn((v) => L.get(v)!, ...widest);
+    const after = turn((v) => ({ x: x[v], y: y[v] }), ...widest);
+    if (Math.sign(before) !== Math.sign(after)) for (const a of sys.atoms) depth[a] = -depth[a]!;
+  });
   // a stereocentre in a cage drawn in perspective shows itself there
   const tetra = new Map<number, Tetrahedral>();
   input.atoms.forEach((a, i) => a.tetra && depth[i] == null && tetra.set(i, a.tetra));
@@ -138,9 +170,9 @@ function layoutSystem(
   i: number,
 ): { pos: Map<number, Point>; depth?: Map<number, number>; hints?: Map<number, Map<number, Point>> } {
   const sys = mol.systems[i];
-  // a small bridged bicycle - norbornane, tropane, quinuclidine - is drawn
-  // in perspective, the way it always is
-  if (isSmallBicycle(mol, sys)) return projectCage(mol, sys);
+  // a cage - norbornane, tropane, quinuclidine, adamantane - is drawn in
+  // perspective, the way it always is; anything else flat
+  if (isCage(mol, sys)) return projectCage(mol, sys);
   let flat = placeRingSystem(mol, sys);
   const rings = sys.rings.map((r) => mol.rings[r]);
   const bridged = rings.some((r, j) =>
@@ -159,12 +191,7 @@ function layoutSystem(
       }
     }
   }
-  if ((!bridged && rings.length < 3) || sys.atoms.length > 20) return { pos: flat };
-  if (rings.some((r) => r.length >= 9)) return { pos: flat };
-  const flatScore = flatCost(mol, sys, flat);
-  if (flatScore < 2) return { pos: flat };
-  const cage = projectCage(mol, sys);
-  return cage.cost < flatScore ? cage : { pos: flat };
+  return { pos: flat };
 }
 
 /** Tries each single bond the other way round, keeping what scores better, until nothing does. */
@@ -257,6 +284,7 @@ function rejoin(
   start: Grown,
   startScore: number,
   score: (pos: Grown) => number,
+  fixed: (atoms: readonly number[]) => boolean = () => false,
 ): { pos: Grown; score: number } {
   let pos = start;
   let current = startScore;
@@ -292,6 +320,8 @@ function rejoin(
         const faces = mol.systemOf[to] >= 0 ? [false, true] : [false];
         for (const mirrored of faces) {
           for (const [t, group, pivot] of mirrored ? moves.filter(([, g]) => g === beyond) : moves) {
+            // an upright cage is not turned
+            if (fixed(group)) continue;
             const trial = new Map(pos);
             if (mirrored) {
               const p0 = trial.get(from)!;
@@ -355,6 +385,7 @@ export function untangle(
   start: Grown,
   startScore: number,
   score: (pos: Grown) => number,
+  fixed: (atoms: readonly number[]) => boolean = () => false,
 ): { pos: Grown; score: number } {
   let pos = start;
   let current = startScore;
@@ -374,7 +405,8 @@ export function untangle(
         const side = sideAtoms(mol, from, to);
         if (side.length > piece.length / 2 || !side.some((v) => hit.has(v))) continue;
         const moves: ((p: Grown) => void)[] = [];
-        for (const t of [15, -15, 30, -30, 45, -45, 60, -60, 90, -90]) {
+        // (an upright cage is moved, not turned)
+        for (const t of fixed(side) ? [] : [15, -15, 30, -30, 45, -45, 60, -60, 90, -90]) {
           moves.push((p) => turnSide(p, side, p.get(from)!, (t * Math.PI) / 180));
         }
         for (const by of [0.3, 0.6]) {
@@ -398,7 +430,11 @@ export function untangle(
 }
 
 /** The benchmark's score for a piece as laid out. */
-export function scorer(mol: Molecule, piece: number[]): (pos: Grown) => number {
+export function scorer(
+  mol: Molecule,
+  piece: number[],
+  depth: readonly (number | null)[] = [],
+): (pos: Grown) => number {
   const index = new Map(piece.map((a, i) => [a, i]));
   const edges: [number, number][] = [];
   const orders: number[] = [];
@@ -420,6 +456,7 @@ export function scorer(mol: Molecule, piece: number[]): (pos: Grown) => number {
   const elements = piece.map((a) => mol.el[a]);
   const hydrogens = piece.map((a) => mol.hs[a]);
   const labelled = piece.map((a) => mol.el[a] !== "C" || mol.charge[a] !== 0);
+  const perspective = piece.map((a) => depth[a] != null);
   return (pos) =>
     layoutMetrics({
       x: piece.map((a) => pos.get(a)!.x),
@@ -431,5 +468,6 @@ export function scorer(mol: Molecule, piece: number[]): (pos: Grown) => number {
       labelled,
       rings,
       cisTrans,
+      perspective,
     }).score;
 }

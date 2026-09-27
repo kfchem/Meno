@@ -116,6 +116,7 @@ function measure(g: Graph, laid: Laid, base: Baseline): LayoutMetrics {
     cisTrans: base.graph.bonds.flatMap((b, i) =>
       b.stereo ? [{ bond: i, refs: b.stereo.refs, cis: b.stereo.cis }] : [],
     ),
+    perspective: laid.depth ? laid.depth.map((d) => d != null) : undefined,
   });
 }
 
