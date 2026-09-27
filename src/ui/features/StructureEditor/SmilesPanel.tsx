@@ -106,6 +106,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type or paste a SMILES"
+          autoFocus
           aria-label="SMILES to add"
           spellCheck={false}
           autoCorrect="off"
