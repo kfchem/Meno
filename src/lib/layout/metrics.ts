@@ -777,15 +777,6 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   if (live.length) {
     const main = live.reduce((b, s) => (s.size > b.size ? s : b));
     const mc = centre(main);
-    // a polycycle of three rings or more - what the molecule is - to the
-    // left of the smaller ring systems hung on it (reserpine's ester)
-    const others = live.filter((sys) => sys !== main);
-    const mainRings = rings.filter((r) => r.every((a) => main.has(a))).length;
-    if (mainRings >= 3 && others.length) {
-      const ox = others.reduce((sum, sys) => sum + centre(sys).x * sys.size, 0) /
-        others.reduce((sum, sys) => sum + sys.size, 0);
-      if (mc.x > ox + L) readingOrder++;
-    }
     // a ring system with a chain out of it: the rings to the left, the
     // chain read after them
     for (const s of strands) {
