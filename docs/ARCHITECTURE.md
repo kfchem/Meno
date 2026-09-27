@@ -25,12 +25,17 @@ through a Tauri command.
 src/
   App.tsx                 tab reducer wiring, TopBar + Deck
   lib/core/               tab state: types.ts (TabKind, State, Action), state.ts (reducer)
-  lib/chem/               acs.ts (ACS 1996 style ratios), layout2d.ts (2D depiction primitives)
+  lib/chem/               layout2d.ts (2D depiction primitives), style.ts / styleFields.ts (drawing style),
+                          labelFonts.ts (label typefaces, letter by letter)
+  lib/net/                network.ts: the network's record, consent, offline mode
+  lib/settings/           appSettings.ts: the app's settings and their file
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
   utils/importers         detectFormat, readMoleculesFromText, RXN grouping/layout, EditorModel conversion
   utils/atomUtils         element table (radii, colours)
-  ui/layouts/TopBar       custom title bar: tabs, "New…" menu, window buttons
+  ui/layouts/TopBar       custom title bar: tabs, "New…" menu, online/offline, Settings, window buttons
+  ui/fonts/               the typefaces labels are drawn in, read from their files
+  ui/network/             consent dialog, activity cards, Settings › Network
   ui/views/registry       TabKind -> { Component, create } table
   ui/views/Deck           renders every open tab, hides inactive ones with CSS
   ui/features/
@@ -40,9 +45,12 @@ src/
     WorkflowEditor/       React Flow graph (prototype, not executable yet)
     PythonConsole/        UI for the Python sidecar
     TextEditor/           plain textarea with line numbers
-    SettingsPanel/        placeholder
+    StyleEditor/          every drawing setting, with a preview
+    SettingsPanel/        Settings: drawing style, network
 src-tauri/
   src/lib.rs              Tauri commands (see table below)
+  src/fonts.rs            the system's typefaces
+  src/net.rs              the network: tasks, the proxy, the record
   capabilities/           permission sets for the main window
   resources/py/           uv (macOS, Apple silicon) and uv.exe (Windows), uv
                           0.12.19, and requirements lock files per profile;
@@ -177,12 +185,17 @@ nothing of Meno's environments lands in the user's own directories.
 | `ext_spawn_sidecar` | `PyConsole` | Spawn a process with piped stdio; returns an id. |
 | `ext_stdin` | `PyConsole` | Write to a sidecar's stdin. |
 | `ext_kill` | `PyConsole` | Kill a sidecar and emit `ext:exit`. |
-| `label_font` | `StructureEditor/labelFont.ts` | The system's Arial as bytes, for the canvas to set atom labels in. Nothing is bundled. |
+| `font_families` | `ui/fonts/typefaces.ts` | Every typeface installed (fontdb), for the label typeface picker. |
+| `font_file` | `ui/fonts/typefaces.ts` | One family's regular face as a font file of its own - out of its collection, its character map made plain (`fonts.rs`). |
+| `net_state` | `lib/net/network.ts` | Offline or not, what is allowed, tasks under way, recent connections. |
+| `net_set_offline`, `net_grant`, `net_revoke` | `lib/net/network.ts` | Offline mode; a purpose's leave to use the network, given or withdrawn. |
+| `net_note_blocked` | `lib/net/network.ts` | Records a connection the window was kept from making. |
 | `greet` | — | Template leftover, unused. |
 
 Events: `uv:log`, `uv:err` (plain strings); `ext:stdout`, `ext:stderr`,
 `ext:exit` (JSON strings `{ id, line? }`). `ext:exit` is emitted exactly once
-per sidecar, whether it exits by itself or through `ext_kill`.
+per sidecar, whether it exits by itself or through `ext_kill`. `net:task` and
+`net:connection` carry the network's record (see below).
 
 ### What the backend accepts
 
@@ -192,7 +205,8 @@ path it is given:
 - `py_env_*`: `uv` must be the bundled `resources/py/uv[.exe]`; `lockPath` must
   be a `.lock` file under `resources/py/`; `venvHome` must be under `uv/` in the
   app data dir; relative paths may not contain `..`, `.` or absolute/drive
-  prefixes; `pythonVersion` must look like `3.12` or `3.12.4`.
+  prefixes; `pythonVersion` must look like `3.12` or `3.12.4`; `purpose` must
+  be `python-env:<name>` - never a purpose that needs no asking.
 - `ext_spawn_sidecar`: `entry` must be an absolute `python`/`python3`/`python.exe`
   inside `<app data>/uv/`; `args` may start with `-u` / `-B`, followed by an
   absolute `.py` script inside `resources/workers/`; later arguments go to the
@@ -203,6 +217,39 @@ path it is given:
 Adding a new worker or interpreter flag means extending these rules
 (`PYTHON_FLAGS`, the workers directory) together with the unit tests in
 `lib.rs`.
+
+## The network
+
+Every connection Meno makes is seen, recorded and answerable for. It is a
+research tool: what it sends out, and when, has to be knowable, and it has
+to be able to work with nothing going out at all.
+
+- **The window reaches nothing.** Its content security policy
+  (`tauri.conf.json`) keeps it to the app: fonts, workers and pictures come
+  from the app or from blobs it made. Anything it is kept from reaching is
+  put on the record (`securitypolicyviolation`), and so are characters no
+  font of Meno's has, which the canvas's text renderer would otherwise look
+  for on its CDN.
+- **Everything else goes through the app's proxy** (`src-tauri/src/net.rs`),
+  on the loopback address. A child process that may use the network - uv
+  setting up Python, a Python sidecar - is begun as a *task* with a
+  *purpose* (`python-env:console`, `python-code`) and pointed at the proxy
+  with the task's token in its proxy credentials. The proxy carries a
+  connection only for a task under way, only for a purpose the user has
+  allowed (`python-code`, the user's own code, needs no asking), only over
+  HTTPS, and never in offline mode. Each connection - host, bytes each way,
+  times, outcome - goes to the window as it happens (`net:connection`, every
+  half second while open) and to `network-log.jsonl` in the app's data
+  folder when it ends.
+- **The window asks and shows** (`lib/net/network.ts`, `ui/network/`): a
+  purpose's first use of the network waits on the user's yes
+  (`askToConnect`, remembered in the settings until withdrawn); each task
+  has a card in the corner while it runs; the top bar switches offline mode;
+  Settings › Network holds the allowed purposes and the record.
+
+Anything new that needs the network begins a task in `net.rs` and routes
+its process, or its own requests, through the proxy; nothing may reach the
+network another way.
 
 ## File format support
 

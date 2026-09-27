@@ -46,6 +46,8 @@ export interface GlyphSource {
 export interface LabelFont {
   readonly family: string;
   readonly capHeight: number;
+  /** Whether any of its sources, the fallbacks among them, has the character. */
+  has(ch: string): boolean;
   advance(ch: string): number;
   hull(ch: string): GlyphPoint[];
 }
@@ -201,6 +203,7 @@ export function labelFont(family: string | undefined): LabelFont {
   const font: LabelFont = {
     family: own.length ? name : DEFAULT_LABEL_FAMILY,
     capHeight: first.capHeight,
+    has: (ch) => chain.some((s) => s.has(ch)),
     advance: (ch) => pick(ch).advance(ch),
     hull: (ch) => pick(ch).hull(ch),
   };

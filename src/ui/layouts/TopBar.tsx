@@ -12,6 +12,7 @@ import { useMemo, MouseEvent, useRef, useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import logo from "../../assets/icon.png";
 import { TabKind } from "../../lib/core";
+import OfflineToggle from "../network/OfflineToggle";
 
 type TabMeta = { id: string; label: string; dirty?: boolean };
 
@@ -220,6 +221,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
           )}
         </div>
 
+        <OfflineToggle />
         <button
           aria-label="Settings"
           title="Settings"

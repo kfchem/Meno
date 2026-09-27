@@ -1,6 +1,11 @@
 import { Text } from "@react-three/drei";
+import { useEffect } from "react";
 import { labelSetOf, placeLabel } from "../../../../lib/chem/layout2d";
-import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
+import {
+  needsFallback,
+  noteUncovered,
+  useLabelFontUrl,
+} from "../../../fonts/typefaces";
 import { useDrawnLayout } from "./drawnLayoutContext";
 
 /**
@@ -14,10 +19,14 @@ export default function Labels2D() {
   // font the layout measures in is the one drawn with, so nothing needs
   // measuring here. Until the font is known nothing is drawn, rather than a
   // label in some other font that then jumps.
-  const font = useLabelFontUrl(
-    opts.fontFamily ?? "Arial",
-    needsFallback(layout.texts.map((t) => t.text)),
-  );
+  const family = opts.fontFamily ?? "Arial";
+  const texts = layout.texts.map((t) => t.text);
+  const font = useLabelFontUrl(family, needsFallback(texts));
+  // what no font of Meno's has goes on the network's record, once known
+  const key = texts.join("\n");
+  useEffect(() => {
+    if (font !== null) noteUncovered(family, key.split("\n"));
+  }, [font, family, key]);
   if (font === null) return null;
   return (
     <group>

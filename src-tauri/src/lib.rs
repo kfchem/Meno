@@ -12,6 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 use uuid::Uuid;
 
 mod fonts;
+mod net;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -35,6 +36,25 @@ struct PyEnvInfo {
     _stamp_path: String,
     #[serde(rename = "pythonVersion")]
     python_version: String,
+    /// What the environment is for, as the user allowed its download
+    /// ("python-env:console"), and in words.
+    #[serde(default)]
+    purpose: String,
+    #[serde(default)]
+    label: String,
+}
+
+/// The purpose a setup's downloads go under: one of the Python environments'
+/// own, never another's - the user's code needs no asking, a setup does.
+fn setup_purpose(info: &PyEnvInfo) -> Result<String, String> {
+    let name = info
+        .purpose
+        .strip_prefix("python-env:")
+        .ok_or_else(|| format!("unexpected purpose: {}", info.purpose))?;
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(format!("unexpected purpose: {}", info.purpose));
+    }
+    Ok(info.purpose.clone())
 }
 
 // The webview supplies every path these commands use, so each one is checked
@@ -207,8 +227,20 @@ fn uv_command(uv: &Path, data: &Path) -> Command {
 }
 
 #[tauri::command]
-async fn py_env_setup_uv(app: AppHandle, payload: PyEnvInfo) -> Result<(), String> {
+async fn py_env_setup_uv(
+    app: AppHandle,
+    payload: PyEnvInfo,
+    net: State<'_, net::Net>,
+) -> Result<(), String> {
     let env = validate_env_info(&payload)?;
+    // uv downloads Python and the packages: a task of its own on the
+    // network, refused offline or unless its purpose has been allowed
+    let label = if payload.label.is_empty() {
+        "Setting up Python".to_string()
+    } else {
+        payload.label.clone()
+    };
+    let task = net.begin(&setup_purpose(&payload)?, &label)?;
     let uv = resource_path(&app, &env.uv)?;
     let lock = resource_path(&app, &env.lock)?;
     let data = app_data_dir(&app)?;
@@ -224,6 +256,7 @@ async fn py_env_setup_uv(app: AppHandle, payload: PyEnvInfo) -> Result<(), Strin
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     no_window(&mut cmd1);
+    task.route(&mut cmd1);
     let mut child1 = cmd1.spawn().map_err(|e| format!("spawn uv venv: {}", e))?;
     pipe_logs(&app, child1.stdout.take().unwrap(), "uv:log");
     pipe_logs(&app, child1.stderr.take().unwrap(), "uv:err");
@@ -246,6 +279,7 @@ async fn py_env_setup_uv(app: AppHandle, payload: PyEnvInfo) -> Result<(), Strin
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     no_window(&mut cmd2);
+    task.route(&mut cmd2);
     let mut child2 = cmd2.spawn().map_err(|e| format!("spawn uv pip: {}", e))?;
     pipe_logs(&app, child2.stdout.take().unwrap(), "uv:log");
     pipe_logs(&app, child2.stderr.take().unwrap(), "uv:err");
@@ -253,6 +287,7 @@ async fn py_env_setup_uv(app: AppHandle, payload: PyEnvInfo) -> Result<(), Strin
     if !st2.success() {
         return Err("uv pip install failed".into());
     }
+    task.finish(true);
     Ok(())
 }
 
@@ -317,6 +352,7 @@ async fn ext_spawn_sidecar(
     app: AppHandle,
     payload: SpawnArgs,
     state: State<'_, ProcState>,
+    net: State<'_, net::Net>,
 ) -> Result<String, String> {
     let venv_root = app_data_dir(&app)?
         .join("uv")
@@ -331,6 +367,12 @@ async fn ext_spawn_sidecar(
     let mut cmd = Command::new(&entry);
     cmd.args(&payload.args).current_dir(cwd);
     no_window(&mut cmd);
+    // Whatever the code run in it reaches for goes through the proxy, seen
+    // and logged, and not at all offline; it lasts as long as the sidecar.
+    let task = net.begin("python-code", "Python run in the console").ok();
+    if let Some(task) = &task {
+        task.route(&mut cmd);
+    }
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -360,6 +402,10 @@ async fn ext_spawn_sidecar(
             }
             if app2.state::<ProcState>().reap(&id2) {
                 let _ = app2.emit("ext:exit", serde_json::json!({"id": id2}).to_string());
+            }
+            // the sidecar's time on the network ends with it
+            if let Some(task) = task {
+                task.finish(true);
             }
         });
     }
@@ -414,6 +460,11 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(ProcState(Mutex::new(HashMap::new())))
+        .manage(net::Net::default())
+        .setup(|app| {
+            net::start(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             // the system's fonts, for atom labels
@@ -422,6 +473,12 @@ pub fn run() {
             // uv + env
             py_env_python_path_uv,
             py_env_setup_uv,
+            // the network: what goes out, and whether it may
+            net::net_state,
+            net::net_set_offline,
+            net::net_grant,
+            net::net_revoke,
+            net::net_note_blocked,
             // python sidecar
             ext_spawn_sidecar,
             ext_stdin,
@@ -441,6 +498,17 @@ pub fn run() {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn a_setup_downloads_only_under_a_python_environments_purpose() {
+        let mut info = env_info(UV_REL, "resources/py/requirements.lock", "uv/console/venv", "3.12");
+        assert_eq!(setup_purpose(&info).as_deref(), Ok("python-env:console"));
+        // not the user's own code, which needs no asking, nor anything else
+        for bad in ["python-code", "python-env:", "python-env:a b", "anything"] {
+            info.purpose = bad.into();
+            assert!(setup_purpose(&info).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn uv_keeps_its_python_and_cache_under_the_app_data() {
@@ -471,6 +539,8 @@ mod tests {
             },
             _stamp_path: String::new(),
             python_version: py.into(),
+            purpose: "python-env:console".into(),
+            label: String::new(),
         }
     }
 
