@@ -1,7 +1,7 @@
 import { ClipboardDocumentIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
-import { writeMolfile } from "../../../lib/chem/molWriter";
+import { chemMolblock } from "../../../lib/rdkit/molblock";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
 import { useEditor } from "./store";
 import { editorModelOf, processFileContent } from "./utils/io";
@@ -30,7 +30,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
     let live = true;
     const t = setTimeout(() => {
       void chemWorker()
-        .then((c) => c.request("to_smiles", { molblock: writeMolfile(model) }))
+        .then((c) => c.request("to_smiles", { molblock: chemMolblock(model) }))
         .then((r) => {
           if (live) setSmiles(r.smiles);
         })

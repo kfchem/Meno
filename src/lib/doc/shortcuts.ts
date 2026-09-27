@@ -35,6 +35,21 @@ export function saveIntent(event: KeyLike): "save" | "saveAs" | null {
   return event.shiftKey ? "saveAs" : "save";
 }
 
+/**
+ * Ctrl/Cmd+Shift+K cleans a structure up - but not while a text field has
+ * the keys.
+ */
+export function isCleanUpKey(event: KeyLike): boolean {
+  return (
+    (event.ctrlKey || event.metaKey) === true &&
+    event.shiftKey === true &&
+    (event.key || "").toLowerCase() === "k" &&
+    !isNativeEditingTarget(event.target) &&
+    (event.target as { tagName?: string } | null)?.tagName?.toUpperCase() !==
+      "TEXTAREA"
+  );
+}
+
 /** Ctrl/Cmd+Z undoes; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. */
 export function undoIntent(event: KeyLike): UndoIntent {
   if (!(event.ctrlKey || event.metaKey)) return null;

@@ -90,6 +90,14 @@ export type EditorState = {
   connectAtoms: (a: number, b: number, order?: Bond["order"]) => number | null;
   replaceDraggedAtomWith: (movingId: number, targetId: number) => void;
   moveAtom: (id: number, x: number, y: number) => void;
+  /**
+   * A new layout for some of the structure - a clean-up - as one undo step:
+   * atoms moved, and wedges changed where the layout needs them.
+   */
+  relayout: (change: {
+    atoms: { id: number; x: number; y: number }[];
+    bonds: Pick<Bond, "id" | "stereo" | "stereoOrient">[];
+  }) => void;
   updateBond: (id: number, patch: Partial<Bond>) => void;
   setBondOrder: (id: number, order: Bond["order"]) => void;
   setBondStereo: (id: number, stereo: NonNullable<Bond["stereo"]>) => void;

@@ -3,16 +3,19 @@ import clsx from "clsx";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import NetworkSettings from "../../network/NetworkSettings";
 import StyleEditor from "../StyleEditor";
+import ChemistrySettings from "./ChemistrySettings";
 import { useSettingsSection, type SettingsSection } from "./section";
 
 const SECTIONS: { id: SettingsSection; name: string }[] = [
   { id: "style", name: "Drawing style" },
+  { id: "chemistry", name: "Chemistry" },
   { id: "network", name: "Network" },
 ];
 
 /**
  * The application's settings: the drawing style every structure is drawn
- * in unless its document has its own, and what Meno may do on the network.
+ * in unless its document has its own, what RDKit points out on it, and
+ * what Meno may do on the network.
  */
 export default function SettingsPanel() {
   const drawingStyle = useAppSettings((s) => s.drawingStyle);
@@ -67,6 +70,15 @@ export default function SettingsPanel() {
               choice={drawingStyle}
               onChange={(next) => setDrawingStyle(next)}
             />
+          </section>
+        ) : section === "chemistry" ? (
+          <section className="mt-6 max-w-4xl">
+            <h2 className="text-base font-semibold text-gh-black">Chemistry</h2>
+            <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
+              What RDKit points out on a structure as it is drawn. The marks
+              are Meno's, not the drawing's: no exported picture has them.
+            </p>
+            <ChemistrySettings />
           </section>
         ) : (
           <section className="mt-6 max-w-4xl">

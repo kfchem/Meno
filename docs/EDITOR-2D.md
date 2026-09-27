@@ -154,8 +154,15 @@ All hover-based, as above.
 - Every bond type from the pointer: wavy, bold, dashed, and the rest of what
   the cycle cannot reach today.
 - Abbreviations (Me, Ph, Boc, OTBS …) that read correctly and can be expanded.
-- Clean-up of a structure or a selection (RDKit).
-- Valence warnings, and R/S shown on request (RDKit).
+- Clean-up of a structure or a selection (RDKit). (PR #53: the whole
+  drawing from its button, or the structure under the pointer with
+  Ctrl/Cmd+Shift+K - laid out afresh over where it was drawn, its chains
+  turned the way they were drawn and its stereochemistry kept, as one undo
+  step; a selection once there is one.)
+- Valence warnings, and R/S shown on request (RDKit). (PR #53: a ring round
+  an atom with too many bonds, saying what is wrong under the pointer; R/S
+  and E/Z from a button on the canvas; both in Settings › Chemistry, and
+  never in an exported picture.)
 - Reaction arrows, "+" and text: create, move, edit, delete.
 - Copy and paste, within Meno and between tabs.
 

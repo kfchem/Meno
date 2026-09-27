@@ -145,6 +145,45 @@ export function moveAtom(
   return { ...doc, model: { atoms: next, bonds: doc.model.bonds } };
 }
 
+/**
+ * A new layout for some of the structure - a clean-up - in one edit: atoms
+ * moved, and wedges changed where the new layout needs them. Nothing that
+ * would not change is touched.
+ */
+export function relayout(
+  doc: StructureDocument,
+  change: {
+    atoms: { id: number; x: number; y: number }[];
+    bonds: Pick<Bond, "id" | "stereo" | "stereoOrient">[];
+  },
+): StructureDocument {
+  const to = new Map(change.atoms.map((a) => [a.id, a]));
+  let moved = false;
+  const atoms = doc.model.atoms.map((a) => {
+    const p = to.get(a.id);
+    if (!p || (p.x === a.x && p.y === a.y)) return a;
+    moved = true;
+    return { ...a, x: p.x, y: p.y };
+  });
+  const patch = new Map(change.bonds.map((b) => [b.id, b]));
+  let rewedged = false;
+  const bonds = doc.model.bonds.map((b) => {
+    const p = patch.get(b.id);
+    if (!p || (p.stereo === b.stereo && p.stereoOrient === b.stereoOrient))
+      return b;
+    rewedged = true;
+    return { ...b, stereo: p.stereo, stereoOrient: p.stereoOrient };
+  });
+  if (!moved && !rewedged) return doc;
+  return {
+    ...doc,
+    model: {
+      atoms: moved ? atoms : doc.model.atoms,
+      bonds: rewedged ? bonds : doc.model.bonds,
+    },
+  };
+}
+
 export function setAtomLabel(
   doc: StructureDocument,
   id: number,

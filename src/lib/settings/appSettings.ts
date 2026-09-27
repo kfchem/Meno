@@ -20,6 +20,15 @@ export type AppSettings = {
   /** The drawing style a structure is drawn in unless its document has its own. */
   drawingStyle: StyleChoice;
   network: NetworkSettings;
+  chemistry: ChemistrySettings;
+};
+
+/** What RDKit points out on a structure as it is drawn. */
+export type ChemistrySettings = {
+  /** Atoms with more bonds than they can have. */
+  valenceWarnings: boolean;
+  /** R and S at stereocentres, E and Z at double bonds. */
+  stereoLabels: boolean;
 };
 
 export type NetworkSettings = {
@@ -32,6 +41,7 @@ export type NetworkSettings = {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   drawingStyle: DEFAULT_STYLE_CHOICE,
   network: { offline: false, granted: [] },
+  chemistry: { valenceWarnings: true, stereoLabels: false },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -44,6 +54,19 @@ export function acceptAppSettings(raw: unknown): AppSettings {
   return {
     drawingStyle: acceptStyleChoice(r.drawingStyle),
     network: acceptNetwork(r.network),
+    chemistry: acceptChemistry(r.chemistry),
+  };
+}
+
+function acceptChemistry(raw: unknown): ChemistrySettings {
+  const d = DEFAULT_APP_SETTINGS.chemistry;
+  if (typeof raw !== "object" || raw === null) return d;
+  const { valenceWarnings, stereoLabels } = raw as Record<string, unknown>;
+  return {
+    valenceWarnings:
+      typeof valenceWarnings === "boolean" ? valenceWarnings : d.valenceWarnings,
+    stereoLabels:
+      typeof stereoLabels === "boolean" ? stereoLabels : d.stereoLabels,
   };
 }
 
@@ -100,6 +123,7 @@ type SettingsState = AppSettings & {
   error: string | null;
   setDrawingStyle: (choice: StyleChoice) => void;
   setNetwork: (network: NetworkSettings) => void;
+  setChemistry: (chemistry: ChemistrySettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -110,8 +134,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, network } = get();
-      writeSettingsText(settingsFileText({ drawingStyle, network })).then(
+      const { drawingStyle, network, chemistry } = get();
+      writeSettingsText(
+        settingsFileText({ drawingStyle, network, chemistry }),
+      ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
       );
@@ -127,6 +153,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setNetwork: (network) => {
       set({ network });
+      scheduleSave();
+    },
+    setChemistry: (chemistry) => {
+      set({ chemistry });
       scheduleSave();
     },
   };

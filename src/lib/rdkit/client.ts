@@ -13,19 +13,38 @@ export type ChemRequests = {
   ping: { args: Record<string, never>; result: { rdkit: string } };
   to_smiles: { args: { molblock: string }; result: { smiles: string } };
   from_smiles: { args: { smiles: string }; result: { molblock: string } };
-  /** New 2D coordinates for the whole structure, atoms in the same order. */
-  clean: { args: { molblock: string }; result: { molblock: string } };
+  /**
+   * New 2D coordinates for the structure, atoms in the same order, laid over
+   * the drawing: each fragment where it was, chains turned the way they
+   * were drawn, at the drawing's own bond length.
+   */
+  clean: { args: { molblock: string }; result: CleanLayout };
   /** Hydrogens, valence, aromaticity and stereo labels, per atom and bond. */
   analyse: { args: { molblock: string }; result: Analysis };
 };
 
 export type ChemOp = keyof ChemRequests;
 
+export type CleanLayout = {
+  /** Each atom's new (x, y), in the MOL block's own units. */
+  coords: [number, number][];
+  /**
+   * Null when the wedges as drawn still say the same stereochemistry in the
+   * new layout, and stay; otherwise every wedge the new layout needs - the
+   * only ones it should have - each narrow at its stereocentre.
+   */
+  wedges: { bond: number; narrow: number; stereo: "up" | "down" }[] | null;
+};
+
 export type Analysis = {
   atoms: {
     index: number;
     hydrogens: number;
-    valenceError?: string;
+    /**
+     * More bonds than the atom can have: its valence, and the most it can
+     * be, when that is known.
+     */
+    valenceError?: { valence: number; most?: number };
     cip?: "R" | "S" | "r" | "s";
     aromatic?: boolean;
   }[];

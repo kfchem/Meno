@@ -14,3 +14,4 @@ export { default as AtomsHoverRings2D } from "./AtomsHoverRings2D";
 export { default as MovePreview2D } from "./MovePreview2D";
 export { default as ReactionArrow2D } from "./ReactionArrow2D";
 export { default as Arrows2D } from "./Arrows2D";
+export { default as ChemMarks2D } from "./ChemMarks2D";

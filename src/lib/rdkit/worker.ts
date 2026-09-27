@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { resolveResource } from "@tauri-apps/api/path";
 import { create } from "zustand";
-import { ensurePyEnv } from "../pyEnv";
+import { ensurePyEnv, pyEnvReady } from "../pyEnv";
 import { ChemClient } from "./client";
 
 /**
@@ -35,6 +35,15 @@ export function chemWorker(): Promise<ChemClient> {
     throw e;
   });
   return running;
+}
+
+/**
+ * Whether RDKit can be had without asking anything: running, or set up and
+ * only to be started. What runs by itself - the checks on a structure -
+ * runs only then; setting RDKit up is always something the user asked for.
+ */
+export async function chemAtHand(): Promise<boolean> {
+  return running !== undefined || (await pyEnvReady("chem"));
 }
 
 type Line = { id: string; line: string };

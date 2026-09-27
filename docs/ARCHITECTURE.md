@@ -30,6 +30,7 @@ src/
   lib/net/                network.ts: the network's record, consent, offline mode
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
+  lib/rdkit/              the chemistry worker: client, sidecar, the MOL blocks it is asked about
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
   utils/importers         detectFormat, readMoleculesFromText, RXN grouping/layout, EditorModel conversion
   utils/atomUtils         element table (radii, colours)
@@ -46,7 +47,7 @@ src/
     PythonConsole/        UI for the Python sidecar
     TextEditor/           plain textarea with line numbers
     StyleEditor/          every drawing setting, with a preview
-    SettingsPanel/        Settings: drawing style, network
+    SettingsPanel/        Settings: drawing style, chemistry, network
 src-tauri/
   src/lib.rs              Tauri commands (see table below)
   src/fonts.rs            the system's typefaces
@@ -138,6 +139,8 @@ What is left before the editor counts as finished, and in what order, is in
   canvas draws the runs where `placeLabel` puts them, in the system's own
   Arial (`label_font`); the SVG names Arial.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
+- **Chemistry**: RDKit's marks on the structure and clean-up, in `chem/`
+  and `ChemMarks2D`; see the chemistry worker below.
 - **Frame loop**: the canvas runs `frameloop="demand"` at a fixed `CANVAS_DPR`
   (2x). React commits (store changes) request a frame automatically; anything
   that animates or mutates the scene imperatively must call `invalidate()`
@@ -172,9 +175,21 @@ PyConsole ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_set
 The chemistry worker (`resources/workers/chem_worker.py`) is a sidecar of
 the `chem` profile, started by `lib/rdkit/worker.ts` and asked through
 `lib/rdkit/client.ts`: JSON lines, a fixed set of requests (ping,
-to_smiles, from_smiles, clean, analyse), MOL blocks in and out. It runs no
-code it is sent, and the app keeps it off the network. Its tests need RDKit
-and run by hand (`scripts/chem/test_chem_worker.py`).
+to_smiles, from_smiles, clean, analyse), MOL blocks in (written by
+`lib/rdkit/molblock.ts`, a label that is not an element as `*`) and V3000
+blocks or coordinates out. It runs no code it is sent, and the app keeps it
+off the network. Its tests need RDKit and run by hand
+(`scripts/chem/test_chem_worker.py`).
+
+On the 2D canvas (`StructureEditor/chem/`), `analyse` feeds the marks -
+valence problems, R/S and E/Z - which `ChemMarks2D` lays over the drawing
+as HTML, outside the drawing and so outside any export; they run only
+while RDKit is set up (`pyEnvReady`), so drawing never starts a download.
+`clean` lays each fragment out afresh and then over the drawing - turned,
+turned over, and its chains turned over their single bonds, whichever
+lies closest - keeping the drawn wedges when they still say the same
+stereochemistry and otherwise giving RDKit's; the editor applies it as one
+undo step.
 
 The venv lives under the app data dir at `uv/<profile>/venv`; a stamp file
 (`uv/stamps/<profile>.json`) stores the lock-file hash so setup reruns only when
