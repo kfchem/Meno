@@ -1,7 +1,16 @@
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { wheelReader } from "../../../../lib/input/wheel";
 import { useEditor, useEditorStore } from "../store";
+
+/** WebKit's pinch on a trackpad, which it gives as gestures, not wheels. */
+type GestureLike = Event & { scale: number; clientX: number; clientY: number };
+
+/** Zoom limits, and how far a pinch's Ctrl-wheel step zooms. */
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 300;
+const PINCH_PER_PX = 0.01;
 
 export function PanZoom2D() {
   const { camera, gl, invalidate } = useThree();
@@ -36,14 +45,16 @@ export function PanZoom2D() {
     const onDown = (e: PointerEvent) => {
       // disable pan during bond extension or on a double-click down
       if (extendRef.current) return;
-      // Pressing on an atom starts a move, not a pan. Atom hit-testing is done
-      // by the canvas wrapper (hovered.atomId), which does not depend on the
-      // 3D raycast, so this also holds if the raycast misses the atom.
-      const st = store.getState();
-      if (st.hovered.atomId != null || st.moveDrag.active) return;
-      // Block pan initiation while panHold is active (e.g., dblclick direction gesture)
-      if (panHoldRef.current) return;
       const btn = (e as any).button;
+      // Pressing on an atom with the main button starts a move, not a pan;
+      // the other buttons move the view from anywhere. Atom hit-testing is
+      // done by the canvas wrapper (hovered.atomId), which does not depend on
+      // the 3D raycast, so this also holds if the raycast misses the atom.
+      const st = store.getState();
+      if (st.moveDrag.active) return;
+      if (btn === 0 && st.hovered.atomId != null) return;
+      // Block pan initiation while panHold is active (e.g., dblclick direction gesture)
+      if (btn === 0 && panHoldRef.current) return;
       const now =
         e.timeStamp ||
         (typeof performance !== "undefined" ? performance.now() : Date.now());
@@ -106,6 +117,12 @@ export function PanZoom2D() {
       invalidate();
     };
     const onUp = (e: PointerEvent) => {
+      if (dragging.current) {
+        // The view may glide on after the release: what was under the
+        // pointer need not be any more. The next move finds what is.
+        store.getState().clearAtomHover();
+        store.getState().clearBondHover();
+      }
       dragging.current = false;
       maybe.current.active = false;
       if (
@@ -118,8 +135,61 @@ export function PanZoom2D() {
         dom.releasePointerCapture(e.pointerId);
       } catch {}
     };
+    // The view zoomed at once by `factor`, keeping the point under the
+    // pointer where it is.
+    const zoomAt = (factor: number, clientX: number, clientY: number) => {
+      const cam = camera as THREE.OrthographicCamera;
+      const rect = dom.getBoundingClientRect();
+      const v = new THREE.Vector3(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -(((clientY - rect.top) / rect.height) * 2 - 1),
+        0,
+      );
+      const before = v.clone().unproject(cam);
+      cam.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cam.zoom * factor));
+      cam.updateProjectionMatrix();
+      const after = v.clone().unproject(cam);
+      pos.current.x += before.x - after.x;
+      pos.current.y += before.y - after.y;
+      vel.current.set(0, 0);
+      zVel.current = 0;
+      invalidate();
+    };
+    // A pinch in WebKit: gestures, while they last, rather than wheels.
+    let pinch: number | null = null;
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      pinch = 1;
+    };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      const g = e as GestureLike;
+      if (pinch === null || !(g.scale > 0)) return;
+      zoomAt(g.scale / pinch, g.clientX, g.clientY);
+      pinch = g.scale;
+    };
+    const onGestureEnd = (e: Event) => {
+      e.preventDefault();
+      pinch = null;
+    };
+    const readWheel = wheelReader();
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      if (pinch !== null) return; // the gesture has it
+      const cz = (camera as any).zoom || 1;
+      if (readWheel(e) === "pan") {
+        // two fingers on a trackpad move the view, the way they scroll a page
+        pos.current.x += e.deltaX / cz;
+        pos.current.y -= e.deltaY / cz;
+        vel.current.set(0, 0);
+        invalidate();
+        return;
+      }
+      if (e.ctrlKey) {
+        // a pinch in Chromium: small steps, followed as they come
+        zoomAt(Math.exp(-e.deltaY * PINCH_PER_PX), e.clientX, e.clientY);
+        return;
+      }
       // lower sensitivity (was 0.001)
       const SENS = 0.00025;
       zVel.current += -e.deltaY * SENS; // accumulate in log-zoom space
@@ -135,11 +205,17 @@ export function PanZoom2D() {
     dom.addEventListener("pointermove", onMove);
     dom.addEventListener("pointerup", onUp);
     dom.addEventListener("wheel", onWheel, { passive: false });
+    dom.addEventListener("gesturestart", onGestureStart);
+    dom.addEventListener("gesturechange", onGestureChange);
+    dom.addEventListener("gestureend", onGestureEnd);
     return () => {
       dom.removeEventListener("pointerdown", onDown);
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerup", onUp);
       dom.removeEventListener("wheel", onWheel);
+      dom.removeEventListener("gesturestart", onGestureStart);
+      dom.removeEventListener("gesturechange", onGestureChange);
+      dom.removeEventListener("gestureend", onGestureEnd);
     };
   }, [camera, gl, invalidate, dom, extend.active, store]);
 
@@ -187,8 +263,6 @@ export function PanZoom2D() {
     cam.position.y = pos.current.y;
 
     // inertial zoom with anchor
-    const MIN_ZOOM = 1;
-    const MAX_ZOOM = 300;
     if (Math.abs(zVel.current) > 1e-5) {
       const old = cam.zoom || 1;
       let next = old * Math.exp(zVel.current);
