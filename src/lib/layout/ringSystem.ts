@@ -56,11 +56,17 @@ export function placeRingSystem(mol: Molecule, sys: RingSystem): Map<number, Poi
   // (a ring that can lie square on the lattice - six, then four - sets the
   // system square)
   const fit = (r: number[]) => (r.length === 6 ? 2 : r.length === 4 ? 1 : 0);
+  // and a ring a larger one is bridged across (sharing three atoms or more)
+  // before others: it stays regular, and the larger ring arcs round from it,
+  // the bridge inside - taxol's A ring, and its eight-membered B
+  const bridgedFrom = (r: number[]) =>
+    rings.some((q) => q !== r && q.length > r.length && q.filter((a) => r.includes(a)).length >= 3) ? 1 : 0;
   const first = [...rings].sort((p, q) => {
     const pm = p.length >= MACROCYCLE ? p.length : 0;
     const qm = q.length >= MACROCYCLE ? q.length : 0;
     if (pm !== qm) return qm - pm;
     if (fit(p) !== fit(q)) return fit(q) - fit(p);
+    if (bridgedFrom(p) !== bridgedFrom(q)) return bridgedFrom(q) - bridgedFrom(p);
     const f = fusedCount(q) - fusedCount(p);
     if (f) return f;
     return q.length - p.length;

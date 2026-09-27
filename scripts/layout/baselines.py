@@ -17,7 +17,7 @@ import pathlib
 import time
 
 from rdkit import Chem, RDLogger
-from rdkit.Chem import rdDepictor
+from rdkit.Chem import AllChem, rdDepictor
 from rdkit.Chem.Draw import rdMolDraw2D
 
 RDLogger.DisableLog("rdApp.*")
@@ -37,7 +37,32 @@ def cis_trans(b):
     return {"refs": refs, "cis": cis}
 
 
-def graph(mol):
+def tetrahedral(mol):
+    """Each stereocentre's configuration as a layout engine needs it: its
+    neighbours in order (-1 for an implicit H, last), and the sign of the
+    volume the first three span seen from the centre - taken from a 3D
+    embedding, so no convention about the order of bonds is involved."""
+    centres = [i for i, _ in Chem.FindMolChiralCenters(mol, includeUnassigned=False, useLegacyImplementation=False)]
+    if not centres:
+        return {}
+    mh = Chem.AddHs(mol)
+    if AllChem.EmbedMolecule(mh, randomSeed=7) != 0:
+        return {}
+    conf = mh.GetConformer()
+    heavy = mol.GetNumAtoms()
+    out = {}
+    for c in centres:
+        nbs = sorted(n.GetIdx() for n in mh.GetAtomWithIdx(c).GetNeighbors())
+        order = [n for n in nbs if n < heavy] + [-1 for n in nbs if n >= heavy]
+        pts = [n if n >= 0 else next(h for h in nbs if h >= heavy) for n in order]
+        p0 = conf.GetAtomPosition(c)
+        v = [conf.GetAtomPosition(n) - p0 for n in pts[:3]]
+        det = v[0].DotProduct(v[1].CrossProduct(v[2]))
+        out[c] = {"neighbours": order, "volume": 1 if det > 0 else -1}
+    return out
+
+
+def graph(mol, centres=True):
     kek = Chem.Mol(mol)
     Chem.Kekulize(kek, clearAromaticFlags=True)
     bonds = []
@@ -51,13 +76,14 @@ def graph(mol):
         if stereo:
             bond["stereo"] = stereo
         bonds.append(bond)
-    return {
-        "atoms": [
-            {"el": a.GetSymbol(), "charge": a.GetFormalCharge(), "hs": a.GetTotalNumHs()}
-            for a in kek.GetAtoms()
-        ],
-        "bonds": bonds,
-    }
+    tetra = tetrahedral(mol) if centres else {}
+    atoms = []
+    for a in kek.GetAtoms():
+        atom = {"el": a.GetSymbol(), "charge": a.GetFormalCharge(), "hs": a.GetTotalNumHs()}
+        if a.GetIdx() in tetra:
+            atom["tetra"] = tetra[a.GetIdx()]
+        atoms.append(atom)
+    return {"atoms": atoms, "bonds": bonds}
 
 
 def laid_out(mol, coordgen):
@@ -84,7 +110,7 @@ def laid_out(mol, coordgen):
     ]
     p = m.GetConformer().GetPositions()
     return {
-        "graph": graph(m),
+        "graph": graph(m, centres=False),
         "x": [round(float(v), 4) for v in p[:, 0]],
         "y": [round(float(v), 4) for v in p[:, 1]],
         "wedges": wedges,

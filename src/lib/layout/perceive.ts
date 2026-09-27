@@ -4,6 +4,7 @@
  * sharing an atom or more, laid out together as one piece.
  */
 import { smallestRings } from "./rings";
+import type { Tetrahedral } from "./stereo";
 
 export type CisTrans = {
   /** An atom on each end of the double bond, each bonded to its end. */
@@ -12,7 +13,13 @@ export type CisTrans = {
   cis: boolean;
 };
 
-export type LayoutAtom = { el: string; charge?: number; hs?: number };
+export type LayoutAtom = {
+  el: string;
+  charge?: number;
+  hs?: number;
+  /** Its configuration, where it is a stereocentre. */
+  tetra?: Tetrahedral;
+};
 export type LayoutBond = { a: number; b: number; order: number; stereo?: CisTrans };
 export type LayoutInput = { atoms: readonly LayoutAtom[]; bonds: readonly LayoutBond[] };
 

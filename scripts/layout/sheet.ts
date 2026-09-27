@@ -36,7 +36,12 @@ const root = resolve(here, "../..");
 const outDir = resolve(root, ".layout");
 
 type Graph = {
-  atoms: { el: string; charge: number; hs: number }[];
+  atoms: {
+    el: string;
+    charge: number;
+    hs: number;
+    tetra?: { neighbours: number[]; volume: 1 | -1 };
+  }[];
   bonds: {
     a: number;
     b: number;
@@ -165,12 +170,30 @@ const baselines = new Map<string, Baseline>(
 
 const engines = ["Meno", "CoordGen", "RDKit"];
 
-/** Meno's own layout of a molecule, timed. */
+/** Meno's own layout of a molecule, timed: with the H atoms it draws, and its wedges. */
 function meno(g: Graph): Laid {
   const t = performance.now();
-  const { x, y } = layout2D(g);
+  const out = layout2D(g);
   const ms = Math.round((performance.now() - t) * 10) / 10;
-  return { graph: g, x, y, wedges: [], ms };
+  const graph: Graph = { atoms: [...g.atoms], bonds: [...g.bonds] };
+  const x = [...out.x];
+  const y = [...out.y];
+  const hydrogenOf = new Map<number, number>();
+  for (const h of out.hydrogens) {
+    graph.atoms.push({ el: "H", charge: 0, hs: 0 });
+    graph.bonds.push({ a: h.on, b: graph.atoms.length - 1, order: 1 });
+    x.push(h.at.x);
+    y.push(h.at.y);
+    hydrogenOf.set(h.on, graph.atoms.length - 1);
+  }
+  const wedges = out.wedges.map((w) => {
+    const to = w.to === -1 ? hydrogenOf.get(w.from)! : w.to;
+    const bond = graph.bonds.findIndex(
+      (b) => (b.a === w.from && b.b === to) || (b.b === w.from && b.a === to),
+    );
+    return { bond, narrow: w.from, stereo: w.stereo };
+  });
+  return { graph, x, y, wedges, ms };
 }
 
 // --only=Name,Name draws just those molecules

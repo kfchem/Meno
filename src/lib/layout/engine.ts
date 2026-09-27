@@ -24,11 +24,15 @@ import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { placeRingSystem } from "./ringSystem";
 import { flatCost, projectCage } from "./cage";
+import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
 import type { Point } from "./geometry";
 
 export type { LayoutInput } from "./perceive";
 
-export type Layout2D = { x: number[]; y: number[] };
+export type Layout2D = {
+  x: number[];
+  y: number[];
+} & Stereo;
 
 export function layout2D(input: LayoutInput): Layout2D {
   const mol = perceive(input);
@@ -70,7 +74,10 @@ export function layout2D(input: LayoutInput): Layout2D {
     }
     right = Math.max(...piece.map((a) => x[a]));
   }
-  return { x, y };
+  const tetra = new Map<number, Tetrahedral>();
+  input.atoms.forEach((a, i) => a.tetra && tetra.set(i, a.tetra));
+  const final = new Map(x.map((v, i) => [i, { x: v, y: y[i] }]));
+  return { x, y, ...placeStereo(mol, final, tetra) };
 }
 
 /**
@@ -180,7 +187,10 @@ function clashing(mol: Molecule, piece: number[], pos: Grown): Set<number> {
       const a = piece[i];
       const b = piece[j];
       if (mol.neighbours[a].includes(b)) continue;
-      if (dist(pos.get(a)!, pos.get(b)!) < 0.6) out.add(a).add(b);
+      const d = dist(pos.get(a)!, pos.get(b)!);
+      // labels need more room than bare carbons
+      const labelled = mol.el[a] !== "C" && mol.el[b] !== "C";
+      if (d < 0.6 || (labelled && d < 0.8)) out.add(a).add(b);
     }
   }
   for (let i = 0; i < bonds.length; i++) {
@@ -226,7 +236,7 @@ function untangle(
         const side = sideAtoms(mol, from, to);
         if (side.length > piece.length / 2 || !side.some((v) => hit.has(v))) continue;
         const moves: ((p: Grown) => void)[] = [];
-        for (const t of [15, -15, 30, -30, 45, -45, 60, -60]) {
+        for (const t of [15, -15, 30, -30, 45, -45, 60, -60, 90, -90]) {
           moves.push((p) => turnSide(p, side, p.get(from)!, (t * Math.PI) / 180));
         }
         for (const by of [0.3, 0.6]) {

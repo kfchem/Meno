@@ -214,7 +214,11 @@ function pointToSegment(
 export function layoutMetrics(g: Geometry): LayoutMetrics {
   const { x, y, edges } = g;
   const n = x.length;
-  const lengths = edges.map(([a, b]) => Math.hypot(x[a] - x[b], y[a] - y[b]));
+  // (a bond to a drawn H is drawn short, by choice: it is left out)
+  const isH = (a: number) => g.elements?.[a] === "H";
+  const lengths = edges
+    .filter(([a, b]) => !isH(a) && !isH(b))
+    .map(([a, b]) => Math.hypot(x[a] - x[b], y[a] - y[b]));
   const L = median(lengths);
   const mean = lengths.reduce((s, v) => s + v, 0) / Math.max(lengths.length, 1);
   const bondSpread = lengths.length
@@ -440,6 +444,14 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       }
     });
     if (gap < 0) continue;
+    // an H drawn at a fusion of rings stands straight up or down, as a
+    // steroid's do: measured against upright
+    if (inside.length >= 3 && outside.length === 1 && isH(outside[0])) {
+      const t = deg(dir(outside[0]));
+      subSum += Math.min(Math.abs(t - 90), Math.abs(t + 90));
+      subCount++;
+      continue;
+    }
     const m = outside.length;
     const rel = outside
       .map((b) => (((dir(b) - start) % TAU) + TAU) % TAU)
