@@ -28,6 +28,9 @@ const IMPLICIT: &[&str] = &["python-code"];
 /// How long an idle connection is kept open.
 const IDLE: Duration = Duration::from_secs(120);
 
+/// How the window is told of a task or a connection: an event and its payload.
+type Tell = Box<dyn Fn(&str, serde_json::Value) + Send + Sync>;
+
 /// The network as Meno sees it: managed by the app, shared with the proxy.
 #[derive(Default, Clone)]
 pub struct Net(Arc<Inner>);
@@ -41,7 +44,10 @@ struct Inner {
     /// Recent connections, newest last.
     recent: Mutex<Vec<Connection>>,
     port: OnceLock<u16>,
-    app: OnceLock<AppHandle>,
+    /// Tells the window: set when the app starts. Kept apart from the app
+    /// itself so that nothing here that the tests reach draws in the
+    /// window's code - a test binary on Windows cannot load what that needs.
+    tell: OnceLock<Tell>,
     log: OnceLock<PathBuf>,
     next: AtomicU64,
 }
@@ -135,9 +141,9 @@ impl Net {
         self.write_log(&serde_json::json!({ "task": task }));
     }
 
-    fn emit<T: Serialize + Clone>(&self, event: &str, payload: &T) {
-        if let Some(app) = self.0.app.get() {
-            let _ = app.emit(event, payload.clone());
+    fn emit<T: Serialize>(&self, event: &str, payload: &T) {
+        if let (Some(tell), Ok(value)) = (self.0.tell.get(), serde_json::to_value(payload)) {
+            tell(event, value);
         }
     }
 
@@ -232,7 +238,10 @@ impl Drop for TaskHandle {
 /// Starts the proxy on the loopback address, and the log in `data`.
 pub fn start(app: &AppHandle) {
     let net = app.state::<Net>().inner().clone();
-    let _ = net.0.app.set(app.clone());
+    let window = app.clone();
+    let _ = net.0.tell.set(Box::new(move |event, payload| {
+        let _ = window.emit(event, payload);
+    }));
     if let Ok(data) = app.path().app_data_dir() {
         let _ = std::fs::create_dir_all(&data);
         let _ = net.0.log.set(data.join("network-log.jsonl"));
