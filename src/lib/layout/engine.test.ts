@@ -204,14 +204,25 @@ describe("layout2D", () => {
     }
   });
 
-  it("draws a ring system with a ring fused on a side flat, though it is bridged too", () => {
-    // bicyclo[2.2.2]octane with a benzene ring fused on one bridge
+  it("draws a ring system with a ring fused on a side flat, its bridge across a ring", () => {
+    // 9,10-dihydro-9,10-ethanoanthracene: the bridge (14, 15) across the
+    // middle ring of an anthracene
     const bonds: [number, number, number?][] = [
-      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 7], [7, 3],
-      [1, 8, 2], [8, 9], [9, 10, 2], [10, 11], [11, 12, 2], [12, 2],
+      [0, 2], [2, 3, 2], [3, 4], [4, 5, 2], [5, 6], [6, 7, 2], [7, 2], [7, 1],
+      [0, 8], [8, 9, 2], [9, 10], [10, 11, 2], [11, 12], [12, 13, 2], [13, 8], [13, 1],
+      [0, 14], [14, 15], [15, 1],
     ];
-    const { depth } = layout2D(carbons(13, bonds));
-    expect(depth.every((d) => d == null)).toBe(true);
+    const input = carbons(16, bonds);
+    const { x, y, depth, solid } = layout2D(input);
+    expect(solid.some((s) => s)).toBe(false);
+    for (const l of bondLengths(input)) expect(l).toBeCloseTo(1, 3);
+    // the fused rings flat, the bridge in front of them or behind
+    expect(depth.slice(0, 14).every((d) => d === 0)).toBe(true);
+    expect(Math.abs(depth[14]!)).toBe(1);
+    expect(depth[15]).toBe(depth[14]);
+    const m = layoutMetrics({ x, y, edges: input.bonds.map(({ a, b }) => [a, b] as const), depth });
+    expect(m.overlaps + m.crossings).toBe(0);
+    expect(m.ringError).toBeLessThan(0.05);
   });
 
   it("sets the pieces of a salt side by side", () => {

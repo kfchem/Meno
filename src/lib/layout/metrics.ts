@@ -35,6 +35,12 @@ export type Geometry = {
    * another crossing it (drawn broken there) are how a solid looks.
    */
   perspective?: readonly boolean[];
+  /**
+   * How near each atom is to the viewer, where the drawing says (a cage, or
+   * a bridge drawn across a ring): a bond passing in front of another is
+   * drawn with the one behind broken, and their crossing is no fault.
+   */
+  depth?: readonly (number | null)[];
 };
 
 export type LayoutMetrics = {
@@ -235,6 +241,12 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   const { x, y, edges } = g;
   const n = x.length;
   const solid = (...atoms: number[]) => atoms.every((a) => g.perspective?.[a]);
+  // one bond in front of the other, where the drawing gives depth
+  const passes = (a: number, b: number, c: number, d: number) => {
+    const z = [a, b, c, d].map((v) => g.depth?.[v]);
+    if (z.some((v) => v == null)) return false;
+    return Math.abs((z[0]! + z[1]!) / 2 - (z[2]! + z[3]!) / 2) > 0.25;
+  };
   // (a bond to a drawn H is drawn short, by choice: it is left out)
   const isH = (a: number) => g.elements?.[a] === "H";
   const lengths = edges
@@ -297,7 +309,10 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   }
   const angleError = angleCount ? angleSum / angleCount : 0;
 
-  const small = rings.filter((r) => r.length <= 8 && !solid(...r));
+  // (a ring drawn in depth - a cage's, or one a bridge makes across a ring
+  // - is seen in perspective, not as a polygon)
+  const inDepth = (r: readonly number[]) => solid(...r) || r.some((a) => (g.depth?.[a] ?? 0) !== 0);
+  const small = rings.filter((r) => r.length <= 8 && !inDepth(r));
   const ringError = small.length
     ? small.reduce((s, r) => s + ringIrregularity(x, y, r, L), 0) / small.length
     : 0;
@@ -941,7 +956,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     const [a, b] = edges[i];
     for (let j = i + 1; j < edges.length; j++) {
       const [c, d] = edges[j];
-      if (a === c || a === d || b === c || b === d || solid(a, b, c, d)) continue;
+      if (a === c || a === d || b === c || b === d || solid(a, b, c, d) || passes(a, b, c, d)) continue;
       if (segmentsCross(x[a], y[a], x[b], y[b], x[c], y[c], x[d], y[d])) crossings++;
     }
   }

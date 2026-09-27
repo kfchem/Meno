@@ -80,7 +80,9 @@ A cage Meno draws in perspective (adamantane, norbornane, quinuclidine) is
 measured as the drawing of a solid: among its own atoms, its foreshortened
 rings, the longer bond of a bridge seen from in front, and a bond passing
 behind another - drawn broken there - are how a solid looks, and are not
-counted as faults. The other drawings have no depth to go by, and are
+counted as faults. So too a bridge Meno draws across the face of a ring
+(artemisinin's peroxide): the rings it makes, and the bonds it passes in
+front of or behind. The other drawings have no depth to go by, and are
 measured in full.
 
 The score still does not see everything a chemist does - whether a skeleton

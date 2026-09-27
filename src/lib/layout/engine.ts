@@ -23,6 +23,7 @@ import { dist, mirror, segmentsCross, sub } from "./geometry";
 import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { placeRingSystem, ringSystemVariants } from "./ringSystem";
+import { bridgeAcross } from "./bridge";
 import { flatCost, isCage, projectCage } from "./cage";
 import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
 import type { Point } from "./geometry";
@@ -37,6 +38,11 @@ export type Layout2D = {
    * (null elsewhere): a bond passing behind another is drawn broken there.
    */
   depth: (number | null)[];
+  /**
+   * The atoms of a cage drawn as the solid it is: its rings foreshortened,
+   * its stereochemistry shown by the drawing itself rather than by wedges.
+   */
+  solid: boolean[];
 } & Stereo;
 
 export function layout2D(input: LayoutInput): Layout2D {
@@ -44,14 +50,18 @@ export function layout2D(input: LayoutInput): Layout2D {
   const local = new Map<number, Map<number, Point>>();
   const depth = new Array<number | null>(mol.n).fill(null);
   const hints = new Map<number, Map<number, Point>>();
-  // the ring systems drawn in perspective: kept upright, as drawn
+  // the cages drawn in perspective: kept upright, as drawn
   const upright = new Set<number>();
-  mol.systems.forEach((_, i) => {
+  const solid = new Array<boolean>(mol.n).fill(false);
+  mol.systems.forEach((sys, i) => {
     const laid = layoutSystem(mol, i);
     local.set(i, laid.pos);
     laid.depth?.forEach((d, a) => (depth[a] = d));
     laid.hints?.forEach((m, a) => hints.set(a, m));
-    if (laid.depth) upright.add(i);
+    if (laid.solid) {
+      upright.add(i);
+      for (const a of sys.atoms) solid[a] = true;
+    }
   });
   const fixed = (atoms: readonly number[]) => atoms.some((a) => upright.has(mol.systemOf[a]));
   const sides = sidesOf(mol);
@@ -68,7 +78,7 @@ export function layout2D(input: LayoutInput): Layout2D {
     const count = ringSystemVariants(mol, sys);
     if (count < 2) return;
     const piece = mol.pieces.find((p) => p.includes(sys.atoms[0]))!;
-    const score = scorer(mol, piece, depth);
+    const score = scorer(mol, piece, depth, solid);
     let best = 0;
     let bestScore = Infinity;
     const here = new Set(piece);
@@ -103,7 +113,7 @@ export function layout2D(input: LayoutInput): Layout2D {
   // the largest piece first, the rest after it to the right
   const pieces = [...mol.pieces].sort((p, q) => q.length - p.length);
   for (const piece of pieces) {
-    const score = scorer(mol, piece, depth);
+    const score = scorer(mol, piece, depth, solid);
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
     const tried = FRAMES.map((frame) => {
@@ -131,10 +141,11 @@ export function layout2D(input: LayoutInput): Layout2D {
     }
     right = Math.max(...piece.map((a) => x[a]));
   }
-  // a cage seen from its other side (the frame mirrored) is nearer where
-  // it was further: the drawing is the solid turned round, not its mirror image
+  // a system drawn with depth, seen from its other side (the frame
+  // mirrored), is nearer where it was further: the drawing is the solid
+  // turned round, not its mirror image
   mol.systems.forEach((sys, i) => {
-    if (!upright.has(i)) return;
+    if (depth[sys.atoms[0]] == null) return;
     const L = local.get(i)!;
     // the way round the widest triangle of its atoms goes, before and after
     const [o, ...rest] = sys.atoms;
@@ -155,9 +166,9 @@ export function layout2D(input: LayoutInput): Layout2D {
   });
   // a stereocentre in a cage drawn in perspective shows itself there
   const tetra = new Map<number, Tetrahedral>();
-  input.atoms.forEach((a, i) => a.tetra && depth[i] == null && tetra.set(i, a.tetra));
+  input.atoms.forEach((a, i) => a.tetra && !solid[i] && tetra.set(i, a.tetra));
   const final = new Map(x.map((v, i) => [i, { x: v, y: y[i] }]));
-  return { x, y, depth, ...placeStereo(mol, final, tetra) };
+  return { x, y, depth, solid, ...placeStereo(mol, final, tetra) };
 }
 
 /**
@@ -168,11 +179,16 @@ export function layout2D(input: LayoutInput): Layout2D {
 function layoutSystem(
   mol: Molecule,
   i: number,
-): { pos: Map<number, Point>; depth?: Map<number, number>; hints?: Map<number, Map<number, Point>> } {
+): {
+  pos: Map<number, Point>;
+  depth?: Map<number, number>;
+  hints?: Map<number, Map<number, Point>>;
+  solid?: boolean;
+} {
   const sys = mol.systems[i];
   // a cage - norbornane, tropane, quinuclidine, adamantane - is drawn in
   // perspective, the way it always is; anything else flat
-  if (isCage(mol, sys)) return projectCage(mol, sys);
+  if (isCage(mol, sys)) return { ...projectCage(mol, sys), solid: true };
   let flat = placeRingSystem(mol, sys);
   const rings = sys.rings.map((r) => mol.rings[r]);
   const bridged = rings.some((r, j) =>
@@ -189,6 +205,12 @@ function layoutSystem(
         least = cost;
         flat = trial;
       }
+    }
+    // where that crowds or stretches it (morphine, artemisinin): the fused
+    // rings flat and regular, the bridge across the face of one
+    if (least >= 1) {
+      const across = bridgeAcross(mol, sys);
+      if (across && flatCost(mol, sys, across.pos, across.depth) < least) return across;
     }
   }
   return { pos: flat };
@@ -434,6 +456,7 @@ export function scorer(
   mol: Molecule,
   piece: number[],
   depth: readonly (number | null)[] = [],
+  solid: readonly boolean[] = [],
 ): (pos: Grown) => number {
   const index = new Map(piece.map((a, i) => [a, i]));
   const edges: [number, number][] = [];
@@ -456,7 +479,8 @@ export function scorer(
   const elements = piece.map((a) => mol.el[a]);
   const hydrogens = piece.map((a) => mol.hs[a]);
   const labelled = piece.map((a) => mol.el[a] !== "C" || mol.charge[a] !== 0);
-  const perspective = piece.map((a) => depth[a] != null);
+  const perspective = piece.map((a) => solid[a] ?? false);
+  const depths = piece.map((a) => depth[a] ?? null);
   return (pos) =>
     layoutMetrics({
       x: piece.map((a) => pos.get(a)!.x),
@@ -469,5 +493,6 @@ export function scorer(
       rings,
       cisTrans,
       perspective,
+      depth: depths,
     }).score;
 }

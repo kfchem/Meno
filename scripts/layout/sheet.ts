@@ -58,6 +58,7 @@ type Laid = {
   ms: number;
   /** Depth, for a cage drawn in perspective: a bond behind another is broken. */
   depth?: (number | null)[];
+  solid?: boolean[];
 };
 type Baseline = {
   name: string;
@@ -116,7 +117,8 @@ function measure(g: Graph, laid: Laid, base: Baseline): LayoutMetrics {
     cisTrans: base.graph.bonds.flatMap((b, i) =>
       b.stereo ? [{ bond: i, refs: b.stereo.refs, cis: b.stereo.cis }] : [],
     ),
-    perspective: laid.depth ? laid.depth.map((d) => d != null) : undefined,
+    perspective: laid.solid,
+    depth: laid.depth,
   });
 }
 
@@ -201,7 +203,7 @@ function meno(g: Graph): Laid {
     );
     return { bond, narrow: w.from, stereo: w.stereo };
   });
-  return { graph, x, y, wedges, ms, depth: out.depth };
+  return { graph, x, y, wedges, ms, depth: out.depth, solid: out.solid };
 }
 
 // --only=Name,Name draws just those molecules

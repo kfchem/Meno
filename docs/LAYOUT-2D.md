@@ -66,7 +66,15 @@ they hang from.
 - **Bridged systems**: where a ring is fused on a side as well - morphine,
   artemisinin, taxol - the system is drawn flat: the smaller ring of a
   bridged pair regular, the larger arcing round it with the bridge inside
-  (taxol's A ring, its B ring round the gem-dimethyl bridge).
+  (taxol's A ring, its B ring round the gem-dimethyl bridge). Where that
+  crowds the bridge or stretches its bonds, the fused rings are drawn flat
+  and regular as though the bridge were not there, and the bridge is a
+  path of bonds across the face of a ring, in front of it or behind it as
+  the molecule has it, the bond behind broken where they cross -
+  artemisinin's peroxide inside its seven-membered ring. A bridge as long
+  as the path it spans is that path set off by a bond, the ring the two
+  make the chair or boat it is (a morphinan's piperidine under its B
+  ring).
 - **Cages**: a system whose rings are all bridged, each sharing three atoms
   or more with another (norbornane, camphor, tropane, quinuclidine,
   adamantane), or a polyhedron (cubane), is drawn in perspective, as the

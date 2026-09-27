@@ -139,7 +139,13 @@ function settle(X: Vec3[], hop: number[][]): Vec3[] {
  * little less room than a view found by searching (the second bridge of
  * bicyclo[2.2.2]octane passes close by the back bridgehead).
  */
-function viewCost(pts: Point[], bonds: [number, number][], near = 0.6, onBond = 0.3): number {
+function viewCost(
+  pts: Point[],
+  bonds: [number, number][],
+  near = 0.6,
+  onBond = 0.3,
+  depth?: readonly number[],
+): number {
   const lens = bonds.map(([a, b]) => Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y));
   const mean = lens.reduce((s, v) => s + v, 0) / lens.length;
   const spread = Math.sqrt(lens.reduce((s, v) => s + (v - mean) ** 2, 0) / lens.length) / mean;
@@ -167,7 +173,9 @@ function viewCost(pts: Point[], bonds: [number, number][], near = 0.6, onBond = 
       const [c, d] = bonds[j];
       if (a === c || a === d || b === c || b === d) continue;
       // a bond passing behind another is drawn broken there, which reads
-      if (segmentsCross(pts[a], pts[b], pts[c], pts[d])) cost += 1;
+      // - the better where the drawing says which is in front
+      const apart = depth && Math.abs((depth[a] + depth[b]) / 2 - (depth[c] + depth[d]) / 2) > 0.25;
+      if (segmentsCross(pts[a], pts[b], pts[c], pts[d])) cost += apart ? 0.3 : 1;
     }
   }
   return cost;
@@ -456,7 +464,7 @@ function sixCycles(mol: Molecule, atoms: readonly number[]): number[][] {
 }
 
 /** The affine map from three dimensions to the page that best takes `from` to `to`. */
-function affineFit(from: Vec3[], to: Point[]): { x: number[]; y: number[]; residual: number } {
+export function affineFit(from: Vec3[], to: Point[]): { x: number[]; y: number[]; residual: number } {
   const rows = from.map((p) => [p[0], p[1], p[2], 1]);
   const normal = [0, 1, 2, 3].map((i) => [0, 1, 2, 3].map((j) => rows.reduce((s, r) => s + r[i] * r[j], 0)));
   const solve = (b: number[]): number[] => {
@@ -888,7 +896,12 @@ const normalise = (a: Vec3): Vec3 => {
 };
 
 /** How badly a flat layout of a ring system reads, by the same measure. */
-export function flatCost(mol: Molecule, sys: RingSystem, pos: Map<number, Point>): number {
+export function flatCost(
+  mol: Molecule,
+  sys: RingSystem,
+  pos: Map<number, Point>,
+  depth?: Map<number, number>,
+): number {
   const atoms = sys.atoms;
   const index = new Map(atoms.map((a, i) => [a, i]));
   const bonds: [number, number][] = [];
@@ -899,5 +912,8 @@ export function flatCost(mol: Molecule, sys: RingSystem, pos: Map<number, Point>
   return viewCost(
     atoms.map((a) => pos.get(a)!),
     bonds,
+    0.6,
+    0.3,
+    depth && atoms.map((a) => depth.get(a) ?? 0),
   );
 }
