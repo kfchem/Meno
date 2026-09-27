@@ -155,7 +155,9 @@ function viewCost(
   for (let i = 0; i < pts.length; i++) {
     for (let j = i + 1; j < pts.length; j++) {
       if (bonded.has(`${i},${j}`)) continue;
-      if (Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) / mean < near) cost += 10;
+      // (one in front of the other may come a little nearer)
+      const apart = depth && Math.abs(depth[i] - depth[j]) > 0.25;
+      if (Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) / mean < (apart ? Math.min(near, 0.45) : near)) cost += 10;
     }
     for (const [a, b] of bonds) {
       if (a === i || b === i) continue;
@@ -788,12 +790,18 @@ function drawOn(
         pts[b].y -= dy * f * share;
       }
     }
-    // (the upright bonds held where they are; the rest less and less, so
-    // that bonds that can all be one length are)
+    // (an upright bond kept upright - its far atom moved only up or down;
+    // the rest held less and less, so that bonds that can all be one
+    // length are)
     const ease = Math.max(0, 1 - it / 300);
     pts.forEach((p, i) => {
       if (fixed.has(i)) return;
-      const w = hold.get(i) ?? 0.05 * ease;
+      if (hold.has(i)) {
+        p.x = anchor[i].x;
+        p.y += (anchor[i].y - p.y) * hold.get(i)!;
+        return;
+      }
+      const w = 0.05 * ease;
       p.x += (anchor[i].x - p.x) * w;
       p.y += (anchor[i].y - p.y) * w;
     });

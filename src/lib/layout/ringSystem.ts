@@ -429,6 +429,11 @@ function placeRing(ring: number[], pos: Map<number, Point>, rings: number[][] = 
     placeSpiro(ring, pos);
     return;
   }
+  // A small ring its neighbours have fixed three atoms or more of (a
+  // furan fused between rings, as morphine's): the rest of it where the
+  // regular polygon that best fits those atoms puts it - its shape kept,
+  // its bonds giving a little, rather than squeezed round an arc.
+  if (n >= 5 && n < MACROCYCLE && count >= 3 && count < n && fitPolygon(ring, pos)) return;
   // the runs of unplaced atoms, each between two placed ones
   for (let i = 0; i < n; i++) {
     if (!placed[i] || placed[(i + 1) % n]) continue;
@@ -442,6 +447,209 @@ function placeRing(ring: number[], pos: Map<number, Point>, rings: number[][] = 
     if (n >= MACROCYCLE && run.length >= 3) placeChainRun(ring[i], ring[j], run, pos, rings);
     else placeRun(ring[i], ring[j], run, n, pos);
   }
+}
+
+/**
+ * The regular polygon of a ring's size best fitted - turned, scaled and
+ * moved, either way round - to the given places of some of its atoms (by
+ * their places round it): where it puts each of its places, and how far,
+ * in all, it misses the given ones.
+ */
+function regularFit(
+  n: number,
+  known: readonly (readonly [number, Point])[],
+  scaleWithin: readonly [number, number] = [0, Infinity],
+): { place: (k: number) => Point; error: number } {
+  const r = radius(n);
+  let best: { place: (k: number) => Point; error: number } | null = null;
+  for (const way of [1, -1]) {
+    const ideal = (k: number) => scale(dir((way * k * 2 * Math.PI) / n), r);
+    const ci = centroid(known.map(([k]) => ideal(k)));
+    const cp = centroid(known.map(([, p]) => p));
+    let dotSum = 0;
+    let crossSum = 0;
+    let norm2 = 0;
+    for (const [k, p] of known) {
+      const u = sub(ideal(k), ci);
+      const w = sub(p, cp);
+      dotSum += u.x * w.x + u.y * w.y;
+      crossSum += u.x * w.y - u.y * w.x;
+      norm2 += u.x * u.x + u.y * u.y;
+    }
+    const k0 = Math.min(scaleWithin[1], Math.max(scaleWithin[0], Math.hypot(dotSum, crossSum) / (norm2 || 1)));
+    const turn = Math.atan2(crossSum, dotSum);
+    const place = (k: number) => add(cp, scale(rotateBy(sub(ideal(k), ci), turn), k0));
+    const error = known.reduce((sum, [k, p]) => sum + dist(place(k), p) ** 2, 0);
+    if (!best || error < best.error) best = { place, error };
+  }
+  return best!;
+}
+
+/**
+ * A ring system whose rings came out bent - pulled this way and that by
+ * rings fused and bridged round them (strychnine) - eased toward rings of
+ * their own shape: each ring drawn to the regular polygon that best fits
+ * it, a little larger or smaller as it must, its bonds giving before its
+ * shape does, and atoms kept clear of each other. The larger ring of a
+ * bridged pair, which arcs round the bridge, is left to its bonds. A
+ * system whose rings are already regular is left as it is.
+ */
+export function regularize(mol: Molecule, sys: RingSystem, pos: Map<number, Point>): void {
+  const { shaped, misfit } = shapesOf(mol, sys, pos);
+  if (!shaped.some((r) => misfit(r) > 0.002)) return;
+  easeRings(mol, sys, pos, shaped, misfit);
+}
+
+/**
+ * How far a ring system's rings are from their own shapes: each ring's
+ * miss from the regular polygon that best fits it, per atom, summed - the
+ * larger ring of a bridged pair, which arcs round the bridge, not counted.
+ */
+export function misshapen(mol: Molecule, sys: RingSystem, pos: Map<number, Point>): number {
+  const { shaped, misfit } = shapesOf(mol, sys, pos);
+  return shaped.reduce((sum, r) => sum + misfit(r), 0);
+}
+
+function shapesOf(mol: Molecule, sys: RingSystem, pos: Map<number, Point>) {
+  const rings = sys.rings.map((i) => mol.rings[i]);
+  // of a bridged pair, the larger arcs round the bridge; of two alike, the
+  // one fused to fewer other rings
+  const fused = (r: number[]) => rings.filter((q) => q !== r && q.filter((a) => r.includes(a)).length === 2).length;
+  const arcs = new Set(
+    rings.filter((r) =>
+      rings.some(
+        (q) =>
+          q !== r &&
+          q.filter((a) => r.includes(a)).length >= 3 &&
+          (q.length < r.length || (q.length === r.length && fused(q) > fused(r))),
+      ),
+    ),
+  );
+  const shaped = rings.filter((r) => r.length < MACROCYCLE && !arcs.has(r));
+  const misfit = (r: number[]) =>
+    regularFit(r.length, r.map((a, k) => [k, pos.get(a)!] as const)).error / r.length;
+  return { shaped, misfit };
+}
+
+function easeRings(
+  mol: Molecule,
+  sys: RingSystem,
+  pos: Map<number, Point>,
+  shaped: number[][],
+  misfit: (r: number[]) => number,
+): void {
+  const atoms = sys.atoms;
+  const bonds: [number, number][] = [];
+  for (const [k] of mol.bondIndex) {
+    const [a, b] = k.split(",").map(Number);
+    if (pos.has(a) && pos.has(b) && sys.atoms.includes(a) && sys.atoms.includes(b)) bonds.push([a, b]);
+  }
+  for (let it = 0; it < 300; it++) {
+    const pull = new Map<number, { x: number; y: number; w: number }>();
+    const add2 = (a: number, d: Point, w: number) => {
+      const m = pull.get(a) ?? { x: 0, y: 0, w: 0 };
+      m.x += d.x * w;
+      m.y += d.y * w;
+      m.w += w;
+      pull.set(a, m);
+    };
+    for (const r of shaped) {
+      const fit = regularFit(r.length, r.map((a, k) => [k, pos.get(a)!] as const), [0.95, 1.35]);
+      r.forEach((a, k) => add2(a, sub(fit.place(k), pos.get(a)!), 1));
+    }
+    for (const [a, b] of bonds) {
+      const d = sub(pos.get(b)!, pos.get(a)!);
+      const l = len(d) || 1e-9;
+      const f = (l - 1) / l / 2;
+      add2(a, scale(d, f), 0.3);
+      add2(b, scale(d, -f), 0.3);
+    }
+    for (let i = 0; i < atoms.length; i++) {
+      for (let j = i + 1; j < atoms.length; j++) {
+        const a = atoms[i];
+        const b = atoms[j];
+        if (mol.neighbours[a].includes(b)) continue;
+        const d = sub(pos.get(b)!, pos.get(a)!);
+        const l = len(d);
+        if (l >= 0.85 || l < 1e-9) continue;
+        const f = (l - 0.85) / l / 2;
+        add2(a, scale(d, f), 1);
+        add2(b, scale(d, -f), 1);
+      }
+    }
+    for (const [a, m] of pull) {
+      const p = pos.get(a)!;
+      pos.set(a, { x: p.x + (0.3 * m.x) / m.w, y: p.y + (0.3 * m.y) / m.w });
+    }
+  }
+  // and set square again by its most regular six-membered ring
+  const six = shaped
+    .filter((r) => r.length === 6)
+    .sort((p, q) => misfit(p) - misfit(q))[0];
+  if (!six) return;
+  let off = 0;
+  six.forEach((a, k) => {
+    const t = (angleOf(sub(pos.get(six[(k + 1) % 6])!, pos.get(a)!)) * 180) / Math.PI - 30;
+    off += t - 60 * Math.round(t / 60);
+  });
+  const turn = (-off / 6) * (Math.PI / 180);
+  const c = centroid(atoms.map((a) => pos.get(a)!));
+  for (const a of atoms) pos.set(a, add(c, rotateBy(sub(pos.get(a)!, c), turn)));
+}
+
+/**
+ * Places a ring's unplaced atoms at the vertices of the regular polygon
+ * fitted (turned, scaled and moved, either way round) to its placed ones;
+ * false, placing nothing, where that puts one on another atom or asks
+ * too much of a bond.
+ */
+function fitPolygon(ring: number[], pos: Map<number, Point>): boolean {
+  const n = ring.length;
+  const r = radius(n);
+  const others = [...pos.entries()].filter(([v]) => !ring.includes(v)).map(([, p]) => p);
+  let best: Map<number, Point> | null = null;
+  let bestError = Infinity;
+  for (const way of [1, -1]) {
+    const ideal = ring.map((_, k) => scale(dir((way * k * 2 * Math.PI) / n), r));
+    const known = ring.map((v, k) => [k, pos.get(v)] as const).filter((e): e is readonly [number, Point] => !!e[1]);
+    const ci = centroid(known.map(([k]) => ideal[k]));
+    const cp = centroid(known.map(([, p]) => p));
+    let dotSum = 0;
+    let crossSum = 0;
+    let norm2 = 0;
+    for (const [k, p] of known) {
+      const u = sub(ideal[k], ci);
+      const w = sub(p, cp);
+      dotSum += u.x * w.x + u.y * w.y;
+      crossSum += u.x * w.y - u.y * w.x;
+      norm2 += u.x * u.x + u.y * u.y;
+    }
+    const k0 = Math.hypot(dotSum, crossSum) / norm2;
+    const turn = Math.atan2(crossSum, dotSum);
+    const place = (k: number) => add(cp, scale(rotateBy(sub(ideal[k], ci), turn), k0));
+    const error = known.reduce((sum, [k, p]) => sum + dist(place(k), p) ** 2, 0);
+    if (error >= bestError) continue;
+    const out = new Map<number, Point>();
+    ring.forEach((v, k) => {
+      if (!pos.has(v)) out.set(v, place(k));
+    });
+    bestError = error;
+    best = out;
+  }
+  if (!best) return false;
+  // (clear of other atoms, and every bond of the ring within reason)
+  for (const p of best.values()) if (others.some((o) => dist(o, p) < 0.5)) return false;
+  const at = (v: number) => best!.get(v) ?? pos.get(v)!;
+  for (let k = 0; k < n; k++) {
+    const l = dist(at(ring[k]), at(ring[(k + 1) % n]));
+    if (l < 0.75 || l > 1.5) return false;
+  }
+  for (const [v, p] of best) pos.set(v, p);
+  return true;
+}
+
+function rotateBy(p: Point, t: number): Point {
+  return { x: p.x * Math.cos(t) - p.y * Math.sin(t), y: p.x * Math.sin(t) + p.y * Math.cos(t) };
 }
 
 /**

@@ -300,6 +300,46 @@ describe("layout2D", () => {
     expect(angles.filter((t) => Math.abs(t - 120) < 2).length).toBeGreaterThanOrEqual(0.6 * angles.length);
   });
 
+  it("keeps a five-membered ring hemmed in by others a pentagon, its bonds giving instead", () => {
+    // acenaphthene: the five-membered ring across naphthalene's peri positions
+    const acenaphthene = carbons(12, [
+      [0, 1, 2], [1, 2], [2, 3, 2], [3, 4], [4, 5, 2], [5, 0], [5, 6], [6, 7, 2], [7, 8], [8, 9, 2], [9, 0],
+      [1, 10], [10, 11], [11, 9],
+    ]);
+    const { x, y } = layout2D(acenaphthene);
+    const ring = [0, 1, 10, 11, 9];
+    const off = ring.map((a, i) => {
+      const p = ring[(i + 4) % 5];
+      const q = ring[(i + 1) % 5];
+      const t = Math.abs(Math.atan2(y[p] - y[a], x[p] - x[a]) - Math.atan2(y[q] - y[a], x[q] - x[a]));
+      return Math.abs((Math.min(t, 2 * Math.PI - t) * 180) / Math.PI - 108);
+    });
+    expect(off.reduce((sum, t) => sum + t, 0) / 5).toBeLessThan(8);
+    for (const l of bondLengths(acenaphthene)) expect(l).toBeGreaterThan(0.95);
+  });
+
+  it("hangs a tropane's two-carbon bridge from its chair on upright bonds", () => {
+    // cocaine
+    const bonds: [number, number, number?][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [7, 9], [9, 10], [10, 11, 2], [10, 12],
+      [12, 13, 2], [13, 14], [14, 15, 2], [15, 16], [16, 17, 2], [6, 18], [18, 19, 2], [18, 20], [20, 21], [5, 1],
+      [8, 2], [17, 12],
+    ];
+    const skeleton = carbons(22, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((a, i) => (i === 1 ? { el: "N" } : [9, 11, 19, 20].includes(i) ? { el: "O" } : a)),
+    };
+    const { x, y, solid } = layout2D(input);
+    // every bond of the cage near upright is upright
+    for (const { a, b } of input.bonds) {
+      if (!solid[a] || !solid[b]) continue;
+      const t = Math.abs(Math.atan2(y[b] - y[a], x[b] - x[a]));
+      const off = Math.abs(t - Math.PI / 2);
+      if (off < (25 * Math.PI) / 180) expect(off).toBeLessThan(1e-6);
+    }
+  });
+
   it("draws a ring system with a ring fused on a side flat, its bridge across a ring", () => {
     // 9,10-dihydro-9,10-ethanoanthracene: the bridge (14, 15) across the
     // middle ring of an anthracene

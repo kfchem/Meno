@@ -23,7 +23,7 @@ import {
 import { dist, mirror, segmentsCross, sub } from "./geometry";
 import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
-import { placeRingSystem, ringSystemVariants } from "./ringSystem";
+import { misshapen, placeRingSystem, regularize, ringSystemVariants } from "./ringSystem";
 import { bridgeAcross } from "./bridge";
 import { flatCost, isCage, projectCage, type CageView } from "./cage";
 import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
@@ -225,12 +225,23 @@ function layoutSystem(
   // a bridged system laid flat from each of its rings in turn: which ring
   // stays regular and which arcs round it decides whether it reads
   if (bridged && !rings.some((r) => r.length >= 9)) {
-    let least = flatCost(mol, sys, flat);
+    // how it reads, flat - its rings' shapes counted as well as its faults -
+    // and each with a fault in it (a crowded atom, a stretched bond) tried
+    // eased toward rings of their own shape, where that is better
+    const cost = (pos: Map<number, Point>) => flatCost(mol, sys, pos) + 20 * misshapen(mol, sys, pos);
+    const eased = (pos: Map<number, Point>) => {
+      if (flatCost(mol, sys, pos) < 1) return pos;
+      const trial = new Map(pos);
+      regularize(mol, sys, trial);
+      return cost(trial) < cost(pos) - 1e-9 ? trial : pos;
+    };
+    flat = eased(flat);
+    let least = cost(flat);
     for (const r of sys.rings) {
-      const trial = placeRingSystem(mol, sys, 0, r);
-      const cost = flatCost(mol, sys, trial);
-      if (cost < least - 1e-9) {
-        least = cost;
+      const trial = eased(placeRingSystem(mol, sys, 0, r));
+      const c = cost(trial);
+      if (c < least - 1e-9) {
+        least = c;
         flat = trial;
       }
     }

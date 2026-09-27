@@ -46,9 +46,15 @@ they hang from.
 - **Bonds**: one length throughout. A bond is stretched only as the last
   way out of a clash (section 5).
 - **Rings of three to eight**: regular polygons; a four-membered ring a
-  square with its sides level and upright (a beta-lactam, an oxetane). Rings fused to each other
-  share a side exactly; a ring fused on two sides or more at once (as in
-  pyrene) takes the positions its neighbours already fix.
+  square with its sides level and upright (a beta-lactam, an oxetane).
+  Rings fused to each other share a side exactly; a ring fused on two
+  sides or more at once (as in pyrene) takes the positions its neighbours
+  already fix. Where those cannot make it regular - a five-membered ring
+  hemmed in by others, morphine's furan, acenaphthene's - its shape comes
+  before its bond lengths: the rest of it goes where the regular polygon
+  best fitted to what is fixed puts it, a little larger than the others
+  if it must be. A ring system whose rings still come out bent (strychnine)
+  is eased toward rings of their own shape, its bonds giving first.
 - **Macrocycles** (nine and more): a chain closed on itself, drawn as one:
   two zigzags, one above the other, joined at their ends, every angle 120
   or 240 degrees - never round. At every corner a substituent takes the
@@ -92,7 +98,8 @@ they hang from.
   bonds 15 degrees off level, the back one above the front one and joined
   to it by two bonds 60 degrees steep - a chair's zigzags pointing opposite
   ways, a boat's the same way. Every bond is one length and opposite bonds
-  are parallel. The ring's axial bonds (a boat's flagpoles) are upright;
+  are parallel. The ring's axial bonds (a boat's flagpoles) are upright, always, a
+  bridge between two of them hanging from them however it must;
   an atom bridging two of its atoms (norbornane's C7) stands straight
   above the front one, a bond's length from the back one; the rest is
   eased into place. Adamantane is then a chair with its three axial bonds
