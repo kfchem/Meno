@@ -114,32 +114,8 @@ export function grow(
     return rotate(q, frame.turn);
   };
 
-  const systemsHere = [...new Set(piece.map((a) => mol.systemOf[a]).filter((s) => s >= 0))];
-  if (systemsHere.length) {
-    // The frame: the ring system the molecule is built round - nearest all
-    // the rest of it (atorvastatin's pyrrole, not one of its phenyls) -
-    // and of those the largest.
-    const reach = (s: number) => {
-      const d = new Map<number, number>();
-      const q = [...mol.systems[s].atoms];
-      q.forEach((a) => d.set(a, 0));
-      for (let h = 0; h < q.length; h++) {
-        for (const v of mol.neighbours[q[h]]) {
-          if (!d.has(v)) {
-            d.set(v, d.get(q[h])! + 1);
-            q.push(v);
-          }
-        }
-      }
-      return Math.max(...d.values());
-    };
-    const far = new Map(systemsHere.map((s) => [s, reach(s)]));
-    const root = systemsHere.sort(
-      (p, q) =>
-        far.get(p)! - far.get(q)! ||
-        mol.systems[q].atoms.length - mol.systems[p].atoms.length ||
-        mol.systems[q].rings.length - mol.systems[p].rings.length,
-    )[0];
+  const root = rootSystem(mol, piece);
+  if (root >= 0) {
     const L = local.get(root)!;
     const c = centroid([...L.values()]);
     // a cage drawn in perspective stays upright, as it was drawn: only
@@ -207,6 +183,53 @@ export function grow(
     }
   }
   return pos;
+}
+
+/**
+ * The ring system a piece is built round, its frame: the one nearest all
+ * the rest of it (atorvastatin's pyrrole, not one of its phenyls), and of
+ * those the largest; -1 for a piece with no ring.
+ */
+export function rootSystem(mol: Molecule, piece: number[]): number {
+  const systemsHere = [...new Set(piece.map((a) => mol.systemOf[a]).filter((s) => s >= 0))];
+  if (!systemsHere.length) return -1;
+  const reach = (s: number) => {
+    const d = new Map<number, number>();
+    const q = [...mol.systems[s].atoms];
+    q.forEach((a) => d.set(a, 0));
+    for (let h = 0; h < q.length; h++) {
+      for (const v of mol.neighbours[q[h]]) {
+        if (!d.has(v)) {
+          d.set(v, d.get(q[h])! + 1);
+          q.push(v);
+        }
+      }
+    }
+    return Math.max(...d.values());
+  };
+  const far = new Map(systemsHere.map((s) => [s, reach(s)]));
+  return systemsHere.sort(
+    (p, q) =>
+      far.get(p)! - far.get(q)! ||
+      mol.systems[q].atoms.length - mol.systems[p].atoms.length ||
+      mol.systems[q].rings.length - mol.systems[p].rings.length,
+  )[0];
+}
+
+/**
+ * The ways of setting a piece's frame down: turned by sixty degrees at a
+ * time, and mirrored - and, for a frame of squares and no hexagons (a
+ * penam), by thirty degrees at a time, the square's sides able to lie
+ * level and upright either way round.
+ */
+export function framesFor(mol: Molecule, piece: number[]): Frame[] {
+  const root = rootSystem(mol, piece);
+  if (root < 0) return FRAMES;
+  const sizes = mol.systems[root].rings.map((r) => mol.rings[r].length);
+  if (!sizes.includes(4) || sizes.includes(6)) return FRAMES;
+  return [false, true].flatMap((mirrored) =>
+    Array.from({ length: 12 }, (_, k) => ({ turn: (k * Math.PI) / 6, mirrored })),
+  );
 }
 
 /** A point of an upright cage's own drawing as the frame sets it: mirrored with it, never turned. */

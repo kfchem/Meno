@@ -45,7 +45,8 @@ they hang from.
 
 - **Bonds**: one length throughout. A bond is stretched only as the last
   way out of a clash (section 5).
-- **Rings of three to eight**: regular polygons. Rings fused to each other
+- **Rings of three to eight**: regular polygons; a four-membered ring a
+  square with its sides level and upright (a beta-lactam, an oxetane). Rings fused to each other
   share a side exactly; a ring fused on two sides or more at once (as in
   pyrene) takes the positions its neighbours already fix.
 - **Macrocycles** (nine and more): a chain closed on itself, drawn as one:
@@ -118,7 +119,9 @@ cannot all be square together (fluorene's two benzene rings either side of
 a five-membered one) is set with its long axis level.
 
 Among the ways of setting the frame square - six turns, and their mirror
-images - the drawing takes the one that reads best (section 4).
+images; twelve for a frame of squares and no hexagons, whose sides can
+lie level either way round - the drawing takes the one that reads best
+(section 4).
 
 ## 4. Reading order
 
@@ -132,7 +135,9 @@ images - the drawing takes the one that reads best (section 4).
 - **A benzene ring at the left of its ring system**, where reading
   begins: indole, quinoline and coumarin with their benzene rings on the
   left, estradiol's aromatic A ring, griseofulvin's, reserpine's indole at
-  the upper left of the rings that follow it.
+  the upper left of the rings that follow it. The heteroatoms of a ring
+  fused to it go below: quinoline's N, indole's NH, coumarin's O at the
+  bottom.
 - **A ring system to the left of the chains that leave it.** The ring
   system is what the molecule is; its chains are read after it.
 - **The first carbon of a chain on the right.** The carbon a chain is
@@ -140,7 +145,9 @@ images - the drawing takes the one that reads best (section 4).
   carbon - is at the right-hand end. Most conventions follow from this one:
   - acids, and fatty acids, with the COOH on the right, and an acyl chain in
     a lipid with its carbonyl on the right and its tail to the left; an
-    acid's C=O points up;
+    acid's C=O points up - at the end of a chain or on an aromatic ring,
+    in its plane; one on a saturated ring goes where the ring's stereo
+    puts it (penicillin's points down);
   - peptides from N-terminus to C-terminus, left to right, as their
     sequences are written, the backbone carrying straight on through each
     alpha carbon and the side chains branching off; an amino acid then

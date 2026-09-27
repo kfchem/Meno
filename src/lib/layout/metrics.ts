@@ -121,8 +121,10 @@ export type LayoutMetrics = {
    * How far the largest fused ring system is from the way IUPAC orients a
    * fused system for numbering: as many rings as can be in a horizontal row,
    * then as many of the rest as can be above and to the right of it, and as
-   * few below and to the left. Rings short of each, counted; and a ring
-   * system with its benzene rings to the right of its other rings, two.
+   * few below and to the left. Rings short of each, counted; a ring
+   * system with its benzene rings to the right of its other rings, two;
+   * and a quarter for each heteroatom of a ring fused to the benzene ring
+   * that is above the system's middle.
    */
   ringOrder: number;
   /** All of it in one number, lower better, for putting layouts in order. */
@@ -391,7 +393,15 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   // square to - of those with rings that can lie on the lattice, and all of
   // the largest where several are as large. A ring hung off it askew is then
   // askew, rather than the frame tilted. Without a ring, every bond counts.
-  const latticeDirs: { t: number; frame: boolean }[] = [];
+  const latticeDirs: { t: number; frame: boolean; step: number }[] = [];
+  // (a four-membered ring is a square with its sides level and upright - a
+  // beta-lactam's, an oxetane's - not merely on the lattice)
+  const squareBonds = new Set(
+    rings
+      .filter((r) => r.length === 4)
+      .flatMap((r) => edges.filter(([a, b]) => r.includes(a) && r.includes(b)))
+      .map(([a, b]) => (a < b ? `${a},${b}` : `${b},${a}`)),
+  );
   const fitting = live.filter((sys) => rings.some((r) => square(r) && r.every((a) => sys.has(a))));
   const frameSize = Math.max(0, ...fitting.map((sys) => sys.size));
   const frames = fitting.filter((sys) => sys.size === frameSize);
@@ -403,15 +413,15 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     const frame = frames.length
       ? fitsLattice.has(k) && frames.some((sys) => sys.has(a) && sys.has(b))
       : true;
-    latticeDirs.push({ t: deg(Math.atan2(y[b] - y[a], x[b] - x[a])), frame });
+    latticeDirs.push({ t: deg(Math.atan2(y[b] - y[a], x[b] - x[a])), frame, step: squareBonds.has(k) ? 90 : 30 });
   }
   const offBy = (turn: number, frameOnly: boolean) => {
     let sum = 0;
     let count = 0;
-    for (const { t, frame } of latticeDirs) {
+    for (const { t, frame, step } of latticeDirs) {
       if (frameOnly && !frame) continue;
       const u = t - turn;
-      sum += Math.abs(u - 30 * Math.round(u / 30));
+      sum += Math.abs(u - step * Math.round(u / step));
       count++;
     }
     return count ? sum / count : 0;
@@ -817,9 +827,13 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         }
       }
     }
-    // an acid's C=O up: the way it is always drawn
+    // an acid's C=O up: the way it is always drawn - at the end of a chain,
+    // or on an aromatic ring, in its plane (one on a saturated ring's
+    // stereocentre goes where its stereo bond puts it: penicillin's down)
     for (let a = 0; a < n; a++) {
       if (el[a] !== "C") continue;
+      const saturated = (b: number) => inRing.has(b) && neighbours[b].every((c) => orderAt(b, c) === 1);
+      if (neighbours[a].some((b) => el[b] !== "O" && saturated(b))) continue;
       const oxo = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 2);
       const hydroxy = neighbours[a].filter(
         (b) =>
@@ -948,6 +962,12 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     const aromatic = own.filter(benzene);
     const rest = own.filter((r) => !benzene(r));
     if (aromatic.length && rest.length && midX(aromatic) > midX(rest) + 0.25 * L) ringOrder += 2;
+    // the heteroatoms of a ring fused to the benzene ring below the middle:
+    // quinoline's N, indole's NH, coumarin's O at the bottom
+    const cy = [...sys].reduce((sum, a) => sum + y[a], 0) / sys.size;
+    const fusedOn = rest.filter((r) => aromatic.some((b) => b.filter((a) => r.includes(a)).length === 2));
+    const hetero = new Set(fusedOn.flat().filter((a) => (g.elements?.[a] ?? "C") !== "C"));
+    for (const a of hetero) if (y[a] > cy + 0.1 * L) ringOrder += 0.5;
   }
 
   let wrongDoubles = 0;

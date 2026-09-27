@@ -9,8 +9,8 @@
  * best is kept. Bonds come out of length 1.
  */
 import {
-  FRAMES,
   flip,
+  framesFor,
   flippable,
   grow,
   sideAtoms,
@@ -89,7 +89,7 @@ export function layout2D(input: LayoutInput): Layout2D {
       // where it helps: substituents inside a macrocycle are crowded until then
       let top: Grown | null = null;
       let topScore = Infinity;
-      for (const frame of FRAMES) {
+      for (const frame of framesFor(mol, piece)) {
         const pos = grow(mol, piece, local, frame, sides, hints, upright);
         const s = score(pos);
         if (s < topScore) {
@@ -116,7 +116,7 @@ export function layout2D(input: LayoutInput): Layout2D {
     const score = scorer(mol, piece, depth, solid);
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
-    const tried = FRAMES.map((frame) => {
+    const tried = framesFor(mol, piece).map((frame) => {
       const pos = grow(mol, piece, local, frame, sides, hints, upright);
       return { pos, score: score(pos) };
     }).sort((p, q) => p.score - q.score);
