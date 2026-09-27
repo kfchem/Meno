@@ -1,5 +1,5 @@
 {
-  "//": "The benchmark molecules. Each is looked up by name in PubChem for its isomeric SMILES (facts; the CID is kept as the source), and by title in the English Wikipedia for the structure its article leads with - the reference to draw as well as, linked, never copied: its licence and author are kept with it. Filled in by fetch.ts. A molecule may name the Commons file to use (referenceFile) where the article's infobox does not lead with the one wanted.",
+  "//": "The benchmark molecules. Each is looked up by name in PubChem for its isomeric SMILES (facts; the CID is kept as the source), and by title in the English Wikipedia for the structure its article's infobox shows - the reference to draw as well as, linked, never copied: its licence and author are kept with it. A molecule may name the Commons file to use instead (referenceFile), say why it has none (noReference) - sugars and nucleosides are drawn flat, not as chairs or Haworth projections - or say what to make of it (referenceNote). Filled in by fetch.ts.",
   "molecules": [
     {
       "name": "Aspirin",
@@ -630,7 +630,8 @@
         "page": "https://commons.wikimedia.org/wiki/File:18-c-6.png",
         "licence": "Public domain",
         "author": "Smokefoot"
-      }
+      },
+      "referenceNote": "The reference itself is poorly drawn: judge by the rules, not by it."
     },
     {
       "name": "Epothilone B",
@@ -766,26 +767,12 @@
       "wikipedia": "Glucose",
       "cid": 5793,
       "smiles": "C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O",
+      "referenceFile": "Alpha-D-glucopyranose.svg",
       "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/4/4d/D-glucose_lineal.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:D-glucose_lineal.svg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/0/06/Alpha-D-glucopyranose.svg",
+        "page": "https://commons.wikimedia.org/wiki/File:Alpha-D-glucopyranose.svg",
         "licence": "CC0",
-        "author": "Qohelet12"
-      }
-    },
-    {
-      "name": "beta-D-Glucopyranose",
-      "category": "sugar",
-      "pubchem": "beta-D-Glucopyranose",
-      "wikipedia": "Glucose",
-      "cid": 64689,
-      "smiles": "C([C@@H]1[C@H]([C@@H]([C@H]([C@@H](O1)O)O)O)O)O",
-      "referenceFile": "Beta-D-Glucopyranose.svg",
-      "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/Beta-D-Glucopyranose.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:Beta-D-Glucopyranose.svg",
-        "licence": "Public domain",
-        "author": "NEUROtiker"
+        "author": "Michael D. Turnbull"
       }
     },
     {
@@ -809,11 +796,12 @@
       "wikipedia": "Ribose",
       "cid": 10975657,
       "smiles": "C1[C@H]([C@H]([C@H](C(O1)O)O)O)O",
+      "referenceFile": "Ribofuranose.svg",
       "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/DRibose_Fischer.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:DRibose_Fischer.svg",
-        "licence": "CC BY-SA 3.0",
-        "author": "Christopher King"
+        "url": "https://upload.wikimedia.org/wikipedia/commons/b/b5/Ribofuranose.svg",
+        "page": "https://commons.wikimedia.org/wiki/File:Ribofuranose.svg",
+        "licence": "Public domain",
+        "author": "Own work"
       }
     },
     {
@@ -823,11 +811,12 @@
       "wikipedia": "Sucrose",
       "cid": 5988,
       "smiles": "C([C@@H]1[C@H]([C@@H]([C@H]([C@H](O1)O[C@]2([C@H]([C@@H]([C@H](O2)CO)O)O)CO)O)O)O)O",
+      "referenceFile": "Sucrose skeletal formula.svg",
       "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Saccharose2.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:Saccharose2.svg",
-        "licence": "Public domain",
-        "author": "NEUROtiker"
+        "url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Sucrose_skeletal_formula.svg",
+        "page": "https://commons.wikimedia.org/wiki/File:Sucrose_skeletal_formula.svg",
+        "licence": "CC0",
+        "author": "Qohelet12"
       }
     },
     {
@@ -837,12 +826,8 @@
       "wikipedia": "Lactose",
       "cid": 6134,
       "smiles": "C([C@@H]1[C@@H]([C@@H]([C@H]([C@@H](O1)O[C@@H]2[C@H](O[C@H]([C@@H]([C@H]2O)O)O)CO)O)O)O)O",
-      "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/Beta-D-Lactose.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:Beta-D-Lactose.svg",
-        "licence": "Public domain",
-        "author": "Yikrazuul"
-      }
+      "reference": null,
+      "noReference": "Commons has lactose only as chairs; a sugar is to be drawn as a flat ring."
     },
     {
       "name": "Cellobiose",
@@ -851,11 +836,12 @@
       "wikipedia": "Cellobiose",
       "cid": 439178,
       "smiles": "C([C@@H]1[C@H]([C@@H]([C@H]([C@@H](O1)O[C@@H]2[C@H](OC([C@@H]([C@H]2O)O)O)CO)O)O)O)O",
+      "referenceFile": "Cellobiose.svg",
       "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/f/f4/Cellobiose_skeletal.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:Cellobiose_skeletal.svg",
-        "licence": "Public domain",
-        "author": "Vectorization: Alhadis"
+        "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Cellobiose.svg",
+        "page": "https://commons.wikimedia.org/wiki/File:Cellobiose.svg",
+        "licence": "CC BY-SA 3.0",
+        "author": "Sunridin"
       }
     },
     {
@@ -963,12 +949,8 @@
       "wikipedia": "Adenosine",
       "cid": 60961,
       "smiles": "C1=NC(=C2C(=N1)N(C=N2)[C@H]3[C@@H]([C@@H]([C@H](O3)CO)O)O)N",
-      "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/e/e8/Adenosin.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:Adenosin.svg",
-        "licence": "Public domain",
-        "author": "NEUROtiker"
-      }
+      "reference": null,
+      "noReference": "Commons has adenosine only as a Haworth projection; a nucleoside is to be drawn flat."
     },
     {
       "name": "Adenosine triphosphate",
@@ -977,11 +959,12 @@
       "wikipedia": "Adenosine triphosphate",
       "cid": 5957,
       "smiles": "C1=NC(=C2C(=N1)N(C=N2)[C@H]3[C@@H]([C@@H]([C@H](O3)COP(=O)(O)OP(=O)(O)OP(=O)(O)O)O)O)N",
+      "referenceFile": "ATP skeletal formula.svg",
       "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/3/31/Adenosintriphosphat_protoniert.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:Adenosintriphosphat_protoniert.svg",
-        "licence": "Public domain",
-        "author": "NEUROtiker"
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/75/ATP_skeletal_formula.svg",
+        "page": "https://commons.wikimedia.org/wiki/File:ATP_skeletal_formula.svg",
+        "licence": "CC0",
+        "author": "Qohelet12"
       }
     },
     {
@@ -991,12 +974,8 @@
       "wikipedia": "Deoxycytidine",
       "cid": 13711,
       "smiles": "C1[C@@H]([C@H](O[C@H]1N2C=CC(=NC2=O)N)CO)O",
-      "reference": {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/a/a3/Desoxycytidin.svg",
-        "page": "https://commons.wikimedia.org/wiki/File:Desoxycytidin.svg",
-        "licence": "Public domain",
-        "author": "NEUROtiker"
-      }
+      "reference": null,
+      "noReference": "Commons has deoxycytidine only as a Haworth projection; a nucleoside is to be drawn flat."
     },
     {
       "name": "NAD+",

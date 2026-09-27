@@ -38,6 +38,10 @@ export type Molecule = {
   wikipedia: string;
   /** The Commons file to take, where the article's infobox leads with another. */
   referenceFile?: string;
+  /** Why there is no reference: none on Commons is drawn as it should be. */
+  noReference?: string;
+  /** What to make of the reference, where it is not one to follow. */
+  referenceNote?: string;
   cid?: number;
   smiles?: string;
   reference?: Reference | null;
@@ -123,7 +127,8 @@ for (const m of list.molecules) {
   try {
     if (again || !m.smiles) Object.assign(m, await fromPubChem(m.pubchem));
     await pause(250); // PubChem asks for no more than five a second
-    if (again || !m.reference) m.reference = await fromWikipedia(m.wikipedia, m.referenceFile);
+    if (m.noReference) m.reference = null;
+    else if (again || !m.reference) m.reference = await fromWikipedia(m.wikipedia, m.referenceFile);
     console.log(
       `${m.name.padEnd(28)} CID ${String(m.cid).padEnd(10)} ${m.reference ? m.reference.licence : "(no reference)"}`,
     );
