@@ -1,6 +1,6 @@
 /**
- * Which ring the second line of a ring's double bond goes into, so that
- * aromatic rings show as aromatic: a ring shows as one when every double
+ * Which ring the second line of a ring's double bond goes into: inside a
+ * ring always, and so that aromatic rings show as aromatic: a ring shows as one when every double
  * bond in it has its second line inside it, which a double bond shared by
  * two fused rings can do for only one of them.
  *
@@ -139,13 +139,55 @@ export function aromaticRingSides(
   return out;
 }
 
+/**
+ * For every double bond in a ring, the ring its second line goes into: an
+ * aromatic ring's as `aromaticRingSides` has it, and any other inside the
+ * smallest ring it is in - between two as small, the one with more double
+ * bonds of its own. A ring's double bond is drawn inside the ring, however
+ * the atoms round it happen to lie: a bridged system's bond, taxol's, is
+ * not left outside it by the bonds of the bridge.
+ */
+export function ringSides(
+  atomCount: number,
+  bonds: readonly RingBond[],
+  elements: readonly string[],
+): Map<number, number[]> {
+  const out = aromaticRingSides(atomCount, bonds, elements);
+  const rings = smallestRings(
+    atomCount,
+    bonds.map((b) => [b.a1, b.a2] as const),
+  );
+  const bondAt = new Map<string, number>();
+  bonds.forEach((b, i) => bondAt.set(key(b.a1, b.a2), i));
+  const ringBonds = rings.map((ring) =>
+    ring.map((a, i) => bondAt.get(key(a, ring[(i + 1) % ring.length]))!),
+  );
+  const doublesIn = ringBonds.map((es) => es.filter((e) => bonds[e]?.order === 2).length);
+  bonds.forEach((b, e) => {
+    if (b.order !== 2 || out.has(e)) return;
+    let best = -1;
+    ringBonds.forEach((es, r) => {
+      if (!es.includes(e)) return;
+      if (
+        best < 0 ||
+        rings[r].length < rings[best].length ||
+        (rings[r].length === rings[best].length && doublesIn[r] > doublesIn[best])
+      ) {
+        best = r;
+      }
+    });
+    if (best >= 0) out.set(e, rings[best]);
+  });
+  return out;
+}
+
 const remembered = new Map<string, Map<number, number[]>>();
 
 /**
- * `aromaticRingSides`, remembered for the structure: a structure being
- * drawn is laid out again at every move, and its rings do not change.
+ * `ringSides`, remembered for the structure: a structure being drawn is
+ * laid out again at every move, and its rings do not change.
  */
-export function aromaticRingSidesOf(
+export function ringSidesOf(
   atomCount: number,
   bonds: readonly RingBond[],
   elements: readonly string[],
@@ -154,7 +196,7 @@ export function aromaticRingSidesOf(
     elements.join(" ") + "|" + bonds.map((b) => `${b.a1}-${b.a2}:${b.order}`).join(" ");
   let found = remembered.get(k);
   if (!found) {
-    found = aromaticRingSides(atomCount, bonds, elements);
+    found = ringSides(atomCount, bonds, elements);
     if (remembered.size > 32) remembered.delete(remembered.keys().next().value!);
     remembered.set(k, found);
   }

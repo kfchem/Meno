@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aromaticRingSides } from "./aromaticSides";
+import { aromaticRingSides, ringSides } from "./aromaticSides";
 
 type B = { a1: number; a2: number; order: number };
 const bond = (a1: number, a2: number, order = 1): B => ({ a1, a2, order });
@@ -59,5 +59,29 @@ describe("aromaticRingSides", () => {
     expect(aromaticRingSides(8, quinone, [..."CCCCCCOO"]).size).toBe(0);
     const cp = [bond(0, 1, 2), bond(1, 2), bond(2, 3, 2), bond(3, 4), bond(4, 0)];
     expect(aromaticRingSides(5, cp, Array(5).fill("C")).size).toBe(0);
+  });
+});
+
+describe("ringSides", () => {
+  it("puts any ring's double bond inside its smallest ring", () => {
+    // cyclohexene 0-5 with its double bond 0=1, fused to a cyclopentane on
+    // 1-2: the double bond is in the six-membered ring only
+    const bonds = [
+      bond(0, 1, 2), bond(1, 2), bond(2, 3), bond(3, 4), bond(4, 5), bond(5, 0),
+      bond(2, 6), bond(6, 7), bond(7, 1),
+    ];
+    const m = ringSides(8, bonds, Array(8).fill("C"));
+    expect(into(m, 0)).toEqual([0, 1, 2, 3, 4, 5]);
+    // a double bond shared by a four- and a six-membered ring: the four
+    const shared = [
+      bond(0, 1), bond(1, 2), bond(2, 3), bond(3, 4), bond(4, 5), bond(5, 0, 2),
+      bond(5, 6), bond(6, 7), bond(7, 0),
+    ];
+    expect(into(ringSides(8, shared, Array(8).fill("C")), 5)).toEqual([0, 5, 6, 7]);
+  });
+
+  it("leaves a double bond out of a ring alone", () => {
+    const bonds = [bond(0, 1), bond(1, 2), bond(2, 0), bond(0, 3, 2)];
+    expect(ringSides(4, bonds, [..."CCCO"]).has(3)).toBe(false);
   });
 });

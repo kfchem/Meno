@@ -1,7 +1,7 @@
 import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
-import { aromaticRingSidesOf } from "./aromaticSides";
+import { ringSidesOf } from "./aromaticSides";
 
 export type Atom = {
   id: number;
@@ -2088,10 +2088,10 @@ export function buildAllPrimitives(
   // of them before any is drawn, so that a bond can meet its neighbour's line
   // where they share an atom instead of stopping short of it.
   const doubleSides = new Map<Bond, number | undefined>();
-  // A double bond in an aromatic ring goes into the ring that shows as
-  // aromatic by it (see aromaticSides): fused rings share a bond, and it can
-  // go into only one of them.
-  const aromaticSide = aromaticRingSidesOf(
+  // A ring's double bond goes inside the ring - an aromatic ring's into the
+  // ring that shows as aromatic by it, since fused rings share a bond and it
+  // can go into only one of them (see aromaticSides).
+  const ringSide = ringSidesOf(
     atoms.length,
     bonds,
     atoms.map((a) => a.el),
@@ -2105,7 +2105,7 @@ export function buildAllPrimitives(
     const L0 = vlen(axis);
     const dir = L0 > 1e-9 ? vscale(axis, 1 / L0) : { x: 1, y: 0 };
     const n = vperp(dir); // Treat +n as "left"
-    const ring = aromaticSide.get(i);
+    const ring = ringSide.get(i);
     if (ring) {
       const c = ring.reduce(
         (acc, k) => ({ x: acc.x + atoms[k].x / ring.length, y: acc.y + atoms[k].y / ring.length }),
