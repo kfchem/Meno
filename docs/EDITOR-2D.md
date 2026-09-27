@@ -70,9 +70,9 @@ come up, so a right drag is a move, not a menu.
 | A whole structure | right-click, *Select this structure* | the same |
 | Nothing | click empty space, or Esc | the same |
 
-A double-click in empty space that does not move still draws a bond; a
-double-click-and-drag from an atom still draws one out of it. On a trackpad
-a double-tap and drag does the same as a double-click and drag.
+A double-click in empty space that does not move still draws a bond, and a
+double-click-and-drag that starts on an atom draws out of it instead. On a
+trackpad a double-tap and drag does the same as a double-click and drag.
 
 ## Who does what
 
