@@ -21,6 +21,8 @@ export type Geometry = {
   /** Element symbols and hydrogen counts, where known: an acid is told by them. */
   elements?: readonly string[];
   hydrogens?: readonly number[];
+  /** The rings, where the caller has them already (they depend only on the bonds). */
+  rings?: readonly (readonly number[])[];
 };
 
 export type LayoutMetrics = {
@@ -89,6 +91,13 @@ export type LayoutMetrics = {
    * right and below it (half a breach each way it is not).
    */
   readingOrder: number;
+  /**
+   * How far the largest fused ring system is from the way IUPAC orients a
+   * fused system for numbering: as many rings as can be in a horizontal row,
+   * then as many of the rest as can be above and to the right of it, and as
+   * few below and to the left. Rings short of each, counted.
+   */
+  ringOrder: number;
   /** All of it in one number, lower better, for putting layouts in order. */
   score: number;
 };
@@ -119,6 +128,7 @@ export const SCORE_WEIGHTS = {
   aspect: 5,
   macroAspect: 5,
   readingOrder: 3,
+  ringOrder: 2,
 } as const;
 
 /**
@@ -210,7 +220,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     ? Math.sqrt(lengths.reduce((s, v) => s + (v - mean) ** 2, 0) / lengths.length) / mean
     : 0;
 
-  const rings = smallestRings(n, edges);
+  const rings = (g.rings as number[][] | undefined) ?? smallestRings(n, edges);
   const inRing = new Set(rings.flat());
   // ring systems: rings sharing atoms
   const systemOf = new Map<number, number>();
@@ -402,15 +412,29 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     if (inside.length < 2 || outside.length === 0) continue;
     const dir = (b: number) => Math.atan2(y[b] - y[a], x[b] - x[a]);
     const ringDirs = inside.map(dir).sort((p, q) => p - q);
+    // the widest gap no ring lies in: at a fusion of three rings every gap
+    // is 120 degrees, and only one is outside
+    const centres = rings
+      .filter((r) => r.includes(a))
+      .map((r) => {
+        const rx = r.reduce((sum, v) => sum + x[v], 0) / r.length;
+        const ry = r.reduce((sum, v) => sum + y[v], 0) / r.length;
+        return Math.atan2(ry - y[a], rx - x[a]);
+      });
     let start = 0;
     let gap = -1;
     ringDirs.forEach((d, i) => {
       const next = i + 1 < ringDirs.length ? ringDirs[i + 1] : ringDirs[0] + TAU;
-      if (next - d > gap) {
+      const holdsRing = centres.some((c) => {
+        const u = (((c - d) % TAU) + TAU) % TAU;
+        return u > 1e-6 && u < next - d - 1e-6;
+      });
+      if (!holdsRing && next - d > gap) {
         gap = next - d;
         start = d;
       }
     });
+    if (gap < 0) continue;
     const m = outside.length;
     const rel = outside
       .map((b) => (((dir(b) - start) % TAU) + TAU) % TAU)
@@ -622,18 +646,47 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   // reading order
   let readingOrder = 0;
   const el = g.elements;
-  if (el && n >= 4) {
-    // an acid at the end of a chain, to the right: the way a chain is read
-    // out to its end. One on a ring goes wherever the ring puts it.
+  if (el) {
+    // The first carbon of a chain on the right: a carboxyl - an acid's or
+    // an ester's - with the chain it heads running off to its left, as far
+    // as that runs unbranched. One on a ring goes wherever the ring puts it;
+    // an acetyl heads no chain. Where chains are headed both ways (the two
+    // acids of glutathione), one has to run the other way, and only the
+    // excess counts.
+    let rightWay = 0;
+    let wrongWay = 0;
     for (let a = 0; a < n; a++) {
-      if (el[a] !== "C") continue;
+      if (el[a] !== "C" || inRing.has(a)) continue;
       const oxo = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 2);
-      const hydroxy = neighbours[a].filter(
-        (b) => el[b] === "O" && orderAt(a, b) === 1 && (g.hydrogens?.[b] ?? 0) > 0,
-      );
+      const oxy = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 1);
       const onto = neighbours[a].filter((b) => el[b] !== "O");
-      if (oxo.length !== 1 || hydroxy.length !== 1 || onto.some((b) => inRing.has(b))) continue;
-      if (x[a] < cx - 0.5 * L) readingOrder++;
+      if (oxo.length !== 1 || oxy.length !== 1 || onto.length !== 1) continue;
+      if (inRing.has(onto[0]) || leaf(onto[0])) continue;
+      let prev = a;
+      let cur = onto[0];
+      for (let i = 0; i < n && through(cur); i++) {
+        const next = neighbours[cur].find((v) => v !== prev && !leaf(v));
+        if (next == null || inRing.has(next)) break;
+        prev = cur;
+        cur = next;
+      }
+      if (x[cur] < x[a] - 0.25 * L) rightWay++;
+      else if (x[cur] > x[a] + 0.25 * L) wrongWay++;
+    }
+    readingOrder += Math.max(0, wrongWay - rightWay);
+    // a sugar - a ring of five or six with one oxygen in it, and oxygens on
+    // its carbons - drawn as its Haworth projection seen from above: the
+    // ring oxygen at the back, which is the top
+    for (const r of rings) {
+      if (r.length !== 5 && r.length !== 6) continue;
+      const ox = r.filter((a) => el[a] === "O");
+      if (ox.length !== 1 || r.some((a) => el[a] !== "C" && el[a] !== "O")) continue;
+      const hydroxylated = r.filter(
+        (a) => el[a] === "C" && neighbours[a].some((b) => !r.includes(b) && el[b] === "O"),
+      ).length;
+      if (hydroxylated < 2) continue;
+      const ry = r.reduce((sum, a) => sum + y[a], 0) / r.length;
+      if (y[ox[0]] < ry + 0.25 * L) readingOrder++;
     }
   }
   const centre = (s: Set<number>) => {
@@ -648,8 +701,14 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   if (live.length) {
     const main = live.reduce((b, s) => (s.size > b.size ? s : b));
     const mc = centre(main);
-    // a ring system with a long chain out of it: the rings to the left
-    if (runs.length && mc.x > cx + 0.5 * L) readingOrder++;
+    // a ring system with a chain out of it: the rings to the left, the
+    // chain read after them
+    for (const s of strands) {
+      if (s.length - 1 < 4) continue;
+      const [head, tail] = [s[0], s[s.length - 1]];
+      const free = main.has(head) && leaf(tail) ? tail : main.has(tail) && leaf(head) ? head : null;
+      if (free != null && x[free] < mc.x - 0.5 * L) readingOrder++;
+    }
     // rings hung on a macrocycle - on it, or one atom off it, as a sugar on
     // its oxygen: to its right, and below it
     const macro = rings.find((r) => r.length >= 12 && r.every((a) => main.has(a)));
@@ -666,6 +725,67 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         if (c.x < mc.x - 0.5 * L) readingOrder += 0.5;
         if (c.y > mc.y + 0.5 * L) readingOrder += 0.5;
       }
+    }
+  }
+
+  // fused rings as IUPAC orients them: the largest system's rings of up to
+  // eight, fused and not bridged, by their centres
+  let ringOrder = 0;
+  if (live.length) {
+    const main = live.reduce((b, s) => (s.size > b.size ? s : b));
+    const fused = rings.filter(
+      (r) =>
+        r.length <= 8 &&
+        r.every((a) => main.has(a)) &&
+        rings.every((q) => q === r || q.filter((a) => r.includes(a)).length <= 2),
+    );
+    if (fused.length >= 2) {
+      const centres = fused.map((r) => ({
+        x: r.reduce((sum, a) => sum + x[a], 0) / r.length,
+        y: r.reduce((sum, a) => sum + y[a], 0) / r.length,
+      }));
+      // rows of ring centres level with each other, turned `t`: the longest
+      const rowsIn = (t: number) => {
+        const c = Math.cos(t);
+        const sn = Math.sin(t);
+        const ys = centres.map((p) => p.x * sn + p.y * c);
+        const rows: number[][] = [];
+        ys.forEach((y0) => {
+          const row = ys.map((v, i) => (Math.abs(v - y0) < 0.15 * L ? i : -1)).filter((i) => i >= 0);
+          if (!rows.some((r) => r.join() === row.join())) rows.push(row);
+        });
+        const longest = Math.max(...rows.map((r) => r.length));
+        return rows.filter((r) => r.length === longest);
+      };
+      const rows = rowsIn(0);
+      const most = Math.max(
+        rows[0].length,
+        rowsIn(Math.PI / 3)[0].length,
+        rowsIn((2 * Math.PI) / 3)[0].length,
+      );
+      // of the longest rows here, the one the rest sit best against: above
+      // and to the right of it, none below and to the left - and a row of
+      // six-membered rings, which lie square, before one with others in it
+      let best = Infinity;
+      for (const row of rows) {
+        let breach = most - row.length;
+        const rx = row.reduce((sum, i) => sum + centres[i].x, 0) / row.length;
+        const ry = row.reduce((sum, i) => sum + centres[i].y, 0) / row.length;
+        centres.forEach((p, i) => {
+          if (row.includes(i)) {
+            if (fused[i].length !== 6) breach += 0.25;
+            return;
+          }
+          const right = p.x > rx + 0.1 * L;
+          const up = p.y > ry + 0.1 * L;
+          const left = p.x < rx - 0.1 * L;
+          const down = p.y < ry - 0.1 * L;
+          if (!(right && up)) breach += 0.5;
+          if (left && down) breach += 0.5;
+        });
+        best = Math.min(best, breach);
+      }
+      ringOrder += best;
     }
   }
 
@@ -715,6 +835,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     aspect,
     macroAspect,
     readingOrder,
+    ringOrder,
   };
   const score = Object.values(scoreParts(measures)).reduce((sum, v) => sum + v, 0);
   return { ...measures, score };

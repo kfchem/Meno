@@ -191,3 +191,51 @@ describe("how a drawing sits", () => {
     expect(m.score).toBeGreaterThan(0);
   });
 });
+
+describe("conventions the rules give", () => {
+  it("wants a sugar's ring oxygen at the top", () => {
+    // a pyranose ring, oxygen at the apex, with OH on three ring carbons
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    const x = [...h.x];
+    const y = [...h.y];
+    const edges = [...h.edges];
+    const elements = ["O", "C", "C", "C", "C", "C"];
+    for (const i of [1, 2, 3]) {
+      x.push(h.x[i] * 2);
+      y.push(h.y[i] * 2);
+      edges.push([i, x.length - 1]);
+      elements.push("O");
+    }
+    const sugar = { x, y, edges, elements, hydrogens: elements.map(() => 1) };
+    expect(layoutMetrics(sugar).readingOrder).toBe(0);
+    expect(layoutMetrics(turned(sugar, 180)).readingOrder).toBe(1);
+  });
+
+  it("wants fused rings in a row, the rest above and to the right", () => {
+    // phenanthrene: two rings in a row, the third up and to the right
+    const s3 = Math.sqrt(3) / 2;
+    const hex = (cx: number, cy: number) => polygon(6, cx, cy, Math.PI / 2);
+    const parts = [hex(0, 0), hex(2 * s3, 0), hex(3 * s3, 1.5)];
+    const x: number[] = [];
+    const y: number[] = [];
+    const edges: [number, number][] = [];
+    const at = (px: number, py: number) => {
+      const i = x.findIndex((v, k) => Math.abs(v - px) < 1e-6 && Math.abs(y[k] - py) < 1e-6);
+      if (i >= 0) return i;
+      x.push(px);
+      y.push(py);
+      return x.length - 1;
+    };
+    for (const p of parts) {
+      const ids = p.x.map((v, i) => at(v, p.y[i]));
+      for (const [a, b] of p.edges) {
+        const e: [number, number] = [ids[a], ids[b]];
+        if (!edges.some(([c, d]) => (c === e[0] && d === e[1]) || (c === e[1] && d === e[0]))) edges.push(e);
+      }
+    }
+    const g = { x, y, edges };
+    expect(layoutMetrics(g).ringOrder).toBe(0);
+    // turned half round, the third ring is down and to the left
+    expect(layoutMetrics(turned(g, 180)).ringOrder).toBeGreaterThan(0);
+  });
+});
