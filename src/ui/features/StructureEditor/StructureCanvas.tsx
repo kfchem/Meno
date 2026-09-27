@@ -26,10 +26,12 @@ import {
   FolderOpenIcon,
   PhotoIcon,
   SwatchIcon,
+  CodeBracketIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Suspense, useEffect, useState } from "react";
 import DocumentStylePanel from "./DocumentStylePanel";
+import SmilesPanel from "./SmilesPanel";
 import { saveIntent } from "../../../lib/doc/shortcuts";
 import { useFileActions } from "./fileActions";
 import { CANVAS_DPR } from "./constants";
@@ -91,6 +93,8 @@ function StructureCanvasContent({
   const alert = importError ?? files.error;
   const dismissAlert = importError ? dismissImportError : files.dismissError;
   const ownStyle = useEditor((s) => s.docStyle != null);
+  // SMILES in and out, by RDKit, in a card over the canvas's corner
+  const [smilesOpen, setSmilesOpen] = useState(false);
 
   return (
     <div
@@ -202,7 +206,25 @@ function StructureCanvasContent({
             <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-accel-base" />
           )}
         </button>
+        <button
+          aria-label="SMILES"
+          aria-pressed={smilesOpen}
+          title="SMILES in and out"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSmilesOpen((v) => !v);
+          }}
+          className={
+            "h-9 w-9 rounded-full border shadow-sm flex items-center justify-center " +
+            (smilesOpen
+              ? "border-accel-base bg-accel-lightbase"
+              : "border-gh-line bg-white/90 hover:bg-gray-100")
+          }
+        >
+          <CodeBracketIcon className="h-5 w-5 text-gh-black" />
+        </button>
       </div>
+      {smilesOpen && <SmilesPanel onClose={() => setSmilesOpen(false)} />}
       <Canvas
         key={tabId}
         orthographic

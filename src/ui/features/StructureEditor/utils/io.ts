@@ -5,6 +5,7 @@ import {
   buildEditorModelFromRXN,
   type EditorModel,
 } from "../../../../utils/importers";
+import type { Model } from "../store/types";
 
 /** Extensions the file pickers offer that have no parser yet. */
 const UNSUPPORTED_EXTENSIONS = new Set(["pdb", "ket"]);
@@ -64,5 +65,32 @@ export async function processFileContent(
   return {
     model,
     centroid,
+  };
+}
+
+/**
+ * An imported model as the editor holds it: every atom and bond with the
+ * fields the drawing needs, defaults filled in.
+ */
+export function editorModelOf(mdl: { atoms: any[]; bonds: any[] }): Model {
+  return {
+    atoms: mdl.atoms.map((a) => ({
+      id: a.id,
+      x: a.x,
+      y: a.y,
+      r: a.r ?? 0.9,
+      el: a.el ?? "C",
+    })),
+    bonds: mdl.bonds.map((b) => ({
+      id: b.id,
+      a: b.a,
+      b: b.b,
+      order: (b.order as 1 | 2 | 3) ?? 1,
+      stereo: b.stereo ?? "none",
+      stereoOrient: b.stereoOrient ?? "principle",
+      ...(b.doubleMode ? { doubleMode: b.doubleMode } : {}),
+      ...(b.display ? { display: b.display } : {}),
+      ...(b.dative ? { dative: true } : {}),
+    })),
   };
 }

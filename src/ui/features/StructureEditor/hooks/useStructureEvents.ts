@@ -4,7 +4,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useEditorStore } from "../store";
 import { ATOM_HOVER_RING_RADIUS_RATIO } from "../constants";
 import { calculateNewBondPosition } from "../utils/geometry";
-import { processFileContent } from "../utils/io";
+import { editorModelOf, processFileContent } from "../utils/io";
 
 export function useStructureEvents(
   initialPayload?: string,
@@ -40,26 +40,7 @@ export function useStructureEvents(
 
   // An import is one undo step: the model goes into the document as a whole,
   // rather than being replayed atom by atom.
-  const toModel = (mdl: { atoms: any[]; bonds: any[] }) => ({
-    atoms: mdl.atoms.map((a) => ({
-      id: a.id,
-      x: a.x,
-      y: a.y,
-      r: a.r ?? 0.9,
-      el: a.el ?? "C",
-    })),
-    bonds: mdl.bonds.map((b) => ({
-      id: b.id,
-      a: b.a,
-      b: b.b,
-      order: (b.order as 1 | 2 | 3) ?? 1,
-      stereo: b.stereo ?? "none",
-      stereoOrient: b.stereoOrient ?? "principle",
-      ...(b.doubleMode ? { doubleMode: b.doubleMode } : {}),
-      ...(b.display ? { display: b.display } : {}),
-      ...(b.dative ? { dative: true } : {}),
-    })),
-  });
+  const toModel = editorModelOf;
 
   // A file's reaction arrow, moved by (dx, dy) along with its atoms, and
   // placed in the same edit as they are.
