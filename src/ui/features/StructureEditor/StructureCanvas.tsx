@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { useEditor, EditorProvider } from "./store";
+import { useEditor, useEditorStore, EditorProvider } from "./store";
 import { useStructureEvents } from "./hooks/useStructureEvents";
 import { useCanvasSetup } from "./hooks/useCanvasSetup";
 import {
@@ -18,6 +18,7 @@ import {
   Labels2D,
   LabelEditor2D,
   HoverOverlay2D,
+  ChemMarks2D,
 } from "./components";
 import {
   ArrowDownTrayIcon,
@@ -25,14 +26,19 @@ import {
   ExclamationTriangleIcon,
   FolderOpenIcon,
   PhotoIcon,
+  SparklesIcon,
   SwatchIcon,
   CodeBracketIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import DocumentStylePanel from "./DocumentStylePanel";
 import SmilesPanel from "./SmilesPanel";
-import { saveIntent } from "../../../lib/doc/shortcuts";
+import { isCleanUpKey, saveIntent } from "../../../lib/doc/shortcuts";
+import { chemWorker, useChem } from "../../../lib/rdkit/worker";
+import { useAppSettings } from "../../../lib/settings/appSettings";
+import { cleanUp } from "./chem/cleanUp";
+import { useChemMarks } from "./chem/useChemMarks";
 import { useFileActions } from "./fileActions";
 import { CANVAS_DPR } from "./constants";
 import { DrawnLayoutProvider } from "./components/DrawnLayout";
@@ -90,8 +96,71 @@ function StructureCanvasContent({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [active, save, saveAs]);
-  const alert = importError ?? files.error;
-  const dismissAlert = importError ? dismissImportError : files.dismissError;
+  // RDKit: its marks on the structure, R/S on request, and clean-up
+  const store = useEditorStore();
+  const model = useEditor((s) => s.model);
+  const marks = useChemMarks(model, active);
+  const chemistry = useAppSettings((s) => s.chemistry);
+  const setChemistry = useAppSettings((s) => s.setChemistry);
+  const chem = useChem();
+  const [chemError, setChemError] = useState<string | null>(null);
+  const [cleaning, setCleaning] = useState(false);
+  const cleaningNow = useRef(false); // one clean-up at a time, keys included
+  const runCleanUp = useCallback(
+    (aroundAtom: number | null) => {
+      if (cleaningNow.current) return;
+      cleaningNow.current = true;
+      setCleaning(true);
+      setChemError(null);
+      cleanUp(store, aroundAtom)
+        .catch((e: unknown) =>
+          setChemError(
+            `Clean-up failed: ${e instanceof Error ? e.message : String(e)}`,
+          ),
+        )
+        .finally(() => {
+          cleaningNow.current = false;
+          setCleaning(false);
+        });
+    },
+    [store],
+  );
+  // With the pointer on a structure, the key cleans up just that one.
+  useEffect(() => {
+    if (!active) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isCleanUpKey(e)) return;
+      e.preventDefault();
+      const { hovered, model: m } = store.getState();
+      const bond =
+        hovered.bondId != null
+          ? m.bonds.find((b) => b.id === hovered.bondId)
+          : undefined;
+      runCleanUp(hovered.atomId ?? bond?.a ?? null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, store, runCleanUp]);
+  const toggleStereoLabels = () => {
+    const stereoLabels = !chemistry.stereoLabels;
+    setChemistry({ ...chemistry, stereoLabels });
+    if (!stereoLabels) return;
+    // asked for: RDKit set up now, if it has not been
+    setChemError(null);
+    chemWorker().catch((e: unknown) => {
+      setChemistry({ ...useAppSettings.getState().chemistry, stereoLabels: false });
+      setChemError(
+        `R and S cannot be shown: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    });
+  };
+
+  const alert = importError ?? files.error ?? chemError;
+  const dismissAlert = importError
+    ? dismissImportError
+    : files.error
+      ? files.dismissError
+      : () => setChemError(null);
   const ownStyle = useEditor((s) => s.docStyle != null);
   // SMILES in and out, by RDKit, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
@@ -223,7 +292,49 @@ function StructureCanvasContent({
         >
           <CodeBracketIcon className="h-5 w-5 text-gh-black" />
         </button>
+        <button
+          aria-label="Clean up"
+          title="Clean up: even bonds and angles, over where it is drawn (Ctrl/Cmd+Shift+K; with the pointer on a structure, just that one)"
+          disabled={cleaning || model.bonds.length === 0}
+          onClick={(e) => {
+            e.stopPropagation();
+            runCleanUp(null);
+          }}
+          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center disabled:opacity-40 disabled:hover:bg-white/90"
+        >
+          <SparklesIcon className="h-5 w-5 text-gh-black" />
+        </button>
+        <button
+          aria-label="Show R and S"
+          aria-pressed={chemistry.stereoLabels}
+          title="R and S at stereocentres, E and Z at double bonds"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleStereoLabels();
+          }}
+          className={
+            "h-9 w-9 rounded-full border shadow-sm flex items-center justify-center text-[11px] font-semibold text-gh-black " +
+            (chemistry.stereoLabels
+              ? "border-accel-base bg-accel-lightbase"
+              : "border-gh-line bg-white/90 hover:bg-gray-100")
+          }
+        >
+          <span>
+            <i>R</i>/<i>S</i>
+          </span>
+        </button>
       </div>
+      {active &&
+        (chem.state === "setting-up" || chem.state === "starting") && (
+          <div
+            role="status"
+            className="absolute right-3 bottom-3 z-50 rounded-full border border-gh-line bg-white/95 shadow-sm px-3 py-1.5 text-xs text-gh-gray"
+          >
+            {chem.state === "setting-up"
+              ? "Setting up RDKit…"
+              : "Starting RDKit…"}
+          </div>
+        )}
       {smilesOpen && <SmilesPanel onClose={() => setSmilesOpen(false)} />}
       <Canvas
         key={tabId}
@@ -266,6 +377,8 @@ function StructureCanvasContent({
           <Suspense fallback={null}>
             <Labels2D />
           </Suspense>
+          {/* RDKit's marks: valence problems, R/S and E/Z */}
+          <ChemMarks2D marks={marks} />
           {/* Label editor */}
           <LabelEditor2D />
           {/* Hover overlay */}

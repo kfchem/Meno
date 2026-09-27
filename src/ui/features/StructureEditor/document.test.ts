@@ -35,6 +35,27 @@ describe("structure document operations", () => {
     expect(ops.connectAtoms(three, 2, three.nextId - 1)).not.toBe(three);
   });
 
+  it("lays some of the structure out afresh in one operation", () => {
+    const d = ops.updateBond(ethane(), 3, { stereo: "up" });
+    const next = ops.relayout(d, {
+      atoms: [
+        { id: 1, x: 0, y: 0 }, // where it is already
+        { id: 2, x: 1.3, y: 0.75 },
+      ],
+      bonds: [{ id: 3, stereo: "down", stereoOrient: "reverse" }],
+    });
+    expect(next.model.atoms[0]).toBe(d.model.atoms[0]);
+    expect(next.model.atoms[1]).toMatchObject({ x: 1.3, y: 0.75 });
+    expect(next.model.bonds[0]).toMatchObject({
+      stereo: "down",
+      stereoOrient: "reverse",
+    });
+    // nothing to change, nothing changed
+    expect(
+      ops.relayout(d, { atoms: [{ id: 1, x: 0, y: 0 }], bonds: [] }),
+    ).toBe(d);
+  });
+
   it("returns the same document when nothing changes, so no undo step is made", () => {
     const d = ethane();
     expect(ops.moveAtom(d, 1, 0, 0)).toBe(d);

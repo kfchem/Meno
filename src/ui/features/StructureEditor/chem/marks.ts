@@ -1,0 +1,206 @@
+/**
+ * What RDKit says about a structure, as marks on it: atoms with more bonds
+ * than they can have, R and S at stereocentres, E and Z at double bonds.
+ * Marks are the editor's, not the drawing's: they are never exported.
+ */
+import type { Analysis } from "../../../../lib/rdkit/client";
+import { molIndex } from "../../../../lib/rdkit/molblock";
+import { elements } from "../../../../utils/atomUtils";
+import type { Model } from "../store/types";
+
+export type ValenceProblem = { valence: number; most?: number };
+
+export type ChemMarks = {
+  /** Atoms with more bonds than they can have, by id. */
+  valence: Map<number, ValenceProblem>;
+  /** Stereocentres, by atom id: R or S (r or s when pseudo-asymmetric). */
+  centres: Map<number, "R" | "S" | "r" | "s">;
+  /** Stereogenic double bonds, by bond id. */
+  doubleBonds: Map<number, "E" | "Z">;
+};
+
+export const NO_MARKS: ChemMarks = {
+  valence: new Map(),
+  centres: new Map(),
+  doubleBonds: new Map(),
+};
+
+/** RDKit's answer about `model`, by the ids of its atoms and bonds. */
+export function marksOf(model: Model, analysis: Analysis): ChemMarks {
+  const { atoms, bonds } = molIndex(model);
+  const marks: ChemMarks = {
+    valence: new Map(),
+    centres: new Map(),
+    doubleBonds: new Map(),
+  };
+  for (const a of analysis.atoms) {
+    const atom = atoms[a.index];
+    if (!atom) continue;
+    if (a.valenceError) marks.valence.set(atom.id, a.valenceError);
+    if (a.cip) marks.centres.set(atom.id, a.cip);
+  }
+  for (const b of analysis.bonds) {
+    const bond = bonds[b.index];
+    if (bond && b.cip) marks.doubleBonds.set(bond.id, b.cip);
+  }
+  return marks;
+}
+
+const NAMES = new Map(elements.map((e) => [e.symbol, e.name]));
+
+/** What is wrong with an atom's valence, in words. */
+export function valenceMessage(el: string, p: ValenceProblem): string {
+  const name = NAMES.get(el) ?? el;
+  return p.most != null
+    ? `Too many bonds: a valence of ${p.valence}, where ${name} takes at most ${p.most}.`
+    : `Too many bonds: a valence of ${p.valence} is more than ${name} takes.`;
+}
+
+type Vec = { x: number; y: number };
+
+/**
+ * The ways out from an atom, best first: halfway across each gap between
+ * its bonds, the widest first, then round the compass. Straight down, first,
+ * from an atom with no bonds.
+ */
+export function waysOut(model: Model, atomId: number): Vec[] {
+  const at = new Map(model.atoms.map((a) => [a.id, a]));
+  const atom = at.get(atomId);
+  const compass = Array.from({ length: 12 }, (_, i) => {
+    const t = -Math.PI / 2 + (i * Math.PI) / 6;
+    return { x: Math.cos(t), y: Math.sin(t) };
+  });
+  if (!atom) return compass;
+  const angles: number[] = [];
+  for (const b of model.bonds) {
+    const other = b.a === atomId ? b.b : b.b === atomId ? b.a : null;
+    const o = other != null ? at.get(other) : undefined;
+    if (!o || (o.x === atom.x && o.y === atom.y)) continue;
+    angles.push(Math.atan2(o.y - atom.y, o.x - atom.x));
+  }
+  angles.sort((p, q) => p - q);
+  const gaps = angles.map((from, i) => {
+    const to = i + 1 < angles.length ? angles[i + 1] : angles[0] + 2 * Math.PI;
+    return { size: to - from, mid: (from + to) / 2 };
+  });
+  gaps.sort((p, q) => q.size - p.size);
+  return [
+    ...gaps.map((g) => ({ x: Math.cos(g.mid), y: Math.sin(g.mid) })),
+    ...compass,
+  ];
+}
+
+export type Rect = { minX: number; minY: number; maxX: number; maxY: number };
+type Segment = [Vec, Vec];
+
+function inside(p: Vec, r: Rect): boolean {
+  return p.x >= r.minX && p.x <= r.maxX && p.y >= r.minY && p.y <= r.maxY;
+}
+
+function crosses(p: Vec, q: Vec, a: Vec, b: Vec): boolean {
+  const side = (u: Vec, v: Vec, w: Vec) =>
+    Math.sign((v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x));
+  return side(p, q, a) * side(p, q, b) < 0 && side(a, b, p) * side(a, b, q) < 0;
+}
+
+/** Whether a line segment passes through a box. */
+export function segmentHitsRect([p, q]: Segment, r: Rect): boolean {
+  if (inside(p, r) || inside(q, r)) return true;
+  const c = [
+    { x: r.minX, y: r.minY },
+    { x: r.maxX, y: r.minY },
+    { x: r.maxX, y: r.maxY },
+    { x: r.minX, y: r.maxY },
+  ];
+  return c.some((a, i) => crosses(p, q, a, c[(i + 1) % 4]));
+}
+
+function overlaps(r: Rect, o: Rect): boolean {
+  return r.minX < o.maxX && o.minX < r.maxX && r.minY < o.maxY && o.minY < r.maxY;
+}
+
+/**
+ * Where a mark half `half` wide and high goes: out from `from` along the
+ * first of `dirs` - past `start(dir)`, and a little further if it must -
+ * that keeps it off the bonds, the labels and the marks already placed;
+ * failing that, where it covers least.
+ */
+export function placeMark(opts: {
+  from: Vec;
+  dirs: Vec[];
+  start: (dir: Vec) => number;
+  half: Vec;
+  step: number;
+  segments: Segment[];
+  rects: Rect[];
+}): Rect {
+  const { from, dirs, start, half, step, segments, rects } = opts;
+  let best: { score: number; rect: Rect } | null = null;
+  dirs.forEach((dir, rank) => {
+    const reach = Math.abs(dir.x) * half.x + Math.abs(dir.y) * half.y;
+    for (let k = 0; k < 3; k++) {
+      const d = start(dir) + reach + k * step;
+      const c = { x: from.x + dir.x * d, y: from.y + dir.y * d };
+      const rect = {
+        minX: c.x - half.x,
+        maxX: c.x + half.x,
+        minY: c.y - half.y,
+        maxY: c.y + half.y,
+      };
+      const hits =
+        segments.filter((s) => segmentHitsRect(s, rect)).length +
+        rects.filter((o) => overlaps(rect, o)).length;
+      const score = hits * 100 + k * 3 + rank;
+      if (!best || score < best.score) best = { score, rect };
+    }
+  });
+  return best!.rect;
+}
+
+/**
+ * Where a double bond's E or Z goes: its middle, and the way out from it -
+ * across the bond, to the side with fewer of its neighbours on (above, when
+ * the two sides have as many) - and the other way, should that be clearer.
+ */
+export function bondSide(
+  model: Model,
+  bondId: number,
+): { at: Vec; out: Vec; back: Vec } | null {
+  const at = new Map(model.atoms.map((a) => [a.id, a]));
+  const bond = model.bonds.find((b) => b.id === bondId);
+  const p = bond && at.get(bond.a);
+  const q = bond && at.get(bond.b);
+  if (!bond || !p || !q) return null;
+  const len = Math.hypot(q.x - p.x, q.y - p.y);
+  if (len < 1e-9) return null;
+  const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+  let n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
+  if (n.y < 0 || (n.y === 0 && n.x < 0)) n = { x: -n.x, y: -n.y };
+  let side = 0;
+  for (const b of model.bonds) {
+    if (b.id === bondId) continue;
+    const ends = [b.a, b.b];
+    if (!ends.includes(bond.a) && !ends.includes(bond.b)) continue;
+    const other = at.get(ends.find((e) => e !== bond.a && e !== bond.b) ?? -1);
+    if (!other) continue;
+    side += Math.sign((other.x - mid.x) * n.x + (other.y - mid.y) * n.y);
+  }
+  const out = side > 0 ? { x: -n.x, y: -n.y } : n;
+  return { at: mid, out, back: { x: -out.x, y: -out.y } };
+}
+
+/**
+ * How far along `dir` a point leaves a box around the origin that reaches
+ * `left`, `right`, `top` and `bottom` from it.
+ */
+export function exitDistance(
+  box: { left: number; right: number; top: number; bottom: number },
+  dir: Vec,
+): number {
+  const tx =
+    dir.x > 1e-9 ? box.right / dir.x : dir.x < -1e-9 ? box.left / -dir.x : Infinity;
+  const ty =
+    dir.y > 1e-9 ? box.top / dir.y : dir.y < -1e-9 ? box.bottom / -dir.y : Infinity;
+  const t = Math.min(tx, ty);
+  return Number.isFinite(t) ? t : 0;
+}

@@ -95,6 +95,10 @@ export const createModelSlice = (
     });
   },
 
+  relayout: (change: Parameters<typeof ops.relayout>[1]) => {
+    doc.edit("clean up", (d) => ops.relayout(d, change));
+  },
+
   updateBond: (id: number, patch: Partial<Bond>) => {
     doc.edit("change bond", (d) => ops.updateBond(d, id, patch));
   },
