@@ -30,7 +30,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
 const outDir = resolve(root, ".layout");
 
+type Graph = {
+  atoms: { el: string; charge: number; hs: number }[];
+  bonds: { a: number; b: number; order: number }[];
+};
 type Laid = {
+  /** The molecule as this engine draws it: with the H atoms it adds. */
+  graph: Graph;
   x: number[];
   y: number[];
   wedges: { bond: number; narrow: number; stereo: "up" | "down" }[];
@@ -38,17 +44,14 @@ type Laid = {
 };
 type Baseline = {
   name: string;
-  graph: {
-    atoms: { el: string; charge: number; hs: number }[];
-    bonds: { a: number; b: number; order: number }[];
-  };
+  graph: Graph;
   layouts: Record<string, Laid>;
 };
 
 const ZOOM = 30;
 
 /** A layout drawn by Meno, at Meno's bond length. */
-function draw(g: Baseline["graph"], laid: Laid): string {
+function draw(g: Graph, laid: Laid): string {
   const lengths = g.bonds.map(({ a, b }) =>
     Math.hypot(laid.x[a] - laid.x[b], laid.y[a] - laid.y[b]),
   );
@@ -81,7 +84,7 @@ function draw(g: Baseline["graph"], laid: Laid): string {
   return createSVG(layoutMolecule(atoms, bonds, opts, ZOOM), opts);
 }
 
-function measure(g: Baseline["graph"], laid: Laid): LayoutMetrics {
+function measure(g: Graph, laid: Laid): LayoutMetrics {
   return layoutMetrics({
     x: laid.x,
     y: laid.y,
@@ -136,7 +139,7 @@ for (const m of listed) {
   const cells = engines.map((e) => {
     const laid = base.layouts[e];
     if (!laid) return "";
-    const metrics = measure(base.graph, laid);
+    const metrics = measure(laid.graph, laid);
     const cat = byCategory.get(m.category) ?? new Map();
     const c = cat.get(e) ?? { score: 0, n: 0 };
     cat.set(e, { score: c.score + metrics.score, n: c.n + 1 });
@@ -148,7 +151,7 @@ for (const m of listed) {
       crossings: t.crossings + metrics.crossings,
       n: t.n + 1,
     });
-    return `<figure><div class="art">${draw(base.graph, laid)}</div>
+    return `<figure><div class="art">${draw(laid.graph, laid)}</div>
 <figcaption><b>${e}</b> · ${laid.ms} ms<br>${fmt(metrics)}</figcaption></figure>`;
   });
   rows.push(`<section><h3>${escape(m.name)} <span class="cid">CID ${m.cid} · ${base.graph.atoms.length} atoms</span></h3>

@@ -1,7 +1,8 @@
 """The benchmark molecules as RDKit lays them out, to measure Meno's own
 layout against: each molecule's graph (what a layout engine is given) and
 the coordinates two engines give it - CoordGen, and RDKit's own depictor
-with its ring-system templates - with the wedges RDKit puts on them.
+with its ring-system templates - with the H atoms and wedges RDKit adds to
+draw them.
 
 Runs in the environment of the chem lock (RDKit):
 
@@ -17,6 +18,7 @@ import time
 
 from rdkit import Chem, RDLogger
 from rdkit.Chem import rdDepictor
+from rdkit.Chem.Draw import rdMolDraw2D
 
 RDLogger.DisableLog("rdApp.*")
 here = pathlib.Path(__file__).resolve().parent
@@ -43,6 +45,9 @@ def graph(mol):
 
 
 def laid_out(mol, coordgen):
+    """A layout as RDKit would draw it: coordinates, then an H added to each
+    stereocentre that needs one to show its stereo (a ring fusion, say) and
+    the wedges put on - what RDKit's own drawing does before it draws."""
     m = Chem.Mol(mol)
     rdDepictor.SetPreferCoordGen(coordgen)
     t = time.perf_counter()
@@ -51,8 +56,7 @@ def laid_out(mol, coordgen):
     else:
         rdDepictor.Compute2DCoords(m, useRingTemplates=True)
     ms = (time.perf_counter() - t) * 1000
-    conf = m.GetConformer()
-    Chem.WedgeMolBonds(m, conf)
+    m = rdMolDraw2D.PrepareMolForDrawing(m, kekulize=True, addChiralHs=True, wedgeBonds=True)
     wedges = [
         {
             "bond": b.GetIdx(),
@@ -62,8 +66,9 @@ def laid_out(mol, coordgen):
         for b in m.GetBonds()
         if b.GetBondDir() in (Chem.BondDir.BEGINWEDGE, Chem.BondDir.BEGINDASH)
     ]
-    p = conf.GetPositions()
+    p = m.GetConformer().GetPositions()
     return {
+        "graph": graph(m),
         "x": [round(float(v), 4) for v in p[:, 0]],
         "y": [round(float(v), 4) for v in p[:, 1]],
         "wedges": wedges,
