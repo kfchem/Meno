@@ -70,6 +70,7 @@ export function placeStereo(
   const wedges: Wedge[] = [];
   const hydrogens: { on: number; at: Point }[] = [];
   const used = new Set<string>();
+  const wedgedAtoms = new Set<number>();
   const centres = [...tetra.keys()].filter((c) => pos.has(c));
   const ringBond = (a: number, b: number) => mol.ringBonds.has(key(a, b));
 
@@ -83,19 +84,30 @@ export function placeStereo(
     const hasH = t.neighbours.includes(-1);
     type Choice = { to: number; rank: number };
     const choices: Choice[] = [];
+    // a wedge sharing an atom with one already drawn makes a run of them,
+    // which reads as the chain being out of the page, not the centre
+    const touches = (a: number, b: number) =>
+      wedgedAtoms.has(a) || wedgedAtoms.has(b) ? 10 : 0;
     for (const n of mol.neighbours[c]) {
       if (used.has(key(c, n))) continue;
       const inRing = ringBond(c, n);
       const end = mol.neighbours[n].length === 1;
       const centre = tetra.has(n);
-      const rank = (inRing ? 100 : 0) + (end ? 0 : 2) + (centre ? 4 : 0) + (mol.el[n] === "H" ? -1 : 0);
+      const rank =
+        (inRing ? 100 : 0) +
+        (end ? 0 : 2) +
+        (centre ? 4 : 0) +
+        (mol.el[n] === "H" ? -1 : 0) +
+        touches(c, n);
       choices.push({ to: n, rank });
     }
-    // an implicit H drawn and wedged: at a ring atom with nothing out of the
-    // rings to carry the wedge
+    // An implicit H drawn and wedged: at a ring atom with nothing out of
+    // the rings to carry the wedge, first of all; elsewhere before a bond
+    // between two centres - the main chain kept plain, the H showing the
+    // stereo - or one that would make a run of wedges.
     const outOfRings = mol.neighbours[c].filter((n) => !ringBond(c, n));
     if (hasH && (mol.systemOf[c] >= 0 && outOfRings.length === 0)) choices.push({ to: -1, rank: -10 });
-    else if (hasH) choices.push({ to: -1, rank: 50 });
+    else if (hasH) choices.push({ to: -1, rank: 5 + (wedgedAtoms.has(c) ? 10 : 0) });
     choices.sort((p, q) => p.rank - q.rank || p.to - q.to);
 
     let hPos: Point | null = null;
@@ -134,7 +146,7 @@ export function placeStereo(
         return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) < (25 * Math.PI) / 180;
       });
       if (along) return null;
-      const p = { x: at.x, y: at.y + (stereo === "up" ? 0.85 : -0.85) };
+      const p = { x: at.x, y: at.y + (stereo === "up" ? 1 : -1) };
       const near = [...pos.entries()].some(
         ([a, q]) => a !== centre && Math.hypot(q.x - p.x, q.y - p.y) < 0.7,
       );
@@ -149,8 +161,12 @@ export function placeStereo(
         const drawn = t.neighbours.map((n) => (n === -1 && choice.to !== -1 ? null : place(n)));
         if (drawnVolume(at, drawn, lift) === t.volume) {
           wedges.push({ from: c, to: choice.to, stereo });
+          wedgedAtoms.add(c);
           if (choice.to === -1) hydrogens.push({ on: c, at: upright(c, stereo) ?? hPos! });
-          else used.add(key(c, choice.to));
+          else {
+            used.add(key(c, choice.to));
+            wedgedAtoms.add(choice.to);
+          }
           done = true;
           break;
         }

@@ -50,9 +50,12 @@ they hang from.
   pyrene) takes the positions its neighbours already fix.
 - **Macrocycles** (nine and more): a chain closed on itself, drawn as one:
   two zigzags, one above the other, joined at their ends, every angle 120
-  or 240 degrees. Wide rather than tall, like the chain it is. The corners
-  of a zigzag alternate, one pointing out and one in; the atoms that carry
-  something take the ones pointing out.
+  or 240 degrees - never round. At every corner a substituent takes the
+  wider, 240-degree side, as on any zigzag: outside the ring where the
+  corner points out, inside it where the corner points in, which is why a
+  macrolide is drawn with groups inside its ring. The atoms carrying the
+  larger groups take the corners pointing out, and the shape is chosen,
+  among the few that lie well, for the room it leaves inside.
 - **Rings of rings**: a macrocycle that runs through other rings rather
   than along their sides - a porphyrin's through its pyrroles, a
   cyclodextrin's through its glucoses - is set round a circle, each ring
@@ -68,7 +71,9 @@ they hang from.
 - **At an atom in no ring**: its bonds evenly spread - three at 120 degrees,
   four at 90.
 - **At a ring atom**: the other bonds split the room outside the ring
-  evenly: one straight out, along the bisector; two either side of it.
+  evenly: one straight out, along the bisector; two either side of it. A
+  substituent never takes the 120-degree side of a zigzag's corner; only a
+  small ring's own angles excuse it.
 
 ## 3. Square to the page
 
@@ -96,9 +101,13 @@ images - the drawing takes the one that reads best (section 4).
   numbered from - the carboxyl of an acid or an ester, a sugar's anomeric
   carbon - is at the right-hand end. Most conventions follow from this one:
   - acids, and fatty acids, with the COOH on the right, and an acyl chain in
-    a lipid with its carbonyl on the right and its tail to the left;
+    a lipid with its carbonyl on the right and its tail to the left; an
+    acid's C=O points up;
   - peptides from N-terminus to C-terminus, left to right, as their
-    sequences are written;
+    sequences are written, the backbone carrying straight on through each
+    alpha carbon and the side chains branching off; an amino acid then
+    comes out with its side chain on the left, the COOH on the right (C=O
+    up) and the NH2 below;
   - sugars (below).
 - **Rings hung on a macrocycle** - the sugars of a macrolide - to its right
   and below it, where the eye goes after reading the ring.
@@ -110,8 +119,10 @@ ring oxygen at the back becomes the top, the anomeric carbon (C1) is on the
 right, and a group above the ring is a wedge, one below it a hash. Set on
 the lattice, a pyranose has its ring oxygen at the top vertex, C1 upper
 right and C5, with C6, upper left; a furanose has its oxygen at the apex.
-Glycosidic bonds then run from left to right, from C1 of one ring to the
-next. In a nucleoside the base, on C1', is on the right, and the chain from
+The anomeric carbon is always on the right: a ring is drawn from the face
+that puts it there. Glycosidic bonds then run from left to right, from C1
+of one ring to the next; where two anomeric carbons are linked (sucrose),
+the aldose keeps its C1 on the right and the ketose gives way. In a nucleoside the base, on C1', is on the right, and the chain from
 C5' - the phosphates of ATP - runs off to the left.
 
 ## 5. Room
@@ -127,8 +138,10 @@ When parts clash, in this order:
 ## 6. Stereochemistry that reads
 
 - Wedges and hashes on bonds out of rings, never on ring bonds, their
-  narrow end at the stereocentre: a bond to H first, then to an end atom,
-  then to a chain.
+  narrow end at the stereocentre: an end atom first, then a chain - but
+  never a run of wedges sharing atoms, nor a wedge on the bond between two
+  stereocentres: there the main chain stays plain and the centre's H is
+  drawn to carry the stereo.
 - A stereocentre at a ring fusion with no bond out of the rings gets an
   explicit H, drawn straight up on a wedge or straight down on hashes, as
   a steroid's are - so the page shows the sense as well as the wedge.

@@ -20,6 +20,7 @@ import {
   type Point,
 } from "./geometry";
 import { key, orderOf, type Molecule } from "./perceive";
+import { MACROCYCLE } from "./ringSystem";
 
 /** How the frame is set: turned by a multiple of 60 degrees, and mirrored or not. */
 export type Frame = { turn: number; mirrored: boolean };
@@ -184,9 +185,11 @@ function assign(
   if (mol.systemOf[a] >= 0 || placed.length !== 1) {
     // a ring atom: the room outside the rings split evenly, the heaviest
     // branch nearest straight out
-    const centres = mol.ringsOf[a].map((r) =>
-      angleOf(sub(centroid(mol.rings[r].map((v) => pos.get(v)!)), at)),
-    );
+    // (a macrocycle's centre is not counted: at a zigzag corner the
+    // substituent takes the wider side, inside the macrocycle or out)
+    const centres = mol.ringsOf[a]
+      .filter((r) => mol.rings[r].length < MACROCYCLE)
+      .map((r) => angleOf(sub(centroid(mol.rings[r].map((v) => pos.get(v)!)), at)));
     const slots = mol.systemOf[a] >= 0 ? splitOutside(taken, centres, k) : splitWidestGap(taken, k);
     const mid = slots.reduce((s, t) => s + t, 0) / slots.length;
     const byCentre = [...slots].sort((p, q) => Math.abs(wrap(p - mid)) - Math.abs(wrap(q - mid)));
@@ -245,10 +248,36 @@ function assign(
   }
   const other = both.find((s) => s !== carryOn)!;
   if (k === 1) return [[children[0], carryOn]];
+  // At an alpha carbon the backbone carries on, N to C(=O) or back, and the
+  // side chain branches off - however much heavier the side chain is.
+  const next = backbone(mol, a, parent, children);
+  const first = next ?? byWeight[0];
+  const second = children.find((c) => c !== first)!;
   return [
-    [byWeight[0], carryOn],
-    [byWeight[1], other],
+    [first, carryOn],
+    [second, other],
   ];
+}
+
+/** A carbonyl carbon of an acid, an ester or an amide: C(=O)O or C(=O)N. */
+function isCarbonyl(mol: Molecule, c: number): boolean {
+  if (mol.el[c] !== "C") return false;
+  const nb = mol.neighbours[c];
+  return (
+    nb.some((v) => mol.el[v] === "O" && orderOf(mol, c, v) === 2) &&
+    nb.some((v) => (mol.el[v] === "O" || mol.el[v] === "N") && orderOf(mol, c, v) === 1)
+  );
+}
+
+/**
+ * Where `a` is an alpha carbon reached from its N or its carbonyl carbon,
+ * the child that carries the backbone on: the other of the two.
+ */
+function backbone(mol: Molecule, a: number, parent: number, children: number[]): number | null {
+  if (mol.el[a] !== "C") return null;
+  if (mol.el[parent] === "N") return children.find((c) => isCarbonyl(mol, c)) ?? null;
+  if (isCarbonyl(mol, parent)) return children.find((c) => mol.el[c] === "N") ?? null;
+  return null;
 }
 
 /**
@@ -304,7 +333,9 @@ function placeChild(
   const out = mol.neighbours[child].filter((v) => !L.has(v));
   const slots = splitOutside(
     ringNb.map((v) => angleOf(sub(L.get(v)!, c0))),
-    mol.ringsOf[child].map((r) => angleOf(sub(centroid(mol.rings[r].map((v) => L.get(v)!)), c0))),
+    mol.ringsOf[child]
+      .filter((r) => mol.rings[r].length < MACROCYCLE)
+      .map((r) => angleOf(sub(centroid(mol.rings[r].map((v) => L.get(v)!)), c0))),
     out.length,
   );
   const mid = slots.reduce((sum, x) => sum + x, 0) / slots.length;

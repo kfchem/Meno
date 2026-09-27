@@ -22,7 +22,7 @@ import {
 import { dist, segmentsCross } from "./geometry";
 import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
-import { placeRingSystem } from "./ringSystem";
+import { placeRingSystem, ringSystemVariants } from "./ringSystem";
 import { flatCost, projectCage } from "./cage";
 import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
 import type { Point } from "./geometry";
@@ -40,6 +40,40 @@ export function layout2D(input: LayoutInput): Layout2D {
   mol.systems.forEach((_, i) => local.set(i, layoutSystem(mol, i)));
   const sides = sidesOf(mol);
   const flips = flippable(mol, sides);
+  // a macrocycle's shape chosen for what hangs from it: each shape offered
+  // tried, grown in every frame, and the best kept
+  mol.systems.forEach((sys, i) => {
+    const count = ringSystemVariants(mol, sys);
+    if (count < 2) return;
+    const piece = mol.pieces.find((p) => p.includes(sys.atoms[0]))!;
+    const score = scorer(mol, piece);
+    let best = 0;
+    let bestScore = Infinity;
+    const here = new Set(piece);
+    const flipsHere = flips.filter(([a]) => here.has(a));
+    for (let v = 0; v < count; v++) {
+      local.set(i, placeRingSystem(mol, sys, v));
+      // the frame it grows best in, tried the other way and untangled
+      // where it helps: substituents inside a macrocycle are crowded until then
+      let top: Grown | null = null;
+      let topScore = Infinity;
+      for (const frame of FRAMES) {
+        const pos = grow(mol, piece, local, frame, sides);
+        const s = score(pos);
+        if (s < topScore) {
+          topScore = s;
+          top = pos;
+        }
+      }
+      const better = improve(mol, top!, topScore, flipsHere, sides, score);
+      const s = untangle(mol, piece, better.pos, better.score, score).score;
+      if (s < bestScore) {
+        bestScore = s;
+        best = v;
+      }
+    }
+    local.set(i, placeRingSystem(mol, sys, best));
+  });
 
   const x = new Array<number>(mol.n).fill(0);
   const y = new Array<number>(mol.n).fill(0);
@@ -101,7 +135,7 @@ function layoutSystem(mol: Molecule, i: number): Map<number, Point> {
 }
 
 /** Tries each single bond the other way round, keeping what scores better, until nothing does. */
-function improve(
+export function improve(
   mol: Molecule,
   start: Grown,
   startScore: number,
@@ -211,7 +245,7 @@ function clashing(mol: Molecule, piece: number[], pos: Grown): Set<number> {
  * angle, a little and then more, and at last stretch the bond it hangs
  * from - each kept only if the drawing scores better for it.
  */
-function untangle(
+export function untangle(
   mol: Molecule,
   piece: number[],
   start: Grown,
@@ -260,7 +294,7 @@ function untangle(
 }
 
 /** The benchmark's score for a piece as laid out. */
-function scorer(mol: Molecule, piece: number[]): (pos: Grown) => number {
+export function scorer(mol: Molecule, piece: number[]): (pos: Grown) => number {
   const index = new Map(piece.map((a, i) => [a, i]));
   const edges: [number, number][] = [];
   const orders: number[] = [];

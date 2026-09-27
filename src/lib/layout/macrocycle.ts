@@ -14,20 +14,47 @@
  */
 import { dir, rad, type Point } from "./geometry";
 
-const cache = new Map<number, Point[]>();
+const cache = new Map<number, Point[][]>();
+
+/** How many shapes of a size are offered, best first. */
+const OFFERED = 5;
 
 /**
- * A ring of `n` atoms (nine or more) on the lattice, clockwise, bond length
- * 1, centred on the origin: its atoms in order.
+ * Rings of `n` atoms (nine or more) on the lattice, clockwise, bond length 1,
+ * centred on the origin: its atoms in order. The few that lie best, best
+ * first and all different: which of them suits a macrocycle depends on what
+ * hangs from it - the substituents that point inside need room there.
  */
+export function macrocycleShapes(n: number): Point[][] {
+  let shapes = cache.get(n);
+  if (!shapes) {
+    shapes = (n % 2 === 0 ? evenShapes(n) : oddShapes(n)).map((shape) => {
+      const w = widest(shape);
+      const c = centreOf(w);
+      return w.map((p) => ({ x: p.x - c.x, y: p.y - c.y }));
+    });
+    cache.set(n, shapes);
+  }
+  return shapes.map((shape) => shape.map((p) => ({ ...p })));
+}
+
+/** The shape that lies best for a ring of `n` atoms. */
 export function macrocycleShape(n: number): Point[] {
-  const hit = cache.get(n);
-  if (hit) return hit.map((p) => ({ ...p }));
-  const shape = widest(n % 2 === 0 ? evenShape(n) : oddShape(n));
-  const c = centreOf(shape);
-  const out = shape.map((p) => ({ x: p.x - c.x, y: p.y - c.y }));
-  cache.set(n, out);
-  return out.map((p) => ({ ...p }));
+  return macrocycleShapes(n)[0];
+}
+
+/** The same shape, whichever way round it is walked and turned: one key. */
+function signature(ps: readonly Point[]): string {
+  const w = widest([...ps]);
+  const c = centreOf(w);
+  const keyOf = (flip: number) =>
+    w
+      .map((p) => `${Math.round(flip * (p.x - c.x) * 10)},${Math.round((p.y - c.y) * 10)}`)
+      .sort()
+      .join(";");
+  const a = keyOf(1);
+  const b = keyOf(-1);
+  return a < b ? a : b;
 }
 
 function centreOf(ps: readonly Point[]): Point {
@@ -116,12 +143,11 @@ function shapeCost(ps: readonly Point[]): number {
   return 4 * (best - 0.55) ** 2 - open - (symmetric(ps) ? 0.1 : 0);
 }
 
-function evenShape(n: number): Point[] {
+function evenShapes(n: number): Point[][] {
   // clockwise: six more right turns than left, none of the left ones together
   const lefts = (n - 6) / 2;
   const extras = 6;
-  let bestPts: Point[] | null = null;
-  let bestCost = Infinity;
+  const found = new Map<string, { pts: Point[]; cost: number }>();
   const tryGaps = (gaps: number[]) => {
     const turns: number[] = [];
     if (!gaps.length) for (let i = 0; i < n; i++) turns.push(-1);
@@ -132,10 +158,9 @@ function evenShape(n: number): Point[] {
     const pts = walk(turns);
     if (!pts) return;
     const cost = shapeCost(pts);
-    if (cost < bestCost - 1e-9) {
-      bestCost = cost;
-      bestPts = pts;
-    }
+    const key = signature(pts);
+    const had = found.get(key);
+    if (!had || cost < had.cost) found.set(key, { pts, cost });
   };
   if (lefts === 0) {
     tryGaps([]);
@@ -153,9 +178,9 @@ function evenShape(n: number): Point[] {
       }
     }
   }
-  if (bestPts) return bestPts;
+  const best = [...found.values()].sort((p, q) => p.cost - q.cost).slice(0, OFFERED);
   // no lattice ring of this size (eight): a regular polygon
-  return regular(n);
+  return best.length ? best.map((b) => b.pts) : [regular(n)];
 }
 
 /** Ordered ways of writing `total` as `count` parts of 1 to `most`, for count up to `maxCount`. */
@@ -196,8 +221,15 @@ function regular(n: number): Point[] {
   });
 }
 
-function oddShape(n: number): Point[] {
-  const base = evenShape(n + 1);
+function oddShapes(n: number): Point[][] {
+  return evenShapes(n + 1)
+    .slice(0, 3)
+    .map((base) => contract(base));
+}
+
+/** A ring one smaller than `base`: two neighbours drawn together into one, the ring eased. */
+function contract(base: Point[]): Point[] {
+  const n = base.length - 1;
   let best: Point[] | null = null;
   let bestStrain = Infinity;
   for (let drop = 0; drop < base.length; drop++) {

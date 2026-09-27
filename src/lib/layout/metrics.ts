@@ -41,8 +41,8 @@ export type LayoutMetrics = {
   /**
    * How far, on average, the angles round a large ring (nine or more) are
    * from a zigzag's 120 degrees, either way - a macrocycle drawn as a round
-   * polygon is far off - in degrees. Not a ring that runs through other
-   * rings (a porphyrin's, a cyclodextrin's): that is a ring of rings.
+   * polygon is far off - in degrees. Not a ring that runs mostly through
+   * other rings (a porphyrin's, a cyclodextrin's): that is a ring of rings.
    */
   macroAngleError: number;
   /** Wedges and hashes on ring bonds, where they are hard to read. */
@@ -117,7 +117,7 @@ export const SCORE_WEIGHTS = {
   ringWedges: 2,
   bondSpread: 50,
   angleError: 0.3,
-  macroAngleError: 0.2,
+  macroAngleError: 0.5,
   ringError: 30,
   tilt: 0.4,
   gridError: 0.1,
@@ -289,7 +289,12 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   // (not one that runs through other rings - a porphyrin's, a
   // cyclodextrin's: that is a ring of rings, set round a circle)
   const threaded = (r: number[]) =>
-    rings.some((q) => q.length < r.length && q.filter((a) => r.includes(a)).length >= 3);
+    new Set(
+      rings
+        .filter((q) => q.length < r.length && q.filter((a) => r.includes(a)).length >= 3)
+        .flatMap((q) => q.filter((a) => r.includes(a))),
+    ).size >=
+    0.4 * r.length;
   for (const r of rings.filter((r) => r.length >= 9 && !threaded(r))) {
     r.forEach((a, i) => {
       if (inSmall.has(a)) return;
@@ -424,7 +429,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     // the widest gap no ring lies in: at a fusion of three rings every gap
     // is 120 degrees, and only one is outside
     const centres = rings
-      .filter((r) => r.includes(a))
+      .filter((r) => r.includes(a) && r.length < 9)
       .map((r) => {
         const rx = r.reduce((sum, v) => sum + x[v], 0) / r.length;
         const ry = r.reduce((sum, v) => sum + y[v], 0) / r.length;
@@ -711,8 +716,6 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       else if (x[nitrogen] > x[carbonyl] + 0.25 * L) backward++;
     }
     readingOrder += Math.max(0, backward - forward);
-    let anomericRight = 0;
-    let anomericLeft = 0;
     // a sugar - a ring of five or six with one oxygen in it, and oxygens on
     // its carbons - drawn as its Haworth projection seen from above: the
     // ring oxygen at the back, which is the top
@@ -728,18 +731,32 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       if (y[ox[0]] < ry + 0.25 * L) readingOrder++;
       // and its anomeric carbon - on the ring oxygen, with an oxygen or a
       // nitrogen of its own: a glycoside's link, a nucleoside's base - on
-      // the right of it
+      // the right-hand side of the ring. Where two sugars are linked by
+      // their anomeric carbons (sucrose) one of them cannot be; an aldose's
+      // (the anomeric carbon on one carbon) keeps its place first.
+      const rx = r.reduce((sum, a) => sum + x[a], 0) / r.length;
       for (const c of neighbours[ox[0]]) {
         if (!r.includes(c)) continue;
         const own = neighbours[c].some((b) => !r.includes(b) && (el[b] === "O" || el[b] === "N"));
         if (!own) continue;
-        if (x[c] > x[ox[0]] + 0.1 * L) anomericRight++;
-        else if (x[c] < x[ox[0]] - 0.1 * L) anomericLeft++;
+        const carbons = neighbours[c].filter((b) => el[b] === "C").length;
+        if (x[c] < rx + 0.25 * L) readingOrder += carbons <= 1 ? 1 : 0.5;
       }
     }
-    // two sugars linked by their anomeric carbons (sucrose) cannot both
-    // have them on the right: only the excess counts
-    readingOrder += 0.5 * Math.max(0, anomericLeft - anomericRight);
+    // an acid's C=O up: the way it is always drawn
+    for (let a = 0; a < n; a++) {
+      if (el[a] !== "C") continue;
+      const oxo = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 2);
+      const hydroxy = neighbours[a].filter(
+        (b) =>
+          el[b] === "O" &&
+          orderAt(a, b) === 1 &&
+          ((g.hydrogens?.[b] ?? 0) > 0 || neighbours[b].length === 1),
+      );
+      if (oxo.length !== 1 || hydroxy.length !== 1) continue;
+      if (y[oxo[0]] < y[a] - 0.2 * L) readingOrder++;
+      else if (y[oxo[0]] < y[a] + 0.2 * L) readingOrder += 0.5;
+    }
   }
   const centre = (s: Set<number>) => {
     let sx = 0;

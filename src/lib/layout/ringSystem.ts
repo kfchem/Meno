@@ -26,7 +26,7 @@ import {
   sub,
   type Point,
 } from "./geometry";
-import { macrocycleShape } from "./macrocycle";
+import { macrocycleShapes } from "./macrocycle";
 import type { Molecule, RingSystem } from "./perceive";
 
 /** Rings this size and over are macrocycles, drawn as a closed zigzag. */
@@ -44,7 +44,19 @@ function squareStart(n: number): number {
   return n === 4 || n === 8 ? Math.PI / 2 + Math.PI / n : Math.PI / 2;
 }
 
-export function placeRingSystem(mol: Molecule, sys: RingSystem): Map<number, Point> {
+/** How many ways a ring system can be laid out: one per macrocycle shape offered. */
+export function ringSystemVariants(mol: Molecule, sys: RingSystem): number {
+  const rings = sys.rings.map((i) => mol.rings[i]);
+  const big = Math.max(0, ...rings.map((r) => r.length));
+  if (big < MACROCYCLE) return 1;
+  const macro = rings.find((r) => r.length === big)!;
+  // one that runs through a ring on its way may also be tried round a
+  // circle, last, where the zigzag cannot take the ring it runs through
+  const threaded = rings.some((r) => r !== macro && r.filter((a) => macro.includes(a)).length >= 3);
+  return macrocycleShapes(big).length + (threaded ? 1 : 0);
+}
+
+export function placeRingSystem(mol: Molecule, sys: RingSystem, variant = 0): Map<number, Point> {
   const pos = new Map<number, Point>();
   const rings = sys.rings.map((i) => mol.rings[i]);
   const placedRing = new Set<number>();
@@ -72,14 +84,22 @@ export function placeRingSystem(mol: Molecule, sys: RingSystem): Map<number, Poi
     return q.length - p.length;
   })[0];
 
-  const threaded =
+  // a macrocycle that runs mostly through other rings is a ring of rings,
+  // round a circle; one that runs through a ring or two on its way
+  // (sirolimus's pyran) is still a chain closed on itself, never round
+  const through = new Set(
+    rings
+      .filter((r) => r !== first && r.filter((a) => first.includes(a)).length >= 3)
+      .flatMap((r) => r.filter((a) => first.includes(a))),
+  );
+  const shapes = first.length >= MACROCYCLE ? macrocycleShapes(first.length) : [];
+  if (
     first.length >= MACROCYCLE &&
-    rings.some((r) => r !== first && r.filter((a) => first.includes(a)).length >= 3);
-  if (threaded) {
-    // rings the macrocycle runs through, not beside
+    (through.size >= 0.4 * first.length || (through.size > 0 && variant >= shapes.length))
+  ) {
     ringOfBlocks(mol, first, rings, pos).forEach((i) => placedRing.add(i));
   } else if (first.length >= MACROCYCLE) {
-    const shape = macrocycleShape(first.length);
+    const shape = shapes[variant % shapes.length];
     const at = macrocycleFit(mol, first, shape, rings);
     first.forEach((a, i) => pos.set(a, shape[at(i)]));
   } else {
@@ -275,6 +295,18 @@ function macrocycleFit(
     if (rings.some((r) => r !== ring && r.includes(a))) weight += 3;
     return weight;
   });
+  // a ring the macrocycle runs through (three atoms or more of it) wants a
+  // corner of the shape: its atoms inside that run turning outward, the way
+  // a regular ring's do
+  const inner: number[] = [];
+  for (const r of rings) {
+    if (r === ring) continue;
+    const shared = ring.map((a, i) => (r.includes(a) ? i : -1)).filter((i) => i >= 0);
+    if (shared.length < 3) continue;
+    for (const i of shared) {
+      if (r.includes(ring[(i - 1 + n) % n]) && r.includes(ring[(i + 1) % n])) inner.push(i);
+    }
+  }
   let best = { shift: 0, way: 1 };
   let bestCost = Infinity;
   for (const way of [1, -1]) {
@@ -282,6 +314,9 @@ function macrocycleFit(
       let cost = 0;
       for (let i = 0; i < n; i++) {
         if (inward[(((shift + way * i) % n) + n) % n]) cost += load[i];
+      }
+      for (const i of inner) {
+        if (inward[(((shift + way * i) % n) + n) % n]) cost += 8;
       }
       if (cost < bestCost - 1e-9) {
         bestCost = cost;

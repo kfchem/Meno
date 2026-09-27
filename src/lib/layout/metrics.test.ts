@@ -164,24 +164,27 @@ describe("how a drawing sits", () => {
   });
 
   it("reads an acid at the end of a chain on the right, and leaves one on a ring alone", () => {
-    // a zigzag with a carboxylic acid on its left end
+    // a zigzag with a carboxylic acid on its left end, its C=O up
     const z = zigzag(6);
     const elements = z.x.map(() => "C");
     const x = [...z.x, -Math.sqrt(3) / 2, 0];
     const y = [...z.y, 0.5, -1];
     const edges = [...z.edges, [0, 7], [0, 8]] as [number, number][];
-    const orders = [...z.edges.map(() => 1), 1, 2];
+    const orders = [...z.edges.map(() => 1), 2, 1];
     const acid = {
       x,
       y,
       edges,
       orders,
       elements: [...elements, "O", "O"],
-      hydrogens: [...elements.map(() => 2), 1, 0],
+      hydrogens: [...elements.map(() => 2), 0, 1],
     };
     expect(layoutMetrics(acid).readingOrder).toBe(1);
-    // turned round, the acid is on the right
-    expect(layoutMetrics(turned(acid, 180)).readingOrder).toBe(0);
+    // mirrored, the acid is on the right, its C=O still up
+    const mirrored = { ...acid, x: acid.x.map((v) => -v) };
+    expect(layoutMetrics(mirrored).readingOrder).toBe(0);
+    // turned half round, it is on the right but its C=O is down
+    expect(layoutMetrics(turned(acid, 180)).readingOrder).toBe(1);
   });
 
   it("adds up its parts to the score", () => {
@@ -209,8 +212,8 @@ describe("conventions the rules give", () => {
     }
     const sugar = { x, y, edges, elements, hydrogens: elements.map(() => 1) };
     expect(layoutMetrics(sugar).readingOrder).toBe(0);
-    // upside down, the oxygen is at the bottom and the anomeric carbon left of it
-    expect(layoutMetrics(turned(sugar, 180)).readingOrder).toBe(1.5);
+    // upside down, the oxygen is at the bottom and the anomeric carbon on the left
+    expect(layoutMetrics(turned(sugar, 180)).readingOrder).toBe(2);
   });
 
   it("wants fused rings in a row, the rest above and to the right", () => {
