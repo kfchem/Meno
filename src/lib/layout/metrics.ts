@@ -827,7 +827,8 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       if (free != null && x[free] < mc.x - 0.5 * L) readingOrder++;
     }
     // rings hung on a macrocycle - on it, or one atom off it, as a sugar on
-    // its oxygen: to its right, and below it
+    // its oxygen: to its right, and below it - a glycoside's aglycone at the
+    // upper left, its sugars after it, lower right
     const macro = rings.find((r) => r.length >= 12 && r.every((a) => main.has(a)));
     if (macro) {
       const hung = (s: Set<number>) =>
@@ -839,8 +840,8 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       for (const s of live) {
         if (s === main || !hung(s)) continue;
         const c = centre(s);
-        if (c.x < mc.x - 0.5 * L) readingOrder += 0.5;
-        if (c.y > mc.y + 0.5 * L) readingOrder += 0.5;
+        if (c.x < mc.x + 0.5 * L) readingOrder += 0.5;
+        if (c.y > mc.y - 0.5 * L) readingOrder += 0.5;
       }
     }
   }
