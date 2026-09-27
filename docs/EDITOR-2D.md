@@ -23,6 +23,23 @@ and in particular:
 - **Hover, then act.** The atom or bond under the pointer is the subject of
   whatever comes next - a click, a drag, a wheel turn, a key. This is already
   how labels are typed.
+- **Drawing is dragging bonds out of atoms**, and the editor is made for
+  that way of drawing rather than for keys to learn: there are no keyboard
+  shortcuts for building structures (agreed 2026-09-27).
+  - A drag from an atom draws one bond where it is led. Near 120 degrees
+    from a bond already there it snaps to that, and an arc grows out of the
+    atom to tell it from the 30-degree grid.
+  - A double-click on an atom draws one bond where there is room; a
+    double-click that drags draws a chain along the pointer's path, a
+    carbon for every bond length, zigzagging.
+  - A press held still (HOLD_MS) lifts an atom, and the drag moves it.
+  - A pause in a drag lets a bond or a moved atom go exactly where the
+    pointer is, off the grid; in a chain it lays down the bond it is on,
+    snapped.
+  - A bond led within reach of an atom closes onto it, and the preview
+    shows it closed before the button comes up.
+
+  The whole stroke is one undo step. (PR #57)
 - **The mouse alone should be enough**, and it should travel as little as
   possible: what is done to an atom is done where the atom is, not from a
   toolbar across the window. Keys are shortcuts, never the only way.
@@ -153,7 +170,8 @@ All hover-based, as above.
   superscripts and carried through the model, the files and the hydrogen
   count.
 - Ring templates (3- to 8-membered, benzene), fused onto a bond or an atom;
-  chains.
+  chains. (Chains: PR #57, a double-click on an atom that drags. Rings, when
+  they come, grow out of the same dragging, not keys.)
 - Every bond type from the pointer: wavy, bold, dashed, and the rest of what
   the cycle cannot reach today.
 - Abbreviations (Me, Ph, Boc, OTBS …) that read correctly and can be expanded.
