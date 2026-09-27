@@ -12,6 +12,7 @@ describe("the settings file", () => {
     const settings = {
       drawingStyle: { preset: "rsc", changes: { ends: "round" as const } },
       network: { offline: true, granted: ["python-env:console"] },
+      chemistry: { valenceWarnings: false, stereoLabels: true },
     };
     const text = settingsFileText(settings);
     expect(JSON.parse(text).format).toBe(1);
@@ -27,6 +28,10 @@ describe("the settings file", () => {
         network: { offline: "yes", granted: ["python-env:console", "x y", 3, "python-env:console"] },
       }).network,
     ).toEqual({ offline: false, granted: ["python-env:console"] });
+    // a file from before there were chemistry settings, or a setting mangled
+    expect(
+      acceptAppSettings({ chemistry: { stereoLabels: "on" } }).chemistry,
+    ).toEqual({ valenceWarnings: true, stereoLabels: false });
   });
 
   it("loads the defaults where there is no file, and says it has loaded", async () => {

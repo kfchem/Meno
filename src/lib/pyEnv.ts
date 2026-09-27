@@ -95,10 +95,10 @@ async function baseInfo(
   };
 }
 
-export async function ensurePyEnv(
-  profile: PyProfile,
-  opts?: { lockPath?: string; pythonVersion?: string }
-): Promise<string> {
+type EnvOptions = { lockPath?: string; pythonVersion?: string };
+
+/** Where a profile's environment stands, and whether it needs setting up. */
+async function envState(profile: PyProfile, opts?: EnvOptions) {
   const defaultLock = PROFILE_LOCK[profile];
   const fallbackLock = "resources/py/requirements.lock";
   const useDefault = await exists(defaultLock, {
@@ -112,8 +112,6 @@ export async function ensurePyEnv(
     baseDir: BaseDirectory.Resource,
   });
   const lockSha = await sha256(lockText);
-
-  await ensureDir("uv/stamps", BaseDirectory.AppData);
 
   const stampExists = await exists(info.stampPath, {
     baseDir: BaseDirectory.AppData,
@@ -138,6 +136,31 @@ export async function ensurePyEnv(
     })) ||
     stamp.lockSha !== lockSha ||
     stamp.py !== info.pythonVersion;
+
+  return { info, lockText, lockSha, venvPy, needSetup };
+}
+
+/**
+ * Whether a profile's environment is set up as its lock file now says - so
+ * that using it needs nothing downloaded. Sets nothing up, and asks nothing.
+ */
+export async function pyEnvReady(profile: PyProfile): Promise<boolean> {
+  try {
+    return !(await envState(profile)).needSetup;
+  } catch {
+    return false;
+  }
+}
+
+export async function ensurePyEnv(
+  profile: PyProfile,
+  opts?: EnvOptions
+): Promise<string> {
+  const { info, lockText, lockSha, venvPy, needSetup } = await envState(
+    profile,
+    opts
+  );
+  await ensureDir("uv/stamps", BaseDirectory.AppData);
 
   if (needSetup) {
     // The first time, the user says whether it may download at all.

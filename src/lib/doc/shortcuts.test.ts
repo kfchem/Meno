@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { saveIntent, undoIntent } from "./shortcuts";
+import { isCleanUpKey, saveIntent, undoIntent } from "./shortcuts";
 
 const key = (over: Partial<Parameters<typeof undoIntent>[0]> = {}) => ({
   key: "z",
@@ -44,5 +44,22 @@ describe("saveIntent", () => {
   it("leaves other keys and a bare S alone", () => {
     expect(saveIntent({ key: "s" })).toBeNull();
     expect(saveIntent({ key: "a", ctrlKey: true })).toBeNull();
+  });
+});
+
+describe("isCleanUpKey", () => {
+  it("is Ctrl/Cmd+Shift+K, outside text fields", () => {
+    expect(isCleanUpKey({ key: "k", metaKey: true, shiftKey: true })).toBe(true);
+    expect(isCleanUpKey({ key: "K", ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(isCleanUpKey({ key: "k", metaKey: true })).toBe(false);
+    expect(isCleanUpKey({ key: "K", shiftKey: true })).toBe(false);
+    expect(
+      isCleanUpKey({
+        key: "k",
+        metaKey: true,
+        shiftKey: true,
+        target: { tagName: "INPUT" },
+      }),
+    ).toBe(false);
   });
 });
