@@ -6,11 +6,13 @@ npm run font-metrics -- <font.ttf|otf> <EXPORT_NAME> "<Family>" > src/lib/chem/f
 
 Writes what a label is placed and cleared by, for one font file: how far each
 printable ASCII character advances the pen, and the convex outline of its ink.
-Register the module in `src/lib/chem/fonts/index.ts` and add the family to
-`LABEL_TYPEFACES` in `src/lib/chem/styleFields.ts`; the canvas also needs the
-font file itself (`src/ui/features/StructureEditor/labelFont.ts`).
+Only the typefaces a label should be placed by before any font file has been
+read need a table: any other is read from its file when first used
+(`src/ui/fonts/typefaces.ts`). Register a table in
+`src/lib/chem/fonts/index.ts`.
 
-Curves are followed in eight steps; the hull is eased to fewer sides by
+The hull is worked out as the app works it out for a font it reads
+(`src/lib/chem/glyphHull.ts`): curves are followed in eight steps; the hull is eased to fewer sides by
 dropping any corner standing less than 15 units (of a 2048-unit em) off the
 line between its neighbours, so it cuts into the ink by no more than that -
 under a hundredth of an em, a tenth of a point in a 10 pt label.

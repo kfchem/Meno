@@ -104,10 +104,16 @@ Both go together, because both touch every layer.
   style built on it: ACS 1996's proportions with round ends and joins and
   labels in IBM Plex Sans, which is also the app's own typeface - its
   capital I has serifs and its l a tail, so Cl never reads as CI. (PR #47)
-- **Typefaces.** A label is placed and cleared by its typeface's own letter
-  shapes, generated from the font file by `scripts/fonts/labelMetrics.ts`;
-  Meno has them for IBM Plex Sans (bundled) and Arial (the system's), with
-  Helvetica set by Arial's.
+- **Typefaces.** Any typeface on the computer: a label is placed and
+  cleared by that typeface's own letter shapes, read from its file when it
+  is first used (the app hands over one face of a collection, with its
+  character map made plain). ASCII letters of Arial (Helvetica too) and IBM
+  Plex Sans come from tables written ahead of time by
+  `scripts/fonts/labelMetrics.ts`, so a label sits the same before a file
+  is read and in tests. A character the typeface lacks - Japanese, above
+  all - is set in IBM Plex Sans JP, which comes with Meno; a typeface that
+  cannot be had or read is set in IBM Plex Sans. The baseline follows the
+  typeface, so a capital sits on its atom as ACS 1996 sets Arial's. (PR #48)
 
 **One way of drawing:**
 

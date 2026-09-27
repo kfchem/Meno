@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ACS_1996, DEFAULT_STYLE_CHOICE, pt, ofBond, STYLE_PRESETS, type DrawingStyle } from "./style";
+import {
+  ACS_1996,
+  DEFAULT_STYLE_CHOICE,
+  pt,
+  ofBond,
+  presetById,
+  STYLE_PRESETS,
+  type DrawingStyle,
+} from "./style";
 import {
   acceptStyleChoice,
   acceptValue,
@@ -15,6 +23,7 @@ const EVERY_SETTING: (keyof DrawingStyle)[] = [
   "tripleGap",
   "wedgeBroadEnd",
   "hashStartOffset",
+  "labelBaseline",
 ];
 
 describe("the settings list", () => {
@@ -36,10 +45,18 @@ describe("the settings list", () => {
 
   it("offers Automatic for exactly the settings that may be left unset", () => {
     const optional = STYLE_FIELDS.filter((f) => f.automatic).map((f) => f.key);
-    expect(optional.sort()).toEqual(["hashStartOffset", "tripleGap", "wedgeBroadEnd"]);
+    expect(optional.sort()).toEqual([
+      "hashStartOffset",
+      "labelBaseline",
+      "tripleGap",
+      "wedgeBroadEnd",
+    ]);
     expect(automaticValue("tripleGap", ACS_1996)).toEqual(ACS_1996.doubleGap);
     expect(automaticValue("hashStartOffset", ACS_1996)).toEqual(ACS_1996.hashInterval);
     expect(automaticValue("wedgeBroadEnd", ACS_1996)).toEqual(pt(3));
+    // by the typeface's own capitals
+    expect(automaticValue("labelBaseline", ACS_1996)).toBeCloseTo(0.4, 12);
+    expect(automaticValue("labelBaseline", presetById("meno").style)).toBeCloseTo(0.391, 3);
   });
 
   it("takes every preset's own values as they are", () => {
@@ -62,7 +79,7 @@ describe("reading a style choice back", () => {
         doubleGap: ofBond(0.2),
         bondColor: "#1F4E79",
         ends: "round",
-        fontFamily: "Comic Sans MS",
+        fontFamily: "  Hiragino Sans ",
         labelColor: "red",
         hashInterval: { value: "2", unit: "pt" },
         waveAmplitude: { value: 1, unit: "mm" },
@@ -76,8 +93,13 @@ describe("reading a style choice back", () => {
         doubleGap: ofBond(0.2),
         bondColor: "#1f4e79",
         ends: "round",
+        fontFamily: "Hiragino Sans",
       },
     });
+    // not a font's name
+    for (const bad of ["", "   ", "a\nb", "x".repeat(121), 3]) {
+      expect(acceptStyleChoice({ preset: "meno", changes: { fontFamily: bad } }).changes).toEqual({});
+    }
   });
 
   it("brings a number into range, a share of the bond by the bond it is a share of", () => {

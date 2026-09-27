@@ -11,39 +11,11 @@ use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 use uuid::Uuid;
 
+mod fonts;
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-/// The system's Arial, which atom labels are set in (ACS 1996), for the canvas
-/// to draw them with. Nothing is bundled: it is read from where the system
-/// keeps it, and where there is none the canvas falls back to a font of its
-/// own.
-#[tauri::command]
-async fn label_font() -> Result<tauri::ipc::Response, String> {
-    let candidates: Vec<PathBuf> = if cfg!(target_os = "macos") {
-        vec![
-            PathBuf::from("/System/Library/Fonts/Supplemental/Arial.ttf"),
-            PathBuf::from("/Library/Fonts/Arial.ttf"),
-        ]
-    } else if cfg!(target_os = "windows") {
-        let windir = std::env::var_os("WINDIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
-        vec![windir.join("Fonts").join("arial.ttf")]
-    } else {
-        vec![
-            PathBuf::from("/usr/share/fonts/truetype/msttcorefonts/Arial.ttf"),
-            PathBuf::from("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
-        ]
-    };
-    for path in candidates {
-        if let Ok(bytes) = std::fs::read(&path) {
-            return Ok(tauri::ipc::Response::new(bytes));
-        }
-    }
-    Err("no Arial on this system".into())
 }
 
 // uv-based Python env helpers
@@ -444,7 +416,9 @@ pub fn run() {
         .manage(ProcState(Mutex::new(HashMap::new())))
         .invoke_handler(tauri::generate_handler![
             greet,
-            label_font,
+            // the system's fonts, for atom labels
+            fonts::font_families,
+            fonts::font_file,
             // uv + env
             py_env_python_path_uv,
             py_env_setup_uv,

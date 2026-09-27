@@ -7,6 +7,8 @@ import {
   type Length,
   type StyleChoice,
 } from "./style";
+import { automaticBaseline } from "./layout2d";
+import { labelFont } from "./labelFonts";
 
 /**
  * Every drawing setting in words: what it is called in the settings, what it
@@ -51,7 +53,8 @@ export type FieldKind =
   | { type: "share"; of: ShareOf; min: number; max: number; step: number }
   | { type: "angle"; min: number; max: number; step: number }
   | { type: "colour" }
-  | { type: "typeface"; options: readonly string[] }
+  /** Any typeface; `suggested` are those that come with Meno or stand for a journal's. */
+  | { type: "typeface"; suggested: readonly string[] }
   | { type: "choice"; options: readonly { value: string; label: string }[] };
 
 export type StyleField = {
@@ -74,11 +77,11 @@ export type StyleField = {
 };
 
 /**
- * The typefaces a label can be set in: those whose letter shapes Meno knows,
- * so that a bond stops the same distance from every letter. Helvetica shares
- * Arial's widths; IBM Plex Sans comes with Meno.
+ * The typefaces offered first: those that come with Meno, then those the
+ * journals' styles use. Any other typeface on the computer can be picked
+ * too; its letters are read from its file.
  */
-export const LABEL_TYPEFACES = ["IBM Plex Sans", "Arial", "Helvetica"] as const;
+export const LABEL_TYPEFACES = ["IBM Plex Sans", "IBM Plex Sans JP", "Arial", "Helvetica"] as const;
 
 const length = (min: number, max: number, step = 0.05): FieldKind => ({
   type: "length",
@@ -305,8 +308,9 @@ export const STYLE_FIELDS: StyleField[] = [
     key: "fontFamily",
     group: "Labels",
     label: "Typeface",
-    description: "The typeface atom labels are set in.",
-    kind: { type: "typeface", options: LABEL_TYPEFACES },
+    description:
+      "The typeface atom labels are set in: any on this computer. A character it lacks, such as a Japanese one, is set in IBM Plex Sans JP.",
+    kind: { type: "typeface", suggested: LABEL_TYPEFACES },
   },
   {
     key: "fontSize",
@@ -358,6 +362,7 @@ export const STYLE_FIELDS: StyleField[] = [
     description:
       "How far below its atom a label's baseline sits. This is what centres a capital letter on the atom.",
     kind: share("font size", 0, 1),
+    automatic: "a capital sits on its atom as in ACS 1996, whatever the typeface",
     rule: true,
   },
   {
@@ -420,6 +425,8 @@ export function automaticValue(
       return wedgeBroadEndOf({ ...style, wedgeBroadEnd: undefined });
     case "hashStartOffset":
       return style.hashInterval;
+    case "labelBaseline":
+      return automaticBaseline(labelFont(style.fontFamily).capHeight);
     default:
       return undefined;
   }
@@ -489,10 +496,13 @@ export function acceptValue(
       return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)
         ? value.toLowerCase()
         : undefined;
-    case "typeface":
-      return typeof value === "string" && k.options.includes(value)
-        ? value
-        : undefined;
+    case "typeface": {
+      if (typeof value !== "string") return undefined;
+      const name = value.trim();
+      // a font's name, not anything else a file might hold
+      const printable = [...name].every((c) => c.charCodeAt(0) >= 0x20);
+      return name.length > 0 && name.length <= 120 && printable ? name : undefined;
+    }
     case "choice":
       return typeof value === "string" &&
         k.options.some((o) => o.value === value)

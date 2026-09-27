@@ -28,7 +28,7 @@ import {
   SwatchIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import DocumentStylePanel from "./DocumentStylePanel";
 import { saveIntent } from "../../../lib/doc/shortcuts";
 import { useFileActions } from "./fileActions";
@@ -239,7 +239,11 @@ function StructureCanvasContent({
           <Wedges2D />
           {/* Atom hover rings */}
           <AtomsHoverRings2D />
-          <Labels2D />
+          {/* A label's font is read before it is drawn: the rest of the
+              drawing does not wait for it, nor go if it cannot be read. */}
+          <Suspense fallback={null}>
+            <Labels2D />
+          </Suspense>
           {/* Label editor */}
           <LabelEditor2D />
           {/* Hover overlay */}

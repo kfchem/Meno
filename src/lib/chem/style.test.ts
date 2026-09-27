@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IBM_PLEX_SANS } from "./fonts/ibmPlexSans";
+import { automaticBaseline } from "./layout2d";
 import {
   ACS_1996,
   bondFraction,
@@ -107,17 +108,26 @@ describe("style presets", () => {
     expect(presetById("nonsense")).toBe(STYLE_PRESETS[0]);
   });
 
-  it("makes Meno's own ACS 1996 with round ends in IBM Plex Sans, a capital sitting on its atom as in ACS 1996", () => {
+  it("makes Meno's own ACS 1996 with round ends in IBM Plex Sans", () => {
     const { style } = presetById("meno");
     expect(DEFAULT_STYLE_CHOICE.preset).toBe("meno");
-    const { ends, fontFamily, labelBaseline, ...rest } = style;
-    const { ends: e, fontFamily: f, labelBaseline: b, ...acs } = ACS_1996;
+    const { ends, fontFamily, ...rest } = style;
+    const { ends: e, fontFamily: f, ...acs } = ACS_1996;
     expect(rest).toEqual(acs);
     expect([ends, fontFamily]).toEqual(["round", "IBM Plex Sans"]);
-    expect([e, f, b]).toEqual(["square", "Arial", 0.4]);
+    expect([e, f]).toEqual(["square", "Arial"]);
+    // the baseline follows the typeface
+    expect(style.labelBaseline).toBeUndefined();
+  });
+
+  it("sets a capital on its atom as ACS 1996 sets Arial's, whatever the typeface", () => {
+    // 0.4 em in Arial, as ACS 1996 has it
+    expect(automaticBaseline(1467 / 2048)).toBeCloseTo(0.4, 12);
+    // Plex's capitals are a little shorter, so its baseline rises with them
+    const plex = automaticBaseline(IBM_PLEX_SANS.capHeight / 1000);
+    expect(plex).toBeCloseTo(0.391, 3);
     // the middle of a capital the same distance below the atom in both
-    const arialCap = 1467 / 2048;
-    expect(labelBaseline - IBM_PLEX_SANS.capHeight / 1000 / 2).toBeCloseTo(0.4 - arialCap / 2, 3);
+    expect(plex - 0.698 / 2).toBeCloseTo(0.4 - 1467 / 2048 / 2, 12);
   });
 
   it("keeps ACS 1996's proportions for what a journal style does not state", () => {

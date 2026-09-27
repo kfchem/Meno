@@ -1,3 +1,5 @@
+// Before anything draws text: where text finds the characters its font lacks.
+import "./ui/fonts/textRenderer";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

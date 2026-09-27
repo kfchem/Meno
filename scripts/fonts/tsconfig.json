@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["**/*.ts", "../../src/lib/chem/labelFonts.ts", "../../src/lib/chem/fonts/**/*.ts", "../../src/lib/chem/arial.ts"]
+  "include": ["**/*.ts", "../../src/types/opentype.d.ts", "../../src/lib/chem/glyphHull.ts", "../../src/lib/chem/labelFonts.ts", "../../src/lib/chem/fonts/**/*.ts", "../../src/lib/chem/arial.ts"]
 }
