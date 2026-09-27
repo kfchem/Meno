@@ -1,128 +1,125 @@
 import { EditorState } from "../types";
 import { StoreApi } from "zustand";
 import { NOMINAL_BOND_LENGTH } from "../../../../../lib/chem/acs";
+import {
+  advanceStroke,
+  finishStroke,
+  holdStroke,
+  startStroke,
+  type Stroke,
+} from "../../utils/stroke";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
 
+const now = () =>
+  typeof performance !== "undefined" ? performance.now() : Date.now();
+
+/** No stroke under way. */
+const ended: EditorState["extend"] = {
+  active: false,
+  atomId: null,
+  pointer: null,
+  mode: "snap",
+  stroke: null,
+  preview: null,
+};
+
 export function createInteractionSlice(set: SetState, get: GetState) {
   return {
-    startExtend: (atomId: number) =>
+    startExtend: (atomId: number, kind: Stroke["kind"] = "bond") =>
       set((prev: EditorState) => ({
         ...prev,
-        extend: { active: true, atomId, pointer: null, mode: "snap" },
-        suppressDblClickUntil: Math.max(
-          prev.suppressDblClickUntil,
-          (typeof performance !== "undefined"
-            ? performance.now()
-            : Date.now()) + 120,
-        ),
+        extend: {
+          active: true,
+          atomId,
+          pointer: null,
+          mode: "snap",
+          stroke: startStroke(kind, atomId),
+          preview: null,
+        },
+        suppressDblClickUntil: Math.max(prev.suppressDblClickUntil, now() + 120),
       })),
 
     updateExtend: (x: number, y: number) =>
-      set((prev: EditorState) => ({
-        ...prev,
-        extend: prev.extend.active
-          ? { ...prev.extend, pointer: { x, y } }
-          : prev.extend,
-      })),
+      set((prev: EditorState) => {
+        if (!prev.extend.active || !prev.extend.stroke) return prev;
+        const pointer = { x, y };
+        const stroke = advanceStroke(
+          prev.model,
+          prev.extend.stroke,
+          pointer,
+          NOMINAL_BOND_LENGTH,
+        );
+        return { ...prev, extend: { ...prev.extend, pointer, stroke } };
+      }),
+
+    holdExtend: () =>
+      set((prev: EditorState) => {
+        const { stroke, pointer } = prev.extend;
+        if (!prev.extend.active || !stroke || !pointer) return prev;
+        const next = holdStroke(prev.model, stroke, pointer, NOMINAL_BOND_LENGTH);
+        if (next === stroke) return prev;
+        return {
+          ...prev,
+          extend: {
+            ...prev.extend,
+            stroke: next,
+            mode: next.free ? "free" : "snap",
+          },
+        };
+      }),
 
     commitExtend: () => {
       const st = get();
-      if (!st.extend.active || st.extend.atomId == null) return;
-      const base = st.model.atoms.find((a) => a.id === st.extend.atomId);
-      if (!base) {
-        set((prev: EditorState) => ({
-          ...prev,
-          extend: { active: false, atomId: null, pointer: null, mode: "snap" },
-          suppressDblClickUntil:
-            (typeof performance !== "undefined"
-              ? performance.now()
-              : Date.now()) + 120,
-        }));
-        return;
-      }
-      // Fixed nominal bond length and tolerance
-      const L = NOMINAL_BOND_LENGTH;
-      const TOL = L * 0.4;
-      const step = Math.PI / 6; // 30°
-      const px = st.extend.pointer?.x ?? base.x + L;
-      const py = st.extend.pointer?.y ?? base.y;
-      // 1) Prefer connecting to a nearby existing atom if within tolerance
-      if (st.extend.pointer) {
-        const nearPtr = get().findAtomNear(px, py, TOL, base.id);
-        if (nearPtr != null) {
-          get().connectAtoms(base.id, nearPtr, 1);
-          set((prev: EditorState) => ({
-            ...prev,
-            extend: {
-              active: false,
-              atomId: null,
-              pointer: null,
-              mode: "snap",
-            },
-            suppressDblClickUntil:
-              (typeof performance !== "undefined"
-                ? performance.now()
-                : Date.now()) + 120,
-          }));
-          return;
-        }
-      }
-      // 2) Compute final position for snap/free modes
-      let nx: number, ny: number;
-      if (st.extend.mode === "free" && st.extend.pointer) {
-        // Place exactly at pointer position (no snap, variable length)
-        nx = st.extend.pointer.x;
-        ny = st.extend.pointer.y;
-      } else {
-        const ang = Math.atan2(py - base.y, px - base.x);
-        const snap = Math.round(ang / step) * step;
-        nx = base.x + L * Math.cos(snap);
-        ny = base.y + L * Math.sin(snap);
-      }
-      // 3) Check for nearby atoms again at final position
-      const nearId = get().findAtomNear(nx, ny, TOL, base.id);
-      if (nearId != null) {
-        get().connectAtoms(base.id, nearId, 1);
-      } else {
-        get().addAtomBonded(base.id, nx, ny, "C", 1);
+      const { stroke, pointer } = st.extend;
+      if (st.extend.active && stroke) {
+        const nodes = pointer
+          ? finishStroke(st.model, stroke, pointer, NOMINAL_BOND_LENGTH)
+          : stroke.nodes;
+        if (nodes.length) st.drawStroke(stroke.baseId, nodes, stroke.kind);
       }
       set((prev: EditorState) => ({
         ...prev,
-        extend: { active: false, atomId: null, pointer: null, mode: "snap" },
-        suppressDblClickUntil:
-          (typeof performance !== "undefined"
-            ? performance.now()
-            : Date.now()) + 120,
+        extend: ended,
+        suppressDblClickUntil: now() + 120,
       }));
     },
+
+    setMoveArmed: (atomId: number | null) =>
+      set((prev: EditorState) =>
+        prev.moveArmed === atomId ? prev : { ...prev, moveArmed: atomId },
+      ),
 
     cancelExtend: () =>
       set((prev: EditorState) => ({
         ...prev,
-        extend: { active: false, atomId: null, pointer: null, mode: "snap" },
-        suppressDblClickUntil:
-          (typeof performance !== "undefined"
-            ? performance.now()
-            : Date.now()) + 120,
+        extend: ended,
+        suppressDblClickUntil: now() + 120,
       })),
 
-    setExtendPreview: (x: number, y: number) =>
+    setExtendPreview: (
+      x: number,
+      y: number,
+      join?: { atomId?: number; pathIndex?: number },
+    ) =>
       set((prev: EditorState) => {
         if (!prev.extend.active) return prev;
         const cur = prev.extend.preview;
-        if (cur && Math.abs(cur.x - x) < 1e-4 && Math.abs(cur.y - y) < 1e-4) {
+        if (
+          cur &&
+          Math.abs(cur.x - x) < 1e-4 &&
+          Math.abs(cur.y - y) < 1e-4 &&
+          cur.atomId === join?.atomId &&
+          cur.pathIndex === join?.pathIndex
+        ) {
           return prev;
         }
-        return { ...prev, extend: { ...prev.extend, preview: { x, y } } };
+        return {
+          ...prev,
+          extend: { ...prev.extend, preview: { x, y, ...join } },
+        };
       }),
-
-    setExtendMode: (mode: "snap" | "free") =>
-      set((prev: EditorState) => ({
-        ...prev,
-        extend: prev.extend.active ? { ...prev.extend, mode } : prev.extend,
-      })),
 
     beginMoveDrag: (
       atomId: number,
