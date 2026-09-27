@@ -77,6 +77,7 @@ export function purposeName(purpose: string): string {
   if (purpose === "python-env:console")
     return "Setting up Python for the console";
   if (purpose === "python-env:node") return "Setting up Python for workflows";
+  if (purpose === "python-env:chem") return "Setting up RDKit for chemistry";
   if (purpose.startsWith("python-env:"))
     return `Setting up Python (${purpose.slice("python-env:".length)})`;
   return purpose;
