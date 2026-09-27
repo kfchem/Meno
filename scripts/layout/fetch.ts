@@ -42,6 +42,11 @@ export type Molecule = {
   noReference?: string;
   /** What to make of the reference, where it is not one to follow. */
   referenceNote?: string;
+  /**
+   * The tautomer the reference draws, where PubChem records another (as it
+   * does porphine's): used in place of PubChem's SMILES.
+   */
+  tautomer?: string;
   cid?: number;
   smiles?: string;
   reference?: Reference | null;
@@ -126,6 +131,7 @@ const again = process.argv.includes("--again");
 for (const m of list.molecules) {
   try {
     if (again || !m.smiles) Object.assign(m, await fromPubChem(m.pubchem));
+    if (m.tautomer) m.smiles = m.tautomer;
     await pause(250); // PubChem asks for no more than five a second
     if (m.noReference) m.reference = null;
     else if (again || !m.reference) m.reference = await fromWikipedia(m.wikipedia, m.referenceFile);

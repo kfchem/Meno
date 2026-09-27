@@ -695,13 +695,14 @@
       "pubchem": "Porphine",
       "wikipedia": "Porphine",
       "cid": 66868,
-      "smiles": "C1=CC2=CC3=CC=C(N3)C=C4C=CC(=N4)C=C5C=CC(=N5)C=C1N2",
+      "smiles": "C1=CC2=CC3=CC=C(N3)C=C4C=CC(=N4)C=C5C=CC(N5)=CC1=N2",
       "reference": {
         "url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Porphyrin.svg",
         "page": "https://commons.wikimedia.org/wiki/File:Porphyrin.svg",
         "licence": "Public domain",
         "author": "Lukáš Mižoch"
-      }
+      },
+      "tautomer": "C1=CC2=CC3=CC=C(N3)C=C4C=CC(=N4)C=C5C=CC(N5)=CC1=N2"
     },
     {
       "name": "Oleic acid",
@@ -778,31 +779,31 @@
     {
       "name": "D-Fructose",
       "category": "sugar",
-      "pubchem": "D-Fructose",
+      "pubchem": "beta-D-fructofuranose",
       "wikipedia": "Fructose",
-      "cid": 2723872,
-      "smiles": "C1[C@H]([C@H]([C@@H](C(O1)(CO)O)O)O)O",
       "reference": {
         "url": "https://upload.wikimedia.org/wikipedia/commons/6/64/Skeletal_Structure_of_Cyclic_D-Fructose.svg",
         "page": "https://commons.wikimedia.org/wiki/File:Skeletal_Structure_of_Cyclic_D-Fructose.svg",
         "licence": "CC0",
         "author": "Darkness3560"
-      }
+      },
+      "cid": 439709,
+      "smiles": "C([C@@H]1[C@H]([C@@H]([C@](O1)(CO)O)O)O)O"
     },
     {
       "name": "D-Ribose",
       "category": "sugar",
-      "pubchem": "D-Ribose",
+      "pubchem": "beta-D-ribofuranose",
       "wikipedia": "Ribose",
-      "cid": 10975657,
-      "smiles": "C1[C@H]([C@H]([C@H](C(O1)O)O)O)O",
       "referenceFile": "Ribofuranose.svg",
       "reference": {
         "url": "https://upload.wikimedia.org/wikipedia/commons/b/b5/Ribofuranose.svg",
         "page": "https://commons.wikimedia.org/wiki/File:Ribofuranose.svg",
         "licence": "Public domain",
         "author": "Own work"
-      }
+      },
+      "cid": 447347,
+      "smiles": "C([C@@H]1[C@H]([C@H]([C@@H](O1)O)O)O)O"
     },
     {
       "name": "Sucrose",
