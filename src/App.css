@@ -1,6 +1,37 @@
 @import "tailwindcss";
 
+/*
+ * IBM Plex Sans, Meno's typeface, from Meno's own files - nothing is fetched
+ * - under the SIL Open Font License (assets/fonts/IBM-Plex-OFL.txt). Bold
+ * text is set in the semibold.
+ */
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("./assets/fonts/IBMPlexSans-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("./assets/fonts/IBMPlexSans-Medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 600 700;
+  font-display: block;
+  src: url("./assets/fonts/IBMPlexSans-SemiBold.woff2") format("woff2");
+}
+
 @theme {
+  /* The system font of the whole app; Japanese falls to the system's own. */
+  --font-sans: "IBM Plex Sans", "Hiragino Sans", "Yu Gothic UI", "Meiryo",
+    ui-sans-serif, system-ui, sans-serif;
+
   --color-accel-background: rgb(246, 250, 252);
   --color-accel-foreground: rgb(26, 31, 43);
   --color-accel-base: rgb(49, 118, 137);

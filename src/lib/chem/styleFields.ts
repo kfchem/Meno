@@ -76,9 +76,9 @@ export type StyleField = {
 /**
  * The typefaces a label can be set in: those whose letter shapes Meno knows,
  * so that a bond stops the same distance from every letter. Helvetica shares
- * Arial's widths.
+ * Arial's widths; IBM Plex Sans comes with Meno.
  */
-export const LABEL_TYPEFACES = ["Arial", "Helvetica"] as const;
+export const LABEL_TYPEFACES = ["IBM Plex Sans", "Arial", "Helvetica"] as const;
 
 const length = (min: number, max: number, step = 0.05): FieldKind => ({
   type: "length",

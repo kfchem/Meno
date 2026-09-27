@@ -1,0 +1,16 @@
+{
+  "//": "The metrics tool writes modules the app imports, so it is typechecked with them.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts", "../../src/lib/chem/labelFonts.ts", "../../src/lib/chem/fonts/**/*.ts", "../../src/lib/chem/arial.ts"]
+}

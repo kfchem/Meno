@@ -100,11 +100,14 @@ Both go together, because both touch every layer.
   canvas. The application's style is kept in `settings.json` in the app's
   data folder; a document's stays with its tab, as MOL and SD files hold the
   structure only. (PR #46) Per-atom and per-bond overrides are to come.
-- **Defaults.** ACS 1996, exactly, as the preset the default starts from.
-  The values used today are not quite it (line width is 5% of the bond
-  length where ACS gives 0.6 pt of 14.4 pt, about 4.2%; double-bond spacing
-  20% where ACS gives 18%), so switching to the style moves the picture
-  slightly - on purpose.
+- **Defaults.** ACS 1996, exactly, as a preset. The default is Meno's own
+  style built on it: ACS 1996's proportions with round ends and joins and
+  labels in IBM Plex Sans, which is also the app's own typeface - its
+  capital I has serifs and its l a tail, so Cl never reads as CI. (PR #47)
+- **Typefaces.** A label is placed and cleared by its typeface's own letter
+  shapes, generated from the font file by `scripts/fonts/labelMetrics.ts`;
+  Meno has them for IBM Plex Sans (bundled) and Arial (the system's), with
+  Helvetica set by Arial's.
 
 **One way of drawing:**
 
