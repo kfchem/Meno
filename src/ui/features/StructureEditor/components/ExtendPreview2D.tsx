@@ -3,7 +3,8 @@ import { useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { COLORS, ALPHA } from "../../../theme/colors";
-import { ACS_RATIOS, NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { useDrawnLayout } from "./drawnLayoutContext";
 
 // Preview for drawing a new bond out of an atom.
 // - Works out where the new atom goes, springing to the snapped angle, and
@@ -15,6 +16,8 @@ export default function ExtendPreview2D() {
   const { model, extend } = useEditor();
   const setExtendPreview = useEditor((s) => s.setExtendPreview);
   const { camera, invalidate } = useThree();
+  // The drawing's own line, in world units.
+  const lineWidthWorld = useDrawnLayout().opts.lineWidthPx;
   const thin = useRef<THREE.Mesh>(null!);
   const q = useMemo(() => new THREE.Quaternion(), []);
   // Animated orientation (angle-only) with spring-bounce; length stays constant (L)
@@ -58,11 +61,7 @@ export default function ExtendPreview2D() {
     const snapAng = Math.round(ang / step) * step;
     const zoom = (camera as any)?.zoom || 1;
     // Match Bonds2D thickness exactly: max(lineWidthWorld, minPx/zoom)
-    const lineWidthWorld = L * ACS_RATIOS.lineWidth;
-    const thickWorld = Math.max(
-      lineWidthWorld,
-      (ACS_RATIOS.minLinePx || 1) / Math.max(zoom, 1e-6)
-    );
+    const thickWorld = Math.max(lineWidthWorld, 1 / Math.max(zoom, 1e-6));
 
     // thin line (base to pointer) — rectangular, not rounded
     // place behind bonds (bonds at z=0)

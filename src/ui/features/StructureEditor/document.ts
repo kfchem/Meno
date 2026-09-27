@@ -7,6 +7,7 @@
  * edit buffer, fit requests. Those belong to the view (see store/).
  */
 import { createDocument, type DocumentStore } from "../../../lib/doc";
+import type { StyleChoice } from "../../../lib/chem/style";
 import type { Arrow, Atom, Bond, Model } from "./store/types";
 
 export type StructureDocument = {
@@ -19,6 +20,11 @@ export type StructureDocument = {
   /** Ids are handed out from one counter shared by atoms and bonds. */
   nextId: number;
   nextArrowId: number;
+  /**
+   * The document's own drawing style; unset, it is drawn in the
+   * application's. Saving to a MOL or SD file keeps the structure only.
+   */
+  style?: StyleChoice;
 };
 
 export function emptyStructureDocument(): StructureDocument {
@@ -311,6 +317,19 @@ export function setAromaticEnabled(
   return doc.aromaticEnabled === enabled
     ? doc
     : { ...doc, aromaticEnabled: enabled };
+}
+
+/** Gives the document its own drawing style, or (undefined) the application's. */
+export function setDocumentStyle(
+  doc: StructureDocument,
+  style: StyleChoice | undefined,
+): StructureDocument {
+  if (doc.style === style) return doc;
+  if (style === undefined) {
+    const { style: _dropped, ...rest } = doc;
+    return rest;
+  }
+  return { ...doc, style };
 }
 
 export function setRingEnabled(

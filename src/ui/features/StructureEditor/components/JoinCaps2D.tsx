@@ -6,14 +6,15 @@ import { useDrawnLayout } from "./drawnLayoutContext";
  * go with it.
  */
 export default function JoinCaps2D() {
-  const { layout } = useDrawnLayout();
+  const { layout, opts } = useDrawnLayout();
   return (
     <group>
       {layout.fills.map((c, i) => (
         <mesh key={`cap-${i}`} position={[c.c.x, c.c.y, 0]} renderOrder={9}>
           <circleGeometry args={[c.r, 24]} />
           <meshBasicMaterial
-            color="black"
+            color={opts.bondColor ?? "black"}
+            toneMapped={false}
             transparent
             opacity={1}
             depthTest={false}

@@ -15,6 +15,7 @@ import type { DocumentStore } from "./lib/doc";
 import { undoIntent } from "./lib/doc/shortcuts";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
+import { loadAppSettings } from "./lib/settings/appSettings";
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
@@ -40,6 +41,11 @@ export default function App() {
     const doc = entry.createDocument(tab.content.data);
     documentsRef.current.set(tab.meta.id, { kind: tab.content.kind, doc });
     return doc;
+  }, []);
+
+  // The application's settings - the drawing style among them - read once.
+  useEffect(() => {
+    void loadAppSettings();
   }, []);
 
   // Undo/redo belong to the active tab, not to the app as a whole.
@@ -114,6 +120,16 @@ export default function App() {
       dispatch({ type: "ADD_TAB", tab: t });
     },
     openByKind: async (kind: TabKind, opts?: { label?: string }) => {
+      // There is one Settings tab: asking again brings it to the front.
+      if (kind === "settings") {
+        const open = state.tabOrder.find(
+          (id) => state.tabsById[id]?.content.kind === "settings"
+        );
+        if (open) {
+          dispatch({ type: "SELECT_TAB", id: open });
+          return;
+        }
+      }
       if (!canOpenKind(state, kind)) {
         setNotice(TOO_MANY_CANVASES);
         return;

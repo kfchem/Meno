@@ -102,3 +102,25 @@ describe("createSVG", () => {
     });
   });
 });
+
+describe("the drawing's bounds", () => {
+  it("take in what the bonds draw past their atoms, so an export does not clip it", () => {
+    // a lone triple bond: its outer lines lie a spacing either side of the atoms
+    const a: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: 1.8, y: 0, el: "C" },
+    ];
+    const triple: Bond[] = [{ a1: 0, a2: 1, order: 3 }];
+    const o = acsWorldOptions(a, triple, { units: "world", paddingPx: 0 });
+    const layout = layoutMolecule(a, triple, o, 60);
+    const outer = Math.max(...layout.lines.map((l) => Math.abs(l.y1)));
+    expect(outer).toBeGreaterThan(0.3);
+    const reach = outer + o.lineWidthPx / 2;
+    expect(layout.bounds.max.y).toBeCloseTo(reach, 9);
+    expect(layout.bounds.min.y).toBeCloseTo(-reach, 9);
+    // and a wedge's broad end
+    const wedge: Bond[] = [{ a1: 0, a2: 1, order: 1, stereo: "up" }];
+    const w = layoutMolecule(a, wedge, o, 60);
+    expect(w.bounds.max.y).toBeGreaterThanOrEqual(o.wedgeWidthPx / 2 - 1e-9);
+  });
+});
