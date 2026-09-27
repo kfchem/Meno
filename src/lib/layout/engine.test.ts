@@ -123,6 +123,40 @@ describe("layout2D", () => {
     expect(m.macroAspect).toBeLessThan(1);
   });
 
+  it("sets a macrocycle that runs through rings round a circle, the rings regular", () => {
+    // three benzene rings joined para to para by CH2CH2 bridges: a ring of rings
+    const bonds: [number, number, number?][] = [];
+    for (let k = 0; k < 3; k++) {
+      const b = k * 8;
+      for (const [i, j] of ring(b, 6)) bonds.push([i, j, (i - b) % 2 ? 2 : 1]);
+      // para positions b+0 and b+3; the bridge b+6, b+7 to the next ring's b+0
+      bonds.push([b + 3, b + 6], [b + 6, b + 7], [b + 7, ((k + 1) % 3) * 8]);
+    }
+    const cyclophane = carbons(24, bonds);
+    for (const l of bondLengths(cyclophane)) expect(l).toBeCloseTo(1, 3);
+    const m = measure(cyclophane);
+    expect(m.ringError).toBeCloseTo(0, 3);
+    expect(m.overlaps + m.crossings).toBe(0);
+  });
+
+  it("draws a cage in perspective, every atom in view", () => {
+    // adamantane: four bridgeheads (0-3), six CH2 between them
+    const cage = carbons(10, [
+      [0, 4], [4, 1], [1, 5], [5, 2], [2, 6], [6, 0],
+      [0, 7], [7, 3], [1, 8], [8, 3], [2, 9], [9, 3],
+    ]);
+    const { x, y } = layout2D(cage);
+    for (let i = 0; i < 10; i++) {
+      for (let j = i + 1; j < 10; j++) {
+        expect(Math.hypot(x[i] - x[j], y[i] - y[j])).toBeGreaterThan(0.3);
+      }
+    }
+    for (const l of bondLengths(cage)) {
+      expect(l).toBeGreaterThan(0.5);
+      expect(l).toBeLessThan(1.6);
+    }
+  });
+
   it("sets the pieces of a salt side by side", () => {
     const input: LayoutInput = {
       atoms: [{ el: "Na", charge: 1 }, { el: "C" }, { el: "C" }, { el: "O" }, { el: "O", charge: -1 }],

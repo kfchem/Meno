@@ -23,6 +23,7 @@ import { dist, segmentsCross } from "./geometry";
 import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { placeRingSystem } from "./ringSystem";
+import { flatCost, projectCage } from "./cage";
 import type { Point } from "./geometry";
 
 export type { LayoutInput } from "./perceive";
@@ -32,7 +33,7 @@ export type Layout2D = { x: number[]; y: number[] };
 export function layout2D(input: LayoutInput): Layout2D {
   const mol = perceive(input);
   const local = new Map<number, Map<number, Point>>();
-  mol.systems.forEach((s, i) => local.set(i, placeRingSystem(mol, s)));
+  mol.systems.forEach((_, i) => local.set(i, layoutSystem(mol, i)));
   const sides = sidesOf(mol);
   const flips = flippable(mol, sides);
 
@@ -58,6 +59,7 @@ export function layout2D(input: LayoutInput): Layout2D {
       if (improved.score < best.score - 1e-9) best = improved;
     }
     best = untangle(mol, piece, best.pos, best.score, score);
+    squareUp(mol, piece, best.pos);
     const xs = piece.map((a) => best.pos.get(a)!.x);
     const ys = piece.map((a) => best.pos.get(a)!.y);
     const shift = (right ? right + 1.5 : 0) - Math.min(...xs);
@@ -69,6 +71,26 @@ export function layout2D(input: LayoutInput): Layout2D {
     right = Math.max(...piece.map((a) => x[a]));
   }
   return { x, y };
+}
+
+/**
+ * A ring system in its own frame: flat, by its rings; or, where it will not
+ * lie flat - a bridge crowding or crossing the ring it spans, the faces of
+ * cubane - as the cage it is, in perspective: whichever reads better.
+ */
+function layoutSystem(mol: Molecule, i: number): Map<number, Point> {
+  const sys = mol.systems[i];
+  const flat = placeRingSystem(mol, sys);
+  const rings = sys.rings.map((r) => mol.rings[r]);
+  const bridged = rings.some((r, j) =>
+    rings.some((q, k) => k > j && q.filter((a) => r.includes(a)).length >= 3 && q.length < 9 && r.length < 9),
+  );
+  if ((!bridged && rings.length < 3) || sys.atoms.length > 20) return flat;
+  if (rings.some((r) => r.length >= 9)) return flat;
+  const flatScore = flatCost(mol, sys, flat);
+  if (flatScore < 2) return flat;
+  const cage = projectCage(mol, sys);
+  return cage.cost < flatScore ? cage.pos : flat;
 }
 
 /** Tries each single bond the other way round, keeping what scores better, until nothing does. */
@@ -97,6 +119,54 @@ function improve(
     if (!better) break;
   }
   return { pos, score: current };
+}
+
+/**
+ * A piece with no ring that can lie square - its rings all five-membered,
+ * say, or none - has nothing setting it on the lattice but its other bonds:
+ * turn it the little way that brings them nearest.
+ */
+function squareUp(mol: Molecule, piece: number[], pos: Grown): void {
+  const here = new Set(piece);
+  const square = mol.rings.some(
+    (r) =>
+      here.has(r[0]) &&
+      (r.length === 4 || r.length === 6) &&
+      mol.rings.every((q) => q === r || q.filter((a) => r.includes(a)).length <= 2),
+  );
+  if (square) return;
+  const dirs: number[] = [];
+  for (const [k] of mol.bondIndex) {
+    const [a, b] = k.split(",").map(Number);
+    if (!here.has(a) || mol.ringBonds.has(k)) continue;
+    const p = pos.get(a)!;
+    const q = pos.get(b)!;
+    dirs.push(Math.atan2(q.y - p.y, q.x - p.x));
+  }
+  if (!dirs.length) return;
+  const step = Math.PI / 6;
+  const off = (turn: number) =>
+    dirs.reduce((sum, t) => {
+      const u = t - turn;
+      return sum + Math.abs(u - step * Math.round(u / step));
+    }, 0);
+  let turn = 0;
+  let least = off(0);
+  for (let i = -150; i < 150; i++) {
+    const t = (i / 10) * (Math.PI / 180);
+    const e = off(t);
+    if (e < least - 1e-9) {
+      least = e;
+      turn = t;
+    }
+  }
+  if (!turn) return;
+  const c = Math.cos(-turn);
+  const sn = Math.sin(-turn);
+  for (const a of piece) {
+    const p = pos.get(a)!;
+    pos.set(a, { x: p.x * c - p.y * sn, y: p.x * sn + p.y * c });
+  }
 }
 
 /** Atoms in the way of each other: on top of one another, on a bond, or at the ends of crossing bonds. */

@@ -66,7 +66,13 @@ export function placeRingSystem(mol: Molecule, sys: RingSystem): Map<number, Poi
     return q.length - p.length;
   })[0];
 
-  if (first.length >= MACROCYCLE) {
+  const threaded =
+    first.length >= MACROCYCLE &&
+    rings.some((r) => r !== first && r.filter((a) => first.includes(a)).length >= 3);
+  if (threaded) {
+    // rings the macrocycle runs through, not beside
+    ringOfBlocks(mol, first, rings, pos).forEach((i) => placedRing.add(i));
+  } else if (first.length >= MACROCYCLE) {
     const shape = macrocycleShape(first.length);
     const at = macrocycleFit(mol, first, shape, rings);
     first.forEach((a, i) => pos.set(a, shape[at(i)]));
@@ -101,6 +107,119 @@ export function placeRingSystem(mol: Molecule, sys: RingSystem): Map<number, Poi
     placedRing.add(next);
   }
   return pos;
+}
+
+/**
+ * A macrocycle that runs through other rings, not along their sides - the
+ * pyrroles of a porphyrin, the glucoses of a cyclodextrin, the aromatic
+ * rings of vancomycin: a ring of rings. Each group of those rings is laid
+ * out on its own, and stands in the macrocycle as one straight side from
+ * where the macrocycle enters it to where it leaves; the macrocycle, so
+ * shortened, is set round a circle, and each group hung on its side with
+ * the rest of it outside. Returns the rings it placed, by index.
+ */
+function ringOfBlocks(
+  mol: Molecule,
+  macro: number[],
+  rings: number[][],
+  pos: Map<number, Point>,
+): number[] {
+  const n = macro.length;
+  const others = rings.map((_, i) => i).filter((i) => rings[i] !== macro);
+  // groups: rings fused to each other
+  const group = new Map<number, number>();
+  others.forEach((i) => group.set(i, i));
+  const find = (i: number): number => (group.get(i) === i ? i : find(group.get(i)!));
+  for (const i of others) {
+    for (const j of others) {
+      if (i < j && rings[i].filter((a) => rings[j].includes(a)).length >= 2) group.set(find(j), find(i));
+    }
+  }
+  const blocks = new Map<number, number[]>();
+  for (const i of others) blocks.set(find(i), [...(blocks.get(find(i)) ?? []), i]);
+  const inMacro = new Set(macro);
+  type Block = { rings: number[]; path: number[]; local: Map<number, Point> };
+  const threads: Block[] = [];
+  for (const members of blocks.values()) {
+    const atoms = new Set(members.flatMap((i) => rings[i]));
+    const shared = macro.map((a, i) => (atoms.has(a) ? i : -1)).filter((i) => i >= 0);
+    if (shared.length < 3) continue;
+    // the run of the macrocycle through the block, in the macrocycle's order
+    const start = shared.find((i) => !atoms.has(macro[(i - 1 + n) % n]));
+    if (start == null) continue;
+    const path: number[] = [];
+    for (let k = 0; k < n && atoms.has(macro[(start + k) % n]); k++) path.push(macro[(start + k) % n]);
+    if (path.length !== shared.length) continue;
+    const sub = { atoms: [...atoms], rings: members.map((i) => mol.rings.indexOf(rings[i])) };
+    threads.push({ rings: members, path, local: placeRingSystem(mol, sub) });
+  }
+  // the macrocycle's sides: a bond, or a block from its first atom to its last
+  const blockAt = new Map<number, Block>();
+  for (const b of threads) blockAt.set(b.path[0], b);
+  const corners: number[] = [];
+  const sides: number[] = [];
+  const firstCorner = macro.findIndex((a, i) => {
+    const prev = macro[(i - 1 + n) % n];
+    return !threads.some((b) => b.path.includes(a) && b.path.includes(prev) && a !== b.path[0]);
+  });
+  for (let k = 0; k < n; ) {
+    const a = macro[(firstCorner + k) % n];
+    corners.push(a);
+    const b = blockAt.get(a);
+    if (b) {
+      sides.push(dist(b.local.get(b.path[0])!, b.local.get(b.path[b.path.length - 1])!));
+      k += b.path.length - 1;
+    } else {
+      sides.push(1);
+      k += 1;
+    }
+  }
+  // round a circle: the radius at which the sides' angles close the ring
+  const turns = (r: number) => sides.reduce((sum, l) => sum + 2 * Math.asin(Math.min(1, l / (2 * r))), 0);
+  let lo = Math.max(...sides) / 2;
+  let hi = sides.reduce((sum, l) => sum + l, 0);
+  for (let it = 0; it < 60; it++) {
+    const mid = (lo + hi) / 2;
+    if (turns(mid) > 2 * Math.PI) lo = mid;
+    else hi = mid;
+  }
+  const r = (lo + hi) / 2;
+  let t = Math.PI / 2;
+  corners.forEach((a, i) => {
+    pos.set(a, scale(dir(t), r));
+    t -= 2 * Math.asin(Math.min(1, sides[i] / (2 * r)));
+  });
+  // each block on its side, the rest of it outside the circle
+  for (const b of threads) {
+    const p0 = pos.get(b.path[0])!;
+    const p1 = pos.get(b.path[b.path.length - 1])!;
+    const l0 = b.local.get(b.path[0])!;
+    const l1 = b.local.get(b.path[b.path.length - 1])!;
+    const rest = [...b.local.keys()].filter((a) => !b.path.includes(a));
+    let best: Map<number, Point> | null = null;
+    let bestOut = -Infinity;
+    for (const flipped of [false, true]) {
+      const src = (p: Point) => (flipped ? { x: p.x, y: -p.y } : p);
+      const a0 = src(l0);
+      const a1 = src(l1);
+      const turn = angleOf(sub(p1, p0)) - angleOf(sub(a1, a0));
+      const place = (p: Point) => {
+        const q = sub(src(p), a0);
+        const c = Math.cos(turn);
+        const sn = Math.sin(turn);
+        return add(p0, { x: q.x * c - q.y * sn, y: q.x * sn + q.y * c });
+      };
+      const placed = new Map<number, Point>();
+      for (const [a, p] of b.local) placed.set(a, place(p));
+      const out = rest.length ? rest.reduce((sum, a) => sum + len(placed.get(a)!), 0) / rest.length : 0;
+      if (out > bestOut) {
+        bestOut = out;
+        best = placed;
+      }
+    }
+    for (const [a, p] of best!) if (!inMacro.has(a) || !pos.has(a)) pos.set(a, p);
+  }
+  return [rings.indexOf(macro), ...threads.flatMap((b) => b.rings)];
 }
 
 /**
