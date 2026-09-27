@@ -82,6 +82,7 @@ public static class MacGui {
   const uint OnScreenOnly = 1, ExcludeDesktop = 16;
   const uint HidTap = 0;                      // kCGHIDEventTap
   const uint EvMoved = 5, EvLeftDown = 1, EvLeftUp = 2, EvLeftDragged = 6;   // CGEventType
+  const uint EvRightDown = 3, EvRightUp = 4, RightButton = 1;
   const uint ClickState = 1;                  // kCGMouseEventClickState
   const uint PixelUnits = 0;                  // kCGScrollEventUnitPixel
 
@@ -259,8 +260,8 @@ public static class MacGui {
     try { CGEventPost(HidTap, e); } finally { CFRelease(e); }
   }
 
-  static IntPtr Mouse(uint type, double x, double y, long clicks) {
-    IntPtr e = CGEventCreateMouseEvent(IntPtr.Zero, type, new CGPoint { X = x, Y = y }, 0);
+  static IntPtr Mouse(uint type, double x, double y, long clicks, uint button = 0) {
+    IntPtr e = CGEventCreateMouseEvent(IntPtr.Zero, type, new CGPoint { X = x, Y = y }, button);
     if (clicks > 0 && e != IntPtr.Zero) CGEventSetIntegerValueField(e, ClickState, clicks);
     return e;
   }
@@ -273,6 +274,8 @@ public static class MacGui {
   // two single clicks as far as the page is concerned.
   public static void LeftDown(double x, double y, int click) { Post(Mouse(EvLeftDown, x, y, click)); }
   public static void LeftUp(double x, double y, int click) { Post(Mouse(EvLeftUp, x, y, click)); }
+  public static void RightDown(double x, double y) { Post(Mouse(EvRightDown, x, y, 1, RightButton)); }
+  public static void RightUp(double x, double y) { Post(Mouse(EvRightUp, x, y, 1, RightButton)); }
 
   public static void Scroll(double x, double y, int pixels) {
     IntPtr e = CGEventCreateScrollWheelEvent2(IntPtr.Zero, PixelUnits, 1, pixels, 0, 0);
@@ -535,11 +538,18 @@ function Save-MenoShot {
 }
 
 function Invoke-MenoClick {
-    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1)
+    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1, [switch] $Right)
     $p = ConvertTo-Screen $X $Y
     Assert-MenoFront
     [MacGui]::MoveTo($p.X, $p.Y)
     Start-Sleep -Milliseconds 30
+    if ($Right) {
+        [MacGui]::RightDown($p.X, $p.Y)
+        Start-Sleep -Milliseconds 30
+        [MacGui]::RightUp($p.X, $p.Y)
+        Start-Sleep -Milliseconds 120
+        return
+    }
     for ($i = 1; $i -le $Count; $i++) {
         [MacGui]::LeftDown($p.X, $p.Y, $i)
         Start-Sleep -Milliseconds 30

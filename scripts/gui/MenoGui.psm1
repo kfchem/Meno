@@ -63,6 +63,7 @@ public static class NativeGui {
 
   const uint INPUT_MOUSE = 0, INPUT_KEYBOARD = 1;
   const uint MOUSEEVENTF_MOVE = 0x0001, MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004;
+  const uint MOUSEEVENTF_RIGHTDOWN = 0x0008, MOUSEEVENTF_RIGHTUP = 0x0010;
   const uint MOUSEEVENTF_ABSOLUTE = 0x8000, MOUSEEVENTF_VIRTUALDESK = 0x4000, MOUSEEVENTF_WHEEL = 0x0800;
   const uint KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_UNICODE = 0x0004;
 
@@ -91,6 +92,8 @@ public static class NativeGui {
   public static void MoveTo(int x, int y) { Send(new[] { Mouse(MOUSEEVENTF_MOVE, x, y, 0) }); }
   public static void LeftDown(int x, int y) { Send(new[] { Mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_LEFTDOWN, x, y, 0) }); }
   public static void LeftUp(int x, int y) { Send(new[] { Mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_LEFTUP, x, y, 0) }); }
+  public static void RightDown(int x, int y) { Send(new[] { Mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_RIGHTDOWN, x, y, 0) }); }
+  public static void RightUp(int x, int y) { Send(new[] { Mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_RIGHTUP, x, y, 0) }); }
   public static void Wheel(int x, int y, int notches) { Send(new[] { Mouse(MOUSEEVENTF_WHEEL, x, y, (uint)(notches * 120)) }); }
 
   // Text goes in as Unicode scan codes, so it does not depend on the
@@ -278,8 +281,15 @@ function Save-MenoShot {
 }
 
 function Invoke-MenoClick {
-    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1)
+    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1, [switch] $Right)
     $p = ConvertTo-Screen $X $Y
+    if ($Right) {
+        [NativeGui]::RightDown($p.X, $p.Y)
+        Start-Sleep -Milliseconds 30
+        [NativeGui]::RightUp($p.X, $p.Y)
+        Start-Sleep -Milliseconds 120
+        return
+    }
     for ($i = 0; $i -lt $Count; $i++) {
         [NativeGui]::LeftDown($p.X, $p.Y)
         Start-Sleep -Milliseconds 30
