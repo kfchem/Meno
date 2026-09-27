@@ -65,3 +65,32 @@ export function editorLayoutOptions(
     ...over,
   });
 }
+
+/**
+ * How much bigger than it prints a bond is on a canvas that opens empty,
+ * and the most a fit makes of one.
+ */
+export const START_SCALE = 2.5;
+export const MAX_FIT_SCALE = 3 * START_SCALE;
+
+/** A bond's length in `style` as it prints, in CSS pixels (96 to the inch). */
+function printedBondPx(style: DrawingStyle): number {
+  return style.bondLengthPt * (96 / 72);
+}
+
+/**
+ * The zoom a canvas opens at, before there is anything to fit: a bond drawn
+ * there comes out two and a half times as long as it prints - big enough to
+ * work on, and in proportion to the style it is drawn in.
+ */
+export function startingZoom(style: DrawingStyle): number {
+  return (printedBondPx(style) * START_SCALE) / NOMINAL_BOND_LENGTH;
+}
+
+/**
+ * The most a fit zooms in: a single bond fitted to the window would
+ * otherwise fill it.
+ */
+export function maxFitZoom(style: DrawingStyle): number {
+  return (printedBondPx(style) * MAX_FIT_SCALE) / NOMINAL_BOND_LENGTH;
+}

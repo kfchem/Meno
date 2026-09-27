@@ -46,6 +46,8 @@ import { cleanUp } from "./chem/cleanUp";
 import { useChemMarks } from "./chem/useChemMarks";
 import { useFileActions } from "./fileActions";
 import { CANVAS_DPR } from "./constants";
+import { startingZoom } from "./layoutOptions";
+import { useDrawingStyle } from "./useDrawingStyle";
 import { DrawnLayoutProvider } from "./components/DrawnLayout";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
@@ -220,6 +222,9 @@ function StructureCanvasContent({
       ? files.dismissError
       : () => setChemError(null);
   const ownStyle = useEditor((s) => s.docStyle != null);
+  // Where the view starts, before there is anything to fit
+  const style = useDrawingStyle();
+  const [startZoom] = useState(() => startingZoom(style));
   // SMILES in and out, by RDKit, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
 
@@ -406,7 +411,7 @@ function StructureCanvasContent({
       <Canvas
         key={tabId}
         orthographic
-        camera={{ position: [0, 0, 10], zoom: 4 }}
+        camera={{ position: [0, 0, 10], zoom: startZoom }}
         // Render on demand: interactions, store changes and the animation
         // layers request frames (see PanZoom2D and the preview components)
         // instead of redrawing continuously while nothing changes.
