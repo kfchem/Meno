@@ -324,7 +324,10 @@ function rejoin(
       ]) {
         const side = sideAtoms(mol, from, to);
         if (side.length < 4 || side.length > piece.length / 2) continue;
-        if (!side.some((v) => mol.systemOf[v] >= 0)) continue;
+        // a part with rings of its own; or a long chain hung from a branch
+        // (a lipid's acyl chain on its glycerol), drawn straight on its own
+        const chain = side.length >= 8 && mol.neighbours[from].length >= 3;
+        if (!chain && !side.some((v) => mol.systemOf[v] >= 0)) continue;
         const beyond = side.filter((v) => v !== to);
         // a little either way about either end of the join; and the part
         // turned right round about its own atom there, in steps of the

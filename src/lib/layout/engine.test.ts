@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FRAMES, grow, sidesOf } from "./assemble";
 import { layout2D } from "./engine";
 import { macrocycleShape } from "./macrocycle";
 import { layoutMetrics } from "./metrics";
@@ -67,6 +68,21 @@ describe("layout2D", () => {
       const side = (i: number) =>
         Math.sign((x[2] - x[1]) * (y[i] - y[1]) - (y[2] - y[1]) * (x[i] - x[1]));
       expect(side(0) === side(3)).toBe(cis);
+    }
+  });
+
+  it("draws a cis double bond in a long chain as a step in a straight chain", () => {
+    // octadec-9-ene, cis: the chain either side of C9=C10 on one line
+    const bonds: [number, number, number?][] = Array.from({ length: 17 }, (_, i) => [i, i + 1, i === 8 ? 2 : 1]);
+    const chain = carbons(18, bonds, bonds.map((_, i) => (i === 8 ? { stereo: { refs: [7, 10], cis: true } } : {})));
+    // as it is grown, in every frame - before anything is tried the other way
+    const mol = perceive(chain);
+    for (const frame of FRAMES) {
+      const pos = grow(mol, mol.pieces[0], new Map(), frame, sidesOf(mol));
+      const axis = (from: number, to: number) =>
+        Math.atan2(pos.get(to)!.y - pos.get(from)!.y, pos.get(to)!.x - pos.get(from)!.x);
+      const turn = Math.abs(Math.atan2(Math.sin(axis(0, 8) - axis(10, 17)), Math.cos(axis(0, 8) - axis(10, 17))));
+      expect(Math.min(turn, Math.PI - turn)).toBeLessThan((10 * Math.PI) / 180);
     }
   });
 

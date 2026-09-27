@@ -95,8 +95,9 @@ they hang from.
   hangs from the cage hangs from its front where it can.
 - **Chains**: zigzag, each turn the other way from the last. A trans double
   bond carries the zigzag on; a cis one is a step in it - the chain read as
-  the straight chain it would be without it, carrying on the same way (a
-  fatty acid, a lipid's acyl chains). A triple bond, or two double bonds on
+  the straight chain it would be without it, taking up again, two bonds
+  past it, the line it ran along before (a fatty acid, a lipid's acyl
+  chains, lying level and side by side). A triple bond, or two double bonds on
   one atom, runs straight.
 - **At an atom in no ring**: its bonds evenly spread - three at 120 degrees,
   four at 90.
@@ -107,7 +108,8 @@ they hang from.
 - **Parts joined**: where two parts each with rings of their own meet at a
   single bond - a sugar on its glycosidic oxygen, taxol's side chain on
   its ester - each is drawn well on its own and then joined, the angle at
-  the join giving way to them.
+  the join giving way to them. So too a long chain hung from a branch (a
+  lipid's acyl chains on its glycerol): drawn straight, then joined.
 
 ## 3. Square to the page
 

@@ -322,6 +322,17 @@ function assign(
     };
     carryOn = level(both[0]) <= level(both[1]) + 1e-9 ? both[0] : both[1];
   }
+  // Two bonds past a cis double bond the chain takes up again the line it
+  // ran along before it: the double bond a step in a straight chain, as a
+  // fatty acid's is drawn - not a bend it runs off along.
+  const resumed = resume(mol, pos, a, parent, grand);
+  if (resumed) {
+    const along = (t: number) => {
+      const axis = add(dir(angleOf(bond)), dir(t));
+      return Math.cos(angleOf(axis) - angleOf(resumed));
+    };
+    carryOn = along(both[0]) >= along(both[1]) ? both[0] : both[1];
+  }
   const other = both.find((s) => s !== carryOn)!;
   if (k === 1) return [[children[0], carryOn]];
   // At an alpha carbon the backbone carries on, N to C(=O) or back, and the
@@ -354,6 +365,28 @@ function backbone(mol: Molecule, a: number, parent: number, children: number[]):
   if (mol.el[parent] === "N") return children.find((c) => isCarbonyl(mol, c)) ?? null;
   if (isCarbonyl(mol, parent)) return children.find((c) => mol.el[c] === "N") ?? null;
   return null;
+}
+
+/**
+ * The line a chain ran along before a cis double bond two bonds back from
+ * `a` - parent, then the double bond's near end (`grand`), then its far
+ * end - as the chain's own zigzag had it there; null where there is none.
+ */
+function resume(mol: Molecule, pos: Grown, a: number, parent: number, grand: number[]): Point | null {
+  if (grand.length !== 1 || mol.systemOf[a] >= 0 || mol.systemOf[parent] >= 0) return null;
+  const g = grand[0];
+  const placedBeside = (u: number, not: number) =>
+    mol.neighbours[u].filter((v) => v !== not && pos.has(v) && mol.systemOf[v] < 0);
+  const [far] = placedBeside(g, parent);
+  if (far == null) return null;
+  const bi = mol.bondIndex.get(key(g, far));
+  const b = bi != null ? mol.bonds[bi] : null;
+  if (!b || b.order !== 2 || !b.stereo?.cis) return null;
+  const [before] = placedBeside(far, g);
+  if (before == null) return null;
+  const [twoBefore] = placedBeside(before, far);
+  if (twoBefore == null) return null;
+  return sub(pos.get(far)!, pos.get(twoBefore)!);
 }
 
 /**
