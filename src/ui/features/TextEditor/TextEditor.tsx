@@ -24,6 +24,10 @@ export default function TextEditor({ value, onChange }: Props) {
         className="flex-1 h-full px-5 outline-none resize-none overflow-auto"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        // Text as typed: no curly quotes, corrections or capitals from the
+        // system.
+        autoCorrect="off"
+        autoCapitalize="off"
         onScroll={(e) => {
           if (gutterRef.current) {
             gutterRef.current.scrollTop = (

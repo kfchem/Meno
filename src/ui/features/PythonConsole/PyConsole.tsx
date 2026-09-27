@@ -190,6 +190,12 @@ export default function PyConsole() {
         <textarea
           value={code}
           onChange={(e) => setCode(e.target.value)}
+          // Code, typed as it is: no curly quotes, corrections or capitals
+          // from the system (a Mac turns " into “ otherwise).
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          autoComplete="off"
           className="flex-1 border rounded-md border-gh-line p-3 font-mono text-sm"
           placeholder='print("Hello World")'
         />
