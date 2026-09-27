@@ -207,6 +207,12 @@ export function useStructureEvents(
 
   const handleWrapperMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const st = store.getState();
+    // Over a button or a card, nothing on the drawing is under the pointer,
+    // whatever is drawn beneath it: a key pressed there must not reach it.
+    if (e.target !== domRef.current) {
+      st.clearAtomHover();
+      return;
+    }
     const p = clientToWorld(e.clientX, e.clientY);
     if (!p) return;
     const tol = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
@@ -218,6 +224,7 @@ export function useStructureEvents(
   const handleWrapperMouseLeave = () => {
     try {
       store.getState().clearAtomHover();
+      store.getState().clearBondHover();
     } catch {}
   };
 

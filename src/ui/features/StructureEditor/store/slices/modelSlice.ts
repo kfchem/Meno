@@ -9,6 +9,25 @@ type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
 
 /**
+ * After a deletion, nothing is under the pointer until it moves again, and
+ * the selection holds only what is still there. The view stays where it is.
+ */
+function forgetDeleted(set: SetState) {
+  set((prev: EditorState) => {
+    const atoms = new Set(prev.model.atoms.map((a) => a.id));
+    const bonds = new Set(prev.model.bonds.map((b) => b.id));
+    return {
+      ...prev,
+      hovered: { atomId: null, bondId: null },
+      sel: {
+        atoms: new Set([...prev.sel.atoms].filter((id) => atoms.has(id))),
+        bonds: new Set([...prev.sel.bonds].filter((id) => bonds.has(id))),
+      },
+    };
+  });
+}
+
+/**
  * Model edits go to the tab's document, which is what undo, redo and saving
  * act on. The store keeps a mirror of it for rendering (see ../index.tsx), so
  * components still read `model` and `arrows` exactly as before.
@@ -93,6 +112,18 @@ export const createModelSlice = (
     doc.edit("move atom", (d) => ops.moveAtom(d, id, x, y), {
       coalesceKey: `move-atom:${id}`,
     });
+  },
+
+  deleteAtom: (id: number) => {
+    if (doc.edit("delete atom", (d) => ops.deleteParts(d, [id], []))) {
+      forgetDeleted(set);
+    }
+  },
+
+  deleteBond: (id: number) => {
+    if (doc.edit("delete bond", (d) => ops.deleteParts(d, [], [id]))) {
+      forgetDeleted(set);
+    }
   },
 
   relayout: (change: Parameters<typeof ops.relayout>[1]) => {

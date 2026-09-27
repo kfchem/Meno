@@ -143,7 +143,10 @@ Both go together, because both touch every layer.
 
 All hover-based, as above.
 
-- Delete an atom or a bond; delete a selection.
+- Delete an atom or a bond; delete a selection. (PR #54: the atom or bond
+  under the pointer, by Delete or Backspace or from the menu a right-click
+  opens there, one undo step each; a carbon left with no bonds goes too. A
+  selection once there is one.)
 - Selection: by click, by adding to it, by box or lasso, a whole fragment;
   move, rotate and flip what is selected.
 - Elements without typing; charges, radicals and isotopes, drawn as

@@ -146,6 +146,37 @@ export function moveAtom(
 }
 
 /**
+ * Atoms and bonds taken out, in one edit: an atom goes with its bonds, and a
+ * carbon those left with no bonds at all goes too - a carbon is only there
+ * as the meeting of its bonds, and on its own would be drawn as CH4. A
+ * labelled atom, an O or an N, stays where it was.
+ */
+export function deleteParts(
+  doc: StructureDocument,
+  atomIds: Iterable<number>,
+  bondIds: Iterable<number>,
+): StructureDocument {
+  const atomsGone = new Set(atomIds);
+  const bondsGone = new Set(bondIds);
+  const { atoms, bonds } = doc.model;
+  for (const b of bonds) {
+    if (atomsGone.has(b.a) || atomsGone.has(b.b)) bondsGone.add(b.id);
+  }
+  const left = bonds.filter((b) => !bondsGone.has(b.id));
+  const stillBonded = new Set(left.flatMap((b) => [b.a, b.b]));
+  for (const b of bonds) {
+    if (!bondsGone.has(b.id)) continue;
+    for (const end of [b.a, b.b]) {
+      const atom = atoms.find((a) => a.id === end);
+      if (atom && atom.el === "C" && !stillBonded.has(end)) atomsGone.add(end);
+    }
+  }
+  const kept = atoms.filter((a) => !atomsGone.has(a.id));
+  if (kept.length === atoms.length && left.length === bonds.length) return doc;
+  return { ...doc, model: { atoms: kept, bonds: left } };
+}
+
+/**
  * A new layout for some of the structure - a clean-up - in one edit: atoms
  * moved, and wedges changed where the new layout needs them. Nothing that
  * would not change is touched.
