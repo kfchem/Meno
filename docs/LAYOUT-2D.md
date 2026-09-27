@@ -50,11 +50,18 @@ they hang from.
   pyrene) takes the positions its neighbours already fix.
 - **Macrocycles** (nine and more): a chain closed on itself, drawn as one:
   two zigzags, one above the other, joined at their ends, every angle 120
-  or 240 degrees. Wide rather than tall, like the chain it is.
-- **Bridged systems**: the largest ring drawn as a polygon, the bridges as
-  chords across it, their atoms spaced evenly along them. Cages that cannot
-  be drawn that way without crossings (adamantane, cubane) take the
-  conventional perspective.
+  or 240 degrees. Wide rather than tall, like the chain it is. The corners
+  of a zigzag alternate, one pointing out and one in; the atoms that carry
+  something take the ones pointing out.
+- **Rings of rings**: a macrocycle that runs through other rings rather
+  than along their sides - a porphyrin's through its pyrroles, a
+  cyclodextrin's through its glucoses - is set round a circle, each ring
+  it runs through regular and outside it.
+- **Bridged systems**: the smaller ring of a bridged pair regular, the
+  larger arcing round it with the bridge inside - taxol's A ring, its B
+  ring round the gem-dimethyl bridge. A cage that will not lie flat
+  without crowding or crossings (adamantane, cubane, quinuclidine) is
+  drawn as the solid it is, seen from the side that hides no atom.
 - **Chains**: zigzag, each turn the other way from the last. A trans double
   bond carries the zigzag on; a cis one turns it back. A triple bond, or
   two double bonds on one atom, runs straight.
@@ -123,7 +130,8 @@ When parts clash, in this order:
   narrow end at the stereocentre: a bond to H first, then to an end atom,
   then to a chain.
 - A stereocentre at a ring fusion with no bond out of the rings gets an
-  explicit H, drawn straight out.
+  explicit H, drawn straight up on a wedge or straight down on hashes, as
+  a steroid's are - so the page shows the sense as well as the wedge.
 - Double bonds are drawn as they are: a cis double bond with its
   substituents on one side.
 

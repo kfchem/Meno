@@ -5,6 +5,7 @@ npm run layout-fetch                                   # fills in molecules.json
 <chem python> scripts/layout/baselines.py              # RDKit's layouts -> .layout/baselines.json
 npm run layout-bench                                   # writes .layout/index.html
 npm run layout-bench -- --open                         # and opens it
+npm run layout-bench -- --only=Paclitaxel,D-Glucose    # just those (names as they start)
 ```
 
 `<chem python>` is the Python of the chem lock: the app's own environment,
@@ -12,12 +13,19 @@ under its data folder at `uv/chem/venv`, will do.
 
 ## What it is for
 
-Meno is getting a 2D layout engine of its own, written from scratch: what
-lays a structure out when it is cleaned up, or when it arrives as a SMILES.
-This is how that engine is judged, and how each change to it is judged
-against the last: every molecule in `molecules.json`, drawn by each engine,
-beside the structure its Wikipedia article shows - the standard to reach -
-with the numbers `src/lib/layout/metrics.ts` gives each drawing.
+Meno has a 2D layout engine of its own, written from scratch
+(`src/lib/layout/engine.ts`, by the rules in `docs/LAYOUT-2D.md`): what lays
+a structure out when it is cleaned up, or when it arrives as a SMILES. This
+is how that engine is judged, and how each change to it is judged against
+the last: every molecule in `molecules.json`, drawn by Meno's engine and by
+RDKit's two, beside the structure its Wikipedia article shows - the
+standard to reach - with the numbers `src/lib/layout/metrics.ts` gives each
+drawing.
+
+The engine is given only what `baselines.py` records as the molecule's
+graph: elements, charges, H counts, bond orders, each double bond's cis or
+trans, and each stereocentre's configuration (as its neighbours in order
+and the sign of the volume the first three span, from a 3D embedding).
 
 The molecules are chosen for what makes layout hard: fused and bridged ring
 systems (steroids, alkaloids, taxol), cages, spiro centres, macrocycles

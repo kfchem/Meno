@@ -192,8 +192,11 @@ lipids each have their own way of being drawn, which it should know.
    level, read left to right (`scripts/layout`, `src/lib/layout/metrics.ts`).
    The numbers are general rules, not a record of particular molecules.
    RDKit's two engines are the baseline. (PR #58)
-2. The engine itself: ring systems, chains, macrocycles, stereo display,
+2. The engine itself (`src/lib/layout/engine.ts`, by the rules in
+   `docs/LAYOUT-2D.md`): ring systems, chains, macrocycles, stereo display,
    clash removal and orientation, measured on the benchmark at each step.
+   A first pass is in; on the benchmark it scores best or level on most of
+   the molecules against RDKit's two engines.
 3. Clean-up and SMILES import moved onto it.
 
 Its code is Meno's own: nothing taken from other depiction code, nothing
