@@ -79,7 +79,10 @@ they hang from.
 - **Cages**: a system whose rings are all bridged, each sharing three atoms
   or more with another (norbornane, camphor, tropane, quinuclidine,
   adamantane), or a polyhedron (cubane), is drawn in perspective, as the
-  solid it is, and upright. It is built on one of its six-membered rings,
+  solid it is, upright and seen from above - the higher on the page, the
+  further back; a drawing that needs it the other way round has the cage
+  seen from its other side, never turned over or mirrored. It is built on
+  one of its six-membered rings,
   drawn as a chair or a boat always is: two zigzags of three atoms, their
   bonds 15 degrees off level, the back one above the front one and joined
   to it by two bonds 60 degrees steep - a chair's zigzags pointing opposite
@@ -193,6 +196,10 @@ When parts clash, in this order:
 - A stereocentre at a ring fusion with no bond out of the rings gets an
   explicit H, drawn straight up on a wedge or straight down on hashes, as
   a steroid's are - so the page shows the sense as well as the wedge.
+  Where that spot is taken - the middle of morphine or strychnine, hemmed
+  in by rings - the H goes wherever round its atom there is most room,
+  clear of atoms and bonds and crossing none; its wedge says the same
+  whichever way it points.
 - Double bonds are drawn as they are: a cis double bond with its
   substituents on one side.
 
@@ -202,8 +209,8 @@ When parts clash, in this order:
    fused, bridged, spiro - and the chains between them.
 2. Lay each ring system out in its own frame, square on the lattice - or,
    for a cage, in perspective and upright.
-3. Grow the structure out from the largest ring system (or, with no ring,
-   from the middle of its longest chain), placing each bond by the rules of
+3. Grow the structure out from the frame (section 3), or, with no ring,
+   from the middle of its longest chain, placing each bond by the rules of
    section 2 and choosing among free placements by section 5.
 4. Try the frame's orientations and keep the one that reads best by
    section 4.

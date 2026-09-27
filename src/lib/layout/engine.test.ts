@@ -220,6 +220,52 @@ describe("layout2D", () => {
     }
   });
 
+  it("draws a cage from above, its back at the top, however the frame is set", () => {
+    for (const volume of [1, -1] as const) {
+      const skeleton = carbons(11, [
+        [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 3], [1, 7, 2], [0, 8], [6, 9], [6, 10],
+      ]);
+      const camphor: LayoutInput = {
+        ...skeleton,
+        atoms: skeleton.atoms.map((a, i) =>
+          i === 7 ? { el: "O" } : i === 3 ? { el: "C", tetra: { neighbours: [2, 4, 6, -1], volume } } : a,
+        ),
+      };
+      const { y, depth } = layout2D(camphor);
+      // round the six-membered ring the cage is drawn on, the higher on the
+      // page the further from the viewer
+      const cage = [0, 1, 2, 3, 4, 5];
+      const my = cage.reduce((s, a) => s + y[a], 0) / cage.length;
+      const md = cage.reduce((s, a) => s + depth[a]!, 0) / cage.length;
+      const together = cage.reduce((s, a) => s + (y[a] - my) * (depth[a]! - md), 0);
+      expect(together).toBeLessThan(0);
+    }
+  });
+
+  it("draws an H at a centre hemmed in by rings clear of every bond", () => {
+    // perhydrophenalene: the centre (0) in three rings, its H drawn
+    const bonds: [number, number][] = [
+      [0, 1], [0, 5], [0, 9], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11],
+      [11, 12], [12, 1],
+    ];
+    const skeleton = carbons(13, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((a, i) => (i === 0 ? { el: "C", tetra: { neighbours: [1, 5, 9, -1], volume: 1 } } : a)),
+    };
+    const { x, y, hydrogens } = layout2D(input);
+    const h = hydrogens.find((d) => d.on === 0)!;
+    expect(h).toBeDefined();
+    for (let a = 1; a < 13; a++) expect(Math.hypot(x[a] - h.at.x, y[a] - h.at.y)).toBeGreaterThan(0.6);
+    for (const [a, b] of bonds) {
+      if (a === 0 || b === 0) continue;
+      const vx = x[b] - x[a];
+      const vy = y[b] - y[a];
+      const k = Math.max(0, Math.min(1, ((h.at.x - x[a]) * vx + (h.at.y - y[a]) * vy) / (vx * vx + vy * vy)));
+      expect(Math.hypot(h.at.x - x[a] - k * vx, h.at.y - y[a] - k * vy)).toBeGreaterThan(0.4);
+    }
+  });
+
   it("draws a ring system with a ring fused on a side flat, its bridge across a ring", () => {
     // 9,10-dihydro-9,10-ethanoanthracene: the bridge (14, 15) across the
     // middle ring of an anthracene

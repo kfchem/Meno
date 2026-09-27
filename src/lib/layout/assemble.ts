@@ -118,9 +118,8 @@ export function grow(
   if (root >= 0) {
     const L = local.get(root)!;
     const c = centroid([...L.values()]);
-    // a cage drawn in perspective stays upright, as it was drawn: only
-    // seen from its other side, if the frame is mirrored
-    const set = upright.has(root) ? (p: Point) => keepUpright(frame, p) : setFrame;
+    // a cage drawn in perspective stays upright, as it was drawn
+    const set = upright.has(root) ? (p: Point) => p : setFrame;
     transforms.set(root, (p) => set(sub(p, c)));
     for (const [a, p] of L) pos.set(a, set(sub(p, c)));
     queue.push(...mol.systems[root].atoms);
@@ -144,7 +143,7 @@ export function grow(
     const order = [...along, ...others];
     order.forEach((v, k) => {
       const t = slots[k] ?? slots[slots.length - 1];
-      placeChild(mol, pos, local, queue, middle, v, setFrameAngle(frame, t), transforms, hints, upright, frame);
+      placeChild(mol, pos, local, queue, middle, v, setFrameAngle(frame, t), transforms, hints, upright);
     });
     queue.push(...order);
   }
@@ -172,14 +171,14 @@ export function grow(
       const s = mol.systemOf[c];
       const back = hints.get(c)?.get(a);
       if (s < 0 || !upright.has(s) || !back || byHint.some(([h]) => h === c)) continue;
-      byHint.push([c, angleOf(keepUpright(frame, sub(local.get(s)!.get(c)!, back)))]);
+      byHint.push([c, angleOf(sub(local.get(s)!.get(c)!, back))]);
     }
     const rest = children.filter((c) => !byHint.some(([h]) => h === c));
     const assigned = rest.length
       ? assign(mol, pos, sides, a, placed, [...taken, ...byHint.map(([, t]) => t)], rest)
       : [];
     for (const [child, t] of [...byHint, ...assigned]) {
-      placeChild(mol, pos, local, queue, a, child, t, transforms, hints, upright, frame);
+      placeChild(mol, pos, local, queue, a, child, t, transforms, hints, upright);
     }
   }
   return pos;
@@ -230,11 +229,6 @@ export function framesFor(mol: Molecule, piece: number[]): Frame[] {
   return [false, true].flatMap((mirrored) =>
     Array.from({ length: 12 }, (_, k) => ({ turn: (k * Math.PI) / 6, mirrored })),
   );
-}
-
-/** A point of an upright cage's own drawing as the frame sets it: mirrored with it, never turned. */
-function keepUpright(frame: Frame, p: Point): Point {
-  return frame.mirrored ? { x: -p.x, y: p.y } : p;
 }
 
 function setFrameAngle(frame: Frame, t: number): number {
@@ -430,7 +424,6 @@ function placeChild(
   transforms: Map<number, (p: Point) => Point>,
   hints: Map<number, Map<number, Point>>,
   upright: ReadonlySet<number> = new Set(),
-  frame: Frame = { turn: 0, mirrored: false },
 ): void {
   const at = add(pos.get(a)!, dir(t));
   const s = mol.systemOf[child];
@@ -442,10 +435,10 @@ function placeChild(
   const L = local.get(s)!;
   const c0 = L.get(child)!;
   if (upright.has(s)) {
-    transforms.set(s, (p) => add(at, keepUpright(frame, sub(p, c0))));
+    transforms.set(s, (p) => add(at, sub(p, c0)));
     for (const [v, p] of L) {
       if (pos.has(v)) continue;
-      pos.set(v, add(at, keepUpright(frame, sub(p, c0))));
+      pos.set(v, add(at, sub(p, c0)));
       queue.push(v);
     }
     return;

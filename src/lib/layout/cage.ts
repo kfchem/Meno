@@ -196,6 +196,13 @@ export type CageView = {
   /** How near each atom is to the viewer: a bond passing behind another is broken there. */
   depth: Map<number, number>;
   cost: number;
+  /**
+   * The same cage seen from its other side - still from above, the back
+   * of its ring still at the top - for a frame set down mirrored: a cage
+   * is never mirrored itself, which would show the other enantiomer, nor
+   * turned round with its depth, which would show it from below.
+   */
+  other?: Omit<CageView, "other">;
 };
 
 /**
@@ -522,7 +529,9 @@ function textbook(
   ];
   const at = (a: number) => X[index.get(a)!];
   type Found = { pts: Point[]; depth: number[]; hints: Map<number, Map<number, Point>>; cost: number };
-  let best: Found | null = null;
+  // the best seen with its front zigzag set off each way: one the other
+  // seen from its other side
+  const best = new Map<number, Found>();
   for (const cycle of cycles) {
     const R = cycle.map(at);
     const c: Vec3 = [0, 1, 2].map((k) => R.reduce((sum, p) => sum + p[k], 0) / 6) as Vec3;
@@ -584,20 +593,25 @@ function textbook(
               (restUp ? 0 : 0.5) +
               exitCost(pts, bonds, index, hints) +
               0.25 * behind;
-            if (!best || cost < best.cost - 1e-9) best = { pts, depth, hints, cost };
+            const held = best.get(hand);
+            if (!held || cost < held.cost - 1e-9) best.set(hand, { pts, depth, hints, cost });
           }
         }
       }
     }
   }
-  if (!best) return null;
-  const pos = new Map<number, Point>();
-  const depth = new Map<number, number>();
-  atoms.forEach((a, i) => {
-    pos.set(a, best.pts[i]);
-    depth.set(a, best.depth[i]);
-  });
-  return { pos, depth, hints: best.hints, cost: best.cost };
+  const found = [...best.values()].sort((p, q) => p.cost - q.cost);
+  if (!found.length) return null;
+  const view = (f: Found): Omit<CageView, "other"> => {
+    const pos = new Map<number, Point>();
+    const depth = new Map<number, number>();
+    atoms.forEach((a, i) => {
+      pos.set(a, f.pts[i]);
+      depth.set(a, f.depth[i]);
+    });
+    return { pos, depth, hints: f.hints, cost: f.cost };
+  };
+  return { ...view(found[0]), other: found[1] ? view(found[1]) : undefined };
 }
 
 /**

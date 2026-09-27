@@ -17,6 +17,7 @@ import {
   sidesOf,
   stretchSide,
   turnSide,
+  type Frame,
   type Grown,
 } from "./assemble";
 import { dist, mirror, segmentsCross, sub } from "./geometry";
@@ -24,7 +25,7 @@ import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { placeRingSystem, ringSystemVariants } from "./ringSystem";
 import { bridgeAcross } from "./bridge";
-import { flatCost, isCage, projectCage } from "./cage";
+import { flatCost, isCage, projectCage, type CageView } from "./cage";
 import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
 import type { Point } from "./geometry";
 
@@ -53,6 +54,8 @@ export function layout2D(input: LayoutInput): Layout2D {
   // the cages drawn in perspective: kept upright, as drawn
   const upright = new Set<number>();
   const solid = new Array<boolean>(mol.n).fill(false);
+  // and each seen from its other side, for a frame set down mirrored
+  const others = new Map<number, Omit<CageView, "other">>();
   mol.systems.forEach((sys, i) => {
     const laid = layoutSystem(mol, i);
     local.set(i, laid.pos);
@@ -61,8 +64,19 @@ export function layout2D(input: LayoutInput): Layout2D {
     if (laid.solid) {
       upright.add(i);
       for (const a of sys.atoms) solid[a] = true;
+      if (laid.other) others.set(i, laid.other);
     }
   });
+  // what a frame grows from: in a mirrored one, each cage seen from its
+  // other side
+  const hintsM = new Map(hints);
+  for (const view of others.values()) view.hints.forEach((m, a) => hintsM.set(a, m));
+  const setUp = (frame: Frame) => {
+    if (!frame.mirrored || !others.size) return { L: local, H: hints };
+    const L = new Map(local);
+    for (const [i, view] of others) L.set(i, view.pos);
+    return { L, H: hintsM };
+  };
   const fixed = (atoms: readonly number[]) => atoms.some((a) => upright.has(mol.systemOf[a]));
   const sides = sidesOf(mol);
   // (a flip mirrors a side across a bond's line, which would tip a cage over)
@@ -90,7 +104,8 @@ export function layout2D(input: LayoutInput): Layout2D {
       let top: Grown | null = null;
       let topScore = Infinity;
       for (const frame of framesFor(mol, piece)) {
-        const pos = grow(mol, piece, local, frame, sides, hints, upright);
+        const { L, H } = setUp(frame);
+        const pos = grow(mol, piece, L, frame, sides, H, upright);
         const s = score(pos);
         if (s < topScore) {
           topScore = s;
@@ -107,6 +122,8 @@ export function layout2D(input: LayoutInput): Layout2D {
     local.set(i, placeRingSystem(mol, sys, best));
   });
 
+  // the drawing each system ended up as
+  const used = new Map(local);
   const x = new Array<number>(mol.n).fill(0);
   const y = new Array<number>(mol.n).fill(0);
   let right = 0;
@@ -117,8 +134,9 @@ export function layout2D(input: LayoutInput): Layout2D {
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
     const tried = framesFor(mol, piece).map((frame) => {
-      const pos = grow(mol, piece, local, frame, sides, hints, upright);
-      return { pos, score: score(pos) };
+      const { L, H } = setUp(frame);
+      const pos = grow(mol, piece, L, frame, sides, H, upright);
+      return { pos, score: score(pos), mirrored: frame.mirrored };
     }).sort((p, q) => p.score - q.score);
     let best = tried[0];
     // every frame tried the other way where it helps, for a small piece;
@@ -126,10 +144,18 @@ export function layout2D(input: LayoutInput): Layout2D {
     const worth = piece.length <= 80 ? tried.length : 4;
     for (const cand of tried.slice(0, worth)) {
       const improved = improve(mol, cand.pos, cand.score, flipsHere, sides, score);
-      if (improved.score < best.score - 1e-9) best = improved;
+      if (improved.score < best.score - 1e-9) best = { ...improved, mirrored: cand.mirrored };
     }
-    best = rejoin(mol, piece, best.pos, best.score, score, fixed);
-    best = untangle(mol, piece, best.pos, best.score, score, fixed);
+    best = { ...rejoin(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
+    best = { ...untangle(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
+    // a cage in a mirrored frame is the one seen from its other side
+    if (best.mirrored) {
+      for (const [i, view] of others) {
+        if (!piece.includes(mol.systems[i].atoms[0])) continue;
+        used.set(i, view.pos);
+        view.depth.forEach((d, a) => (depth[a] = d));
+      }
+    }
     if (!fixed(piece)) squareUp(mol, piece, best.pos);
     const xs = piece.map((a) => best.pos.get(a)!.x);
     const ys = piece.map((a) => best.pos.get(a)!.y);
@@ -141,12 +167,13 @@ export function layout2D(input: LayoutInput): Layout2D {
     }
     right = Math.max(...piece.map((a) => x[a]));
   }
-  // a system drawn with depth, seen from its other side (the frame
-  // mirrored), is nearer where it was further: the drawing is the solid
-  // turned round, not its mirror image
+  // a flat system drawn with depth (a bridge across a ring), seen from its
+  // other side (the frame mirrored), is nearer where it was further: the
+  // drawing is the molecule turned round, not its mirror image. (A cage is
+  // never mirrored: a mirrored frame has it seen from its other side.)
   mol.systems.forEach((sys, i) => {
     if (depth[sys.atoms[0]] == null) return;
-    const L = local.get(i)!;
+    const L = used.get(i)!;
     // the way round the widest triangle of its atoms goes, before and after
     const [o, ...rest] = sys.atoms;
     const turn = (p: (a: number) => Point, a: number, b: number) => {
@@ -184,6 +211,7 @@ function layoutSystem(
   depth?: Map<number, number>;
   hints?: Map<number, Map<number, Point>>;
   solid?: boolean;
+  other?: Omit<CageView, "other">;
 } {
   const sys = mol.systems[i];
   // a cage - norbornane, tropane, quinuclidine, adamantane - is drawn in

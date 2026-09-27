@@ -12,7 +12,7 @@
  * hashes behind it, the rest in it; the wedge's sense is whichever gives
  * that sign back.
  */
-import { angleOf, centroid, splitOutside, splitWidestGap, sub, type Point } from "./geometry";
+import { angleOf, centroid, segmentsCross, splitOutside, splitWidestGap, sub, type Point } from "./geometry";
 import { key, type Molecule } from "./perceive";
 
 export type Tetrahedral = {
@@ -113,49 +113,72 @@ export function placeStereo(
     else if (hasH) choices.push({ to: -1, rank: 5 + (wideEnds.has(c) ? 10 : 0) });
     choices.sort((p, q) => p.rank - q.rank || p.to - q.to);
 
+    // Where an H drawn on this centre goes. Its wedge's sense is fixed by
+    // the configuration wherever it points, where its other bonds lie in
+    // the page, so it goes where it reads best: straight up on a wedge, or
+    // straight down on hashes, as a steroid's are, where that is clear;
+    // else wherever round the atom there is most room - away from other
+    // atoms and from bonds, and crossing none.
     let hPos: Point | null = null;
     if (hasH) {
-      const taken = mol.neighbours[c].map((n) => angleOf(sub(pos.get(n)!, at)));
-      const centresOfRings = mol.ringsOf[c].map((r) =>
-        angleOf(sub(centroid(mol.rings[r].map((v) => pos.get(v)!)), at)),
-      );
-      const [t0] = mol.systemOf[c] >= 0 ? splitOutside(taken, centresOfRings, 1) : splitWidestGap(taken, 1);
-      // straight out, unless something is there already - a neighbour's
-      // methyl, at a steroid's C9 - then turned aside within the room
-      const others = [...pos.entries()].filter(([a]) => a !== c).map(([, p]) => p);
-      others.push(...hydrogens.map((h) => h.at));
-      let bestRoom = -1;
-      for (const turn of [0, 25, -25, 40, -40]) {
-        const t1 = t0 + (turn * Math.PI) / 180;
-        const p = { x: at.x + Math.cos(t1), y: at.y + Math.sin(t1) };
-        const room = Math.min(...others.map((o) => Math.hypot(o.x - p.x, o.y - p.y)));
-        if (room > bestRoom + 1e-9) {
-          bestRoom = room;
-          hPos = p;
+      // (a labelled atom - an O, an N, an H already drawn - wants more room)
+      const others = [...pos.entries()]
+        .filter(([a]) => a !== c)
+        .map(([a, p]) => ({ p, label: mol.el[a] !== "C" }));
+      others.push(...hydrogens.map((h) => ({ p: h.at, label: true })));
+      const bonds = [...mol.bondIndex.keys()]
+        .map((k) => k.split(",").map(Number) as [number, number])
+        .filter(([a, b]) => a !== c && b !== c && pos.has(a) && pos.has(b))
+        .map(([a, b]) => [pos.get(a)!, pos.get(b)!] as const);
+      const own = mol.neighbours[c].map((n) => angleOf(sub(pos.get(n)!, at)));
+      const room = (angle: number) => {
+        const p = { x: at.x + Math.cos(angle), y: at.y + Math.sin(angle) };
+        let r = Infinity;
+        for (const o of others) r = Math.min(r, Math.hypot(o.p.x - p.x, o.p.y - p.y) - (o.label ? 0.2 : 0));
+        for (const [u, v] of bonds) {
+          // (a label's room from a bond, a little less than from an atom)
+          r = Math.min(r, toSegment(p, u, v) + 0.15);
+          if (segmentsCross(at, p, u, v)) r = Math.min(r, 0);
         }
-        if (room >= 0.8) break;
+        for (const o of own) {
+          const d = Math.abs(Math.atan2(Math.sin(o - angle), Math.cos(o - angle)));
+          if (d < (35 * Math.PI) / 180) r = Math.min(r, d);
+        }
+        // (room enough is room enough: then the way it ought to point)
+        return Math.min(r, 0.85);
+      };
+      const [t0] =
+        mol.systemOf[c] >= 0
+          ? splitOutside(
+              own,
+              mol.ringsOf[c].map((r) => angleOf(sub(centroid(mol.rings[r].map((v) => pos.get(v)!)), at))),
+              1,
+            )
+          : splitWidestGap(own, 1);
+      // the sense it will take, to know which way is upright for it
+      let sense = 0;
+      for (const lift of [1, -1]) {
+        const probe = { x: at.x + Math.cos(t0), y: at.y + Math.sin(t0) };
+        const drawn = t.neighbours.map((n) => (n === -1 ? probe : pos.get(n) ?? null));
+        const lifts = t.neighbours.map((n) => (n === -1 ? lift : 0));
+        if (drawnVolume(at, drawn, lifts) === t.volume) sense = lift;
       }
+      const fusion = mol.systemOf[c] >= 0 && !mol.neighbours[c].some((n) => !ringBond(c, n));
+      const preferred = fusion && sense ? (sense > 0 ? Math.PI / 2 : -Math.PI / 2) : t0;
+      let bestT = t0;
+      let bestRoom = -Infinity;
+      for (let k = 0; k < 24; k++) {
+        const angle = (k * Math.PI) / 12;
+        // (upright, or straight out of the rings, first among equals)
+        const lean = Math.abs(Math.atan2(Math.sin(angle - preferred), Math.cos(angle - preferred)));
+        const r = room(angle) - 0.02 * lean;
+        if (r > bestRoom + 1e-9) {
+          bestRoom = r;
+          bestT = angle;
+        }
+      }
+      hPos = { x: at.x + Math.cos(bestT), y: at.y + Math.sin(bestT) };
     }
-    // An H drawn at a ring fusion stands straight up on its wedge, or straight
-    // down on its hashes, as a steroid's are drawn - the sense it shows read
-    // from the page as well as from the wedge - where nothing is in the way
-    // and no bond runs that way. (Which way it points does not change what
-    // it says: only whether it is a wedge or hashes does.)
-    const upright = (centre: number, stereo: "up" | "down"): Point | null => {
-      if (mol.systemOf[centre] < 0) return null;
-      const t1 = stereo === "up" ? Math.PI / 2 : -Math.PI / 2;
-      const along = mol.neighbours[centre].some((n) => {
-        const d = angleOf(sub(pos.get(n)!, at)) - t1;
-        return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) < (25 * Math.PI) / 180;
-      });
-      if (along) return null;
-      const p = { x: at.x, y: at.y + (stereo === "up" ? 1 : -1) };
-      const near = [...pos.entries()].some(
-        ([a, q]) => a !== centre && Math.hypot(q.x - p.x, q.y - p.y) < 0.7,
-      );
-      const nearH = hydrogens.some((h) => Math.hypot(h.at.x - p.x, h.at.y - p.y) < 0.7);
-      return near || nearH ? null : p;
-    };
     for (const choice of choices) {
       const place = (n: number) => (n === -1 ? hPos : pos.get(n) ?? null);
       let done = false;
@@ -165,7 +188,7 @@ export function placeStereo(
         if (drawnVolume(at, drawn, lift) === t.volume) {
           wedges.push({ from: c, to: choice.to, stereo });
           narrowEnds.add(c);
-          if (choice.to === -1) hydrogens.push({ on: c, at: upright(c, stereo) ?? hPos! });
+          if (choice.to === -1) hydrogens.push({ on: c, at: hPos! });
           else {
             used.add(key(c, choice.to));
             wideEnds.add(choice.to);
@@ -180,3 +203,11 @@ export function placeStereo(
   return { wedges, hydrogens };
 }
 
+/** How far `p` is from the segment `u`-`v`. */
+function toSegment(p: Point, u: Point, v: Point): number {
+  const vx = v.x - u.x;
+  const vy = v.y - u.y;
+  const l2 = vx * vx + vy * vy;
+  const k = l2 ? Math.max(0, Math.min(1, ((p.x - u.x) * vx + (p.y - u.y) * vy) / l2)) : 0;
+  return Math.hypot(p.x - (u.x + k * vx), p.y - (u.y + k * vy));
+}
