@@ -121,7 +121,8 @@ export type LayoutMetrics = {
    * How far the largest fused ring system is from the way IUPAC orients a
    * fused system for numbering: as many rings as can be in a horizontal row,
    * then as many of the rest as can be above and to the right of it, and as
-   * few below and to the left. Rings short of each, counted.
+   * few below and to the left. Rings short of each, counted; and a ring
+   * system with its benzene rings to the right of its other rings, two.
    */
   ringOrder: number;
   /** All of it in one number, lower better, for putting layouts in order. */
@@ -931,6 +932,22 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       }
       ringOrder += best;
     }
+  }
+  // and within a ring system, a benzene ring at the left, where reading
+  // begins: indole's, quinoline's and coumarin's benzene rings, estradiol's
+  // aromatic A ring, griseofulvin's and reserpine's
+  for (const sys of live) {
+    const own = rings.filter((r) => r.length <= 8 && r.every((a) => sys.has(a)));
+    if (own.length < 2 || rings.some((r) => r.length > 8 && r.every((a) => sys.has(a)))) continue;
+    const benzene = (r: readonly number[]) =>
+      r.length === 6 &&
+      r.every((a) => (g.elements?.[a] ?? "C") === "C") &&
+      edges.filter(([a, b], e) => r.includes(a) && r.includes(b) && (g.orders?.[e] ?? 1) === 2).length === 3;
+    const midX = (list: readonly (readonly number[])[]) =>
+      list.reduce((sum, r) => sum + r.reduce((t, a) => t + x[a], 0) / r.length, 0) / list.length;
+    const aromatic = own.filter(benzene);
+    const rest = own.filter((r) => !benzene(r));
+    if (aromatic.length && rest.length && midX(aromatic) > midX(rest) + 0.25 * L) ringOrder += 2;
   }
 
   let wrongDoubles = 0;

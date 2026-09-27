@@ -129,6 +129,10 @@ images - the drawing takes the one that reads best (section 4).
   right of it. Phenanthrene's third ring goes up and to the right; a
   steroid's A and B rings form the row, with C and D above and to the right
   - the way steroids are always drawn.
+- **A benzene ring at the left of its ring system**, where reading
+  begins: indole, quinoline and coumarin with their benzene rings on the
+  left, estradiol's aromatic A ring, griseofulvin's, reserpine's indole at
+  the upper left of the rings that follow it.
 - **A ring system to the left of the chains that leave it.** The ring
   system is what the molecule is; its chains are read after it.
 - **The first carbon of a chain on the right.** The carbon a chain is
