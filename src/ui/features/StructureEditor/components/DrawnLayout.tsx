@@ -43,35 +43,58 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
     moveDrag.active && moveDrag.preview ? moveDrag.atomId : null;
   const dragX = moveDrag.preview?.x;
   const dragY = moveDrag.preview?.y;
-  const fromId =
-    extend.active && extend.preview && extend.atomId != null
-      ? extend.atomId
-      : null;
-  const newX = extend.preview?.x;
-  const newY = extend.preview?.y;
+  // A stroke under way: the atoms it has laid down, and the bond the pointer
+  // is leading, to a new atom or onto one already there.
+  const stroke = extend.active ? extend.stroke : null;
+  const preview = extend.active ? extend.preview : null;
   const atoms: LAtom[] = useMemo(() => {
     const out = model.atoms.map((a) =>
       a.id === draggedId && dragX != null && dragY != null
         ? { id: a.id, x: dragX, y: dragY, el: a.el }
         : { id: a.id, x: a.x, y: a.y, el: a.el },
     );
-    if (fromId != null && newX != null && newY != null) {
-      out.push({ id: EXTENDING_ATOM_ID, x: newX, y: newY, el: "C" });
+    stroke?.nodes.forEach((n, i) => {
+      if (n.atomId == null && n.pathIndex == null) {
+        out.push({ id: EXTENDING_ATOM_ID - i, x: n.x, y: n.y, el: "C" });
+      }
+    });
+    if (preview && preview.atomId == null && preview.pathIndex == null) {
+      out.push({ id: EXTENDING_ATOM_ID - 1000, x: preview.x, y: preview.y, el: "C" });
     }
     return out;
-  }, [model.atoms, draggedId, dragX, dragY, fromId, newX, newY]);
-  const extending = fromId != null && newX != null && newY != null;
+  }, [model.atoms, draggedId, dragX, dragY, stroke, preview]);
   const bonds: LBond[] = useMemo(() => {
     const index = new Map<number, number>();
-    model.atoms.forEach((a, i) => index.set(a.id, i));
+    atoms.forEach((a, i) => index.set(a.id, i));
     const out = layoutBonds(model.bonds, index);
-    const from = fromId != null ? index.get(fromId) : undefined;
-    if (extending && from != null) {
-      // the new atom is last
-      out.push({ a1: from, a2: model.atoms.length, order: 1, stereo: "none" });
+    if (!stroke) return out;
+    // where each node of the stroke is drawn: its own atom, or the one it
+    // closed onto
+    const at = (n: { atomId?: number; pathIndex?: number }, i: number) =>
+      n.atomId != null
+        ? index.get(n.atomId)
+        : n.pathIndex != null
+          ? index.get(EXTENDING_ATOM_ID - n.pathIndex)
+          : index.get(EXTENDING_ATOM_ID - i);
+    let from = index.get(stroke.baseId);
+    stroke.nodes.forEach((n, i) => {
+      const to = at(n, i);
+      if (from != null && to != null && from !== to) {
+        out.push({ a1: from, a2: to, order: 1, stereo: "none" });
+      }
+      from = to;
+    });
+    if (preview && from != null) {
+      const to =
+        preview.atomId != null || preview.pathIndex != null
+          ? at(preview, -1)
+          : index.get(EXTENDING_ATOM_ID - 1000);
+      if (to != null && to !== from) {
+        out.push({ a1: from, a2: to, order: 1, stereo: "none" });
+      }
     }
     return out;
-  }, [model.atoms, model.bonds, fromId, extending]);
+  }, [atoms, model.bonds, stroke, preview]);
   const opts = useMemo(() => {
     const keys = Object.keys(aromaticRings || {}).filter(
       (k) => aromaticRings[k],
