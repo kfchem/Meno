@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { layoutMetrics, ringIrregularity } from "./metrics";
+import { layoutMetrics, ringIrregularity, scoreParts } from "./metrics";
 
 /** A regular polygon's atoms and bonds, bond length 1. */
 function polygon(k: number, cx = 0, cy = 0, turn = 0) {
@@ -85,5 +85,109 @@ describe("what a chemist sees in a macrocycle, wedges and labels", () => {
       labelled: [true, true],
     });
     expect(labels.crowdedLabels).toBe(1);
+  });
+});
+
+/** Turns a drawing through `deg` degrees about the origin. */
+function turned<T extends { x: number[]; y: number[] }>(g: T, deg: number): T {
+  const t = (deg * Math.PI) / 180;
+  return {
+    ...g,
+    x: g.x.map((v, i) => v * Math.cos(t) - g.y[i] * Math.sin(t)),
+    y: g.x.map((v, i) => v * Math.sin(t) + g.y[i] * Math.cos(t)),
+  };
+}
+
+/** A zigzag of `k` bonds, bond length 1, running level to the right. */
+function zigzag(k: number) {
+  const h = Math.sqrt(3) / 2;
+  const x = Array.from({ length: k + 1 }, (_, i) => i * h);
+  const y = Array.from({ length: k + 1 }, (_, i) => (i % 2 ? 0.5 : 0));
+  const edges = Array.from({ length: k }, (_, i) => [i, i + 1] as [number, number]);
+  return { x, y, edges };
+}
+
+describe("how a drawing sits", () => {
+  it("measures how far it is turned off the lattice", () => {
+    // pointed at the top, two sides upright: square
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    expect(layoutMetrics(h).tilt).toBeCloseTo(0, 6);
+    expect(layoutMetrics(turned(h, 10)).tilt).toBeCloseTo(10, 1);
+    // turned a whole step of the lattice, it is square again
+    expect(layoutMetrics(turned(h, 30)).tilt).toBeCloseTo(0, 1);
+  });
+
+  it("takes the largest ring system as the frame, and a ring hung off it askew as askew", () => {
+    // naphthalene, square, with a benzene ring hung off it turned 13 degrees
+    const s3 = Math.sqrt(3) / 2;
+    const nx = [0, s3, s3, 0, -s3, -s3, 2 * s3, 2 * s3, 3 * s3, 3 * s3];
+    const ny = [1, 0.5, -0.5, -1, -0.5, 0.5, 1, -1, 0.5, -0.5];
+    const nEdges: [number, number][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0],
+      [1, 6], [6, 8], [8, 9], [9, 7], [7, 2],
+    ];
+    const ring = turned(polygon(6, 0, 0, Math.PI / 2), 13);
+    // hung from atom 0 of naphthalene, straight up, by one bond
+    const top = ring.y.indexOf(Math.min(...ring.y));
+    const dx = -ring.x[top];
+    const dy = 2 - ring.y[top];
+    const x = [...nx, ...ring.x.map((v) => v + dx)];
+    const y = [...ny, ...ring.y.map((v) => v + dy)];
+    const edges = [
+      ...nEdges,
+      ...ring.edges.map(([a, b]) => [a + 10, b + 10] as [number, number]),
+      [0, 10 + top] as [number, number],
+    ];
+    const m = layoutMetrics({ x, y, edges });
+    expect(m.tilt).toBeCloseTo(0, 6);
+    expect(m.gridError).toBeGreaterThan(3);
+  });
+
+  it("takes a chain running level as right, and one running up the page as wrong", () => {
+    const z = zigzag(8);
+    expect(layoutMetrics(z).chainTilt).toBeCloseTo(0, 6);
+    // turned a lattice step, still on the lattice, but running up at 60 degrees
+    const up = turned(z, 60);
+    expect(layoutMetrics(up).tilt).toBeCloseTo(0, 1);
+    expect(layoutMetrics(up).chainTilt).toBeCloseTo(60, 1);
+  });
+
+  it("lets a short chain hung on a ring run straight out from it", () => {
+    // a propyl group on the top of an upright hexagon, running up
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    const s3 = Math.sqrt(3) / 2;
+    const top = h.y.indexOf(Math.max(...h.y));
+    const x = [...h.x, 0, s3, s3];
+    const y = [...h.y, 2, 2.5, 3.5];
+    const edges = [...h.edges, [top, 6], [6, 7], [7, 8]] as [number, number][];
+    expect(layoutMetrics({ x, y, edges }).chainTilt).toBeCloseTo(0, 6);
+  });
+
+  it("reads an acid at the end of a chain on the right, and leaves one on a ring alone", () => {
+    // a zigzag with a carboxylic acid on its left end
+    const z = zigzag(6);
+    const elements = z.x.map(() => "C");
+    const x = [...z.x, -Math.sqrt(3) / 2, 0];
+    const y = [...z.y, 0.5, -1];
+    const edges = [...z.edges, [0, 7], [0, 8]] as [number, number][];
+    const orders = [...z.edges.map(() => 1), 1, 2];
+    const acid = {
+      x,
+      y,
+      edges,
+      orders,
+      elements: [...elements, "O", "O"],
+      hydrogens: [...elements.map(() => 2), 1, 0],
+    };
+    expect(layoutMetrics(acid).readingOrder).toBe(1);
+    // turned round, the acid is on the right
+    expect(layoutMetrics(turned(acid, 180)).readingOrder).toBe(0);
+  });
+
+  it("adds up its parts to the score", () => {
+    const m = layoutMetrics(turned(zigzag(8), 20));
+    const sum = Object.values(scoreParts(m)).reduce((a, b) => a + b, 0);
+    expect(m.score).toBeCloseTo(sum, 9);
+    expect(m.score).toBeGreaterThan(0);
   });
 });

@@ -188,8 +188,10 @@ lipids each have their own way of being drawn, which it should know.
 
 1. **A benchmark to judge it by**: some seventy molecules, each beside the
    structure its Wikipedia article shows, with numbers for what looks
-   untidy (`scripts/layout`, `src/lib/layout/metrics.ts`). RDKit's two
-   engines are the baseline. (PR #58)
+   untidy and for how the drawing sits - square to the lattice, its chains
+   level, read left to right (`scripts/layout`, `src/lib/layout/metrics.ts`).
+   The numbers are general rules, not a record of particular molecules.
+   RDKit's two engines are the baseline. (PR #58)
 2. The engine itself: ring systems, chains, macrocycles, stereo display,
    clash removal and orientation, measured on the benchmark at each step.
 3. Clean-up and SMILES import moved onto it.

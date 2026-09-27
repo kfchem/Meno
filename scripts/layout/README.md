@@ -28,7 +28,14 @@ amino acids and peptides, nucleosides, lipids.
 ## The numbers
 
 Lower is better, and each is measured against the drawing's own typical
-bond, so scale does not matter.
+bond, so scale does not matter. Every caption shows the score and what it
+is made of, the largest part first; the weights are `SCORE_WEIGHTS` in
+`metrics.ts`.
+
+They are general rules, meant to hold for a structure nobody has drawn
+before, not a record of how particular molecules are drawn.
+
+**Faults** - what no drawing may have:
 
 | | |
 |---|---|
@@ -36,16 +43,34 @@ bond, so scale does not matter.
 | crossings | bonds crossing bonds |
 | clashes | atoms lying on a bond they are not part of |
 | crowded labels | labelled atoms (anything but a neutral C) close enough for their labels to meet |
-| bonds ± | how much bond lengths vary |
+
+**Shape**:
+
+| | |
+|---|---|
+| bond lengths | how much bond lengths vary |
 | angles | how far angles at chain atoms are from ideal |
 | rings | how far rings of up to eight are from regular polygons |
 | macrocycle angles | how far the angles round a ring of nine or more are from a zigzag's 120° - a macrocycle drawn as a round polygon is far off |
+| substituents | how far a ring atom's other bonds are from splitting the room outside the ring evenly: an H at a ring fusion drawn straight out, not aslant |
 | wedges on rings | wedges and hashes on ring bonds, where they read badly |
 
-The score weighs them together to put drawings in order. It does not see
-everything a chemist does - orientation, and whether a skeleton looks the
-way it is always drawn, among others - so the sheet shows the reference
-beside every drawing.
+**Orientation** - the drawing square to the page, and read left to right:
+
+| | |
+|---|---|
+| tilt | how far the drawing is turned off the 30° lattice. The largest ring system is the frame; a ring hung off it askew is *askew*, not the frame tilted. A frame whose rings cannot all lie on the lattice together, as fluorene's cannot, is square when its long axis is level or upright |
+| askew | how far the bonds that could lie on the lattice are still off it once the frame is square |
+| chains off level | how far the open parts of the structure - strands of atoms in no ring, split where they branch - run from level, along the axis of their zigzag; a strand of up to four bonds hung on a ring may run straight out from it instead |
+| long axis | how far the drawing's long axis is from level, in proportion to how much longer than broad it is |
+| tall | height over width, past square |
+| macrocycle tall | a ring of twelve or more drawn taller than wide |
+| folded chains, splayed chains | long chains folded up rather than drawn out, and not running parallel as lipids' do |
+| reading order | an acid at the end of a chain on the right; a ring system to the left of the chains out of it; the rings hung on a macrocycle to its right and below it |
+
+The score still does not see everything a chemist does - whether a skeleton
+is turned the way it is always drawn, a steroid's A ring at the lower left
+among them - so the sheet shows the reference beside every drawing.
 
 ## Licences
 
@@ -58,5 +83,5 @@ beside every drawing.
 - **The SMILES** are PubChem's, recorded with their CID.
 - **The engine** is Meno's own code. Nothing is taken from other depiction
   code (RDKit, CoordGen, CDK and the rest), and nothing is traced from the
-  references: skeleton templates, when there are any, are drawn for Meno.
+  references: the engine works from rules, not from stored drawings.
   RDKit's layouts appear here only as a baseline to beat.

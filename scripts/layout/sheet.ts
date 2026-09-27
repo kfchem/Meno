@@ -23,7 +23,11 @@ import {
   type Bond,
 } from "../../src/lib/chem/layout2d";
 import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "../../src/lib/chem/acs";
-import { layoutMetrics, type LayoutMetrics } from "../../src/lib/layout/metrics";
+import {
+  layoutMetrics,
+  scoreParts,
+  type LayoutMetrics,
+} from "../../src/lib/layout/metrics";
 import type { Molecule } from "./fetch";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -93,19 +97,52 @@ function measure(g: Graph, laid: Laid): LayoutMetrics {
     wedged: laid.wedges.map((w) => w.bond),
     // a label for anything but a neutral carbon
     labelled: g.atoms.map((a) => a.el !== "C" || a.charge !== 0),
+    elements: g.atoms.map((a) => a.el),
+    hydrogens: g.atoms.map((a) => a.hs),
   });
 }
 
 const escape = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const fmt = (m: LayoutMetrics) =>
-  [
-    `score ${m.score.toFixed(1)}`,
+/** What each part of the score is called on the sheet. */
+const partNames: Record<keyof ReturnType<typeof scoreParts>, string> = {
+  overlaps: "overlaps",
+  crossings: "crossings",
+  clashes: "clashes",
+  crowdedLabels: "crowded labels",
+  ringWedges: "wedges on rings",
+  bondSpread: "bond lengths",
+  angleError: "angles",
+  macroAngleError: "macrocycle angles",
+  ringError: "rings",
+  tilt: "tilt",
+  gridError: "askew",
+  substituentError: "substituents",
+  chainFold: "folded chains",
+  chainSplay: "splayed chains",
+  chainTilt: "chains off level",
+  axisTilt: "long axis",
+  aspect: "tall",
+  macroAspect: "macrocycle tall",
+  readingOrder: "reading order",
+};
+
+const fmt = (m: LayoutMetrics) => {
+  // what the score is made of, the largest first
+  const parts = Object.entries(scoreParts(m))
+    .filter(([, v]) => v >= 0.1)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${partNames[k as keyof typeof partNames]} ${v.toFixed(1)}`);
+  return [
+    `<b>score ${m.score.toFixed(1)}</b>${parts.length ? ` = ${parts.join(" + ")}` : ""}`,
     `overlaps ${m.overlaps} · crossings ${m.crossings} · clashes ${m.clashes} · crowded labels ${m.crowdedLabels}`,
-    `bonds ±${(m.bondSpread * 100).toFixed(1)}% · angles ${m.angleError.toFixed(1)}° · rings ${m.ringError.toFixed(3)}`,
-    `macrocycle angles ${m.macroAngleError.toFixed(1)}° · wedges on rings ${m.ringWedges}`,
+    `bonds ±${(m.bondSpread * 100).toFixed(1)}% · angles ${m.angleError.toFixed(1)}° · rings ${m.ringError.toFixed(3)} · macrocycle ${m.macroAngleError.toFixed(1)}°`,
+    `tilt ${m.tilt.toFixed(1)}° · askew ${m.gridError.toFixed(1)}° · substituents ${m.substituentError.toFixed(1)}° · wedges on rings ${m.ringWedges}`,
+    `chains folded ${m.chainFold.toFixed(2)}, splayed ${m.chainSplay.toFixed(0)}°, off level ${m.chainTilt.toFixed(0)}° · long axis ${m.axisTilt.toFixed(0)}°`,
+    `height/width ${m.aspect.toFixed(2)}, macrocycle ${m.macroAspect.toFixed(2)} · reading order ${m.readingOrder}`,
   ].join("<br>");
+};
 
 const listed: Molecule[] = JSON.parse(
   readFileSync(resolve(here, "molecules.json"), "utf8"),
@@ -124,6 +161,7 @@ const totals = new Map<string, { score: number; overlaps: number; crossings: num
 /** Mean score by category, then engine. */
 const byCategory = new Map<string, Map<string, { score: number; n: number }>>();
 const rows: string[] = [];
+const scores: Record<string, Record<string, LayoutMetrics>> = {};
 let category = "";
 for (const m of listed) {
   const base = baselines.get(m.name);
@@ -134,12 +172,13 @@ for (const m of listed) {
   }
   const ref = m.reference
     ? `<figure class="ref"><div class="art"><img src="${m.reference.url}" alt="${escape(m.name)} on Wikipedia" loading="lazy"></div>
-<figcaption>Wikipedia · <a href="${m.reference.page}">${escape(m.reference.licence)}</a>, ${escape(m.reference.author).slice(0, 60)}</figcaption></figure>`
-    : `<figure class="ref"><div class="art empty">no reference</div><figcaption>Wikipedia</figcaption></figure>`;
+<figcaption>Wikipedia · <a href="${m.reference.page}">${escape(m.reference.licence)}</a>, ${escape(m.reference.author).slice(0, 60)}${m.referenceNote ? `<br><b>${escape(m.referenceNote)}</b>` : ""}</figcaption></figure>`
+    : `<figure class="ref"><div class="art empty">no reference</div><figcaption>${escape(m.noReference ?? "Wikipedia")}</figcaption></figure>`;
   const cells = engines.map((e) => {
     const laid = base.layouts[e];
     if (!laid) return "";
     const metrics = measure(laid.graph, laid);
+    (scores[m.name] ??= {})[e] = metrics;
     const cat = byCategory.get(m.category) ?? new Map();
     const c = cat.get(e) ?? { score: 0, n: 0 };
     cat.set(e, { score: c.score + metrics.score, n: c.n + 1 });
@@ -213,6 +252,7 @@ ${rows.join("\n")}
 `;
 
 mkdirSync(outDir, { recursive: true });
+writeFileSync(resolve(outDir, "scores.json"), JSON.stringify(scores, null, 1));
 const out = resolve(outDir, "index.html");
 writeFileSync(out, page);
 console.log(`${rows.length} rows -> ${out}`);
