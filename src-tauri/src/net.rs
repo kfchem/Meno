@@ -49,6 +49,9 @@ struct Inner {
     /// window's code - a test binary on Windows cannot load what that needs.
     tell: OnceLock<Tell>,
     log: OnceLock<PathBuf>,
+    /// One writer at a time, so that entries from connections ending
+    /// together do not run into one another.
+    log_lock: Mutex<()>,
     next: AtomicU64,
 }
 
@@ -149,12 +152,15 @@ impl Net {
 
     fn write_log(&self, entry: &serde_json::Value) {
         let Some(path) = self.0.log.get() else { return };
+        // the whole line in one write, one writer at a time
+        let line = format!("{entry}\n");
+        let _one = self.0.log_lock.lock().unwrap_or_else(|e| e.into_inner());
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)
         {
-            let _ = writeln!(file, "{entry}");
+            let _ = file.write_all(line.as_bytes());
         }
     }
 
@@ -557,6 +563,35 @@ mod tests {
         assert_eq!(decode_base64("YQ==").unwrap(), b"a");
         assert_eq!(decode_base64("YWI=").unwrap(), b"ab");
         assert_eq!(decode_base64("!!"), None);
+    }
+
+    #[test]
+    fn keeps_every_entry_whole_when_many_are_written_at_once() {
+        let path = std::env::temp_dir().join(format!("meno-net-log-{}.jsonl", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let net = Net::default();
+        let _ = net.0.log.set(path.clone());
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let net = net.clone();
+                std::thread::spawn(move || {
+                    for i in 0..200 {
+                        net.note_blocked(&format!("host-{t}-{i}.example"), None, "a reason long enough to be written in more than one piece");
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(lines.len(), 8 * 200);
+        for line in lines {
+            let entry: serde_json::Value = serde_json::from_str(line).expect(line);
+            assert_eq!(entry["connection"]["outcome"], "blocked");
+        }
     }
 
     #[test]
