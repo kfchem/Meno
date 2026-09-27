@@ -79,7 +79,7 @@ available:
 | `Start-Meno` | start the app under test, sized and in front |
 | `Open-MenoFile -Path` | open a structure into an empty tab |
 | `Save-Step -Name` | a numbered screenshot |
-| `Invoke-MenoClick -X -Y [-Count]` | client coordinates, not screen |
+| `Invoke-MenoClick -X -Y [-Count] [-Right]` | client coordinates, not screen; `-Right` for the other button |
 | `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-AtStep]` | press, travel, release |
 | `Move-MenoPointer -X -Y` | hover |
 | `Invoke-MenoWheel -X -Y -Notches` | zoom; positive is away from you, in |

@@ -115,6 +115,8 @@ export function Atoms2D() {
         setHoveredFromId(a.id);
         const now = performance.now();
         const btn = (e as any).nativeEvent?.button;
+        // Only the main button works an atom; the other opens its menu.
+        if (btn != null && btn !== 0) return;
         const DBL_MS = 400;
         if (
           btn === 0 &&

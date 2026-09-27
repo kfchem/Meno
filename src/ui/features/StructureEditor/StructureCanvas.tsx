@@ -34,7 +34,12 @@ import {
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import DocumentStylePanel from "./DocumentStylePanel";
 import SmilesPanel from "./SmilesPanel";
-import { isCleanUpKey, saveIntent } from "../../../lib/doc/shortcuts";
+import PartMenu, { type MenuTarget } from "./PartMenu";
+import {
+  isCleanUpKey,
+  isDeleteKey,
+  saveIntent,
+} from "../../../lib/doc/shortcuts";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { cleanUp } from "./chem/cleanUp";
@@ -125,22 +130,75 @@ function StructureCanvasContent({
     },
     [store],
   );
-  // With the pointer on a structure, the key cleans up just that one.
+  // What is under the pointer is what a key acts on: Delete deletes it, and
+  // the clean-up key cleans up the structure it is in (everything, when the
+  // pointer is on nothing).
+  const hoveredPart = useCallback((): MenuTarget["kind"] | null => {
+    const { hovered } = store.getState();
+    return hovered.atomId != null
+      ? "atom"
+      : hovered.bondId != null
+        ? "bond"
+        : null;
+  }, [store]);
+  const structureAt = useCallback(
+    (kind: MenuTarget["kind"] | null, id: number | null) => {
+      if (kind === "atom") return id;
+      const { model: m } = store.getState();
+      return m.bonds.find((b) => b.id === id)?.a ?? null;
+    },
+    [store],
+  );
+  const deletePart = useCallback(
+    (kind: MenuTarget["kind"], id: number) => {
+      const st = store.getState();
+      if (st.labelEdit.active || st.moveDrag.active || st.extend.active) return;
+      if (kind === "atom") st.deleteAtom(id);
+      else st.deleteBond(id);
+    },
+    [store],
+  );
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!isCleanUpKey(e)) return;
-      e.preventDefault();
-      const { hovered, model: m } = store.getState();
-      const bond =
-        hovered.bondId != null
-          ? m.bonds.find((b) => b.id === hovered.bondId)
-          : undefined;
-      runCleanUp(hovered.atomId ?? bond?.a ?? null);
+      const { hovered } = store.getState();
+      const kind = hoveredPart();
+      const id = kind === "atom" ? hovered.atomId : hovered.bondId;
+      if (isCleanUpKey(e)) {
+        e.preventDefault();
+        runCleanUp(structureAt(kind, id));
+      } else if (isDeleteKey(e) && kind && id != null) {
+        e.preventDefault();
+        deletePart(kind, id);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, store, runCleanUp]);
+  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart]);
+  // The same, from the mouse alone: a menu at the pointer on a right-click.
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  useEffect(() => setMenu(null), [model]); // what it was about may be gone
+  const openMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    // A card's text field keeps the system's own menu - cut, copy, paste.
+    if (e.target !== domRef.current) return;
+    e.preventDefault(); // no browser menu over the drawing
+    const { hovered } = store.getState();
+    const kind = hoveredPart();
+    const id = kind === "atom" ? hovered.atomId : hovered.bondId;
+    if (!kind || id == null) {
+      setMenu(null);
+      return;
+    }
+    const box = e.currentTarget.getBoundingClientRect();
+    setMenu({
+      kind,
+      id,
+      x: e.clientX - box.left,
+      y: e.clientY - box.top,
+      within: { width: box.width, height: box.height },
+    });
+  };
   const toggleStereoLabels = () => {
     const stereoLabels = !chemistry.stereoLabels;
     setChemistry({ ...chemistry, stereoLabels });
@@ -174,6 +232,7 @@ function StructureCanvasContent({
       onMouseMove={handleWrapperMouseMove}
       onMouseLeave={handleWrapperMouseLeave}
       onClick={handleWrapperClick}
+      onContextMenu={openMenu}
     >
       {/* Hidden file input for Open (replace) */}
       <input
@@ -336,6 +395,14 @@ function StructureCanvasContent({
           </div>
         )}
       {smilesOpen && <SmilesPanel onClose={() => setSmilesOpen(false)} />}
+      {menu && (
+        <PartMenu
+          target={menu}
+          onClose={closeMenu}
+          onDelete={() => deletePart(menu.kind, menu.id)}
+          onCleanUp={() => runCleanUp(structureAt(menu.kind, menu.id))}
+        />
+      )}
       <Canvas
         key={tabId}
         orthographic

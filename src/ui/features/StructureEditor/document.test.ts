@@ -35,6 +35,32 @@ describe("structure document operations", () => {
     expect(ops.connectAtoms(three, 2, three.nextId - 1)).not.toBe(three);
   });
 
+  it("deletes an atom with its bonds, and the carbons left on their own", () => {
+    // propanol: C1-C2-C3-O; the middle carbon goes
+    let d = ops.addBondedPair(doc(), { x: 0, y: 0 }, { x: 1.5, y: 0 });
+    d = ops.addAtomBonded(d, 2, 3, 0);
+    d = ops.addAtomBonded(d, d.nextId - 2, 4.5, 0, "O");
+    const [c1, c2, c3, o] = d.model.atoms.map((a) => a.id);
+    const next = ops.deleteParts(d, [c2], []);
+    // C1 is left with nothing and goes; C3 keeps its bond to O
+    expect(next.model.atoms.map((a) => a.id)).toEqual([c3, o]);
+    expect(next.model.atoms.some((a) => a.id === c1)).toBe(false);
+    expect(next.model.bonds).toHaveLength(1);
+    expect(next.model.bonds[0]).toMatchObject({ a: c3, b: o });
+  });
+
+  it("deletes a bond, keeping a labelled atom it leaves alone", () => {
+    let d = ops.addBondedPair(doc(), { x: 0, y: 0 }, { x: 1.5, y: 0, el: "O" });
+    d = ops.addAtomBonded(d, 1, -1.5, 0);
+    const bond = d.model.bonds[0].id; // C1-O
+    const next = ops.deleteParts(d, [], [bond]);
+    // the O stays, on its own; C1 still has its other bond
+    expect(next.model.atoms.map((a) => a.el)).toEqual(["C", "O", "C"]);
+    expect(next.model.bonds).toHaveLength(1);
+    // nothing to delete, nothing changed
+    expect(ops.deleteParts(d, [99], [98])).toBe(d);
+  });
+
   it("lays some of the structure out afresh in one operation", () => {
     const d = ops.updateBond(ethane(), 3, { stereo: "up" });
     const next = ops.relayout(d, {

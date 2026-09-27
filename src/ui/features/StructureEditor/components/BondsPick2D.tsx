@@ -240,6 +240,8 @@ export default function BondsPick2D() {
         } catch {}
       }}
       onPointerDown={(e) => {
+        // Only the main button works a bond; the other opens its menu.
+        if (((e as any).nativeEvent?.button ?? 0) !== 0) return;
         const idx = (e as any).instanceId as number | undefined;
         if (idx == null || idx < 0) return;
         const b = model.bonds[idx];

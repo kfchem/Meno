@@ -138,6 +138,11 @@ What is left before the editor counts as finished, and in what order, is in
   margin clear of the letters without measuring anything at run time. The
   canvas draws the runs where `placeLabel` puts them, in the system's own
   Arial (`label_font`); the SVG names Arial.
+- **Hover, then act**: `hovered.atomId` / `hovered.bondId` is the subject
+  of a key (Delete, the clean-up key) and of the menu a right-click opens at
+  the pointer (`PartMenu.tsx`), which offers the same actions to the mouse
+  alone. Only the main button works atoms and bonds; the other is the
+  menu's. Over a button or a card nothing counts as hovered.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
 - **Chemistry**: RDKit's marks on the structure and clean-up, in `chem/`
   and `ChemMarks2D`; see the chemistry worker below.

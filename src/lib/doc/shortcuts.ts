@@ -50,6 +50,22 @@ export function isCleanUpKey(event: KeyLike): boolean {
   );
 }
 
+/**
+ * Delete or Backspace on its own deletes what is under the pointer - but not
+ * while a text field has the keys.
+ */
+export function isDeleteKey(event: KeyLike): boolean {
+  return (
+    (event.key === "Delete" || event.key === "Backspace") &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    !isNativeEditingTarget(event.target) &&
+    (event.target as { tagName?: string } | null)?.tagName?.toUpperCase() !==
+      "TEXTAREA"
+  );
+}
+
 /** Ctrl/Cmd+Z undoes; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. */
 export function undoIntent(event: KeyLike): UndoIntent {
   if (!(event.ctrlKey || event.metaKey)) return null;

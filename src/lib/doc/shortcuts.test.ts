@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCleanUpKey, saveIntent, undoIntent } from "./shortcuts";
+import { isCleanUpKey, isDeleteKey, saveIntent, undoIntent } from "./shortcuts";
 
 const key = (over: Partial<Parameters<typeof undoIntent>[0]> = {}) => ({
   key: "z",
@@ -60,6 +60,18 @@ describe("isCleanUpKey", () => {
         shiftKey: true,
         target: { tagName: "INPUT" },
       }),
+    ).toBe(false);
+  });
+});
+
+describe("isDeleteKey", () => {
+  it("is Delete or Backspace on its own, outside text fields", () => {
+    expect(isDeleteKey({ key: "Delete" })).toBe(true);
+    expect(isDeleteKey({ key: "Backspace" })).toBe(true);
+    expect(isDeleteKey({ key: "Backspace", metaKey: true })).toBe(false);
+    expect(isDeleteKey({ key: "d" })).toBe(false);
+    expect(
+      isDeleteKey({ key: "Backspace", target: { tagName: "TEXTAREA" } }),
     ).toBe(false);
   });
 });

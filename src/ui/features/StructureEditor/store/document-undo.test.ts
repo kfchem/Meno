@@ -37,6 +37,25 @@ describe("editor store over a document", () => {
     expect(state().model.atoms).toHaveLength(1);
   });
 
+  it("deletes what the pointer is on in one step, and forgets the hover", () => {
+    const { doc, state } = editor();
+    const base = state().addAtom(0, 0, "C");
+    const end = state().addAtomBonded(base, 1.5, 0, "C");
+    state().setHoveredFromId(end);
+    const fitBefore = state().fitNonce;
+
+    state().deleteAtom(end);
+    // the carbon left on its own goes with it
+    expect(state().model.atoms).toHaveLength(0);
+    expect(state().hovered).toEqual({ atomId: null, bondId: null });
+    // the view stays where it is
+    expect(state().fitNonce).toBe(fitBefore);
+
+    doc.undo();
+    expect(state().model.atoms).toHaveLength(2);
+    expect(state().model.bonds).toHaveLength(1);
+  });
+
   it("counts a bond extension as one step", () => {
     const { doc, state } = editor();
     const base = state().addAtom(0, 0, "C");

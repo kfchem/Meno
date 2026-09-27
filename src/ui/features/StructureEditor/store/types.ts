@@ -91,6 +91,12 @@ export type EditorState = {
   replaceDraggedAtomWith: (movingId: number, targetId: number) => void;
   moveAtom: (id: number, x: number, y: number) => void;
   /**
+   * Deletes an atom and its bonds, or a bond, as one undo step; a carbon
+   * left with no bonds goes too.
+   */
+  deleteAtom: (id: number) => void;
+  deleteBond: (id: number) => void;
+  /**
    * A new layout for some of the structure - a clean-up - as one undo step:
    * atoms moved, and wedges changed where the layout needs them.
    */
