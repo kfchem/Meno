@@ -7,7 +7,7 @@ import {
   type Atom as LAtom,
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
-import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
+import { editorLayoutOptions, layoutBonds, maxFitZoom } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 
 export default function FitToContent2D({
@@ -20,20 +20,17 @@ export default function FitToContent2D({
   const { model, autoFitSuspended } = useEditor();
   const style = useDrawingStyle();
   const { camera, size, invalidate } = useThree();
-  // Only auto-fit when content appears (0 -> >0) or when trigger changes.
-  const lastCountRef = useRef(0);
+  // Fit only when asked (the trigger): opening, adding or dropping a
+  // structure asks, and so does the fit button. Drawing never does - the
+  // first bond on an empty canvas is drawn where it was put, at the zoom
+  // the canvas opened at, and the view stays.
   const lastTriggerRef = useRef(trigger);
   useEffect(() => {
     const cam = camera as THREE.OrthographicCamera;
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
-    const count = atoms.length;
-
-    const triggerChanged = trigger !== lastTriggerRef.current;
-    const appeared = lastCountRef.current === 0 && count > 0;
-    if (!appeared && !triggerChanged) {
-      // Skip refit to avoid resetting user zoom/pan (e.g., on double click add)
-      lastCountRef.current = count;
+    if (trigger === lastTriggerRef.current) return;
+    if (atoms.length === 0) {
       lastTriggerRef.current = trigger;
       return;
     }
@@ -63,14 +60,13 @@ export default function FitToContent2D({
     const pad = Math.max(0, Math.min(paddingPx, Math.min(w, h) * 0.45));
     const zx = (w - 2 * pad) / spanX;
     const zy = (h - 2 * pad) / spanY;
-    const z = Math.max(0.01, Math.min(zx, zy));
+    const z = Math.max(0.01, Math.min(zx, zy, maxFitZoom(style)));
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     cam.zoom = z;
     cam.updateProjectionMatrix();
     cam.position.set(cx, cy, cam.position.z);
     invalidate();
-    lastCountRef.current = count;
     lastTriggerRef.current = trigger;
     // size changes should also refit
   }, [

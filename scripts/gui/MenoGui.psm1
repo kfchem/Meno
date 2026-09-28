@@ -95,6 +95,17 @@ public static class NativeGui {
   public static void RightDown(int x, int y) { Send(new[] { Mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_RIGHTDOWN, x, y, 0) }); }
   public static void RightUp(int x, int y) { Send(new[] { Mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_RIGHTUP, x, y, 0) }); }
   public static void Wheel(int x, int y, int notches) { Send(new[] { Mouse(MOUSEEVENTF_WHEEL, x, y, (uint)(notches * 120)) }); }
+  // Two fingers on a precision touchpad reach a page as wheel messages of a
+  // fraction of a notch each, sideways ones too.
+  const uint MOUSEEVENTF_HWHEEL = 0x1000;
+  public static void Swipe(int x, int y, int dx, int dy, int steps) {
+    for (int i = 0; i < steps; i++) {
+      int wy = -(dy / steps) * 120 / 100, wx = (dx / steps) * 120 / 100;
+      if (wy != 0) Send(new[] { Mouse(MOUSEEVENTF_WHEEL, x, y, (uint)wy) });
+      if (wx != 0) Send(new[] { Mouse(MOUSEEVENTF_HWHEEL, x, y, (uint)wx) });
+      System.Threading.Thread.Sleep(16);
+    }
+  }
 
   // Text goes in as Unicode scan codes, so it does not depend on the
   // keyboard layout the machine happens to have.
@@ -320,12 +331,13 @@ function Invoke-MenoDrag {
         [int] $Steps = 12,
         [int] $StepMs = 25,
         [int] $Count = 1,
-        [scriptblock] $AtStep
+        [scriptblock] $AtStep,
+        [switch] $Right
     )
     $a = ConvertTo-Screen $FromX $FromY
     [NativeGui]::MoveTo($a.X, $a.Y)
     Start-Sleep -Milliseconds 80
-    [NativeGui]::LeftDown($a.X, $a.Y)
+    if ($Right) { [NativeGui]::RightDown($a.X, $a.Y) } else { [NativeGui]::LeftDown($a.X, $a.Y) }
     Start-Sleep -Milliseconds 80
     for ($i = 1; $i -le $Steps; $i++) {
         $t = $i / $Steps
@@ -335,7 +347,7 @@ function Invoke-MenoDrag {
         if ($AtStep) { & $AtStep $i }
     }
     $b = ConvertTo-Screen $ToX $ToY
-    [NativeGui]::LeftUp($b.X, $b.Y)
+    if ($Right) { [NativeGui]::RightUp($b.X, $b.Y) } else { [NativeGui]::LeftUp($b.X, $b.Y) }
     Start-Sleep -Milliseconds 200
 }
 
@@ -353,6 +365,18 @@ function Move-MenoPointer {
     [NativeGui]::MoveTo($p.X - 4, $p.Y)
     Start-Sleep -Milliseconds 60
     [NativeGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 200
+}
+
+function Invoke-MenoSwipe {
+    param(
+        [Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y,
+        [int] $DX = 0, [int] $DY = 0, [int] $Steps = 10
+    )
+    $p = ConvertTo-Screen $X $Y
+    [NativeGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 60
+    [NativeGui]::Swipe($p.X, $p.Y, $DX, $DY, $Steps)
     Start-Sleep -Milliseconds 200
 }
 
@@ -419,5 +443,5 @@ function Wait-MenoSettled {
 
 Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
     Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
-    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel,
+    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel, Invoke-MenoSwipe,
     Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled

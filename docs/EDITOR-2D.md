@@ -53,6 +53,54 @@ and in particular:
 - **Labels**: hydrogens go on the side away from the bonds, and on the right
   when the bonds are within 10 degrees of vertical (#24).
 
+### Pointer and keys, in 2D and 3D
+
+Agreed with the maintainer on 2026-09-27. Meno runs on Windows and macOS,
+is worked with a mouse first but must be just as usable from a trackpad, and
+will show the 2D drawing and the 3D structure in one canvas - so the same
+hands do the same things in both, and modifier keys follow each system's
+own conventions: where Windows uses Ctrl, macOS uses ⌘ (on a Mac, a
+Ctrl-click is a right-click).
+
+**Moving the view.** A left drag, the gesture used most, is the view's own
+main movement; everything else moves or zooms the same way in both.
+
+| | Mouse | Trackpad | 2D | 3D |
+|---|---|---|---|---|
+| Left drag from empty space | left drag | press and drag | move | turn |
+| Right or middle drag, anywhere | right or middle drag | two-finger press and drag | move | move |
+| Scroll | the wheel zooms | two fingers move | as the device | as the device |
+| Zoom | the wheel | pinch | zoom | zoom |
+
+A mouse wheel and two fingers arrive as the same event, so they are told
+apart by the first event of each run - fingers move sideways, in fractions
+and in small first steps (`lib/input/wheel.ts`); a pinch comes as a WebKit
+gesture or, in Chromium, with Ctrl held. Measured on the maintainer's Mac,
+a trackpad's first step is 1 or 2 px however fast the stroke, and a
+smoothly scrolling mouse's notch (an MX Master 3S) is 13 px, so 8 px tells
+them apart; a notch zooms at least as far as a plain wheel's 40 px line.
+(PR #55; 3D follows when the views are joined.)
+
+**A click keeps each view's own meaning**: in 2D a click on an atom edits
+its label and a click on a bond changes its kind, as drawing wants; in 3D a
+click on an atom selects it. A right-click, or a press with two fingers,
+opens the menu for what is under the pointer; it waits for the button to
+come up, so a right drag is a move, not a menu.
+
+**Selecting**, the same in both views:
+
+| | Windows | macOS |
+|---|---|---|
+| Add or take out one atom or bond | Ctrl+click | ⌘+click |
+| Everything along the bonds from the last atom chosen to this one | Shift+click | Shift+click |
+| A box: what it holds | double-click empty space and drag, or Ctrl+drag | double-click empty space and drag, or ⌘+drag |
+| A whole structure | right-click, *Select this structure* | the same |
+| Nothing | click empty space, or Esc | the same |
+
+A double-click in empty space that does not move still draws a bond, and a
+double-click-and-drag that starts on an atom draws out of it instead. On a
+trackpad a double-tap and drag does the same as a double-click and drag.
+
 ## Who does what
 
 - **TypeScript** holds the model, the gestures and the drawing - everything
@@ -193,6 +241,39 @@ All hover-based, as above.
   never in an exported picture.)
 - Reaction arrows, "+" and text: create, move, edit, delete.
 - Copy and paste, within Meno and between tabs.
+
+### 4a. A layout engine of Meno's own
+
+Agreed 2026-09-27: clean-up as it is (RDKit's layout laid over the drawing,
+PR #53) falls well short - taxol comes out unrecognisable - and neither of
+RDKit's layout engines is good enough to build on, so Meno gets its own,
+written from scratch, used for clean-up and for structures that arrive
+without coordinates (SMILES).
+
+What it has to do, in the maintainer's words: rings drawn clean and regular,
+ring bonds kept plain with stereo shown on the bonds out of them - adding an
+H where a ring-fusion centre has no other - substituents that would clash
+turned to where they fit, and stretched only if they still clash, and the
+molecule turned the way it is usually drawn (taxol with its bridgehead
+double bond level). Macrocycles, macrolides above all, must come out well
+as a matter of course. Sugars, amino acids and peptides, nucleosides and
+lipids each have their own way of being drawn, which it should know.
+
+1. **A benchmark to judge it by**: some seventy molecules, each beside the
+   structure its Wikipedia article shows, with numbers for what looks
+   untidy and for how the drawing sits - square to the lattice, its chains
+   level, read left to right (`scripts/layout`, `src/lib/layout/metrics.ts`).
+   The numbers are general rules, not a record of particular molecules.
+   RDKit's two engines are the baseline. (PR #58)
+2. The engine itself (`src/lib/layout/engine.ts`, by the rules in
+   `docs/LAYOUT-2D.md`): ring systems, chains, macrocycles, stereo display,
+   clash removal and orientation, measured on the benchmark at each step.
+   A first pass is in; on the benchmark it scores best or level on most of
+   the molecules against RDKit's two engines.
+3. Clean-up and SMILES import moved onto it.
+
+Its code is Meno's own: nothing taken from other depiction code, nothing
+traced from reference drawings.
 
 ### 5. Files, clipboard and export
 

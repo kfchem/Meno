@@ -47,6 +47,8 @@ import { cleanUp } from "./chem/cleanUp";
 import { useChemMarks } from "./chem/useChemMarks";
 import { useFileActions } from "./fileActions";
 import { CANVAS_DPR } from "./constants";
+import { startingZoom } from "./layoutOptions";
+import { useDrawingStyle } from "./useDrawingStyle";
 import { DrawnLayoutProvider } from "./components/DrawnLayout";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
@@ -180,6 +182,41 @@ function StructureCanvasContent({
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
+  // A right-drag moves the view, so the menu waits for the button to come
+  // up without having travelled. macOS asks for the menu as the button goes
+  // down, Windows as it comes up: either way it opens only then.
+  const rightPress = useRef<{
+    x: number;
+    y: number;
+    down: boolean;
+    moved: boolean;
+    pending: MenuTarget | null;
+  } | null>(null);
+  const onRightDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 2) {
+      rightPress.current = null; // a Ctrl-click on a Mac starts afresh
+      return;
+    }
+    rightPress.current = {
+      x: e.clientX,
+      y: e.clientY,
+      down: true,
+      moved: false,
+      pending: null,
+    };
+  };
+  const onRightMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = rightPress.current;
+    if (!r?.down || r.moved) return;
+    if (Math.hypot(e.clientX - r.x, e.clientY - r.y) > 4) r.moved = true;
+  };
+  const onRightUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = rightPress.current;
+    if (e.button !== 2 || !r) return;
+    r.down = false;
+    if (r.pending && !r.moved) setMenu(r.pending);
+    r.pending = null;
+  };
   const openMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     // A card's text field keeps the system's own menu - cut, copy, paste.
     if (e.target !== domRef.current) return;
@@ -192,13 +229,16 @@ function StructureCanvasContent({
       return;
     }
     const box = e.currentTarget.getBoundingClientRect();
-    setMenu({
+    const target: MenuTarget = {
       kind,
       id,
       x: e.clientX - box.left,
       y: e.clientY - box.top,
       within: { width: box.width, height: box.height },
-    });
+    };
+    const r = rightPress.current;
+    if (r?.down) r.pending = target; // macOS: open on the way up
+    else if (!r?.moved) setMenu(target); // Windows, or a Ctrl-click on a Mac
   };
   const toggleStereoLabels = () => {
     const stereoLabels = !chemistry.stereoLabels;
@@ -221,6 +261,9 @@ function StructureCanvasContent({
       ? files.dismissError
       : () => setChemError(null);
   const ownStyle = useEditor((s) => s.docStyle != null);
+  // Where the view starts, before there is anything to fit
+  const style = useDrawingStyle();
+  const [startZoom] = useState(() => startingZoom(style));
   // SMILES in and out, by RDKit, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
 
@@ -234,6 +277,9 @@ function StructureCanvasContent({
       onMouseLeave={handleWrapperMouseLeave}
       onClick={handleWrapperClick}
       onContextMenu={openMenu}
+      onPointerDownCapture={onRightDown}
+      onPointerMoveCapture={onRightMove}
+      onPointerUpCapture={onRightUp}
     >
       {/* Hidden file input for Open (replace) */}
       <input
@@ -407,7 +453,7 @@ function StructureCanvasContent({
       <Canvas
         key={tabId}
         orthographic
-        camera={{ position: [0, 0, 10], zoom: 4 }}
+        camera={{ position: [0, 0, 10], zoom: startZoom }}
         // Render on demand: interactions, store changes and the animation
         // layers request frames (see PanZoom2D and the preview components)
         // instead of redrawing continuously while nothing changes.

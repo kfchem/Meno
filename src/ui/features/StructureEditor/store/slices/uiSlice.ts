@@ -58,7 +58,8 @@ export function createUiSlice(
       const { labelEdit } = get();
       if (!labelEdit.active || labelEdit.atomId == null) return;
       const id = labelEdit.atomId;
-      const value = labelEdit.value.trim();
+      // (full-width letters, from an input method, as the ordinary ones)
+      const value = labelEdit.value.normalize("NFKC").trim();
       // An empty input keeps the current label.
       if (value) doc.edit("rename atom", (d) => ops.setAtomLabel(d, id, value));
       set((prev: EditorState) => ({

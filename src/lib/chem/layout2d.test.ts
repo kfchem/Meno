@@ -1720,6 +1720,38 @@ describe("two double bonds sharing an atom", () => {
       }
     }
   });
+
+  it("stops each line where a label they share cuts it, meeting nothing there", () => {
+    // O=S=O, and C=C=C with the carbons labelled: the label takes the lines'
+    // ends, so the first bond is drawn the same whether the second is double
+    // or single. Run on to meet the other bond's lines, they cross the
+    // letters - most plainly at a sulfonyl drawn nearly straight through.
+    const cases: [string[], Partial<LayoutOptions>][] = [
+      [["O", "S", "O"], {}],
+      [["C", "C", "C"], { showCarbonLabels: true }],
+    ];
+    for (const [els, over] of cases) {
+      for (const mode of ["center", "left", "right"] as const) {
+        for (const deg of [90, 120, 179.99, 180]) {
+          const ends = (second: 1 | 2) => {
+            const { atoms, bonds } = pair(deg, "center", false);
+            els.forEach((el, i) => (atoms[i].el = el));
+            bonds[0].doubleMode = mode;
+            bonds[1].order = second;
+            const { lines } = buildAllPrimitives(atoms, bonds, opts(over), 40);
+            // the first bond's lines: level, on the near side of the atom
+            return lines
+              .filter((l) => Math.abs(l.y1 - l.y2) < 1e-9)
+              .filter((l) => Math.min(l.x1, l.x2) < 1.8 - 1e-6)
+              .map((l) => [Math.max(l.x1, l.x2), l.y1].map((v) => +v.toFixed(6)))
+              .sort((a, b) => a[1] - b[1]);
+          };
+          const why = `${els.join("")} ${mode} ${deg}`;
+          expect([why, ends(2)]).toEqual([why, ends(1)]);
+        }
+      }
+    }
+  });
 });
 
 describe("which atoms are finished off at all", () => {
@@ -1770,5 +1802,37 @@ describe("which atoms are finished off at all", () => {
     expect(got.has(4)).toBe(false); // nothing of a centred double reaches it
     expect(got.has(0)).toBe(true); // plain bonds meet here
     expect(got.has(3)).toBe(true); // a plain bond reaches here
+  });
+});
+
+describe("a cage in perspective", () => {
+  // two bonds crossing in an X: 0-1 behind, 2-3 in front
+  const atoms = (withDepth: boolean): Atom[] => [
+    { id: 0, x: -1, y: -1, el: "C", ...(withDepth ? { z: -1 } : {}) },
+    { id: 1, x: 1, y: 1, el: "C", ...(withDepth ? { z: -1 } : {}) },
+    { id: 2, x: -1, y: 1, el: "C", ...(withDepth ? { z: 1 } : {}) },
+    { id: 3, x: 1, y: -1, el: "C", ...(withDepth ? { z: 1 } : {}) },
+  ];
+  const bonds: Bond[] = [
+    { a1: 0, a2: 1, order: 1, stereo: "none" },
+    { a1: 2, a2: 3, order: 1, stereo: "none" },
+  ];
+
+  it("breaks the bond behind where it passes under the one in front", () => {
+    const { lines } = buildAllPrimitives(atoms(true), bonds, opts(), 40);
+    // the back bond in two pieces, neither reaching the middle; the front whole
+    const back = lines.filter((l) => Math.sign(l.x2 - l.x1) === Math.sign(l.y2 - l.y1));
+    const front = lines.filter((l) => Math.sign(l.x2 - l.x1) !== Math.sign(l.y2 - l.y1));
+    expect(back).toHaveLength(2);
+    expect(front).toHaveLength(1);
+    for (const l of back) {
+      const nearest = Math.min(Math.hypot(l.x1, l.y1), Math.hypot(l.x2, l.y2));
+      expect(nearest).toBeGreaterThan(0.05);
+    }
+  });
+
+  it("draws crossing bonds whole where nothing says which is in front", () => {
+    const { lines } = buildAllPrimitives(atoms(false), bonds, opts(), 40);
+    expect(lines).toHaveLength(2);
   });
 });

@@ -1,6 +1,7 @@
 import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
+import { ringSidesOf } from "./aromaticSides";
 
 export type Atom = {
   id: number;
@@ -9,6 +10,12 @@ export type Atom = {
   el: string;
   charge?: number;
   isotope?: number;
+  /**
+   * How near the atom is to the viewer, where the structure is drawn in
+   * perspective (a cage): a bond passing behind another is broken where it
+   * crosses it.
+   */
+  z?: number;
 };
 export type Bond = {
   a1: number;
@@ -750,12 +757,6 @@ function centredMeetPoint(
   return vadd({ x: at.x, y: at.y }, vadd(vscale(n, offset), vscale(d, t)));
 }
 
-/**
- * The two lines of a double bond drawn centred, each carried on to meet the
- * line of a neighbouring double bond where they share an atom. Left to stop
- * short, consecutive double bonds read as four loose lines rather than a
- * chain.
- */
 /** Where the lines of a double bond sit, either side of its own line. */
 function doubleOffsets(
   b: Bond,
@@ -771,6 +772,13 @@ function doubleOffsets(
   return sgn == null ? [off * 0.5, -off * 0.5] : [off * sgn];
 }
 
+/**
+ * The two lines of a double bond drawn centred, each carried on to meet the
+ * line of a neighbouring double bond where they share an atom. Left to stop
+ * short, consecutive double bonds read as four loose lines rather than a
+ * chain. Not at a labelled atom, though: the label has already taken the
+ * bond's end, and a line run on from there would cross the letters.
+ */
 function centredPair(
   p1: Vec2,
   p2: Vec2,
@@ -780,6 +788,7 @@ function centredPair(
   widthPx: number,
   bond: Bond,
   atoms: Atom[],
+  labelled: (idx: number) => boolean,
   adjBonds?: Map<number, Bond[]>,
   doubleSides?: Map<Bond, number | undefined>,
   joinMinDeg = 20,
@@ -788,9 +797,11 @@ function centredPair(
   const limit = off * 2;
   const sideOf = (b: Bond) => doubleOffsets(b, off, doubleSides);
   const others = (idx: number) =>
-    (adjBonds?.get(idx) ?? []).filter(
-      (b) => b !== bond && b.order === 2 && b.stereo !== "up" && b.stereo !== "down",
-    );
+    labelled(idx)
+      ? []
+      : (adjBonds?.get(idx) ?? []).filter(
+          (b) => b !== bond && b.order === 2 && b.stereo !== "up" && b.stereo !== "down",
+        );
   const out: LineSeg[] = [];
   const meets: Meet[] = [];
   const ends: Vec2[] = [];
@@ -831,9 +842,8 @@ function centredPair(
       outward: Vec2,
       end: { at: Vec2; met: boolean },
     ): { at: Vec2; met: boolean; through?: Vec2 } => {
-      if (end.met) return end;
+      if (end.met || labelled(atIdx)) return end;
       const atom = atoms[atIdx];
-      if (atom.el !== "C") return end;
       let best: Vec2 | null = null;
       let bestU: Vec2 | null = null;
       let bestT = -Infinity;
@@ -1870,6 +1880,7 @@ export function buildBondPrimitives(
         lwPx,
         bond,
         atoms,
+        (idx) => hasLabel(atoms[idx].el),
         adjBonds,
         doubleSides,
         opts.centredJoinMinDeg ?? 20,
@@ -1883,7 +1894,8 @@ export function buildBondPrimitives(
     // read as a chain that way, and as four loose lines otherwise. Elsewhere
     // it stops on the bisector of the angle it runs inside, and runs up to an
     // atom with nothing on its side - in a ring, both ends; in a chain, the
-    // end inside the zigzag. A label takes both lines' ends alike.
+    // end inside the zigzag. A label takes both lines' ends alike, and meets
+    // nothing: the lines stop where it has cut them.
     const o = vscale(n, off * sgn);
     const around = (idx: number) =>
       (adjBonds?.get(idx) ?? []).filter((nb) => nb !== bond);
@@ -1907,13 +1919,15 @@ export function buildBondPrimitives(
     const ps1 = vadd(p1, vscale(dir, Math.min(back1, room)));
     const ps2 = vadd(p2, vscale(dir, -Math.min(back2, room)));
     const others = (idx: number) =>
-      (adjBonds?.get(idx) ?? []).filter(
-        (nb) =>
-          nb !== bond &&
-          nb.order === 2 &&
-          nb.stereo !== "up" &&
-          nb.stereo !== "down",
-      );
+      hasLabel(atoms[idx].el)
+        ? []
+        : (adjBonds?.get(idx) ?? []).filter(
+            (nb) =>
+              nb !== bond &&
+              nb.order === 2 &&
+              nb.stereo !== "up" &&
+              nb.stereo !== "down",
+          );
     const sideOf = (nb: Bond) => doubleOffsets(nb, off, doubleSides);
     const ps1b = mitreOffsetEnd(
       atoms,
@@ -2087,15 +2101,35 @@ export function buildAllPrimitives(
   // of them before any is drawn, so that a bond can meet its neighbour's line
   // where they share an atom instead of stopping short of it.
   const doubleSides = new Map<Bond, number | undefined>();
-  for (const b of bonds) {
-    if (b.order !== 2) continue;
-    if (b.doubleMode !== undefined && b.doubleMode !== "auto") continue;
+  // A ring's double bond goes inside the ring - an aromatic ring's into the
+  // ring that shows as aromatic by it, since fused rings share a bond and it
+  // can go into only one of them (see aromaticSides).
+  const ringSide = ringSidesOf(
+    atoms.length,
+    bonds,
+    atoms.map((a) => a.el),
+  );
+  bonds.forEach((b, i) => {
+    if (b.order !== 2) return;
+    if (b.doubleMode !== undefined && b.doubleMode !== "auto") return;
     const p1 = { x: atoms[b.a1].x, y: atoms[b.a1].y };
     const p2 = { x: atoms[b.a2].x, y: atoms[b.a2].y };
     const axis = vsub(p2, p1);
     const L0 = vlen(axis);
     const dir = L0 > 1e-9 ? vscale(axis, 1 / L0) : { x: 1, y: 0 };
     const n = vperp(dir); // Treat +n as "left"
+    const ring = ringSide.get(i);
+    if (ring) {
+      const c = ring.reduce(
+        (acc, k) => ({ x: acc.x + atoms[k].x / ring.length, y: acc.y + atoms[k].y / ring.length }),
+        { x: 0, y: 0 },
+      );
+      const toward = vdot(vsub(c, vscale(vadd(p1, p2), 0.5)), n);
+      if (Math.abs(toward) > 1e-9) {
+        doubleSides.set(b, toward > 0 ? 1 : -1);
+        return;
+      }
+    }
     const neigh1 = bonds
       .filter((o) => o !== b && (o.a1 === b.a1 || o.a2 === b.a1))
       .map((o) => (o.a1 === b.a1 ? o.a2 : o.a1));
@@ -2144,7 +2178,7 @@ export function buildAllPrimitives(
       if (here < CROWDED && there > here) sgn = -sgn;
     }
     doubleSides.set(b, sgn);
-  }
+  });
 
   // bonds at each atom, and just the neighbours, which the ring search uses
   // measure the labels once: the bonds are trimmed to them
@@ -2340,10 +2374,11 @@ export function buildAllPrimitives(
       labelShapes,
       doubleSides
     );
-    lines.push(...r.lines);
+    const behind = brokenBehind(atoms, bonds, b, r.lines, rWorld);
+    lines.push(...behind.lines);
     polys.push(...r.polys);
     meets.push(...(r.meets ?? []));
-    freeEnds.push(...(r.ends ?? []));
+    freeEnds.push(...(r.ends ?? []), ...behind.ends);
     bends.push(...(r.bends ?? []));
   }
   // Every end and corner the joins at atoms have not already seen to:
@@ -2368,6 +2403,80 @@ export function buildAllPrimitives(
     }
   }
   return { lines, polys, circles, fills };
+}
+
+/**
+ * A bond's lines, broken where the bond passes behind another - both drawn
+ * in perspective, their atoms' `z` saying which is nearer where they cross.
+ * The gap is wide enough to read as the one bond going under the other.
+ * Returns the lines, and the ends the breaks make.
+ */
+function brokenBehind(
+  atoms: Atom[],
+  bonds: Bond[],
+  bond: Bond,
+  lines: LineSeg[],
+  halfWidth: number,
+): { lines: LineSeg[]; ends: Vec2[] } {
+  const a = atoms[bond.a1];
+  const c = atoms[bond.a2];
+  if (a?.z == null || c?.z == null) return { lines, ends: [] };
+  const gap = halfWidth * 5;
+  // where the bond crosses the ones in front of it, as fractions along it
+  const cuts: number[] = [];
+  const p = { x: a.x, y: a.y };
+  const d = { x: c.x - a.x, y: c.y - a.y };
+  for (const o of bonds) {
+    if (o === bond) continue;
+    if (o.a1 === bond.a1 || o.a1 === bond.a2 || o.a2 === bond.a1 || o.a2 === bond.a2) continue;
+    const e = atoms[o.a1];
+    const f = atoms[o.a2];
+    if (e?.z == null || f?.z == null) continue;
+    const q = { x: e.x, y: e.y };
+    const g = { x: f.x - e.x, y: f.y - e.y };
+    const den = vcross(d, g);
+    if (Math.abs(den) < 1e-9) continue;
+    const t = vcross(vsub(q, p), g) / den;
+    const u = vcross(vsub(q, p), d) / den;
+    if (t <= 0 || t >= 1 || u <= 0 || u >= 1) continue;
+    const mine = a.z + (c.z - a.z) * t;
+    const theirs = e.z + (f.z - e.z) * u;
+    if (mine < theirs - 1e-6) cuts.push(t);
+  }
+  if (!cuts.length) return { lines, ends: [] };
+  const out: LineSeg[] = [];
+  const ends: Vec2[] = [];
+  for (const l of lines) {
+    // each line of the bond, cut where the crossing falls along it
+    const ld = { x: l.x2 - l.x1, y: l.y2 - l.y1 };
+    const ll = vlen(ld);
+    if (ll < 1e-9) {
+      out.push(l);
+      continue;
+    }
+    let pieces: [number, number][] = [[0, 1]];
+    for (const t0 of cuts) {
+      const cross = { x: p.x + d.x * t0, y: p.y + d.y * t0 };
+      const t = vdot(vsub(cross, { x: l.x1, y: l.y1 }), ld) / (ll * ll);
+      const half = gap / ll;
+      pieces = pieces.flatMap(([s0, s1]): [number, number][] => {
+        if (t + half <= s0 || t - half >= s1) return [[s0, s1]];
+        const kept: [number, number][] = [];
+        if (t - half > s0) kept.push([s0, t - half]);
+        if (t + half < s1) kept.push([t + half, s1]);
+        return kept;
+      });
+    }
+    const at = (s: number) => ({ x: l.x1 + (l.x2 - l.x1) * s, y: l.y1 + (l.y2 - l.y1) * s });
+    for (const [s0, s1] of pieces) {
+      const from = at(s0);
+      const to = at(s1);
+      out.push({ ...l, x1: from.x, y1: from.y, x2: to.x, y2: to.y });
+      if (s0 > 0) ends.push(from);
+      if (s1 < 1) ends.push(to);
+    }
+  }
+  return { lines: out, ends };
 }
 
 export function layoutMolecule(

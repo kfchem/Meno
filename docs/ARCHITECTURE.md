@@ -29,6 +29,7 @@ src/
                           labelFonts.ts (label typefaces, letter by letter)
   lib/net/                network.ts: the network's record, consent, offline mode
   lib/settings/           appSettings.ts: the app's settings and their file
+  lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
   lib/rdkit/              the chemistry worker: client, sidecar, the MOL blocks it is asked about
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
