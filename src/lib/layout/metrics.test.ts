@@ -187,6 +187,19 @@ describe("how a drawing sits", () => {
     expect(layoutMetrics(turned(acid, 180)).readingOrder).toBe(1);
   });
 
+  it("counts a label's H that runs into another label", () => {
+    // C-OH, the H on the right of the O, and another O a little way off
+    const base = {
+      edges: [[0, 1]] as [number, number][],
+      elements: ["C", "O", "O"],
+      hydrogens: [3, 1, 0],
+      labelled: [false, true, true],
+    };
+    const clear = layoutMetrics({ ...base, x: [0, 1, 3], y: [0, 0, 0] });
+    const onIt = layoutMetrics({ ...base, x: [0, 1, 1.9], y: [0, 0, 0.3] });
+    expect(onIt.crowdedLabels).toBeGreaterThan(clear.crowdedLabels);
+  });
+
   it("adds up its parts to the score", () => {
     const m = layoutMetrics(turned(zigzag(8), 20));
     const sum = Object.values(scoreParts(m)).reduce((a, b) => a + b, 0);

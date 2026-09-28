@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FRAMES, grow, sidesOf } from "./assemble";
-import { layout2D } from "./engine";
+import { layout2D, roomForHydrogens, scorer } from "./engine";
 import { macrocycleShape } from "./macrocycle";
-import { layoutMetrics } from "./metrics";
+import { hydrogenSpot, layoutMetrics } from "./metrics";
+import { dist } from "./geometry";
 import { perceive, type LayoutBond, type LayoutInput } from "./perceive";
 import { solidOf } from "./cage";
 
@@ -470,6 +471,45 @@ describe("layout2D", () => {
     expect(x[1]).toBeLessThan(cx - 0.5);
     expect(y[1]).toBeLessThan(cy - 0.5);
     expect((x[1] - cx) * (y[2] - cy) - (y[1] - cy) * (x[2] - cx)).toBeGreaterThan(0);
+  });
+
+  it("makes room for an OH's H by moving a bond, never setting the H under it", () => {
+    // hydroxyacetone, HO-CH2-C(=O)-CH3, drawn by hand with the OH's H (on
+    // the left of its O, as HO) on the ketone's O
+    const input: LayoutInput = {
+      atoms: [{ el: "O", hs: 1 }, { el: "C" }, { el: "C" }, { el: "O" }, { el: "C" }],
+      bonds: [
+        { a: 0, b: 1, order: 1 },
+        { a: 1, b: 2, order: 1 },
+        { a: 2, b: 3, order: 2 },
+        { a: 2, b: 4, order: 1 },
+      ],
+    };
+    const mol = perceive(input);
+    const s3 = Math.sqrt(3) / 2;
+    const pos = new Map([
+      [0, { x: -s3, y: 0.5 }],
+      [1, { x: 0, y: 0 }],
+      [2, { x: -s3, y: -0.5 }],
+      [3, { x: -2 * s3, y: 0 }],
+      [4, { x: -s3, y: -1.5 }],
+    ]);
+    const piece = [0, 1, 2, 3, 4];
+    const score = scorer(mol, piece, [], [], 1);
+    const spot = (p: Map<number, { x: number; y: number }>) => {
+      const o = p.get(0)!;
+      const c = p.get(1)!;
+      const h = hydrogenSpot([{ x: (c.x - o.x) / dist(c, o), y: (c.y - o.y) / dist(c, o) }]);
+      return { x: o.x + h.x, y: o.y + h.y, beside: h.y === 0 };
+    };
+    const clearOf = (h: { x: number; y: number }, p: { x: number; y: number }) =>
+      Math.abs(h.x - p.x) > 0.65 || Math.abs(h.y - p.y) > 0.58;
+    expect(clearOf(spot(pos), pos.get(3)!)).toBe(false);
+    const room = roomForHydrogens(mol, piece, pos, score(pos), score);
+    expect(room.score).toBeLessThan(score(pos));
+    const h = spot(room.pos);
+    expect(h.beside).toBe(true);
+    expect(clearOf(h, room.pos.get(3)!)).toBe(true);
   });
 
   it("sets the pieces of a salt side by side", () => {

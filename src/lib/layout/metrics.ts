@@ -48,6 +48,13 @@ export type Geometry = {
    * by it.
    */
   tetra?: readonly ({ neighbours: readonly number[]; volume: number } | null | undefined)[];
+  /**
+   * What a label's H running into something counts for, in crowdings: a
+   * quarter unless given. A layout sets its parts first, not counting it,
+   * and makes room for its H's last, by moving bonds a little, counting it
+   * as much as labels on each other.
+   */
+  hydrogenRoom?: number;
 };
 
 export type LayoutMetrics = {
@@ -76,8 +83,9 @@ export type LayoutMetrics = {
   ringWedges: number;
   /**
    * Labelled atoms, not bonded, so close their labels crowd (under 0.8 of a
-   * bond); and half for a label's H with nowhere to go clear of other
-   * labels, atoms and bonds.
+   * bond); and a quarter for a label's H - beside its symbol, or under or over
+   * it between bonds on both sides, as the drawing sets it - that runs into
+   * another label, an atom or a bond.
    */
   crowdedLabels: number;
   /**
@@ -237,6 +245,22 @@ export function ringIrregularity(
     best = Math.min(best, Math.sqrt(sum / k) / bond);
   }
   return best;
+}
+
+/**
+ * Where the drawing sets a labelled atom's H, from the atom, in bond
+ * lengths, given the ways its bonds leave it (unit vectors): beside the
+ * symbol on the side its bonds leave free - OH, or HO where they leave to
+ * the right - or under it (over it) where they leave on both sides. (The
+ * font is 0.69 of a bond: an H beside its symbol is half a bond off, one
+ * under it 0.6.)
+ */
+export function hydrogenSpot(ways: readonly { x: number; y: number }[]): { x: number; y: number } {
+  const band = Math.sin((10 * Math.PI) / 180);
+  const sx = ways.reduce((sum, w) => sum + w.x, 0);
+  const sy = ways.reduce((sum, w) => sum + w.y, 0);
+  if (ways.some((w) => w.x < -band) && ways.some((w) => w.x > band)) return { x: 0, y: sy >= 0 ? -0.6 : 0.6 };
+  return { x: sx > Math.hypot(sx, sy) * band ? -0.5 : 0.5, y: 0 };
 }
 
 /** The volume three vectors span. */
@@ -416,60 +440,42 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       }
     }
   }
-  // and where a label's H goes, as the drawing sets it: on the side its
-  // bonds leave free, or under the symbol (over it) where they leave both
-  // sides - or, where that runs into another label, an atom or a bond, the
-  // other side, or under or over the symbol, whichever is clear. An H with
-  // nowhere clear to go crowds. (In bond lengths: the font is 0.69 of a
-  // bond, an H beside its symbol half a bond off, one under it 0.6.)
-  if (g.labelled && g.hydrogens) {
-    const band = Math.sin((10 * Math.PI) / 180);
-    const placed: { x: number; y: number }[] = [];
+  // and a label's H, where the drawing sets it, clear of every other
+  // label, atom and bond: an OH's H is ink as much as its O. A quarter of
+  // a crowding each - the layout moves a bond to clear it where it can
+  // (untangle), but never buys that with a bond crossing another.
+  const hydrogenRoom = g.hydrogenRoom ?? 0.25;
+  if (g.labelled && g.hydrogens && hydrogenRoom > 0) {
+    const spots: { a: number; x: number; y: number }[] = [];
     for (let a = 0; a < n; a++) {
       if (!g.labelled[a] || !(g.hydrogens[a] > 0) || g.elements?.[a] === "C" || !neighbours[a].length) continue;
-      let sx = 0;
-      let sy = 0;
-      let left = false;
-      let right = false;
-      let down = false;
-      let up = false;
-      for (const b of neighbours[a]) {
-        const d = Math.hypot(x[b] - x[a], y[b] - y[a]) || 1;
-        const ux = (x[b] - x[a]) / d;
-        const uy = (y[b] - y[a]) / d;
-        sx += ux;
-        sy += uy;
-        if (ux < -band) left = true;
-        if (ux > band) right = true;
-        if (uy < -0.64) down = true;
-        if (uy > 0.64) up = true;
+      const h = hydrogenSpot(
+        neighbours[a].map((b) => {
+          const d = Math.hypot(x[b] - x[a], y[b] - y[a]) || 1;
+          return { x: (x[b] - x[a]) / d, y: (y[b] - y[a]) / d };
+        }),
+      );
+      spots.push({ a, x: x[a] + h.x * L, y: y[a] + h.y * L });
+    }
+    for (const [i, h] of spots.entries()) {
+      let crowded = false;
+      for (let b = 0; b < n && !crowded; b++) {
+        if (b === h.a) continue;
+        // (an H's ink is 0.4 of a bond across and half a bond high, an O's
+        // a little more; side by side they want a space between them, or
+        // OH O reads as one word, one over the other a sliver of paper)
+        const [w, t] = g.labelled[b] ? [0.65, 0.58] : [0.33, 0.33];
+        if (Math.abs(h.x - x[b]) < w * L && Math.abs(h.y - y[b]) < t * L) crowded = true;
       }
-      const at = (dx: number, dy: number) => ({ x: x[a] + dx * L, y: y[a] + dy * L });
-      const ways: { x: number; y: number }[] = [];
-      if (left && right) ways.push(at(0, sy >= 0 ? -0.6 : 0.6), at(0, sy >= 0 ? 0.6 : -0.6));
-      else {
-        const toLeft = sx > Math.hypot(sx, sy) * band;
-        ways.push(at(toLeft ? -0.5 : 0.5, 0));
-        if (toLeft ? !right : !left) ways.push(at(toLeft ? 0.5 : -0.5, 0));
-        if (!down) ways.push(at(0, -0.6));
-        if (!up) ways.push(at(0, 0.6));
+      for (const o of spots.slice(i + 1)) {
+        if (Math.abs(h.x - o.x) < 0.6 * L && Math.abs(h.y - o.y) < 0.55 * L) crowded = true;
       }
-      const clear = (h: { x: number; y: number }) => {
-        for (let b = 0; b < n; b++) {
-          if (b === a) continue;
-          const [w, t] = g.labelled![b] ? [0.53, 0.52] : [0.33, 0.33];
-          if (Math.abs(h.x - x[b]) < w * L && Math.abs(h.y - y[b]) < t * L) return false;
-        }
-        for (const o of placed) if (Math.abs(h.x - o.x) < 0.5 * L && Math.abs(h.y - o.y) < 0.5 * L) return false;
-        for (const [p, q] of edges) {
-          if (p === a || q === a) continue;
-          if (pointToSegment(h.x, h.y, x[p], y[p], x[q], y[q]) < 0.3 * L) return false;
-        }
-        return true;
-      };
-      const chosen = ways.find(clear);
-      if (!chosen) crowdedLabels += 0.5;
-      placed.push(chosen ?? ways[0]);
+      for (const [p, q] of edges) {
+        if (crowded) break;
+        if (p === h.a || q === h.a) continue;
+        if (pointToSegment(h.x, h.y, x[p], y[p], x[q], y[q]) < 0.3 * L) crowded = true;
+      }
+      if (crowded) crowdedLabels += hydrogenRoom;
     }
   }
 

@@ -50,7 +50,7 @@ before, not a record of how particular molecules are drawn.
 | overlaps | atoms not bonded but closer than half a bond |
 | crossings | bonds crossing bonds |
 | clashes | atoms lying on a bond they are not part of |
-| crowded labels | labelled atoms (anything but a neutral C) close enough for their labels to meet; and, half as much, a label's H with nowhere to go clear of other labels, atoms and bonds (the drawing sets it the other side, or under or over its symbol, where the usual side is taken) |
+| crowded labels | labelled atoms (anything but a neutral C) close enough for their labels to meet; and, a quarter as much, a label's H - beside its symbol, or under or over it between bonds on both sides, as the drawing sets it - that runs into another label (side by side, with less than a space between them), an atom or a bond |
 
 **Shape**:
 

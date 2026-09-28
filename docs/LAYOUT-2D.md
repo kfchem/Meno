@@ -20,8 +20,7 @@ priority - a later one never buys itself at the cost of an earlier one:
 
 1. **Nothing hidden.** No atom on another, no bond through an atom or
    across another bond, no label crowding a label - an OH's H as much as
-   its O: it goes on the side its bonds leave free, or, where that is
-   taken, the other side or under or over its symbol.
+   its O, with a space between labels side by side.
 2. **Every part in its standard shape.** One bond length; rings as regular
    polygons; chains as zigzags; the bonds round an atom evenly spread.
 3. **Square to the page.** Bonds on a lattice, as far as the skeleton
@@ -235,6 +234,19 @@ When parts clash, in this order:
 2. **Turn** a substituent off its ideal angle, as little as will do.
 3. **Stretch** a bond, only if the clash is still there.
 
+None of these ends with bonds crossing that did not cross before, however
+much else a crossing would clear.
+
+And last, room for the H of every label: the drawing writes it beside the
+symbol on the side the bonds leave free (OH, or HO where they leave to the
+right; under or over the symbol only between bonds on both sides, as in a
+chain's NH). Where it would run into another label, an atom or a bond, the
+bond to the atom is turned a little or drawn a little longer or shorter -
+an OH, an SH - or the same is done to what it runs into, a C=O's O or a
+small branch (taxol's benzoate, clear of its C1 OH). The H is never moved
+under the symbol to make room, and no move that crosses bonds is taken.
+Nothing else is moved for it: the drawing is set first, its H's last.
+
 ## 6. Stereochemistry that reads
 
 - Wedges and hashes on bonds out of rings, never on ring bonds, their
@@ -249,6 +261,9 @@ When parts clash, in this order:
   in by rings - the H goes wherever round its atom there is most room,
   clear of atoms and bonds and crossing none; its wedge says the same
   whichever way it points.
+- A ring atom's two groups - erythromycin's OH and methyl on one carbon -
+  each show which face they are on: the one in front on a wedge, the other
+  behind on hashes.
 - Double bonds are drawn as they are: a cis double bond with its
   substituents on one side.
 

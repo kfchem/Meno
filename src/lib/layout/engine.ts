@@ -21,7 +21,7 @@ import {
   type Grown,
 } from "./assemble";
 import { angleOf, dist, mirror, segmentsCross, sub } from "./geometry";
-import { layoutMetrics } from "./metrics";
+import { hydrogenSpot, layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { misshapen, placeRingSystem, regularize, ringSystemVariants } from "./ringSystem";
 import { bridgeAcross } from "./bridge";
@@ -100,7 +100,7 @@ export function layout2D(input: LayoutInput): Layout2D {
     const count = ringSystemVariants(mol, sys);
     if (count < 2) return;
     const piece = mol.pieces.find((p) => p.includes(sys.atoms[0]))!;
-    const score = scorer(mol, piece, depth, solid);
+    const score = scorer(mol, piece, depth, solid, 0);
     let best = 0;
     let bestScore = Infinity;
     const here = new Set(piece);
@@ -139,7 +139,10 @@ export function layout2D(input: LayoutInput): Layout2D {
   // the largest piece first, the rest after it to the right
   const pieces = [...mol.pieces].sort((p, q) => q.length - p.length);
   for (const piece of pieces) {
-    const score = scorer(mol, piece, depth, solid);
+    // (room for the H's of labels made last, by moving bonds a little, an
+    // H on a label counting then as much as a label on a label)
+    const score = scorer(mol, piece, depth, solid, 0);
+    const scoreH = scorer(mol, piece, depth, solid, 1);
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
     const swapsHere = swaps.filter(([a]) => here.has(a));
@@ -170,6 +173,7 @@ export function layout2D(input: LayoutInput): Layout2D {
     }
     best = { ...rejoin(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
     best = { ...untangle(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
+    best = { ...roomForHydrogens(mol, piece, best.pos, scoreH(best.pos), scoreH, fixed), mirrored: best.mirrored };
     // a cage in a mirrored frame is the one seen from its other side
     if (best.mirrored) {
       for (const [i, view] of others) {
@@ -519,6 +523,15 @@ function clashing(mol: Molecule, piece: number[], pos: Grown): Set<number> {
   return out;
 }
 
+/** How far a point is from the segment p-q. */
+function toSegment(h: Point, p: Point, q: Point): number {
+  const vx = q.x - p.x;
+  const vy = q.y - p.y;
+  const len2 = vx * vx + vy * vy;
+  const t = len2 ? Math.max(0, Math.min(1, ((h.x - p.x) * vx + (h.y - p.y) * vy) / len2)) : 0;
+  return Math.hypot(h.x - (p.x + t * vx), h.y - (p.y + t * vy));
+}
+
 /**
  * Where parts are still in each other's way: turn a branch off its ideal
  * angle, a little and then more, and at last stretch the bond it hangs
@@ -551,6 +564,27 @@ export function untangle(
           : [],
     )
     .filter(([a]) => pos.has(a));
+  // (and it ends with no more bonds crossing than it began with, however
+  // much else a crossing would clear - nothing is hidden first of all: a
+  // crossing made on the way and not undone, the best drawing without it
+  // is kept instead)
+  const bonds = [...mol.bondIndex.keys()]
+    .map((k) => k.split(",").map(Number) as [number, number])
+    .filter(([a]) => pos.has(a));
+  const crossingsIn = (p: Grown) => {
+    let count = 0;
+    for (let i = 0; i < bonds.length; i++) {
+      const [a, b] = bonds[i];
+      for (let j = i + 1; j < bonds.length; j++) {
+        const [c, d] = bonds[j];
+        if (a === c || a === d || b === c || b === d) continue;
+        if (segmentsCross(p.get(a)!, p.get(b)!, p.get(c)!, p.get(d)!)) count++;
+      }
+    }
+    return count;
+  };
+  const crossed = crossingsIn(pos);
+  let safe = { pos, score: current };
   for (let round = 0; round < 6; round++) {
     const hit = clashing(mol, piece, pos);
     if (!hit.size) break;
@@ -581,8 +615,134 @@ export function untangle(
             pos = trial;
             current = s;
             better = true;
+            if (crossingsIn(trial) <= crossed) safe = { pos, score: current };
           }
         }
+      }
+    }
+    if (!better) break;
+  }
+  return crossingsIn(pos) > crossed ? safe : { pos, score: current };
+}
+
+/**
+ * A label's H that runs into another label, an atom or a bond: the bond to
+ * its atom turned a little, or drawn a little longer or shorter (an OH, an
+ * SH), or the same done to what it runs into - a C=O's O, a small branch -
+ * until the H has room beside its symbol. The drawing writes OH or HO as the bond has
+ * it; the H is never moved under the symbol to make room. A move that
+ * crosses bonds is not taken.
+ */
+export function roomForHydrogens(
+  mol: Molecule,
+  piece: number[],
+  start: Grown,
+  startScore: number,
+  score: (pos: Grown) => number,
+  fixed: (atoms: readonly number[]) => boolean = () => false,
+): { pos: Grown; score: number } {
+  let pos = start;
+  let current = startScore;
+  const here = new Set(piece);
+  const bonds = [...mol.bondIndex.keys()]
+    .map((k) => k.split(",").map(Number) as [number, number])
+    .filter(([a]) => here.has(a));
+  const crossingsIn = (p: Grown) => {
+    let count = 0;
+    for (let i = 0; i < bonds.length; i++) {
+      const [a, b] = bonds[i];
+      for (let j = i + 1; j < bonds.length; j++) {
+        const [c, d] = bonds[j];
+        if (a === c || a === d || b === c || b === d) continue;
+        if (segmentsCross(p.get(a)!, p.get(b)!, p.get(c)!, p.get(d)!)) count++;
+      }
+    }
+    return count;
+  };
+  // what each label's H runs into, where the drawing sets it
+  const blocked = (p: Grown): Map<number, number[]> => {
+    const out = new Map<number, number[]>();
+    for (const a of piece) {
+      if (mol.el[a] === "C" || !(mol.hs[a] > 0) || !mol.neighbours[a].length) continue;
+      const at = p.get(a)!;
+      const off = hydrogenSpot(
+        mol.neighbours[a].map((b) => {
+          const v = sub(p.get(b)!, at);
+          const d = Math.hypot(v.x, v.y) || 1;
+          return { x: v.x / d, y: v.y / d };
+        }),
+      );
+      const h = { x: at.x + off.x, y: at.y + off.y };
+      const hits: number[] = [];
+      for (const b of piece) {
+        if (b === a) continue;
+        const q = p.get(b)!;
+        const [w, t] = mol.el[b] !== "C" ? [0.65, 0.58] : [0.33, 0.33];
+        if (Math.abs(h.x - q.x) < w && Math.abs(h.y - q.y) < t) hits.push(b);
+      }
+      for (const [b, c] of bonds) {
+        if (b === a || c === a) continue;
+        if (toSegment(h, p.get(b)!, p.get(c)!) < 0.3) hits.push(b, c);
+      }
+      if (hits.length) out.set(a, [...new Set(hits)]);
+    }
+    return out;
+  };
+  // the small moves of an atom, or of a branch hung from a bond
+  const nudges = (side: number[], from: number, to: number): ((p: Grown) => void)[] => {
+    const out: ((p: Grown) => void)[] = [];
+    if (fixed(side)) return out;
+    for (const t of [0, 10, -10, 20, -20, 30, -30]) {
+      for (const by of [0, -0.15, 0.15, 0.3, 0.45]) {
+        if (!t && !by) continue;
+        out.push((p) => {
+          if (t) turnSide(p, side, p.get(from)!, (t * Math.PI) / 180);
+          if (by) stretchSide(p, side, p.get(from)!, p.get(to)!, by);
+        });
+      }
+    }
+    return out;
+  };
+  let crossings = crossingsIn(pos);
+  for (let round = 0; round < 3; round++) {
+    const now = blocked(pos);
+    if (!now.size) break;
+    let better = false;
+    for (const [a, hits] of now) {
+      const moves: ((p: Grown) => void)[] = [];
+      // its own bond, where it ends there (an OH, an SH, an NH2)
+      if (mol.neighbours[a].length === 1 && mol.systemOf[a] < 0) moves.push(...nudges([a], mol.neighbours[a][0], a));
+      // or what it runs into: an end atom (a C=O's O), or a small branch
+      // out of the rest at it
+      for (const o of hits) {
+        for (const p of mol.neighbours[o]) {
+          if (mol.ringBonds.has(p < o ? `${p},${o}` : `${o},${p}`)) continue;
+          const side = sideAtoms(mol, p, o);
+          // (not one that carries the H's own atom along with it)
+          if (side.length > 12 || side.includes(a)) continue;
+          moves.push(...nudges(side, p, o));
+        }
+      }
+      let found: Grown | null = null;
+      let foundScore = current;
+      let foundCrossings = crossings;
+      for (const move of moves) {
+        const trial = new Map(pos);
+        move(trial);
+        const s = score(trial);
+        if (s < foundScore - 1e-6) {
+          const c = crossingsIn(trial);
+          if (c > crossings) continue;
+          found = trial;
+          foundScore = s;
+          foundCrossings = c;
+        }
+      }
+      if (found) {
+        pos = found;
+        current = foundScore;
+        crossings = foundCrossings;
+        better = true;
       }
     }
     if (!better) break;
@@ -596,6 +756,7 @@ export function scorer(
   piece: number[],
   depth: readonly (number | null)[] = [],
   solid: readonly boolean[] = [],
+  hydrogenRoom?: number,
 ): (pos: Grown) => number {
   const index = new Map(piece.map((a, i) => [a, i]));
   const edges: [number, number][] = [];
@@ -638,5 +799,6 @@ export function scorer(
       perspective,
       depth: depths,
       tetra,
+      hydrogenRoom,
     }).score;
 }
