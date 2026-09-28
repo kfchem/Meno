@@ -103,7 +103,7 @@ public static class NativeGui {
       int wy = -(dy / steps) * 120 / 100, wx = (dx / steps) * 120 / 100;
       if (wy != 0) Send(new[] { Mouse(MOUSEEVENTF_WHEEL, x, y, (uint)wy) });
       if (wx != 0) Send(new[] { Mouse(MOUSEEVENTF_HWHEEL, x, y, (uint)wx) });
-      System.Threading.Thread.Sleep(16);
+      Sleep(16);
     }
   }
 
@@ -303,7 +303,9 @@ function Save-MenoShot {
 function Get-HeldKeys {
     # -Hold's names as virtual keys: Shortcut is Ctrl here, Command on a Mac.
     param([string[]] $Hold)
-    return [uint16[]] @($Hold | ForEach-Object { @{ Shortcut = 0x11; Shift = 0x10; Alt = 0x12 }[$_] })
+    # The comma keeps the array whole: returned bare, an empty one unrolls to
+    # $null and a single key to a scalar, and Hold() is handed neither.
+    return , [uint16[]] @($Hold | ForEach-Object { @{ Shortcut = 0x11; Shift = 0x10; Alt = 0x12 }[$_] })
 }
 
 function Invoke-MenoClick {
