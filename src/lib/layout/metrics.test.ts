@@ -1,0 +1,350 @@
+import { describe, expect, it } from "vitest";
+import { layoutMetrics, ringIrregularity, scoreParts } from "./metrics";
+
+/** A regular polygon's atoms and bonds, bond length 1. */
+function polygon(k: number, cx = 0, cy = 0, turn = 0) {
+  const r = 1 / (2 * Math.sin(Math.PI / k));
+  const x = Array.from({ length: k }, (_, i) => cx + r * Math.cos(turn + (i * 2 * Math.PI) / k));
+  const y = Array.from({ length: k }, (_, i) => cy + r * Math.sin(turn + (i * 2 * Math.PI) / k));
+  const edges = Array.from({ length: k }, (_, i) => [i, (i + 1) % k] as [number, number]);
+  return { x, y, edges };
+}
+
+describe("layoutMetrics", () => {
+  it("finds nothing wrong with a regular hexagon", () => {
+    const m = layoutMetrics(polygon(6));
+    expect(m.bondSpread).toBeCloseTo(0, 9);
+    expect(m.ringError).toBeCloseTo(0, 9);
+    expect(m.overlaps + m.crossings + m.clashes).toBe(0);
+  });
+
+  it("measures a squashed ring, and bonds that vary", () => {
+    const h = polygon(6);
+    const squashed = { ...h, y: h.y.map((v) => v * 0.6) };
+    const m = layoutMetrics(squashed);
+    expect(m.ringError).toBeGreaterThan(0.1);
+    expect(m.bondSpread).toBeGreaterThan(0.05);
+  });
+
+  it("counts atoms on top of each other, and crossing bonds", () => {
+    // two bonds crossing in an X, and a fifth atom right by the first
+    const m = layoutMetrics({
+      x: [0, 1, 0, 1, 0.05],
+      y: [0, 1, 1, 0, 0.02],
+      edges: [[0, 1], [2, 3]],
+    });
+    expect(m.crossings).toBe(1);
+    expect(m.overlaps).toBeGreaterThanOrEqual(1);
+  });
+
+  it("takes a zigzag chain's angles as right, and a straight one's as wrong", () => {
+    const h = Math.sqrt(3) / 2;
+    const zig = {
+      x: [0, h, 2 * h, 3 * h],
+      y: [0, 0.5, 0, 0.5],
+      edges: [[0, 1], [1, 2], [2, 3]] as [number, number][],
+    };
+    expect(layoutMetrics(zig).angleError).toBeCloseTo(0, 6);
+    const straight = { ...zig, y: [0, 0, 0, 0] };
+    expect(layoutMetrics(straight).angleError).toBeCloseTo(60, 6);
+    // unless it is a triple bond, which is straight
+    expect(layoutMetrics({ ...straight, orders: [1, 3, 1] }).angleError).toBeCloseTo(0, 6);
+  });
+
+  it("sees a ring's shape whatever it is turned to", () => {
+    const h = polygon(6, 3, 4, 0.7);
+    expect(ringIrregularity(h.x, h.y, [0, 1, 2, 3, 4, 5], 1)).toBeCloseTo(0, 9);
+    expect(ringIrregularity(h.x, h.y, [5, 4, 3, 2, 1, 0], 1)).toBeCloseTo(0, 9);
+  });
+});
+
+describe("what a chemist sees in a macrocycle, wedges and labels", () => {
+  it("takes a zigzag macrocycle as right and a round one as wrong", () => {
+    const round = polygon(14);
+    expect(layoutMetrics(round).macroAngleError).toBeGreaterThan(30);
+    // naphthalene's outline as a ten-membered ring: every angle 120° or 240°
+    const h = Math.sqrt(3) / 2;
+    const x = [0, -h, -h, 0, h, 2 * h, 3 * h, 3 * h, 2 * h, h];
+    const y = [1, 0.5, -0.5, -1, -0.5, -1, -0.5, 0.5, 1, 0.5];
+    const edges = x.map((_, i) => [i, (i + 1) % x.length] as [number, number]);
+    expect(layoutMetrics({ x, y, edges }).macroAngleError).toBeCloseTo(0, 6);
+  });
+
+  it("counts wedges on ring bonds, and labels that crowd", () => {
+    const h = polygon(6);
+    // a seventh atom off the ring, its bond wedged; one on the ring too
+    const x = [...h.x, h.x[0] + 1];
+    const y = [...h.y, h.y[0]];
+    const edges = [...h.edges, [0, 6] as [number, number]];
+    const m = layoutMetrics({ x, y, edges, wedged: [0, 6] });
+    expect(m.ringWedges).toBe(1);
+    const labels = layoutMetrics({
+      x: [0, 0.6],
+      y: [0, 0],
+      edges: [],
+      labelled: [true, true],
+    });
+    expect(labels.crowdedLabels).toBe(1);
+  });
+});
+
+/** Turns a drawing through `deg` degrees about the origin. */
+function turned<T extends { x: number[]; y: number[] }>(g: T, deg: number): T {
+  const t = (deg * Math.PI) / 180;
+  return {
+    ...g,
+    x: g.x.map((v, i) => v * Math.cos(t) - g.y[i] * Math.sin(t)),
+    y: g.x.map((v, i) => v * Math.sin(t) + g.y[i] * Math.cos(t)),
+  };
+}
+
+/** A zigzag of `k` bonds, bond length 1, running level to the right. */
+function zigzag(k: number) {
+  const h = Math.sqrt(3) / 2;
+  const x = Array.from({ length: k + 1 }, (_, i) => i * h);
+  const y = Array.from({ length: k + 1 }, (_, i) => (i % 2 ? 0.5 : 0));
+  const edges = Array.from({ length: k }, (_, i) => [i, i + 1] as [number, number]);
+  return { x, y, edges };
+}
+
+describe("how a drawing sits", () => {
+  it("measures how far it is turned off the lattice", () => {
+    // pointed at the top, two sides upright: square
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    expect(layoutMetrics(h).tilt).toBeCloseTo(0, 6);
+    expect(layoutMetrics(turned(h, 10)).tilt).toBeCloseTo(10, 1);
+    // turned a whole step of the lattice, it is square again
+    expect(layoutMetrics(turned(h, 30)).tilt).toBeCloseTo(0, 1);
+  });
+
+  it("takes the largest ring system as the frame, and a ring hung off it askew as askew", () => {
+    // naphthalene, square, with a benzene ring hung off it turned 13 degrees
+    const s3 = Math.sqrt(3) / 2;
+    const nx = [0, s3, s3, 0, -s3, -s3, 2 * s3, 2 * s3, 3 * s3, 3 * s3];
+    const ny = [1, 0.5, -0.5, -1, -0.5, 0.5, 1, -1, 0.5, -0.5];
+    const nEdges: [number, number][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0],
+      [1, 6], [6, 8], [8, 9], [9, 7], [7, 2],
+    ];
+    const ring = turned(polygon(6, 0, 0, Math.PI / 2), 13);
+    // hung from atom 0 of naphthalene, straight up, by one bond
+    const top = ring.y.indexOf(Math.min(...ring.y));
+    const dx = -ring.x[top];
+    const dy = 2 - ring.y[top];
+    const x = [...nx, ...ring.x.map((v) => v + dx)];
+    const y = [...ny, ...ring.y.map((v) => v + dy)];
+    const edges = [
+      ...nEdges,
+      ...ring.edges.map(([a, b]) => [a + 10, b + 10] as [number, number]),
+      [0, 10 + top] as [number, number],
+    ];
+    const m = layoutMetrics({ x, y, edges });
+    expect(m.tilt).toBeCloseTo(0, 6);
+    expect(m.gridError).toBeGreaterThan(3);
+  });
+
+  it("takes a chain running level as right, and one running up the page as wrong", () => {
+    const z = zigzag(8);
+    expect(layoutMetrics(z).chainTilt).toBeCloseTo(0, 6);
+    // turned a lattice step, still on the lattice, but running up at 60 degrees
+    const up = turned(z, 60);
+    expect(layoutMetrics(up).tilt).toBeCloseTo(0, 1);
+    expect(layoutMetrics(up).chainTilt).toBeCloseTo(60, 1);
+  });
+
+  it("lets a short chain hung on a ring run straight out from it", () => {
+    // a propyl group on the top of an upright hexagon, running up
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    const s3 = Math.sqrt(3) / 2;
+    const top = h.y.indexOf(Math.max(...h.y));
+    const x = [...h.x, 0, s3, s3];
+    const y = [...h.y, 2, 2.5, 3.5];
+    const edges = [...h.edges, [top, 6], [6, 7], [7, 8]] as [number, number][];
+    expect(layoutMetrics({ x, y, edges }).chainTilt).toBeCloseTo(0, 6);
+  });
+
+  it("reads an acid at the end of a chain on the right, and leaves one on a ring alone", () => {
+    // a zigzag with a carboxylic acid on its left end, its C=O up
+    const z = zigzag(6);
+    const elements = z.x.map(() => "C");
+    const x = [...z.x, -Math.sqrt(3) / 2, 0];
+    const y = [...z.y, 0.5, -1];
+    const edges = [...z.edges, [0, 7], [0, 8]] as [number, number][];
+    const orders = [...z.edges.map(() => 1), 2, 1];
+    const acid = {
+      x,
+      y,
+      edges,
+      orders,
+      elements: [...elements, "O", "O"],
+      hydrogens: [...elements.map(() => 2), 0, 1],
+    };
+    expect(layoutMetrics(acid).readingOrder).toBe(1);
+    // mirrored, the acid is on the right, its C=O still up
+    const mirrored = { ...acid, x: acid.x.map((v) => -v) };
+    expect(layoutMetrics(mirrored).readingOrder).toBe(0);
+    // turned half round, it is on the right but its C=O is down
+    expect(layoutMetrics(turned(acid, 180)).readingOrder).toBe(1);
+  });
+
+  it("counts a label's H that runs into another label", () => {
+    // C-OH, the H on the right of the O, and another O a little way off
+    const base = {
+      edges: [[0, 1]] as [number, number][],
+      elements: ["C", "O", "O"],
+      hydrogens: [3, 1, 0],
+      labelled: [false, true, true],
+    };
+    const clear = layoutMetrics({ ...base, x: [0, 1, 3], y: [0, 0, 0] });
+    const onIt = layoutMetrics({ ...base, x: [0, 1, 1.9], y: [0, 0, 0.3] });
+    expect(onIt.crowdedLabels).toBeGreaterThan(clear.crowdedLabels);
+  });
+
+  it("adds up its parts to the score", () => {
+    const m = layoutMetrics(turned(zigzag(8), 20));
+    const sum = Object.values(scoreParts(m)).reduce((a, b) => a + b, 0);
+    expect(m.score).toBeCloseTo(sum, 9);
+    expect(m.score).toBeGreaterThan(0);
+  });
+});
+
+describe("conventions the rules give", () => {
+  it("wants a sugar's ring oxygen at the top", () => {
+    // a pyranose ring, oxygen at the apex, with OH on three ring carbons -
+    // the anomeric one, next to the oxygen, upper right
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    const x = [...h.x];
+    const y = [...h.y];
+    const edges = [...h.edges];
+    const elements = ["O", "C", "C", "C", "C", "C"];
+    for (const i of [5, 4, 3]) {
+      x.push(h.x[i] * 2);
+      y.push(h.y[i] * 2);
+      edges.push([i, x.length - 1]);
+      elements.push("O");
+    }
+    const sugar = { x, y, edges, elements, hydrogens: elements.map(() => 1) };
+    expect(layoutMetrics(sugar).readingOrder).toBe(0);
+    // upside down, the oxygen is at the bottom and the anomeric carbon on the left
+    expect(layoutMetrics(turned(sugar, 180)).readingOrder).toBe(2);
+  });
+
+  it("tells a lactone from a sugar", () => {
+    // the same ring, its oxygen at the top, with a C=O on the carbon next
+    // to the oxygen: turned upside down, it is no sugar upside down
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    const x = [...h.x];
+    const y = [...h.y];
+    const edges = [...h.edges];
+    const orders = h.edges.map(() => 1);
+    const elements = ["O", "C", "C", "C", "C", "C"];
+    for (const [i, order] of [[5, 2], [4, 1], [3, 1]]) {
+      x.push(h.x[i] * 2);
+      y.push(h.y[i] * 2);
+      edges.push([i, x.length - 1]);
+      orders.push(order);
+      elements.push("O");
+    }
+    const lactone = { x, y, edges, orders, elements, hydrogens: elements.map((e) => (e === "O" ? 1 : 1)) };
+    expect(layoutMetrics(turned(lactone, 180)).readingOrder).toBe(0);
+  });
+
+  it("reads a chain folded back on itself from its carboxyl, above its tail", () => {
+    // a hairpin: an acid's chain running left along the top, turning, and
+    // its tail running right along the bottom; the acid's C=O level
+    const s3 = Math.sqrt(3) / 2;
+    const x: number[] = [];
+    const y: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      x.push(6 * s3 - i * s3);
+      y.push(2 + (i % 2) * 0.5);
+    }
+    for (let i = 0; i < 7; i++) {
+      x.push(i * s3);
+      y.push(-(i % 2) * 0.5);
+    }
+    const edges = [...Array(13).keys()].map((i) => [i, i + 1] as [number, number]);
+    // the carboxyl on the chain's first carbon (0): =O and OH either side
+    x.push(7 * s3, 6 * s3 + 0.5);
+    y.push(2.5, 1.2);
+    edges.push([0, 14], [0, 15]);
+    const hairpin = {
+      x,
+      y,
+      edges,
+      orders: [...Array<number>(13).fill(1), 2, 1],
+      elements: [...x.slice(0, 14).map(() => "C"), "O", "O"],
+      hydrogens: [...x.slice(0, 14).map(() => 2), 0, 1],
+    };
+    const upsideDown = { ...hairpin, y: hairpin.y.map((v) => -v) };
+    expect(layoutMetrics(upsideDown).readingOrder).toBeGreaterThan(layoutMetrics(hairpin).readingOrder);
+  });
+
+  it("wants a sugar hung on a macrolide seen from its face, wherever its ring O falls", () => {
+    // a ring of twelve carbons, and on its first atom, by an O (12), a
+    // pyranose (13-18, its ring O 18) with two OHs (19, 20), its anomeric
+    // carbon (13) on the left, facing the ring
+    const sugar = (clockwise: boolean) => {
+      const R = 1 / (2 * Math.sin(Math.PI / 12));
+      const x: number[] = [];
+      const y: number[] = [];
+      for (let i = 0; i < 12; i++) {
+        x.push(R * Math.cos((i * 2 * Math.PI) / 12) - R);
+        y.push(R * Math.sin((i * 2 * Math.PI) / 12));
+      }
+      x.push(1);
+      y.push(0);
+      // round the ring from the anomeric carbon, on the left
+      const at = (k: number) => Math.PI - ((clockwise ? 1 : -1) * k * Math.PI) / 3;
+      for (let k = 0; k < 6; k++) {
+        x.push(3 + Math.cos(at(k)));
+        y.push(Math.sin(at(k)));
+      }
+      for (const k of [1, 2]) {
+        x.push(3 + 2 * Math.cos(at(k)));
+        y.push(2 * Math.sin(at(k)));
+      }
+      const edges: [number, number][] = [];
+      for (let i = 0; i < 12; i++) edges.push([i, (i + 1) % 12]);
+      edges.push([0, 12], [12, 13]);
+      for (let k = 0; k < 6; k++) edges.push([13 + k, 13 + ((k + 1) % 6)]);
+      edges.push([14, 19], [15, 20]);
+      const elements = [...Array(12).fill("C"), "O", "C", "C", "C", "C", "C", "O", "O", "O"];
+      const hydrogens = elements.map((e, i) => (i >= 19 ? 1 : e === "C" ? 1 : 0));
+      return { x, y, edges, elements, hydrogens };
+    };
+    // the face counts, and only the face: set without it, nothing counts
+    const face = (g: ReturnType<typeof sugar>) =>
+      layoutMetrics(g).readingOrder - layoutMetrics({ ...g, sugarFaces: false }).readingOrder;
+    expect(face(sugar(true))).toBe(0);
+    expect(face(sugar(false))).toBe(1);
+  });
+
+  it("wants fused rings in a row, the rest above and to the right", () => {
+    // phenanthrene: two rings in a row, the third up and to the right
+    const s3 = Math.sqrt(3) / 2;
+    const hex = (cx: number, cy: number) => polygon(6, cx, cy, Math.PI / 2);
+    const parts = [hex(0, 0), hex(2 * s3, 0), hex(3 * s3, 1.5)];
+    const x: number[] = [];
+    const y: number[] = [];
+    const edges: [number, number][] = [];
+    const at = (px: number, py: number) => {
+      const i = x.findIndex((v, k) => Math.abs(v - px) < 1e-6 && Math.abs(y[k] - py) < 1e-6);
+      if (i >= 0) return i;
+      x.push(px);
+      y.push(py);
+      return x.length - 1;
+    };
+    for (const p of parts) {
+      const ids = p.x.map((v, i) => at(v, p.y[i]));
+      for (const [a, b] of p.edges) {
+        const e: [number, number] = [ids[a], ids[b]];
+        if (!edges.some(([c, d]) => (c === e[0] && d === e[1]) || (c === e[1] && d === e[0]))) edges.push(e);
+      }
+    }
+    const g = { x, y, edges };
+    expect(layoutMetrics(g).ringOrder).toBe(0);
+    // turned half round, the third ring is down and to the left
+    expect(layoutMetrics(turned(g, 180)).ringOrder).toBeGreaterThan(0);
+  });
+});

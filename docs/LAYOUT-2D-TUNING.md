@@ -1,0 +1,199 @@
+# Tuning Meno's 2D layout
+
+For whoever adjusts the layout engine next, a person or an agent.
+[`LAYOUT-2D.md`](LAYOUT-2D.md) says what a good drawing is and the rules
+the engine keeps; this says where those rules live, how a change is made
+and judged, what has gone wrong before, and what the maintainer has
+decided. Read both before changing anything.
+
+## Where things are
+
+`src/lib/layout/`:
+
+| File | What it does |
+|---|---|
+| `perceive.ts` | the graph: rings (smallest set of smallest rings), ring systems, pieces, stereo as given |
+| `ringSystem.ts` | each ring system laid out on its own: fused and spiro rings, a ring's shape before its bond lengths, macrocycles fitted to a shape (`macrocycleFit`: heavy groups outside, a macrolide's lactone at the lower left), rings of rings, chains through a hub ring |
+| `macrocycle.ts` | the shapes a macrocycle can take on the lattice |
+| `cage.ts`, `bridge.ts` | a cage drawn as the solid it is (a chair or boat seen from above); a bridge drawn across a flat ring |
+| `assemble.ts` | the structure grown out from its root system in one frame: each bond's direction, zigzags, a cis double bond as a step, a phosphate as a cross, an amino acid's backbone |
+| `engine.ts` | `layout2D`: the steps below, and the local search (`improve`, `rejoin`, `untangle`, `faceSugars`, `roomForHydrogens`, `squareUp`) |
+| `stereo.ts` | wedges and hashes, and the H's drawn to carry them |
+| `metrics.ts` | the measure: every rule as a number, `SCORE_WEIGHTS`, and where the drawing sets a label's H (`hydrogenSpot`) |
+
+Tests: `engine.test.ts`, `metrics.test.ts`, `stereo.test.ts`, `rings.test.ts`.
+
+`scripts/layout/` (see its [README](../scripts/layout/README.md)):
+`sheet.ts` draws the benchmark sheet, `labels.ts` checks the labels as
+drawn, `compare.ts` compares two runs, and `molecules.json` lists the
+molecules with their references.
+
+## How a drawing is made
+
+1. **Perceive** the molecule.
+2. **Each ring system on its own** (`layoutSystem`): a cage in perspective,
+   the rest flat; a bridged system tried both ways, the better kept.
+3. **A macrocycle's shape**: each shape offered is grown in its best few
+   frames, improved and untangled, and the best shape is kept.
+4. **Each piece**:
+   - grown from its root system in every frame (`framesFor`: 12, or 24 for
+     a frame of squares alone);
+   - improved: single bonds turned over, a ring atom's two groups swapped,
+     then small sides turned over with a bond inside them turned back as
+     well (on every frame for a piece of up to 40 atoms, the best three
+     otherwise);
+   - rejoined (parts drawn on their own, joined) and untangled (branches
+     turned or stretched out of each other's way, never ending with more
+     bonds crossing than at the start).
+
+   All of this is scored as a **draft**: with a label's H and a hung
+   sugar's face not counted.
+5. **Last, locally, scored in full**:
+   - `faceSugars` turns a sugar hung on a macrolide over to its face,
+     leaving the aglycone as it is;
+   - `roomForHydrogens` turns or lengthens a bond a little so that each
+     label's H has room.
+
+   Neither takes a move that crosses bonds.
+6. `squareUp` (a piece with no square ring), the depth of a bridge seen
+   from its other side, and `placeStereo`.
+
+The engine proposes and the measure judges. Every convention is a term in
+`metrics.ts`; the engine's part is to offer drawings in which the term can
+be met. A new convention usually needs both: the term, and a way for the
+engine to reach it (a frame, a flip, a fit, a nudge).
+
+## The measure
+
+`layoutMetrics` returns each measure; `SCORE_WEIGHTS` turns them into one
+score, lower better. In order of weight:
+
+- **faults**: wrong cis/trans (50), overlaps (10), crossings and crowded
+  labels (5), atoms on bonds (3);
+- **reading**: reading order (3 per breach), which face is shown (3),
+  ring order (2);
+- **shape and lattice**: bond lengths, rings, angles, tilt, askew, chains
+  level.
+
+A fault must outweigh anything it would clear, and a convention must
+outweigh the shape it costs. Where a new term fights an old one, decide
+which comes first and weigh them so.
+
+Two options set a draft apart from the final score:
+
+- `hydrogenRoom`: what a label's H running into something counts, in
+  crowdings - 0 while drafting, 1 in `roomForHydrogens`, and a quarter on
+  the sheet (a leftover shows, but never outweighs a drawing's shape);
+- `sugarFaces`: false while drafting, so that a hung sugar's face does not
+  pull the aglycone round.
+
+A rule for where something goes belongs in `readingOrder`; one for how a
+fused system lies in `ringOrder`; which face a system is seen from in
+`face`; one about labels in `crowdedLabels`.
+
+Distances are in bond lengths. The font is 0.694 of a bond; an H set
+beside its symbol is half a bond off, one under or over it 0.6.
+
+## How to make a change
+
+```
+cp .layout/scores.json /tmp/before.json      # the sheet as it was
+# ...change the engine or the measure...
+npm run layout-bench                         # or --only=Name,Name
+npm run layout-compare -- /tmp/before.json   # what moved, and why
+npm run layout-labels                        # labels, as drawn
+npx vitest run src/lib/layout
+npm run typecheck
+```
+
+Then look at every molecule that moved on the sheet (`.layout/index.html`),
+not only the one aimed at: the score is a guide, the drawings decide. Add
+a test with a small molecule built by hand, and a line to `LAYOUT-2D.md`.
+
+## What has gone wrong before
+
+- **The search is greedy and follows a path.** A new kind of move, or a
+  new term, can send it to a worse drawing elsewhere (vancomycin and
+  azithromycin both did). Compare the whole sheet.
+- **A small concern weighed too early pulls the whole drawing.** An H's
+  room and a sugar's face, counted while the drawing was being set, moved
+  a peptide's chain and a macrolide's aglycone. Settle the drawing first,
+  then fix such things locally, last.
+- **A local fix must never buy itself with a crossing.** Every late step
+  checks crossings.
+- **A ring turned over across a bond lies askew.** Offer the turn that sets
+  it square on the lattice again.
+- **Rules made for one case can be wrong in another.** A sugar's anomeric
+  carbon on the right and ring O at the top hold for a chain of sugars read
+  left to right, not for a sugar hung on an aglycone. For that, only the
+  face was kept.
+- **Speed.** One measure takes 0.1 to 0.3 ms; the calls multiply by frames,
+  shapes and passes. The sheet takes about 8 s; ciclosporin, at about 1 s,
+  is the slowest.
+
+## What the maintainer has decided
+
+These are judgements, not things that follow from the rules, and each is
+now kept by a rule in `LAYOUT-2D.md`:
+
+- **Acids and amino acids**: an acid's C=O up, except on a saturated
+  ring's carbon (penicillin's points down). An amino acid has its side
+  chain on the left, the COOH on the right and the NH2 below.
+- **Sugars**:
+  - the anomeric carbon on the right, the ring numbered clockwise from it
+    (the Haworth projection seen from above);
+  - on a glycoside, the aglycone upper left and the sugars lower right;
+  - a macrolide's sugars face the aglycone, but are still seen from their
+    face, whatever the references do.
+- **Macrocycles**:
+  - never round, with each substituent on the 240-degree side;
+  - E/Z exact, and no ring trans double bond or fused ring set in an
+    indentation;
+  - a macrolide's lactone at the lower left, the ring numbered
+    counterclockwise from the carbonyl carbon;
+  - vancomycin not round.
+- **Stereo**:
+  - no run of wedges (an H instead);
+  - a steroid's fusion H drawn clear of the rings;
+  - an H hemmed in by rings goes where there is room;
+  - both of a ring atom's two groups marked.
+- **Chains**: gem-dimethyls drawn close together; symmetry kept. Lipids
+  are straight, a cis double bond a step; prostaglandins drawn as their
+  fatty acid folded, the acid's chain on top.
+- **Cages and bridged systems**:
+  - cages built from the chair and boat, always seen from above (the
+    back edge at the top), axial bonds exactly upright;
+  - artemisinin drawn flat;
+  - taxol's parts each drawn well, then joined;
+  - a ring hemmed in by others keeps its shape before its bond lengths.
+- **Orientation**:
+  - Clean-up gives the right drawing in one go (turning a drawing over is
+    a feature of its own, not the answer);
+  - a ring system is seen from its front face, by rules drawn from how
+    IUPAC orients its stereoparents;
+  - morphinan turned 60 degrees from its reference is acceptable;
+  - penicillin as its reference;
+  - griseofulvin's aromatic ring on the left;
+  - diazepam fine as it is.
+- **Phosphates** drawn in a straight line, by a general rule.
+- **Labels**: no H is ever hidden. The layout makes room by moving bonds
+  a little, never by writing the H under its symbol, and the drawing code
+  is not changed for it.
+
+Licences: a reference image (Wikipedia, IUPAC) is linked, never copied or
+traced into the repository, and no code is taken from RDKit, CoordGen or
+CDK.
+
+## Open
+
+- **Not yet in the app.** Clean-up and SMILES import still lay out with
+  RDKit (`src/ui/features/StructureEditor/chem/cleanUp.ts`); moving them
+  onto `layout2D` is the next step.
+- **How a ring system is turned once its face is right**: morphinan is
+  60 degrees from its reference. IUPAC's stereoparent orientations are
+  the candidate knowledge, if no general rule gives it.
+- **Flavonoids** have their ring O at the top, against the rule for a
+  ring fused to a benzene (none is on the sheet).
+- **Aspartame** is not drawn as a peptide read left to right, and
+  **vancomycin** is not the level backbone its reference is.
+- **Clearing an H** may draw a bond up to 45% longer (taxol's benzoate).

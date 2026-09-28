@@ -1,0 +1,1330 @@
+/**
+ * How good a 2D layout of a molecule is, in numbers: what a chemist sees at
+ * a glance as untidy, measured so that one layout can be compared with
+ * another, and a change to the layout engine with the last.
+ *
+ * All lengths are taken against the layout's own typical bond (the median),
+ * so the scale it was drawn at does not matter.
+ */
+import { smallestRings, type Edge } from "./rings";
+
+export type Geometry = {
+  x: readonly number[];
+  y: readonly number[];
+  edges: readonly Edge[];
+  /** Bond orders, where known: a triple bond, or two double bonds, sit in a line. */
+  orders?: readonly number[];
+  /** Which bonds carry a wedge or hashes, by index. */
+  wedged?: readonly number[];
+  /** Which atoms are drawn with a label (O, N, a charged C...): labels need room. */
+  labelled?: readonly boolean[];
+  /** Element symbols and hydrogen counts, where known: an acid is told by them. */
+  elements?: readonly string[];
+  hydrogens?: readonly number[];
+  /** The rings, where the caller has them already (they depend only on the bonds). */
+  rings?: readonly (readonly number[])[];
+  /**
+   * Double bonds whose configuration is known, by bond index: an atom on
+   * each end and whether they are cis.
+   */
+  cisTrans?: readonly { bond: number; refs: readonly [number, number]; cis: boolean }[];
+  /**
+   * The atoms of a cage drawn in perspective, where known. Among themselves
+   * they are measured as the drawing of a solid, not of a flat structure:
+   * rings foreshortened, bonds of a bridge longer, and a bond behind
+   * another crossing it (drawn broken there) are how a solid looks.
+   */
+  perspective?: readonly boolean[];
+  /**
+   * How near each atom is to the viewer, where the drawing says (a cage, or
+   * a bridge drawn across a ring): a bond passing in front of another is
+   * drawn with the one behind broken, and their crossing is no fault.
+   */
+  depth?: readonly (number | null)[];
+  /**
+   * Each stereocentre's configuration, where known, by atom: its neighbours
+   * in order (-1 for an implicit H) and the sign of the volume the first
+   * three span, seen from the centre - the face the drawing shows is told
+   * by it.
+   */
+  tetra?: readonly ({ neighbours: readonly number[]; volume: number } | null | undefined)[];
+  /**
+   * What a label's H running into something counts for, in crowdings: a
+   * quarter unless given. A layout sets its parts first, not counting it,
+   * and makes room for its H's last, by moving bonds a little, counting it
+   * as much as labels on each other.
+   */
+  hydrogenRoom?: number;
+  /**
+   * Whether a sugar hung on a macrolide counts as seen from the wrong face
+   * (it does unless this is false): a layout sets the aglycone first, not
+   * counting it, and turns each sugar over last where it must.
+   */
+  sugarFaces?: boolean;
+};
+
+export type LayoutMetrics = {
+  /** How much bond lengths vary: their standard deviation over their mean. */
+  bondSpread: number;
+  /** How far, on average, the angles between bonds are from ideal, in degrees. */
+  angleError: number;
+  /** How far, on average, rings of up to eight are from regular polygons, in bond lengths. */
+  ringError: number;
+  /** Atoms not bonded to each other but closer than half a bond. */
+  overlaps: number;
+  /** Bonds crossing bonds they do not share an atom with. */
+  crossings: number;
+  /** Double bonds drawn cis that are trans, or the other way: not this molecule at all. */
+  wrongDoubles: number;
+  /** Atoms lying on a bond they are not part of (within 0.3 of a bond). */
+  clashes: number;
+  /**
+   * How far, on average, the angles round a large ring (nine or more) are
+   * from a zigzag's 120 degrees, either way - a macrocycle drawn as a round
+   * polygon is far off - in degrees. Not a ring that runs mostly through
+   * other rings (a porphyrin's, a cyclodextrin's): that is a ring of rings.
+   */
+  macroAngleError: number;
+  /** Wedges and hashes on ring bonds, where they are hard to read. */
+  ringWedges: number;
+  /**
+   * Labelled atoms, not bonded, so close their labels crowd (under 0.8 of a
+   * bond); and a quarter for a label's H - beside its symbol, or under or over
+   * it between bonds on both sides, as the drawing sets it - that runs into
+   * another label, an atom or a bond.
+   */
+  crowdedLabels: number;
+  /**
+   * How far the drawing is turned off the 30-degree lattice, in degrees (0
+   * to 15): the turn that brings the bonds that can lie on it - those of
+   * four- and six-membered rings, and those in no ring - nearest to it.
+   */
+  tilt: number;
+  /**
+   * How far, on average, those bonds are still off the lattice once the
+   * drawing is turned onto it: parts drawn askew to the rest, in degrees.
+   */
+  gridError: number;
+  /**
+   * How far, on average, a ring atom's other bonds are from where they go:
+   * one straight out, two 60 degrees apart about straight out (a
+   * gem-dimethyl), more splitting the room outside the ring evenly; an H at
+   * a ring fusion upright. In degrees.
+   */
+  substituentError: number;
+  /**
+   * How far long chains are folded rather than drawn out straight, 0 to 1 -
+   * and half as much again for each place a chain turns back on itself at
+   * a cis double bond.
+   */
+  chainFold: number;
+  /** How far long chains are from running parallel, as lipids' do, in degrees. */
+  chainSplay: number;
+  /**
+   * How far, on average, the open parts of a structure run from level, in
+   * degrees: each strand of atoms in no ring - ring to ring, ring to end,
+   * branch to branch - along the axis of its zigzag, weighed by its length.
+   */
+  chainTilt: number;
+  /**
+   * How far the drawing's long axis is from level, in degrees, scaled by
+   * how much longer than broad it is: a round drawing has no axis to tilt.
+   */
+  axisTilt: number;
+  /** Height over width: a drawing reads best wider than it is tall. */
+  aspect: number;
+  /** Height over width of the tallest ring of sixteen or more: a macrocycle lies wide. */
+  macroAspect: number;
+  /**
+   * Breaches of the order a drawing is read in, left to right and top to
+   * bottom: an acid at the end of a chain on the right, an amino acid's
+   * NH2 below its alpha carbon (half a breach), a ring system to the left
+   * of the chains out of it, the rings hung on a macrocycle to its right
+   * and below it (half a breach each way it is not).
+   */
+  readingOrder: number;
+  /**
+   * How far the largest fused ring system is from the way IUPAC orients a
+   * fused system for numbering: as many rings as can be in a horizontal row,
+   * then as many of the rest as can be above and to the right of it, and as
+   * few below and to the left. Rings short of each, counted; a ring
+   * system with its benzene rings to the right of its other rings, two;
+   * and one and a half for each heteroatom of a ring fused to the benzene
+   * ring that is above the middle of the two - which way up it is
+   * outweighs how the rest of its rings lie.
+   */
+  ringOrder: number;
+  /**
+   * Which face of a ring system the drawing shows: its angular groups - the
+   * one bond out of the rings at an atom with three ring bonds, a steroid's
+   * methyls, taxol's - in front of the page, on wedges, as a steroid's
+   * beta face is. How many more are behind it than in front.
+   */
+  face: number;
+  /** All of it in one number, lower better, for putting layouts in order. */
+  score: number;
+};
+
+/**
+ * What each measure costs in the score, per unit. A fault a chemist cannot
+ * miss (atoms on top of each other, bonds crossing) outweighs any amount of
+ * untidiness; a turned drawing costs more than parts askew within it, which
+ * some skeletons cannot avoid.
+ */
+export const SCORE_WEIGHTS = {
+  overlaps: 10,
+  crossings: 5,
+  wrongDoubles: 50,
+  clashes: 3,
+  crowdedLabels: 5,
+  ringWedges: 2,
+  bondSpread: 50,
+  angleError: 0.3,
+  macroAngleError: 0.5,
+  ringError: 30,
+  tilt: 0.4,
+  gridError: 0.1,
+  substituentError: 0.2,
+  chainFold: 10,
+  chainSplay: 0.05,
+  chainTilt: 0.08,
+  axisTilt: 0.1,
+  aspect: 5,
+  macroAspect: 5,
+  readingOrder: 3,
+  ringOrder: 2,
+  face: 3,
+} as const;
+
+/**
+ * The score, measure by measure: what each adds. Aspect ratios cost only
+ * past square.
+ */
+export function scoreParts(m: Omit<LayoutMetrics, "score">): Record<keyof typeof SCORE_WEIGHTS, number> {
+  const w = SCORE_WEIGHTS;
+  const parts = {} as Record<keyof typeof SCORE_WEIGHTS, number>;
+  for (const k of Object.keys(w) as (keyof typeof SCORE_WEIGHTS)[]) parts[k] = w[k] * m[k];
+  parts.aspect = w.aspect * Math.max(0, m.aspect - 1);
+  parts.macroAspect = w.macroAspect * Math.max(0, m.macroAspect - 1);
+  return parts;
+}
+
+const TAU = Math.PI * 2;
+const deg = (r: number) => (r * 180) / Math.PI;
+
+function median(v: number[]): number {
+  if (!v.length) return 1;
+  const s = [...v].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/** How far a ring is from a regular polygon of its size, in bond lengths. */
+export function ringIrregularity(
+  xs: readonly number[],
+  ys: readonly number[],
+  ring: readonly number[],
+  bond: number,
+): number {
+  const k = ring.length;
+  const cx = ring.reduce((s, i) => s + xs[i], 0) / k;
+  const cy = ring.reduce((s, i) => s + ys[i], 0) / k;
+  const ideal = bond / (2 * Math.sin(Math.PI / k)); // circumradius
+  let best = Infinity;
+  for (const dir of [1, -1]) {
+    // the regular polygon's turn that best fits these vertices
+    let sx = 0;
+    let sy = 0;
+    ring.forEach((a, i) => {
+      const t = Math.atan2(ys[a] - cy, xs[a] - cx) - (dir * i * TAU) / k;
+      sx += Math.cos(t);
+      sy += Math.sin(t);
+    });
+    const t0 = Math.atan2(sy, sx);
+    let sum = 0;
+    ring.forEach((a, i) => {
+      const t = t0 + (dir * i * TAU) / k;
+      const dx = xs[a] - (cx + ideal * Math.cos(t));
+      const dy = ys[a] - (cy + ideal * Math.sin(t));
+      sum += dx * dx + dy * dy;
+    });
+    best = Math.min(best, Math.sqrt(sum / k) / bond);
+  }
+  return best;
+}
+
+/**
+ * Where the drawing sets a labelled atom's H, from the atom, in bond
+ * lengths, given the ways its bonds leave it (unit vectors): beside the
+ * symbol on the side its bonds leave free - OH, or HO where they leave to
+ * the right - or under it (over it) where they leave on both sides. (The
+ * font is 0.69 of a bond: an H beside its symbol is half a bond off, one
+ * under it 0.6.)
+ */
+export function hydrogenSpot(ways: readonly { x: number; y: number }[]): { x: number; y: number } {
+  const band = Math.sin((10 * Math.PI) / 180);
+  const sx = ways.reduce((sum, w) => sum + w.x, 0);
+  const sy = ways.reduce((sum, w) => sum + w.y, 0);
+  if (ways.some((w) => w.x < -band) && ways.some((w) => w.x > band)) return { x: 0, y: sy >= 0 ? -0.6 : 0.6 };
+  return { x: sx > Math.hypot(sx, sy) * band ? -0.5 : 0.5, y: 0 };
+}
+
+/** The volume three vectors span. */
+function volume(a: readonly number[], b: readonly number[], c: readonly number[]): number {
+  return (
+    a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])
+  );
+}
+
+function segmentsCross(
+  ax: number, ay: number, bx: number, by: number,
+  cx: number, cy: number, dx: number, dy: number,
+): boolean {
+  const o = (px: number, py: number, qx: number, qy: number, rx: number, ry: number) =>
+    Math.sign((qx - px) * (ry - py) - (qy - py) * (rx - px));
+  return (
+    o(ax, ay, bx, by, cx, cy) * o(ax, ay, bx, by, dx, dy) < 0 &&
+    o(cx, cy, dx, dy, ax, ay) * o(cx, cy, dx, dy, bx, by) < 0
+  );
+}
+
+function pointToSegment(
+  px: number, py: number, ax: number, ay: number, bx: number, by: number,
+): number {
+  const vx = bx - ax;
+  const vy = by - ay;
+  const len2 = vx * vx + vy * vy;
+  const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / len2)) : 0;
+  return Math.hypot(px - (ax + t * vx), py - (ay + t * vy));
+}
+
+export function layoutMetrics(g: Geometry): LayoutMetrics {
+  const { x, y, edges } = g;
+  const n = x.length;
+  // (a bond, or any pair of atoms, by a number: a string would be built
+  // for every pair every time the drawing is measured)
+  const pair = (p: number, q: number) => (p < q ? p * n + q : q * n + p);
+  const persp = g.perspective;
+  const solid = (...atoms: number[]) => !!persp && atoms.every((a) => persp[a]);
+  const solid2 = (a: number, b: number) => !!persp && !!persp[a] && !!persp[b];
+  // one bond in front of the other, where the drawing gives depth
+  const z = g.depth;
+  const passes = (a: number, b: number, c: number, d: number) => {
+    if (!z) return false;
+    const za = z[a];
+    const zb = z[b];
+    const zc = z[c];
+    const zd = z[d];
+    if (za == null || zb == null || zc == null || zd == null) return false;
+    return Math.abs((za + zb) / 2 - (zc + zd) / 2) > 0.25;
+  };
+  // (a bond to a drawn H is drawn short, by choice: it is left out)
+  const isH = (a: number) => g.elements?.[a] === "H";
+  const lengths = edges
+    .filter(([a, b]) => !isH(a) && !isH(b) && !solid(a, b))
+    .map(([a, b]) => Math.hypot(x[a] - x[b], y[a] - y[b]));
+  const L = median(lengths);
+  const mean = lengths.reduce((s, v) => s + v, 0) / Math.max(lengths.length, 1);
+  const bondSpread = lengths.length
+    ? Math.sqrt(lengths.reduce((s, v) => s + (v - mean) ** 2, 0) / lengths.length) / mean
+    : 0;
+
+  const rings = (g.rings as number[][] | undefined) ?? smallestRings(n, edges);
+  const inRing = new Set(rings.flat());
+  // ring systems: rings sharing atoms
+  const systemOf = new Map<number, number>();
+  const systems: Set<number>[] = [];
+  for (const r of rings) {
+    const touching = [...new Set(r.map((a) => systemOf.get(a)).filter((s): s is number => s != null))];
+    const merged = new Set<number>(r);
+    for (const t of touching) for (const a of systems[t]) merged.add(a);
+    const id = systems.length;
+    systems.push(merged);
+    for (const a of merged) systemOf.set(a, id);
+    for (const t of touching) systems[t] = new Set();
+  }
+  const live = systems.filter((s) => s.size > 0);
+  const bonded = new Set(edges.map(([a, b]) => pair(a, b)));
+  const neighbours: number[][] = Array.from({ length: n }, () => []);
+  const orderOf = new Map<number, number>();
+  edges.forEach(([a, b], e) => {
+    neighbours[a].push(b);
+    neighbours[b].push(a);
+    orderOf.set(pair(a, b), g.orders?.[e] ?? 1);
+  });
+
+  // A phosphorus or sulfur with four bonds - a phosphate, a sulfonyl - is
+  // drawn as a cross, square to the page, the chain straight through it
+  const cross = (a: number) =>
+    (g.elements?.[a] === "P" || g.elements?.[a] === "S") && neighbours[a].length === 4 && !inRing.has(a);
+
+  // angles: at an atom in no ring, its bonds evenly spread (a pair at 120°,
+  // or 180° across a triple bond or between two double bonds, or between
+  // two crosses - the O of a P-O-P - so that a run of them is one line; the
+  // bond joining a cross to a zigzag gives way, to 150°)
+  let angleSum = 0;
+  let angleCount = 0;
+  for (let a = 0; a < n; a++) {
+    const nb = neighbours[a];
+    if (nb.length < 2 || inRing.has(a)) continue;
+    const dirs = nb
+      .map((b) => Math.atan2(y[b] - y[a], x[b] - x[a]))
+      .sort((p, q) => p - q);
+    const gaps = dirs.map((d, i) =>
+      i + 1 < dirs.length ? dirs[i + 1] - d : dirs[0] + TAU - d,
+    );
+    let ideal = TAU / nb.length;
+    if (nb.length === 2) {
+      const o = nb.map((b) => orderOf.get(pair(a, b)) ?? 1);
+      const linear = o.includes(3) || (o[0] === 2 && o[1] === 2) || nb.every(cross);
+      ideal = linear ? Math.PI : (2 * Math.PI) / 3;
+      // either way round: the smaller gap against the ideal
+      const off = Math.abs(deg(Math.min(...gaps) - (linear ? Math.PI : ideal)));
+      angleSum += nb.some(cross) && !linear ? Math.min(off, Math.abs(deg(Math.min(...gaps)) - 150)) : off;
+    } else {
+      for (const gap of gaps) angleSum += Math.abs(deg(gap - ideal)) / gaps.length;
+    }
+    angleCount++;
+  }
+  const angleError = angleCount ? angleSum / angleCount : 0;
+
+  // (a ring drawn in depth - a cage's, or one a bridge makes across a ring
+  // - is seen in perspective, not as a polygon)
+  const inDepth = (r: readonly number[]) => solid(...r) || r.some((a) => (g.depth?.[a] ?? 0) !== 0);
+  const small = rings.filter((r) => r.length <= 8 && !inDepth(r));
+  const ringError = small.length
+    ? small.reduce((s, r) => s + ringIrregularity(x, y, r, L), 0) / small.length
+    : 0;
+
+  // round a macrocycle: each atom that is in no smaller ring, its angle
+  // inside the ring against 120° or 240°, whichever is nearer
+  const inSmall = new Set(rings.filter((r) => r.length <= 8).flat());
+  let macroSum = 0;
+  let macroCount = 0;
+  // (not one that runs through other rings - a porphyrin's, a
+  // cyclodextrin's: that is a ring of rings, set round a circle)
+  const threaded = (r: number[]) =>
+    new Set(
+      rings
+        .filter((q) => q.length < r.length && q.filter((a) => r.includes(a)).length >= 3)
+        .flatMap((q) => q.filter((a) => r.includes(a))),
+    ).size >=
+    0.4 * r.length;
+  for (const r of rings.filter((r) => r.length >= 9 && !threaded(r))) {
+    r.forEach((a, i) => {
+      if (inSmall.has(a)) return;
+      const p = r[(i + r.length - 1) % r.length];
+      const q = r[(i + 1) % r.length];
+      const t =
+        Math.atan2(y[p] - y[a], x[p] - x[a]) - Math.atan2(y[q] - y[a], x[q] - x[a]);
+      const inner = deg(Math.abs(Math.atan2(Math.sin(t), Math.cos(t)))); // 0..180
+      macroSum += Math.abs(inner - 120);
+      macroCount++;
+    });
+  }
+  const macroAngleError = macroCount ? macroSum / macroCount : 0;
+
+  const ringBonds = new Set<number>();
+  for (const r of rings) {
+    r.forEach((a, i) => {
+      const b = r[(i + 1) % r.length];
+      ringBonds.add(pair(a, b));
+    });
+  }
+  const ringWedges = (g.wedged ?? []).filter((e) => {
+    const [a, b] = edges[e] ?? [];
+    return a != null && ringBonds.has(pair(a, b));
+  }).length;
+
+  let crowdedLabels = 0;
+  if (g.labelled) {
+    for (let a = 0; a < n; a++) {
+      if (!g.labelled[a]) continue;
+      for (let b = a + 1; b < n; b++) {
+        if (!g.labelled[b] || bonded.has(pair(a, b))) continue;
+        if (Math.hypot(x[a] - x[b], y[a] - y[b]) < 0.8 * L) crowdedLabels++;
+      }
+    }
+  }
+  // and a label's H, where the drawing sets it, clear of every other
+  // label, atom and bond: an OH's H is ink as much as its O. A quarter of
+  // a crowding each - the layout moves a bond to clear it where it can
+  // (untangle), but never buys that with a bond crossing another.
+  const hydrogenRoom = g.hydrogenRoom ?? 0.25;
+  if (g.labelled && g.hydrogens && hydrogenRoom > 0) {
+    const spots: { a: number; x: number; y: number }[] = [];
+    for (let a = 0; a < n; a++) {
+      if (!g.labelled[a] || !(g.hydrogens[a] > 0) || g.elements?.[a] === "C" || !neighbours[a].length) continue;
+      const h = hydrogenSpot(
+        neighbours[a].map((b) => {
+          const d = Math.hypot(x[b] - x[a], y[b] - y[a]) || 1;
+          return { x: (x[b] - x[a]) / d, y: (y[b] - y[a]) / d };
+        }),
+      );
+      spots.push({ a, x: x[a] + h.x * L, y: y[a] + h.y * L });
+    }
+    for (const [i, h] of spots.entries()) {
+      let crowded = false;
+      for (let b = 0; b < n && !crowded; b++) {
+        if (b === h.a) continue;
+        // (an H's ink is 0.4 of a bond across and half a bond high, an O's
+        // a little more; side by side they want a space between them, or
+        // OH O reads as one word, one over the other a sliver of paper)
+        const [w, t] = g.labelled[b] ? [0.65, 0.58] : [0.33, 0.33];
+        if (Math.abs(h.x - x[b]) < w * L && Math.abs(h.y - y[b]) < t * L) crowded = true;
+      }
+      for (const o of spots.slice(i + 1)) {
+        if (Math.abs(h.x - o.x) < 0.6 * L && Math.abs(h.y - o.y) < 0.55 * L) crowded = true;
+      }
+      for (const [p, q] of edges) {
+        if (crowded) break;
+        if (p === h.a || q === h.a) continue;
+        if (pointToSegment(h.x, h.y, x[p], y[p], x[q], y[q]) < 0.3 * L) crowded = true;
+      }
+      if (crowded) crowdedLabels += hydrogenRoom;
+    }
+  }
+
+  // the 30° lattice: the bonds of four- and six-membered rings and those in
+  // no ring can all lie on it; five-membered rings and macrocycles cannot,
+  // nor a ring bridged across another (sharing three atoms or more with
+  // it), which is drawn in perspective. The turn that brings those bonds
+  // nearest to it is how far the drawing is tilted, and what is left after
+  // that turn how far its parts are askew.
+  const fitsLattice = new Set<number>();
+  const offLattice = new Set<number>();
+  const square = (r: readonly number[]) =>
+    (r.length === 4 || r.length === 6) &&
+    rings.every((q) => q === r || q.filter((a) => r.includes(a)).length <= 2);
+  for (const r of rings) {
+    const fits = square(r);
+    r.forEach((a, i) => {
+      const b = r[(i + 1) % r.length];
+      (fits ? fitsLattice : offLattice).add(pair(a, b));
+    });
+  }
+  // The eye takes the largest ring system as the frame the drawing is
+  // square to - of those with rings that can lie on the lattice, and all of
+  // the largest where several are as large. A ring hung off it askew is then
+  // askew, rather than the frame tilted. Without a ring, every bond counts.
+  const latticeDirs: { t: number; frame: boolean; step: number }[] = [];
+  // (a four-membered ring is a square with its sides level and upright - a
+  // beta-lactam's, an oxetane's - not merely on the lattice)
+  // (and so is a cross)
+  const squareBonds = new Set(
+    [
+      ...rings
+        .filter((r) => r.length === 4)
+        .flatMap((r) => edges.filter(([a, b]) => r.includes(a) && r.includes(b))),
+      ...edges.filter(([a, b]) => cross(a) || cross(b)),
+    ].map(([a, b]) => pair(a, b)),
+  );
+  const fitting = live.filter((sys) => rings.some((r) => square(r) && r.every((a) => sys.has(a))));
+  const frameSize = Math.max(0, ...fitting.map((sys) => sys.size));
+  const frames = fitting.filter((sys) => sys.size === frameSize);
+  for (const [a, b] of edges) {
+    const k = pair(a, b);
+    if (offLattice.has(k) && !fitsLattice.has(k)) continue;
+    // a solid's bonds, and those out of it, lie as it is seen
+    if (g.perspective?.[a] || g.perspective?.[b]) continue;
+    const frame = frames.length
+      ? fitsLattice.has(k) && frames.some((sys) => sys.has(a) && sys.has(b))
+      : true;
+    latticeDirs.push({ t: deg(Math.atan2(y[b] - y[a], x[b] - x[a])), frame, step: squareBonds.has(k) ? 90 : 30 });
+  }
+  const offBy = (turn: number, frameOnly: boolean) => {
+    let sum = 0;
+    let count = 0;
+    for (const { t, frame, step } of latticeDirs) {
+      if (frameOnly && !frame) continue;
+      const u = t - turn;
+      sum += Math.abs(u - step * Math.round(u / step));
+      count++;
+    }
+    return count ? sum / count : 0;
+  };
+  let turn = 0;
+  let best = offBy(0, true);
+  for (let i = -150; i < 150; i++) {
+    const e = offBy(i / 10, true);
+    if (e < best - 1e-9) {
+      best = e;
+      turn = i / 10;
+    }
+  }
+  let tilt = Math.abs(turn);
+  // A frame whose rings cannot all lie on the lattice together - two
+  // benzene rings either side of a five-membered one, as in fluorene - is
+  // square when it is set straight by its own shape: its long axis level
+  // or upright.
+  if (frames.length && best > 2) {
+    const inFrame = [...new Set(frames.flatMap((sys) => [...sys]))];
+    const fx = inFrame.reduce((sum, a) => sum + x[a], 0) / inFrame.length;
+    const fy = inFrame.reduce((sum, a) => sum + y[a], 0) / inFrame.length;
+    let fxx = 0;
+    let fyy = 0;
+    let fxy = 0;
+    for (const a of inFrame) {
+      fxx += (x[a] - fx) ** 2;
+      fyy += (y[a] - fy) ** 2;
+      fxy += (x[a] - fx) * (y[a] - fy);
+    }
+    const along = Math.abs(deg(0.5 * Math.atan2(2 * fxy, fxx - fyy))); // 0..90
+    tilt = Math.min(tilt, along, 90 - along);
+  }
+  const gridError = offBy(turn, false);
+
+  // a ring atom's other bonds, against splitting the widest room between
+  // its ring bonds evenly
+  const ringNeighbours: number[][] = Array.from({ length: n }, () => []);
+  for (const r of rings) {
+    r.forEach((a, i) => {
+      for (const b of [r[(i + 1) % r.length], r[(i + r.length - 1) % r.length]]) {
+        if (!ringNeighbours[a].includes(b)) ringNeighbours[a].push(b);
+      }
+    });
+  }
+  let subSum = 0;
+  let subCount = 0;
+  for (let a = 0; a < n; a++) {
+    const inside = ringNeighbours[a];
+    const outside = neighbours[a].filter((b) => !inside.includes(b));
+    if (inside.length < 2 || outside.length === 0) continue;
+    const dir = (b: number) => Math.atan2(y[b] - y[a], x[b] - x[a]);
+    const ringDirs = inside.map(dir).sort((p, q) => p - q);
+    // the widest gap no ring lies in: at a fusion of three rings every gap
+    // is 120 degrees, and only one is outside
+    const centres = rings
+      .filter((r) => r.includes(a) && r.length < 9)
+      .map((r) => {
+        const rx = r.reduce((sum, v) => sum + x[v], 0) / r.length;
+        const ry = r.reduce((sum, v) => sum + y[v], 0) / r.length;
+        return Math.atan2(ry - y[a], rx - x[a]);
+      });
+    let start = 0;
+    let gap = -1;
+    ringDirs.forEach((d, i) => {
+      const next = i + 1 < ringDirs.length ? ringDirs[i + 1] : ringDirs[0] + TAU;
+      const holdsRing = centres.some((c) => {
+        const u = (((c - d) % TAU) + TAU) % TAU;
+        return u > 1e-6 && u < next - d - 1e-6;
+      });
+      if (!holdsRing && next - d > gap) {
+        gap = next - d;
+        start = d;
+      }
+    });
+    if (gap < 0) continue;
+    // an H drawn at a fusion of rings stands straight up or down, as a
+    // steroid's do: measured against upright
+    if (inside.length >= 3 && outside.length === 1 && isH(outside[0])) {
+      const t = deg(dir(outside[0]));
+      subSum += Math.min(Math.abs(t - 90), Math.abs(t + 90));
+      subCount++;
+      continue;
+    }
+    const m = outside.length;
+    const rel = outside
+      .map((b) => (((dir(b) - start) % TAU) + TAU) % TAU)
+      .sort((p, q) => p - q);
+    // two on one ring atom close together, 60 degrees apart about straight
+    // out; otherwise splitting the room evenly
+    const ideal = (k: number) =>
+      m === 2 && gap > Math.PI / 2
+        ? gap / 2 + (k === 0 ? -1 : 1) * Math.min(Math.PI / 6, gap / 4)
+        : (gap * (k + 1)) / (m + 1);
+    rel.forEach((r, k) => {
+      subSum += Math.abs(deg(r - ideal(k)));
+      subCount++;
+    });
+  }
+  const substituentError = subCount ? subSum / subCount : 0;
+
+  // chains: runs of atoms in no ring, each with two bonds
+  const chainAtom = (a: number) => !inRing.has(a) && neighbours[a].length === 2;
+  const orderAt = (a: number, b: number) =>
+    orderOf.get(pair(a, b)) ?? 1;
+  const runs: number[][] = [];
+  const done = new Set<number>();
+  for (let a = 0; a < n; a++) {
+    if (!chainAtom(a) || done.has(a)) continue;
+    // walk to one end, then collect to the other
+    let prev = -1;
+    let cur = a;
+    for (;;) {
+      const next = neighbours[cur].find((b) => b !== prev && chainAtom(b) && b !== a);
+      if (next == null || next === a) break;
+      prev = cur;
+      cur = next;
+      if (cur === a) break;
+    }
+    const run: number[] = [];
+    const endOuter = neighbours[cur].find((b) => b !== prev && !chainAtom(b));
+    if (endOuter != null) run.push(endOuter);
+    prev = endOuter ?? -1;
+    for (;;) {
+      run.push(cur);
+      done.add(cur);
+      const next = neighbours[cur].find((b) => b !== prev);
+      if (next == null) break;
+      prev = cur;
+      cur = next;
+      if (!chainAtom(cur)) {
+        run.push(cur);
+        break;
+      }
+      if (done.has(cur)) break;
+    }
+    if (run.length >= 5) runs.push(run);
+  }
+  const zig = Math.cos(Math.PI / 6);
+  // folding, over stretches of single bonds (a cis double bond bends a
+  // chain rightly)
+  let foldSum = 0;
+  let foldCount = 0;
+  for (const run of runs) {
+    let from = 0;
+    for (let i = 1; i <= run.length; i++) {
+      const brk = i === run.length || orderAt(run[i - 1], run[i]) !== 1;
+      if (!brk) continue;
+      const bonds = i - 1 - from;
+      if (bonds >= 5) {
+        const p = run[from];
+        const q = run[i - 1];
+        const reach = Math.hypot(x[q] - x[p], y[q] - y[p]) / (bonds * L * zig);
+        foldSum += Math.max(0, 1 - reach);
+        foldCount++;
+      }
+      from = i;
+    }
+  }
+  let chainFold = foldCount ? foldSum / foldCount : 0;
+  const cx = x.reduce((sum, v) => sum + v, 0) / Math.max(n, 1);
+  const cy = y.reduce((sum, v) => sum + v, 0) / Math.max(n, 1);
+  // long chains, pointed away from the middle, against running parallel
+  const axes = runs
+    .filter((r) => r.length >= 7)
+    .map((r) => {
+      const p = r[0];
+      const q = r[r.length - 1];
+      const flip = Math.hypot(x[p] - cx, y[p] - cy) > Math.hypot(x[q] - cx, y[q] - cy);
+      return flip ? Math.atan2(y[p] - y[q], x[p] - x[q]) : Math.atan2(y[q] - y[p], x[q] - x[p]);
+    });
+  let splaySum = 0;
+  let splayCount = 0;
+  for (let i = 0; i < axes.length; i++) {
+    for (let j = i + 1; j < axes.length; j++) {
+      const t = axes[i] - axes[j];
+      splaySum += deg(Math.abs(Math.atan2(Math.sin(t), Math.cos(t))));
+      splayCount++;
+    }
+  }
+  const chainSplay = splayCount ? splaySum / splayCount : 0;
+
+  // strands: the open parts of the structure, split where they branch and
+  // where they meet a ring, and carried on at a free end into the atom that
+  // continues them there - an OH rather than an =O, a carbon first
+  const leaf = (a: number) => !inRing.has(a) && neighbours[a].length === 1;
+  const spineDegree = (a: number) => neighbours[a].filter((b) => !leaf(b)).length;
+  const through = (a: number) => !inRing.has(a) && !leaf(a) && spineDegree(a) === 2;
+  const bendAt = (p: number, t: number, c: number) => {
+    const u = Math.atan2(y[p] - y[t], x[p] - x[t]) - Math.atan2(y[c] - y[t], x[c] - x[t]);
+    return Math.abs(deg(Math.abs(Math.atan2(Math.sin(u), Math.cos(u)))) - 120);
+  };
+  const carryOn = (t: number, p: number): number | null => {
+    if (inRing.has(t) || spineDegree(t) > 1) return null;
+    const rank = (c: number) =>
+      (orderAt(t, c) === 1 ? 0 : 2) + (g.elements && g.elements[c] !== "C" ? 1 : 0);
+    const free = neighbours[t]
+      .filter(leaf)
+      .sort((a, b) => rank(a) - rank(b) || bendAt(p, t, a) - bendAt(p, t, b) || a - b);
+    return free[0] ?? null;
+  };
+  const walked = new Set<number>();
+  const strands: number[][] = [];
+  let reversals = 0;
+  for (let e = 0; e < n; e++) {
+    if (leaf(e) || through(e)) continue;
+    for (const first of neighbours[e]) {
+      if (leaf(first)) continue;
+      const key = pair(e, first);
+      if (walked.has(key) || ringBonds.has(key)) continue;
+      const path = [e, first];
+      walked.add(key);
+      while (through(path[path.length - 1])) {
+        const cur = path[path.length - 1];
+        const next = neighbours[cur].find((b) => b !== path[path.length - 2] && !leaf(b));
+        if (next == null || path.includes(next)) break;
+        walked.add(pair(cur, next));
+        path.push(next);
+      }
+      const head = carryOn(path[0], path[1]);
+      if (head != null) path.unshift(head);
+      const tail = carryOn(path[path.length - 1], path[path.length - 2]);
+      if (tail != null) path.push(tail);
+      // A cis double bond turns a chain rightly: measure either side of it.
+      // But a chain is read as the straight chain it would be without it -
+      // a fatty acid's cis bond is a step in a straight chain - so the part
+      // after it carries on the way the part before it went, never back.
+      let from = 0;
+      const pieces: number[][] = [];
+      for (let i = 1; i + 2 < path.length; i++) {
+        const [p, a, b, q] = [path[i - 1], path[i], path[i + 1], path[i + 2]];
+        if (orderAt(a, b) !== 2) continue;
+        const side = (r: number) =>
+          Math.sign((x[b] - x[a]) * (y[r] - y[a]) - (y[b] - y[a]) * (x[r] - x[a]));
+        if (side(p) * side(q) > 0) {
+          pieces.push(path.slice(from, i + 1));
+          from = i + 1;
+        }
+      }
+      pieces.push(path.slice(from));
+      strands.push(...pieces);
+      const heading = (s: number[]) => ({ x: x[s[s.length - 1]] - x[s[0]], y: y[s[s.length - 1]] - y[s[0]] });
+      for (let k = 1; k < pieces.length; k++) {
+        const u = heading(pieces[k - 1]);
+        const v = heading(pieces[k]);
+        if (pieces[k - 1].length >= 3 && pieces[k].length >= 3 && u.x * v.x + u.y * v.y < 0) {
+          reversals++;
+        }
+      }
+    }
+  }
+  // A zigzag's axis runs through the midpoints of its bonds, and it should
+  // run level - except a short chain hung on a ring, which may as well run
+  // straight out from the ring: its axis within 30 degrees of the way out,
+  // as a zigzag's is of its first bond.
+  const outward = (r: number): number | null => {
+    const ring = rings.filter((q) => q.includes(r)).sort((p, q) => p.length - q.length)[0];
+    if (!ring) return null;
+    const rx = ring.reduce((sum, a) => sum + x[a], 0) / ring.length;
+    const ry = ring.reduce((sum, a) => sum + y[a], 0) / ring.length;
+    return Math.atan2(y[r] - ry, x[r] - rx);
+  };
+  let tiltSum = 0;
+  let tiltBonds = 0;
+  for (const s of strands) {
+    const k = s.length - 1;
+    if (k < 3) continue;
+    const dx = (x[s[k - 1]] + x[s[k]] - x[s[0]] - x[s[1]]) / 2;
+    const dy = (y[s[k - 1]] + y[s[k]] - y[s[0]] - y[s[1]]) / 2;
+    const t = Math.abs(deg(Math.atan2(dy, dx)));
+    let off = t > 90 ? 180 - t : t;
+    const [head, tail] = [s[0], s[k]];
+    const hungFrom = inRing.has(head) && leaf(tail) ? head : inRing.has(tail) && leaf(head) ? tail : null;
+    const out = k <= 4 && hungFrom != null ? outward(hungFrom) : null;
+    if (out != null) {
+      const along = hungFrom === head ? Math.atan2(dy, dx) : Math.atan2(-dy, -dx);
+      const u = along - out;
+      off = Math.min(off, Math.max(0, deg(Math.abs(Math.atan2(Math.sin(u), Math.cos(u)))) - 30));
+    }
+    tiltSum += k * off;
+    tiltBonds += k;
+  }
+  const chainTilt = tiltBonds ? tiltSum / tiltBonds : 0;
+  chainFold += 0.5 * reversals;
+
+  const width = Math.max(...x) - Math.min(...x);
+  const height = Math.max(...y) - Math.min(...y);
+  const aspect = n > 2 ? height / Math.max(width, L) : 0;
+  // the long axis: the way the atoms spread furthest
+  let sxx = 0;
+  let syy = 0;
+  let sxy = 0;
+  for (let a = 0; a < n; a++) {
+    sxx += (x[a] - cx) ** 2;
+    syy += (y[a] - cy) ** 2;
+    sxy += (x[a] - cx) * (y[a] - cy);
+  }
+  const half = (sxx + syy) / 2;
+  const spread = Math.sqrt(Math.max(0, half * half - (sxx * syy - sxy * sxy)));
+  const long = half + spread;
+  const broad = Math.max(0, half - spread);
+  const axisTilt =
+    long > 0 ? Math.abs(deg(0.5 * Math.atan2(2 * sxy, sxx - syy))) * (1 - Math.sqrt(broad / long)) : 0;
+  // (a ring of up to fifteen, seven bonds a side at most, is as tall as it
+  // is wide whatever its shape, and lies as its conventions put it: a
+  // macrolide's lactone at its lower left)
+  let macroAspect = 0;
+  for (const r of rings) {
+    if (r.length < 16) continue;
+    const rx = r.map((a) => x[a]);
+    const ry = r.map((a) => y[a]);
+    const w = Math.max(...rx) - Math.min(...rx);
+    const h = Math.max(...ry) - Math.min(...ry);
+    macroAspect = Math.max(macroAspect, h / Math.max(w, L));
+  }
+
+  // reading order
+  let readingOrder = 0;
+  const el = g.elements;
+  if (el) {
+    // The first carbon of a chain on the right: a carboxyl - an acid's or
+    // an ester's - with the chain it heads running off to its left, as far
+    // as that runs unbranched. One on a ring goes wherever the ring puts it;
+    // an acetyl heads no chain. Where chains are headed both ways (the two
+    // acids of glutathione), one has to run the other way, and only the
+    // excess counts.
+    let rightWay = 0;
+    let wrongWay = 0;
+    for (let a = 0; a < n; a++) {
+      if (el[a] !== "C" || inRing.has(a)) continue;
+      const oxo = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 2);
+      const oxy = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 1);
+      const onto = neighbours[a].filter((b) => el[b] !== "O");
+      if (oxo.length !== 1 || oxy.length !== 1 || onto.length !== 1) continue;
+      if (leaf(onto[0])) continue;
+      // an acid on a ring: to the right of the middle, but lightly - a
+      // ring's substituents go where the ring puts them
+      if (inRing.has(onto[0])) {
+        const isAcid = oxy.some((o) => (g.hydrogens?.[o] ?? 0) > 0 || neighbours[o].length === 1);
+        if (isAcid && x[a] < cx - 0.25 * L) readingOrder += 0.5;
+        continue;
+      }
+      let prev = a;
+      let cur = onto[0];
+      for (let i = 0; i < n && through(cur); i++) {
+        const next = neighbours[cur].find((v) => v !== prev && !leaf(v));
+        if (next == null || inRing.has(next)) break;
+        prev = cur;
+        cur = next;
+      }
+      if (x[cur] < x[a] - 0.25 * L) rightWay++;
+      else if (x[cur] > x[a] + 0.25 * L) wrongWay++;
+    }
+    readingOrder += Math.max(0, wrongWay - rightWay);
+    // the backbone of an amino acid or a peptide from N to C, left to
+    // right, as sequences are written: at each carbon bearing an N and a
+    // carbonyl carbon, the N to the left of it. Round a cyclic peptide half
+    // must run back, so again only the excess counts.
+    let forward = 0;
+    let backward = 0;
+    for (let a = 0; a < n; a++) {
+      if (el[a] !== "C") continue;
+      const nitrogen = neighbours[a].find((b) => el[b] === "N");
+      const carbonyl = neighbours[a].find(
+        (b) =>
+          el[b] === "C" &&
+          neighbours[b].some((c) => el[c] === "O" && orderAt(b, c) === 2) &&
+          neighbours[b].some((c) => (el[c] === "O" || el[c] === "N") && orderAt(b, c) === 1),
+      );
+      if (nitrogen == null || carbonyl == null) continue;
+      if (x[nitrogen] < x[carbonyl] - 0.25 * L) forward++;
+      else if (x[nitrogen] > x[carbonyl] + 0.25 * L) backward++;
+    }
+    readingOrder += Math.max(0, backward - forward);
+    // and an amino acid's NH2, at the start of its backbone, below the
+    // alpha carbon: the backbone comes up from it to the carboxyl, the side
+    // chain branching off to the left
+    for (let a = 0; a < n; a++) {
+      if (el[a] !== "N" || inRing.has(a) || neighbours[a].length !== 1) continue;
+      if ((g.hydrogens?.[a] ?? 0) === 0) continue;
+      const alpha = neighbours[a][0];
+      if (el[alpha] !== "C" || inRing.has(alpha)) continue;
+      const acid = neighbours[alpha].some(
+        (b) =>
+          el[b] === "C" &&
+          neighbours[b].some((c) => el[c] === "O" && orderAt(b, c) === 2) &&
+          neighbours[b].some((c) => (el[c] === "O" || el[c] === "N") && orderAt(b, c) === 1),
+      );
+      if (acid && y[a] > y[alpha] - 0.25 * L) readingOrder += 0.5;
+    }
+    // a sugar - a ring of five or six with one oxygen in it, and oxygens on
+    // its carbons - drawn as its Haworth projection seen from above: the
+    // ring oxygen at the back, which is the top
+    for (const r of rings) {
+      if (r.length !== 5 && r.length !== 6) continue;
+      const ox = r.filter((a) => el[a] === "O");
+      if (ox.length !== 1 || r.some((a) => el[a] !== "C" && el[a] !== "O")) continue;
+      // (saturated, as a sugar's ring is: not a lactone, as artemisinin's is)
+      if (r.some((a) => neighbours[a].some((b) => orderAt(a, b) !== 1))) continue;
+      const hydroxylated = r.filter(
+        (a) => el[a] === "C" && neighbours[a].some((b) => !r.includes(b) && el[b] === "O"),
+      ).length;
+      if (hydroxylated < 2) continue;
+      // A sugar hung on a macrolide's ring faces it, whichever side that is:
+      // its anomeric carbon toward the aglycone, as erythromycin's are, and
+      // so its ring oxygen wherever that then falls - but it is still seen
+      // from the face its carbons number clockwise from.
+      const onMacrocycle = neighbours[ox[0]].some(
+        (c) =>
+          r.includes(c) &&
+          neighbours[c].some(
+            (b) =>
+              !r.includes(b) &&
+              el[b] === "O" &&
+              neighbours[b].some((d) => d !== c && rings.some((q) => q.length >= 12 && q.includes(d))),
+          ),
+      );
+      // (one hung from the macrocycle by an O of its own is turned over to
+      // its face last, where the drawing is set without it; one the ring
+      // runs through, a cyclodextrin's, is set with it)
+      const hung = neighbours[ox[0]].some(
+        (c) =>
+          r.includes(c) &&
+          neighbours[c].some(
+            (b) =>
+              !r.includes(b) &&
+              el[b] === "O" &&
+              !rings.some((q) => q.length >= 12 && q.includes(b)) &&
+              neighbours[b].some((d) => d !== c && rings.some((q) => q.length >= 12 && q.includes(d))),
+          ),
+      );
+      if (hung && g.sugarFaces === false) continue;
+      const ry = r.reduce((sum, a) => sum + y[a], 0) / r.length;
+      if (!onMacrocycle && y[ox[0]] < ry + 0.25 * L) readingOrder++;
+      // and its anomeric carbon - on the ring oxygen, with an oxygen or a
+      // nitrogen of its own: a glycoside's link, a nucleoside's base - on
+      // the right-hand side of the ring. Where two sugars are linked by
+      // their anomeric carbons (sucrose) one of them cannot be; an aldose's
+      // (the anomeric carbon on one carbon) keeps its place first.
+      const rx = r.reduce((sum, a) => sum + x[a], 0) / r.length;
+      for (const c of neighbours[ox[0]]) {
+        if (!r.includes(c)) continue;
+        const own = neighbours[c].some((b) => !r.includes(b) && (el[b] === "O" || el[b] === "N"));
+        if (!own) continue;
+        const carbons = neighbours[c].filter((b) => el[b] === "C").length;
+        if (!onMacrocycle && x[c] < rx + 0.25 * L) readingOrder += carbons <= 1 ? 1 : 0.5;
+        // and the carbons numbered on from it clockwise round the ring, as
+        // the Haworth projection has them: the face it is seen from
+        const next = neighbours[c].find((b) => r.includes(b) && b !== ox[0]);
+        if (next != null) {
+          const turn = (x[c] - rx) * (y[next] - ry) - (y[c] - ry) * (x[next] - rx);
+          if (turn > 0) readingOrder += carbons <= 1 ? 1 : 0.5;
+        }
+      }
+    }
+    // an acid's C=O up: the way it is always drawn - at the end of a chain,
+    // or on an aromatic ring, in its plane (one on a saturated ring's
+    // stereocentre goes where its stereo bond puts it: penicillin's down)
+    for (let a = 0; a < n; a++) {
+      if (el[a] !== "C") continue;
+      const saturated = (b: number) => inRing.has(b) && neighbours[b].every((c) => orderAt(b, c) === 1);
+      if (neighbours[a].some((b) => el[b] !== "O" && saturated(b))) continue;
+      const oxo = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 2);
+      const hydroxy = neighbours[a].filter(
+        (b) =>
+          el[b] === "O" &&
+          orderAt(a, b) === 1 &&
+          ((g.hydrogens?.[b] ?? 0) > 0 || neighbours[b].length === 1),
+      );
+      if (oxo.length !== 1 || hydroxy.length !== 1) continue;
+      if (y[oxo[0]] < y[a] - 0.2 * L) readingOrder++;
+      else if (y[oxo[0]] < y[a] + 0.2 * L) readingOrder += 0.5;
+    }
+    // and a double-bonded O on a cross above the chain through it, as
+    // IUPAC puts double-bonded substituents on a chain (P-3.2.2): never
+    // below it
+    for (let a = 0; a < n; a++) {
+      if (!cross(a)) continue;
+      const oxo = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 2);
+      if (oxo.length === 1 && y[oxo[0]] < y[a] - 0.2 * L) readingOrder += 0.5;
+    }
+    // A chain folded back on itself - a fatty acid drawn as a hairpin, a
+    // prostaglandin's two chains from its ring, both running off to the
+    // right - has its carboxyl end above its tail: read from the carboxyl,
+    // as arachidonic acid is drawn, and as IUPAC sets prostane.
+    for (let a = 0; a < n; a++) {
+      if (el[a] !== "C" || inRing.has(a)) continue;
+      const oxo = neighbours[a].filter((b) => el[b] === "O" && orderAt(a, b) === 2);
+      const hydroxy = neighbours[a].filter(
+        (b) => el[b] === "O" && orderAt(a, b) === 1 && ((g.hydrogens?.[b] ?? 0) > 0 || neighbours[b].length === 1),
+      );
+      const on = neighbours[a].filter((b) => el[b] === "C");
+      if (oxo.length !== 1 || hydroxy.length !== 1 || on.length !== 1) continue;
+      // its tail: the methyl farthest from it along the bonds
+      const far = new Array<number>(n).fill(-1);
+      far[a] = 0;
+      const todo = [a];
+      let tail = -1;
+      for (let h = 0; h < todo.length; h++) {
+        const u = todo[h];
+        for (const v of neighbours[u]) {
+          if (far[v] >= 0) continue;
+          far[v] = far[u] + 1;
+          todo.push(v);
+          if (el[v] === "C" && neighbours[v].length === 1 && (tail < 0 || far[v] > far[tail])) tail = v;
+        }
+      }
+      if (tail < 0 || far[tail] < 8) continue;
+      // (the end of a chain of four or more, not a methyl on a ring)
+      let run = 0;
+      for (let u = tail, prev = -1; !inRing.has(u) && neighbours[u].length <= 2 && run < 4; run++) {
+        const next = neighbours[u].find((v) => v !== prev);
+        if (next == null) break;
+        prev = u;
+        u = next;
+      }
+      if (run < 4) continue;
+      if (x[a] > cx + 0.5 * L && x[tail] > cx + 0.5 * L && y[a] < y[tail] + 0.5 * L) readingOrder++;
+    }
+    // A macrolide's lactone at the lower left of its ring, the ring
+    // numbered from the carbonyl carbon counterclockwise - C2 to its right
+    // along the bottom, the ring O last, above it - as erythromycin and
+    // epothilone are drawn.
+    for (const r of rings) {
+      if (r.length < 12) continue;
+      const lactones = r.filter(
+        (c, i) =>
+          el[c] === "C" &&
+          neighbours[c].some((o) => !r.includes(o) && el[o] === "O" && orderAt(c, o) === 2) &&
+          [r[(i + 1) % r.length], r[(i + r.length - 1) % r.length]].some((o) => el[o] === "O"),
+      );
+      if (lactones.length !== 1) continue;
+      const c1 = lactones[0];
+      const i = r.indexOf(c1);
+      const [before, after] = [r[(i + r.length - 1) % r.length], r[(i + 1) % r.length]];
+      const c2 = el[after] === "O" ? before : after;
+      // (a plain lactone: not one on a ring's carbon, as sirolimus's is)
+      if (rings.some((q) => q !== r && (q.includes(c1) || q.includes(c2)))) continue;
+      const rx = r.reduce((sum, v) => sum + x[v], 0) / r.length;
+      const ry = r.reduce((sum, v) => sum + y[v], 0) / r.length;
+      if (x[c1] > rx - 0.5 * L) readingOrder += 0.5;
+      if (y[c1] > ry - 0.5 * L) readingOrder += 0.5;
+      if ((x[c1] - rx) * (y[c2] - ry) - (y[c1] - ry) * (x[c2] - rx) < 0) readingOrder++;
+    }
+  }
+  const centre = (s: Set<number>) => {
+    let sx = 0;
+    let sy = 0;
+    for (const a of s) {
+      sx += x[a];
+      sy += y[a];
+    }
+    return { x: sx / s.size, y: sy / s.size };
+  };
+  if (live.length) {
+    const main = live.reduce((b, s) => (s.size > b.size ? s : b));
+    const mc = centre(main);
+    // a ring system with a chain out of it: the rings to the left, the
+    // chain read after them
+    for (const s of strands) {
+      if (s.length - 1 < 4) continue;
+      const [head, tail] = [s[0], s[s.length - 1]];
+      const free = main.has(head) && leaf(tail) ? tail : main.has(tail) && leaf(head) ? head : null;
+      if (free != null && x[free] < mc.x - 0.5 * L) readingOrder++;
+    }
+    // rings hung on a macrocycle - on it, or one atom off it, as a sugar on
+    // its oxygen: to its right, and below it - a glycoside's aglycone at the
+    // upper left, its sugars after it, lower right
+    const macro = rings.find((r) => r.length >= 12 && r.every((a) => main.has(a)));
+    if (macro) {
+      const hung = (s: Set<number>) =>
+        macro.some((m) =>
+          neighbours[m].some(
+            (b) => s.has(b) || (!inRing.has(b) && neighbours[b].some((c) => s.has(c))),
+          ),
+        );
+      for (const s of live) {
+        if (s === main || !hung(s)) continue;
+        const c = centre(s);
+        if (c.x < mc.x + 0.5 * L) readingOrder += 0.5;
+        if (c.y > mc.y - 0.5 * L) readingOrder += 0.5;
+      }
+    }
+  }
+
+  // fused rings as IUPAC orients them: the largest system's rings of up to
+  // eight, fused and not bridged, by their centres
+  let ringOrder = 0;
+  if (live.length) {
+    const main = live.reduce((b, s) => (s.size > b.size ? s : b));
+    const fused = rings.filter(
+      (r) =>
+        r.length <= 8 &&
+        r.every((a) => main.has(a)) &&
+        rings.every((q) => q === r || q.filter((a) => r.includes(a)).length <= 2),
+    );
+    if (fused.length >= 2) {
+      const centres = fused.map((r) => ({
+        x: r.reduce((sum, a) => sum + x[a], 0) / r.length,
+        y: r.reduce((sum, a) => sum + y[a], 0) / r.length,
+      }));
+      // rows of ring centres level with each other, turned `t`: the longest
+      const rowsIn = (t: number) => {
+        const c = Math.cos(t);
+        const sn = Math.sin(t);
+        const ys = centres.map((p) => p.x * sn + p.y * c);
+        const rows: number[][] = [];
+        ys.forEach((y0) => {
+          const row = ys.map((v, i) => (Math.abs(v - y0) < 0.15 * L ? i : -1)).filter((i) => i >= 0);
+          if (!rows.some((r) => r.join() === row.join())) rows.push(row);
+        });
+        const longest = Math.max(...rows.map((r) => r.length));
+        return rows.filter((r) => r.length === longest);
+      };
+      const rows = rowsIn(0);
+      const most = Math.max(
+        rows[0].length,
+        rowsIn(Math.PI / 3)[0].length,
+        rowsIn((2 * Math.PI) / 3)[0].length,
+      );
+      // of the longest rows here, the one the rest sit best against: above
+      // and to the right of it, none below and to the left - and a row of
+      // six-membered rings, which lie square, before one with others in it
+      let best = Infinity;
+      for (const row of rows) {
+        let breach = most - row.length;
+        const rx = row.reduce((sum, i) => sum + centres[i].x, 0) / row.length;
+        const ry = row.reduce((sum, i) => sum + centres[i].y, 0) / row.length;
+        centres.forEach((p, i) => {
+          if (row.includes(i)) {
+            if (fused[i].length !== 6) breach += 0.25;
+            return;
+          }
+          const right = p.x > rx + 0.1 * L;
+          const up = p.y > ry + 0.1 * L;
+          const left = p.x < rx - 0.1 * L;
+          const down = p.y < ry - 0.1 * L;
+          if (!(right && up)) breach += 0.5;
+          if (left && down) breach += 0.5;
+          else if (left) breach += 0.25;
+        });
+        best = Math.min(best, breach);
+      }
+      ringOrder += best;
+    }
+  }
+  // and within a ring system, a benzene ring at the left, where reading
+  // begins: indole's, quinoline's and coumarin's benzene rings, estradiol's
+  // aromatic A ring, griseofulvin's and reserpine's
+  for (const sys of live) {
+    const own = rings.filter((r) => r.length <= 8 && r.every((a) => sys.has(a)));
+    if (own.length < 2 || rings.some((r) => r.length > 8 && r.every((a) => sys.has(a)))) continue;
+    const benzene = (r: readonly number[]) =>
+      r.length === 6 &&
+      r.every((a) => (g.elements?.[a] ?? "C") === "C") &&
+      edges.filter(([a, b], e) => r.includes(a) && r.includes(b) && (g.orders?.[e] ?? 1) === 2).length === 3;
+    const midX = (list: readonly (readonly number[])[]) =>
+      list.reduce((sum, r) => sum + r.reduce((t, a) => t + x[a], 0) / r.length, 0) / list.length;
+    const aromatic = own.filter(benzene);
+    const rest = own.filter((r) => !benzene(r));
+    if (aromatic.length && rest.length && midX(aromatic) > midX(rest) + 0.25 * L) ringOrder += 2;
+    // the heteroatoms of a ring fused to the benzene ring below the middle
+    // of the two: quinoline's N, indole's NH, coumarin's O at the bottom,
+    // morphine's ether O and strychnine's indoline N - which way up comes
+    // before how the rest of its rings lie
+    const hetero = new Map<number, number>();
+    for (const r of rest) {
+      const b = aromatic.find((q) => q.filter((a) => r.includes(a)).length === 2);
+      if (!b) continue;
+      const both = [...new Set([...r, ...b])];
+      const cy = both.reduce((sum, a) => sum + y[a], 0) / both.length;
+      for (const a of r) if ((g.elements?.[a] ?? "C") !== "C") hetero.set(a, Math.max(hetero.get(a) ?? -Infinity, cy));
+    }
+    for (const [a, cy] of hetero) if (y[a] > cy + 0.1 * L) ringOrder += 1.5;
+  }
+
+  // the face: an angular group - the one bond out of the rings at an atom
+  // with three ring bonds - in front of the page where it can be, as a
+  // steroid's methyls are (its beta face). Seen from the other face, the
+  // same skeleton is its mirror image on the page, every wedge hashes.
+  // (A cage drawn in perspective shows its own face, and a macrocycle
+  // lies as its own conventions have it; a bond is in front of the page as
+  // a wedge draws it, ring bonds lying in it.)
+  const inMacrocycle = new Set(rings.filter((r) => r.length > 8).flat());
+  let toward = 0;
+  let away = 0;
+  for (let c = 0; c < n && g.tetra; c++) {
+    const t = g.tetra[c];
+    if (!t || solid(c) || inMacrocycle.has(c) || neighbours[c].length !== 4) continue;
+    const out = neighbours[c].filter((b) => !ringBonds.has(pair(c, b)));
+    if (out.length !== 1 || g.elements?.[out[0]] === "H" || t.neighbours.includes(-1)) continue;
+    const v = t.neighbours.map((b) => [x[b] - x[c], y[b] - y[c], b === out[0] ? 1 : 0]);
+    // (with the first three in the page, the fourth says it: it stands
+    // opposite them)
+    const d = out[0] === t.neighbours[3] ? -volume(v[0], v[1], v[3]) : volume(v[0], v[1], v[2]);
+    if (Math.abs(d) < 1e-9) continue;
+    if (Math.sign(d) === Math.sign(t.volume)) toward++;
+    else away++;
+  }
+  const face = Math.max(0, away - toward);
+
+  let wrongDoubles = 0;
+  for (const { bond, refs, cis } of g.cisTrans ?? []) {
+    const [a, b] = edges[bond];
+    const onA = neighbours[a].includes(refs[0]) && refs[0] !== b ? refs[0] : refs[1];
+    const onB = onA === refs[0] ? refs[1] : refs[0];
+    const side = (r: number) =>
+      Math.sign((x[b] - x[a]) * (y[r] - y[a]) - (y[b] - y[a]) * (x[r] - x[a]));
+    if ((side(onA) === side(onB)) !== cis) wrongDoubles++;
+  }
+
+  let overlaps = 0;
+  for (let a = 0; a < n; a++) {
+    for (let b = a + 1; b < n; b++) {
+      const dx = x[a] - x[b];
+      const dy = y[a] - y[b];
+      if (dx * dx + dy * dy >= 0.25 * L * L) continue;
+      if (bonded.has(pair(a, b)) || solid2(a, b)) continue;
+      overlaps++;
+    }
+  }
+
+  // (each bond's box, to pass over pairs far apart without more ado)
+  const E = edges.length;
+  const lox = new Float64Array(E);
+  const hix = new Float64Array(E);
+  const loy = new Float64Array(E);
+  const hiy = new Float64Array(E);
+  edges.forEach(([a, b], e) => {
+    lox[e] = Math.min(x[a], x[b]);
+    hix[e] = Math.max(x[a], x[b]);
+    loy[e] = Math.min(y[a], y[b]);
+    hiy[e] = Math.max(y[a], y[b]);
+  });
+  let crossings = 0;
+  for (let i = 0; i < E; i++) {
+    const [a, b] = edges[i];
+    for (let j = i + 1; j < E; j++) {
+      if (lox[j] > hix[i] || hix[j] < lox[i] || loy[j] > hiy[i] || hiy[j] < loy[i]) continue;
+      const [c, d] = edges[j];
+      if (a === c || a === d || b === c || b === d) continue;
+      if (!segmentsCross(x[a], y[a], x[b], y[b], x[c], y[c], x[d], y[d])) continue;
+      if (solid(a, b, c, d) || passes(a, b, c, d)) continue;
+      crossings++;
+    }
+  }
+
+  let clashes = 0;
+  const near = 0.3 * L;
+  for (let p = 0; p < n; p++) {
+    const px = x[p];
+    const py = y[p];
+    for (let e = 0; e < E; e++) {
+      if (px < lox[e] - near || px > hix[e] + near || py < loy[e] - near || py > hiy[e] + near) continue;
+      const [a, b] = edges[e];
+      if (p === a || p === b) continue;
+      if (pointToSegment(px, py, x[a], y[a], x[b], y[b]) >= near) continue;
+      if (solid(p, a, b)) continue;
+      clashes++;
+    }
+  }
+
+  const measures = {
+    bondSpread,
+    angleError,
+    ringError,
+    overlaps,
+    crossings,
+    wrongDoubles,
+    clashes,
+    macroAngleError,
+    ringWedges,
+    crowdedLabels,
+    tilt,
+    gridError,
+    substituentError,
+    chainFold,
+    chainSplay,
+    chainTilt,
+    axisTilt,
+    aspect,
+    macroAspect,
+    readingOrder,
+    ringOrder,
+    face,
+  };
+  const score = Object.values(scoreParts(measures)).reduce((sum, v) => sum + v, 0);
+  return { ...measures, score };
+}

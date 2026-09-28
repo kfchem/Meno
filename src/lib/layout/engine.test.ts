@@ -1,0 +1,529 @@
+import { describe, expect, it } from "vitest";
+import { FRAMES, grow, sidesOf } from "./assemble";
+import { layout2D, roomForHydrogens, scorer } from "./engine";
+import { macrocycleShape } from "./macrocycle";
+import { hydrogenSpot, layoutMetrics } from "./metrics";
+import { dist } from "./geometry";
+import { perceive, type LayoutBond, type LayoutInput } from "./perceive";
+import { solidOf } from "./cage";
+
+/** Carbons joined by the bonds given, as [a, b, order?]. */
+function carbons(n: number, bonds: [number, number, number?][], extra: Partial<LayoutBond>[] = []): LayoutInput {
+  return {
+    atoms: Array.from({ length: n }, () => ({ el: "C" })),
+    bonds: bonds.map(([a, b, order], i) => ({ a, b, order: order ?? 1, ...extra[i] })),
+  };
+}
+
+const ring = (from: number, size: number): [number, number][] =>
+  Array.from({ length: size }, (_, i) => [from + i, from + ((i + 1) % size)]);
+
+const bondLengths = (input: LayoutInput) => {
+  const { x, y } = layout2D(input);
+  return input.bonds.map(({ a, b }) => Math.hypot(x[a] - x[b], y[a] - y[b]));
+};
+
+const measure = (input: LayoutInput) => {
+  const { x, y } = layout2D(input);
+  return layoutMetrics({
+    x,
+    y,
+    edges: input.bonds.map(({ a, b }) => [a, b] as const),
+    orders: input.bonds.map((b) => b.order),
+  });
+};
+
+describe("layout2D", () => {
+  it("draws benzene as a regular hexagon with two sides upright", () => {
+    const benzene = carbons(6, ring(0, 6).map(([a, b], i) => [a, b, i % 2 ? 2 : 1]));
+    for (const l of bondLengths(benzene)) expect(l).toBeCloseTo(1, 6);
+    const { x } = layout2D(benzene);
+    // an apex at the top and bottom, and two atoms on each upright side
+    const xs = x.map((v) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(4));
+    expect(new Set(xs).size).toBe(3);
+    expect(measure(benzene).tilt).toBeCloseTo(0, 6);
+  });
+
+  it("draws a chain as a level zigzag", () => {
+    const hexane = carbons(6, [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+    ]);
+    const m = measure(hexane);
+    expect(m.angleError).toBeCloseTo(0, 6);
+    expect(m.chainTilt).toBeCloseTo(0, 6);
+    expect(m.tilt).toBeCloseTo(0, 6);
+  });
+
+  it("draws a double bond cis or trans as it is", () => {
+    for (const cis of [true, false]) {
+      const butene = carbons(4, [[0, 1], [1, 2, 2], [2, 3]], [
+        {},
+        { stereo: { refs: [0, 3], cis } },
+        {},
+      ]);
+      const { x, y } = layout2D(butene);
+      const side = (i: number) =>
+        Math.sign((x[2] - x[1]) * (y[i] - y[1]) - (y[2] - y[1]) * (x[i] - x[1]));
+      expect(side(0) === side(3)).toBe(cis);
+    }
+  });
+
+  it("draws a cis double bond in a long chain as a step in a straight chain", () => {
+    // octadec-9-ene, cis: the chain either side of C9=C10 on one line
+    const bonds: [number, number, number?][] = Array.from({ length: 17 }, (_, i) => [i, i + 1, i === 8 ? 2 : 1]);
+    const chain = carbons(18, bonds, bonds.map((_, i) => (i === 8 ? { stereo: { refs: [7, 10], cis: true } } : {})));
+    // as it is grown, in every frame - before anything is tried the other way
+    const mol = perceive(chain);
+    for (const frame of FRAMES) {
+      const pos = grow(mol, mol.pieces[0], new Map(), frame, sidesOf(mol));
+      const axis = (from: number, to: number) =>
+        Math.atan2(pos.get(to)!.y - pos.get(from)!.y, pos.get(to)!.x - pos.get(from)!.x);
+      const turn = Math.abs(Math.atan2(Math.sin(axis(0, 8) - axis(10, 17)), Math.cos(axis(0, 8) - axis(10, 17))));
+      expect(Math.min(turn, Math.PI - turn)).toBeLessThan((10 * Math.PI) / 180);
+    }
+  });
+
+  it("fuses rings on a shared side", () => {
+    const naphthalene = carbons(10, [...ring(0, 6), [1, 6], [6, 7], [7, 8], [8, 9], [9, 2]]);
+    for (const l of bondLengths(naphthalene)) expect(l).toBeCloseTo(1, 6);
+    const m = measure(naphthalene);
+    expect(m.ringError).toBeCloseTo(0, 6);
+    expect(m.overlaps + m.crossings).toBe(0);
+  });
+
+  it("points a substituent straight out of its ring", () => {
+    const methylcyclohexane = carbons(7, [...ring(0, 6), [0, 6]]);
+    const { x, y } = layout2D(methylcyclohexane);
+    const cx = x.slice(0, 6).reduce((s, v) => s + v, 0) / 6;
+    const cy = y.slice(0, 6).reduce((s, v) => s + v, 0) / 6;
+    // on the line from the centre through its ring atom, a bond further out
+    expect(Math.hypot(x[6] - cx, y[6] - cy)).toBeCloseTo(2, 6);
+  });
+
+  it("sets a steroid as it is always drawn: A and B in a row, C and D above to the right", () => {
+    // gonane, C1 to C17 as atoms 0 to 16
+    const c = (k: number) => k - 1;
+    const bonds: [number, number][] = [
+      [c(1), c(2)], [c(2), c(3)], [c(3), c(4)], [c(4), c(5)], [c(5), c(10)], [c(10), c(1)],
+      [c(5), c(6)], [c(6), c(7)], [c(7), c(8)], [c(8), c(9)], [c(9), c(10)],
+      [c(9), c(11)], [c(11), c(12)], [c(12), c(13)], [c(13), c(14)], [c(14), c(8)],
+      [c(14), c(15)], [c(15), c(16)], [c(16), c(17)], [c(17), c(13)],
+    ];
+    const gonane = carbons(17, bonds);
+    const m = measure(gonane);
+    expect(m.ringOrder).toBe(0);
+    const { x, y } = layout2D(gonane);
+    // ring A (C1-C5, C10) lower left of ring D (C13-C17)
+    const mid = (ks: number[]) => ({
+      x: ks.reduce((s, k) => s + x[c(k)], 0) / ks.length,
+      y: ks.reduce((s, k) => s + y[c(k)], 0) / ks.length,
+    });
+    const a = mid([1, 2, 3, 4, 5, 10]);
+    const d = mid([13, 14, 15, 16, 17]);
+    expect(a.x).toBeLessThan(d.x);
+    expect(a.y).toBeLessThan(d.y);
+  });
+
+  it("draws a macrocycle as a closed zigzag, not a round polygon", () => {
+    const shape = macrocycleShape(14);
+    for (let i = 0; i < 14; i++) {
+      const p = shape[i];
+      const q = shape[(i + 1) % 14];
+      expect(Math.hypot(q.x - p.x, q.y - p.y)).toBeCloseTo(1, 6);
+    }
+    const m = measure(carbons(14, ring(0, 14)));
+    expect(m.macroAngleError).toBeCloseTo(0, 6);
+    // lying wide
+    expect(m.macroAspect).toBeLessThan(1);
+  });
+
+  it("sets a macrocycle that runs through rings round a circle, the rings regular", () => {
+    // three benzene rings joined para to para by CH2CH2 bridges: a ring of rings
+    const bonds: [number, number, number?][] = [];
+    for (let k = 0; k < 3; k++) {
+      const b = k * 8;
+      for (const [i, j] of ring(b, 6)) bonds.push([i, j, (i - b) % 2 ? 2 : 1]);
+      // para positions b+0 and b+3; the bridge b+6, b+7 to the next ring's b+0
+      bonds.push([b + 3, b + 6], [b + 6, b + 7], [b + 7, ((k + 1) % 3) * 8]);
+    }
+    const cyclophane = carbons(24, bonds);
+    for (const l of bondLengths(cyclophane)) expect(l).toBeCloseTo(1, 3);
+    const m = measure(cyclophane);
+    expect(m.ringError).toBeCloseTo(0, 3);
+    expect(m.overlaps + m.crossings).toBe(0);
+  });
+
+  it("draws adamantane as it is always drawn: a chair, its axial bonds upright to the fourth bridgehead", () => {
+    // four bridgeheads (0-3), six CH2 between them
+    const cage = carbons(10, [
+      [0, 4], [4, 1], [1, 5], [5, 2], [2, 6], [6, 0],
+      [0, 7], [7, 3], [1, 8], [8, 3], [2, 9], [9, 3],
+    ]);
+    const { x, y, depth } = layout2D(cage);
+    for (const l of bondLengths(cage)) expect(l).toBeCloseTo(1, 3);
+    const upright = cage.bonds.filter(({ a, b }) => Math.abs(x[a] - x[b]) < 1e-6);
+    expect(upright).toHaveLength(3);
+    // one bond passes behind another, and is drawn broken there
+    const m = layoutMetrics({ x, y, edges: cage.bonds.map(({ a, b }) => [a, b] as const) });
+    expect(m.crossings).toBe(1);
+    expect(m.overlaps).toBe(0);
+    expect(depth.every((d) => d != null)).toBe(true);
+  });
+
+  it("draws norbornane as a boat with its bridge above it", () => {
+    // bridgeheads 0 and 3; the bridge 6
+    const norbornane = carbons(7, [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 3]]);
+    const { x, y } = layout2D(norbornane);
+    expect(Math.max(...y)).toBeCloseTo(y[6], 6);
+    // straight above the front bridgehead, a bond's length from the back one
+    const lengths = [0, 3].map((h) => Math.hypot(x[6] - x[h], y[6] - y[h])).sort((p, q) => p - q);
+    expect(lengths[0]).toBeCloseTo(1, 3);
+    expect(lengths[1]).toBeCloseTo(Math.sqrt(3), 3);
+    expect([0, 3].some((h) => Math.abs(x[6] - x[h]) < 1e-6)).toBe(true);
+  });
+
+  it("draws a cage as the solid it is, not its mirror image", () => {
+    // camphor: C1 (0) with its methyl (8), the ketone at C2 (1), C4 (3) the
+    // other bridgehead, C7 (6) with its two methyls - and each hand of it
+    for (const volume of [1, -1] as const) {
+      const skeleton = carbons(11, [
+        [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 3], [1, 7, 2], [0, 8], [6, 9], [6, 10],
+      ]);
+      const camphor: LayoutInput = {
+        ...skeleton,
+        atoms: skeleton.atoms.map((a, i) =>
+          i === 7 ? { el: "O" } : i === 3 ? { el: "C", tetra: { neighbours: [2, 4, 6, -1], volume } } : a,
+        ),
+      };
+      const mol = perceive(camphor);
+      const solid = solidOf(mol, mol.systems[0]);
+      const { x, y, depth } = layout2D(camphor);
+      // the linear map that takes the solid (about its middle) to the drawing
+      // (x, y and depth) best turns it the right way: a mirror would not
+      const atoms = mol.systems[0].atoms;
+      const mid = (f: (a: number) => number) => atoms.reduce((s, a) => s + f(a), 0) / atoms.length;
+      const from = atoms.map((a) => {
+        const p = solid.get(a)!;
+        return [0, 1, 2].map((k) => p[k] - mid((b) => solid.get(b)![k]));
+      });
+      const to = atoms.map((a) => [x[a] - mid((b) => x[b]), y[a] - mid((b) => y[b]), depth[a]! - mid((b) => depth[b]!)]);
+      const cross = (u: number, v: number) => from.reduce((s, p, i) => s + p[u] * to[i][v], 0);
+      const M = [0, 1, 2].map((u) => [0, 1, 2].map((v) => cross(u, v)));
+      const det =
+        M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) -
+        M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+        M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+      expect(det).toBeGreaterThan(0);
+    }
+  });
+
+  it("draws a cage from above, its back at the top, however the frame is set", () => {
+    for (const volume of [1, -1] as const) {
+      const skeleton = carbons(11, [
+        [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 3], [1, 7, 2], [0, 8], [6, 9], [6, 10],
+      ]);
+      const camphor: LayoutInput = {
+        ...skeleton,
+        atoms: skeleton.atoms.map((a, i) =>
+          i === 7 ? { el: "O" } : i === 3 ? { el: "C", tetra: { neighbours: [2, 4, 6, -1], volume } } : a,
+        ),
+      };
+      const { y, depth } = layout2D(camphor);
+      // round the six-membered ring the cage is drawn on, the higher on the
+      // page the further from the viewer
+      const cage = [0, 1, 2, 3, 4, 5];
+      const my = cage.reduce((s, a) => s + y[a], 0) / cage.length;
+      const md = cage.reduce((s, a) => s + depth[a]!, 0) / cage.length;
+      const together = cage.reduce((s, a) => s + (y[a] - my) * (depth[a]! - md), 0);
+      expect(together).toBeLessThan(0);
+    }
+  });
+
+  it("draws an H at a centre hemmed in by rings clear of every bond", () => {
+    // perhydrophenalene: the centre (0) in three rings, its H drawn
+    const bonds: [number, number][] = [
+      [0, 1], [0, 5], [0, 9], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11],
+      [11, 12], [12, 1],
+    ];
+    const skeleton = carbons(13, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((a, i) => (i === 0 ? { el: "C", tetra: { neighbours: [1, 5, 9, -1], volume: 1 } } : a)),
+    };
+    const { x, y, hydrogens } = layout2D(input);
+    const h = hydrogens.find((d) => d.on === 0)!;
+    expect(h).toBeDefined();
+    for (let a = 1; a < 13; a++) expect(Math.hypot(x[a] - h.at.x, y[a] - h.at.y)).toBeGreaterThan(0.6);
+    for (const [a, b] of bonds) {
+      if (a === 0 || b === 0) continue;
+      const vx = x[b] - x[a];
+      const vy = y[b] - y[a];
+      const k = Math.max(0, Math.min(1, ((h.at.x - x[a]) * vx + (h.at.y - y[a]) * vy) / (vx * vx + vy * vy)));
+      expect(Math.hypot(h.at.x - x[a] - k * vx, h.at.y - y[a] - k * vy)).toBeGreaterThan(0.4);
+    }
+  });
+
+  it("draws macrocycles strung through benzene rings as chains, never round", () => {
+    // a benzene hub, a macrocycle through it and each of two more benzenes
+    // by an ether and a chain of six
+    const benzene = (o: number): [number, number, number][] =>
+      [0, 1, 2, 3, 4, 5].map((i) => [o + i, o + ((i + 1) % 6), i % 2 ? 1 : 2]);
+    const bonds: [number, number, number?][] = [
+      ...benzene(0), ...benzene(6), ...benzene(12),
+      [0, 18], [18, 6], [9, 19], [19, 20], [20, 21], [21, 22], [22, 28], [28, 29], [29, 2],
+      [5, 23], [23, 12], [15, 24], [24, 25], [25, 26], [26, 27], [27, 30], [30, 31], [31, 3],
+    ];
+    const skeleton = carbons(32, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((a, i) => (i === 18 || i === 23 ? { el: "O" } : a)),
+    };
+    const { x, y } = layout2D(input);
+    for (const l of bondLengths(input)) expect(Math.abs(l - 1)).toBeLessThan(0.05);
+    const m = layoutMetrics({ x, y, edges: input.bonds.map(({ a, b }) => [a, b] as const) });
+    expect(m.overlaps + m.crossings).toBe(0);
+    expect(m.ringError).toBeLessThan(0.01);
+    // the chains zigzags - their angles 120 degrees, most of them exactly,
+    // none opened out toward an arc's (154 degrees round a ring of 14)
+    const angles = [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31].map((c) => {
+      const [p, q] = input.bonds.filter(({ a, b }) => a === c || b === c).map(({ a, b }) => (a === c ? b : a));
+      const t = Math.abs(Math.atan2(y[p] - y[c], x[p] - x[c]) - Math.atan2(y[q] - y[c], x[q] - x[c]));
+      return (Math.min(t, 2 * Math.PI - t) * 180) / Math.PI;
+    });
+    for (const t of angles) {
+      expect(t).toBeGreaterThan(100);
+      expect(t).toBeLessThan(145);
+    }
+    expect(angles.filter((t) => Math.abs(t - 120) < 2).length).toBeGreaterThanOrEqual(0.6 * angles.length);
+  });
+
+  it("keeps a five-membered ring hemmed in by others a pentagon, its bonds giving instead", () => {
+    // acenaphthene: the five-membered ring across naphthalene's peri positions
+    const acenaphthene = carbons(12, [
+      [0, 1, 2], [1, 2], [2, 3, 2], [3, 4], [4, 5, 2], [5, 0], [5, 6], [6, 7, 2], [7, 8], [8, 9, 2], [9, 0],
+      [1, 10], [10, 11], [11, 9],
+    ]);
+    const { x, y } = layout2D(acenaphthene);
+    const ring = [0, 1, 10, 11, 9];
+    const off = ring.map((a, i) => {
+      const p = ring[(i + 4) % 5];
+      const q = ring[(i + 1) % 5];
+      const t = Math.abs(Math.atan2(y[p] - y[a], x[p] - x[a]) - Math.atan2(y[q] - y[a], x[q] - x[a]));
+      return Math.abs((Math.min(t, 2 * Math.PI - t) * 180) / Math.PI - 108);
+    });
+    expect(off.reduce((sum, t) => sum + t, 0) / 5).toBeLessThan(8);
+    for (const l of bondLengths(acenaphthene)) expect(l).toBeGreaterThan(0.95);
+  });
+
+  it("hangs a tropane's two-carbon bridge from its chair on upright bonds", () => {
+    // cocaine
+    const bonds: [number, number, number?][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [7, 9], [9, 10], [10, 11, 2], [10, 12],
+      [12, 13, 2], [13, 14], [14, 15, 2], [15, 16], [16, 17, 2], [6, 18], [18, 19, 2], [18, 20], [20, 21], [5, 1],
+      [8, 2], [17, 12],
+    ];
+    const skeleton = carbons(22, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((a, i) => (i === 1 ? { el: "N" } : [9, 11, 19, 20].includes(i) ? { el: "O" } : a)),
+    };
+    const { x, y, solid } = layout2D(input);
+    // every bond of the cage near upright is upright
+    for (const { a, b } of input.bonds) {
+      if (!solid[a] || !solid[b]) continue;
+      const t = Math.abs(Math.atan2(y[b] - y[a], x[b] - x[a]));
+      const off = Math.abs(t - Math.PI / 2);
+      if (off < (25 * Math.PI) / 180) expect(off).toBeLessThan(1e-6);
+    }
+  });
+
+  it("draws a ring system with a ring fused on a side flat, its bridge across a ring", () => {
+    // 9,10-dihydro-9,10-ethanoanthracene: the bridge (14, 15) across the
+    // middle ring of an anthracene
+    const bonds: [number, number, number?][] = [
+      [0, 2], [2, 3, 2], [3, 4], [4, 5, 2], [5, 6], [6, 7, 2], [7, 2], [7, 1],
+      [0, 8], [8, 9, 2], [9, 10], [10, 11, 2], [11, 12], [12, 13, 2], [13, 8], [13, 1],
+      [0, 14], [14, 15], [15, 1],
+    ];
+    const input = carbons(16, bonds);
+    const { x, y, depth, solid } = layout2D(input);
+    expect(solid.some((s) => s)).toBe(false);
+    for (const l of bondLengths(input)) expect(l).toBeCloseTo(1, 3);
+    // the fused rings flat, the bridge in front of them or behind
+    expect(depth.slice(0, 14).every((d) => d === 0)).toBe(true);
+    expect(Math.abs(depth[14]!)).toBe(1);
+    expect(depth[15]).toBe(depth[14]);
+    const m = layoutMetrics({ x, y, edges: input.bonds.map(({ a, b }) => [a, b] as const), depth });
+    expect(m.overlaps + m.crossings).toBe(0);
+    expect(m.ringError).toBeLessThan(0.05);
+  });
+
+  it("draws a ring system from the face its angular groups are on, whichever hand it is", () => {
+    // artemisinin: its angular methyl (18) on the ketal carbon (14) in
+    // front of the page, on a wedge, as a steroid's are
+    const els = "CCCCCCCOOCCCCCCOOOCC";
+    const bonds: [number, number, number?][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7, 2], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12],
+      [12, 13], [13, 14], [14, 15], [14, 16], [16, 17], [14, 18], [5, 19], [11, 1], [10, 4], [15, 9], [17, 10],
+    ];
+    const centres: [number, number[], 1 | -1][] = [
+      [1, [0, 2, 11, -1], 1], [4, [3, 5, 10, -1], -1], [5, [4, 6, 19, -1], 1], [9, [8, 10, 15, -1], -1],
+      [10, [4, 9, 11, 17], -1], [11, [1, 10, 12, -1], -1], [14, [13, 15, 16, 18], 1],
+    ];
+    for (const hand of [1, -1] as const) {
+      const skeleton = carbons(els.length, bonds);
+      const input: LayoutInput = {
+        ...skeleton,
+        atoms: skeleton.atoms.map((_, i) => {
+          const c = centres.find(([a]) => a === i);
+          return { el: els[i], ...(c && { tetra: { neighbours: c[1], volume: (c[2] * hand) as 1 | -1 } }) };
+        }),
+      };
+      const { wedges } = layout2D(input);
+      expect(wedges.find((w) => w.from === 14 && w.to === 18)?.stereo).toBe("up");
+    }
+  });
+
+  it("puts the heteroatom of a ring fused to a benzene below it, before how the other rings lie", () => {
+    // strychnine: its benzene ring (19-24) on the left, the indoline N (12)
+    // below it, as IUPAC draws strychnidine
+    const els = "CCNCCCCOCCCONCCCCCCCCCCCC";
+    const bonds: [number, number, number?][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5, 2], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11, 2], [10, 12],
+      [12, 13], [13, 14], [14, 15], [15, 16], [16, 17], [17, 18], [18, 19], [19, 20, 2], [20, 21], [21, 22, 2],
+      [22, 23], [23, 24, 2], [18, 0], [17, 2], [15, 4], [14, 8], [24, 12], [18, 13], [24, 19],
+    ];
+    const centres: [number, number[], 1 | -1][] = [
+      [8, [7, 9, 14, -1], -1], [13, [12, 14, 18, -1], -1], [14, [8, 13, 15, -1], -1], [15, [4, 14, 16, -1], -1],
+      [17, [2, 16, 18, -1], -1], [18, [0, 13, 17, 19], 1],
+    ];
+    const skeleton = carbons(els.length, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((_, i) => {
+        const c = centres.find(([a]) => a === i);
+        return { el: els[i], ...(c && { tetra: { neighbours: c[1], volume: c[2] } }) };
+      }),
+    };
+    const { x, y } = layout2D(input);
+    const mid = (atoms: number[], v: number[]) => atoms.reduce((s, a) => s + v[a], 0) / atoms.length;
+    const benzene = [19, 20, 21, 22, 23, 24];
+    const both = [...benzene, 12, 13, 18];
+    expect(y[12]).toBeLessThan(mid(both, y) - 0.1);
+    expect(mid(benzene, x)).toBeLessThan(mid([...Array(els.length).keys()], x));
+  });
+
+  it("draws tryptophan as an amino acid, its indole N below", () => {
+    // the NH2 (14) below the alpha carbon (10), the COOH (11) on its right
+    // with its C=O (12) up, and the indole's N (8) below the middle of it
+    const els = "CCCCCCCCNCCCOON";
+    const skeleton = carbons(els.length, [
+      [0, 1, 2], [1, 2], [2, 3, 2], [3, 4], [4, 5, 2], [4, 6], [6, 7, 2], [7, 8], [6, 9], [9, 10], [10, 11],
+      [11, 12, 2], [11, 13], [10, 14], [5, 0], [8, 3],
+    ]);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((_, i) =>
+        i === 10
+          ? { el: "C", hs: 1, tetra: { neighbours: [9, 11, 14, -1], volume: -1 } }
+          : { el: els[i], hs: [1, 1, 1, 0, 0, 1, 0, 1, 1, 2, 1, 0, 0, 1, 2][i] },
+      ),
+    };
+    const { x, y } = layout2D(input);
+    expect(y[14]).toBeLessThan(y[10] - 0.25);
+    expect(x[11]).toBeGreaterThan(x[10]);
+    expect(y[12]).toBeGreaterThan(y[11] + 0.2);
+    const indole = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+    expect(y[8]).toBeLessThan(indole.reduce((s, a) => s + y[a], 0) / indole.length - 0.1);
+  });
+
+  it("draws a triphosphate as one straight line, each P=O above it", () => {
+    // methyl triphosphate: CH3-O-P(=O)(OH)-O-P(=O)(OH)-O-P(=O)(OH)2
+    const els = "COPOOOPOOOPOOO";
+    const skeleton = carbons(els.length, [
+      [0, 1], [1, 2], [2, 3, 2], [2, 4], [2, 5], [5, 6], [6, 7, 2], [6, 8], [6, 9], [9, 10], [10, 11, 2], [10, 12],
+      [10, 13],
+    ]);
+    const input: LayoutInput = { ...skeleton, atoms: skeleton.atoms.map((_, i) => ({ el: els[i], hs: [3, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1][i] })) };
+    const { y } = layout2D(input);
+    // P, O, P, O, P on one level line
+    for (const a of [5, 6, 9, 10]) expect(y[a]).toBeCloseTo(y[2], 6);
+    for (const [p, o] of [[2, 3], [6, 7], [10, 11]]) expect(y[o]).toBeGreaterThan(y[p] + 0.9);
+  });
+
+  it("sets a macrolide's lactone at its lower left, numbered counterclockwise from it", () => {
+    // a fourteen-membered lactone: its ring O (0), C1 (1) with its C=O
+    // (14), and methyls on C2, C4, C6, C8 and C10
+    const bonds: [number, number, number?][] = [...ring(0, 14), [1, 14, 2]];
+    for (const [c, m] of [[2, 15], [4, 16], [6, 17], [8, 18], [10, 19]]) bonds.push([c, m]);
+    const skeleton = carbons(20, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((a, i) => (i === 0 || i === 14 ? { el: "O" } : a)),
+    };
+    const { x, y } = layout2D(input);
+    const cx = [...Array(14).keys()].reduce((sum, a) => sum + x[a], 0) / 14;
+    const cy = [...Array(14).keys()].reduce((sum, a) => sum + y[a], 0) / 14;
+    expect(x[1]).toBeLessThan(cx - 0.5);
+    expect(y[1]).toBeLessThan(cy - 0.5);
+    expect((x[1] - cx) * (y[2] - cy) - (y[1] - cy) * (x[2] - cx)).toBeGreaterThan(0);
+  });
+
+  it("makes room for an OH's H by moving a bond, never setting the H under it", () => {
+    // hydroxyacetone, HO-CH2-C(=O)-CH3, drawn by hand with the OH's H (on
+    // the left of its O, as HO) on the ketone's O
+    const input: LayoutInput = {
+      atoms: [{ el: "O", hs: 1 }, { el: "C" }, { el: "C" }, { el: "O" }, { el: "C" }],
+      bonds: [
+        { a: 0, b: 1, order: 1 },
+        { a: 1, b: 2, order: 1 },
+        { a: 2, b: 3, order: 2 },
+        { a: 2, b: 4, order: 1 },
+      ],
+    };
+    const mol = perceive(input);
+    const s3 = Math.sqrt(3) / 2;
+    const pos = new Map([
+      [0, { x: -s3, y: 0.5 }],
+      [1, { x: 0, y: 0 }],
+      [2, { x: -s3, y: -0.5 }],
+      [3, { x: -2 * s3, y: 0 }],
+      [4, { x: -s3, y: -1.5 }],
+    ]);
+    const piece = [0, 1, 2, 3, 4];
+    const score = scorer(mol, piece, [], [], 1);
+    const spot = (p: Map<number, { x: number; y: number }>) => {
+      const o = p.get(0)!;
+      const c = p.get(1)!;
+      const h = hydrogenSpot([{ x: (c.x - o.x) / dist(c, o), y: (c.y - o.y) / dist(c, o) }]);
+      return { x: o.x + h.x, y: o.y + h.y, beside: h.y === 0 };
+    };
+    const clearOf = (h: { x: number; y: number }, p: { x: number; y: number }) =>
+      Math.abs(h.x - p.x) > 0.65 || Math.abs(h.y - p.y) > 0.58;
+    expect(clearOf(spot(pos), pos.get(3)!)).toBe(false);
+    const room = roomForHydrogens(mol, piece, pos, score(pos), score);
+    expect(room.score).toBeLessThan(score(pos));
+    const h = spot(room.pos);
+    expect(h.beside).toBe(true);
+    expect(clearOf(h, room.pos.get(3)!)).toBe(true);
+  });
+
+  it("sets the pieces of a salt side by side", () => {
+    const input: LayoutInput = {
+      atoms: [{ el: "Na", charge: 1 }, { el: "C" }, { el: "C" }, { el: "O" }, { el: "O", charge: -1 }],
+      bonds: [
+        { a: 1, b: 2, order: 1 },
+        { a: 2, b: 3, order: 2 },
+        { a: 2, b: 4, order: 1 },
+      ],
+    };
+    const { x, y } = layout2D(input);
+    for (let i = 1; i < 5; i++) {
+      expect(Math.hypot(x[0] - x[i], y[0] - y[i])).toBeGreaterThan(1);
+    }
+  });
+});

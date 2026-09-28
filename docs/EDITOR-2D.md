@@ -217,6 +217,39 @@ All hover-based, as above.
 - Reaction arrows, "+" and text: create, move, edit, delete.
 - Copy and paste, within Meno and between tabs.
 
+### 4a. A layout engine of Meno's own
+
+Agreed 2026-09-27: clean-up as it is (RDKit's layout laid over the drawing,
+PR #53) falls well short - taxol comes out unrecognisable - and neither of
+RDKit's layout engines is good enough to build on, so Meno gets its own,
+written from scratch, used for clean-up and for structures that arrive
+without coordinates (SMILES).
+
+What it has to do, in the maintainer's words: rings drawn clean and regular,
+ring bonds kept plain with stereo shown on the bonds out of them - adding an
+H where a ring-fusion centre has no other - substituents that would clash
+turned to where they fit, and stretched only if they still clash, and the
+molecule turned the way it is usually drawn (taxol with its bridgehead
+double bond level). Macrocycles, macrolides above all, must come out well
+as a matter of course. Sugars, amino acids and peptides, nucleosides and
+lipids each have their own way of being drawn, which it should know.
+
+1. **A benchmark to judge it by**: some seventy molecules, each beside the
+   structure its Wikipedia article shows, with numbers for what looks
+   untidy and for how the drawing sits - square to the lattice, its chains
+   level, read left to right (`scripts/layout`, `src/lib/layout/metrics.ts`).
+   The numbers are general rules, not a record of particular molecules.
+   RDKit's two engines are the baseline. (PR #58)
+2. The engine itself (`src/lib/layout/engine.ts`, by the rules in
+   `docs/LAYOUT-2D.md`): ring systems, chains, macrocycles, stereo display,
+   clash removal and orientation, measured on the benchmark at each step.
+   A first pass is in; on the benchmark it scores best or level on most of
+   the molecules against RDKit's two engines.
+3. Clean-up and SMILES import moved onto it.
+
+Its code is Meno's own: nothing taken from other depiction code, nothing
+traced from reference drawings.
+
 ### 5. Files, clipboard and export
 
 - Save and Save As (MOL/SDF), Ctrl+S, and closing asks when there is
