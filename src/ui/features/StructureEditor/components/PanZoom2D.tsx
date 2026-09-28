@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { wheelReader } from "../../../../lib/input/wheel";
+import { isPinch, wheelReader } from "../../../../lib/input/wheel";
 import { useEditor, useEditorStore } from "../store";
 
 /** WebKit's pinch on a trackpad, which it gives as gestures, not wheels. */
@@ -187,8 +187,9 @@ export function PanZoom2D() {
         invalidate();
         return;
       }
-      if (e.ctrlKey) {
-        // a pinch in Chromium: small steps, followed as they come
+      if (isPinch(e)) {
+        // a pinch in Chromium: small steps, followed as they come (Ctrl with
+        // a mouse's notch goes on below, and zooms as the wheel does)
         zoomAt(Math.exp(-e.deltaY * PINCH_PER_PX), e.clientX, e.clientY);
         return;
       }

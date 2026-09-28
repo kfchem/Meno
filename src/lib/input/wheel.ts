@@ -44,6 +44,19 @@ export function looksLikeFingers(e: WheelLike): boolean {
   return Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY)) < NOTCH_PX;
 }
 
+/**
+ * Whether a wheel event with Ctrl held is a pinch, to be followed step by
+ * step as the fingers go. Chromium hands a pinch on a trackpad over as the
+ * wheel with Ctrl held, in small fractional steps. But on Windows Ctrl with
+ * the mouse wheel is itself the ordinary way to zoom, and its notch - 100 px
+ * - followed as a pinch zooms e times, 2.7, at a single click. So a notch is
+ * told from a pinch the way the first step of a run is told from fingers,
+ * and a notch zooms as the wheel's notch does without Ctrl.
+ */
+export function isPinch(e: WheelLike): boolean {
+  return e.ctrlKey && looksLikeFingers(e);
+}
+
 /** A reader of wheel events for one view, remembering the run it is in. */
 export function wheelReader(): (e: WheelLike) => WheelIntent {
   let run: { intent: WheelIntent; at: number } | null = null;
