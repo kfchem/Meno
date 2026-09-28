@@ -80,6 +80,9 @@ export function editorModelOf(mdl: { atoms: any[]; bonds: any[] }): Model {
       y: a.y,
       r: a.r ?? 0.9,
       el: a.el ?? "C",
+      ...(a.charge ? { charge: a.charge } : {}),
+      ...(a.radical ? { radical: a.radical } : {}),
+      ...(a.isotope ? { isotope: a.isotope } : {}),
     })),
     bonds: mdl.bonds.map((b) => ({
       id: b.id,

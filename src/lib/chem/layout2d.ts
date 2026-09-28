@@ -2,14 +2,15 @@ import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
 import { ringSidesOf } from "./aromaticSides";
+import { implicitHydrogens, type AtomChem } from "./molecule";
 
-export type Atom = {
+export { implicitHydrogens };
+
+/** An atom as the drawing takes it: its chemistry (./molecule), and where it is. */
+export type Atom = AtomChem & {
   id: number;
   x: number;
   y: number;
-  el: string;
-  charge?: number;
-  isotope?: number;
   /**
    * How near the atom is to the viewer, where the structure is drawn in
    * perspective (a cage): a bond passing behind another is broken where it
@@ -1382,32 +1383,6 @@ function buildWavySegments(
 }
 
 /**
- * Valences used to work out how many hydrogens a drawn atom carries. Charges
- * and radicals are not modelled yet, so a charged atom gets no hydrogens here.
- */
-const DEFAULT_VALENCE: Record<string, number> = {
-  B: 3,
-  C: 4,
-  N: 3,
-  O: 2,
-  Si: 4,
-  P: 3,
-  S: 2,
-  Se: 2,
-  F: 1,
-  Cl: 1,
-  Br: 1,
-  I: 1,
-};
-
-/** Hydrogens left on an atom of `el` whose bond orders sum to `bondOrderSum`. */
-export function implicitHydrogens(el: string, bondOrderSum: number): number {
-  const valence = DEFAULT_VALENCE[el];
-  if (valence == null) return 0;
-  return Math.max(0, valence - bondOrderSum);
-}
-
-/**
  * The labels of the atoms that have one, and where their hydrogens go.
  *
  * Two angles decide it (options hydrogenBandDeg, symbolCentringDeg). How far
@@ -1469,7 +1444,7 @@ export function buildTextLabels(
     const h =
       opts.showImplicitHydrogens === false
         ? 0
-        : implicitHydrogens(a.el, orderSum.get(i) ?? 0);
+        : implicitHydrogens(a.el, orderSum.get(i) ?? 0, a.charge ?? 0, a.radical);
     const centreSymbol =
       straightLeft.has(i) && straightRight.has(i) ? { centreSymbol: true } : {};
     if (h <= 0) {

@@ -1,17 +1,18 @@
 import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
 import { kekuleOrders } from "../lib/chem/kekulize";
+import type { AtomChem, ParsedAtom } from "../lib/chem/molecule";
 import {
   parseSDF,
   parseXYZ,
   type Molecule as ParsedMol,
 } from "./structureParsers";
 
-export type EditorAtom = {
+/** An atom as the editor holds it: its chemistry (lib/chem/molecule), and where it is. */
+export type EditorAtom = AtomChem & {
   id: number;
   x: number;
   y: number;
   r: number;
-  el: string;
 };
 export type EditorBond = {
   id: number;
@@ -28,6 +29,16 @@ export type EditorBond = {
   dative?: boolean;
 };
 export type EditorModel = { atoms: EditorAtom[]; bonds: EditorBond[] };
+
+/** A parsed atom's chemistry, as the editor holds it: its symbol normalised, and a charge, radical or isotope only where it has one. */
+function chemistryOf(a: ParsedAtom): AtomChem {
+  return {
+    el: normalizeEl(a.el),
+    ...(a.charge ? { charge: a.charge } : {}),
+    ...(a.radical ? { radical: a.radical } : {}),
+    ...(a.isotope ? { isotope: a.isotope } : {}),
+  };
+}
 
 /** MOL's bond type for a coordination (dative) bond. */
 const COORDINATION_BOND = 9;
@@ -356,7 +367,7 @@ export function convertMolToEditorModel(m: ParsedMol, scale: number) {
     x: a.x * scale,
     y: a.y * scale,
     r: 0.9,
-    el: normalizeEl(a.element),
+    ...chemistryOf(a),
   }));
   // Assign bond IDs after atom IDs to avoid collisions with atoms
   const bondIdBase = atoms.length;
@@ -422,7 +433,7 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
         x: a.x * scale,
         y: a.y * scale,
         r: 0.9,
-        el: normalizeEl(a.element),
+        ...chemistryOf(a),
       });
     }
     const orders = kekuleOrders(m.atoms, m.bonds);

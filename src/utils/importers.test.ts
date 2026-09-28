@@ -62,7 +62,7 @@ describe("readMoleculesFromText", () => {
     const fmt = detectFormat("6324.sdf", numericTitleMol);
     const mols = readMoleculesFromText(numericTitleMol, fmt);
     expect(mols).toHaveLength(1);
-    expect(mols[0].atoms.map((a) => a.element)).toEqual(["C", "C"]);
+    expect(mols[0].atoms.map((a) => a.el)).toEqual(["C", "C"]);
     expect(mols[0].bonds).toEqual([
       { a1: 0, a2: 1, order: 1, stereoCode: 0 },
     ]);

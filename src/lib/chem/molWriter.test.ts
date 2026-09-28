@@ -113,3 +113,47 @@ describe("writeMolfile", () => {
     expect(writeSdf(model).endsWith("M  END\n$$$$\n")).toBe(true);
   });
 });
+
+describe("charges, radicals and isotopes", () => {
+  const charged: WriterModel = {
+    atoms: [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: L, y: 0, el: "N", charge: 1 },
+      { id: 3, x: 1.5 * L, y: L * 0.866, el: "O" },
+      { id: 4, x: 1.5 * L, y: -L * 0.866, el: "O", charge: -1 },
+      { id: 5, x: 4 * L, y: 0, el: "C", radical: "doublet", isotope: 13 },
+      { id: 6, x: 6 * L, y: 0, el: "Fe", charge: 2 },
+    ],
+    bonds: [
+      { a: 1, b: 2, order: 1 },
+      { a: 2, b: 3, order: 2 },
+      { a: 2, b: 4, order: 1 },
+    ],
+  };
+
+  it("writes them as a V2000 block's property lines", () => {
+    const text = writeMolfile(charged, { version: "V2000" });
+    expect(text).toContain("M  CHG  3   2   1   4  -1   6   2");
+    expect(text).toContain("M  RAD  1   5   2");
+    expect(text).toContain("M  ISO  1   5  13");
+  });
+
+  it("writes them as a V3000 atom's properties", () => {
+    const text = writeMolfile(charged, { version: "V3000" });
+    expect(text).toContain("M  V30 2 N");
+    expect(text).toMatch(/M {2}V30 2 N .* CHG=1\n/);
+    expect(text).toMatch(/M {2}V30 5 C .* RAD=2 MASS=13\n/);
+  });
+
+  for (const version of ["V2000", "V3000"] as const) {
+    it(`reads back what it writes, ${version}`, () => {
+      const [m] = readMoleculesFromText(writeMolfile(charged, { version }), "mol");
+      expect(m.atoms.map((a) => [a.el, a.charge, a.radical, a.isotope])).toEqual(
+        charged.atoms.map((a) => [a.el, a.charge, a.radical, a.isotope]),
+      );
+      // and on into the editor
+      const { model: editor } = moleculesToEditorModel([m]);
+      expect(editor.atoms.map((a) => a.charge)).toEqual([undefined, 1, undefined, -1, undefined, 2]);
+    });
+  }
+});

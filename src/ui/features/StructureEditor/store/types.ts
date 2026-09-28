@@ -1,13 +1,10 @@
 import type { ImportedArrow, Relayout } from "../document";
+import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
 
-export type Atom = {
-  id: number;
-  x: number;
-  y: number;
-  r: number;
-  el: string;
+/** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
+export type Atom = EditorAtom & {
   /**
    * How near the viewer the atom is, where its structure is drawn in
    * perspective - a cage, as Clean-up draws one: a bond passing behind

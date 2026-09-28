@@ -87,6 +87,7 @@ export function layoutJob(part: Model): LayoutJob {
       const t = configuration(i);
       return {
         el: part.atoms[i].el,
+        ...(part.atoms[i].charge ? { charge: part.atoms[i].charge } : {}),
         hs: drawing.atoms[i].hs + (folded.get(at.get(i)!)?.length ?? 0),
         ...(t ? { tetra: t } : {}),
       };
