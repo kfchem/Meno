@@ -80,7 +80,7 @@ available:
 | `Open-MenoFile -Path` | open a structure into an empty tab |
 | `Save-Step -Name` | a numbered screenshot |
 | `Invoke-MenoClick -X -Y [-Count] [-Right]` | client coordinates, not screen; `-Right` for the other button |
-| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-AtStep] [-Right]` | press, travel, release; `-Right` with the other button |
+| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-Count] [-AtStep] [-Right]` | press, travel, release; `-Count 2` after an `Invoke-MenoClick` there is a double-click that drags; `-Right` with the other button |
 | `Move-MenoPointer -X -Y` | hover |
 | `Invoke-MenoWheel -X -Y -Notches` | zoom; positive is away from you, in |
 | `Invoke-MenoSwipe -X -Y [-DX] [-DY] [-Steps]` | two fingers on a trackpad: moves the view; positive DY scrolls down |
@@ -97,7 +97,9 @@ Two things worth knowing:
 - **Drag in steps.** `Invoke-MenoDrag` breaks the travel up because the editor
   needs it: it waits a few pixels before it calls a press a drag at all, and
   the preview follows the moves rather than the release. `-AtStep` is where a
-  mid-flight screenshot goes.
+  mid-flight screenshot goes. On a Mac the poster says how many clicks a
+  press is, so the drag of a double-click that drags wants `-Count 2`, as a
+  real mouse would give it; Windows counts for itself.
 - **A scenario shares `run.ps1`'s scope.** It is dot-sourced, so a variable
   named like one of that script's own quietly replaces it. Names in a scenario
   should be its own.

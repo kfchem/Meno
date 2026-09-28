@@ -19,6 +19,7 @@ import {
   LabelEditor2D,
   HoverOverlay2D,
   ChemMarks2D,
+  SnapArc2D,
 } from "./components";
 import {
   ArrowDownTrayIcon,
@@ -496,6 +497,8 @@ function StructureCanvasContent({
           <LabelEditor2D />
           {/* Hover overlay */}
           <ExtendPreview2D />
+          {/* The 120-degree arc while a bond snaps to it */}
+          <SnapArc2D />
           {/* Move preview */}
           <MovePreview2D />
           <HoverOverlay2D />

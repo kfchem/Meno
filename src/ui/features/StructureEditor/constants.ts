@@ -11,6 +11,33 @@ export const CANVAS_DPR = 2;
 
 export const ATOM_HOVER_RING_RADIUS_RATIO = 0.26; // world-units ratio
 
+/**
+ * How long after a click its label is edited, and how soon a second click
+ * makes it a double-click instead. The system's own double-click time is
+ * half a second by default (macOS): a click's edit must wait at least that
+ * long, or the second click of a double-click comes after the first has
+ * already begun editing.
+ */
+export const DOUBLE_CLICK_MS = 500;
+
+/** How long a press held still on an atom takes to lift it to be moved. */
+export const HOLD_MS = 450;
+
+/**
+ * How far a press has to travel to be a drag rather than a click, in px.
+ * The browser calls the end of a drag a click all the same, wherever the
+ * button comes up; the drawing does not (see utils/press).
+ */
+export const MOV_PX = 5;
+
+/**
+ * How long a pause in a drag takes to let a bond or an atom go where the
+ * pointer is, off the grid - or to lay down the bond a chain is on. Longer
+ * than a long press: a drag slows down as it arrives, and should not let go
+ * of the grid on its way there.
+ */
+export const FREE_MS = 700;
+
 // Atom picking hit radius (instanced circle used for raycasting)
 // Must match the hover ring radius for exact visual parity.
 export const ATOM_PICK_RADIUS_RATIO = ATOM_HOVER_RING_RADIUS_RATIO;

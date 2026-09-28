@@ -1,4 +1,5 @@
 import type { ImportedArrow } from "../document";
+import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
 
 export type Atom = { id: number; x: number; y: number; r: number; el: string };
@@ -44,6 +45,8 @@ export type EditorState = {
     atomId: number | null;
     value: string;
     autoCap: boolean;
+    /** When it was begun, and with what: a double-click takes back one its first click began. */
+    opened?: { at: number; value: string };
   };
   moveDrag: {
     active: boolean;
@@ -60,14 +63,21 @@ export type EditorState = {
     active: boolean;
     atomId: number | null;
     pointer: { x: number; y: number } | null;
+    /** "free" once a bond stroke has paused: it follows the pointer exactly. */
     mode: "snap" | "free";
+    /** The stroke being drawn: a bond or a chain, and what it has laid down. */
+    stroke?: Stroke | null;
     /**
-     * Where the new atom is previewed (after snapping), published by
-     * ExtendPreview2D so the drawing can lay the new bond out there.
+     * Where the bond the pointer is leading ends, as ExtendPreview2D shows it
+     * (after snapping, and the spring into place) - on an atom already there
+     * or one of the stroke's own when it closes onto it - so the drawing can
+     * lay it out there.
      */
-    preview?: { x: number; y: number } | null;
+    preview?: { x: number; y: number; atomId?: number; pathIndex?: number } | null;
   };
   panHold: { active: boolean; pointerId: number | null };
+  /** The atom a long press has lifted to be moved, before it moves. */
+  moveArmed: number | null;
   suppressDblClickUntil: number;
   nextId: number;
   nextArrowId: number;
@@ -121,15 +131,24 @@ export type EditorState = {
   clearHovered: () => void;
   clearAtomHover: () => void;
   clearBondHover: () => void;
-  startExtend: (atomId: number) => void;
+  /** Begins a stroke out of an atom: one bond, or a chain. */
+  startExtend: (atomId: number, kind?: Stroke["kind"]) => void;
   updateExtend: (x: number, y: number) => void;
+  /** A pause in the stroke: see `holdStroke`. */
+  holdExtend: () => void;
+  setMoveArmed: (atomId: number | null) => void;
   commitExtend: () => void;
   cancelExtend: () => void;
+  /** A finished stroke, added as one undo step. */
+  drawStroke: (
+    baseId: number,
+    nodes: readonly StrokeNode[],
+    kind: Stroke["kind"],
+  ) => void;
   suppressDoubleClick: (ms?: number) => void;
   triggerHoverPulse: (bondId: number) => void;
   beginPanHold: (pointerId: number | null) => void;
   endPanHold: (pointerId?: number | null) => void;
-  setExtendMode: (mode: "snap" | "free") => void;
   setMoveMode: (mode: "snap" | "free") => void;
   beginMoveDrag: (
     atomId: number,
@@ -144,7 +163,11 @@ export type EditorState = {
   savedPath: string | null;
   /** The document has just been written to `path`: it is saved there. */
   markSavedAs: (path: string) => void;
-  setExtendPreview: (x: number, y: number) => void;
+  setExtendPreview: (
+    x: number,
+    y: number,
+    join?: { atomId?: number; pathIndex?: number },
+  ) => void;
   endMoveDrag: () => void;
   /** The structure a tab opens with: where its document starts, not an edit. */
   openModel: (next: Model, arrow?: ImportedArrow) => void;

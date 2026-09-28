@@ -146,6 +146,42 @@ export function moveAtom(
 }
 
 /**
+ * A stroke drawn out of atom `baseId`, in one edit: a bond to each of its
+ * nodes in turn - a new carbon where a node has no atom, or the atom already
+ * there (`atomId`), or one this stroke added before (`pathIndex`). A bond
+ * that is already there is not drawn twice.
+ */
+export function addStroke(
+  doc: StructureDocument,
+  baseId: number,
+  nodes: readonly {
+    x: number;
+    y: number;
+    atomId?: number;
+    pathIndex?: number;
+  }[],
+): StructureDocument {
+  if (!doc.model.atoms.some((a) => a.id === baseId)) return doc;
+  let d = doc;
+  const ids: number[] = [];
+  let from = baseId;
+  for (const node of nodes) {
+    let to: number;
+    if (node.atomId != null) to = node.atomId;
+    else if (node.pathIndex != null && ids[node.pathIndex] != null)
+      to = ids[node.pathIndex];
+    else {
+      d = addAtom(d, node.x, node.y);
+      to = d.nextId - 1;
+    }
+    ids.push(to);
+    d = connectAtoms(d, from, to);
+    from = to;
+  }
+  return d;
+}
+
+/**
  * Atoms and bonds taken out, in one edit: an atom goes with its bonds, and a
  * carbon those left with no bonds at all goes too - a carbon is only there
  * as the meeting of its bonds, and on its own would be drawn as CH4. A

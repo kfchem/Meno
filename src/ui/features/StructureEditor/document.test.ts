@@ -35,6 +35,31 @@ describe("structure document operations", () => {
     expect(ops.connectAtoms(three, 2, three.nextId - 1)).not.toBe(three);
   });
 
+  it("adds a stroke in one operation, closing onto atoms it reaches", () => {
+    const d = ops.addAtom(doc(), 0, 0);
+    // a square drawn out of atom 1 and back to it, then on to a new atom
+    const next = ops.addStroke(d, 1, [
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+      { x: 0, y: 0, atomId: 1 },
+      { x: -1, y: 0 },
+    ]);
+    expect(next.model.atoms).toHaveLength(5);
+    expect(next.model.bonds).toHaveLength(5);
+    // and back onto a node of its own, not a new atom
+    const loop = ops.addStroke(d, 1, [
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+      { x: 2, y: 1 },
+      { x: 1, y: 0, pathIndex: 0 },
+    ]);
+    expect(loop.model.atoms).toHaveLength(4);
+    expect(loop.model.bonds).toHaveLength(4);
+    // from an atom that is not there: nothing
+    expect(ops.addStroke(d, 99, [{ x: 1, y: 0 }])).toBe(d);
+  });
+
   it("deletes an atom with its bonds, and the carbons left on their own", () => {
     // propanol: C1-C2-C3-O; the middle carbon goes
     let d = ops.addBondedPair(doc(), { x: 0, y: 0 }, { x: 1.5, y: 0 });

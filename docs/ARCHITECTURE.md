@@ -144,6 +144,11 @@ What is left before the editor counts as finished, and in what order, is in
   the pointer (`PartMenu.tsx`), which offers the same actions to the mouse
   alone. Only the main button works atoms and bonds; the other is the
   menu's. Over a button or a card nothing counts as hovered.
+- **Strokes**: bonds dragged out of an atom are a stroke (`utils/stroke.ts`,
+  with the angles in `utils/extendSnap.ts`) - a bond, or a chain - held in
+  `extend.stroke` while the button is down. The store, `ExtendPreview2D`,
+  `SnapArc2D` and the drawn layout all read the same stroke, so what is
+  shown is what is added; `addStroke` adds it in one edit on release.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
 - **Chemistry**: RDKit's marks on the structure and clean-up, in `chem/`
   and `ChemMarks2D`; see the chemistry worker below.

@@ -114,6 +114,16 @@ export const createModelSlice = (
     });
   },
 
+  drawStroke: (
+    baseId: number,
+    nodes: Parameters<typeof ops.addStroke>[2],
+    kind: "bond" | "chain",
+  ) => {
+    doc.edit(kind === "chain" ? "draw chain" : "extend bond", (d) =>
+      ops.addStroke(d, baseId, nodes),
+    );
+  },
+
   deleteAtom: (id: number) => {
     if (doc.edit("delete atom", (d) => ops.deleteParts(d, [id], []))) {
       forgetDeleted(set);
@@ -183,6 +193,7 @@ export const createModelSlice = (
       ...prev,
       sel: { atoms: new Set(), bonds: new Set() },
       hovered: { atomId: null, bondId: null },
+      moveArmed: null,
       labelEdit: { active: false, atomId: null, value: "", autoCap: true },
       moveDrag: {
         active: false,
