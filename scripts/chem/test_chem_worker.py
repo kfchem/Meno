@@ -76,6 +76,16 @@ class ChemWorkerTest(unittest.TestCase):
         self.assertTrue(r["ok"])
         self.assertEqual(r["result"]["smiles"], "N[C@@H](Cc1ccc(Cl)cc1)C(=O)O")
 
+    def test_writes_a_smiles_without_an_h_drawn_to_carry_a_wedge(self):
+        # (R)-CHFClBr's H drawn, on a wedge
+        block = v2000(
+            [("C", 0, 0), ("F", 0, 1.5), ("Cl", 1.3, -0.75), ("Br", -1.3, -0.75), ("H", 0.4, -1.4)],
+            [(0, 1, 1, None), (0, 2, 1, None), (0, 3, 1, None), (0, 4, 1, "up")],
+        )
+        smiles = ask("to_smiles", molblock=block)["result"]["smiles"]
+        self.assertNotIn("[H]", smiles)
+        self.assertIn("@", smiles)
+
     def test_reads_a_smiles_into_a_v3000_block_with_2d_coordinates(self):
         r = ask("from_smiles", smiles="C[C@H](N)C(=O)O")
         block = r["result"]["molblock"]

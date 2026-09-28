@@ -46,7 +46,9 @@ def op_ping(_):
 
 
 def op_to_smiles(m):
-    return {"smiles": Chem.MolToSmiles(read(m["molblock"]))}
+    # an H drawn to carry a wedge says its centre's configuration, which
+    # the SMILES says without it
+    return {"smiles": Chem.MolToSmiles(Chem.RemoveHs(read(m["molblock"])))}
 
 
 def op_from_smiles(m):
