@@ -56,7 +56,7 @@ Wait-MenoSettled | Out-Null
 Invoke-MenoClick -X 905 -Y 553 -Right
 Wait-MenoSettled | Out-Null
 Save-Step "atom-menu"
-Invoke-MenoClick -X 1105 -Y 657     # Select this structure
+Invoke-MenoClick -X 1105 -Y 849     # Select this structure, below the charge items
 Wait-MenoSettled | Out-Null
 Save-Step "structure"
 
