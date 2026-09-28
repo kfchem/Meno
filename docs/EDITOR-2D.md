@@ -29,6 +29,54 @@ and in particular:
 - **Labels**: hydrogens go on the side away from the bonds, and on the right
   when the bonds are within 10 degrees of vertical (#24).
 
+### Pointer and keys, in 2D and 3D
+
+Agreed with the maintainer on 2026-09-27. Meno runs on Windows and macOS,
+is worked with a mouse first but must be just as usable from a trackpad, and
+will show the 2D drawing and the 3D structure in one canvas - so the same
+hands do the same things in both, and modifier keys follow each system's
+own conventions: where Windows uses Ctrl, macOS uses ⌘ (on a Mac, a
+Ctrl-click is a right-click).
+
+**Moving the view.** A left drag, the gesture used most, is the view's own
+main movement; everything else moves or zooms the same way in both.
+
+| | Mouse | Trackpad | 2D | 3D |
+|---|---|---|---|---|
+| Left drag from empty space | left drag | press and drag | move | turn |
+| Right or middle drag, anywhere | right or middle drag | two-finger press and drag | move | move |
+| Scroll | the wheel zooms | two fingers move | as the device | as the device |
+| Zoom | the wheel | pinch | zoom | zoom |
+
+A mouse wheel and two fingers arrive as the same event, so they are told
+apart by the first event of each run - fingers move sideways, in fractions
+and in small first steps (`lib/input/wheel.ts`); a pinch comes as a WebKit
+gesture or, in Chromium, with Ctrl held. Measured on the maintainer's Mac,
+a trackpad's first step is 1 or 2 px however fast the stroke, and a
+smoothly scrolling mouse's notch (an MX Master 3S) is 13 px, so 8 px tells
+them apart; a notch zooms at least as far as a plain wheel's 40 px line.
+(PR #55; 3D follows when the views are joined.)
+
+**A click keeps each view's own meaning**: in 2D a click on an atom edits
+its label and a click on a bond changes its kind, as drawing wants; in 3D a
+click on an atom selects it. A right-click, or a press with two fingers,
+opens the menu for what is under the pointer; it waits for the button to
+come up, so a right drag is a move, not a menu.
+
+**Selecting**, the same in both views:
+
+| | Windows | macOS |
+|---|---|---|
+| Add or take out one atom or bond | Ctrl+click | ⌘+click |
+| Everything along the bonds from the last atom chosen to this one | Shift+click | Shift+click |
+| A box: what it holds | double-click empty space and drag, or Ctrl+drag | double-click empty space and drag, or ⌘+drag |
+| A whole structure | right-click, *Select this structure* | the same |
+| Nothing | click empty space, or Esc | the same |
+
+A double-click in empty space that does not move still draws a bond, and a
+double-click-and-drag that starts on an atom draws out of it instead. On a
+trackpad a double-tap and drag does the same as a double-click and drag.
+
 ## Who does what
 
 - **TypeScript** holds the model, the gestures and the drawing - everything

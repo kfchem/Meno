@@ -80,9 +80,10 @@ available:
 | `Open-MenoFile -Path` | open a structure into an empty tab |
 | `Save-Step -Name` | a numbered screenshot |
 | `Invoke-MenoClick -X -Y [-Count] [-Right]` | client coordinates, not screen; `-Right` for the other button |
-| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-AtStep]` | press, travel, release |
+| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-AtStep] [-Right]` | press, travel, release; `-Right` with the other button |
 | `Move-MenoPointer -X -Y` | hover |
 | `Invoke-MenoWheel -X -Y -Notches` | zoom; positive is away from you, in |
+| `Invoke-MenoSwipe -X -Y [-DX] [-DY] [-Steps]` | two fingers on a trackpad: moves the view; positive DY scrolls down |
 | `Send-MenoText`, `Send-MenoKey` | typing |
 | `Send-MenoShortcut -Key [-Shift]` | Ctrl (Windows) or Cmd (Mac) with a key: `Z` is undo |
 | `Get-ClientSize`, `Wait-MenoSettled` | |
