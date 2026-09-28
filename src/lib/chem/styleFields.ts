@@ -392,6 +392,34 @@ export const STYLE_FIELDS: StyleField[] = [
     kind: share("bond", 0.3, 1, 0.01),
     rule: true,
   },
+  {
+    key: "chargeCircles",
+    group: "Labels",
+    label: "Charges of one",
+    description:
+      "A charge of one drawn in a circle, as ACS 1996's drawings have it, or as a plain sign. A charge of two or more is written plainly: 2+.",
+    kind: {
+      type: "choice",
+      options: [
+        { value: "single", label: "In a circle" },
+        { value: "none", label: "Plain" },
+      ],
+    },
+  },
+  {
+    key: "chargedCarbonLabel",
+    group: "Labels",
+    label: "Charged carbon",
+    description:
+      "A carbon with a charge, or an unpaired electron, drawn as its bonds' meeting with the charge beside it, or with its C.",
+    kind: {
+      type: "choice",
+      options: [
+        { value: "hidden", label: "No C" },
+        { value: "shown", label: "With its C" },
+      ],
+    },
+  },
 
   // --- Aromatic rings --------------------------------------------------------
   {

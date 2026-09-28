@@ -35,7 +35,8 @@ export default function Labels2D() {
           opts.units === "px" ? t.fontPx / Math.max(zoom, 1e-6) : t.fontPx;
         return (
           <group key={`txt-${i}`}>
-            {placeLabel(t, fontWorld, labelSetOf(opts)).map((run, k) => (
+            {/* (a mark - a charge's circle, a radical's dot - is drawn with the lines) */}
+            {placeLabel(t, fontWorld, labelSetOf(opts)).map((run, k) => run.mark ? null : (
               <Text
                 key={`run-${k}`}
                 font={font}

@@ -2,7 +2,7 @@ import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
 import { ringSidesOf } from "./aromaticSides";
-import { implicitHydrogens, type AtomChem } from "./molecule";
+import { chargeText, implicitHydrogens, type AtomChem } from "./molecule";
 
 export { implicitHydrogens };
 
@@ -112,6 +112,10 @@ export type LayoutOptions = {
   aromaticCircleSize?: number;
   paddingPx: number;
   showCarbonLabels: boolean;
+  /** A charge of one drawn circled (⊕, ⊖) rather than as a plain sign; unset, circled. */
+  circleCharges?: boolean;
+  /** A charged carbon, or one with an unpaired electron, drawn with its C; unset, as a bare vertex, the charge beside it. */
+  showChargedCarbons?: boolean;
   /** Draw the hydrogens a labelled atom carries, e.g. OH, NH2. Default: on. */
   showImplicitHydrogens?: boolean;
   /**
@@ -152,8 +156,13 @@ export type BondPrimitives = {
   ends?: Vec2[];
   bends?: Bend[];
 };
-/** A piece of a label; `sub` marks a subscript such as the 2 in NH2. */
-export type TextRun = { text: string; sub?: boolean };
+/**
+ * A piece of a label: `sub` marks a subscript such as the 2 in NH2, `sup` a
+ * superscript - a charge of two or more, an isotope's mass number. A `mark`
+ * is drawn rather than set in type, where a superscript would go: a charge
+ * of one in its circle (its `text` the sign), a radical's dot or dots.
+ */
+export type TextRun = { text: string; sub?: boolean; sup?: boolean; mark?: "charge" | "radical" };
 
 /**
  * How a label is set, as fractions of its font size (ACS 1996): its baseline
@@ -179,12 +188,26 @@ export function automaticBaseline(capHeight: number): number {
 /** How far apart the lines of a stacked label are, baseline to baseline. */
 export const STACK_SPACING = 0.857;
 
+/**
+ * How far above the label's baseline a superscript's sits, in ems: a
+ * charge's sign level with the top of a capital, as a formula has it.
+ */
+export const SUP_RISE = 0.42;
+/** How wide a mark - a charge in its circle, a radical's dot - is set, in the superscript's ems. */
+const MARK_WIDTH = 0.82;
+/** The circle round a charge of one, as a share of the superscript's em. */
+const MARK_RADIUS = 0.34;
+/** How far above its baseline a mark's middle is, in the superscript's ems: where a plus sign's is. */
+const MARK_MIDDLE = 0.36;
+
 /** How a label is set, as fractions of its font size, and in what. */
 export type LabelSet = {
   /** Below the atom, in ems; unset, as `automaticBaseline` has it for the typeface. */
   baseline?: number;
   subscriptSize: number;
   subscriptDrop: number;
+  /** Above the baseline, in ems; unset, `SUP_RISE`. */
+  superscriptRise?: number;
   stackSpacing: number;
   fontFamily?: string;
 };
@@ -232,6 +255,12 @@ export type TextItem = {
   centreSymbol?: boolean;
   /** The atom this label belongs to, by index. */
   atom?: number;
+  /**
+   * Not a label but a charge or a radical's dots set beside a carbon drawn
+   * without one: centred on (x, y) as a whole, and at the middle of a
+   * superscript rather than on a baseline.
+   */
+  beside?: boolean;
 };
 
 /** How far a label's ink reaches from its atom: left, right, up and down. */
@@ -248,6 +277,8 @@ export type LabelBox = {
 export type PlacedRun = {
   text: string;
   sub: boolean;
+  /** Drawn, not set in type: see `TextRun`. */
+  mark?: "charge" | "radical";
   x: number;
   y: number;
   size: number;
@@ -309,37 +340,54 @@ export function placeLabel(
   const font = labelFont(set.fontFamily);
   const runs = t.runs ?? [{ text: t.text }];
   const anchor = Math.min(t.anchorRun ?? 0, runs.length - 1);
-  const sizes = runs.map((r) => fontSize * (r.sub ? set.subscriptSize : 1));
-  const widths = runs.map((r, i) => runWidth(font, r.text, sizes[i]));
-  /** Where a run starts so that its first letter is centred on the atom. */
+  const small = (r: TextRun) => r.sub || r.sup || r.mark;
+  const sizes = runs.map((r) => fontSize * (small(r) ? set.subscriptSize : 1));
+  const widths = runs.map((r, i) => (r.mark ? sizes[i] * MARK_WIDTH : runWidth(font, r.text, sizes[i])));
+  /** Where a run starts so that its first letter (or its mark) is centred on the atom. */
   const centredOn = (i: number) =>
-    t.x - (font.advance([...runs[i].text][0] ?? " ") * sizes[i]) / 2;
+    t.x - (runs[i].mark ? widths[i] : font.advance([...runs[i].text][0] ?? " ") * sizes[i]) / 2;
   /** Where the symbol starts: its first letter on the atom, or all of it. */
   const symbolAt = () =>
     t.centreSymbol ? t.x - widths[anchor] / 2 : centredOn(anchor);
   const baseline =
     t.y - fontSize * (set.baseline ?? automaticBaseline(font.capHeight));
+  const rise = fontSize * (set.superscriptRise ?? SUP_RISE);
   const setRun = (i: number, x: number, line: number): PlacedRun => ({
     text: runs[i].text,
     sub: !!runs[i].sub,
+    ...(runs[i].mark ? { mark: runs[i].mark } : {}),
     x,
-    y: runs[i].sub ? line - fontSize * set.subscriptDrop : line,
+    y: runs[i].sub ? line - fontSize * set.subscriptDrop : runs[i].sup || runs[i].mark ? line + rise : line,
     size: sizes[i],
   });
   const out: PlacedRun[] = [];
-  if (t.stack && anchor + 1 < runs.length) {
+  if (t.beside) {
+    // a charge beside a bare vertex: centred on its spot, its sign's middle there
+    const total = widths.reduce((sum, w) => sum + w, 0);
+    let x = t.x - total / 2;
+    const line = t.y - rise - (sizes[0] ?? fontSize) * MARK_MIDDLE;
+    for (let i = 0; i < runs.length; i++) {
+      out.push(setRun(i, x, line));
+      x += widths[i];
+    }
+    return out;
+  }
+  // (a charge or a radical after the symbol stays beside it)
+  let firstLineEnd = anchor;
+  while (firstLineEnd + 1 < runs.length && (runs[firstLineEnd + 1].sup || runs[firstLineEnd + 1].mark)) firstLineEnd++;
+  if (t.stack && firstLineEnd + 1 < runs.length) {
     // the symbol, and whatever precedes it, on the first line
     let x = symbolAt();
     for (let i = 0; i < anchor; i++) x -= widths[i];
-    for (let i = 0; i <= anchor; i++) {
+    for (let i = 0; i <= firstLineEnd; i++) {
       out.push(setRun(i, x, baseline));
       x += widths[i];
     }
     const line =
       baseline +
       fontSize * set.stackSpacing * (t.stack === "below" ? -1 : 1);
-    x = centredOn(anchor + 1);
-    for (let i = anchor + 1; i < runs.length; i++) {
+    x = centredOn(firstLineEnd + 1);
+    for (let i = firstLineEnd + 1; i < runs.length; i++) {
       out.push(setRun(i, x, line));
       x += widths[i];
     }
@@ -354,6 +402,57 @@ export function placeLabel(
   return out;
 }
 
+/** Where a placed mark's circle is: a charge's, or the one a radical's dots sit in. */
+export function markCircle(run: PlacedRun): { c: Vec2; r: number } {
+  return {
+    c: { x: run.x + (run.size * MARK_WIDTH) / 2, y: run.y + run.size * MARK_MIDDLE },
+    r: run.size * MARK_RADIUS,
+  };
+}
+
+/**
+ * The marks of the labels, drawn: a charge of one as its sign in a circle,
+ * a radical as a dot, or two for a carbene's pair - in lines, shapes and
+ * filled circles, as the rest of the drawing is, a little lighter than a
+ * bond's line.
+ */
+function labelMarks(
+  texts: readonly TextItem[],
+  fontSize: number,
+  set: LabelSet,
+  lineWorld: number,
+  lwPx: number,
+): { lines: LineSeg[]; polys: Poly[]; fills: Circle[] } {
+  const lines: LineSeg[] = [];
+  const polys: Poly[] = [];
+  const fills: Circle[] = [];
+  const w = lineWorld * 0.8;
+  for (const t of texts) {
+    for (const run of placeLabel(t, fontSize, set)) {
+      if (!run.mark) continue;
+      const { c, r } = markCircle(run);
+      if (run.mark === "radical") {
+        const dot = Math.max(lineWorld * 1.25, run.size * 0.075);
+        const two = [...run.text].length > 1;
+        for (const dx of two ? [-r * 0.55, r * 0.55] : [0]) fills.push({ c: { x: c.x + dx, y: c.y }, r: dot });
+        continue;
+      }
+      // the circle, as a ring of thin pieces
+      const n = 40;
+      for (let k = 0; k < n; k++) {
+        const a0 = (k * 2 * Math.PI) / n;
+        const a1 = ((k + 1) * 2 * Math.PI) / n;
+        const at = (a: number, rr: number) => ({ x: c.x + rr * Math.cos(a), y: c.y + rr * Math.sin(a) });
+        polys.push({ points: [at(a0, r - w / 2), at(a0, r + w / 2), at(a1, r + w / 2), at(a1, r - w / 2)] });
+      }
+      const arm = r * 0.58;
+      lines.push({ x1: c.x - arm, y1: c.y, x2: c.x + arm, y2: c.y, widthPx: lwPx * 0.8 });
+      if (run.text === "+") lines.push({ x1: c.x, y1: c.y - arm, x2: c.x, y2: c.y + arm, widthPx: lwPx * 0.8 });
+    }
+  }
+  return { lines, polys, fills };
+}
+
 /**
  * The ink of a label, as the convex outline of each of its letters, around
  * its atom: the atom is at the origin.
@@ -362,11 +461,27 @@ export function labelHulls(
   t: TextItem,
   fontSize: number,
   set: LabelSet = ACS_LABEL_SET,
+  tail = true,
 ): Vec2[][] {
   const font = labelFont(set.fontFamily);
   const out: Vec2[][] = [];
-  for (const run of placeLabel(t, fontSize, set)) {
+  const anchor = t.anchorRun ?? 0;
+  const runs = t.runs ?? [{ text: t.text }];
+  for (const [k, run] of placeLabel(t, fontSize, set).entries()) {
+    // (its charge and a radical's dots, which a bond is kept clear of by
+    // where they are put, not by stopping short of them)
+    if (!tail && k > anchor && (runs[k]?.sup || runs[k]?.mark)) continue;
     let pen = run.x - t.x;
+    if (run.mark) {
+      const { c, r } = markCircle(run);
+      out.push(
+        Array.from({ length: 12 }, (_, k) => ({
+          x: c.x - t.x + r * Math.cos((k * Math.PI) / 6),
+          y: c.y - t.y + r * Math.sin((k * Math.PI) / 6),
+        })),
+      );
+      continue;
+    }
     for (const ch of run.text) {
       const hull = font.hull(ch).map((p) => ({
         x: pen + p.x * run.size,
@@ -1383,6 +1498,119 @@ function buildWavySegments(
 }
 
 /**
+ * Whether an atom with bonds is drawn with its label: anything but a
+ * carbon, and a carbon when every carbon is, when it is one isotope in
+ * particular (¹³C), or - where the style has it so - when it is charged or
+ * has an electron unpaired. Otherwise a carbon is its bonds' meeting, and
+ * its charge sits beside it.
+ */
+export function showsLabel(
+  a: Pick<Atom, "el" | "charge" | "radical" | "isotope">,
+  opts: Pick<LayoutOptions, "showCarbonLabels" | "showChargedCarbons">,
+): boolean {
+  return (
+    opts.showCarbonLabels ||
+    a.el !== "C" ||
+    !!a.isotope ||
+    (!!opts.showChargedCarbons && (!!a.charge || !!a.radical))
+  );
+}
+
+/**
+ * Whether a label's charge, set after it above the line, would sit on one of
+ * its atom's bonds (widened by a double bond's lines, and the labels'
+ * clearance). Only where the drawing is in world units: elsewhere the size
+ * of a label is not known here.
+ */
+function tailClashes(
+  item: TextItem,
+  tail: readonly TextRun[],
+  ways: readonly { dir: Vec2; len: number; order: number }[],
+  a: Atom,
+  opts: LayoutOptions,
+): boolean {
+  if (opts.units !== "world" || !ways.length) return false;
+  const set = labelSetOf(opts);
+  const runs = item.runs ?? [];
+  // (a line's half width and a little; a double or triple bond's other lines besides)
+  const gap = opts.lineWidthPx * 0.5 + (opts.labelMarginPx ?? opts.fontPx * 0.16) * 0.35;
+  const room = (w: { order: number }) =>
+    gap + (w.order >= 3 ? (opts.tripleOffsetPx ?? 0) : w.order === 2 ? (opts.doubleOffsetPx ?? 0) : 0);
+  return placeLabel(item, opts.fontPx, set).some((run, k) => {
+    if (!tail.includes(runs[k])) return false;
+    const { c, r } = run.mark
+      ? markCircle(run)
+      : { c: { x: run.x + run.size * 0.5, y: run.y + run.size * MARK_MIDDLE }, r: run.size * 0.5 };
+    return ways.some((w) => {
+      const v = { x: c.x - a.x, y: c.y - a.y };
+      const along = Math.max(0, Math.min(w.len, v.x * w.dir.x + v.y * w.dir.y));
+      const off = Math.hypot(v.x - along * w.dir.x, v.y - along * w.dir.y);
+      return off < r + room(w);
+    });
+  });
+}
+
+/**
+ * A charge, or a radical's dots, set beside a carbon drawn as its bonds'
+ * meeting: out along whichever way its bonds leave most room, above and to
+ * the right where that is as good, a little under half a bond out.
+ */
+function besideVertex(
+  a: Atom,
+  ways: readonly { dir: Vec2; len: number; order?: number }[],
+  runs: TextRun[],
+  opts: Pick<LayoutOptions, "fontPx">,
+  reach?: (dir: Vec2) => number,
+): TextItem {
+  const deg = Math.PI / 180;
+  let best = 45 * deg;
+  let bestScore = -Infinity;
+  for (let k = 0; k < 24; k++) {
+    const t = k * 15 * deg;
+    let room = 90 * deg;
+    for (const w of ways) {
+      const d = Math.abs(Math.atan2(Math.sin(t - Math.atan2(w.dir.y, w.dir.x)), Math.cos(t - Math.atan2(w.dir.y, w.dir.x))));
+      room = Math.min(room, d);
+    }
+    const off = Math.abs(Math.atan2(Math.sin(t - 45 * deg), Math.cos(t - 45 * deg)));
+    const score = Math.min(room, 70 * deg) - 0.15 * off;
+    if (score > bestScore + 1e-9) {
+      bestScore = score;
+      best = t;
+    }
+  }
+  const lens = ways.map((w) => w.len).sort((p, q) => p - q);
+  const dir = { x: Math.cos(best), y: Math.sin(best) };
+  // (beside a label, clear of its letters: `reach` says how far they go that way)
+  const out = reach ? reach(dir) : 0.42 * (lens[lens.length >> 1] ?? 1);
+  return {
+    x: a.x + out * Math.cos(best),
+    y: a.y + out * Math.sin(best),
+    text: runs.map((r) => r.text).join(""),
+    fontPx: opts.fontPx,
+    runs,
+    anchorRun: 0,
+    // (the whole of it centred there, set as a superscript would be)
+    beside: true,
+  };
+}
+
+/** What a label writes after its symbol, on the symbol's line: its charge, then its radical's dots. */
+function tailRuns(a: Atom, opts: Pick<LayoutOptions, "circleCharges">): TextRun[] {
+  const out: TextRun[] = [];
+  const q = a.charge ?? 0;
+  if (q) {
+    out.push(
+      Math.abs(q) === 1 && opts.circleCharges !== false
+        ? { text: q > 0 ? "+" : "\u2212", mark: "charge" }
+        : { text: chargeText(q), sup: true },
+    );
+  }
+  if (a.radical) out.push({ text: a.radical === "doublet" ? "\u2022" : "\u2022\u2022", mark: "radical" });
+  return out;
+}
+
+/**
  * The labels of the atoms that have one, and where their hydrogens go.
  *
  * Two angles decide it (options hydrogenBandDeg, symbolCentringDeg). How far
@@ -1412,6 +1640,8 @@ export function buildTextLabels(
   // and which have a bond leaving close to straight out to the side
   const straightLeft = new Set<number>();
   const straightRight = new Set<number>();
+  // each bond out of each atom, as a direction and a length
+  const ways = new Map<number, { dir: Vec2; len: number; order: number }[]>();
   const note = (i: number, j: number, order: number) => {
     bonded.add(i);
     orderSum.set(i, (orderSum.get(i) ?? 0) + order);
@@ -1419,6 +1649,7 @@ export function buildTextLabels(
     const to = atoms[j];
     if (!from || !to) return;
     const d = vnorm(vsub({ x: to.x, y: to.y }, { x: from.x, y: from.y }));
+    ways.set(i, [...(ways.get(i) ?? []), { dir: d, len: vlen(vsub({ x: to.x, y: to.y }, { x: from.x, y: from.y })), order }]);
     const acc = away.get(i) ?? { x: 0, y: 0 };
     away.set(i, { x: acc.x + d.x, y: acc.y + d.y });
     if (d.x < -band) leftward.add(i);
@@ -1439,8 +1670,42 @@ export function buildTextLabels(
     const a = atoms[i];
     // A carbon with no bonds has nothing to stand for it but its label: ACS
     // 1996 writes methane CH4.
-    const show = opts.showCarbonLabels || a.el !== "C" || !bonded.has(i);
-    if (!show) continue;
+    const show = showsLabel(a, opts) || !bonded.has(i);
+    // its charge and its radical's dots, after the symbol on its line; its
+    // mass number before it
+    const tail = tailRuns(a, opts);
+    const head: TextRun[] = a.isotope ? [{ text: String(a.isotope), sup: true }] : [];
+    // A label's charge goes after it, above the line - unless a bond runs
+    // there (a nitro group's N=O); then beside the label, where its bonds
+    // leave most room.
+    const push = (item: TextItem) => {
+      const clash = tail.length > 0 && tailClashes(item, tail, ways.get(i) ?? [], a, opts);
+      if (!clash) {
+        out.push(item);
+        return;
+      }
+      const runs = (item.runs ?? []).filter((r) => !tail.includes(r));
+      const bare = { ...item, runs, text: runs.map((r) => r.text).join("") };
+      out.push(bare);
+      const set = labelSetOf(opts);
+      const size = opts.fontPx * set.subscriptSize;
+      out.push(
+        besideVertex(a, ways.get(i) ?? [], tail, opts, (dir) => {
+          let far = 0;
+          for (const hull of labelHulls(bare, opts.fontPx, set, false)) {
+            for (const p of hull) far = Math.max(far, p.x * dir.x + p.y * dir.y);
+          }
+          return far + size * (MARK_RADIUS + 0.2);
+        }),
+      );
+    };
+    if (!show) {
+      // A carbon drawn as its bonds' meeting carries its charge beside it,
+      // where its bonds leave most room - above and to the right, if that
+      // is free.
+      if (tail.length) out.push(besideVertex(a, ways.get(i) ?? [], tail, opts));
+      continue;
+    }
     const h =
       opts.showImplicitHydrogens === false
         ? 0
@@ -1448,13 +1713,14 @@ export function buildTextLabels(
     const centreSymbol =
       straightLeft.has(i) && straightRight.has(i) ? { centreSymbol: true } : {};
     if (h <= 0) {
-      out.push({
+      const runs = [...head, { text: a.el }, ...tail];
+      push({
         x: a.x,
         y: a.y,
-        text: a.el,
+        text: runs.map((r) => r.text).join(""),
         fontPx: opts.fontPx,
-        runs: [{ text: a.el }],
-        anchorRun: 0,
+        runs,
+        anchorRun: head.length,
         ...centreSymbol,
         atom: i,
       });
@@ -1472,14 +1738,14 @@ export function buildTextLabels(
     // sets them on a line of their own, below the symbol when the bonds rise
     // and above it when they fall.
     if (leftward.has(i) && rightward.has(i)) {
-      const runs = [{ text: a.el }, ...hydrogens];
-      out.push({
+      const runs = [...head, { text: a.el }, ...tail, ...hydrogens];
+      push({
         x: a.x,
         y: a.y,
         text: runs.map((r) => r.text).join(""),
         fontPx: opts.fontPx,
         runs,
-        anchorRun: 0,
+        anchorRun: head.length,
         stack: toward.y >= 0 ? "below" : "above",
         ...centreSymbol,
         atom: i,
@@ -1488,16 +1754,18 @@ export function buildTextLabels(
     }
     const neighboursRight =
       toward.x > Math.hypot(toward.x, toward.y) * band;
+    // (the charge after all of it where the H follow the symbol: NH3+; after
+    // the symbol where they come first: H3N+)
     const runs = neighboursRight
-      ? [...hydrogens, { text: a.el }]
-      : [{ text: a.el }, ...hydrogens];
-    out.push({
+      ? [...hydrogens, ...head, { text: a.el }, ...tail]
+      : [...head, { text: a.el }, ...hydrogens, ...tail];
+    push({
       x: a.x,
       y: a.y,
       text: runs.map((r) => r.text).join(""),
       fontPx: opts.fontPx,
       runs,
-      anchorRun: neighboursRight ? runs.length - 1 : 0,
+      anchorRun: neighboursRight ? hydrogens.length + head.length : head.length,
       atom: i,
     });
   }
@@ -1567,7 +1835,7 @@ export function buildBondPrimitives(
   // themselves - a bond comes closer to the round side of an O than to the
   // corner of an N - but not on how wide the bond is there, so a wedge's
   // broad end stops where a line would.
-  const hasLabel = (el: string) => opts.showCarbonLabels || el !== "C";
+  const hasLabel = (at: Atom) => showsLabel(at, opts);
   const fontWorld = toWorld(opts.fontPx, zoom, units);
   const margin =
     opts.labelMarginPx != null
@@ -1578,8 +1846,9 @@ export function buildBondPrimitives(
   const L0 = vlen(dir0);
   const dir = L0 > 1e-9 ? vscale(dir0, 1 / L0) : { x: 1, y: 0 };
   /** Where a bond stops, leaving the atom along `towards`. */
-  const labelReach = (idx: number, el: string, towards: Vec2) => {
-    if (!hasLabel(el)) return 0;
+  const labelReach = (idx: number, at: Atom, towards: Vec2) => {
+    if (!hasLabel(at)) return 0;
+    const el = at.el;
     const hulls =
       (idx >= 0 ? labelShapes?.get(idx) : undefined) ??
       labelHulls(
@@ -1591,8 +1860,8 @@ export function buildBondPrimitives(
   };
   // Labels at both ends may not take more than nine tenths of the bond
   // between them; if they would, each gives up its share.
-  let trimA = labelReach(bond.a1, a.el, dir);
-  let trimB = labelReach(bond.a2, c.el, vscale(dir, -1));
+  let trimA = labelReach(bond.a1, a, dir);
+  let trimB = labelReach(bond.a2, c, vscale(dir, -1));
   const room = L0 * (opts.labelShareMax ?? 0.9);
   if (trimA + trimB > room) {
     const k = room / (trimA + trimB);
@@ -1604,8 +1873,8 @@ export function buildBondPrimitives(
   // Where a label has taken the bond's end, the line simply stops there, and
   // that end is finished off like any other free end.
   const labelEnds: Vec2[] = [];
-  if (hasLabel(a.el) && trimA > 0) labelEnds.push(p1);
-  if (hasLabel(c.el) && trimB > 0) labelEnds.push(p2);
+  if (hasLabel(a) && trimA > 0) labelEnds.push(p1);
+  if (hasLabel(c) && trimB > 0) labelEnds.push(p2);
   const round = (opts.joinStyle ?? "round") === "round";
   /**
    * The bonds carrying on from `at`, other than to `other`, to cut a broad
@@ -1615,7 +1884,7 @@ export function buildBondPrimitives(
   const neighboursAt = (at: number, other: number): Neighbour[] => {
     const atom = atoms[at];
     const out: Neighbour[] = [];
-    if (!atom || hasLabel(atom.el)) return out;
+    if (!atom || hasLabel(atom)) return out;
     const doubleHalf = toWorld(opts.doubleOffsetPx, zoom, units) * 0.5;
     const tripleHalf = toWorld(opts.tripleOffsetPx, zoom, units);
     for (const b of adjBonds?.get(at) ?? []) {
@@ -1722,7 +1991,7 @@ export function buildBondPrimitives(
     return {
       lines,
       polys,
-      ends: hasLabel(a.el) && trimA > 0 ? [p1] : [],
+      ends: hasLabel(a) && trimA > 0 ? [p1] : [],
     };
   }
   if (bond.stereo === "up" || bond.stereo === "down") {
@@ -1750,7 +2019,7 @@ export function buildBondPrimitives(
         tipHalf,
         neighbours,
         round,
-        hasLabel(atoms[tipIdx].el) && trimNarrow > 0,
+        hasLabel(atoms[tipIdx]) && trimNarrow > 0,
         cutRuleOf(opts),
       );
       polys.push(tri);
@@ -1855,7 +2124,7 @@ export function buildBondPrimitives(
         lwPx,
         bond,
         atoms,
-        (idx) => hasLabel(atoms[idx].el),
+        (idx) => hasLabel(atoms[idx]),
         adjBonds,
         doubleSides,
         opts.centredJoinMinDeg ?? 20,
@@ -1874,10 +2143,10 @@ export function buildBondPrimitives(
     const o = vscale(n, off * sgn);
     const around = (idx: number) =>
       (adjBonds?.get(idx) ?? []).filter((nb) => nb !== bond);
-    const back1 = hasLabel(a.el)
+    const back1 = hasLabel(a)
       ? 0
       : sideLineBack(atoms, bond.a1, dir, vscale(n, sgn), off, around(bond.a1));
-    const back2 = hasLabel(c.el)
+    const back2 = hasLabel(c)
       ? 0
       : sideLineBack(
           atoms,
@@ -1894,7 +2163,7 @@ export function buildBondPrimitives(
     const ps1 = vadd(p1, vscale(dir, Math.min(back1, room)));
     const ps2 = vadd(p2, vscale(dir, -Math.min(back2, room)));
     const others = (idx: number) =>
-      hasLabel(atoms[idx].el)
+      hasLabel(atoms[idx])
         ? []
         : (adjBonds?.get(idx) ?? []).filter(
             (nb) =>
@@ -2046,7 +2315,7 @@ export function joinsAtAtoms(
   const mitres = new Map<number, Vec2[]>();
   for (let i = 0; i < atoms.length; i++) {
     const d = deg.get(i) || 0;
-    const showLabel = opts.showCarbonLabels || atoms[i].el !== "C";
+    const showLabel = showsLabel(atoms[i], opts);
     // A label takes the bond's end with it, and a wedge's wide end covers its
     // own join, so neither wants anything here.
     if (showLabel || wedgeEnds.has(i)) continue;
@@ -2161,7 +2430,7 @@ export function buildAllPrimitives(
   const labelShapes = new Map<number, Vec2[][]>();
   for (const tx of buildTextLabels(atoms, opts, bonds)) {
     if (tx.atom != null) {
-      labelShapes.set(tx.atom, labelHulls(tx, fontWorld, labelSetOf(opts)));
+      labelShapes.set(tx.atom, labelHulls(tx, fontWorld, labelSetOf(opts), false));
     }
   }
   const adjBonds = new Map<number, Bond[]>();
@@ -2462,6 +2731,14 @@ export function layoutMolecule(
 ): Layout {
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
   const texts = buildTextLabels(atoms, opts, bonds);
+  // the labels' marks - a charge's circle, a radical's dots - drawn as the
+  // rest of the drawing is
+  const units = opts.units ?? "px";
+  const lwPx = Math.max(units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx, Math.max(0.5, opts.minLinePx ?? 1));
+  const marks = labelMarks(texts, toWorld(opts.fontPx, zoom, opts.units), labelSetOf(opts), pxToWorld(lwPx, zoom), lwPx);
+  prim.lines.push(...marks.lines);
+  prim.polys.push(...marks.polys);
+  prim.fills.push(...marks.fills);
   // A label hangs off its atom, so the drawing is wider than the atoms are:
   // leave it out and a label at the edge is cut off, on the canvas as in an
   // export.
@@ -2540,6 +2817,8 @@ function svgLabel(
   const fontFamily = fontStack(set.fontFamily ?? "Arial");
   let out = "";
   for (const run of placeLabel(t, fontSize, set)) {
+    // (a mark is drawn with the lines and shapes)
+    if (run.mark) continue;
     out +=
       `<text x="${run.x}" y="${-run.y}" font-family="${fontFamily}"` +
       ` font-size="${run.size}" fill="${fill}" stroke="none"` +

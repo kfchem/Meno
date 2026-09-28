@@ -141,6 +141,18 @@ export type DrawingStyle = {
   /** The most of a bond the labels at its two ends may take between them, as a fraction. */
   labelShareMax: number;
 
+  // --- Charges --------------------------------------------------------------
+  /**
+   * A charge of one drawn in a circle (⊕, ⊖), or as a plain sign. A larger
+   * charge is never circled: 2+.
+   */
+  chargeCircles: "single" | "none";
+  /**
+   * A charged carbon - or one with an electron unpaired - drawn as its bonds'
+   * meeting with the charge beside it, or with its C.
+   */
+  chargedCarbonLabel: "hidden" | "shown";
+
   // --- Aromatic rings ------------------------------------------------------
   /** The circle drawn in an aromatic ring, as a fraction of the ring's radius. */
   aromaticCircleSize: number;
@@ -165,6 +177,8 @@ const RULES = {
   hydrogenVerticalBand: 10,
   symbolCentringAngle: 25,
   labelShareMax: 0.9,
+  chargeCircles: "single",
+  chargedCarbonLabel: "hidden",
   aromaticCircleSize: 0.5,
 } satisfies Partial<DrawingStyle>;
 
@@ -439,6 +453,8 @@ export function layoutOptionsFor(
     aromaticCircleSize: style.aromaticCircleSize,
     paddingPx: 48,
     showCarbonLabels: false,
+    circleCharges: style.chargeCircles !== "none",
+    showChargedCarbons: style.chargedCarbonLabel === "shown",
     units: "world",
     minLinePx: 1,
     joinStyle: style.ends === "round" ? "round" : "sharp",
