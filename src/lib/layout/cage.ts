@@ -687,11 +687,20 @@ function exits(
       m.set(b, { x: pts[i].x + flat.x / l, y: pts[i].y + flat.y / l });
     });
     // the rest straight out, two of them either side, as the solid has them
+    // - but a stereocentre's one bond out, beside its H, the way the solid
+    // has it: straight out is where neither of its corners is, and says
+    // nothing of which it is in
+    const shown = mol.tetra.get(a)?.neighbours.includes(-1) && free.length === 1;
     const spread = free.length > 1 ? (37.5 * Math.PI) / 180 : 0;
     const sides = [...free].sort((p, q) => across(dirs[q]) - across(dirs[p]));
     sides.forEach((k, j) => {
       const t = open ? away + (free.length > 1 ? (j === 0 ? -spread : spread) : 0) : Math.atan2(0, 1);
-      const flatDir = open ? { x: Math.cos(t), y: Math.sin(t) } : { x: across(dirs[k]), y: 0 };
+      const d = dirs[k];
+      const flatDir = shown
+        ? { x: across(d), y: fit.y[0] * d[0] + fit.y[1] * d[1] + fit.y[2] * d[2] }
+        : open
+          ? { x: Math.cos(t), y: Math.sin(t) }
+          : { x: across(d), y: 0 };
       const l = Math.hypot(flatDir.x, flatDir.y) || 1;
       m.set(out[k], { x: pts[i].x + flatDir.x / l, y: pts[i].y + flatDir.y / l });
     });

@@ -144,6 +144,13 @@ a test with a small molecule built by hand, and a line to `LAYOUT-2D.md`.
   `layout-stereo` with `stereo.py`, which has RDKit read every drawing on
   the sheet, is the check. With it, artemisinin is drawn from its other
   face: its angular methyl is in front only that way.
+- **A drawing that says nothing reads by luck.** A cage's bond out,
+  drawn straight out from the cage's bonds, is where neither of its
+  corners is: which it read as turned on how the view fell. Palytoxin's
+  ketals read right under node and wrong in the app, whose JavaScript
+  engine (WebKit's) came to another view from the last bits of the same
+  sums. Such a bond now goes along its corner. A test turns every bond
+  out of a cage 15 degrees each way and asks for the same reading.
 - **Speed.** One measure takes 0.1 to 0.3 ms; the calls multiply by frames,
   shapes and passes. The sheet takes about 8 s; ciclosporin, at about 1 s,
   is the slowest.

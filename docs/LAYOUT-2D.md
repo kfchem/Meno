@@ -280,7 +280,9 @@ Nothing else is moved for it: the drawing is set first, its H's last.
   itself, with no wedges; what it shows is read back from the solid the
   cage is drawn from, fitted to where its atoms are and how deep, and the
   way each bond out of it points (`drawn.ts`). Drawn the other way, a bond
-  turns its centre.
+  turns its centre. So a stereocentre's one bond out of a cage, beside its
+  H, is drawn the way the solid has it - never straight out from the
+  cage's bonds, which is where neither of its corners is and says nothing.
 
 ## How the engine goes about it
 

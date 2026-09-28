@@ -92,6 +92,34 @@ describe("readStereo", () => {
     }
   });
 
+  it("reads every centre in a cage for sure, not by a hair", () => {
+    // each bond out of a cage turned a little either way reads the same:
+    // it is drawn along the corner it is in, not somewhere between the two
+    for (const [name, g] of Object.entries(cages)) {
+      const input = g as LayoutInput;
+      const { atoms, bonds, out } = drawing(input);
+      const read = readStereo(atoms, bonds);
+      for (const [c, t] of read.tetra) {
+        if (atoms[c].z == null) continue;
+        for (const n of t.neighbours) {
+          if (n < 0 || atoms[n].z != null) continue;
+          for (const deg of [-15, 15]) {
+            const r = (deg * Math.PI) / 180;
+            const v = { x: atoms[n].x - atoms[c].x, y: atoms[n].y - atoms[c].y };
+            const turned = atoms.map((a, i) =>
+              i === n
+                ? { ...a, x: atoms[c].x + v.x * Math.cos(r) - v.y * Math.sin(r), y: atoms[c].y + v.x * Math.sin(r) + v.y * Math.cos(r) }
+                : a,
+            );
+            const u = readStereo(turned, bonds).tetra.get(c);
+            expect(u && sameConfiguration(t, u), `${name}: centre ${c}, its bond to ${n} turned ${deg}`).toBe(true);
+          }
+        }
+      }
+      expect(out.solid.some(Boolean), name).toBe(true);
+    }
+  });
+
   it("turns a centre in a cage when its substituent is drawn the other way", () => {
     // cocaine's C3, which carries the benzoate: as the bond to its O is
     // drawn round the carbon, it is read on one side of the cage or the
