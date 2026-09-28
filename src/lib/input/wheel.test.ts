@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { looksLikeFingers, wheelReader, type WheelLike } from "./wheel";
+import { isPinch, looksLikeFingers, wheelReader, type WheelLike } from "./wheel";
 
 const ev = (over: Partial<WheelLike>): WheelLike => ({
   deltaX: 0,
@@ -33,6 +33,26 @@ describe("looksLikeFingers", () => {
     expect(looksLikeFingers(ev({ deltaY: 42.5 }))).toBe(true);
     // Shift turns a wheel sideways on Windows: still a wheel
     expect(looksLikeFingers(ev({ deltaX: 100, shiftKey: true }))).toBe(false);
+  });
+});
+
+describe("isPinch", () => {
+  it("follows a pinch, which Chromium gives as Ctrl with small, fractional steps", () => {
+    expect(isPinch(ev({ deltaY: 2.4, ctrlKey: true }))).toBe(true);
+    expect(isPinch(ev({ deltaY: -3, ctrlKey: true }))).toBe(true);
+  });
+
+  it("takes Ctrl with a mouse's notch as the wheel, not as a pinch", () => {
+    // Chromium on Windows: a notch is 100 px, which a pinch's reading would
+    // turn into a zoom of e, 2.7 times, at one click
+    expect(isPinch(ev({ deltaY: 100, ctrlKey: true }))).toBe(false);
+    expect(isPinch(ev({ deltaY: -100, ctrlKey: true }))).toBe(false);
+    // a wheel scrolled a line at a time says so
+    expect(isPinch(ev({ deltaY: 3, deltaMode: 1, ctrlKey: true }))).toBe(false);
+  });
+
+  it("is never a pinch without Ctrl", () => {
+    expect(isPinch(ev({ deltaY: 2.4 }))).toBe(false);
   });
 });
 

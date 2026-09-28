@@ -1803,6 +1803,29 @@ describe("which atoms are finished off at all", () => {
     expect(got.has(0)).toBe(true); // plain bonds meet here
     expect(got.has(3)).toBe(true); // a plain bond reaches here
   });
+
+  it("caps a wavy bond at its stereocentre only, not at the atom its wave stops short of", () => {
+    // the stereocentre 0 carries the wave and two plain bonds; the wave stops
+    // at the top of a turn before 1, and a cap on 1 floated beyond it
+    const atoms: Atom[] = [
+      { id: 0, x: 0, y: 0, el: "C" },
+      { id: 1, x: 1.8, y: 0, el: "C" },
+      { id: 2, x: -0.9, y: 1.6, el: "C" },
+      { id: 3, x: -0.9, y: -1.6, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 1, a2: 0, order: 1, stereo: "wavy" }, // written far end first
+      { a1: 0, a2: 2, order: 1, stereo: "none" },
+      { a1: 0, a2: 3, order: 1, stereo: "none" },
+    ];
+    const got = caps(atoms, bonds);
+    expect(got.has(1)).toBe(false);
+    expect(got.has(0)).toBe(true);
+    // and in the drawing: the wave's own free end is capped where it stops,
+    // and nothing is left on the far atom
+    const { fills } = buildAllPrimitives(atoms, bonds, opts({ joinStyle: "round" }), 40);
+    expect(fills.some((f) => Math.hypot(f.c.x - 1.8, f.c.y) < 1e-9)).toBe(false);
+  });
 });
 
 describe("a cage in perspective", () => {
