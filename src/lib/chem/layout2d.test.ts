@@ -102,27 +102,6 @@ describe("buildTextLabels", () => {
     expect(at(150, 270).text).toBe("NH");
   });
 
-  it("sets the hydrogens where there is room, given the font", () => {
-    const L = NOMINAL_BOND_LENGTH;
-    // an OH whose H would run into a label beside it
-    const atoms: Atom[] = [
-      { id: 1, x: -L, y: 0, el: "C" },
-      { id: 2, x: 0, y: 0, el: "O" },
-      { id: 3, x: 0.75 * L, y: 0, el: "N" },
-    ];
-    const bonds: Bond[] = [{ a1: 0, a2: 1, order: 1 }];
-    const o = (font?: number) => buildTextLabels(atoms, opts(), bonds, font).find((t) => t.atom === 1)!;
-    // without the font, as ever: OH, the H towards the N
-    expect(o().text).toBe("OH");
-    expect(o().stack).toBeUndefined();
-    // with it, the H under the O, clear of the N
-    expect(o(opts().fontPx).stack).toBe("below");
-    // and where nothing is in the way, as ever
-    const alone = buildTextLabels(atoms.slice(0, 2), opts(), bonds, opts().fontPx)[0];
-    expect(alone.text).toBe("OH");
-    expect(alone.stack).toBeUndefined();
-  });
-
   it("writes a carbon with no bonds as CH4, and a bonded one not at all", () => {
     const atoms: Atom[] = [
       { id: 1, x: 0, y: 0, el: "C" },

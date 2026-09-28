@@ -27,9 +27,7 @@ and in particular:
   possible: what is done to an atom is done where the atom is, not from a
   toolbar across the window. Keys are shortcuts, never the only way.
 - **Labels**: hydrogens go on the side away from the bonds, and on the right
-  when the bonds are within 10 degrees of vertical (#24). Where they would
-  run into another label, an atom or a bond, they go the other side, or
-  under or over the symbol, whichever is clear first.
+  when the bonds are within 10 degrees of vertical (#24).
 
 ## Who does what
 

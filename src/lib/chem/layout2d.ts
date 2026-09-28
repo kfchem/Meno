@@ -1413,17 +1413,11 @@ export function implicitHydrogens(el: string, bondOrderSum: number): number {
  * on one of them. And how close to horizontal bonds on both sides have to
  * leave for the whole symbol to be centred between them: within 25 degrees.
  * Bonds of a zigzag, 30 degrees off, leave the first letter on the atom.
- *
- * Given the labels' font size in the atoms' own units (`fontWorld`), the
- * hydrogens also keep clear of what is round them: where they would run
- * into another label, an atom or a bond, they go the other side, or under
- * or over the symbol, whichever is clear first - as a chemist moves them.
  */
 export function buildTextLabels(
   atoms: Atom[],
   opts: LayoutOptions,
-  bonds: Bond[] = [],
-  fontWorld?: number,
+  bonds: Bond[] = []
 ): TextItem[] {
   // Bond orders and directions per atom: the first decides how many hydrogens
   // an atom carries, the second which side to write them on.
@@ -1461,50 +1455,12 @@ export function buildTextLabels(
     note(b.a2, b.a1, order);
   }
 
-  // A carbon with no bonds has nothing to stand for it but its label: ACS
-  // 1996 writes methane CH4.
-  const shown = (i: number) => opts.showCarbonLabels || atoms[i].el !== "C" || !bonded.has(i);
-  const set = labelSetOf(opts);
-  // the boxes of the hydrogens already set, which later ones keep clear of
-  const hydrogenBoxes: Box[] = [];
-  /** Whether a label's hydrogens, set as `t`, run into nothing. */
-  const clear = (t: TextItem, i: number): boolean => {
-    if (fontWorld == null) return true;
-    const box = hydrogenBox(t, fontWorld, set);
-    if (!box) return true;
-    const f = fontWorld;
-    for (let j = 0; j < atoms.length; j++) {
-      if (j === i) continue;
-      const o = atoms[j];
-      // another label's symbol, or the corner of a bond
-      const [w, h] = shown(j) ? [0.4 * f, 0.38 * f] : [0.12 * f, 0.12 * f];
-      if (o.x > box.l - w && o.x < box.r + w && o.y > box.b - h && o.y < box.t + h) return false;
-    }
-    for (const b of hydrogenBoxes) {
-      if (b.l < box.r && box.l < b.r && b.b < box.t && box.b < b.t) return false;
-    }
-    for (const b of bonds) {
-      const p = atoms[b.a1];
-      const q = atoms[b.a2];
-      if (!p || !q) continue;
-      // (its own bonds from where they leave the symbol)
-      let from: Vec2 = p;
-      let to: Vec2 = q;
-      if (b.a1 === i || b.a2 === i) {
-        const [near, far] = b.a1 === i ? [p, q] : [q, p];
-        const d = vnorm(vsub(far, near));
-        from = { x: near.x + d.x * 0.6 * f, y: near.y + d.y * 0.6 * f };
-        to = far;
-      }
-      if (segmentMeetsBox(from, to, box, 0.08 * f)) return false;
-    }
-    return true;
-  };
-
   const out: TextItem[] = [];
   for (let i = 0; i < atoms.length; i++) {
     const a = atoms[i];
-    const show = shown(i);
+    // A carbon with no bonds has nothing to stand for it but its label: ACS
+    // 1996 writes methane CH4.
+    const show = opts.showCarbonLabels || a.el !== "C" || !bonded.has(i);
     if (!show) continue;
     const h =
       opts.showImplicitHydrogens === false
@@ -1536,115 +1492,37 @@ export function buildTextLabels(
     // Bonds leaving on both sides leave no side for the hydrogens: ACS 1996
     // sets them on a line of their own, below the symbol when the bonds rise
     // and above it when they fall.
-    const stacked = (below: boolean): TextItem => {
+    if (leftward.has(i) && rightward.has(i)) {
       const runs = [{ text: a.el }, ...hydrogens];
-      return {
+      out.push({
         x: a.x,
         y: a.y,
         text: runs.map((r) => r.text).join(""),
         fontPx: opts.fontPx,
         runs,
         anchorRun: 0,
-        stack: below ? "below" : "above",
+        stack: toward.y >= 0 ? "below" : "above",
         ...centreSymbol,
         atom: i,
-      };
-    };
-    const beside = (left: boolean): TextItem => {
-      const runs = left ? [...hydrogens, { text: a.el }] : [{ text: a.el }, ...hydrogens];
-      return {
-        x: a.x,
-        y: a.y,
-        text: runs.map((r) => r.text).join(""),
-        fontPx: opts.fontPx,
-        runs,
-        anchorRun: left ? runs.length - 1 : 0,
-        atom: i,
-      };
-    };
-    let ways: TextItem[];
-    if (leftward.has(i) && rightward.has(i)) {
-      ways = [stacked(toward.y >= 0), stacked(toward.y < 0)];
-    } else {
-      const neighboursRight =
-        toward.x > Math.hypot(toward.x, toward.y) * band;
-      ways = [beside(neighboursRight)];
-      // the other side, where no bond leaves on it; under or over the
-      // symbol, where no bond leaves near straight down or up
-      if (neighboursRight ? !rightward.has(i) : !leftward.has(i)) ways.push(beside(!neighboursRight));
-      const steep = (down: boolean) =>
-        bonds.some((b) => {
-          const j = b.a1 === i ? b.a2 : b.a2 === i ? b.a1 : -1;
-          if (j < 0 || !atoms[j]) return false;
-          const d = vnorm(vsub(atoms[j], a));
-          return down ? d.y < -0.64 : d.y > 0.64;
-        });
-      if (!steep(true)) ways.push(stacked(true));
-      if (!steep(false)) ways.push(stacked(false));
-    }
-    const chosen = ways.find((t) => clear(t, i)) ?? ways[0];
-    if (fontWorld != null) {
-      const box = hydrogenBox(chosen, fontWorld, set);
-      if (box) hydrogenBoxes.push(box);
-    }
-    out.push(chosen);
-  }
-  return out;
-}
-
-type Box = { l: number; r: number; b: number; t: number };
-
-/** Where a label's hydrogens are inked: the box round its H and count. */
-function hydrogenBox(t: TextItem, fontSize: number, set: LabelSet): Box | null {
-  const runs = t.runs ?? [];
-  const anchor = t.anchorRun ?? 0;
-  const hulls = labelHulls(t, fontSize, set);
-  // the hulls come letter by letter, run by run
-  let k = 0;
-  const box: Box = { l: Infinity, r: -Infinity, b: Infinity, t: -Infinity };
-  runs.forEach((run, ri) => {
-    for (const ch of run.text) {
-      const hull = hulls[k++];
-      if (!hull || ri === anchor || ch === " ") continue;
-      for (const p of hull) {
-        box.l = Math.min(box.l, t.x + p.x);
-        box.r = Math.max(box.r, t.x + p.x);
-        box.b = Math.min(box.b, t.y + p.y);
-        box.t = Math.max(box.t, t.y + p.y);
-      }
-    }
-  });
-  return box.l <= box.r ? box : null;
-}
-
-/** Whether the segment from `p` to `q` comes within `pad` of the box. */
-function segmentMeetsBox(p: Vec2, q: Vec2, box: Box, pad: number): boolean {
-  const l = box.l - pad;
-  const r = box.r + pad;
-  const b = box.b - pad;
-  const t = box.t + pad;
-  // clip the segment to the box (Liang-Barsky)
-  let t0 = 0;
-  let t1 = 1;
-  const dx = q.x - p.x;
-  const dy = q.y - p.y;
-  const edges: [number, number][] = [
-    [-dx, p.x - l],
-    [dx, r - p.x],
-    [-dy, p.y - b],
-    [dy, t - p.y],
-  ];
-  for (const [pp, qq] of edges) {
-    if (pp === 0) {
-      if (qq < 0) return false;
+      });
       continue;
     }
-    const u = qq / pp;
-    if (pp < 0) t0 = Math.max(t0, u);
-    else t1 = Math.min(t1, u);
-    if (t0 > t1) return false;
+    const neighboursRight =
+      toward.x > Math.hypot(toward.x, toward.y) * band;
+    const runs = neighboursRight
+      ? [...hydrogens, { text: a.el }]
+      : [{ text: a.el }, ...hydrogens];
+    out.push({
+      x: a.x,
+      y: a.y,
+      text: runs.map((r) => r.text).join(""),
+      fontPx: opts.fontPx,
+      runs,
+      anchorRun: neighboursRight ? runs.length - 1 : 0,
+      atom: i,
+    });
   }
-  return true;
+  return out;
 }
 
 /**
@@ -2278,7 +2156,7 @@ export function buildAllPrimitives(
   // measure the labels once: the bonds are trimmed to them
   const fontWorld = toWorld(opts.fontPx, zoom, opts.units);
   const labelShapes = new Map<number, Vec2[][]>();
-  for (const tx of buildTextLabels(atoms, opts, bonds, fontWorld)) {
+  for (const tx of buildTextLabels(atoms, opts, bonds)) {
     if (tx.atom != null) {
       labelShapes.set(tx.atom, labelHulls(tx, fontWorld, labelSetOf(opts)));
     }
@@ -2580,7 +2458,7 @@ export function layoutMolecule(
   zoom: number
 ): Layout {
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
-  const texts = buildTextLabels(atoms, opts, bonds, toWorld(opts.fontPx, zoom, opts.units));
+  const texts = buildTextLabels(atoms, opts, bonds);
   // A label hangs off its atom, so the drawing is wider than the atoms are:
   // leave it out and a label at the edge is cut off, on the canvas as in an
   // export.
