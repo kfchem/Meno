@@ -8,6 +8,8 @@ npm run layout-bench -- --open                         # and opens it
 npm run layout-bench -- --only=Paclitaxel,D-Glucose    # just those (names as they start)
 npm run layout-labels                                  # a label's H running into anything, as drawn
 npm run layout-compare -- before.json                  # Meno's scores against an earlier .layout/scores.json
+npm run layout-stereo                                  # each drawing as a MOL file -> .layout/stereo.json
+<chem python> scripts/layout/stereo.py                 # RDKit reads each back: the stereochemistry as given?
 ```
 
 How to tune the engine with these, and what has been decided, is in

@@ -150,8 +150,11 @@ What is left before the editor counts as finished, and in what order, is in
   `SnapArc2D` and the drawn layout all read the same stroke, so what is
   shown is what is added; `addStroke` adds it in one edit on release.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
-- **Chemistry**: RDKit's marks on the structure and clean-up, in `chem/`
-  and `ChemMarks2D`; see the chemistry worker below.
+- **Chemistry**: RDKit's marks on the structure, in `chem/` and
+  `ChemMarks2D` (see the chemistry worker below); clean-up and a SMILES's
+  layout by Meno's own engine (`src/lib/layout`), run in a web worker
+  (`chem/layoutWorker.ts`), what it is given read out of the drawing
+  (`chem/engineLayout.ts`, `lib/layout/drawn.ts`).
 - **Frame loop**: the canvas runs `frameloop="demand"` at a fixed `CANVAS_DPR`
   (2x). React commits (store changes) request a frame automatically; anything
   that animates or mutates the scene imperatively must call `invalidate()`

@@ -17,6 +17,7 @@
     "layout-fetch": "tsx scripts/layout/fetch.ts",
     "layout-labels": "tsx scripts/layout/labels.ts",
     "layout-compare": "tsx scripts/layout/compare.ts",
+    "layout-stereo": "tsx scripts/layout/stereo.ts",
     "tauri": "tauri"
   },
   "dependencies": {

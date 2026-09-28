@@ -6,6 +6,7 @@
  * All lengths are taken against the layout's own typical bond (the median),
  * so the scale it was drawn at does not matter.
  */
+import { drawnVolume } from "./geometry";
 import { smallestRings, type Edge } from "./rings";
 
 export type Geometry = {
@@ -267,13 +268,6 @@ export function hydrogenSpot(ways: readonly { x: number; y: number }[]): { x: nu
   const sy = ways.reduce((sum, w) => sum + w.y, 0);
   if (ways.some((w) => w.x < -band) && ways.some((w) => w.x > band)) return { x: 0, y: sy >= 0 ? -0.6 : 0.6 };
   return { x: sx > Math.hypot(sx, sy) * band ? -0.5 : 0.5, y: 0 };
-}
-
-/** The volume three vectors span. */
-function volume(a: readonly number[], b: readonly number[], c: readonly number[]): number {
-  return (
-    a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])
-  );
 }
 
 function segmentsCross(
@@ -1230,12 +1224,14 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     if (!t || solid(c) || inMacrocycle.has(c) || neighbours[c].length !== 4) continue;
     const out = neighbours[c].filter((b) => !ringBonds.has(pair(c, b)));
     if (out.length !== 1 || g.elements?.[out[0]] === "H" || t.neighbours.includes(-1)) continue;
-    const v = t.neighbours.map((b) => [x[b] - x[c], y[b] - y[c], b === out[0] ? 1 : 0]);
-    // (with the first three in the page, the fourth says it: it stands
-    // opposite them)
-    const d = out[0] === t.neighbours[3] ? -volume(v[0], v[1], v[3]) : volume(v[0], v[1], v[2]);
-    if (Math.abs(d) < 1e-9) continue;
-    if (Math.sign(d) === Math.sign(t.volume)) toward++;
+    // (read as a wedge on it would be: see drawnVolume)
+    const d = drawnVolume(
+      { x: x[c], y: y[c] },
+      t.neighbours.map((b) => ({ x: x[b], y: y[b] })),
+      t.neighbours.map((b) => (b === out[0] ? 1 : 0)),
+    );
+    if (!d) continue;
+    if (d === Math.sign(t.volume)) toward++;
     else away++;
   }
   const face = Math.max(0, away - toward);

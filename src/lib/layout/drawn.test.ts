@@ -1,0 +1,155 @@
+import { describe, expect, it } from "vitest";
+import { readStereo, sameConfiguration, type DrawnAtom, type DrawnBond } from "./drawn";
+import { layout2D } from "./engine";
+import type { LayoutInput } from "./perceive";
+import cages from "./testdata/cages.json";
+
+const at = (deg: number, r = 1) => ({ x: r * Math.cos((deg * Math.PI) / 180), y: r * Math.sin((deg * Math.PI) / 180) });
+
+/** A carbon at the origin with neighbours drawn at these angles, lifted as given (+1 wedge, -1 hashes). */
+function centre(angles: number[], lifts: number[], hs = 0) {
+  const atoms: DrawnAtom[] = [{ x: 0, y: 0, hs }, ...angles.map((a) => ({ ...at(a), hs: 0 }))];
+  const bonds: DrawnBond[] = angles.map((_, i) => ({
+    a: 0,
+    b: i + 1,
+    order: 1,
+    ...(lifts[i] ? { wedge: { narrow: 0, stereo: lifts[i] > 0 ? ("up" as const) : ("down" as const) } } : {}),
+  }));
+  return readStereo(atoms, bonds).tetra.get(0);
+}
+
+/** A layout of `input` as the engine draws it, taken down as a drawing: its H atoms, wedges and depths. */
+function drawing(input: LayoutInput) {
+  const out = layout2D(input);
+  const atoms: DrawnAtom[] = input.atoms.map((a, i) => ({
+    x: out.x[i],
+    y: out.y[i],
+    hs: a.hs ?? 0,
+    ...(out.depth[i] != null ? { z: out.depth[i]! } : {}),
+    ...(out.solid[i] && a.tetra ? { centre: true } : {}),
+  }));
+  const bonds: DrawnBond[] = input.bonds.map(({ a, b, order }) => ({ a, b, order }));
+  const hydrogen = new Map<number, number>();
+  for (const h of out.hydrogens) {
+    atoms.push({ ...h.at, hs: 0 });
+    atoms[h.on] = { ...atoms[h.on], hs: atoms[h.on].hs - 1 };
+    bonds.push({ a: h.on, b: atoms.length - 1, order: 1 });
+    hydrogen.set(atoms.length - 1, h.on);
+  }
+  for (const w of out.wedges) {
+    const to = w.to === -1 ? [...hydrogen].find(([, on]) => on === w.from)![0] : w.to;
+    const bond = bonds.find((b) => (b.a === w.from && b.b === to) || (b.b === w.from && b.a === to))!;
+    bond.wedge = { narrow: w.from, stereo: w.stereo };
+  }
+  return { atoms, bonds, out, hydrogen };
+}
+
+describe("readStereo", () => {
+  // what RDKit reads each of these as (neighbours F, Cl, Br, I or H, in order)
+  it("reads a centre from its wedge, as RDKit does", () => {
+    expect(centre([-30, 90, 210, 30], [0, 0, 0, 1])?.volume).toBe(-1); // R
+    expect(centre([-30, 90, 210, 30], [0, 0, 0, -1])?.volume).toBe(1);
+    expect(centre([0, 120, 240], [1, 0, 0], 1)).toEqual({ neighbours: [1, 2, 3, -1], volume: 1 }); // R
+  });
+
+  it("reads three bonds in the page within 180 degrees of each other as RDKit does", () => {
+    // (read from the angles alone, two of them and the wedge say one thing
+    // and the other two the opposite)
+    expect(centre([0, -40, -128, 116], [0, 0, 0, 1])?.volume).toBe(1); // S
+  });
+
+  it("reads nothing at a centre with no wedge, or one with two H", () => {
+    expect(centre([-30, 90, 210, 30], [0, 0, 0, 0])).toBeUndefined();
+    expect(centre([0, 120], [1, 0], 2)).toBeUndefined();
+  });
+
+  it("reads a double bond's groups on the sides they are drawn on", () => {
+    // 2-butene: C0-C1=C2-C3, trans, then cis
+    const trans = [at(210), { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1 + Math.cos(Math.PI / 6), y: Math.sin(Math.PI / 6) }];
+    const bonds: DrawnBond[] = [
+      { a: 0, b: 1, order: 1 },
+      { a: 1, b: 2, order: 2 },
+      { a: 2, b: 3, order: 1 },
+    ];
+    const hs = (ps: { x: number; y: number }[]) => ps.map((p) => ({ ...p, hs: 1 }));
+    expect(readStereo(hs(trans), bonds).cisTrans.get(1)).toEqual({ refs: [0, 3], cis: false });
+    const cis = [...trans.slice(0, 3), { x: trans[3].x, y: -trans[3].y }];
+    expect(readStereo(hs(cis), bonds).cisTrans.get(1)).toEqual({ refs: [0, 3], cis: true });
+  });
+
+  it("reads back every centre the engine draws, cages in perspective among them", () => {
+    for (const [name, g] of Object.entries(cages)) {
+      const input = g as LayoutInput;
+      const { atoms, bonds, out, hydrogen } = drawing(input);
+      expect(out.solid.some(Boolean), name).toBe(true);
+      const read = readStereo(atoms, bonds);
+      input.atoms.forEach((a, i) => {
+        if (!a.tetra) return;
+        const t = read.tetra.get(i);
+        expect(t, `${name} ${i}`).toBeDefined();
+        expect(sameConfiguration(a.tetra, t!, (n) => (hydrogen.has(n) ? -1 : n)), `${name} ${i}`).toBe(true);
+      });
+    }
+  });
+
+  it("reads every centre in a cage for sure, not by a hair", () => {
+    // each bond out of a cage turned a little either way reads the same:
+    // it is drawn along the corner it is in, not somewhere between the two
+    for (const [name, g] of Object.entries(cages)) {
+      const input = g as LayoutInput;
+      const { atoms, bonds, out } = drawing(input);
+      const read = readStereo(atoms, bonds);
+      for (const [c, t] of read.tetra) {
+        if (atoms[c].z == null) continue;
+        for (const n of t.neighbours) {
+          if (n < 0 || atoms[n].z != null) continue;
+          for (const deg of [-15, 15]) {
+            const r = (deg * Math.PI) / 180;
+            const v = { x: atoms[n].x - atoms[c].x, y: atoms[n].y - atoms[c].y };
+            const turned = atoms.map((a, i) =>
+              i === n
+                ? { ...a, x: atoms[c].x + v.x * Math.cos(r) - v.y * Math.sin(r), y: atoms[c].y + v.x * Math.sin(r) + v.y * Math.cos(r) }
+                : a,
+            );
+            const u = readStereo(turned, bonds).tetra.get(c);
+            expect(u && sameConfiguration(t, u), `${name}: centre ${c}, its bond to ${n} turned ${deg}`).toBe(true);
+          }
+        }
+      }
+      expect(out.solid.some(Boolean), name).toBe(true);
+    }
+  });
+
+  it("turns a centre in a cage when its substituent is drawn the other way", () => {
+    // cocaine's C3, which carries the benzoate: as the bond to its O is
+    // drawn round the carbon, it is read on one side of the cage or the
+    // other - where it is drawn, the way it was
+    const input = cages.Cocaine as LayoutInput;
+    const { atoms, bonds } = drawing(input);
+    const bonded = (i: number) => input.bonds.flatMap((b) => (b.a === i ? [b.b] : b.b === i ? [b.a] : []));
+    const c = input.atoms.findIndex(
+      (a, i) => a.tetra && atoms[i].z != null && bonded(i).some((n) => input.atoms[n].el === "O"),
+    );
+    const o = bonded(c).find((n) => input.atoms[n].el === "O")!;
+    const before = readStereo(atoms, bonds).tetra.get(c)!;
+    const r = Math.hypot(atoms[o].x - atoms[c].x, atoms[o].y - atoms[c].y);
+    const readings = new Set<boolean>();
+    for (let deg = 0; deg < 360; deg += 10) {
+      const p = at(deg, r);
+      const moved = atoms.map((a, i) => (i === o ? { ...a, x: atoms[c].x + p.x, y: atoms[c].y + p.y } : a));
+      const t = readStereo(moved, bonds).tetra.get(c);
+      if (t) readings.add(sameConfiguration(before, t));
+    }
+    expect(readings).toEqual(new Set([true, false]));
+  });
+});
+
+describe("sameConfiguration", () => {
+  it("counts the swaps between two orders of the neighbours", () => {
+    const t = { neighbours: [1, 2, 3, 4], volume: 1 as const };
+    expect(sameConfiguration(t, { neighbours: [2, 1, 3, 4], volume: -1 })).toBe(true);
+    expect(sameConfiguration(t, { neighbours: [2, 3, 1, 4], volume: 1 })).toBe(true);
+    expect(sameConfiguration(t, { neighbours: [2, 3, 1, 4], volume: -1 })).toBe(false);
+    expect(sameConfiguration(t, { neighbours: [1, 2, 3, 5], volume: 1 })).toBe(false);
+  });
+});

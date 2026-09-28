@@ -76,7 +76,7 @@ describe("the chemistry client", () => {
   it("fails whatever is waiting when it closes, and stops listening", async () => {
     const w = fakeWorker();
     const c = new ChemClient(w.transport);
-    const r = c.request("clean", { molblock: "A" });
+    const r = c.request("analyse", { molblock: "A" });
     c.close("the chemistry worker stopped");
     await expect(r).rejects.toThrow("the chemistry worker stopped");
     expect(w.stopped()).toBe(true);

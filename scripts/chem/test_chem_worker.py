@@ -9,9 +9,7 @@ They need RDKit, so they run in an environment built from the chem lock:
 """
 
 import importlib.util
-import itertools
 import json
-import math
 import pathlib
 import unittest
 
@@ -72,30 +70,21 @@ def v2000(atoms, bonds):
     return "\n".join(lines + ["M  END"]) + "\n"
 
 
-def atom_coords(block):
-    """The (x, y) of every atom of a V2000 block."""
-    lines = block.splitlines()
-    n = int(lines[3][:3])
-    return [(float(l[:10]), float(l[10:20])) for l in lines[4:4 + n]]
-
-
-def with_coords(block, coords):
-    """A V2000 block with its atoms moved."""
-    lines = block.splitlines()
-    for i, (x, y) in enumerate(coords):
-        lines[4 + i] = f"{x:10.4f}{y:10.4f}" + lines[4 + i][20:]
-    return "\n".join(lines) + "\n"
-
-
-def centre(coords):
-    return (sum(p[0] for p in coords) / len(coords), sum(p[1] for p in coords) / len(coords))
-
-
 class ChemWorkerTest(unittest.TestCase):
     def test_writes_a_canonical_smiles_with_its_stereo(self):
         r = ask("to_smiles", molblock=PCPA)
         self.assertTrue(r["ok"])
         self.assertEqual(r["result"]["smiles"], "N[C@@H](Cc1ccc(Cl)cc1)C(=O)O")
+
+    def test_writes_a_smiles_without_an_h_drawn_to_carry_a_wedge(self):
+        # (R)-CHFClBr's H drawn, on a wedge
+        block = v2000(
+            [("C", 0, 0), ("F", 0, 1.5), ("Cl", 1.3, -0.75), ("Br", -1.3, -0.75), ("H", 0.4, -1.4)],
+            [(0, 1, 1, None), (0, 2, 1, None), (0, 3, 1, None), (0, 4, 1, "up")],
+        )
+        smiles = ask("to_smiles", molblock=block)["result"]["smiles"]
+        self.assertNotIn("[H]", smiles)
+        self.assertIn("@", smiles)
 
     def test_reads_a_smiles_into_a_v3000_block_with_2d_coordinates(self):
         r = ask("from_smiles", smiles="C[C@H](N)C(=O)O")
@@ -103,65 +92,6 @@ class ChemWorkerTest(unittest.TestCase):
         self.assertIn("V3000", block)
         # and back to the same molecule
         self.assertEqual(ask("to_smiles", molblock=block)["result"]["smiles"], "C[C@H](N)C(=O)O")
-
-    def test_cleans_up_where_it_was_drawn_keeping_its_stereo(self):
-        r = ask("clean", molblock=PCPA)["result"]
-        coords = r["coords"]
-        self.assertEqual(len(coords), 13)
-        # the wedge still says what it did, so it stays where it was drawn
-        self.assertIsNone(r["wedges"])
-        self.assertEqual(
-            ask("to_smiles", molblock=with_coords(PCPA, coords))["result"]["smiles"],
-            "N[C@@H](Cc1ccc(Cl)cc1)C(=O)O",
-        )
-        # at the drawing's bond length, and over where it was drawn
-        self.assertAlmostEqual(math.dist(coords[7], coords[8]), 1.5, delta=0.1)
-        drawn = atom_coords(PCPA)
-        self.assertLess(
-            math.dist(centre(coords), centre(drawn)), 1e-6)
-        self.assertLess(max(math.dist(p, q) for p, q in zip(coords, drawn)), 1.0)
-
-    def test_rewedges_only_when_the_drawn_wedges_would_say_otherwise(self):
-        # CHFClBr, drawn with its four neighbours in every order and a wedge
-        # on each bond in turn: however it is laid out, the same molecule
-        spots = [(0, 1.5), (1.3, -0.75), (-1.3, -0.75), (0.4, -1.4)]
-        rewedged = 0
-        for order in itertools.permutations(["F", "Cl", "Br", "C"]):
-            for wedge in range(4):
-                atoms = [("C", 0, 0)] + [(el, x, y) for el, (x, y) in zip(order, spots)]
-                bonds = [(0, j + 1, 1, "up" if j == wedge else None) for j in range(4)]
-                block = v2000(atoms, bonds)
-                before = ask("to_smiles", molblock=block)["result"]["smiles"]
-                r = ask("clean", molblock=block)["result"]
-                if r["wedges"] is not None:
-                    rewedged += 1
-                    bonds = [(0, j + 1, 1, None) for j in range(4)]
-                    for w in r["wedges"]:
-                        a, b, order_, _ = bonds[w["bond"]]
-                        other = b if w["narrow"] == a else a
-                        bonds[w["bond"]] = (w["narrow"], other, order_, w["stereo"])
-                moved = [(el, x, y) for (el, _, _), (x, y) in zip(atoms, r["coords"])]
-                after = ask("to_smiles", molblock=v2000(moved, bonds))["result"]["smiles"]
-                self.assertEqual(before, after, (order, wedge))
-        self.assertGreater(rewedged, 0)
-
-    def test_leaves_each_fragment_where_it_was(self):
-        block = v2000(
-            [("C", 0, 0), ("C", 1.5, 0), ("O", 10, 0), ("C", 11.5, 0.3), ("N", 20, 5)],
-            [(0, 1, 1, None), (2, 3, 1, None)],
-        )
-        coords = ask("clean", molblock=block)["result"]["coords"]
-        self.assertEqual(coords[4], [20.0, 5.0])
-        self.assertLess(math.dist(coords[2], (10, 0)), 0.1)
-
-    def test_cleans_up_what_it_cannot_make_sense_of(self):
-        five = v2000(
-            [("C", 0, 0), ("C", 1.5, 0), ("C", -1.5, 0), ("C", 0, 1.5), ("C", 0, -1.5), ("C", 1, 1)],
-            [(0, j, 1, None) for j in range(1, 6)],
-        )
-        r = ask("clean", molblock=five)
-        self.assertTrue(r["ok"])
-        self.assertIsNone(r["result"]["wedges"])
 
     def test_analyses_hydrogens_aromaticity_and_stereo(self):
         r = ask("analyse", molblock=PCPA)["result"]

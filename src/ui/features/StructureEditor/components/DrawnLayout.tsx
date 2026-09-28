@@ -48,11 +48,14 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
   const stroke = extend.active ? extend.stroke : null;
   const preview = extend.active ? extend.preview : null;
   const atoms: LAtom[] = useMemo(() => {
-    const out = model.atoms.map((a) =>
-      a.id === draggedId && dragX != null && dragY != null
-        ? { id: a.id, x: dragX, y: dragY, el: a.el }
-        : { id: a.id, x: a.x, y: a.y, el: a.el },
-    );
+    // (with its depth, where it is drawn in perspective: a bond behind
+    // another is broken where they cross)
+    const out: LAtom[] = model.atoms.map((a) => ({
+      id: a.id,
+      ...(a.id === draggedId && dragX != null && dragY != null ? { x: dragX, y: dragY } : { x: a.x, y: a.y }),
+      el: a.el,
+      ...(a.z != null ? { z: a.z } : {}),
+    }));
     stroke?.nodes.forEach((n, i) => {
       if (n.atomId == null && n.pathIndex == null) {
         out.push({ id: EXTENDING_ATOM_ID - i, x: n.x, y: n.y, el: "C" });

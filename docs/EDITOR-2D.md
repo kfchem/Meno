@@ -106,8 +106,9 @@ trackpad a double-tap and drag does the same as a double-click and drag.
 - **TypeScript** holds the model, the gestures and the drawing - everything
   that has to answer within a frame. No Python in the drawing path.
 - **RDKit** decides chemistry: valence and implicit hydrogens with charges,
-  aromaticity, SMILES, clean-up (2D coordinates), stereo perception and CIP
-  labels. It runs in the Python
+  aromaticity, SMILES, stereo perception and CIP labels. (2D coordinates -
+  clean-up - are Meno's own layout engine's, in TypeScript: 4a below.) It
+  runs in the Python
   sidecar, in an environment the bundled `uv` builds on first launch;
   downloading it then, rather than shipping it, keeps Meno itself small, and
   the workflow side will need far more packages than this. Calls are
@@ -206,7 +207,7 @@ Both go together, because both touch every layer.
   The download asks first and goes on the network's record like any other.
   (PR #52)
 - A dedicated worker that answers a fixed set of requests (not the console's
-  run-any-code worker) - SMILES in and out, clean-up, and per atom and bond
+  run-any-code worker) - SMILES in and out, and per atom and bond
   hydrogens, valence errors, aromaticity and CIP labels - kept off the
   network, and a typed, asynchronous client for it on the TS side. (PR #52)
 - A MOL V3000 writer in TS. (PR #40)
@@ -230,11 +231,11 @@ All hover-based, as above.
 - Every bond type from the pointer: wavy, bold, dashed, and the rest of what
   the cycle cannot reach today.
 - Abbreviations (Me, Ph, Boc, OTBS …) that read correctly and can be expanded.
-- Clean-up of a structure or a selection (RDKit). (PR #53: the whole
-  drawing from its button, or the structure under the pointer with
-  Ctrl/Cmd+Shift+K - laid out afresh over where it was drawn, its chains
-  turned the way they were drawn and its stereochemistry kept, as one undo
-  step; a selection once there is one.)
+- Clean-up of a structure or a selection. (PR #53: the whole drawing from
+  its button, or the structure under the pointer with Ctrl/Cmd+Shift+K, as
+  one undo step; a selection once there is one. Since the layout engine,
+  4a, it is the engine's drawing - turned the way the structure is usually
+  drawn, not the way it was - each structure where it was.)
 - Valence warnings, and R/S shown on request (RDKit). (PR #53: a ring round
   an atom with too many bonds, saying what is wrong under the pointer; R/S
   and E/Z from a button on the canvas; both in Settings › Chemistry, and
@@ -270,7 +271,34 @@ lipids each have their own way of being drawn, which it should know.
    clash removal and orientation, measured on the benchmark at each step.
    A first pass is in; on the benchmark it scores best or level on most of
    the molecules against RDKit's two engines.
-3. Clean-up and SMILES import moved onto it.
+3. Clean-up and SMILES import moved onto it: `chem/cleanUp.ts` and
+   `chem/engineLayout.ts`, the engine in a worker of its own
+   (`chem/layoutWorker.ts`), as a large structure takes it up to a second.
+   - What the engine is given is read out of the drawing itself
+     (`lib/layout/drawn.ts`): each centre's configuration from its wedges,
+     read as RDKit reads them, and each double bond's from its sides. So
+     Clean-up no longer needs RDKit, and works before it is set up.
+   - An H drawn on a stereocentre is taken as the centre's own: kept if
+     the engine draws one there, taken away if not, and one added where the
+     engine draws an H the drawing had not.
+   - A cage comes out in perspective, as the engine draws one: its atoms
+     keep a depth (`Atom.z`), and a bond passing behind another is drawn
+     broken there. Its stereocentres (`Atom.stereoCentre`) show their
+     configuration by the drawing itself, with no wedges: it is read from
+     where their bonds point, so a substituent drawn round to the other
+     side turns its centre (agreed 2026-09-28). A file, the SMILES and R/S
+     are given the wedges that say it (`chem/drawing.ts#forFlatReaders`);
+     the depth itself is not saved, so a cage opened again is flat, its
+     stereochemistry wedged.
+   - The new drawing is read back before anything moves: if it would not
+     say the stereochemistry the old one said, Clean-up refuses. So it does
+     for a wedge it cannot carry - wedge and hashes drawn opposite each
+     other, or on an atom whose fourth group is a lone pair (a sulfoxide's
+     S), which the engine has no way to take - rather than lose it. A wedge
+     that says nothing (on a CH2) goes.
+   - A SMILES is still read by RDKit, whose drawing says what it means;
+     the engine then draws it (RDKit's drawing stands, should the engine
+     fail).
 
 Its code is Meno's own: nothing taken from other depiction code, nothing
 traced from reference drawings.

@@ -104,7 +104,8 @@ function StructureCanvasContent({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [active, save, saveAs]);
-  // RDKit: its marks on the structure, R/S on request, and clean-up
+  // RDKit: its marks on the structure and R/S on request; and clean-up, by
+  // Meno's own layout engine (chem/cleanUp)
   const store = useEditorStore();
   const model = useEditor((s) => s.model);
   const marks = useChemMarks(model, active);

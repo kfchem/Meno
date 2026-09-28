@@ -3,13 +3,16 @@ import { useEffect, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { chemMolblock } from "../../../lib/rdkit/molblock";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
+import { laidOut } from "./chem/cleanUp";
+import { forFlatReaders } from "./chem/drawing";
 import { useEditor } from "./store";
 import { editorModelOf, processFileContent } from "./utils/io";
 
 /**
- * SMILES in and out, by RDKit: a structure from a SMILES, added beside what
- * is drawn, and the canonical SMILES of what is drawn. The first use sets
- * RDKit up - asking before it downloads - and starts it.
+ * SMILES in and out, by RDKit: a structure from a SMILES, laid out by Meno's
+ * own engine and added beside what is drawn, and the canonical SMILES of
+ * what is drawn. The first use sets RDKit up - asking before it downloads -
+ * and starts it.
  */
 export default function SmilesPanel({ onClose }: { onClose: () => void }) {
   const model = useEditor((s) => s.model);
@@ -30,7 +33,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
     let live = true;
     const t = setTimeout(() => {
       void chemWorker()
-        .then((c) => c.request("to_smiles", { molblock: chemMolblock(model) }))
+        .then((c) => c.request("to_smiles", { molblock: chemMolblock(forFlatReaders(model)) }))
         .then((r) => {
           if (live) setSmiles(r.smiles);
         })
@@ -54,9 +57,19 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
       const c = await chemWorker();
       const { molblock } = await c.request("from_smiles", { smiles: text });
       const result = await processFileContent("smiles.mol", molblock);
-      const next = editorModelOf(result.model);
+      // RDKit's drawing says what the SMILES does; the engine draws it
+      // (and RDKit's drawing stands, should the engine fail)
+      const drawn = editorModelOf(result.model);
+      const next = await laidOut(drawn).catch((e: unknown) => {
+        console.warn("the SMILES is drawn as RDKit laid it out", e);
+        return drawn;
+      });
+      const mid = {
+        x: next.atoms.reduce((n, a) => n + a.x, 0) / (next.atoms.length || 1),
+        y: next.atoms.reduce((n, a) => n + a.y, 0) / (next.atoms.length || 1),
+      };
       if (model.atoms.length === 0) {
-        replaceModel(shift(next, -result.centroid.x, -result.centroid.y));
+        replaceModel(shift(next, -mid.x, -mid.y));
       } else {
         // beside what is drawn, two bonds clear of it
         const maxX = Math.max(...model.atoms.map((a) => a.x));
@@ -67,7 +80,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
           shift(
             next,
             maxX + 2 * NOMINAL_BOND_LENGTH - minX,
-            midY - result.centroid.y,
+            midY - mid.y,
           ),
         );
       }

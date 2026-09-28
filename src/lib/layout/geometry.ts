@@ -124,3 +124,65 @@ export function splitWidestGap(taken: readonly number[], count: number, start = 
   });
   return Array.from({ length: count }, (_, i) => from + (gap * (i + 1)) / (count + 1));
 }
+
+type V3 = [number, number, number];
+const det = (a: V3, b: V3, c: V3) =>
+  a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+
+/**
+ * The sign of the volume a centre's first three neighbours span as drawn,
+ * or 0 where the drawing does not say. With the first three all in the
+ * page, the fourth, on its wedge, says it: it stands opposite them.
+ *
+ * All four bonds drawn, what is read is the way they run round the centre
+ * and which of them stand out of the page, as a reader reads it (and
+ * RDKit): each is taken as a direction, spread evenly round the centre in
+ * the order it is drawn in - a wedge out of the page, hashes behind it, and
+ * the bonds in the page leaning a little the other way, as a tetrahedral
+ * centre's do. Read from the angles as drawn, three bonds in the page that
+ * all lie within 180 degrees of each other - a drawing can come to that -
+ * could say one thing with two of them and the wedge, and the opposite
+ * with the other two. With three drawn and the H left out, the angles as
+ * drawn are read: the two bonds in the page, the shorter way round - and
+ * where those two lie straight across the centre from each other, a T,
+ * the H is read as a bond in the page in the widest gap, as RDKit reads it.
+ */
+export function drawnVolume(
+  at: Point,
+  neighbours: readonly (Point | null)[],
+  lift: readonly number[],
+): number {
+  const drawn = neighbours.flatMap((p, i) => (p ? [{ i, angle: Math.atan2(p.y - at.y, p.x - at.x) }] : []));
+  const lean = -drawn.reduce((s, { i }) => s + lift[i], 0) / 3;
+  drawn.sort((p, q) => p.angle - q.angle);
+  const round = new Map(drawn.map(({ i, angle }, k) => [i, drawn.length >= 4 ? (2 * Math.PI * k) / drawn.length : angle]));
+  const v = neighbours.map((p, i): V3 | null => {
+    if (!p) return null;
+    const a = round.get(i)!;
+    return [Math.cos(a), Math.sin(a), lift[i] || (drawn.length >= 4 ? lean : 0)];
+  });
+  if (v[0] && v[1] && v[2]) {
+    const d = det(v[0], v[1], v[2]);
+    if (Math.abs(d) > 1e-6) return Math.sign(d);
+  }
+  if (v[0] && v[1] && v[3]) {
+    const d = -det(v[0], v[1], v[3]);
+    if (Math.abs(d) > 1e-6) return Math.sign(d);
+  }
+  const h = neighbours.indexOf(null);
+  if (drawn.length === 3 && neighbours.length === 4 && h >= 0) {
+    // (a T: the H in the widest gap, in the page)
+    let widest = 0;
+    let across = 0;
+    drawn.forEach((p, k) => {
+      const next = k + 1 < drawn.length ? drawn[k + 1].angle : drawn[0].angle + 2 * Math.PI;
+      if (next - p.angle > widest) {
+        widest = next - p.angle;
+        across = p.angle + widest / 2;
+      }
+    });
+    const withH = neighbours.map((p, i) => (i === h ? { x: at.x + Math.cos(across), y: at.y + Math.sin(across) } : p));
+    return drawnVolume(at, withH, lift);
+  }
+  return 0;
+}

@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { createSVG, layoutMolecule } from "../../../lib/chem/layout2d";
 import { writeMolfile, writeSdf } from "../../../lib/chem/molWriter";
+import { forFlatReaders } from "./chem/drawing";
 import { styleOf, type DrawingStyle } from "../../../lib/chem/style";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { editorLayoutOptions, layoutBonds } from "./layoutOptions";
@@ -18,13 +19,16 @@ function stem(path: string): string {
 
 /**
  * The structure as the file at `path` is to hold it: an SD file for `.sdf`,
- * a MOL file for anything else, titled with the file's own name.
+ * a MOL file for anything else, titled with the file's own name. A cage
+ * drawn in perspective is given the wedges that say its stereochemistry,
+ * which the file has no other way to hold.
  */
 export function structureFileText(model: Model, path: string): string {
   const title = stem(path);
+  const flat = forFlatReaders(model);
   return /\.sdf$/i.test(path)
-    ? writeSdf(model, { title })
-    : writeMolfile(model, { title });
+    ? writeSdf(flat, { title })
+    : writeMolfile(flat, { title });
 }
 
 /**
@@ -46,7 +50,7 @@ export function drawingSvg(
   aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
   style: DrawingStyle,
 ): string {
-  const atoms = model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el }));
+  const atoms = model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el, ...(a.z != null ? { z: a.z } : {}) }));
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const bonds = layoutBonds(model.bonds, index);
   const enabled = Object.keys(aromatic.aromaticRings || {}).filter(

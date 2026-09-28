@@ -17,6 +17,46 @@ function readBack(input: LayoutInput, centre: number): number {
   return drawnVolume({ x: out.x[centre], y: out.y[centre] }, t.neighbours.map(point), lift);
 }
 
+describe("drawnVolume", () => {
+  // four bonds, three of them in the page within 180 degrees of each
+  // other: read from the angles alone, two of them and the wedge would say
+  // one thing and the other two the opposite
+  const at = (deg: number) => ({ x: Math.cos((deg * Math.PI) / 180), y: Math.sin((deg * Math.PI) / 180) });
+  const fan = [at(0), at(-40), at(-128), at(116)];
+  const lift = [0, 0, 0, 1];
+
+  it("reads the same whichever three bonds it is asked about", () => {
+    const orders = [
+      [0, 1, 2, 3],
+      [1, 2, 0, 3],
+      [3, 0, 1, 2],
+      [2, 3, 1, 0],
+    ];
+    const reads = orders.map((o) => {
+      const v = drawnVolume({ x: 0, y: 0 }, o.map((i) => fan[i]), o.map((i) => lift[i]));
+      // (an odd reordering of the four turns the sign)
+      const odd = o.reduce((n, a, i) => n + o.slice(i + 1).filter((b) => b < a).length, 0) % 2;
+      return odd ? -v : v;
+    });
+    expect(new Set(reads).size).toBe(1);
+  });
+
+  it("reads a T as RDKit does, the H in the widest gap", () => {
+    // F, Cl and Br (on a wedge) at 0, 180 and 90 degrees: RDKit reads R,
+    // which with the H last is a volume of +1; the wedge on F instead, S
+    expect(drawnVolume({ x: 0, y: 0 }, [at(0), at(180), at(90), null], [0, 0, 1, 0])).toBe(1);
+    expect(drawnVolume({ x: 0, y: 0 }, [at(0), at(180), at(90), null], [1, 0, 0, 0])).toBe(-1);
+  });
+
+  it("reads a centre drawn with a wedge and hashes side by side", () => {
+    // two ring bonds in the page, the groups on the ring atom one in front
+    // and one behind (erythromycin's tertiary alcohols)
+    const v = drawnVolume({ x: 0, y: 0 }, [at(150), at(210), at(60), at(-60)], [0, 0, 1, -1]);
+    expect(v).toBe(-drawnVolume({ x: 0, y: 0 }, [at(150), at(210), at(60), at(-60)], [0, 0, -1, 1]));
+    expect(v).not.toBe(0);
+  });
+});
+
 describe("stereo", () => {
   // butan-2-ol: C0-C1(O4)-C2-C3, C1 the centre with an implicit H
   const butanol = (volume: 1 | -1): LayoutInput => ({

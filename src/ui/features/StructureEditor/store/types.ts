@@ -1,8 +1,25 @@
-import type { ImportedArrow } from "../document";
+import type { ImportedArrow, Relayout } from "../document";
 import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
 
-export type Atom = { id: number; x: number; y: number; r: number; el: string };
+export type Atom = {
+  id: number;
+  x: number;
+  y: number;
+  r: number;
+  el: string;
+  /**
+   * How near the viewer the atom is, where its structure is drawn in
+   * perspective - a cage, as Clean-up draws one: a bond passing behind
+   * another is drawn broken there. World units.
+   */
+  z?: number;
+  /**
+   * A stereocentre whose configuration the perspective drawing itself shows,
+   * with no wedge: it is read from where its bonds point (lib/layout/drawn).
+   */
+  stereoCentre?: boolean;
+};
 export type Bond = {
   id: number;
   a: number;
@@ -110,10 +127,7 @@ export type EditorState = {
    * A new layout for some of the structure - a clean-up - as one undo step:
    * atoms moved, and wedges changed where the layout needs them.
    */
-  relayout: (change: {
-    atoms: { id: number; x: number; y: number }[];
-    bonds: Pick<Bond, "id" | "stereo" | "stereoOrient">[];
-  }) => void;
+  relayout: (change: Relayout) => void;
   updateBond: (id: number, patch: Partial<Bond>) => void;
   setBondOrder: (id: number, order: Bond["order"]) => void;
   setBondStereo: (id: number, stereo: NonNullable<Bond["stereo"]>) => void;

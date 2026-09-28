@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { chemMolblock } from "../../../../lib/rdkit/molblock";
+import { forFlatReaders } from "./drawing";
 import { chemAtHand, chemWorker, useChem } from "../../../../lib/rdkit/worker";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
 import type { Model } from "../store/types";
@@ -42,7 +43,7 @@ export function useChemMarks(model: Model, active: boolean): ChemMarks | null {
     let live = true;
     const t = setTimeout(() => {
       void chemWorker()
-        .then((c) => c.request("analyse", { molblock: chemMolblock(model) }))
+        .then((c) => c.request("analyse", { molblock: chemMolblock(forFlatReaders(model)) }))
         .then((r) => {
           if (live) setMarks(marksOf(model, r));
         })

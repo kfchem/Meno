@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { MOL_BOND_LENGTH } from "../../../../lib/chem/molWriter";
-import type { Model } from "../store/types";
-import { fragmentOf, partOf, relayoutOf } from "./cleanUp";
+import { readStereo, sameConfiguration, wedgesForFlat } from "../../../../lib/layout/drawn";
+import { layout2D, type LayoutInput } from "../../../../lib/layout/engine";
+import cages from "../../../../lib/layout/testdata/cages.json";
+import { createStructureDocument } from "../document";
+import { connectStoreToDocument, createEditorStore } from "../store";
+import type { Bond, Model } from "../store/types";
+import { cleanUp, fragmentOf, fragmentsOf, laidOut, partOf } from "./cleanUp";
+import { degrees, drawingOf, forFlatReaders, orientFor } from "./drawing";
 
-const atom = (id: number, x: number, y: number) => ({ id, x, y, r: 0.9, el: "C" });
+const atom = (id: number, x: number, y: number, el = "C") => ({ id, x, y, r: 0.9, el });
 
 // a methyl on a wedge from a CH with two more carbons, and apart from them
 // an ethane
@@ -25,6 +30,66 @@ const model: Model = {
   ],
 };
 
+/** A canvas holding `m`, the way a structure tab is put together. */
+function canvas(m: Model) {
+  const doc = createStructureDocument();
+  doc.reset({ ...doc.getState(), model: m, nextId: 2000 });
+  const store = createEditorStore(doc);
+  connectStoreToDocument(store, doc);
+  return { doc, store };
+}
+
+/** The stereochemistry `m` shows, by atom id, an H drawn on its own counted as its centre's. */
+function stereo(m: Model) {
+  const d = drawingOf(m);
+  const ids = m.atoms.map((a) => a.id);
+  const degree = degrees(m.bonds);
+  const asId = (n: number) => (n === -1 || (m.atoms[n].el === "H" && degree.get(ids[n]) === 1) ? -1 : ids[n]);
+  return new Map(
+    [...readStereo(d.atoms, d.bonds).tetra].map(([c, t]) => [ids[c], { neighbours: t.neighbours.map(asId), volume: t.volume }]),
+  );
+}
+
+const centroid = (m: Model, ids: Set<number>) => {
+  const as = m.atoms.filter((a) => ids.has(a.id));
+  return { x: as.reduce((s, a) => s + a.x, 0) / as.length, y: as.reduce((s, a) => s + a.y, 0) / as.length };
+};
+
+/**
+ * A structure drawn flat, as a file or RDKit would have it: laid out by the
+ * engine, and a cage it draws in perspective given the wedges that say its
+ * stereochemistry instead.
+ */
+function flatDrawing(input: LayoutInput): Model {
+  const out = layout2D(input);
+  const k = NOMINAL_BOND_LENGTH;
+  const atoms = input.atoms.map((a, i) => atom(i + 1, out.x[i] * k, out.y[i] * k, a.el));
+  const bonds: Bond[] = input.bonds.map((b, i) => ({ id: 100 + i, a: b.a + 1, b: b.b + 1, order: b.order as 1 | 2 | 3 }));
+  const wedge = (from: number, to: number, stereo: "up" | "down") => {
+    const i = bonds.findIndex((b) => (b.a === from && b.b === to) || (b.a === to && b.b === from));
+    bonds[i] = { ...bonds[i], stereo, stereoOrient: orientFor(bonds[i], from, degrees(bonds)) };
+  };
+  const addH = (on: number, at: { x: number; y: number }) => {
+    const id = 500 + atoms.length;
+    atoms.push(atom(id, at.x * k, at.y * k, "H"));
+    bonds.push({ id: id + 1000, a: on + 1, b: id, order: 1 });
+    return id;
+  };
+  const hOf = new Map(out.hydrogens.map((h) => [h.on, addH(h.on, h.at)]));
+  for (const w of out.wedges) wedge(w.from + 1, w.to === -1 ? hOf.get(w.from)! : w.to + 1, w.stereo);
+  // the cage's own stereocentres, said with wedges on the drawing as it is
+  const perspective: Model = {
+    atoms: atoms.map((a, i) => ({
+      ...a,
+      ...(i < input.atoms.length && out.depth[i] != null ? { z: out.depth[i]! * k } : {}),
+      ...(i < input.atoms.length && out.solid[i] && input.atoms[i].tetra ? { stereoCentre: true } : {}),
+    })),
+    bonds,
+  };
+  const flat = forFlatReaders(perspective);
+  return { atoms: flat.atoms.map(({ id, x, y, el }) => atom(id, x, y, el)), bonds: flat.bonds as Bond[] };
+}
+
 describe("fragmentOf and partOf", () => {
   it("find the atoms bonded to an atom, and the bonds among them", () => {
     expect([...fragmentOf(model, 4)].sort()).toEqual([1, 2, 3, 4]);
@@ -33,47 +98,113 @@ describe("fragmentOf and partOf", () => {
     expect(part.atoms.map((a) => a.id)).toEqual([5, 6]);
     expect(part.bonds.map((b) => b.id)).toEqual([10]);
   });
+
+  it("finds every structure on the canvas, a lone atom not among them", () => {
+    const withLone: Model = { ...model, atoms: [...model.atoms, atom(20, 5, 5, "O")] };
+    expect(fragmentsOf(withLone).map((f) => [...f].sort())).toEqual([
+      [1, 2, 3, 4],
+      [5, 6],
+    ]);
+  });
 });
 
-describe("relayoutOf", () => {
-  const coords: [number, number][] = [
-    [0, 0],
-    [1.5, 0],
-    [-1.5, 0],
-    [0, 1.5],
-  ];
-  const part = partOf(model, fragmentOf(model, 1));
-  const k = NOMINAL_BOND_LENGTH / MOL_BOND_LENGTH;
-
-  it("moves the part's atoms, back in the editor's units, and nothing else", () => {
-    const r = relayoutOf(model, part, { coords, wedges: null });
-    expect(r.atoms).toEqual([
-      { id: 1, x: 0, y: 0 },
-      { id: 2, x: 1.5 * k, y: 0 },
-      { id: 3, x: -1.5 * k, y: 0 },
-      { id: 4, x: 0, y: 1.5 * k },
-    ]);
-    expect(r.bonds).toEqual([]);
+describe("cleanUp", () => {
+  it("lays each structure out afresh where it was, keeping its stereochemistry, in one step", async () => {
+    const { doc, store } = canvas(model);
+    const before = store.getState().model;
+    await cleanUp(store);
+    const after = store.getState().model;
+    expect(doc.history().undoDepth).toBe(1);
+    for (const ids of fragmentsOf(before)) {
+      const [p, q] = [centroid(before, ids), centroid(after, ids)];
+      expect(q.x).toBeCloseTo(p.x, 6);
+      expect(q.y).toBeCloseTo(p.y, 6);
+    }
+    // at the drawing's own bond length, every bond alike
+    for (const b of after.bonds) {
+      const [p, q] = [b.a, b.b].map((id) => after.atoms.find((a) => a.id === id)!);
+      expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeCloseTo(1, 3);
+    }
+    const [s0, s1] = [stereo(before), stereo(after)];
+    expect([...s1.keys()]).toEqual([...s0.keys()]);
+    for (const [c, t] of s0) expect(sameConfiguration(t, s1.get(c)!)).toBe(true);
   });
 
-  it("puts wedges where RDKit says, narrow at the stereocentre, and no others", () => {
-    const r = relayoutOf(model, part, {
-      coords,
-      // a hashed wedge from atom 1 (index 0) to atom 2 (index 1)
-      wedges: [{ bond: 0, narrow: 0, stereo: "down" }],
-    });
-    expect(r.bonds).toEqual([
-      // atom 1 has more bonds than atom 2, so narrow there is the usual way
-      { id: 7, stereo: "down", stereoOrient: "principle" },
-      { id: 9, stereo: "none", stereoOrient: "principle" },
-    ]);
+  it("lays out only the structure an atom is in, when asked about one", async () => {
+    const { store } = canvas(model);
+    await cleanUp(store, 5);
+    const after = store.getState().model;
+    for (const id of [1, 2, 3, 4]) {
+      expect(after.atoms.find((a) => a.id === id)).toEqual(model.atoms.find((a) => a.id === id));
+    }
   });
 
-  it("turns a wedge round when it is narrow at the end with fewer bonds", () => {
-    const r = relayoutOf(model, part, {
-      coords,
-      wedges: [{ bond: 2, narrow: 3, stereo: "up" }],
-    });
-    expect(r.bonds).toEqual([{ id: 9, stereo: "up", stereoOrient: "reverse" }]);
+  it("draws a cage in perspective, its stereocentres shown by the drawing and still read as they were", async () => {
+    for (const [name, g] of Object.entries(cages)) {
+      const flat = flatDrawing(g as LayoutInput);
+      const { store } = canvas(flat);
+      await cleanUp(store);
+      const after = store.getState().model;
+      expect(after.atoms.some((a) => a.z != null), name).toBe(true);
+      expect(after.atoms.some((a) => a.stereoCentre), name).toBe(true);
+      const [s0, s1] = [stereo(flat), stereo(after)];
+      for (const [c, t] of s0) {
+        expect(s1.get(c), `${name} ${c}`).toBeDefined();
+        expect(sameConfiguration(t, s1.get(c)!), `${name} ${c}`).toBe(true);
+      }
+      // and a reader of wedges is told the same
+      const told = forFlatReaders(after);
+      const s2 = stereo({ atoms: told.atoms.map(({ id, x, y, el }) => atom(id, x, y, el)), bonds: told.bonds as Bond[] });
+      for (const [c, t] of s0) expect(sameConfiguration(t, s2.get(c)!), `${name} ${c}, flat`).toBe(true);
+    }
+  });
+
+  it("takes away an H it no longer draws, and keeps one it does", async () => {
+    // cocaine drawn flat has an H on each bridgehead, to carry its wedge;
+    // in perspective the cage shows them, and they go
+    const flat = flatDrawing(cages.Cocaine as LayoutInput);
+    const hs = flat.atoms.filter((a) => a.el === "H").length;
+    expect(hs).toBeGreaterThan(0);
+    const { store } = canvas(flat);
+    await cleanUp(store);
+    expect(store.getState().model.atoms.filter((a) => a.el === "H")).toHaveLength(0);
+    expect(wedgesForFlat(drawingOf(store.getState().model).atoms, drawingOf(store.getState().model).bonds).hydrogens.length).toBe(hs);
+  });
+
+  it("lays out a structure that has just arrived, before it is added", async () => {
+    // RDKit's drawing of a SMILES, as it comes: flat, wedged
+    const flat = flatDrawing(cages.Quinine as LayoutInput);
+    const laid = await laidOut(flat);
+    expect(laid.atoms.some((a) => a.z != null)).toBe(true);
+    const [s0, s1] = [stereo(flat), stereo(laid)];
+    for (const [c, t] of s0) expect(sameConfiguration(t, s1.get(c)!), `${c}`).toBe(true);
+  });
+
+  it("refuses, rather than lose it, a configuration it cannot carry", async () => {
+    // methyl phenyl sulfoxide's S, wedged: its fourth group a lone pair
+    const sulfoxide: Model = {
+      atoms: [atom(1, 0, 0, "S"), atom(2, 0, 1, "O"), atom(3, -1, -0.5), atom(4, 1, -0.5)],
+      bonds: [
+        { id: 5, a: 1, b: 2, order: 2 },
+        { id: 6, a: 1, b: 3, order: 1, stereo: "up" },
+        { id: 7, a: 1, b: 4, order: 1 },
+      ],
+    };
+    const { store } = canvas(sulfoxide);
+    await expect(cleanUp(store)).rejects.toThrow(/nothing was moved/);
+    expect(store.getState().model).toEqual(sulfoxide);
+  });
+
+  it("drops a wedge that says nothing, on a CH2", async () => {
+    const propane: Model = {
+      atoms: [atom(1, 0, 0), atom(2, 1, 0.5), atom(3, 2, 0)],
+      bonds: [
+        { id: 4, a: 2, b: 1, order: 1, stereo: "up" },
+        { id: 5, a: 2, b: 3, order: 1 },
+      ],
+    };
+    const { store } = canvas(propane);
+    await cleanUp(store);
+    expect(store.getState().model.bonds.every((b) => b.stereo !== "up")).toBe(true);
   });
 });
