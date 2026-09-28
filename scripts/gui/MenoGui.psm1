@@ -133,6 +133,15 @@ public static class NativeGui {
     return i;
   }
 
+  // Modifier keys pressed, in order, or let go, in reverse: held through a
+  // click or a drag.
+  public static void Hold(ushort[] vks, bool up) {
+    if (vks.Length == 0) return;
+    INPUT[] seq = new INPUT[vks.Length];
+    for (int i = 0; i < vks.Length; i++) seq[i] = Key(vks[up ? vks.Length - 1 - i : i], up);
+    Send(seq);
+  }
+
   public static void TapKey(ushort vk) {
     INPUT down = new INPUT(); down.type = INPUT_KEYBOARD; down.ki.wVk = vk;
     INPUT up = down; up.ki.dwFlags = KEYEVENTF_KEYUP;
@@ -291,8 +300,28 @@ function Save-MenoShot {
     return $Path
 }
 
+function Get-HeldKeys {
+    # -Hold's names as virtual keys: Shortcut is Ctrl here, Command on a Mac.
+    param([string[]] $Hold)
+    return [uint16[]] @($Hold | ForEach-Object { @{ Shortcut = 0x11; Shift = 0x10; Alt = 0x12 }[$_] })
+}
+
 function Invoke-MenoClick {
-    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1, [switch] $Right)
+    <#
+      .SYNOPSIS
+      Click - or right-click - at a point, with the modifier keys -Hold names
+      held: Shortcut (Ctrl here, Command on a Mac), Shift, Alt.
+    #>
+    param(
+        [Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1, [switch] $Right,
+        [ValidateSet("Shortcut", "Shift", "Alt")] [string[]] $Hold = @()
+    )
+    $keys = Get-HeldKeys $Hold
+    [NativeGui]::Hold($keys, $false)
+    try { Invoke-WinClick $X $Y $Count $Right } finally { [NativeGui]::Hold($keys, $true) }
+}
+
+function Invoke-WinClick([int] $X, [int] $Y, [int] $Count, [bool] $Right) {
     $p = ConvertTo-Screen $X $Y
     if ($Right) {
         [NativeGui]::RightDown($p.X, $p.Y)
@@ -324,6 +353,9 @@ function Invoke-MenoDrag {
       -Count is there for the Mac's sake: Windows counts the clicks itself,
       so a drag straight after an Invoke-MenoClick on the same point is
       already the second click of a double-click.
+
+      -Hold names the modifier keys held through it, as Invoke-MenoClick's;
+      -Via, points it passes through on its way, @(@(x, y), ...) - a lasso's.
     #>
     param(
         [Parameter(Mandatory)] [int] $FromX, [Parameter(Mandatory)] [int] $FromY,
@@ -332,16 +364,40 @@ function Invoke-MenoDrag {
         [int] $StepMs = 25,
         [int] $Count = 1,
         [scriptblock] $AtStep,
-        [switch] $Right
+        [switch] $Right,
+        [ValidateSet("Shortcut", "Shift", "Alt")] [string[]] $Hold = @(),
+        [int[][]] $Via = @()
     )
+    $path = Get-DragPath $FromX $FromY $Via $ToX $ToY $Steps
+    $keys = Get-HeldKeys $Hold
+    [NativeGui]::Hold($keys, $false)
+    try { Invoke-WinDrag $FromX $FromY $ToX $ToY $path $StepMs $AtStep $Right } finally { [NativeGui]::Hold($keys, $true) }
+}
+
+function Get-DragPath {
+    # The points a drag passes through, in client coordinates: -Steps of them
+    # on each leg, from the start through each of -Via to the end.
+    param([int] $FromX, [int] $FromY, [int[][]] $Via, [int] $ToX, [int] $ToY, [int] $Steps)
+    $corners = @(, @($FromX, $FromY)) + @($Via | Where-Object { $_ }) + @(, @($ToX, $ToY))
+    $path = @()
+    for ($k = 1; $k -lt $corners.Count; $k++) {
+        $p = $corners[$k - 1]; $q = $corners[$k]
+        for ($i = 1; $i -le $Steps; $i++) {
+            $t = $i / $Steps
+            $path += , @([int]($p[0] + ($q[0] - $p[0]) * $t), [int]($p[1] + ($q[1] - $p[1]) * $t))
+        }
+    }
+    return , $path
+}
+
+function Invoke-WinDrag([int] $FromX, [int] $FromY, [int] $ToX, [int] $ToY, $path, [int] $StepMs, [scriptblock] $AtStep, [bool] $Right) {
     $a = ConvertTo-Screen $FromX $FromY
     [NativeGui]::MoveTo($a.X, $a.Y)
     Start-Sleep -Milliseconds 80
     if ($Right) { [NativeGui]::RightDown($a.X, $a.Y) } else { [NativeGui]::LeftDown($a.X, $a.Y) }
     Start-Sleep -Milliseconds 80
-    for ($i = 1; $i -le $Steps; $i++) {
-        $t = $i / $Steps
-        $p = ConvertTo-Screen ([int]($FromX + ($ToX - $FromX) * $t)) ([int]($FromY + ($ToY - $FromY) * $t))
+    for ($i = 1; $i -le $path.Count; $i++) {
+        $p = ConvertTo-Screen $path[$i - 1][0] $path[$i - 1][1]
         [NativeGui]::MoveTo($p.X, $p.Y)
         Start-Sleep -Milliseconds $StepMs
         if ($AtStep) { & $AtStep $i }

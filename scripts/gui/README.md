@@ -79,8 +79,8 @@ available:
 | `Start-Meno` | start the app under test, sized and in front |
 | `Open-MenoFile -Path` | open a structure into an empty tab |
 | `Save-Step -Name` | a numbered screenshot |
-| `Invoke-MenoClick -X -Y [-Count] [-Right]` | client coordinates, not screen; `-Right` for the other button |
-| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-Count] [-AtStep] [-Right]` | press, travel, release; `-Count 2` after an `Invoke-MenoClick` there is a double-click that drags; `-Right` with the other button |
+| `Invoke-MenoClick -X -Y [-Count] [-Right] [-Hold]` | client coordinates, not screen; `-Right` for the other button; `-Hold Shortcut, Shift, Alt` holds those keys through it (Shortcut: Ctrl on Windows, ⌘ on a Mac) |
+| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-Count] [-AtStep] [-Right] [-Hold] [-Via]` | press, travel, release; `-Count 2` after an `Invoke-MenoClick` there is a double-click that drags; `-Right` with the other button; `-Hold` as for a click; `-Via @(@(x, y), ...)` passes through those points on the way - a lasso |
 | `Move-MenoPointer -X -Y` | hover |
 | `Invoke-MenoWheel -X -Y -Notches` | zoom; positive is away from you, in |
 | `Invoke-MenoSwipe -X -Y [-DX] [-DY] [-Steps]` | two fingers on a trackpad: moves the view; positive DY scrolls down |
