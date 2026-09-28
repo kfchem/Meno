@@ -96,12 +96,35 @@ come up, so a right drag is a move, not a menu.
 | Add or take out one atom or bond | Ctrl+click | ⌘+click |
 | Everything along the bonds from the last atom chosen to this one | Shift+click | Shift+click |
 | A box: what it holds | double-click empty space and drag, or Ctrl+drag | double-click empty space and drag, or ⌘+drag |
+| A lasso: what it encloses | the box's gesture with Alt held | the box's gesture with Option held |
 | A whole structure | right-click, *Select this structure* | the same |
+| Everything | Ctrl+A | ⌘A |
 | Nothing | click empty space, or Esc | the same |
 
 A double-click in empty space that does not move still draws a bond, and a
 double-click-and-drag that starts on an atom draws out of it instead. On a
 trackpad a double-tap and drag does the same as a double-click and drag.
+A box or a lasso drawn with Ctrl (⌘) held adds what it takes to the
+selection; drawn without, it replaces it.
+
+**What is done to a selection** (2D, PR #66). It is shaded in the hover
+highlight's colour, under the drawing, and a small handle stands above it.
+
+- Dragging any of its atoms moves the whole of it, off the grid, as one undo
+  step; an atom that is not selected moves on its own as before.
+- Dragging the handle turns it about its middle, in steps of 15 degrees, or
+  freely after a pause - one undo step.
+- The keys that act on what is under the pointer act on the selection
+  instead, once there is one: Delete or Backspace deletes it, and
+  Ctrl/⌘+Shift+K cleans up every structure it is in.
+- A right-click on something selected, or on empty space, opens the
+  selection's menu: *Delete selection*, *Turn over left to right*, *Turn
+  over top to bottom*, *Clean up these structures*. Turning over is seeing
+  the molecule from its other side, not its mirror image: the drawing is
+  mirrored and every wedge on it becomes hashes and every hash a wedge, so
+  each stereocentre keeps its configuration.
+- The selection is the view's, not the document's: undo does not change it,
+  and what an edit deletes leaves it.
 
 ## Who does what
 
@@ -220,10 +243,10 @@ All hover-based, as above.
 
 - Delete an atom or a bond; delete a selection. (PR #54: the atom or bond
   under the pointer, by Delete or Backspace or from the menu a right-click
-  opens there, one undo step each; a carbon left with no bonds goes too. A
-  selection once there is one.)
+  opens there, one undo step each; a carbon left with no bonds goes too.
+  PR #66: the selection, by the same keys or its menu, in one step.)
 - Selection: by click, by adding to it, by box or lasso, a whole fragment;
-  move, rotate and flip what is selected.
+  move, rotate and flip what is selected. (PR #66, as above.)
 - Elements without typing; charges, radicals and isotopes, drawn as
   superscripts and carried through the model, the files and the hydrogen
   count.
@@ -236,7 +259,7 @@ All hover-based, as above.
 - Abbreviations (Me, Ph, Boc, OTBS …) that read correctly and can be expanded.
 - Clean-up of a structure or a selection. (PR #53: the whole drawing from
   its button, or the structure under the pointer with Ctrl/Cmd+Shift+K, as
-  one undo step; a selection once there is one. Since the layout engine,
+  one undo step; the structures a selection is in, PR #66. Since the layout engine,
   4a, it is the engine's drawing - turned the way the structure is usually
   drawn, not the way it was - each structure where it was.)
 - Valence warnings, and R/S shown on request (RDKit). (PR #53: a ring round
