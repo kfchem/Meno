@@ -36,6 +36,17 @@ describe("a bond stroke", () => {
     });
   });
 
+  it("closes onto the atom the pointer is on, however far away", () => {
+    // an atom two bonds off, the pointer on it: a long bond closes the ring
+    const far = {
+      atoms: [...methyl.atoms, { id: 3, x: 1.2, y: 1.5 }],
+      bonds: methyl.bonds,
+    };
+    const t = strokeTarget(far, startStroke("bond", 1), { x: 1.25, y: 1.45 }, L)!;
+    expect(t.atomId).toBe(3);
+    expect(t.end).toEqual({ x: 1.2, y: 1.5 });
+  });
+
   it("closes onto an atom within reach", () => {
     const three = {
       atoms: [...methyl.atoms, { id: 3, x: 0.5, y: 0.9 }],

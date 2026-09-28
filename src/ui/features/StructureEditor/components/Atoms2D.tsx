@@ -4,7 +4,7 @@ import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { computeMoveSnap } from "../utils/moveSnap";
-import { ATOM_PICK_RADIUS_RATIO, HOLD_MS } from "../constants";
+import { ATOM_PICK_RADIUS_RATIO, FREE_MS, HOLD_MS } from "../constants";
 import { commitInstanceMatrices } from "./instances";
 
 /** How far a press has to travel to be a drag rather than a click, in px. */
@@ -110,7 +110,7 @@ export function Atoms2D() {
 
   /**
    * A stroke out of an atom, from the press to the release: a bond, or a
-   * chain (see utils/stroke). A pause of HOLD_MS in it lets a bond go where
+   * chain (see utils/stroke). A pause of FREE_MS in it lets a bond go where
    * the pointer is, or lays down the bond a chain is on. `firstMove`, when
    * the drag is already under way, starts the stroke at once.
    */
@@ -126,7 +126,7 @@ export function Atoms2D() {
       holdTimer.current = window.setTimeout(() => {
         holdTimer.current = null;
         if (cand.current.started) holdExtend();
-      }, HOLD_MS) as unknown as number;
+      }, FREE_MS) as unknown as number;
     };
     const onMove = (ev: PointerEvent) => {
       if (!cand.current.active || cand.current.atomId == null) return;
@@ -167,7 +167,7 @@ export function Atoms2D() {
 
   /**
    * Moving an atom a long press has lifted, from its first move to the
-   * release. It snaps as it goes; after a pause of HOLD_MS it follows the
+   * release. It snaps as it goes; after a pause of FREE_MS it follows the
    * pointer freely. Dropped on another atom, it becomes that atom.
    */
   const moveGesture = (idx: number, first: PointerEvent, pid: number | null) => {
@@ -190,7 +190,7 @@ export function Atoms2D() {
         holdTimer.current = null;
         moveFree = true;
         setMoveMode("free");
-      }, HOLD_MS) as unknown as number;
+      }, FREE_MS) as unknown as number;
     };
     // The atom is not moved until it is dropped: MovePreview2D works out
     // where it snaps to while it is dragged, and the drawing lays it out

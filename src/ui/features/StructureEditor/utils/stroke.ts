@@ -10,7 +10,8 @@
  *   pause lays down the bond it is on.
  *
  * Either ends on an atom already there when it comes within reach of one -
- * it closes a ring - and a chain goes on from it. Nothing is added to the
+ * it closes a ring - and a chain goes on from it. A bond also ends on the
+ * atom the pointer is on, however far away: a long bond closes a ring too. Nothing is added to the
  * document until the button comes up: the stroke is one undo step.
  */
 import { chainStart, chainStep, snapBond, type Pt } from "./extendSnap";
@@ -117,6 +118,19 @@ export function strokeTarget(
   const reach = JOIN_REACH * length;
   let bestFar = reach;
   let join: { atomId?: number; pathIndex?: number; at: Pt } | null = null;
+  // (a bond goes to the atom the pointer is on, however far that is: a
+  // ring is closed with a long bond as well as a short one)
+  if (s.kind === "bond") {
+    for (const a of model.atoms) {
+      if (a.id === t.tipAtom || t.bonded.has(a.id)) continue;
+      const far = Math.hypot(a.x - pointer.x, a.y - pointer.y);
+      if (far < bestFar) {
+        bestFar = far;
+        join = { atomId: a.id, at: a };
+      }
+    }
+    if (join) bestFar = 0;
+  }
   for (const a of model.atoms) {
     if (a.id === t.tipAtom || t.bonded.has(a.id)) continue;
     const far = Math.hypot(a.x - end.x, a.y - end.y);

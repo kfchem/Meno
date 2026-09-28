@@ -33,11 +33,12 @@ and in particular:
     double-click that drags draws a chain along the pointer's path, a
     carbon for every bond length, zigzagging.
   - A press held still (HOLD_MS) lifts an atom, and the drag moves it.
-  - A pause in a drag lets a bond or a moved atom go exactly where the
-    pointer is, off the grid; in a chain it lays down the bond it is on,
-    snapped.
-  - A bond led within reach of an atom closes onto it, and the preview
-    shows it closed before the button comes up.
+  - A pause in a drag (FREE_MS, longer than a long press) lets a bond or a
+    moved atom go exactly where the pointer is, off the grid; in a chain
+    it lays down the bond it is on, snapped.
+  - A bond led within reach of an atom closes onto it, and so does one led
+    onto an atom however far away - a long bond closes a ring too; the
+    preview shows it closed before the button comes up.
 
   The whole stroke is one undo step. (PR #57)
 - **The mouse alone should be enough**, and it should travel as little as
