@@ -7,6 +7,7 @@ import { calculateNewBondPosition } from "../utils/geometry";
 import { clickClock, doubleClickedSince, noteClick } from "../utils/clickCount";
 import { endsDrag, movePress, startPress, type Press } from "../utils/press";
 import { editorModelOf, processFileContent } from "../utils/io";
+import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
 export function useStructureEvents(
   initialPayload?: string,
@@ -131,6 +132,8 @@ export function useStructureEvents(
       clickTimerRef.current = null;
     }
     if (!camRef.current || !domRef.current) return;
+    // (Ctrl or ⌘, or Shift, clicked twice: the selection's, not a bond drawn)
+    if (addsToSelection(e) || e.shiftKey) return;
     const stNow = store.getState();
     const nowMs =
       typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -262,6 +265,19 @@ export function useStructureEvents(
     const press = pressRef.current;
     pressRef.current = null;
     if (endsDrag(press, e.clientX, e.clientY)) return;
+    // A click with Ctrl (⌘) or Shift works the selection, and edits nothing
+    if (addsToSelection(e) || e.shiftKey) return;
+    // A click on nothing lets the selection go (not the end of a turn of it)
+    const stClick = store.getState();
+    const nowClick =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (
+      e.target === domRef.current &&
+      stClick.hovered.atomId == null &&
+      stClick.hovered.bondId == null &&
+      !(stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil)
+    )
+      stClick.clearSel();
     // The second click of a double-click (as the system reckons one) edits
     // nothing, and neither does its first, if the edit is not yet begun.
     if (e.detail >= 2) return;

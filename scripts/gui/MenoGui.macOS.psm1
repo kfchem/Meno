@@ -260,9 +260,16 @@ public static class MacGui {
     try { CGEventPost(HidTap, e); } finally { CFRelease(e); }
   }
 
+  // The modifier keys the mouse's events say are held (CGEventFlags): a
+  // page reads a click's metaKey, shiftKey and altKey off the event itself.
+  // Said on every event, none as well: an event that says nothing takes
+  // whatever the system last thought was held.
+  static ulong Held = 0;
+
   static IntPtr Mouse(uint type, double x, double y, long clicks, uint button = 0) {
     IntPtr e = CGEventCreateMouseEvent(IntPtr.Zero, type, new CGPoint { X = x, Y = y }, button);
     if (clicks > 0 && e != IntPtr.Zero) CGEventSetIntegerValueField(e, ClickState, clicks);
+    if (e != IntPtr.Zero) CGEventSetFlags(e, Held);
     return e;
   }
 
@@ -334,6 +341,21 @@ public static class MacGui {
       ChordKey(src, key, true, held);
       ChordKey(src, key, false, held);
       for (int i = modifiers.Length - 1; i >= 0; i--) { held &= ~flags[i]; ChordKey(src, modifiers[i], false, held); }
+    } finally { if (src != IntPtr.Zero) CFRelease(src); }
+  }
+
+  // Modifier keys pressed, in order, or let go, in reverse, around a click
+  // or a drag - as keys of their own, as a hand does it, and said by the
+  // mouse's events meanwhile.
+  public static void HoldKeys(ushort[] codes, ulong[] flags, bool down) {
+    IntPtr src = CGEventSourceCreate(1);        // kCGEventSourceStateHIDSystemState
+    try {
+      if (down) {
+        for (int i = 0; i < codes.Length; i++) { Held |= flags[i]; ChordKey(src, codes[i], true, Held); }
+      } else {
+        for (int i = codes.Length - 1; i >= 0; i--) { Held &= ~flags[i]; ChordKey(src, codes[i], false, Held); }
+        Held = 0;
+      }
     } finally { if (src != IntPtr.Zero) CFRelease(src); }
   }
 
@@ -556,10 +578,32 @@ function Save-MenoShot {
     return Save-WindowShot -Id $script:Window -Path $Path
 }
 
+function Set-HeldKeys {
+    # -Hold's names pressed, or let go: Shortcut is Command here, Ctrl on
+    # Windows; Alt is Option.
+    param([string[]] $Hold, [switch] $Up)
+    $codes = @{ Shortcut = 55; Shift = 56; Alt = 58 }
+    $flags = @{ Shortcut = 0x100000; Shift = 0x20000; Alt = 0x80000 }
+    [MacGui]::HoldKeys([uint16[]] @($Hold | ForEach-Object { $codes[$_] }), [uint64[]] @($Hold | ForEach-Object { $flags[$_] }), -not $Up)
+}
+
 function Invoke-MenoClick {
-    param([Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1, [switch] $Right)
+    <#
+      .SYNOPSIS
+      Click - or right-click - at a point, with the modifier keys -Hold names
+      held: Shortcut (Command here, Ctrl on Windows), Shift, Alt (Option).
+    #>
+    param(
+        [Parameter(Mandatory)] [int] $X, [Parameter(Mandatory)] [int] $Y, [int] $Count = 1, [switch] $Right,
+        [ValidateSet("Shortcut", "Shift", "Alt")] [string[]] $Hold = @()
+    )
     $p = ConvertTo-Screen $X $Y
     Assert-MenoFront
+    Set-HeldKeys $Hold
+    try { Invoke-MacClick $p $Count $Right } finally { Set-HeldKeys $Hold -Up }
+}
+
+function Invoke-MacClick($p, [int] $Count, [bool] $Right) {
     [MacGui]::MoveTo($p.X, $p.Y)
     Start-Sleep -Milliseconds 30
     if ($Right) {
@@ -593,6 +637,9 @@ function Invoke-MenoDrag {
       system counts clicks: the drag after an Invoke-MenoClick on the same
       point. Here the poster says how many clicks a press is, and the page
       sees what it says.
+
+      -Hold names the modifier keys held through it, as Invoke-MenoClick's;
+      -Via, points it passes through on its way, @(@(x, y), ...) - a lasso's.
     #>
     param(
         [Parameter(Mandatory)] [int] $FromX, [Parameter(Mandatory)] [int] $FromY,
@@ -601,19 +648,42 @@ function Invoke-MenoDrag {
         [int] $StepMs = 25,
         [int] $Count = 1,
         [scriptblock] $AtStep,
-        [switch] $Right
+        [switch] $Right,
+        [ValidateSet("Shortcut", "Shift", "Alt")] [string[]] $Hold = @(),
+        [int[][]] $Via = @()
     )
     $a = ConvertTo-Screen $FromX $FromY
     $b = ConvertTo-Screen $ToX $ToY
+    $path = Get-DragPath $FromX $FromY $Via $ToX $ToY $Steps
     Assert-MenoFront
+    Set-HeldKeys $Hold
+    try { Invoke-MacDrag $a $b $path $StepMs $Count $AtStep $Right } finally { Set-HeldKeys $Hold -Up }
+}
+
+function Get-DragPath {
+    # The points a drag passes through, in client coordinates: -Steps of them
+    # on each leg, from the start through each of -Via to the end.
+    param([int] $FromX, [int] $FromY, [int[][]] $Via, [int] $ToX, [int] $ToY, [int] $Steps)
+    $corners = @(, @($FromX, $FromY)) + @($Via | Where-Object { $_ }) + @(, @($ToX, $ToY))
+    $path = @()
+    for ($k = 1; $k -lt $corners.Count; $k++) {
+        $p = $corners[$k - 1]; $q = $corners[$k]
+        for ($i = 1; $i -le $Steps; $i++) {
+            $t = $i / $Steps
+            $path += , @([int]($p[0] + ($q[0] - $p[0]) * $t), [int]($p[1] + ($q[1] - $p[1]) * $t))
+        }
+    }
+    return , $path
+}
+
+function Invoke-MacDrag($a, $b, $path, [int] $StepMs, [int] $Count, [scriptblock] $AtStep, [bool] $Right) {
     [MacGui]::MoveTo($a.X, $a.Y)
     Start-Sleep -Milliseconds 80
     if ($Right) { [MacGui]::RightDown($a.X, $a.Y) } else { [MacGui]::LeftDown($a.X, $a.Y, $Count) }
     Start-Sleep -Milliseconds 80
     try {
-        for ($i = 1; $i -le $Steps; $i++) {
-            $t = $i / $Steps
-            $p = ConvertTo-Screen ([int]($FromX + ($ToX - $FromX) * $t)) ([int]($FromY + ($ToY - $FromY) * $t))
+        for ($i = 1; $i -le $path.Count; $i++) {
+            $p = ConvertTo-Screen $path[$i - 1][0] $path[$i - 1][1]
             if ($Right) { [MacGui]::RightDragTo($p.X, $p.Y) } else { [MacGui]::DragTo($p.X, $p.Y) }
             Start-Sleep -Milliseconds $StepMs
             if ($AtStep) { & $AtStep $i }

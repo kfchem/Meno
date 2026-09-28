@@ -4,6 +4,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { commitInstanceMatrices } from "./instances";
+import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
 export default function BondsPick2D() {
   useThree();
@@ -19,6 +20,8 @@ export default function BondsPick2D() {
     suppressDoubleClick,
     hovered,
     triggerHoverPulse,
+    toggleBondSel,
+    selectPathTo,
   } = useEditor();
   const inst = useRef<THREE.InstancedMesh>(null!);
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
@@ -267,6 +270,20 @@ export default function BondsPick2D() {
         try {
           setHoveredFromId(b.id);
         } catch {}
+        // Ctrl (⌘) and a click adds the bond to the selection, with its
+        // atoms, or takes it out; Shift and a click, everything along the
+        // bonds to it.
+        const native = (e as any).nativeEvent as PointerEvent | undefined;
+        if (native && (addsToSelection(native) || native.shiftKey)) {
+          clickState.current.armed = false;
+          clickState.current.downBondId = null;
+          (e as any).stopPropagation?.();
+          if (native.shiftKey) {
+            selectPathTo(b.a);
+            selectPathTo(b.b);
+          } else toggleBondSel(b.id);
+          return;
+        }
         clickState.current.armed = true;
         clickState.current.downBondId = b.id;
         const pid =

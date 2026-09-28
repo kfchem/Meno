@@ -6,6 +6,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { computeMoveSnap } from "../utils/moveSnap";
 import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
 import { clickClock, doubleClickedSince } from "../utils/clickCount";
+import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { commitInstanceMatrices } from "./instances";
 
 /** A click edits a label this long after it, unless a second click follows. */
@@ -34,6 +35,10 @@ export function Atoms2D() {
     updateMovePointer,
     endMoveDrag,
     suppressDoubleClick,
+    sel,
+    toggleAtomSel,
+    selectPathTo,
+    moveAtoms,
   } = useEditor();
   const inst = useRef<THREE.InstancedMesh>(null!);
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
@@ -265,6 +270,51 @@ export function Atoms2D() {
     window.addEventListener("pointerup", onUp, true);
   };
 
+  /**
+   * The selection moved together, dragged by one of its atoms: by as much as
+   * the pointer goes, off the grid, as one undo step.
+   */
+  const selectionMoveGesture = (pid: number | null) => {
+    cand.current.started = true;
+    suppressDoubleClick?.(600);
+    const from = model.atoms
+      .filter((a) => sel.atoms.has(a.id))
+      .map((a) => ({ id: a.id, x: a.x, y: a.y }));
+    const p0 = toWorld(cand.current.sx, cand.current.sy);
+    const gesture = `drag-${performance.now()}`;
+    let frame: number | null = null;
+    let last = p0;
+    const apply = () => {
+      frame = null;
+      const dx = last.x - p0.x;
+      const dy = last.y - p0.y;
+      moveAtoms(
+        from.map((a) => ({ id: a.id, x: a.x + dx, y: a.y + dy })),
+        gesture,
+      );
+    };
+    const onMove = (ev: PointerEvent) => {
+      last = toWorld(ev.clientX, ev.clientY);
+      // (one move a frame: every move lays the drawing out again)
+      if (frame == null) frame = window.requestAnimationFrame(apply);
+    };
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp, true);
+      if (frame != null) {
+        window.cancelAnimationFrame(frame);
+        last = toWorld(ev.clientX, ev.clientY);
+        apply();
+      }
+      resetCand();
+      endedByInteractive.current = true;
+      suppressDoubleClick?.(480);
+      endPanHold(ev.pointerId ?? pid);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, true);
+  };
+
   const countCap = Math.max(model.atoms.length, 1);
   const remountKey = model.atoms.length;
 
@@ -302,6 +352,17 @@ export function Atoms2D() {
         const cy = (e as any).nativeEvent?.clientY ?? (e as any).clientY;
         const pid =
           (e as any).nativeEvent?.pointerId ?? (e as any).pointerId ?? null;
+        // Ctrl (⌘) and a click adds the atom to the selection or takes it
+        // out; Shift and a click, everything along the bonds to it.
+        const native = (e as any).nativeEvent as PointerEvent | undefined;
+        if (native && (addsToSelection(native) || native.shiftKey)) {
+          (e as any).stopPropagation?.();
+          cancelPendingEdit();
+          lastDown.current = { t: 0, id: null, x: 0, y: 0 };
+          if (native.shiftKey) selectPathTo(a.id);
+          else toggleAtomSel(a.id);
+          return;
+        }
         const DBL_MS = DOUBLE_CLICK_MS;
         const second =
           lastDown.current.id === a.id && now - lastDown.current.t <= DBL_MS;
@@ -344,7 +405,9 @@ export function Atoms2D() {
           return;
         }
         lastDown.current = { t: now, id: a.id, x: cx, y: cy };
-        // A drag moves the atom; a click edits its label.
+        // A drag moves the atom - or, the atom selected with others, the
+        // selection; a click edits its label.
+        const withSelection = sel.atoms.has(a.id) && sel.atoms.size > 1;
         const onFirstMove = (ev: PointerEvent) => {
           if (!cand.current.active || cand.current.started) return;
           if (Math.hypot(ev.clientX - cx, ev.clientY - cy) < MOV_PX) return;
@@ -353,7 +416,8 @@ export function Atoms2D() {
           cancelPendingEdit();
           // a drag is not the first click of a double-click
           lastDown.current = { t: 0, id: null, x: 0, y: 0 };
-          moveGesture(idx, ev, pid);
+          if (withSelection) selectionMoveGesture(pid);
+          else moveGesture(idx, ev, pid);
         };
         const onEarlyUp = (ev: PointerEvent) => {
           window.removeEventListener("pointermove", onFirstMove);

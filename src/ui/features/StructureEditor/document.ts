@@ -147,6 +147,34 @@ export function moveAtom(
 }
 
 /**
+ * Atoms put where they are to go, together - a selection moved, turned or
+ * turned over - and, where given, a depth changed and a bond's wedge made
+ * hashes or the other way round; everything else about them kept.
+ */
+export function placeAtoms(
+  doc: StructureDocument,
+  moves: readonly { id: number; x: number; y: number; z?: number }[],
+  stereo: readonly Pick<Bond, "id" | "stereo">[] = [],
+): StructureDocument {
+  const to = new Map(moves.map((m) => [m.id, m]));
+  let changed = false;
+  const atoms = doc.model.atoms.map((a) => {
+    const m = to.get(a.id);
+    if (!m || (m.x === a.x && m.y === a.y && (m.z === undefined || m.z === a.z))) return a;
+    changed = true;
+    return { ...a, x: m.x, y: m.y, ...(m.z !== undefined ? { z: m.z } : {}) };
+  });
+  const flip = new Map(stereo.map((b) => [b.id, b.stereo]));
+  const bonds = doc.model.bonds.map((b) => {
+    const s = flip.get(b.id);
+    if (s === undefined || s === b.stereo) return b;
+    changed = true;
+    return { ...b, stereo: s };
+  });
+  return changed ? { ...doc, model: { atoms, bonds } } : doc;
+}
+
+/**
  * A stroke drawn out of atom `baseId`, in one edit: a bond to each of its
  * nodes in turn - a new carbon where a node has no atom, or the atom already
  * there (`atomId`), or one this stroke added before (`pathIndex`). A bond

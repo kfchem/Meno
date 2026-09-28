@@ -29,6 +29,44 @@ function isNativeEditingTarget(target: unknown): boolean {
   return tag === "INPUT" || tag === "SELECT";
 }
 
+/** A Mac's, where ⌘ does what Ctrl does elsewhere, and a Ctrl-click is a right-click. */
+export const IS_MAC =
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+/**
+ * Ctrl (⌘ on a Mac) with a click or a drag adds to the selection, or takes
+ * out of it.
+ */
+export function addsToSelection(
+  event: Pick<KeyLike, "ctrlKey" | "metaKey">,
+  mac = IS_MAC,
+): boolean {
+  return (mac ? event.metaKey : event.ctrlKey) === true;
+}
+
+/** Ctrl/Cmd+A selects everything - but not while a text field has the keys. */
+export function isSelectAllKey(event: KeyLike): boolean {
+  return (
+    (event.ctrlKey || event.metaKey) === true &&
+    !event.shiftKey &&
+    (event.key || "").toLowerCase() === "a" &&
+    !isTextTarget(event.target)
+  );
+}
+
+/** Escape lets the selection go - but not while a text field has the keys. */
+export function isDeselectKey(event: KeyLike): boolean {
+  return event.key === "Escape" && !isTextTarget(event.target);
+}
+
+function isTextTarget(target: unknown): boolean {
+  return (
+    isNativeEditingTarget(target) ||
+    (target as { tagName?: string } | null)?.tagName?.toUpperCase() === "TEXTAREA"
+  );
+}
+
 /** Ctrl/Cmd+S saves; Ctrl/Cmd+Shift+S saves as. */
 export function saveIntent(event: KeyLike): "save" | "saveAs" | null {
   if (!(event.ctrlKey || event.metaKey)) return null;

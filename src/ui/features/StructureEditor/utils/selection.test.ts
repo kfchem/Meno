@@ -1,0 +1,75 @@
+import { describe, expect, it } from "vitest";
+import type { Model } from "../store/types";
+import { inBox, inLasso, insidePolygon, middleOf, pathBetween, turned, turnedOver } from "./selection";
+
+const atom = (id: number, x: number, y: number) => ({ id, x, y, r: 0.9, el: "C" });
+
+// a chain 1-2-3-4 along x, a wedge on 2-3, and apart from it an ethane 5-6
+const model: Model = {
+  atoms: [atom(1, 0, 0), atom(2, 1, 0), atom(3, 2, 0), atom(4, 3, 0), atom(5, 10, 0), atom(6, 11, 0)],
+  bonds: [
+    { id: 11, a: 1, b: 2, order: 1 },
+    { id: 12, a: 2, b: 3, order: 1, stereo: "up" },
+    { id: 13, a: 3, b: 4, order: 1 },
+    { id: 14, a: 5, b: 6, order: 1 },
+  ],
+};
+
+describe("inBox and inLasso", () => {
+  it("take the atoms inside, and only the bonds between two of them", () => {
+    const box = inBox(model, { x: 0.5, y: -1 }, { x: 2.5, y: 1 });
+    expect([...box.atoms]).toEqual([2, 3]);
+    expect([...box.bonds]).toEqual([12]);
+    // drawn from either corner
+    expect([...inBox(model, { x: 2.5, y: 1 }, { x: 0.5, y: -1 }).atoms]).toEqual([2, 3]);
+  });
+
+  it("take what a lasso encloses, whatever its shape", () => {
+    // a triangle round atoms 1 and 2, not 3
+    const lasso = inLasso(model, [
+      { x: -1, y: -1 },
+      { x: 1.6, y: -1 },
+      { x: -1, y: 2 },
+    ]);
+    expect([...lasso.atoms].sort()).toEqual([1]);
+    const wide = inLasso(model, [
+      { x: -1, y: -1 },
+      { x: 2.5, y: -1 },
+      { x: 2.5, y: 1 },
+      { x: -1, y: 1 },
+    ]);
+    expect([...wide.atoms].sort()).toEqual([1, 2, 3]);
+    expect([...wide.bonds].sort()).toEqual([11, 12]);
+    expect(insidePolygon({ x: 0, y: 0 }, [{ x: 1, y: 1 }])).toBe(false);
+  });
+});
+
+describe("pathBetween", () => {
+  it("takes the atoms and bonds along the bonds from one atom to another", () => {
+    const path = pathBetween(model, 1, 4)!;
+    expect([...path.atoms].sort()).toEqual([1, 2, 3, 4]);
+    expect([...path.bonds].sort()).toEqual([11, 12, 13]);
+  });
+
+  it("finds none between atoms no bonds join", () => {
+    expect(pathBetween(model, 1, 5)).toBeNull();
+  });
+});
+
+describe("turned and turnedOver", () => {
+  it("turns the selection about its middle", () => {
+    const mid = middleOf(model, new Set([1, 2, 3]))!;
+    expect(mid).toEqual({ x: 1, y: 0 });
+    const t = turned(model.atoms.slice(0, 3), mid, Math.PI / 2);
+    expect(t[0].x).toBeCloseTo(1);
+    expect(t[0].y).toBeCloseTo(-1);
+  });
+
+  it("turns it over: mirrored, its wedges made hashes, so the molecule stays the one it was", () => {
+    const over = turnedOver(model, new Set([1, 2, 3, 4]), "vertical");
+    expect(over.atoms.map((a) => a.x)).toEqual([3, 2, 1, 0]);
+    expect(over.bonds).toEqual([{ id: 12, stereo: "down" }]);
+    // a bond reaching out of the selection keeps its wedge
+    expect(turnedOver(model, new Set([2]), "horizontal").bonds).toEqual([]);
+  });
+});

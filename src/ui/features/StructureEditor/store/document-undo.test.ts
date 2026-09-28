@@ -181,6 +181,62 @@ describe("editor store over a document", () => {
     expect(state().model.atoms[0].el).toBe("C");
   });
 
+  it("selects by atom, by bond, along the bonds, and a whole structure; deleting it is one step", () => {
+    const { doc, state } = editor();
+    // a chain of four and, apart from it, an ethane
+    const [a, b, c, d] = [0, 1, 2, 3].map((i) => state().addAtom(i * 1.5, 0, "C"));
+    state().connectAtoms(a, b, 1);
+    state().connectAtoms(b, c, 1);
+    state().connectAtoms(c, d, 1);
+    const e = state().addAtom(10, 0, "C");
+    const f = state().addAtom(11.5, 0, "C");
+    state().connectAtoms(e, f, 1);
+
+    state().toggleAtomSel(a);
+    state().selectPathTo(d);
+    expect([...state().sel.atoms].sort()).toEqual([a, b, c, d].sort());
+    expect(state().sel.bonds.size).toBe(3);
+    state().toggleAtomSel(d);
+    expect(state().sel.atoms.has(d)).toBe(false);
+    expect(state().sel.bonds.size).toBe(2);
+    state().selectAll();
+    expect(state().sel.atoms.size).toBe(6);
+    expect(state().sel.bonds.size).toBe(4);
+    state().clearSel();
+    // a bond comes with its atoms, and goes on its own
+    const ef = state().model.bonds.find((x) => x.a === e || x.b === e)!.id;
+    state().toggleBondSel(ef);
+    expect([...state().sel.atoms].sort()).toEqual([e, f].sort());
+    state().toggleBondSel(ef);
+    expect(state().sel.bonds.size).toBe(0);
+    state().clearSel();
+    state().selectStructure(f);
+    expect([...state().sel.atoms].sort()).toEqual([e, f].sort());
+
+    const before = doc.history().undoDepth;
+    state().deleteSelection();
+    expect(state().model.atoms.map((x) => x.id)).toEqual([a, b, c, d]);
+    expect(state().sel.atoms.size).toBe(0);
+    expect(doc.history().undoDepth).toBe(before + 1);
+  });
+
+  it("moves a selection's atoms as one step, and turns it over keeping the molecule", () => {
+    const { doc, state } = editor();
+    const a = state().addAtom(0, 0, "C");
+    const b = state().addAtom(1.5, 0, "C");
+    state().connectAtoms(a, b, 1);
+    const bond = state().model.bonds[0].id;
+    state().setBondStereo(bond, "up");
+    const before = doc.history().undoDepth;
+    state().moveAtoms([{ id: a, x: 1, y: 1 }, { id: b, x: 2.5, y: 1 }], "drag-1");
+    state().moveAtoms([{ id: a, x: 2, y: 2 }, { id: b, x: 3.5, y: 2 }], "drag-1");
+    expect(doc.history().undoDepth).toBe(before + 1);
+    state().setSel({ atoms: new Set([a, b]), bonds: new Set([bond]) });
+    state().turnSelectionOver("vertical");
+    expect(state().model.atoms.map((x) => x.x)).toEqual([3.5, 2]);
+    expect(state().model.bonds[0].stereo).toBe("down");
+  });
+
   it("reads a charge, and an isotope, from a label typed", () => {
     const { doc, state } = editor();
     const id = state().addAtom(0, 0, "C");

@@ -5,8 +5,14 @@ import { useEffect, useRef } from "react";
  * the canvas is, so that the menu stays inside it.
  */
 export type MenuTarget = {
-  kind: "atom" | "bond";
-  id: number;
+  /** The atom or bond right-clicked; null, when it was nothing. */
+  kind: "atom" | "bond" | null;
+  id: number | null;
+  /**
+   * Whether there is a selection, and whether the menu is its: right-clicked
+   * on something selected, or on nothing.
+   */
+  selection: "none" | "elsewhere" | "here";
   x: number;
   y: number;
   within: { width: number; height: number };
@@ -21,22 +27,30 @@ const WIDTH = 240;
 const ITEM = 32;
 
 /**
- * What can be done to the atom or bond under the pointer, at the pointer:
- * the mouse alone reaches everything a key does. Closes on Escape, on a
- * press anywhere else, and on a turn of the wheel.
+ * What can be done to the atom or bond under the pointer - or to the
+ * selection - at the pointer: the mouse alone reaches everything a key
+ * does. Closes on Escape, on a press anywhere else, and on a turn of the
+ * wheel.
  */
 export default function PartMenu({
   target,
   onDelete,
   onCleanUp,
+  onSelectStructure,
+  onTurnOver,
   onCharge,
   onRadical,
   radical,
   onClose,
 }: {
   target: MenuTarget;
+  /** The part deleted, or the selection when the menu is its. */
   onDelete: () => void;
+  /** The part's structure cleaned up, or the selection's structures. */
   onCleanUp: () => void;
+  onSelectStructure: () => void;
+  /** The selection turned over, left to right or top to bottom. */
+  onTurnOver: (axis: "vertical" | "horizontal") => void;
   /** An atom's charge one up or one down. */
   onCharge: (step: 1 | -1) => void;
   /** An atom's unpaired electron given or taken away; `radical`, whether it has one. */
@@ -69,32 +83,45 @@ export default function PartMenu({
     };
   }, [onClose]);
 
-  const items = [
-    {
-      name: target.kind === "atom" ? "Delete atom" : "Delete bond",
-      keys: MAC ? "⌫" : "Del",
-      run: onDelete,
-    },
-    // an atom's charge and radical: the + and - keys do the first
-    ...(target.kind === "atom"
+  const deleteKey = MAC ? "⌫" : "Del";
+  const cleanUpKey = MAC ? "⇧⌘K" : "Ctrl+Shift+K";
+  // (with a selection elsewhere, the keys are the selection's)
+  const keys = target.selection === "none";
+  const items =
+    target.selection === "here"
       ? [
-          { name: "Charge one up", keys: "+", run: () => onCharge(1) },
-          { name: "Charge one down", keys: "\u2212", run: () => onCharge(-1) },
-          { name: radical ? "No unpaired electron" : "Unpaired electron", keys: "", run: onRadical },
+          { name: "Delete selection", keys: deleteKey, run: onDelete },
+          { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
+          { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
+          { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
         ]
-      : []),
-    {
-      name: "Clean up this structure",
-      keys: MAC ? "⇧⌘K" : "Ctrl+Shift+K",
-      run: onCleanUp,
-    },
-  ];
+      : [
+          {
+            name: target.kind === "atom" ? "Delete atom" : "Delete bond",
+            keys: keys ? deleteKey : "",
+            run: onDelete,
+          },
+          // an atom's charge and radical: the + and - keys do the first
+          ...(target.kind === "atom"
+            ? [
+                { name: "Charge one up", keys: "+", run: () => onCharge(1) },
+                { name: "Charge one down", keys: "\u2212", run: () => onCharge(-1) },
+                { name: radical ? "No unpaired electron" : "Unpaired electron", keys: "", run: onRadical },
+              ]
+            : []),
+          { name: "Select this structure", keys: "", run: onSelectStructure },
+          {
+            name: "Clean up this structure",
+            keys: keys ? cleanUpKey : "",
+            run: onCleanUp,
+          },
+        ];
   const height = items.length * ITEM + 12;
   return (
     <div
       ref={ref}
       role="menu"
-      aria-label={target.kind === "atom" ? "Atom" : "Bond"}
+      aria-label={target.selection === "here" ? "Selection" : target.kind === "atom" ? "Atom" : "Bond"}
       className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
       style={{
         left: Math.max(0, Math.min(target.x, target.within.width - WIDTH - 8)),
