@@ -154,7 +154,19 @@ lie level either way round - the drawing takes the one that reads best
   left, estradiol's aromatic A ring, griseofulvin's, reserpine's indole at
   the upper left of the rings that follow it. The heteroatoms of a ring
   fused to it go below: quinoline's N, indole's NH, coumarin's O at the
-  bottom.
+  bottom, and so morphine's ether O and strychnine's indoline N, as IUPAC
+  draws morphinan and strychnidine. Which way up a ring system is comes
+  before how the rest of its rings lie.
+- **Seen from the face its angular groups are on.** A ring system has two
+  faces, and a drawing from one is the mirror image of a drawing from the
+  other, every wedge a hash. It is drawn from the face its angular groups
+  are on - the one bond out of the rings at an atom with three ring bonds:
+  a steroid's methyls, a terpenoid's, taxol's, artemisinin's - so that
+  they stand in front of the page on wedges, as a steroid's do: the way
+  IUPAC orients a steroid makes its beta face the one in front, and
+  natural steroids and terpenoids have their angular methyls beta. (A cage
+  shows the face its own drawing gives it, section 2; a macrocycle lies as
+  its own conventions have it.)
 - **A ring system to the left of the chains that leave it.** The ring
   system is what the molecule is; its chains are read after it.
 - **The first carbon of a chain on the right.** The carbon a chain is
@@ -194,7 +206,9 @@ When parts clash, in this order:
 
 1. **Choose among equal placements**: which side of a chain a branch goes,
    which way a zigzag turns, which way round a ring system is hung - each
-   is free, and the one without the clash is taken.
+   is free, and the one without the clash is taken. A branch turned over
+   is tried with what hangs on it turned back as well: tryptophan's side
+   chain turned down, its NH2 below, its carboxyl's C=O still up.
 2. **Turn** a substituent off its ideal angle, as little as will do.
 3. **Stretch** a bond, only if the clash is still there.
 

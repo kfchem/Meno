@@ -74,8 +74,9 @@ before, not a record of how particular molecules are drawn.
 | tall | height over width, past square |
 | macrocycle tall | a ring of twelve or more drawn taller than wide |
 | folded chains, splayed chains | long chains folded up rather than drawn out, and not running parallel as lipids' do |
-| reading order | an acid at the end of a chain on the right; a ring system to the left of the chains out of it; the rings hung on a macrocycle to its right and below it |
-| ring order | fused rings as IUPAC orients them for numbering - as many in a horizontal row as can be, the rest above and to the right; and a ring system's benzene rings at its left |
+| reading order | an acid at the end of a chain on the right; an amino acid's NH2 below its alpha carbon; a ring system to the left of the chains out of it; the rings hung on a macrocycle to its right and below it |
+| ring order | fused rings as IUPAC orients them for numbering - as many in a horizontal row as can be, the rest above and to the right; and a ring system's benzene rings at its left, the heteroatoms of a ring fused to one below it, which outweighs how the rest lie |
+| face | the face of a ring system the drawing shows: its angular groups - the one bond out of the rings at an atom with three ring bonds, a steroid's methyls - in front of the page, on wedges, as a steroid's beta face is; how many more are behind it than in front |
 
 A cage Meno draws in perspective (adamantane, norbornane, quinuclidine) is
 measured as the drawing of a solid: among its own atoms, its foreshortened

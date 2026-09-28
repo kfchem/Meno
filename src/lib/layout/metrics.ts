@@ -41,6 +41,13 @@ export type Geometry = {
    * drawn with the one behind broken, and their crossing is no fault.
    */
   depth?: readonly (number | null)[];
+  /**
+   * Each stereocentre's configuration, where known, by atom: its neighbours
+   * in order (-1 for an implicit H) and the sign of the volume the first
+   * three span, seen from the centre - the face the drawing shows is told
+   * by it.
+   */
+  tetra?: readonly ({ neighbours: readonly number[]; volume: number } | null | undefined)[];
 };
 
 export type LayoutMetrics = {
@@ -112,9 +119,10 @@ export type LayoutMetrics = {
   macroAspect: number;
   /**
    * Breaches of the order a drawing is read in, left to right and top to
-   * bottom: an acid at the end of a chain on the right, a ring system to
-   * the left of the chains out of it, the rings hung on a macrocycle to its
-   * right and below it (half a breach each way it is not).
+   * bottom: an acid at the end of a chain on the right, an amino acid's
+   * NH2 below its alpha carbon (half a breach), a ring system to the left
+   * of the chains out of it, the rings hung on a macrocycle to its right
+   * and below it (half a breach each way it is not).
    */
   readingOrder: number;
   /**
@@ -123,10 +131,18 @@ export type LayoutMetrics = {
    * then as many of the rest as can be above and to the right of it, and as
    * few below and to the left. Rings short of each, counted; a ring
    * system with its benzene rings to the right of its other rings, two;
-   * and a quarter for each heteroatom of a ring fused to the benzene ring
-   * that is above the system's middle.
+   * and one and a half for each heteroatom of a ring fused to the benzene
+   * ring that is above the middle of the two - which way up it is
+   * outweighs how the rest of its rings lie.
    */
   ringOrder: number;
+  /**
+   * Which face of a ring system the drawing shows: its angular groups - the
+   * one bond out of the rings at an atom with three ring bonds, a steroid's
+   * methyls, taxol's - in front of the page, on wedges, as a steroid's
+   * beta face is. How many more are behind it than in front.
+   */
+  face: number;
   /** All of it in one number, lower better, for putting layouts in order. */
   score: number;
 };
@@ -159,6 +175,7 @@ export const SCORE_WEIGHTS = {
   macroAspect: 5,
   readingOrder: 3,
   ringOrder: 2,
+  face: 3,
 } as const;
 
 /**
@@ -216,6 +233,13 @@ export function ringIrregularity(
     best = Math.min(best, Math.sqrt(sum / k) / bond);
   }
   return best;
+}
+
+/** The volume three vectors span. */
+function volume(a: readonly number[], b: readonly number[], c: readonly number[]): number {
+  return (
+    a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])
+  );
 }
 
 function segmentsCross(
@@ -803,6 +827,22 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       else if (x[nitrogen] > x[carbonyl] + 0.25 * L) backward++;
     }
     readingOrder += Math.max(0, backward - forward);
+    // and an amino acid's NH2, at the start of its backbone, below the
+    // alpha carbon: the backbone comes up from it to the carboxyl, the side
+    // chain branching off to the left
+    for (let a = 0; a < n; a++) {
+      if (el[a] !== "N" || inRing.has(a) || neighbours[a].length !== 1) continue;
+      if ((g.hydrogens?.[a] ?? 0) === 0) continue;
+      const alpha = neighbours[a][0];
+      if (el[alpha] !== "C" || inRing.has(alpha)) continue;
+      const acid = neighbours[alpha].some(
+        (b) =>
+          el[b] === "C" &&
+          neighbours[b].some((c) => el[c] === "O" && orderAt(b, c) === 2) &&
+          neighbours[b].some((c) => (el[c] === "O" || el[c] === "N") && orderAt(b, c) === 1),
+      );
+      if (acid && y[a] > y[alpha] - 0.25 * L) readingOrder += 0.5;
+    }
     // a sugar - a ring of five or six with one oxygen in it, and oxygens on
     // its carbons - drawn as its Haworth projection seen from above: the
     // ring oxygen at the back, which is the top
@@ -810,6 +850,8 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       if (r.length !== 5 && r.length !== 6) continue;
       const ox = r.filter((a) => el[a] === "O");
       if (ox.length !== 1 || r.some((a) => el[a] !== "C" && el[a] !== "O")) continue;
+      // (saturated, as a sugar's ring is: not a lactone, as artemisinin's is)
+      if (r.some((a) => neighbours[a].some((b) => orderAt(a, b) !== 1))) continue;
       const hydroxylated = r.filter(
         (a) => el[a] === "C" && neighbours[a].some((b) => !r.includes(b) && el[b] === "O"),
       ).length;
@@ -972,13 +1014,45 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     const aromatic = own.filter(benzene);
     const rest = own.filter((r) => !benzene(r));
     if (aromatic.length && rest.length && midX(aromatic) > midX(rest) + 0.25 * L) ringOrder += 2;
-    // the heteroatoms of a ring fused to the benzene ring below the middle:
-    // quinoline's N, indole's NH, coumarin's O at the bottom
-    const cy = [...sys].reduce((sum, a) => sum + y[a], 0) / sys.size;
-    const fusedOn = rest.filter((r) => aromatic.some((b) => b.filter((a) => r.includes(a)).length === 2));
-    const hetero = new Set(fusedOn.flat().filter((a) => (g.elements?.[a] ?? "C") !== "C"));
-    for (const a of hetero) if (y[a] > cy + 0.1 * L) ringOrder += 0.5;
+    // the heteroatoms of a ring fused to the benzene ring below the middle
+    // of the two: quinoline's N, indole's NH, coumarin's O at the bottom,
+    // morphine's ether O and strychnine's indoline N - which way up comes
+    // before how the rest of its rings lie
+    const hetero = new Map<number, number>();
+    for (const r of rest) {
+      const b = aromatic.find((q) => q.filter((a) => r.includes(a)).length === 2);
+      if (!b) continue;
+      const both = [...new Set([...r, ...b])];
+      const cy = both.reduce((sum, a) => sum + y[a], 0) / both.length;
+      for (const a of r) if ((g.elements?.[a] ?? "C") !== "C") hetero.set(a, Math.max(hetero.get(a) ?? -Infinity, cy));
+    }
+    for (const [a, cy] of hetero) if (y[a] > cy + 0.1 * L) ringOrder += 1.5;
   }
+
+  // the face: an angular group - the one bond out of the rings at an atom
+  // with three ring bonds - in front of the page where it can be, as a
+  // steroid's methyls are (its beta face). Seen from the other face, the
+  // same skeleton is its mirror image on the page, every wedge hashes.
+  // (A cage drawn in perspective shows its own face, and a macrocycle
+  // lies as its own conventions have it; a bond is in front of the page as
+  // a wedge draws it, ring bonds lying in it.)
+  const inMacrocycle = new Set(rings.filter((r) => r.length > 8).flat());
+  let toward = 0;
+  let away = 0;
+  for (let c = 0; c < n && g.tetra; c++) {
+    const t = g.tetra[c];
+    if (!t || solid(c) || inMacrocycle.has(c) || neighbours[c].length !== 4) continue;
+    const out = neighbours[c].filter((b) => !ringBonds.has(pair(c, b)));
+    if (out.length !== 1 || g.elements?.[out[0]] === "H" || t.neighbours.includes(-1)) continue;
+    const v = t.neighbours.map((b) => [x[b] - x[c], y[b] - y[c], b === out[0] ? 1 : 0]);
+    // (with the first three in the page, the fourth says it: it stands
+    // opposite them)
+    const d = out[0] === t.neighbours[3] ? -volume(v[0], v[1], v[3]) : volume(v[0], v[1], v[2]);
+    if (Math.abs(d) < 1e-9) continue;
+    if (Math.sign(d) === Math.sign(t.volume)) toward++;
+    else away++;
+  }
+  const face = Math.max(0, away - toward);
 
   let wrongDoubles = 0;
   for (const { bond, refs, cis } of g.cisTrans ?? []) {
@@ -1063,6 +1137,7 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     macroAspect,
     readingOrder,
     ringOrder,
+    face,
   };
   const score = Object.values(scoreParts(measures)).reduce((sum, v) => sum + v, 0);
   return { ...measures, score };

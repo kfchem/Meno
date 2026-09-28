@@ -142,9 +142,15 @@ export function layout2D(input: LayoutInput): Layout2D {
     // every frame tried the other way where it helps, for a small piece;
     // the most promising few for a large one
     const worth = piece.length <= 80 ? tried.length : 4;
-    for (const cand of tried.slice(0, worth)) {
-      const improved = improve(mol, cand.pos, cand.score, flipsHere, sides, score);
-      if (improved.score < best.score - 1e-9) best = { ...improved, mirrored: cand.mirrored };
+    const improved = tried
+      .slice(0, worth)
+      .map((cand) => ({ ...improve(mol, cand.pos, cand.score, flipsHere, sides, score), mirrored: cand.mirrored }))
+      .sort((p, q) => p.score - q.score);
+    // and the best few set right within their small sides - every one, for
+    // a small piece
+    for (const cand of improved.slice(0, piece.length <= 40 ? improved.length : 3)) {
+      const deeper = { ...improve(mol, cand.pos, cand.score, flipsHere, sides, score, true), mirrored: cand.mirrored };
+      if (deeper.score < best.score - 1e-9) best = deeper;
     }
     best = { ...rejoin(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
     best = { ...untangle(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
@@ -255,7 +261,13 @@ function layoutSystem(
   return { pos: flat };
 }
 
-/** Tries each single bond the other way round, keeping what scores better, until nothing does. */
+/**
+ * Tries each single bond the other way round, keeping what scores better,
+ * until nothing does. Then, `deep`, each small side turned over is tried
+ * with each bond within it turned back as well: what hangs on it - a
+ * carboxyl's C=O, up - set right again, where turning the side alone would
+ * put it wrong; and if that helps, single bonds again.
+ */
 export function improve(
   mol: Molecule,
   start: Grown,
@@ -263,25 +275,58 @@ export function improve(
   flips: [number, number][],
   sides: Map<string, number>,
   score: (pos: Grown) => number,
+  deep = false,
 ): { pos: Grown; score: number } {
   let pos = start;
   let current = startScore;
-  for (let pass = 0; pass < 4; pass++) {
-    let better = false;
+  const singly = () => {
+    for (let pass = 0; pass < 4; pass++) {
+      let better = false;
+      for (const [a, b] of flips) {
+        const trial = new Map(pos);
+        flip(mol, trial, a, b, sides);
+        const s = score(trial);
+        if (s < current - 1e-6) {
+          pos = trial;
+          current = s;
+          better = true;
+        }
+      }
+      if (!better) break;
+    }
+  };
+  // a side turned over and a bond within it turned back: the best pair
+  const doubly = () => {
+    let found: Grown | null = null;
     for (const [a, b] of flips) {
+      const beyondB = sides.get(`${a}>${b}`) ?? 0;
+      const beyondA = sides.get(`${b}>${a}`) ?? 0;
+      if (Math.min(beyondA, beyondB) > SMALL_SIDE) continue;
+      const [from, to] = beyondB <= beyondA ? [a, b] : [b, a];
+      const moved = new Set(sideAtoms(mol, from, to));
       const trial = new Map(pos);
       flip(mol, trial, a, b, sides);
-      const s = score(trial);
-      if (s < current - 1e-6) {
-        pos = trial;
-        current = s;
-        better = true;
+      for (const [c, d] of flips) {
+        if ((c === a && d === b) || !moved.has(c) || !moved.has(d)) continue;
+        const again = new Map(trial);
+        flip(mol, again, c, d, sides);
+        const s = score(again);
+        if (s < current - 1e-6) {
+          current = s;
+          found = again;
+        }
       }
     }
-    if (!better) break;
-  }
+    if (found) pos = found;
+    return found != null;
+  };
+  singly();
+  for (let round = 0; deep && round < 2 && doubly(); round++) singly();
   return { pos, score: current };
 }
+
+/** The most atoms a side turned over may have and still be set right within. */
+const SMALL_SIDE = 10;
 
 /**
  * A piece with no ring that can lie square - its rings all five-membered,
@@ -539,6 +584,10 @@ export function scorer(
   const labelled = piece.map((a) => mol.el[a] !== "C" || mol.charge[a] !== 0);
   const perspective = piece.map((a) => solid[a] ?? false);
   const depths = piece.map((a) => depth[a] ?? null);
+  const tetra = piece.map((a) => {
+    const t = mol.tetra.get(a);
+    return t && { neighbours: t.neighbours.map((b) => (b < 0 ? -1 : index.get(b)!)), volume: t.volume };
+  });
   return (pos) =>
     layoutMetrics({
       x: piece.map((a) => pos.get(a)!.x),
@@ -552,5 +601,6 @@ export function scorer(
       cisTrans,
       perspective,
       depth: depths,
+      tetra,
     }).score;
 }

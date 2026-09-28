@@ -119,6 +119,7 @@ function measure(g: Graph, laid: Laid, base: Baseline): LayoutMetrics {
     ),
     perspective: laid.solid,
     depth: laid.depth,
+    tetra: g.atoms.map((_, i) => base.graph.atoms[i]?.tetra),
   });
 }
 
@@ -148,6 +149,7 @@ const partNames: Record<keyof ReturnType<typeof scoreParts>, string> = {
   macroAspect: "macrocycle tall",
   readingOrder: "reading order",
   ringOrder: "ring order",
+  face: "face",
 };
 
 const fmt = (m: LayoutMetrics) => {
@@ -162,7 +164,7 @@ const fmt = (m: LayoutMetrics) => {
     `bonds ±${(m.bondSpread * 100).toFixed(1)}% · angles ${m.angleError.toFixed(1)}° · rings ${m.ringError.toFixed(3)} · macrocycle ${m.macroAngleError.toFixed(1)}°`,
     `tilt ${m.tilt.toFixed(1)}° · askew ${m.gridError.toFixed(1)}° · substituents ${m.substituentError.toFixed(1)}° · wedges on rings ${m.ringWedges}`,
     `chains folded ${m.chainFold.toFixed(2)}, splayed ${m.chainSplay.toFixed(0)}°, off level ${m.chainTilt.toFixed(0)}° · long axis ${m.axisTilt.toFixed(0)}°`,
-    `height/width ${m.aspect.toFixed(2)}, macrocycle ${m.macroAspect.toFixed(2)} · reading order ${m.readingOrder} · ring order ${m.ringOrder}`,
+    `height/width ${m.aspect.toFixed(2)}, macrocycle ${m.macroAspect.toFixed(2)} · reading order ${m.readingOrder} · ring order ${m.ringOrder} · face ${m.face}`,
   ].join("<br>");
 };
 

@@ -361,6 +361,85 @@ describe("layout2D", () => {
     expect(m.ringError).toBeLessThan(0.05);
   });
 
+  it("draws a ring system from the face its angular groups are on, whichever hand it is", () => {
+    // artemisinin: its angular methyl (18) on the ketal carbon (14) in
+    // front of the page, on a wedge, as a steroid's are
+    const els = "CCCCCCCOOCCCCCCOOOCC";
+    const bonds: [number, number, number?][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7, 2], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12],
+      [12, 13], [13, 14], [14, 15], [14, 16], [16, 17], [14, 18], [5, 19], [11, 1], [10, 4], [15, 9], [17, 10],
+    ];
+    const centres: [number, number[], 1 | -1][] = [
+      [1, [0, 2, 11, -1], 1], [4, [3, 5, 10, -1], -1], [5, [4, 6, 19, -1], 1], [9, [8, 10, 15, -1], -1],
+      [10, [4, 9, 11, 17], -1], [11, [1, 10, 12, -1], -1], [14, [13, 15, 16, 18], 1],
+    ];
+    for (const hand of [1, -1] as const) {
+      const skeleton = carbons(els.length, bonds);
+      const input: LayoutInput = {
+        ...skeleton,
+        atoms: skeleton.atoms.map((_, i) => {
+          const c = centres.find(([a]) => a === i);
+          return { el: els[i], ...(c && { tetra: { neighbours: c[1], volume: (c[2] * hand) as 1 | -1 } }) };
+        }),
+      };
+      const { wedges } = layout2D(input);
+      expect(wedges.find((w) => w.from === 14 && w.to === 18)?.stereo).toBe("up");
+    }
+  });
+
+  it("puts the heteroatom of a ring fused to a benzene below it, before how the other rings lie", () => {
+    // strychnine: its benzene ring (19-24) on the left, the indoline N (12)
+    // below it, as IUPAC draws strychnidine
+    const els = "CCNCCCCOCCCONCCCCCCCCCCCC";
+    const bonds: [number, number, number?][] = [
+      [0, 1], [1, 2], [2, 3], [3, 4], [4, 5, 2], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11, 2], [10, 12],
+      [12, 13], [13, 14], [14, 15], [15, 16], [16, 17], [17, 18], [18, 19], [19, 20, 2], [20, 21], [21, 22, 2],
+      [22, 23], [23, 24, 2], [18, 0], [17, 2], [15, 4], [14, 8], [24, 12], [18, 13], [24, 19],
+    ];
+    const centres: [number, number[], 1 | -1][] = [
+      [8, [7, 9, 14, -1], -1], [13, [12, 14, 18, -1], -1], [14, [8, 13, 15, -1], -1], [15, [4, 14, 16, -1], -1],
+      [17, [2, 16, 18, -1], -1], [18, [0, 13, 17, 19], 1],
+    ];
+    const skeleton = carbons(els.length, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((_, i) => {
+        const c = centres.find(([a]) => a === i);
+        return { el: els[i], ...(c && { tetra: { neighbours: c[1], volume: c[2] } }) };
+      }),
+    };
+    const { x, y } = layout2D(input);
+    const mid = (atoms: number[], v: number[]) => atoms.reduce((s, a) => s + v[a], 0) / atoms.length;
+    const benzene = [19, 20, 21, 22, 23, 24];
+    const both = [...benzene, 12, 13, 18];
+    expect(y[12]).toBeLessThan(mid(both, y) - 0.1);
+    expect(mid(benzene, x)).toBeLessThan(mid([...Array(els.length).keys()], x));
+  });
+
+  it("draws tryptophan as an amino acid, its indole N below", () => {
+    // the NH2 (14) below the alpha carbon (10), the COOH (11) on its right
+    // with its C=O (12) up, and the indole's N (8) below the middle of it
+    const els = "CCCCCCCCNCCCOON";
+    const skeleton = carbons(els.length, [
+      [0, 1, 2], [1, 2], [2, 3, 2], [3, 4], [4, 5, 2], [4, 6], [6, 7, 2], [7, 8], [6, 9], [9, 10], [10, 11],
+      [11, 12, 2], [11, 13], [10, 14], [5, 0], [8, 3],
+    ]);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((_, i) =>
+        i === 10
+          ? { el: "C", hs: 1, tetra: { neighbours: [9, 11, 14, -1], volume: -1 } }
+          : { el: els[i], hs: [1, 1, 1, 0, 0, 1, 0, 1, 1, 2, 1, 0, 0, 1, 2][i] },
+      ),
+    };
+    const { x, y } = layout2D(input);
+    expect(y[14]).toBeLessThan(y[10] - 0.25);
+    expect(x[11]).toBeGreaterThan(x[10]);
+    expect(y[12]).toBeGreaterThan(y[11] + 0.2);
+    const indole = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+    expect(y[8]).toBeLessThan(indole.reduce((s, a) => s + y[a], 0) / indole.length - 0.1);
+  });
+
   it("sets the pieces of a salt side by side", () => {
     const input: LayoutInput = {
       atoms: [{ el: "Na", charge: 1 }, { el: "C" }, { el: "C" }, { el: "O" }, { el: "O", charge: -1 }],

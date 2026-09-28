@@ -216,6 +216,26 @@ describe("conventions the rules give", () => {
     expect(layoutMetrics(turned(sugar, 180)).readingOrder).toBe(2);
   });
 
+  it("tells a lactone from a sugar", () => {
+    // the same ring, its oxygen at the top, with a C=O on the carbon next
+    // to the oxygen: turned upside down, it is no sugar upside down
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    const x = [...h.x];
+    const y = [...h.y];
+    const edges = [...h.edges];
+    const orders = h.edges.map(() => 1);
+    const elements = ["O", "C", "C", "C", "C", "C"];
+    for (const [i, order] of [[5, 2], [4, 1], [3, 1]]) {
+      x.push(h.x[i] * 2);
+      y.push(h.y[i] * 2);
+      edges.push([i, x.length - 1]);
+      orders.push(order);
+      elements.push("O");
+    }
+    const lactone = { x, y, edges, orders, elements, hydrogens: elements.map((e) => (e === "O" ? 1 : 1)) };
+    expect(layoutMetrics(turned(lactone, 180)).readingOrder).toBe(0);
+  });
+
   it("wants fused rings in a row, the rest above and to the right", () => {
     // phenanthrene: two rings in a row, the third up and to the right
     const s3 = Math.sqrt(3) / 2;
