@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { useEffect, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useEditorStore } from "../store";
-import { ATOM_HOVER_RING_RADIUS_RATIO } from "../constants";
+import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS } from "../constants";
 import { calculateNewBondPosition } from "../utils/geometry";
 import { editorModelOf, processFileContent } from "../utils/io";
 
@@ -154,6 +154,20 @@ export function useStructureEvents(
     if (hoveredAtomId != null) {
       const base = atoms.find((a) => a.id === hoveredAtomId);
       if (base) {
+        // A double-click slower than the drawing's own reckoning of one
+        // (the system's double-click time can be set longer) may find its
+        // first click already editing this atom's label, nothing typed yet:
+        // it was a double-click, so that edit is taken back.
+        const edit = st.labelEdit;
+        if (
+          edit.active &&
+          edit.atomId === base.id &&
+          edit.opened &&
+          nowMs - edit.opened.at < 2 * DOUBLE_CLICK_MS &&
+          edit.value === edit.opened.value
+        ) {
+          st.cancelLabelEdit();
+        }
         const neighbors: { x: number; y: number }[] = [];
         for (const b of bonds) {
           if (b.a === base.id || b.b === base.id) {
@@ -245,7 +259,7 @@ export function useStructureEvents(
       if (!p) return;
       const id = st.findAtomNear(p.x, p.y, NOMINAL_BOND_LENGTH * 0.25, null);
       if (id != null) st.beginLabelEdit(id);
-    }, 420) as unknown as number;
+    }, DOUBLE_CLICK_MS) as unknown as number;
   };
 
   const onDropAppend = async (e: React.DragEvent<HTMLDivElement>) => {

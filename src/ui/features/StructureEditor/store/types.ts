@@ -45,6 +45,8 @@ export type EditorState = {
     atomId: number | null;
     value: string;
     autoCap: boolean;
+    /** When it was begun, and with what: a double-click takes back one its first click began. */
+    opened?: { at: number; value: string };
   };
   moveDrag: {
     active: boolean;

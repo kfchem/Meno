@@ -31,7 +31,10 @@ and in particular:
     atom to tell it from the 30-degree grid.
   - A double-click on an atom draws one bond where there is room; a
     double-click that drags draws a chain along the pointer's path, a
-    carbon for every bond length, zigzagging.
+    carbon for every bond length, zigzagging. A click alone edits the
+    atom's label once the system's double-click time has passed
+    (DOUBLE_CLICK_MS, half a second); a double-click slower than that,
+    finding its first click already editing, takes the edit back.
   - A press held still (HOLD_MS) lifts an atom, and the drag moves it.
   - A pause in a drag (FREE_MS, longer than a long press) lets a bond or a
     moved atom go exactly where the pointer is, off the grid; in a chain

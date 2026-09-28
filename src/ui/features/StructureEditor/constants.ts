@@ -11,6 +11,15 @@ export const CANVAS_DPR = 2;
 
 export const ATOM_HOVER_RING_RADIUS_RATIO = 0.26; // world-units ratio
 
+/**
+ * How long after a click its label is edited, and how soon a second click
+ * makes it a double-click instead. The system's own double-click time is
+ * half a second by default (macOS): a click's edit must wait at least that
+ * long, or the second click of a double-click comes after the first has
+ * already begun editing.
+ */
+export const DOUBLE_CLICK_MS = 500;
+
 /** How long a press held still on an atom takes to lift it to be moved. */
 export const HOLD_MS = 450;
 

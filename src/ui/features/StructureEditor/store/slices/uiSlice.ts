@@ -40,6 +40,7 @@ export function createUiSlice(
             atomId,
             value: val,
             autoCap,
+            opened: { at: typeof performance !== "undefined" ? performance.now() : Date.now(), value: val },
           },
         };
       }),

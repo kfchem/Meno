@@ -4,13 +4,13 @@ import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { computeMoveSnap } from "../utils/moveSnap";
-import { ATOM_PICK_RADIUS_RATIO, FREE_MS, HOLD_MS } from "../constants";
+import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, HOLD_MS } from "../constants";
 import { commitInstanceMatrices } from "./instances";
 
 /** How far a press has to travel to be a drag rather than a click, in px. */
 const MOV_PX = 5;
 /** A click edits a label this long after it, unless a second click follows. */
-const EDIT_DELAY_MS = 410;
+const EDIT_DELAY_MS = DOUBLE_CLICK_MS;
 
 // The hit area is world-fixed, the size of the hover ring
 // (ATOM_PICK_RADIUS_RATIO), so what lights up is what can be picked.
@@ -310,7 +310,7 @@ export function Atoms2D() {
         const cy = (e as any).nativeEvent?.clientY ?? (e as any).clientY;
         const pid =
           (e as any).nativeEvent?.pointerId ?? (e as any).pointerId ?? null;
-        const DBL_MS = 400;
+        const DBL_MS = DOUBLE_CLICK_MS;
         const second =
           lastDown.current.id === a.id && now - lastDown.current.t <= DBL_MS;
         cand.current = {
