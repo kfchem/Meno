@@ -1,15 +1,13 @@
 /**
- * Clean-up: a structure laid out afresh by RDKit - even bond lengths and
- * angles - over where it was drawn, as one undo step.
+ * Clean-up: a structure laid out afresh by Meno's own engine - the drawing a
+ * chemist would make of it (docs/LAYOUT-2D.md) - where it was drawn, as one
+ * undo step.
  */
-import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { wedgeNarrowAtom } from "../../../../lib/chem/layout2d";
-import { MOL_BOND_LENGTH } from "../../../../lib/chem/molWriter";
-import type { CleanLayout } from "../../../../lib/rdkit/client";
-import { chemMolblock, molIndex } from "../../../../lib/rdkit/molblock";
-import { chemWorker } from "../../../../lib/rdkit/worker";
+import { emptyStructureDocument, relayout } from "../document";
 import type { EditorStore } from "../store";
-import type { Bond, Model } from "../store/types";
+import type { Model } from "../store/types";
+import { layoutJob, nextFree, relayoutFrom } from "./engineLayout";
+import { layOut } from "./layOut";
 
 /** An atom and every atom bonded to it, however far along. */
 export function fragmentOf(model: Model, atomId: number): Set<number> {
@@ -39,84 +37,60 @@ export function partOf(model: Model, ids: Set<number>): Model {
   };
 }
 
-/** A new layout for some of a structure, as the edits that make it. */
-export type Relayout = {
-  atoms: { id: number; x: number; y: number }[];
-  bonds: {
-    id: number;
-    stereo: NonNullable<Bond["stereo"]>;
-    stereoOrient: NonNullable<Bond["stereoOrient"]>;
-  }[];
-};
-
-/**
- * RDKit's clean-up of `part` of `model` as edits: every atom of the part
- * moved, and - when the wedges as drawn would no longer say the same - the
- * wedges RDKit gives in their place, each narrow at its stereocentre, and
- * the part's other wedges made plain bonds.
- */
-export function relayoutOf(
-  model: Model,
-  part: Model,
-  layout: CleanLayout,
-): Relayout {
-  const { atoms, bonds } = molIndex(part);
-  const scale = NOMINAL_BOND_LENGTH / MOL_BOND_LENGTH;
-  const moved = atoms.map((a, i) => {
-    const [x, y] = layout.coords[i] ?? [a.x / scale, a.y / scale];
-    return { id: a.id, x: x * scale, y: y * scale };
-  });
-  if (!layout.wedges) return { atoms: moved, bonds: [] };
-  // Which end of a wedge is narrow is held relative to the number of bonds
-  // at each end, counted over the whole structure, as the drawing counts.
-  const degree = new Map<number, number>();
-  for (const b of model.bonds) {
-    degree.set(b.a, (degree.get(b.a) ?? 0) + 1);
-    degree.set(b.b, (degree.get(b.b) ?? 0) + 1);
+/** The structures on the canvas, each the atoms bonded together, a lone atom not among them. */
+export function fragmentsOf(model: Model): Set<number>[] {
+  const seen = new Set<number>();
+  const out: Set<number>[] = [];
+  const bonded = new Set(model.bonds.flatMap((b) => [b.a, b.b]));
+  for (const a of model.atoms) {
+    if (seen.has(a.id) || !bonded.has(a.id)) continue;
+    const f = fragmentOf(model, a.id);
+    f.forEach((id) => seen.add(id));
+    out.push(f);
   }
-  const wedges = new Map(layout.wedges.map((w) => [w.bond, w]));
-  const changed: Relayout["bonds"] = [];
-  bonds.forEach((b, i) => {
-    const w = wedges.get(i);
-    const orient = b.stereoOrient ?? "principle";
-    if (w) {
-      const narrow = atoms[w.narrow]?.id;
-      if (narrow == null) return;
-      const usual = wedgeNarrowAtom(
-        { a1: b.a, a2: b.b, order: b.order, stereoOrient: "principle" },
-        degree,
-      );
-      const want = usual === narrow ? "principle" : "reverse";
-      if (b.stereo !== w.stereo || orient !== want) {
-        changed.push({ id: b.id, stereo: w.stereo, stereoOrient: want });
-      }
-    } else if (b.stereo === "up" || b.stereo === "down") {
-      changed.push({ id: b.id, stereo: "none", stereoOrient: "principle" });
-    }
-  });
-  return { atoms: moved, bonds: changed };
+  return out;
 }
 
 /**
- * Cleans up the fragment an atom is in, or the whole structure: asks RDKit
- * - setting it up first, if it has not been - and applies its layout as one
- * undo step. Refuses, rather than moving anything, if the structure changed
- * while RDKit was at it.
+ * Cleans up the fragment an atom is in, or every structure on the canvas,
+ * each where it was: laid out afresh by Meno's own engine (engineLayout),
+ * off the drawing's thread, and applied as one undo step. Refuses, rather
+ * than moving anything, if the structure changed meanwhile, or if the new
+ * layout would not say the stereochemistry the old one said.
  */
 export async function cleanUp(
   store: EditorStore,
   aroundAtom: number | null = null,
 ): Promise<void> {
   const model = store.getState().model;
-  const part =
-    aroundAtom == null ? model : partOf(model, fragmentOf(model, aroundAtom));
-  if (part.bonds.length === 0) return; // nothing to lay out
-  const chem = await chemWorker();
-  const layout = await chem.request("clean", { molblock: chemMolblock(part) });
+  const parts = (aroundAtom == null ? fragmentsOf(model) : [fragmentOf(model, aroundAtom)])
+    .map((ids) => partOf(model, ids))
+    .filter((part) => part.bonds.length > 0);
+  if (!parts.length) return; // nothing to lay out
+  const jobs = parts.map(layoutJob);
+  const laid = await Promise.all(jobs.map((job) => layOut(job.input)));
   if (store.getState().model !== model) {
     throw new Error(
       "The structure changed while it was being cleaned up, so nothing was moved.",
     );
   }
-  store.getState().relayout(relayoutOf(model, part, layout));
+  const changes = parts.map((part, i) => relayoutFrom(model, part, jobs[i], laid[i]));
+  store.getState().relayout({
+    atoms: changes.flatMap((c) => c.atoms),
+    bonds: changes.flatMap((c) => c.bonds),
+    added: changes.flatMap((c) => c.added ?? []),
+    removed: changes.flatMap((c) => c.removed ?? []),
+  });
+}
+
+/**
+ * `model` laid out afresh by the engine as a whole - a salt's ions set out
+ * together - for a structure that has only just arrived, before it is
+ * added: RDKit's drawing of a SMILES.
+ */
+export async function laidOut(model: Model): Promise<Model> {
+  if (!model.bonds.length) return model;
+  const job = layoutJob(model);
+  const change = relayoutFrom(model, model, job, await layOut(job.input));
+  return relayout({ ...emptyStructureDocument(), model, nextId: nextFree(model) }, change).model;
 }

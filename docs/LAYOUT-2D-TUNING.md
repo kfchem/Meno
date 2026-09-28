@@ -19,9 +19,14 @@ decided. Read both before changing anything.
 | `assemble.ts` | the structure grown out from its root system in one frame: each bond's direction, zigzags, a cis double bond as a step, a phosphate as a cross, an amino acid's backbone |
 | `engine.ts` | `layout2D`: the steps below, and the local search (`improve`, `rejoin`, `untangle`, `faceSugars`, `roomForHydrogens`, `squareUp`) |
 | `stereo.ts` | wedges and hashes, and the H's drawn to carry them |
+| `drawn.ts` | a drawing's stereochemistry read back out of it - wedges as RDKit reads them, a cage in perspective from its solid - which is what the app gives the engine; and the wedges a flat reader needs for such a cage |
 | `metrics.ts` | the measure: every rule as a number, `SCORE_WEIGHTS`, and where the drawing sets a label's H (`hydrogenSpot`) |
 
-Tests: `engine.test.ts`, `metrics.test.ts`, `stereo.test.ts`, `rings.test.ts`.
+Tests: `engine.test.ts`, `metrics.test.ts`, `stereo.test.ts`, `rings.test.ts`, `drawn.test.ts`.
+
+In the app, `src/ui/features/StructureEditor/chem/engineLayout.ts` turns a
+drawing into what the engine is given and its layout back into edits, and
+`cleanUp.ts` runs it - in a web worker - for Clean-up and for a SMILES.
 
 `scripts/layout/` (see its [README](../scripts/layout/README.md)):
 `sheet.ts` draws the benchmark sheet, `labels.ts` checks the labels as
@@ -198,9 +203,6 @@ CDK.
 
 ## Open
 
-- **Not yet in the app.** Clean-up and SMILES import still lay out with
-  RDKit (`src/ui/features/StructureEditor/chem/cleanUp.ts`); moving them
-  onto `layout2D` is the next step.
 - **How a ring system is turned once its face is right**: morphinan is
   60 degrees from its reference. IUPAC's stereoparent orientations are
   the candidate knowledge, if no general rule gives it.
