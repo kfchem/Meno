@@ -17,7 +17,7 @@
 import { segmentsCross, type Point } from "./geometry";
 import type { Molecule, RingSystem } from "./perceive";
 
-type Vec3 = [number, number, number];
+export type Vec3 = [number, number, number];
 
 /** Graph distances between the system's atoms, through its own bonds. */
 function hops(mol: Molecule, atoms: number[]): number[][] {
@@ -837,6 +837,29 @@ function handedness(mol: Molecule, atoms: number[], index: Map<number, number>, 
   return Math.sign(vote);
 }
 
+/** Straight away from bonds given as unit vectors: where their sum points the other way. */
+function awayFrom(us: readonly Vec3[]): Vec3 {
+  const sum: Vec3 = [0, 1, 2].map((c) => us.reduce((s, u) => s + u[c], 0)) as Vec3;
+  return normalise([-sum[0], -sum[1], -sum[2]]);
+}
+
+/**
+ * Where the bonds of a tetrahedral atom that are not among `us` (its bonds
+ * given, as unit vectors) point: with three given, the one corner left;
+ * with two, the two either side of their plane.
+ */
+export function freeCorners(us: readonly Vec3[]): Vec3[] {
+  const away = awayFrom(us);
+  if (us.length !== 2) return [away];
+  const across = normalise(crossV(us[0], us[1]));
+  const k = Math.cos((54.75 * Math.PI) / 180);
+  const j = Math.sin((54.75 * Math.PI) / 180);
+  return [
+    [0, 1, 2].map((c) => away[c] * k + across[c] * j) as Vec3,
+    [0, 1, 2].map((c) => away[c] * k - across[c] * j) as Vec3,
+  ];
+}
+
 /**
  * The directions, in the solid, of an atom's bonds out of the cage: the
  * tetrahedron's free corners (or, beside a double bond, the plane's), the
@@ -856,17 +879,10 @@ function outward(
     return normalise([q[0] - X[i][0], q[1] - X[i][1], q[2] - X[i][2]]);
   };
   const us = inside.map(unit);
-  const sum: Vec3 = [0, 1, 2].map((c) => us.reduce((s, u) => s + u[c], 0)) as Vec3;
-  const away = normalise([-sum[0], -sum[1], -sum[2]]);
-  if (us.length >= 3 || us.length < 2) return out.map(() => away);
-  // two bonds in the cage: the two free corners either side of their plane
-  const across = normalise(crossV(us[0], us[1]));
+  const corners = freeCorners(us);
+  const away = awayFrom(us);
+  if (corners.length < 2) return out.map(() => away);
   const k = Math.cos((54.75 * Math.PI) / 180);
-  const j = Math.sin((54.75 * Math.PI) / 180);
-  const corners: Vec3[] = [
-    [0, 1, 2].map((c) => away[c] * k + across[c] * j) as Vec3,
-    [0, 1, 2].map((c) => away[c] * k - across[c] * j) as Vec3,
-  ];
   const double = out.some((b) => {
     const bi = mol.bondIndex.get(a < b ? `${a},${b}` : `${b},${a}`);
     return bi != null && mol.bonds[bi].order === 2;

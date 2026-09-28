@@ -102,6 +102,8 @@ cp .layout/scores.json /tmp/before.json      # the sheet as it was
 npm run layout-bench                         # or --only=Name,Name
 npm run layout-compare -- /tmp/before.json   # what moved, and why
 npm run layout-labels                        # labels, as drawn
+npm run layout-stereo                        # then, in the chem environment:
+<chem python> scripts/layout/stereo.py       # the stereochemistry, as RDKit reads it
 npx vitest run src/lib/layout
 npm run typecheck
 ```
@@ -127,6 +129,16 @@ a test with a small molecule built by hand, and a line to `LAYOUT-2D.md`.
   carbon on the right and ring O at the top hold for a chain of sugars read
   left to right, not for a sugar hung on an aglycone. For that, only the
   face was kept.
+- **A wedge read from its angles lies.** The engine once read its own
+  wedges from the angles as drawn. At a centre whose three bonds in the
+  page lie within 180 degrees of each other, that says the opposite of
+  what a reader - and RDKit - reads: artemisinin's ketal carbon, the one
+  with the peroxide and a methyl on it, came out the wrong way while
+  looking right, and so did an H of sirolimus's. The reading
+  (`drawnVolume`) now goes by the way the bonds run round the centre, and
+  `layout-stereo` with `stereo.py`, which has RDKit read every drawing on
+  the sheet, is the check. With it, artemisinin is drawn from its other
+  face: its angular methyl is in front only that way.
 - **Speed.** One measure takes 0.1 to 0.3 ms; the calls multiply by frames,
   shapes and passes. The sheet takes about 8 s; ciclosporin, at about 1 s,
   is the slowest.
@@ -197,3 +209,5 @@ CDK.
 - **Aspartame** is not drawn as a peptide read left to right, and
   **vancomycin** is not the level backbone its reference is.
 - **Clearing an H** may draw a bond up to 45% longer (taxol's benzoate).
+- **POPC's glycerol carbon** has no configuration in its graph
+  (`baselines.py` leaves it out), so `stereo.py` reports it unread.
