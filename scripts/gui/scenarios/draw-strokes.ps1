@@ -43,7 +43,7 @@ Save-Step "moved"
 # to the right, a chain - the usual zigzag along the stroke; a pause on the
 # way lays down the bond it is on.
 Invoke-MenoClick -X 270 -Y 674
-Invoke-MenoDrag -FromX 270 -FromY 674 -ToX 1000 -ToY 690 -Steps 40 -AtStep {
+Invoke-MenoDrag -FromX 270 -FromY 674 -ToX 1000 -ToY 690 -Steps 40 -Count 2 -AtStep {
     param($i)
     if ($i -eq 22) { Save-Step "chain-under-way" }
     if ($i -eq 30) { Start-Sleep -Milliseconds 700 }

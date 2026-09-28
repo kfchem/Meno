@@ -569,12 +569,18 @@ function Invoke-MenoDrag {
       the editor asks for several: it waits a few pixels before it calls a
       press a drag at all, and the preview it draws follows the moves rather
       than the release.
+
+      -Count 2 makes the press the second click of a double-click, as the
+      system counts clicks: the drag after an Invoke-MenoClick on the same
+      point. Here the poster says how many clicks a press is, and the page
+      sees what it says.
     #>
     param(
         [Parameter(Mandatory)] [int] $FromX, [Parameter(Mandatory)] [int] $FromY,
         [Parameter(Mandatory)] [int] $ToX, [Parameter(Mandatory)] [int] $ToY,
         [int] $Steps = 12,
         [int] $StepMs = 25,
+        [int] $Count = 1,
         [scriptblock] $AtStep
     )
     $a = ConvertTo-Screen $FromX $FromY
@@ -582,7 +588,7 @@ function Invoke-MenoDrag {
     Assert-MenoFront
     [MacGui]::MoveTo($a.X, $a.Y)
     Start-Sleep -Milliseconds 80
-    [MacGui]::LeftDown($a.X, $a.Y, 1)
+    [MacGui]::LeftDown($a.X, $a.Y, $Count)
     Start-Sleep -Milliseconds 80
     try {
         for ($i = 1; $i -le $Steps; $i++) {
@@ -595,7 +601,7 @@ function Invoke-MenoDrag {
     } finally {
         # Let go whatever happened: a button left down is a button held down
         # for every app on the machine.
-        [MacGui]::LeftUp($b.X, $b.Y, 1)
+        [MacGui]::LeftUp($b.X, $b.Y, $Count)
     }
     Start-Sleep -Milliseconds 200
 }

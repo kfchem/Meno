@@ -309,12 +309,17 @@ function Invoke-MenoDrag {
       the editor asks for several: it waits a few pixels before it calls a
       press a drag at all, and the preview it draws follows the moves rather
       than the release.
+
+      -Count is there for the Mac's sake: Windows counts the clicks itself,
+      so a drag straight after an Invoke-MenoClick on the same point is
+      already the second click of a double-click.
     #>
     param(
         [Parameter(Mandatory)] [int] $FromX, [Parameter(Mandatory)] [int] $FromY,
         [Parameter(Mandatory)] [int] $ToX, [Parameter(Mandatory)] [int] $ToY,
         [int] $Steps = 12,
         [int] $StepMs = 25,
+        [int] $Count = 1,
         [scriptblock] $AtStep
     )
     $a = ConvertTo-Screen $FromX $FromY
