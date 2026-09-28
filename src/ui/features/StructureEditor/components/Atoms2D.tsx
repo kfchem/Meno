@@ -4,7 +4,7 @@ import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { computeMoveSnap } from "../utils/moveSnap";
-import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, HOLD_MS, MOV_PX } from "../constants";
+import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
 import { clickClock, doubleClickedSince } from "../utils/clickCount";
 import { commitInstanceMatrices } from "./instances";
 
@@ -29,7 +29,6 @@ export function Atoms2D() {
     commitExtend,
     beginPanHold,
     endPanHold,
-    setMoveArmed,
     setMoveMode,
     beginMoveDrag,
     updateMovePointer,
@@ -88,7 +87,6 @@ export function Atoms2D() {
     }
   };
   const holdTimer = useRef<number | null>(null);
-  const armed = useRef(false);
   const clearHold = () => {
     if (holdTimer.current != null) {
       window.clearTimeout(holdTimer.current);
@@ -110,15 +108,13 @@ export function Atoms2D() {
   /**
    * A stroke out of an atom, from the press to the release: a bond, or a
    * chain (see utils/stroke). A pause of FREE_MS in it lets a bond go where
-   * the pointer is, or lays down the bond a chain is on. `firstMove`, when
-   * the drag is already under way, starts the stroke at once.
+   * the pointer is, or lays down the bond a chain is on.
    */
   const strokeGesture = (
     atomId: number,
     kind: "bond" | "chain",
     pid: number | null,
     onTap: (ev: PointerEvent) => void,
-    firstMove?: PointerEvent,
   ) => {
     const restartHold = () => {
       clearHold();
@@ -161,19 +157,16 @@ export function Atoms2D() {
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, true);
-    if (firstMove) onMove(firstMove);
   };
 
   /**
-   * Moving an atom a long press has lifted, from its first move to the
-   * release. It snaps as it goes; after a pause of FREE_MS it follows the
-   * pointer freely. Dropped on another atom, it becomes that atom.
+   * Moving an atom, from its first move to the release. It snaps as it goes;
+   * after a pause of FREE_MS it follows the pointer freely. Dropped on
+   * another atom, it becomes that atom.
    */
   const moveGesture = (idx: number, first: PointerEvent, pid: number | null) => {
     const thisAtom = model.atoms[idx];
     if (!thisAtom) return;
-    armed.current = false;
-    setMoveArmed(null);
     cand.current.started = true;
     // During and just after the drag, a click is not a label edit.
     suppressDoubleClick?.(600);
@@ -325,13 +318,15 @@ export function Atoms2D() {
         // the drag is the atom's, not the view's
         beginPanHold(pid);
         if (second) {
-          // A double-click that drags draws a chain: an atom for every bond
-          // length the pointer goes, following it; a pause lays down the
-          // bond it is on. One that does not drag draws one bond where
-          // there is room (the canvas's double-click does that).
+          // A double-click that drags draws a bond out of the atom, where it
+          // is led; a pause lets it go where the pointer is. One that does
+          // not drag draws one bond where there is room (the canvas's
+          // double-click does that). (Chains, a bond laid down for every
+          // bond length the pointer goes, are not drawn this way for now:
+          // utils/stroke still knows them.)
           cancelPendingEdit();
           lastDown.current = { t: 0, id: null, x: 0, y: 0 };
-          strokeGesture(a.id, "chain", pid, (ev) => {
+          strokeGesture(a.id, "bond", pid, (ev) => {
             // Tap-connect: released without a drag beside another atom
             const p = toWorld(ev.clientX, ev.clientY);
             const near = findAtomNear(
@@ -349,41 +344,22 @@ export function Atoms2D() {
           return;
         }
         lastDown.current = { t: now, id: a.id, x: cx, y: cy };
-        // A press held still lifts the atom to be moved; a drag straight
-        // away draws a bond out of it; a click edits its label.
-        clearHold();
-        holdTimer.current = window.setTimeout(() => {
-          holdTimer.current = null;
-          if (cand.current.active && !cand.current.started) {
-            armed.current = true;
-            setMoveArmed(a.id);
-          }
-        }, HOLD_MS) as unknown as number;
+        // A drag moves the atom; a click edits its label.
         const onFirstMove = (ev: PointerEvent) => {
           if (!cand.current.active || cand.current.started) return;
           if (Math.hypot(ev.clientX - cx, ev.clientY - cy) < MOV_PX) return;
           window.removeEventListener("pointermove", onFirstMove);
           window.removeEventListener("pointerup", onEarlyUp, true);
-          clearHold();
           cancelPendingEdit();
           // a drag is not the first click of a double-click
           lastDown.current = { t: 0, id: null, x: 0, y: 0 };
-          if (armed.current) {
-            moveGesture(idx, ev, pid);
-          } else {
-            strokeGesture(a.id, "bond", pid, () => undefined, ev);
-          }
+          moveGesture(idx, ev, pid);
         };
         const onEarlyUp = (ev: PointerEvent) => {
           window.removeEventListener("pointermove", onFirstMove);
           window.removeEventListener("pointerup", onEarlyUp, true);
-          clearHold();
-          const wasArmed = armed.current;
-          armed.current = false;
-          setMoveArmed(null);
           resetCand();
           endPanHold(ev.pointerId ?? null);
-          if (wasArmed) return; // lifted, then put down where it was
           // A click: its label is edited, unless a second click follows -
           // then onPointerDown cancels this.
           cancelPendingEdit();

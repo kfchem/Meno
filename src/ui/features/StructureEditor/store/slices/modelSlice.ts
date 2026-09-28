@@ -193,7 +193,6 @@ export const createModelSlice = (
       ...prev,
       sel: { atoms: new Set(), bonds: new Set() },
       hovered: { atomId: null, bondId: null },
-      moveArmed: null,
       labelEdit: { active: false, atomId: null, value: "", autoCap: true },
       moveDrag: {
         active: false,

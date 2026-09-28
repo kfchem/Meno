@@ -9,9 +9,6 @@ import { ATOM_HOVER_RING_RADIUS_RATIO } from "../constants";
 export default function AtomsHoverRings2D() {
   // World-scaling mode: no camera dependency needed
   const { model, hovered } = useEditor();
-  // A long press lifts the atom to be moved: its ring swells.
-  const moveArmed = useEditor((s) => s.moveArmed);
-  const liftRef = useRef(1);
   const invalidate = useThree((s) => s.invalidate);
   const inst = useRef<THREE.InstancedMesh>(null!);
   const mat = useRef<THREE.MeshBasicMaterial>(null!);
@@ -124,10 +121,6 @@ export default function AtomsHoverRings2D() {
       anim.current.id = null;
     }
 
-    const liftGoal =
-      moveArmed != null && moveArmed === anim.current.id ? 1.4 : 1;
-    liftRef.current += (liftGoal - liftRef.current) * Math.min(1, dt * 18);
-    if (Math.abs(liftGoal - liftRef.current) > 1e-3) invalidate();
     // Write transforms: only for active id (in/out), others zero
     for (let i = 0; i < atoms.length; i++) {
       const a = atoms[i];
@@ -135,7 +128,7 @@ export default function AtomsHoverRings2D() {
         anim.current.id === a.id &&
         opacityRef.current > 0.01 &&
         scaleRef.current > 0.0001;
-      const s = active ? scaleRef.current * liftRef.current : 0;
+      const s = active ? scaleRef.current : 0;
       tmpM.makeScale(s, s, 1).setPosition(a.x, a.y, -0.02);
       m.setMatrixAt(i, tmpM);
     }
