@@ -6,6 +6,7 @@ import { useEditor } from "../store";
 import { fontStack, type LayoutOptions } from "../../../../lib/chem/layout2d";
 import { editorLayoutOptions } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
+import { labelKey, typedLabel } from "../utils/labelTyping";
 
 export default function LabelEditor2D() {
   const { camera } = useThree();
@@ -29,6 +30,8 @@ export default function LabelEditor2D() {
     cancelLabelEdit,
   } = useEditor();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // whether an input method is composing in the box: its text is left alone
+  const composing = useRef(false);
   // Fade control and position retention
   const [mounted, setMounted] = useState(false);
   const [exiting, setExiting] = useState(false);
@@ -38,6 +41,10 @@ export default function LabelEditor2D() {
   const focusInputEnd = () => {
     const el = inputRef.current;
     if (!el) return false;
+    // (focused already, or an input method composing: the caret is left
+    // where it is - moving it commits the composition, and it comes again)
+    if (document.activeElement === el) return true;
+    if (composing.current) return false;
     try {
       el.focus({ preventScroll: true });
       const v = el.value;
@@ -88,8 +95,8 @@ export default function LabelEditor2D() {
       // typing a label.
       const t = e.target as HTMLElement | null;
       if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
-      const ch = e.key;
-      if (ch && ch.length === 1 && /[a-zA-Z]/.test(ch)) {
+      const ch = labelKey(e);
+      if (ch) {
         // First char uppercase; subsequent chars as typed
         const initial = ch.toUpperCase();
         beginLabelEdit(hovered.atomId, initial);
@@ -219,17 +226,25 @@ export default function LabelEditor2D() {
           }}
           onChange={(e) => {
             const v = e.target.value;
-            // First char auto-capitalized; others as typed
-            if (v.length === 0) {
-              setLabelEditValue("");
-            } else if (labelEdit.autoCap) {
-              setLabelEditValue(v[0].toUpperCase() + v.slice(1));
-            } else {
+            // an input method composing: its text as it is, for now
+            if (composing.current || (e.nativeEvent as InputEvent).isComposing) {
               setLabelEditValue(v);
+              return;
             }
+            // First char auto-capitalized; others as typed
+            setLabelEditValue(typedLabel(v, labelEdit.autoCap));
+          }}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={(e) => {
+            composing.current = false;
+            setLabelEditValue(typedLabel(e.currentTarget.value, labelEdit.autoCap));
           }}
           placeholder={atom?.el === "C" ? "C" : undefined}
           onKeyDown={(e) => {
+            // (Enter and Escape during a composition are the input method's)
+            if (composing.current || e.nativeEvent.isComposing) return;
             if (e.key === "Enter") {
               commitLabelEdit();
               e.preventDefault();
