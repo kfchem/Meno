@@ -5,8 +5,14 @@ import { useEffect, useRef } from "react";
  * the canvas is, so that the menu stays inside it.
  */
 export type MenuTarget = {
-  kind: "atom" | "bond";
-  id: number;
+  /** The atom or bond right-clicked; null, when it was nothing. */
+  kind: "atom" | "bond" | null;
+  id: number | null;
+  /**
+   * Whether there is a selection, and whether the menu is its: right-clicked
+   * on something selected, or on nothing.
+   */
+  selection: "none" | "elsewhere" | "here";
   x: number;
   y: number;
   within: { width: number; height: number };
@@ -16,23 +22,32 @@ const MAC =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
-/** The menu's size, for keeping it inside the canvas. */
-const SIZE = { width: 240, height: 84 };
+/** The menu's width, and each item's height, for keeping it inside the canvas. */
+const WIDTH = 240;
+const ITEM = 32;
 
 /**
- * What can be done to the atom or bond under the pointer, at the pointer:
- * the mouse alone reaches everything a key does. Closes on Escape, on a
- * press anywhere else, and on a turn of the wheel.
+ * What can be done to the atom or bond under the pointer - or to the
+ * selection - at the pointer: the mouse alone reaches everything a key
+ * does. Closes on Escape, on a press anywhere else, and on a turn of the
+ * wheel.
  */
 export default function PartMenu({
   target,
   onDelete,
   onCleanUp,
+  onSelectStructure,
+  onTurnOver,
   onClose,
 }: {
   target: MenuTarget;
+  /** The part deleted, or the selection when the menu is its. */
   onDelete: () => void;
+  /** The part's structure cleaned up, or the selection's structures. */
   onCleanUp: () => void;
+  onSelectStructure: () => void;
+  /** The selection turned over, left to right or top to bottom. */
+  onTurnOver: (axis: "vertical" | "horizontal") => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -60,28 +75,42 @@ export default function PartMenu({
     };
   }, [onClose]);
 
-  const items = [
-    {
-      name: target.kind === "atom" ? "Delete atom" : "Delete bond",
-      keys: MAC ? "⌫" : "Del",
-      run: onDelete,
-    },
-    {
-      name: "Clean up this structure",
-      keys: MAC ? "⇧⌘K" : "Ctrl+Shift+K",
-      run: onCleanUp,
-    },
-  ];
+  const deleteKey = MAC ? "⌫" : "Del";
+  const cleanUpKey = MAC ? "⇧⌘K" : "Ctrl+Shift+K";
+  // (with a selection elsewhere, the keys are the selection's)
+  const keys = target.selection === "none";
+  const items =
+    target.selection === "here"
+      ? [
+          { name: "Delete selection", keys: deleteKey, run: onDelete },
+          { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
+          { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
+          { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
+        ]
+      : [
+          {
+            name: target.kind === "atom" ? "Delete atom" : "Delete bond",
+            keys: keys ? deleteKey : "",
+            run: onDelete,
+          },
+          { name: "Select this structure", keys: "", run: onSelectStructure },
+          {
+            name: "Clean up this structure",
+            keys: keys ? cleanUpKey : "",
+            run: onCleanUp,
+          },
+        ];
+  const height = items.length * ITEM + 12;
   return (
     <div
       ref={ref}
       role="menu"
-      aria-label={target.kind === "atom" ? "Atom" : "Bond"}
+      aria-label={target.selection === "here" ? "Selection" : target.kind === "atom" ? "Atom" : "Bond"}
       className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
       style={{
-        left: Math.max(0, Math.min(target.x, target.within.width - SIZE.width - 8)),
-        top: Math.max(0, Math.min(target.y, target.within.height - SIZE.height - 8)),
-        width: SIZE.width,
+        left: Math.max(0, Math.min(target.x, target.within.width - WIDTH - 8)),
+        top: Math.max(0, Math.min(target.y, target.within.height - height - 8)),
+        width: WIDTH,
       }}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}

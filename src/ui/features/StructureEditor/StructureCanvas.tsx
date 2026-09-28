@@ -20,6 +20,7 @@ import {
   HoverOverlay2D,
   ChemMarks2D,
   SnapArc2D,
+  Selection2D,
 } from "./components";
 import {
   ArrowDownTrayIcon,
@@ -39,6 +40,8 @@ import PartMenu, { type MenuTarget } from "./PartMenu";
 import {
   isCleanUpKey,
   isDeleteKey,
+  isDeselectKey,
+  isSelectAllKey,
   saveIntent,
 } from "../../../lib/doc/shortcuts";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
@@ -116,7 +119,7 @@ function StructureCanvasContent({
   const [cleaning, setCleaning] = useState(false);
   const cleaningNow = useRef(false); // one clean-up at a time, keys included
   const runCleanUp = useCallback(
-    (aroundAtom: number | null) => {
+    (aroundAtom: number | Iterable<number> | null) => {
       if (cleaningNow.current) return;
       cleaningNow.current = true;
       setCleaning(true);
@@ -136,7 +139,8 @@ function StructureCanvasContent({
   );
   // What is under the pointer is what a key acts on: Delete deletes it, and
   // the clean-up key cleans up the structure it is in (everything, when the
-  // pointer is on nothing).
+  // pointer is on nothing) - unless something is selected: then the keys
+  // act on the selection, and the structures it is in.
   const hoveredPart = useCallback((): MenuTarget["kind"] | null => {
     const { hovered } = store.getState();
     return hovered.atomId != null
@@ -162,25 +166,37 @@ function StructureCanvasContent({
     },
     [store],
   );
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      const { hovered } = store.getState();
+      const st = store.getState();
+      const { hovered, sel } = st;
       const kind = hoveredPart();
       const id = kind === "atom" ? hovered.atomId : hovered.bondId;
+      const selected = sel.atoms.size > 0 || sel.bonds.size > 0;
+      const busy = st.labelEdit.active || st.moveDrag.active || st.extend.active;
       if (isCleanUpKey(e)) {
         e.preventDefault();
-        runCleanUp(structureAt(kind, id));
+        runCleanUp(selected ? sel.atoms : structureAt(kind, id));
+      } else if (isDeleteKey(e) && selected) {
+        e.preventDefault();
+        if (!busy) st.deleteSelection();
       } else if (isDeleteKey(e) && kind && id != null) {
         e.preventDefault();
         deletePart(kind, id);
+      } else if (isSelectAllKey(e) && !busy) {
+        e.preventDefault();
+        st.selectAll();
+      } else if (isDeselectKey(e) && selected && !busy && !menu) {
+        // (Esc with the menu open closes the menu only)
+        st.clearSel();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart]);
+  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, menu]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
-  const [menu, setMenu] = useState<MenuTarget | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
   // A right-drag moves the view, so the menu waits for the button to come
@@ -225,14 +241,23 @@ function StructureCanvasContent({
     const { hovered } = store.getState();
     const kind = hoveredPart();
     const id = kind === "atom" ? hovered.atomId : hovered.bondId;
-    if (!kind || id == null) {
+    // on something selected, or on nothing with a selection: the
+    // selection's menu
+    const { sel } = store.getState();
+    const part = kind && id != null;
+    const selected = sel.atoms.size > 0 || sel.bonds.size > 0;
+    const onSelected =
+      part &&
+      (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
+    if (!part && !selected) {
       setMenu(null);
       return;
     }
     const box = e.currentTarget.getBoundingClientRect();
     const target: MenuTarget = {
-      kind,
-      id,
+      kind: part ? kind : null,
+      id: part ? id : null,
+      selection: !selected ? "none" : onSelected || !part ? "here" : "elsewhere",
       x: e.clientX - box.left,
       y: e.clientY - box.top,
       within: { width: box.width, height: box.height },
@@ -447,8 +472,22 @@ function StructureCanvasContent({
         <PartMenu
           target={menu}
           onClose={closeMenu}
-          onDelete={() => deletePart(menu.kind, menu.id)}
-          onCleanUp={() => runCleanUp(structureAt(menu.kind, menu.id))}
+          onDelete={() => {
+            if (menu.selection === "here") store.getState().deleteSelection();
+            else if (menu.kind && menu.id != null) deletePart(menu.kind, menu.id);
+          }}
+          onCleanUp={() =>
+            runCleanUp(
+              menu.selection === "here"
+                ? store.getState().sel.atoms
+                : structureAt(menu.kind, menu.id),
+            )
+          }
+          onSelectStructure={() => {
+            const at = structureAt(menu.kind, menu.id);
+            if (at != null) store.getState().selectStructure(at);
+          }}
+          onTurnOver={(axis) => store.getState().turnSelectionOver(axis)}
         />
       )}
       <Canvas
@@ -487,6 +526,8 @@ function StructureCanvasContent({
           <Wedges2D />
           {/* Atom hover rings */}
           <AtomsHoverRings2D />
+          {/* what is selected, the box or lasso selecting, the handle turning it */}
+          <Selection2D />
           {/* A label's font is read before it is drawn: the rest of the
               drawing does not wait for it, nor go if it cannot be read. */}
           <Suspense fallback={null}>
