@@ -1433,6 +1433,16 @@ function buildDativeArrow(
 }
 
 /**
+ * Whether a wavy bond's wave starts at its a1: the stereocentre, the atom
+ * with more bonds, or a1 when they have as many. The drawing and the caps at
+ * its atoms both ask this, so that they cannot come to disagree about which
+ * end the wave reaches.
+ */
+function wavyFromA1(bond: Bond, deg?: Map<number, number>): boolean {
+  return (deg?.get(bond.a1) || 0) >= (deg?.get(bond.a2) || 0);
+}
+
+/**
  * A wavy bond, as ACS 1996 draws it: half circles alternately either side of
  * the line - half ellipses, if the amplitude is not a quarter of the period -
  * starting on the line at `from`, the stereocentre, and swinging first to the
@@ -2049,7 +2059,7 @@ export function buildBondPrimitives(
   if (bond.stereo === "wavy") {
     // The wave starts at the stereocentre: the atom with more bonds, or the
     // first when they have as many.
-    const fromA = (deg?.get(bond.a1) || 0) >= (deg?.get(bond.a2) || 0);
+    const fromA = wavyFromA1(bond, deg);
     lines.push(
       ...buildWavySegments(
         fromA ? p1o : p2o,
@@ -2269,11 +2279,18 @@ export function joinsAtAtoms(
       : b.doubleMode !== undefined &&
         b.doubleMode !== "auto" &&
         b.doubleMode !== "center");
+  // A wavy bond starts on the line at its stereocentre but stops short of
+  // the other atom - at the top of a turn, if that is where it falls - and
+  // its own end is finished where it stops. Nothing of it reaches that atom,
+  // and a cap there is a dot out beyond the wave.
+  const wavyFar = (b: Bond): number | null =>
+    bondKind(b) !== "wavy" ? null : wavyFromA1(b, deg) ? b.a2 : b.a1;
   const reaching = new Map<number, number>();
   for (const b of bonds) {
     if (!onAxis(b)) continue;
-    reaching.set(b.a1, (reaching.get(b.a1) ?? 0) + 1);
-    reaching.set(b.a2, (reaching.get(b.a2) ?? 0) + 1);
+    for (const e of [b.a1, b.a2]) {
+      if (e !== wavyFar(b)) reaching.set(e, (reaching.get(e) ?? 0) + 1);
+    }
   }
   const plainDirs = new Map<number, Vec2[]>();
   const plainEnds = new Set<number>();
@@ -2291,8 +2308,10 @@ export function joinsAtAtoms(
     }
     if (!onAxis(b)) continue;
     // a dative bond's line ends at the donor; at the acceptor its arrow's
-    // point is the end, and a cap there would blunt it
-    const ends = kind === "dative" ? [b.a1] : [b.a1, b.a2];
+    // point is the end, and a cap there would blunt it. A wave ends at its
+    // stereocentre only.
+    const ends =
+      kind === "dative" ? [b.a1] : [b.a1, b.a2].filter((e) => e !== wavyFar(b));
     const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
     const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
     for (const e of ends) plainEnds.add(e);
