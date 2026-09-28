@@ -16,8 +16,9 @@ const MAC =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
-/** The menu's size, for keeping it inside the canvas. */
-const SIZE = { width: 240, height: 84 };
+/** The menu's width, and each item's height, for keeping it inside the canvas. */
+const WIDTH = 240;
+const ITEM = 32;
 
 /**
  * What can be done to the atom or bond under the pointer, at the pointer:
@@ -28,11 +29,19 @@ export default function PartMenu({
   target,
   onDelete,
   onCleanUp,
+  onCharge,
+  onRadical,
+  radical,
   onClose,
 }: {
   target: MenuTarget;
   onDelete: () => void;
   onCleanUp: () => void;
+  /** An atom's charge one up or one down. */
+  onCharge: (step: 1 | -1) => void;
+  /** An atom's unpaired electron given or taken away; `radical`, whether it has one. */
+  onRadical: () => void;
+  radical: boolean;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -66,12 +75,21 @@ export default function PartMenu({
       keys: MAC ? "⌫" : "Del",
       run: onDelete,
     },
+    // an atom's charge and radical: the + and - keys do the first
+    ...(target.kind === "atom"
+      ? [
+          { name: "Charge one up", keys: "+", run: () => onCharge(1) },
+          { name: "Charge one down", keys: "\u2212", run: () => onCharge(-1) },
+          { name: radical ? "No unpaired electron" : "Unpaired electron", keys: "", run: onRadical },
+        ]
+      : []),
     {
       name: "Clean up this structure",
       keys: MAC ? "⇧⌘K" : "Ctrl+Shift+K",
       run: onCleanUp,
     },
   ];
+  const height = items.length * ITEM + 12;
   return (
     <div
       ref={ref}
@@ -79,9 +97,9 @@ export default function PartMenu({
       aria-label={target.kind === "atom" ? "Atom" : "Bond"}
       className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
       style={{
-        left: Math.max(0, Math.min(target.x, target.within.width - SIZE.width - 8)),
-        top: Math.max(0, Math.min(target.y, target.within.height - SIZE.height - 8)),
-        width: SIZE.width,
+        left: Math.max(0, Math.min(target.x, target.within.width - WIDTH - 8)),
+        top: Math.max(0, Math.min(target.y, target.within.height - height - 8)),
+        width: WIDTH,
       }}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}

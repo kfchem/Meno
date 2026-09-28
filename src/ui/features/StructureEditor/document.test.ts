@@ -136,7 +136,7 @@ describe("structure document operations", () => {
     const d = ethane();
     expect(ops.moveAtom(d, 1, 0, 0)).toBe(d);
     expect(ops.moveAtom(d, 999, 5, 5)).toBe(d);
-    expect(ops.setAtomLabel(d, 1, "C")).toBe(d);
+    expect(ops.setAtomChemistry(d, 1, { el: "C" })).toBe(d);
     expect(ops.updateBond(d, d.model.bonds[0].id, { order: 1 })).toBe(d);
     expect(ops.updateBond(d, 999, { order: 2 })).toBe(d);
     expect(ops.removeArrow(d, 1)).toBe(d);
@@ -152,7 +152,7 @@ describe("structure document operations", () => {
     expect(moved.model.atoms[0]).toBe(d.model.atoms[0]);
     expect(moved.model.bonds).toBe(d.model.bonds);
 
-    const named = ops.setAtomLabel(moved, 2, "O");
+    const named = ops.setAtomChemistry(moved, 2, { el: "O" });
     expect(named.model.atoms[1].el).toBe("O");
     expect(named.model.atoms[1].x).toBe(4);
   });

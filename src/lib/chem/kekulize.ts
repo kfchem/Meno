@@ -19,7 +19,7 @@
 /** MDL bond type 4: aromatic. */
 export const AROMATIC_BOND = 4;
 
-export type KekuleAtom = { element: string };
+export type KekuleAtom = { el: string };
 export type KekuleBond = { a1: number; a2: number; order: number };
 
 type Role = "needs" | "may" | "never";
@@ -49,7 +49,7 @@ export function kekuleOrders(
   }
   const role = (i: number): Role => {
     if (hasMultiple[i]) return "never"; // already has its double bond, e.g. a pyridone's C=O
-    const el = canonical(atoms[i]?.element ?? "");
+    const el = canonical(atoms[i]?.el ?? "");
     if (el === "C") return "needs";
     // Two connections: pyridine-like, or a pyrrole-type N-H whose H the file
     // leaves implicit. The ring decides which.

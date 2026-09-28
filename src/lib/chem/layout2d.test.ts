@@ -1836,3 +1836,113 @@ describe("a cage in perspective", () => {
     expect(lines).toHaveLength(2);
   });
 });
+
+describe("charges, radicals and isotopes", () => {
+  const L = NOMINAL_BOND_LENGTH;
+  // methylamine as its ammonium, an alkoxide, a carbocation, a radical and 13C
+  const atom = (id: number, x: number, y: number, el: string, extra: Partial<Atom> = {}): Atom => ({ id, x, y, el, ...extra });
+  const single = (a1: number, a2: number): Bond => ({ a1, a2, order: 1 });
+  const ammonium = [atom(0, 0, 0, "C"), atom(1, L, 0, "N", { charge: 1 })];
+  const labelOf = (atoms: Atom[], bonds: Bond[], i: number, over: Partial<LayoutOptions> = {}) =>
+    buildTextLabels(atoms, opts(over), bonds).find((t) => t.atom === i)!;
+
+  it("writes a charge of one in its circle after the H, and plainly if asked", () => {
+    const t = labelOf(ammonium, [single(0, 1)], 1);
+    expect(t.runs!.map((r) => [r.text, r.sub ?? false, r.mark ?? null])).toEqual([
+      ["N", false, null],
+      ["H", false, null],
+      ["3", true, null],
+      ["+", false, "charge"],
+    ]);
+    const plain = labelOf(ammonium, [single(0, 1)], 1, { circleCharges: false });
+    expect(plain.runs![plain.runs!.length - 1]).toEqual({ text: "+", sup: true });
+  });
+
+  it("sets the charge after the symbol when the H come first, and above the baseline", () => {
+    // the bond leaves down to the right, as a zigzag's does: H3N+
+    const left = [atom(0, L * 0.866, -L / 2, "C"), atom(1, 0, 0, "N", { charge: 1 })];
+    const t = labelOf(left, [single(0, 1)], 1);
+    expect(t.runs!.map((r) => r.text)).toEqual(["H", "3", "N", "+"]);
+    const placed = placeLabel(t, 1);
+    const n = placed.find((r) => r.text === "N")!;
+    const mark = placed.find((r) => r.mark)!;
+    expect(mark.x).toBeGreaterThan(n.x);
+    expect(mark.y).toBeGreaterThan(n.y);
+  });
+
+  it("writes a charge of two or more plainly, as a superscript", () => {
+    const iron = [atom(0, 0, 0, "Fe", { charge: 2 })];
+    const t = buildTextLabels(iron, opts(), [])[0];
+    expect(t.runs).toEqual([{ text: "Fe" }, { text: "2+", sup: true }]);
+    const oxide = [atom(0, 0, 0, "C"), atom(1, L, 0, "O", { charge: -1 })];
+    expect(labelOf(oxide, [single(0, 1)], 1).runs!.map((r) => r.text)).toEqual(["O", "−"]);
+  });
+
+  it("writes an isotope's mass number before the symbol, and shows a 13C's label", () => {
+    const labelled = [atom(0, 0, 0, "C", { isotope: 13 }), atom(1, L, 0, "C")];
+    // (its bond to the right, so its H come first: H3 13C)
+    const t = labelOf(labelled, [single(0, 1)], 0);
+    expect(t.runs!.map((r) => r.text)).toEqual(["H", "3", "13", "C"]);
+    expect(t.runs![t.anchorRun! - 1]).toEqual({ text: "13", sup: true });
+    expect(t.runs![t.anchorRun!]).toEqual({ text: "C" });
+  });
+
+  it("leaves a charged carbon a bare vertex, its charge beside it where its bonds leave room", () => {
+    // a tertiary carbocation, its bonds down-left, down-right and up
+    const cation = [
+      atom(0, 0, 0, "C", { charge: 1 }),
+      atom(1, -L * 0.866, -L / 2, "C"),
+      atom(2, L * 0.866, -L / 2, "C"),
+      atom(3, 0, L, "C"),
+    ];
+    const bonds = [single(0, 1), single(0, 2), single(0, 3)];
+    const texts = buildTextLabels(cation, opts(), bonds);
+    expect(texts.find((t) => t.atom === 0)).toBeUndefined();
+    const beside = texts.find((t) => t.beside)!;
+    expect(beside.runs).toEqual([{ text: "+", mark: "charge" }]);
+    // up and to the right, between the bond up and the one down-right
+    const angle = (Math.atan2(beside.y, beside.x) * 180) / Math.PI;
+    expect(angle).toBeGreaterThan(15);
+    expect(angle).toBeLessThan(75);
+    // and with its C, where the style asks for it
+    const shown = buildTextLabels(cation, opts({ showChargedCarbons: true }), bonds);
+    expect(shown.find((t) => t.atom === 0)!.runs!.map((r) => r.text)).toEqual(["C", "+"]);
+  });
+
+  it("draws a circled charge's circle and sign, and a radical's dot, with the lines", () => {
+    const layout = layoutMolecule(ammonium, [single(0, 1)], opts(), 30);
+    const plain = layoutMolecule(ammonium.map((a) => ({ ...a, charge: undefined })), [single(0, 1)], opts(), 30);
+    expect(layout.polys.length - plain.polys.length).toBe(40);
+    expect(layout.lines.length - plain.lines.length).toBe(2);
+    const radical = [atom(0, 0, 0, "C", { radical: "doublet" }), atom(1, L, 0, "C"), atom(2, -L, 0, "C")];
+    const withDot = layoutMolecule(radical, [single(0, 1), single(0, 2)], opts(), 30);
+    const without = layoutMolecule(radical.map((a) => ({ ...a, radical: undefined })), [single(0, 1), single(0, 2)], opts(), 30);
+    expect(withDot.fills.length - without.fills.length).toBe(1);
+  });
+
+  it("counts the H a charge leaves: NH3+ on a methyl, none on O-", () => {
+    expect(implicitHydrogens("N", 1, 1)).toBe(3);
+    expect(implicitHydrogens("O", 1, -1)).toBe(0);
+  });
+
+  it("moves a label's charge off a bond that runs where it would go", () => {
+    // a nitro group's N, its N=O up to the right where the charge would go
+    const nitro = [
+      atom(0, -L * 0.866, -L / 2, "C"),
+      atom(1, 0, 0, "N", { charge: 1 }),
+      atom(2, L * 0.866, L / 2, "O"),
+      atom(3, 0, -L, "O", { charge: -1 }),
+    ];
+    const bonds: Bond[] = [single(0, 1), { a1: 1, a2: 2, order: 2 }, single(1, 3)];
+    const texts = buildTextLabels(nitro, opts(), bonds);
+    expect(texts.find((t) => t.atom === 1)!.runs).toEqual([{ text: "N" }]);
+    const beside = texts.find((t) => t.beside && Math.hypot(t.x, t.y) < L)!;
+    expect(beside.runs).toEqual([{ text: "+", mark: "charge" }]);
+    // clear of the N=O at 30 degrees
+    const angle = (Math.atan2(beside.y, beside.x) * 180) / Math.PI;
+    expect(Math.abs(angle - 30)).toBeGreaterThan(40);
+    // and a charge where nothing is in its way stays after the label
+    const up = nitro.map((a) => (a.id === 2 ? { ...a, x: 0, y: L } : a));
+    expect(buildTextLabels(up, opts(), bonds).find((t) => t.atom === 1)!.runs!.map((r) => r.text)).toEqual(["N", "+"]);
+  });
+});

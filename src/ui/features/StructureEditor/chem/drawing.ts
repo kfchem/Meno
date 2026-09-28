@@ -9,7 +9,8 @@
  * drawing itself, which such a reader cannot see, so it is given the wedges
  * (and H) that say it.
  */
-import { implicitHydrogens, wedgeNarrowAtom } from "../../../../lib/chem/layout2d";
+import { wedgeNarrowAtom } from "../../../../lib/chem/layout2d";
+import { implicitHydrogens } from "../../../../lib/chem/molecule";
 import type { WriterModel } from "../../../../lib/chem/molWriter";
 import { wedgesForFlat, type DrawnAtom, type DrawnBond } from "../../../../lib/layout/drawn";
 import { isElementSymbol } from "../../../../lib/rdkit/molblock";
@@ -44,11 +45,16 @@ export function orientFor(
 export function undrawnHydrogens(model: Model): Map<number, number> {
   const sum = new Map<number, number>();
   for (const b of model.bonds) {
-    sum.set(b.a, (sum.get(b.a) ?? 0) + b.order);
-    sum.set(b.b, (sum.get(b.b) ?? 0) + b.order);
+    // (a dative bond lends a pair, and takes no H from either end)
+    const order = b.dative ? 0 : b.order;
+    sum.set(b.a, (sum.get(b.a) ?? 0) + order);
+    sum.set(b.b, (sum.get(b.b) ?? 0) + order);
   }
   return new Map(
-    model.atoms.map((a) => [a.id, isElementSymbol(a.el) ? implicitHydrogens(a.el, sum.get(a.id) ?? 0) : 0]),
+    model.atoms.map((a) => [
+      a.id,
+      isElementSymbol(a.el) ? implicitHydrogens(a.el, sum.get(a.id) ?? 0, a.charge ?? 0, a.radical) : 0,
+    ]),
   );
 }
 

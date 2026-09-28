@@ -10,6 +10,7 @@ type KeyLike = {
   ctrlKey?: boolean;
   metaKey?: boolean;
   shiftKey?: boolean;
+  altKey?: boolean;
   target?: unknown;
 };
 
@@ -64,6 +65,21 @@ export function isDeleteKey(event: KeyLike): boolean {
     (event.target as { tagName?: string } | null)?.tagName?.toUpperCase() !==
       "TEXTAREA"
   );
+}
+
+/**
+ * + or - on its own - the keys that have them, the number pad's among them,
+ * Shift or not - puts the charge of what is under the pointer one up or one
+ * down: 1, -1, or 0 for any other key. Not while typing in a box, and not
+ * with Ctrl or Cmd, which zoom.
+ */
+export function chargeStep(event: KeyLike): 1 | -1 | 0 {
+  if (event.ctrlKey || event.metaKey || event.altKey) return 0;
+  if (isNativeEditingTarget(event.target)) return 0;
+  if ((event.target as { tagName?: string } | null)?.tagName?.toUpperCase() === "TEXTAREA") return 0;
+  if (event.key === "+") return 1;
+  if (event.key === "-" || event.key === "\u2212") return -1;
+  return 0;
 }
 
 /** Ctrl/Cmd+Z undoes; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. */

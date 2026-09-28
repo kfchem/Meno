@@ -1,23 +1,48 @@
 import { elements } from "./atomUtils";
+import type { Molecule, ParsedAtom, ParsedBond, Radical } from "../lib/chem/molecule";
 
-export type Atom = {
-  x: number;
-  y: number;
-  z: number;
-  element: string;
-};
+// (a file's molecule is the one in lib/chem/molecule; the names it had here)
+export type { Molecule };
+export type Atom = ParsedAtom;
+export type Bond = ParsedBond;
 
-export type Bond = {
-  a1: number;
-  a2: number;
-  order: number;
-  stereoCode?: number;
-};
+/** MOL's radical codes: 1 a singlet, 2 a doublet, 3 a triplet. */
+const RADICALS: Record<number, Radical> = { 1: "singlet", 2: "doublet", 3: "triplet" };
+/** The atom block's charge field: 1 to 3 for +3 to +1, 4 a doublet radical, 5 to 7 for -1 to -3. */
+const CHARGE_CODES: Record<number, number> = { 1: 3, 2: 2, 3: 1, 5: -1, 6: -2, 7: -3 };
 
-export type Molecule = {
-  atoms: Atom[];
-  bonds: Bond[];
-};
+/**
+ * Sets what a V2000 block's property lines say about its atoms - charges,
+ * radicals and isotopes - over what its atom block said: by the format,
+ * a CHG or RAD line there at all clears the atom block's charges.
+ */
+function applyProperties(lines: readonly string[], atoms: Atom[]): void {
+  const props = lines.map((l) => /^M {2}(CHG|RAD|ISO)\s+(.*)$/.exec(l)).filter((m) => m != null);
+  if (props.some((m) => m[1] === "CHG" || m[1] === "RAD")) {
+    for (const a of atoms) {
+      delete a.charge;
+      delete a.radical;
+    }
+  }
+  for (const [, kind, rest] of props) {
+    const toks = rest.trim().split(/\s+/).map((t) => Number.parseInt(t));
+    const n = toks[0];
+    for (let k = 0; k < n; k++) {
+      const atom = atoms[toks[1 + 2 * k] - 1];
+      const v = toks[2 + 2 * k];
+      if (!atom || !Number.isFinite(v)) continue;
+      if (kind === "CHG") {
+        if (v) atom.charge = v;
+        else delete atom.charge;
+      } else if (kind === "RAD") {
+        if (RADICALS[v]) atom.radical = RADICALS[v];
+        else delete atom.radical;
+      } else if (v > 0) {
+        atom.isotope = v;
+      }
+    }
+  }
+}
 
 export function parseSDF(sdf: string): Molecule[] {
   const norm = sdf.replace(/\r\n?/g, "\n");
@@ -73,14 +98,19 @@ export function parseSDF(sdf: string): Molecule[] {
         let y = Number.parseFloat(line.slice(10, 20));
         let z = Number.parseFloat(line.slice(20, 30));
         let element = (line.slice(31, 34) || "").trim();
+        let code = Number.parseInt(line.slice(36, 39));
         if (!Number.isFinite(x) || !Number.isFinite(y)) {
           const toks = line.trim().split(/\s+/);
           x = Number.parseFloat(toks[0] ?? "0");
           y = Number.parseFloat(toks[1] ?? "0");
           z = Number.parseFloat(toks[2] ?? "0");
           element = (toks[3] ?? element ?? "C").trim();
+          code = Number.parseInt(toks[5] ?? "0");
         }
-        atoms.push({ x, y, z, element: element || "C" });
+        const atom: Atom = { x, y, z, el: element || "C" };
+        if (CHARGE_CODES[code]) atom.charge = CHARGE_CODES[code];
+        else if (code === 4) atom.radical = "doublet";
+        atoms.push(atom);
       }
       const firstBond = firstAtom + atomCount;
       for (let i = 0; i < bondCount; i++) {
@@ -108,6 +138,7 @@ export function parseSDF(sdf: string): Molecule[] {
         )
           bonds.push({ a1, a2, order, stereoCode });
       }
+      applyProperties(lines.slice(firstBond + bondCount), atoms);
     }
     out.push({ atoms, bonds });
   }
@@ -126,7 +157,7 @@ export function parseXYZ(xyz: string): Molecule[] {
     const atoms: Atom[] = atomLines.map((line) => {
       const [element, x, y, z] = line.trim().split(/\s+/);
       return {
-        element,
+        el: element,
         x: parseFloat(x),
         y: parseFloat(y),
         z: parseFloat(z),
@@ -138,8 +169,8 @@ export function parseXYZ(xyz: string): Molecule[] {
       for (let n = m + 1; n < atoms.length; n++) {
         const a1 = atoms[m];
         const a2 = atoms[n];
-        const r1 = elements.find((e) => e.symbol === a1.element)?.single ?? 1.5;
-        const r2 = elements.find((e) => e.symbol === a2.element)?.single ?? 1.5;
+        const r1 = elements.find((e) => e.symbol === a1.el)?.single ?? 1.5;
+        const r2 = elements.find((e) => e.symbol === a2.el)?.single ?? 1.5;
         const threshold = (r1 + r2) * 1.1;
 
         const dx = a1.x - a2.x;
@@ -202,11 +233,15 @@ function parseMolV3000(block: string): Molecule | null {
       const body = s.replace(/^M\s+V30\s+/, "");
       const toks = body.trim().split(/\s+/);
       if (toks.length >= 5) {
-        const element = toks[1];
-        const x = parseFloat(toks[2]);
-        const y = parseFloat(toks[3]);
-        const z = parseFloat(toks[4]);
-        atoms.push({ element, x, y, z });
+        const atom: Atom = { el: toks[1], x: parseFloat(toks[2]), y: parseFloat(toks[3]), z: parseFloat(toks[4]) };
+        const prop = (key: string) => {
+          const m = new RegExp(`\\b${key}=(-?\\d+)`, "i").exec(toks.slice(6).join(" "));
+          return m ? Number.parseInt(m[1]) : 0;
+        };
+        if (prop("CHG")) atom.charge = prop("CHG");
+        if (RADICALS[prop("RAD")]) atom.radical = RADICALS[prop("RAD")];
+        if (prop("MASS") > 0) atom.isotope = prop("MASS");
+        atoms.push(atom);
       }
       continue;
     }

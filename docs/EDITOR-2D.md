@@ -226,7 +226,16 @@ All hover-based, as above.
   move, rotate and flip what is selected.
 - Elements without typing; charges, radicals and isotopes, drawn as
   superscripts and carried through the model, the files and the hydrogen
-  count.
+  count. (PR #65: charges, radicals and isotopes read from files and
+  SMILES, kept and written back; the H an atom carries follow its charge.
+  Drawn as the maintainer has it: a charge of one in its circle (⊕, ⊖),
+  larger ones plainly (2+), after the label and above the line or, where a
+  bond runs there, beside it; a charged carbon a bare vertex with its
+  charge beside it; a radical a dot; a mass number before the symbol.
+  Circled or plain, and a charged carbon's C, are the style's. Set by
+  typing - N+, NH3+, O-, Fe2+, 13C, or a charge alone - by + and - over
+  an atom, or from its menu, which also gives or takes an unpaired
+  electron.)
 - Ring templates (3- to 8-membered, benzene), fused onto a bond or an atom;
   chains. (Chains: PR #57, a double-click on an atom that drags - taken out
   again for now, that gesture drawing one bond. Rings, when they come, grow

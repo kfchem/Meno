@@ -5,6 +5,7 @@ import {
   buildEditorModelFromRXN,
   type EditorModel,
 } from "../../../../utils/importers";
+import { chemistry } from "../../../../lib/chem/molecule";
 import type { Model } from "../store/types";
 
 /** Extensions the file pickers offer that have no parser yet. */
@@ -80,6 +81,7 @@ export function editorModelOf(mdl: { atoms: any[]; bonds: any[] }): Model {
       y: a.y,
       r: a.r ?? 0.9,
       el: a.el ?? "C",
+      ...chemistry(a),
     })),
     bonds: mdl.bonds.map((b) => ({
       id: b.id,

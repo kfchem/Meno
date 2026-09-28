@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCleanUpKey, isDeleteKey, saveIntent, undoIntent } from "./shortcuts";
+import { chargeStep, isCleanUpKey, isDeleteKey, saveIntent, undoIntent } from "./shortcuts";
 
 const key = (over: Partial<Parameters<typeof undoIntent>[0]> = {}) => ({
   key: "z",
@@ -73,5 +73,18 @@ describe("isDeleteKey", () => {
     expect(
       isDeleteKey({ key: "Backspace", target: { tagName: "TEXTAREA" } }),
     ).toBe(false);
+  });
+});
+
+describe("chargeStep", () => {
+  it("is + or - on its own, outside text fields", () => {
+    expect(chargeStep({ key: "+" })).toBe(1);
+    expect(chargeStep({ key: "+", shiftKey: true })).toBe(1);
+    expect(chargeStep({ key: "-" })).toBe(-1);
+    expect(chargeStep({ key: "=" })).toBe(0);
+    // Ctrl or Cmd with them zoom
+    expect(chargeStep({ key: "+", metaKey: true })).toBe(0);
+    expect(chargeStep({ key: "-", ctrlKey: true })).toBe(0);
+    expect(chargeStep({ key: "-", target: { tagName: "INPUT" } })).toBe(0);
   });
 });
