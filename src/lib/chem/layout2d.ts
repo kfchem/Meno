@@ -1,6 +1,7 @@
 import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
+import { ringSidesOf } from "./aromaticSides";
 
 export type Atom = {
   id: number;
@@ -2087,15 +2088,35 @@ export function buildAllPrimitives(
   // of them before any is drawn, so that a bond can meet its neighbour's line
   // where they share an atom instead of stopping short of it.
   const doubleSides = new Map<Bond, number | undefined>();
-  for (const b of bonds) {
-    if (b.order !== 2) continue;
-    if (b.doubleMode !== undefined && b.doubleMode !== "auto") continue;
+  // A ring's double bond goes inside the ring - an aromatic ring's into the
+  // ring that shows as aromatic by it, since fused rings share a bond and it
+  // can go into only one of them (see aromaticSides).
+  const ringSide = ringSidesOf(
+    atoms.length,
+    bonds,
+    atoms.map((a) => a.el),
+  );
+  bonds.forEach((b, i) => {
+    if (b.order !== 2) return;
+    if (b.doubleMode !== undefined && b.doubleMode !== "auto") return;
     const p1 = { x: atoms[b.a1].x, y: atoms[b.a1].y };
     const p2 = { x: atoms[b.a2].x, y: atoms[b.a2].y };
     const axis = vsub(p2, p1);
     const L0 = vlen(axis);
     const dir = L0 > 1e-9 ? vscale(axis, 1 / L0) : { x: 1, y: 0 };
     const n = vperp(dir); // Treat +n as "left"
+    const ring = ringSide.get(i);
+    if (ring) {
+      const c = ring.reduce(
+        (acc, k) => ({ x: acc.x + atoms[k].x / ring.length, y: acc.y + atoms[k].y / ring.length }),
+        { x: 0, y: 0 },
+      );
+      const toward = vdot(vsub(c, vscale(vadd(p1, p2), 0.5)), n);
+      if (Math.abs(toward) > 1e-9) {
+        doubleSides.set(b, toward > 0 ? 1 : -1);
+        return;
+      }
+    }
     const neigh1 = bonds
       .filter((o) => o !== b && (o.a1 === b.a1 || o.a2 === b.a1))
       .map((o) => (o.a1 === b.a1 ? o.a2 : o.a1));
@@ -2144,7 +2165,7 @@ export function buildAllPrimitives(
       if (here < CROWDED && there > here) sgn = -sgn;
     }
     doubleSides.set(b, sgn);
-  }
+  });
 
   // bonds at each atom, and just the neighbours, which the ring search uses
   // measure the labels once: the bonds are trimmed to them
