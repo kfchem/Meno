@@ -213,42 +213,68 @@ export function deleteParts(
 }
 
 /**
- * A new layout for some of the structure - a clean-up - in one edit: atoms
- * moved, and wedges changed where the new layout needs them. Nothing that
- * would not change is touched.
+ * A new layout for some of the structure, as edits: where each atom goes
+ * (and its depth, where it is drawn in perspective; none, where it is not),
+ * the wedges changed, and the H atoms drawn to carry a wedge - added, or
+ * taken away with their bonds where no longer drawn.
  */
-export function relayout(
-  doc: StructureDocument,
-  change: {
-    atoms: { id: number; x: number; y: number }[];
-    bonds: Pick<Bond, "id" | "stereo" | "stereoOrient">[];
-  },
-): StructureDocument {
+export type Relayout = {
+  atoms: { id: number; x: number; y: number; z?: number; stereoCentre?: boolean }[];
+  bonds: Pick<Bond, "id" | "stereo" | "stereoOrient">[];
+  /** H atoms to add, each bonded to `on`, the bond wedged as given. */
+  added?: {
+    x: number;
+    y: number;
+    on: number;
+    stereo: NonNullable<Bond["stereo"]>;
+    stereoOrient: NonNullable<Bond["stereoOrient"]>;
+  }[];
+  /** Atoms to take away, with their bonds. */
+  removed?: number[];
+};
+
+/**
+ * A new layout for some of the structure - a clean-up - in one edit: atoms
+ * moved, wedges changed, H atoms added and taken away where the new layout
+ * needs them. Nothing that would not change is touched.
+ */
+export function relayout(doc: StructureDocument, change: Relayout): StructureDocument {
   const to = new Map(change.atoms.map((a) => [a.id, a]));
-  let moved = false;
-  const atoms = doc.model.atoms.map((a) => {
+  const gone = new Set(change.removed ?? []);
+  let changed = gone.size > 0 || (change.added?.length ?? 0) > 0;
+  const atoms = doc.model.atoms.flatMap((a): Atom[] => {
+    if (gone.has(a.id)) return [];
     const p = to.get(a.id);
-    if (!p || (p.x === a.x && p.y === a.y)) return a;
-    moved = true;
-    return { ...a, x: p.x, y: p.y };
+    if (!p) return [a];
+    if (p.x === a.x && p.y === a.y && p.z === a.z && !!p.stereoCentre === !!a.stereoCentre) return [a];
+    changed = true;
+    const { z: _z, stereoCentre: _c, ...rest } = a;
+    return [
+      {
+        ...rest,
+        x: p.x,
+        y: p.y,
+        ...(p.z != null ? { z: p.z } : {}),
+        ...(p.stereoCentre ? { stereoCentre: true } : {}),
+      },
+    ];
   });
   const patch = new Map(change.bonds.map((b) => [b.id, b]));
-  let rewedged = false;
-  const bonds = doc.model.bonds.map((b) => {
+  const bonds = doc.model.bonds.flatMap((b): Bond[] => {
+    if (gone.has(b.a) || gone.has(b.b)) return [];
     const p = patch.get(b.id);
-    if (!p || (p.stereo === b.stereo && p.stereoOrient === b.stereoOrient))
-      return b;
-    rewedged = true;
-    return { ...b, stereo: p.stereo, stereoOrient: p.stereoOrient };
+    if (!p || (p.stereo === b.stereo && p.stereoOrient === b.stereoOrient)) return [b];
+    changed = true;
+    return [{ ...b, stereo: p.stereo, stereoOrient: p.stereoOrient }];
   });
-  if (!moved && !rewedged) return doc;
-  return {
-    ...doc,
-    model: {
-      atoms: moved ? atoms : doc.model.atoms,
-      bonds: rewedged ? bonds : doc.model.bonds,
-    },
-  };
+  if (!changed) return doc;
+  let nextId = doc.nextId;
+  for (const h of change.added ?? []) {
+    const id = nextId++;
+    atoms.push({ id, x: h.x, y: h.y, r: 0.9, el: "H" });
+    bonds.push({ id: nextId++, a: h.on, b: id, order: 1, stereo: h.stereo, stereoOrient: h.stereoOrient });
+  }
+  return { ...doc, nextId, model: { atoms, bonds } };
 }
 
 export function setAtomLabel(

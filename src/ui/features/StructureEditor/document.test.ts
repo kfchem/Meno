@@ -107,6 +107,31 @@ describe("structure document operations", () => {
     ).toBe(d);
   });
 
+  it("adds and takes away the H a new layout draws, and gives atoms a depth", () => {
+    let d = ethane();
+    d = ops.addAtomBonded(d, 1, -1, 1, "H");
+    const h = d.model.atoms[2].id;
+    const next = ops.relayout(d, {
+      atoms: [{ id: 1, x: 0, y: 0, z: 0.5, stereoCentre: true }],
+      bonds: [],
+      added: [{ x: 0, y: 1.5, on: 2, stereo: "up", stereoOrient: "principle" }],
+      removed: [h],
+    });
+    expect(next.model.atoms.map((a) => a.el)).toEqual(["C", "C", "H"]);
+    expect(next.model.atoms[0]).toMatchObject({ z: 0.5, stereoCentre: true });
+    const added = next.model.atoms[2];
+    expect(added.id).not.toBe(h);
+    // the H's own bond gone with it; the new one wedged from atom 2
+    expect(next.model.bonds.map((b) => [b.a, b.b, b.stereo])).toEqual([
+      [1, 2, "none"],
+      [2, added.id, "up"],
+    ]);
+    // and laid out again flat, the depth goes
+    const flat = ops.relayout(next, { atoms: [{ id: 1, x: 0, y: 0 }], bonds: [] });
+    expect(flat.model.atoms[0].z).toBeUndefined();
+    expect(flat.model.atoms[0].stereoCentre).toBeUndefined();
+  });
+
   it("returns the same document when nothing changes, so no undo step is made", () => {
     const d = ethane();
     expect(ops.moveAtom(d, 1, 0, 0)).toBe(d);
