@@ -26,25 +26,27 @@ and in particular:
 - **Drawing is dragging bonds out of atoms**, and the editor is made for
   that way of drawing rather than for keys to learn: there are no keyboard
   shortcuts for building structures (agreed 2026-09-27).
-  - A drag from an atom draws one bond where it is led. Near 120 degrees
-    from a bond already there it snaps to that, and an arc grows out of the
-    atom to tell it from the 30-degree grid.
+  - A drag on an atom moves it; it snaps as it goes, and dropped on another
+    atom it becomes that atom.
   - A double-click on an atom draws one bond where there is room; a
-    double-click that drags draws a chain along the pointer's path, a
-    carbon for every bond length, zigzagging. A click alone edits the
-    atom's label once the system's double-click time has passed
-    (DOUBLE_CLICK_MS, half a second); a double-click slower than that,
-    finding its first click already editing, takes the edit back. The end
-    of a drag is not a click, though the browser fires one wherever the
-    button comes up: a bond or a chain let go on the atom it has just
+    double-click that drags draws one bond where it is led. Near 120
+    degrees from a bond already there it snaps to that, and an arc grows
+    out of the atom to tell it from the 30-degree grid. (Agreed 2026-09-28,
+    after trying it: a plain drag drawing a bond was hard to get used to.)
+  - A click alone edits the atom's label once the system's double-click
+    time has passed (DOUBLE_CLICK_MS, half a second); a double-click
+    slower than that, finding its first click already editing, takes the
+    edit back. The end of a drag is not a click, though the browser fires
+    one wherever the button comes up: a bond let go on the atom it has just
     drawn does not go on to edit that atom's label (utils/press).
-  - A press held still (HOLD_MS) lifts an atom, and the drag moves it.
-  - A pause in a drag (FREE_MS, longer than a long press) lets a bond or a
-    moved atom go exactly where the pointer is, off the grid; in a chain
-    it lays down the bond it is on, snapped.
+  - A pause in a drag (FREE_MS) lets a bond or a moved atom go exactly
+    where the pointer is, off the grid.
   - A bond led within reach of an atom closes onto it, and so does one led
     onto an atom however far away - a long bond closes a ring too; the
     preview shows it closed before the button comes up.
+  - Chains - a bond laid down for every bond length the pointer goes - are
+    not drawn for now (2026-09-28); they are to come back in some form.
+    `utils/stroke` still knows them.
 
   The whole stroke is one undo step. (PR #57)
 - **The mouse alone should be enough**, and it should travel as little as
@@ -226,8 +228,9 @@ All hover-based, as above.
   superscripts and carried through the model, the files and the hydrogen
   count.
 - Ring templates (3- to 8-membered, benzene), fused onto a bond or an atom;
-  chains. (Chains: PR #57, a double-click on an atom that drags. Rings, when
-  they come, grow out of the same dragging, not keys.)
+  chains. (Chains: PR #57, a double-click on an atom that drags - taken out
+  again for now, that gesture drawing one bond. Rings, when they come, grow
+  out of the same dragging, not keys.)
 - Every bond type from the pointer: wavy, bold, dashed, and the rest of what
   the cycle cannot reach today.
 - Abbreviations (Me, Ph, Boc, OTBS …) that read correctly and can be expanded.

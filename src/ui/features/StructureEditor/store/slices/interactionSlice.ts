@@ -86,11 +86,6 @@ export function createInteractionSlice(set: SetState, get: GetState) {
       }));
     },
 
-    setMoveArmed: (atomId: number | null) =>
-      set((prev: EditorState) =>
-        prev.moveArmed === atomId ? prev : { ...prev, moveArmed: atomId },
-      ),
-
     cancelExtend: () =>
       set((prev: EditorState) => ({
         ...prev,

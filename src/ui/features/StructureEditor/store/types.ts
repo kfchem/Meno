@@ -93,8 +93,6 @@ export type EditorState = {
     preview?: { x: number; y: number; atomId?: number; pathIndex?: number } | null;
   };
   panHold: { active: boolean; pointerId: number | null };
-  /** The atom a long press has lifted to be moved, before it moves. */
-  moveArmed: number | null;
   suppressDblClickUntil: number;
   nextId: number;
   nextArrowId: number;
@@ -150,7 +148,6 @@ export type EditorState = {
   updateExtend: (x: number, y: number) => void;
   /** A pause in the stroke: see `holdStroke`. */
   holdExtend: () => void;
-  setMoveArmed: (atomId: number | null) => void;
   commitExtend: () => void;
   cancelExtend: () => void;
   /** A finished stroke, added as one undo step. */
