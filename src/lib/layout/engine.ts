@@ -20,7 +20,7 @@ import {
   type Frame,
   type Grown,
 } from "./assemble";
-import { dist, mirror, segmentsCross, sub } from "./geometry";
+import { angleOf, dist, mirror, segmentsCross, sub } from "./geometry";
 import { layoutMetrics } from "./metrics";
 import { perceive, type LayoutInput, type Molecule } from "./perceive";
 import { misshapen, placeRingSystem, regularize, ringSystemVariants } from "./ringSystem";
@@ -86,6 +86,14 @@ export function layout2D(input: LayoutInput): Layout2D {
     const [from, to] = beyondB <= beyondA ? [a, b] : [b, a];
     return !fixed(sideAtoms(mol, from, to));
   });
+  // and the two groups on a ring atom (a gem pair) each the other's way
+  const swaps: [number, number, number][] = [];
+  for (let a = 0; a < mol.n; a++) {
+    const s = mol.systemOf[a];
+    if (s < 0 || upright.has(s)) continue;
+    const out = mol.neighbours[a].filter((b) => mol.systemOf[b] !== s);
+    if (out.length === 2) swaps.push([a, out[0], out[1]]);
+  }
   // a macrocycle's shape chosen for what hangs from it: each shape offered
   // tried, grown in every frame, and the best kept
   mol.systems.forEach((sys, i) => {
@@ -97,26 +105,27 @@ export function layout2D(input: LayoutInput): Layout2D {
     let bestScore = Infinity;
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
+    const swapsHere = swaps.filter(([a]) => here.has(a));
     for (let v = 0; v < count; v++) {
       local.set(i, placeRingSystem(mol, sys, v));
-      // the frame it grows best in, tried the other way and untangled
-      // where it helps: substituents inside a macrocycle are crowded until then
-      let top: Grown | null = null;
-      let topScore = Infinity;
-      for (const frame of framesFor(mol, piece)) {
-        const { L, H } = setUp(frame);
-        const pos = grow(mol, piece, L, frame, sides, H, upright);
-        const s = score(pos);
-        if (s < topScore) {
-          topScore = s;
-          top = pos;
+      // the frame it grows best in - the best few, for a piece of up to
+      // sixty atoms - each tried the other way and untangled where it helps:
+      // substituents inside a macrocycle are crowded until then, and the
+      // frame that reads best may not be the one that grew best
+      const grown = framesFor(mol, piece)
+        .map((frame) => {
+          const { L, H } = setUp(frame);
+          const pos = grow(mol, piece, L, frame, sides, H, upright);
+          return { pos, score: score(pos) };
+        })
+        .sort((p, q) => p.score - q.score);
+      for (const top of grown.slice(0, piece.length <= 60 ? 3 : 1)) {
+        const better = improve(mol, top.pos, top.score, flipsHere, sides, score, false, swapsHere);
+        const s = untangle(mol, piece, better.pos, better.score, score, fixed).score;
+        if (s < bestScore) {
+          bestScore = s;
+          best = v;
         }
-      }
-      const better = improve(mol, top!, topScore, flipsHere, sides, score);
-      const s = untangle(mol, piece, better.pos, better.score, score, fixed).score;
-      if (s < bestScore) {
-        bestScore = s;
-        best = v;
       }
     }
     local.set(i, placeRingSystem(mol, sys, best));
@@ -133,6 +142,7 @@ export function layout2D(input: LayoutInput): Layout2D {
     const score = scorer(mol, piece, depth, solid);
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
+    const swapsHere = swaps.filter(([a]) => here.has(a));
     const tried = framesFor(mol, piece).map((frame) => {
       const { L, H } = setUp(frame);
       const pos = grow(mol, piece, L, frame, sides, H, upright);
@@ -144,12 +154,18 @@ export function layout2D(input: LayoutInput): Layout2D {
     const worth = piece.length <= 80 ? tried.length : 4;
     const improved = tried
       .slice(0, worth)
-      .map((cand) => ({ ...improve(mol, cand.pos, cand.score, flipsHere, sides, score), mirrored: cand.mirrored }))
+      .map((cand) => ({
+        ...improve(mol, cand.pos, cand.score, flipsHere, sides, score, false, swapsHere),
+        mirrored: cand.mirrored,
+      }))
       .sort((p, q) => p.score - q.score);
     // and the best few set right within their small sides - every one, for
     // a small piece
     for (const cand of improved.slice(0, piece.length <= 40 ? improved.length : 3)) {
-      const deeper = { ...improve(mol, cand.pos, cand.score, flipsHere, sides, score, true), mirrored: cand.mirrored };
+      const deeper = {
+        ...improve(mol, cand.pos, cand.score, flipsHere, sides, score, true, swapsHere),
+        mirrored: cand.mirrored,
+      };
       if (deeper.score < best.score - 1e-9) best = deeper;
     }
     best = { ...rejoin(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
@@ -262,8 +278,11 @@ function layoutSystem(
 }
 
 /**
- * Tries each single bond the other way round, keeping what scores better,
- * until nothing does. Then, `deep`, each small side turned over is tried
+ * Tries each single bond the other way round, and the two groups on a ring
+ * atom (`swaps`: the atom, then each group's first atom) each the other's
+ * way, keeping what scores better, until nothing does - erythromycin's
+ * tertiary OH turned up out of its sugar's way, its methyl across. Then,
+ * `deep`, each small side turned over is tried
  * with each bond within it turned back as well: what hangs on it - a
  * carboxyl's C=O, up - set right again, where turning the side alone would
  * put it wrong; and if that helps, single bonds again.
@@ -276,6 +295,7 @@ export function improve(
   sides: Map<string, number>,
   score: (pos: Grown) => number,
   deep = false,
+  swaps: [number, number, number][] = [],
 ): { pos: Grown; score: number } {
   let pos = start;
   let current = startScore;
@@ -285,6 +305,22 @@ export function improve(
       for (const [a, b] of flips) {
         const trial = new Map(pos);
         flip(mol, trial, a, b, sides);
+        const s = score(trial);
+        if (s < current - 1e-6) {
+          pos = trial;
+          current = s;
+          better = true;
+        }
+      }
+      for (const [a, b, c] of swaps) {
+        const trial = new Map(pos);
+        const at = trial.get(a)!;
+        const tb = angleOf(sub(trial.get(b)!, at));
+        const tc = angleOf(sub(trial.get(c)!, at));
+        const sb = sideAtoms(mol, a, b);
+        const sc = sideAtoms(mol, a, c);
+        turnSide(trial, sb, at, tc - tb);
+        turnSide(trial, sc, at, tb - tc);
         const s = score(trial);
         if (s < current - 1e-6) {
           pos = trial;

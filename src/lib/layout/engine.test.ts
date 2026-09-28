@@ -440,6 +440,38 @@ describe("layout2D", () => {
     expect(y[8]).toBeLessThan(indole.reduce((s, a) => s + y[a], 0) / indole.length - 0.1);
   });
 
+  it("draws a triphosphate as one straight line, each P=O above it", () => {
+    // methyl triphosphate: CH3-O-P(=O)(OH)-O-P(=O)(OH)-O-P(=O)(OH)2
+    const els = "COPOOOPOOOPOOO";
+    const skeleton = carbons(els.length, [
+      [0, 1], [1, 2], [2, 3, 2], [2, 4], [2, 5], [5, 6], [6, 7, 2], [6, 8], [6, 9], [9, 10], [10, 11, 2], [10, 12],
+      [10, 13],
+    ]);
+    const input: LayoutInput = { ...skeleton, atoms: skeleton.atoms.map((_, i) => ({ el: els[i], hs: [3, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1][i] })) };
+    const { y } = layout2D(input);
+    // P, O, P, O, P on one level line
+    for (const a of [5, 6, 9, 10]) expect(y[a]).toBeCloseTo(y[2], 6);
+    for (const [p, o] of [[2, 3], [6, 7], [10, 11]]) expect(y[o]).toBeGreaterThan(y[p] + 0.9);
+  });
+
+  it("sets a macrolide's lactone at its lower left, numbered counterclockwise from it", () => {
+    // a fourteen-membered lactone: its ring O (0), C1 (1) with its C=O
+    // (14), and methyls on C2, C4, C6, C8 and C10
+    const bonds: [number, number, number?][] = [...ring(0, 14), [1, 14, 2]];
+    for (const [c, m] of [[2, 15], [4, 16], [6, 17], [8, 18], [10, 19]]) bonds.push([c, m]);
+    const skeleton = carbons(20, bonds);
+    const input: LayoutInput = {
+      ...skeleton,
+      atoms: skeleton.atoms.map((a, i) => (i === 0 || i === 14 ? { el: "O" } : a)),
+    };
+    const { x, y } = layout2D(input);
+    const cx = [...Array(14).keys()].reduce((sum, a) => sum + x[a], 0) / 14;
+    const cy = [...Array(14).keys()].reduce((sum, a) => sum + y[a], 0) / 14;
+    expect(x[1]).toBeLessThan(cx - 0.5);
+    expect(y[1]).toBeLessThan(cy - 0.5);
+    expect((x[1] - cx) * (y[2] - cy) - (y[1] - cy) * (x[2] - cx)).toBeGreaterThan(0);
+  });
+
   it("sets the pieces of a salt side by side", () => {
     const input: LayoutInput = {
       atoms: [{ el: "Na", charge: 1 }, { el: "C" }, { el: "C" }, { el: "O" }, { el: "O", charge: -1 }],

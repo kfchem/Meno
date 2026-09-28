@@ -349,7 +349,10 @@ function macrocycleFit(
           }
         }
       }
-      weight += 1 + 0.5 * (seen.size - 2);
+      // (a double-bonded O as much as a methyl and a half: a C=O inside
+      // the ring crowds it more than a methyl does)
+      const double = mol.bonds[mol.bondIndex.get(a < b ? `${a},${b}` : `${b},${a}`)!].order === 2;
+      weight += (double ? 1.5 : 1) + 0.5 * (seen.size - 2);
     }
     return weight;
   });
@@ -390,6 +393,10 @@ function macrocycleFit(
     const cis = st.cis !== (onA !== before) !== (onB !== after);
     fixed.push({ i, cis });
   }
+  // A macrolide's lactone at the lower left, the ring numbered from its
+  // carbonyl carbon counterclockwise (docs/LAYOUT-2D.md, section 4): among
+  // fits that put the heavy groups outside as well, the one that does
+  const lactone = macrolactone(mol, ring, rings);
   const at = (shift: number, way: number, k: number) => shape[(((shift + way * k) % n) + n) % n];
   let best = { shift: 0, way: 1 };
   let bestCost = Infinity;
@@ -411,6 +418,13 @@ function macrocycleFit(
       for (const i of pointOut) {
         if (inward[(((shift + way * i) % n) + n) % n]) cost += 20;
       }
+      if (lactone) {
+        const c1 = at(shift, way, lactone.c1);
+        const c2 = at(shift, way, lactone.c2);
+        if (c1.x > -0.5) cost += 2;
+        if (c1.y > -0.5) cost += 2;
+        if (cross(c1, c2) < 0) cost += 4;
+      }
       if (cost < bestCost - 1e-9) {
         bestCost = cost;
         best = { shift, way };
@@ -418,6 +432,29 @@ function macrocycleFit(
     }
   }
   return (i) => (((best.shift + best.way * i) % n) + n) % n;
+}
+
+/**
+ * A macrocycle's one lactone, where it is a plain one - its carbonyl carbon
+ * and the next atom on in no other ring: their places in the ring.
+ */
+function macrolactone(mol: Molecule, ring: number[], rings: number[][]): { c1: number; c2: number } | null {
+  const n = ring.length;
+  const found: { c1: number; c2: number }[] = [];
+  ring.forEach((c, i) => {
+    if (mol.el[c] !== "C") return;
+    const oxo = mol.neighbours[c].some(
+      (o) => !ring.includes(o) && mol.el[o] === "O" && mol.bonds[mol.bondIndex.get(c < o ? `${c},${o}` : `${o},${c}`)!].order === 2,
+    );
+    if (!oxo) return;
+    const [before, after] = [(i - 1 + n) % n, (i + 1) % n];
+    if (mol.el[ring[before]] === "O") found.push({ c1: i, c2: after });
+    else if (mol.el[ring[after]] === "O") found.push({ c1: i, c2: before });
+  });
+  if (found.length !== 1) return null;
+  const { c1, c2 } = found[0];
+  if (rings.some((q) => q !== ring && (q.includes(ring[c1]) || q.includes(ring[c2])))) return null;
+  return found[0];
 }
 
 /** Places the atoms of a ring not yet placed, given those that are. */

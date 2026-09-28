@@ -50,14 +50,14 @@ before, not a record of how particular molecules are drawn.
 | overlaps | atoms not bonded but closer than half a bond |
 | crossings | bonds crossing bonds |
 | clashes | atoms lying on a bond they are not part of |
-| crowded labels | labelled atoms (anything but a neutral C) close enough for their labels to meet |
+| crowded labels | labelled atoms (anything but a neutral C) close enough for their labels to meet; and, half as much, a label's H with nowhere to go clear of other labels, atoms and bonds (the drawing sets it the other side, or under or over its symbol, where the usual side is taken) |
 
 **Shape**:
 
 | | |
 |---|---|
 | bond lengths | how much bond lengths vary |
-| angles | how far angles at chain atoms are from ideal |
+| angles | how far angles at chain atoms are from ideal: 120°, or 180° across a triple bond, between two double bonds or between two phosphate crosses; a bond joining a cross to a zigzag may give way to 150° |
 | rings | how far rings of up to eight are from regular polygons |
 | macrocycle angles | how far the angles round a ring of nine or more are from a zigzag's 120° - a macrocycle drawn as a round polygon is far off; a ring that runs through other rings (a porphyrin's) is a ring of rings, and not counted |
 | substituents | how far a ring atom's other bonds are from splitting the room outside the ring evenly: an H at a ring fusion drawn straight out, not aslant |
@@ -68,13 +68,13 @@ before, not a record of how particular molecules are drawn.
 | | |
 |---|---|
 | tilt | how far the drawing is turned off the 30° lattice. The largest ring system is the frame; a ring hung off it askew is *askew*, not the frame tilted. A frame whose rings cannot all lie on the lattice together, as fluorene's cannot, is square when its long axis is level or upright |
-| askew | how far the bonds that could lie on the lattice are still off it once the frame is square |
+| askew | how far the bonds that could lie on the lattice are still off it once the frame is square (a four-membered ring's, and a phosphate or sulfonyl cross's, on a square grid: level and upright) |
 | chains off level | how far the open parts of the structure - strands of atoms in no ring, split where they branch - run from level, along the axis of their zigzag; a strand of up to four bonds hung on a ring may run straight out from it instead |
 | long axis | how far the drawing's long axis is from level, in proportion to how much longer than broad it is |
 | tall | height over width, past square |
-| macrocycle tall | a ring of twelve or more drawn taller than wide |
+| macrocycle tall | a ring of sixteen or more drawn taller than wide |
 | folded chains, splayed chains | long chains folded up rather than drawn out, and not running parallel as lipids' do |
-| reading order | an acid at the end of a chain on the right; an amino acid's NH2 below its alpha carbon; a ring system to the left of the chains out of it; the rings hung on a macrocycle to its right and below it |
+| reading order | an acid at the end of a chain on the right; an amino acid's NH2 below its alpha carbon; a chain folded back on itself (a prostaglandin's two chains) with its carboxyl end above its tail; a double-bonded O on a phosphate above the chain; a macrolide's lactone at the lower left of its ring, the ring numbered from it counterclockwise; a ring system to the left of the chains out of it; the rings hung on a macrocycle to its right and below it |
 | ring order | fused rings as IUPAC orients them for numbering - as many in a horizontal row as can be, the rest above and to the right; and a ring system's benzene rings at its left, the heteroatoms of a ring fused to one below it, which outweighs how the rest lie |
 | face | the face of a ring system the drawing shows: its angular groups - the one bond out of the rings at an atom with three ring bonds, a steroid's methyls - in front of the page, on wedges, as a steroid's beta face is; how many more are behind it than in front |
 

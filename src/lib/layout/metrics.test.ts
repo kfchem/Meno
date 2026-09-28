@@ -236,6 +236,37 @@ describe("conventions the rules give", () => {
     expect(layoutMetrics(turned(lactone, 180)).readingOrder).toBe(0);
   });
 
+  it("reads a chain folded back on itself from its carboxyl, above its tail", () => {
+    // a hairpin: an acid's chain running left along the top, turning, and
+    // its tail running right along the bottom; the acid's C=O level
+    const s3 = Math.sqrt(3) / 2;
+    const x: number[] = [];
+    const y: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      x.push(6 * s3 - i * s3);
+      y.push(2 + (i % 2) * 0.5);
+    }
+    for (let i = 0; i < 7; i++) {
+      x.push(i * s3);
+      y.push(-(i % 2) * 0.5);
+    }
+    const edges = [...Array(13).keys()].map((i) => [i, i + 1] as [number, number]);
+    // the carboxyl on the chain's first carbon (0): =O and OH either side
+    x.push(7 * s3, 6 * s3 + 0.5);
+    y.push(2.5, 1.2);
+    edges.push([0, 14], [0, 15]);
+    const hairpin = {
+      x,
+      y,
+      edges,
+      orders: [...Array<number>(13).fill(1), 2, 1],
+      elements: [...x.slice(0, 14).map(() => "C"), "O", "O"],
+      hydrogens: [...x.slice(0, 14).map(() => 2), 0, 1],
+    };
+    const upsideDown = { ...hairpin, y: hairpin.y.map((v) => -v) };
+    expect(layoutMetrics(upsideDown).readingOrder).toBeGreaterThan(layoutMetrics(hairpin).readingOrder);
+  });
+
   it("wants fused rings in a row, the rest above and to the right", () => {
     // phenanthrene: two rings in a row, the third up and to the right
     const s3 = Math.sqrt(3) / 2;

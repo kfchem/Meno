@@ -19,7 +19,9 @@ else on the page is read: left to right. Four aims follow, in order of
 priority - a later one never buys itself at the cost of an earlier one:
 
 1. **Nothing hidden.** No atom on another, no bond through an atom or
-   across another bond, no label crowding a label.
+   across another bond, no label crowding a label - an OH's H as much as
+   its O: it goes on the side its bonds leave free, or, where that is
+   taken, the other side or under or over its symbol.
 2. **Every part in its standard shape.** One bond length; rings as regular
    polygons; chains as zigzags; the bonds round an atom evenly spread.
 3. **Square to the page.** Bonds on a lattice, as far as the skeleton
@@ -66,6 +68,13 @@ they hang from.
   on its side sits where the shape turns (both ends of that side corners
   pointing out), a ring it runs through at three atoms stands outside a
   corner pointing in, and every double bond in it keeps its cis or trans.
+  A macrolide has its lactone at the lower left, the ring numbered from
+  its carbonyl carbon counterclockwise - C2 to its right along the bottom,
+  the ring O last, above it - as erythromycin and epothilone are drawn: of
+  the ways of fitting the ring to its shape that put the heavy groups
+  outside, the one that does so. A ring of up to fifteen, seven bonds a
+  side at most, is as tall as it is wide whatever its shape, and lies as
+  that puts it.
 - **Rings of rings**: a macrocycle that is rings strung together and
   nothing else - a porphyrin's pyrroles, a cyclodextrin's glucoses, each
   linked to the next by an atom or two - is set round a circle, each ring
@@ -116,6 +125,12 @@ they hang from.
   one atom, runs straight.
 - **At an atom in no ring**: its bonds evenly spread - three at 120 degrees,
   four at 90.
+- **A phosphate, a sulfonyl**: a phosphorus or sulfur with four bonds is a
+  cross square to the page, the chain straight through it and a
+  double-bonded O above it, as IUPAC puts double-bonded substituents on a
+  chain. The O between two crosses runs straight on, so that ATP's
+  triphosphate is one line; the bond joining a cross to a zigzag gives way,
+  to 150 degrees.
 - **At a ring atom**: one bond out goes straight out, along the bisector;
   two (a gem-dimethyl) go close together, 60 degrees apart about it; more
   split the room evenly. A substituent never takes the 120-degree side of
@@ -185,6 +200,11 @@ lie level either way round - the drawing takes the one that reads best
   - sugars (below).
 - **Rings hung on a macrocycle** - the sugars of a macrolide - to its right
   and below it: the aglycone at the upper left, read first.
+- **A chain folded back on itself** - a fatty acid drawn as a hairpin, a
+  prostaglandin's two chains from its ring, both running off to the right
+  - has its carboxyl end above its tail: read from the carboxyl first, as
+  arachidonic acid is drawn and as IUPAC sets prostane, the ring on the
+  left, the chain with the acid above the other.
 
 ### Sugars and nucleosides
 
@@ -196,7 +216,8 @@ right and C5, with C6, upper left; a furanose has its oxygen at the apex.
 The anomeric carbon is always on the right, and the ring's carbons are
 numbered on from it clockwise: a ring is drawn from the face that has them
 so. Glycosidic bonds then run from left to right, from C1
-of one ring to the next; where two anomeric carbons are linked (sucrose),
+of one ring to the next (a sugar hung on a macrolide faces its aglycone
+instead, its anomeric carbon toward it, whichever side that is); where two anomeric carbons are linked (sucrose),
 the aldose keeps its C1 on the right and the ketose gives way. In a nucleoside the base, on C1', is on the right, and the chain from
 C5' - the phosphates of ATP - runs off to the left.
 
@@ -205,8 +226,10 @@ C5' - the phosphates of ATP - runs off to the left.
 When parts clash, in this order:
 
 1. **Choose among equal placements**: which side of a chain a branch goes,
-   which way a zigzag turns, which way round a ring system is hung - each
-   is free, and the one without the clash is taken. A branch turned over
+   which way a zigzag turns, which way round a ring system is hung, which
+   of a ring atom's two groups goes which way - each is free, and the one
+   without the clash is taken (erythromycin's tertiary OH up, out of its
+   sugar's way, its methyl across). A branch turned over
    is tried with what hangs on it turned back as well: tryptophan's side
    chain turned down, its NH2 below, its carboxyl's C=O still up.
 2. **Turn** a substituent off its ideal angle, as little as will do.

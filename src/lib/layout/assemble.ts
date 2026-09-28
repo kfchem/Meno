@@ -132,14 +132,23 @@ export function grow(
     const along = [path[i - 1], path[i + 1]].filter((v) => v != null);
     const others = mol.neighbours[middle].filter((v) => !along.includes(v));
     const deg = mol.neighbours[middle].length;
+    // (a cross, or the O between two, square to the page, the chain straight
+    // through it and a double-bonded O above)
+    const cross = isCross(mol, middle);
+    const between = deg === 2 && along.length === 2 && along.every((v) => isCross(mol, v));
     const slots =
       deg === 1
         ? [0]
-        : deg === 2
-          ? [(-150 * Math.PI) / 180, (-30 * Math.PI) / 180]
-          : deg === 3
-            ? [(-150 * Math.PI) / 180, (-30 * Math.PI) / 180, Math.PI / 2]
-            : splitWidestGap([], deg, Math.PI);
+        : between
+          ? [Math.PI, 0]
+          : cross && along.length === 2
+            ? [Math.PI, 0, Math.PI / 2, -Math.PI / 2]
+            : deg === 2
+              ? [(-150 * Math.PI) / 180, (-30 * Math.PI) / 180]
+              : deg === 3
+                ? [(-150 * Math.PI) / 180, (-30 * Math.PI) / 180, Math.PI / 2]
+                : splitWidestGap([], deg, Math.PI);
+    if (cross) others.sort((u, v) => orderOf(mol, middle, v) - orderOf(mol, middle, u));
     const order = [...along, ...others];
     order.forEach((v, k) => {
       const t = slots[k] ?? slots[slots.length - 1];
@@ -270,11 +279,28 @@ function assign(
   const p = taken[0];
   const deg = k + 1;
   const orders = mol.neighbours[a].map((v) => orderOf(mol, a, v));
+  // (and the O of a P-O-P, so that a run of crosses is one line)
   const straight =
-    deg === 2 && (orders.includes(3) || orders.filter((o) => o === 2).length === 2);
+    deg === 2 &&
+    (orders.includes(3) ||
+      orders.filter((o) => o === 2).length === 2 ||
+      (isCross(mol, parent) && isCross(mol, children[0])));
   if (straight) return [[children[0], p + Math.PI]];
   if (deg === 4) {
     const slots = [p + Math.PI, p + Math.PI / 2, p - Math.PI / 2];
+    if (isCross(mol, a)) {
+      // a cross: the chain straight through it - a single bond before a
+      // double one where it ends - and a double-bonded O above it
+      const order = (c: number) => orderOf(mol, a, c);
+      const [first, ...rest] = [...children].sort((u, v) => weight(v) - weight(u) || order(u) - order(v) || u - v);
+      const [hi, lo] = rest.sort((u, v) => order(v) - order(u) || u - v);
+      const up = Math.sin(slots[1]) >= Math.sin(slots[2]) ? slots[1] : slots[2];
+      return [
+        [first, slots[0]],
+        [hi, up],
+        [lo, up === slots[1] ? slots[2] : slots[1]],
+      ];
+    }
     return byWeight.map((c, i) => [c, slots[i]]);
   }
   if (deg > 4) {
@@ -328,6 +354,25 @@ function assign(
     carryOn = along(both[0]) >= along(both[1]) ? both[0] : both[1];
   }
   const other = both.find((s) => s !== carryOn)!;
+  const angleAt = (t: number) => Math.abs(wrap(t - p));
+  const opens = (t: number) => angleAt(t) > (2 * Math.PI) / 3 - 1e-6 && angleAt(t) < Math.PI - 1e-6;
+  if (k === 1 && isCross(mol, children[0])) {
+    // a cross set square to the page: the bond into it level where the
+    // angle here allows (150 degrees, the join giving way), else upright,
+    // else straight on
+    const turns = [0, 1, 2, 3].map((i) => (i * Math.PI) / 2);
+    const open = turns.filter(opens);
+    const level = open.find((t) => Math.abs(Math.cos(t)) > 0.5);
+    const into = level ?? open[0] ?? turns.find((t) => angleAt(t) > Math.PI - 1e-6);
+    if (into != null) return [[children[0], into]];
+  }
+  if (k === 1 && isCross(mol, parent)) {
+    // and out of a cross back onto the lattice, the join giving way again,
+    // the zigzag turning the way it would have
+    const lattice = [0, 1, 2, 3, 4, 5].map((i) => Math.PI / 6 + (i * Math.PI) / 3);
+    const open = lattice.filter(opens).sort((u, v) => Math.abs(wrap(u - carryOn!)) - Math.abs(wrap(v - carryOn!)));
+    if (open.length) return [[children[0], open[0]]];
+  }
   if (k === 1) return [[children[0], carryOn]];
   // At an alpha carbon the backbone carries on, N to C(=O) or back, and the
   // side chain branches off - however much heavier the side chain is.
@@ -338,6 +383,14 @@ function assign(
     [first, carryOn],
     [second, other],
   ];
+}
+
+/**
+ * A phosphorus or sulfur with four bonds, in no ring - a phosphate, a
+ * sulfonyl: drawn as a cross, square to the page.
+ */
+export function isCross(mol: Molecule, a: number): boolean {
+  return (mol.el[a] === "P" || mol.el[a] === "S") && mol.neighbours[a].length === 4 && mol.systemOf[a] < 0;
 }
 
 /** A carbonyl carbon of an acid, an ester or an amide: C(=O)O or C(=O)N. */
