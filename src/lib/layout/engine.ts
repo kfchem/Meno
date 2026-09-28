@@ -100,7 +100,7 @@ export function layout2D(input: LayoutInput): Layout2D {
     const count = ringSystemVariants(mol, sys);
     if (count < 2) return;
     const piece = mol.pieces.find((p) => p.includes(sys.atoms[0]))!;
-    const score = scorer(mol, piece, depth, solid, 0);
+    const score = scorer(mol, piece, depth, solid, 0, false);
     let best = 0;
     let bestScore = Infinity;
     const here = new Set(piece);
@@ -139,9 +139,11 @@ export function layout2D(input: LayoutInput): Layout2D {
   // the largest piece first, the rest after it to the right
   const pieces = [...mol.pieces].sort((p, q) => q.length - p.length);
   for (const piece of pieces) {
-    // (room for the H's of labels made last, by moving bonds a little, an
-    // H on a label counting then as much as a label on a label)
-    const score = scorer(mol, piece, depth, solid, 0);
+    // (a macrolide's sugars turned to their face, and room made for the
+    // H's of labels, last: by turning a sugar over on its link, and by
+    // moving bonds a little - an H on a label counting then as much as a
+    // label on a label)
+    const score = scorer(mol, piece, depth, solid, 0, false);
     const scoreH = scorer(mol, piece, depth, solid, 1);
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
@@ -173,7 +175,8 @@ export function layout2D(input: LayoutInput): Layout2D {
     }
     best = { ...rejoin(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
     best = { ...untangle(mol, piece, best.pos, best.score, score, fixed), mirrored: best.mirrored };
-    best = { ...roomForHydrogens(mol, piece, best.pos, scoreH(best.pos), scoreH, fixed), mirrored: best.mirrored };
+    best = { ...faceSugars(mol, piece, best.pos, scoreH(best.pos), scoreH, sides), mirrored: best.mirrored };
+    best = { ...roomForHydrogens(mol, piece, best.pos, best.score, scoreH, fixed), mirrored: best.mirrored };
     // a cage in a mirrored frame is the one seen from its other side
     if (best.mirrored) {
       for (const [i, view] of others) {
@@ -750,6 +753,103 @@ export function roomForHydrogens(
   return { pos, score: current };
 }
 
+/**
+ * A sugar hung on a macrolide seen from the face its carbons number
+ * clockwise from, the aglycone staying as it is: turned over on one side or
+ * the other of its glycosidic O, and swung round that link as far as it
+ * must be to clear the rest. No move that crosses bonds is taken.
+ */
+function faceSugars(
+  mol: Molecule,
+  piece: number[],
+  start: Grown,
+  startScore: number,
+  score: (pos: Grown) => number,
+  sides: Map<string, number>,
+): { pos: Grown; score: number } {
+  let pos = start;
+  let current = startScore;
+  const here = new Set(piece);
+  const links = sugarLinks(mol).filter(([a]) => here.has(a));
+  if (!links.length) return { pos, score: current };
+  const bonds = [...mol.bondIndex.keys()]
+    .map((k) => k.split(",").map(Number) as [number, number])
+    .filter(([a]) => here.has(a));
+  const crossingsIn = (p: Grown) => {
+    let count = 0;
+    for (let i = 0; i < bonds.length; i++) {
+      const [a, b] = bonds[i];
+      for (let j = i + 1; j < bonds.length; j++) {
+        const [c, d] = bonds[j];
+        if (a === c || a === d || b === c || b === d) continue;
+        if (segmentsCross(p.get(a)!, p.get(b)!, p.get(c)!, p.get(d)!)) count++;
+      }
+    }
+    return count;
+  };
+  let crossings = crossingsIn(pos);
+  for (let round = 0; round < 2; round++) {
+    let better = false;
+    for (const [a, b] of links) {
+      const side = sideAtoms(mol, a, b);
+      let found: Grown | null = null;
+      let foundScore = current;
+      let foundCrossings = crossings;
+      // (turned over across the link's line, the sugar's ring lies askew:
+      // the turns that set it square on the lattice again, and others)
+      const flipped = new Map(pos);
+      flip(mol, flipped, a, b, sides);
+      const ringBond = bonds.find(
+        ([u, v]) => side.includes(u) && side.includes(v) && mol.ringBonds.has(u < v ? `${u},${v}` : `${v},${u}`),
+      );
+      const turns = [0, 15, -15, 30, -30, 45, -45, 60, -60];
+      if (ringBond) {
+        const t = (angleOf(sub(flipped.get(ringBond[1])!, flipped.get(ringBond[0])!)) * 180) / Math.PI;
+        const square = 30 + 60 * Math.round((t - 30) / 60) - t;
+        turns.push(square, square + 60, square - 60);
+      }
+      for (const t of turns) {
+        const trial = new Map(flipped);
+        if (t) turnSide(trial, side, trial.get(a)!, (t * Math.PI) / 180);
+        const s = score(trial);
+        if (s < foundScore - 1e-6) {
+          const c = crossingsIn(trial);
+          if (c > crossings) continue;
+          found = trial;
+          foundScore = s;
+          foundCrossings = c;
+        }
+      }
+      if (found) {
+        pos = found;
+        current = foundScore;
+        crossings = foundCrossings;
+        better = true;
+      }
+    }
+    if (!better) break;
+  }
+  return { pos, score: current };
+}
+
+/** Each side of the glycosidic O of a sugar hung on a macrolide: aglycone side first. */
+function sugarLinks(mol: Molecule): [number, number][] {
+  const out: [number, number][] = [];
+  const macro = (a: number) => mol.ringsOf[a].some((r) => mol.rings[r].length >= 12);
+  for (let o = 0; o < mol.n; o++) {
+    if (mol.el[o] !== "O" || mol.systemOf[o] >= 0 || mol.neighbours[o].length !== 2) continue;
+    const [p, q] = mol.neighbours[o];
+    const sugar = (c: number) =>
+      mol.ringsOf[c].some((r) => {
+        const ring = mol.rings[r];
+        return (ring.length === 5 || ring.length === 6) && ring.filter((a) => mol.el[a] === "O").length === 1;
+      });
+    if (macro(p) && sugar(q)) out.push([p, o], [o, q]);
+    else if (macro(q) && sugar(p)) out.push([q, o], [o, p]);
+  }
+  return out;
+}
+
 /** The benchmark's score for a piece as laid out. */
 export function scorer(
   mol: Molecule,
@@ -757,6 +857,7 @@ export function scorer(
   depth: readonly (number | null)[] = [],
   solid: readonly boolean[] = [],
   hydrogenRoom?: number,
+  sugarFaces?: boolean,
 ): (pos: Grown) => number {
   const index = new Map(piece.map((a, i) => [a, i]));
   const edges: [number, number][] = [];
@@ -800,5 +901,6 @@ export function scorer(
       depth: depths,
       tetra,
       hydrogenRoom,
+      sugarFaces,
     }).score;
 }

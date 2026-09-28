@@ -55,6 +55,12 @@ export type Geometry = {
    * as much as labels on each other.
    */
   hydrogenRoom?: number;
+  /**
+   * Whether a sugar hung on a macrolide counts as seen from the wrong face
+   * (it does unless this is false): a layout sets the aglycone first, not
+   * counting it, and turns each sugar over last where it must.
+   */
+  sugarFaces?: boolean;
 };
 
 export type LayoutMetrics = {
@@ -936,8 +942,37 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         (a) => el[a] === "C" && neighbours[a].some((b) => !r.includes(b) && el[b] === "O"),
       ).length;
       if (hydroxylated < 2) continue;
+      // A sugar hung on a macrolide's ring faces it, whichever side that is:
+      // its anomeric carbon toward the aglycone, as erythromycin's are, and
+      // so its ring oxygen wherever that then falls - but it is still seen
+      // from the face its carbons number clockwise from.
+      const onMacrocycle = neighbours[ox[0]].some(
+        (c) =>
+          r.includes(c) &&
+          neighbours[c].some(
+            (b) =>
+              !r.includes(b) &&
+              el[b] === "O" &&
+              neighbours[b].some((d) => d !== c && rings.some((q) => q.length >= 12 && q.includes(d))),
+          ),
+      );
+      // (one hung from the macrocycle by an O of its own is turned over to
+      // its face last, where the drawing is set without it; one the ring
+      // runs through, a cyclodextrin's, is set with it)
+      const hung = neighbours[ox[0]].some(
+        (c) =>
+          r.includes(c) &&
+          neighbours[c].some(
+            (b) =>
+              !r.includes(b) &&
+              el[b] === "O" &&
+              !rings.some((q) => q.length >= 12 && q.includes(b)) &&
+              neighbours[b].some((d) => d !== c && rings.some((q) => q.length >= 12 && q.includes(d))),
+          ),
+      );
+      if (hung && g.sugarFaces === false) continue;
       const ry = r.reduce((sum, a) => sum + y[a], 0) / r.length;
-      if (y[ox[0]] < ry + 0.25 * L) readingOrder++;
+      if (!onMacrocycle && y[ox[0]] < ry + 0.25 * L) readingOrder++;
       // and its anomeric carbon - on the ring oxygen, with an oxygen or a
       // nitrogen of its own: a glycoside's link, a nucleoside's base - on
       // the right-hand side of the ring. Where two sugars are linked by
@@ -948,17 +983,8 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         if (!r.includes(c)) continue;
         const own = neighbours[c].some((b) => !r.includes(b) && (el[b] === "O" || el[b] === "N"));
         if (!own) continue;
-        // (a sugar hung on a macrolide's ring faces it, whichever side that
-        // is: its anomeric carbon toward the aglycone, as erythromycin's are)
-        const onMacrocycle = neighbours[c].some(
-          (b) =>
-            !r.includes(b) &&
-            el[b] === "O" &&
-            neighbours[b].some((d) => d !== c && rings.some((q) => q.length >= 12 && q.includes(d))),
-        );
-        if (onMacrocycle) continue;
         const carbons = neighbours[c].filter((b) => el[b] === "C").length;
-        if (x[c] < rx + 0.25 * L) readingOrder += carbons <= 1 ? 1 : 0.5;
+        if (!onMacrocycle && x[c] < rx + 0.25 * L) readingOrder += carbons <= 1 ? 1 : 0.5;
         // and the carbons numbered on from it clockwise round the ring, as
         // the Haworth projection has them: the face it is seen from
         const next = neighbours[c].find((b) => r.includes(b) && b !== ox[0]);

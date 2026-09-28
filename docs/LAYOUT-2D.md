@@ -216,7 +216,10 @@ The anomeric carbon is always on the right, and the ring's carbons are
 numbered on from it clockwise: a ring is drawn from the face that has them
 so. Glycosidic bonds then run from left to right, from C1
 of one ring to the next (a sugar hung on a macrolide faces its aglycone
-instead, its anomeric carbon toward it, whichever side that is); where two anomeric carbons are linked (sucrose),
+instead, its anomeric carbon toward it, whichever side that is - still
+seen from the face its carbons number clockwise from, its ring oxygen
+where that puts it: turned over on its link, and swung clear, once the
+aglycone is set, which it leaves as it is); where two anomeric carbons are linked (sucrose),
 the aldose keeps its C1 on the right and the ketose gives way. In a nucleoside the base, on C1', is on the right, and the chain from
 C5' - the phosphates of ATP - runs off to the left.
 

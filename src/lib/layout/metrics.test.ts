@@ -280,6 +280,46 @@ describe("conventions the rules give", () => {
     expect(layoutMetrics(upsideDown).readingOrder).toBeGreaterThan(layoutMetrics(hairpin).readingOrder);
   });
 
+  it("wants a sugar hung on a macrolide seen from its face, wherever its ring O falls", () => {
+    // a ring of twelve carbons, and on its first atom, by an O (12), a
+    // pyranose (13-18, its ring O 18) with two OHs (19, 20), its anomeric
+    // carbon (13) on the left, facing the ring
+    const sugar = (clockwise: boolean) => {
+      const R = 1 / (2 * Math.sin(Math.PI / 12));
+      const x: number[] = [];
+      const y: number[] = [];
+      for (let i = 0; i < 12; i++) {
+        x.push(R * Math.cos((i * 2 * Math.PI) / 12) - R);
+        y.push(R * Math.sin((i * 2 * Math.PI) / 12));
+      }
+      x.push(1);
+      y.push(0);
+      // round the ring from the anomeric carbon, on the left
+      const at = (k: number) => Math.PI - ((clockwise ? 1 : -1) * k * Math.PI) / 3;
+      for (let k = 0; k < 6; k++) {
+        x.push(3 + Math.cos(at(k)));
+        y.push(Math.sin(at(k)));
+      }
+      for (const k of [1, 2]) {
+        x.push(3 + 2 * Math.cos(at(k)));
+        y.push(2 * Math.sin(at(k)));
+      }
+      const edges: [number, number][] = [];
+      for (let i = 0; i < 12; i++) edges.push([i, (i + 1) % 12]);
+      edges.push([0, 12], [12, 13]);
+      for (let k = 0; k < 6; k++) edges.push([13 + k, 13 + ((k + 1) % 6)]);
+      edges.push([14, 19], [15, 20]);
+      const elements = [...Array(12).fill("C"), "O", "C", "C", "C", "C", "C", "O", "O", "O"];
+      const hydrogens = elements.map((e, i) => (i >= 19 ? 1 : e === "C" ? 1 : 0));
+      return { x, y, edges, elements, hydrogens };
+    };
+    // the face counts, and only the face: set without it, nothing counts
+    const face = (g: ReturnType<typeof sugar>) =>
+      layoutMetrics(g).readingOrder - layoutMetrics({ ...g, sugarFaces: false }).readingOrder;
+    expect(face(sugar(true))).toBe(0);
+    expect(face(sugar(false))).toBe(1);
+  });
+
   it("wants fused rings in a row, the rest above and to the right", () => {
     // phenanthrene: two rings in a row, the third up and to the right
     const s3 = Math.sqrt(3) / 2;
