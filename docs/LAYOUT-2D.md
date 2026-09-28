@@ -269,6 +269,18 @@ Nothing else is moved for it: the drawing is set first, its H's last.
   behind on hashes.
 - Double bonds are drawn as they are: a cis double bond with its
   substituents on one side.
+- A wedge says what a reader reads it as - and RDKit, which is how that is
+  checked. With all four bonds of a centre drawn, that is the way they run
+  round it and which stand out of the page, not the angles between them:
+  where three bonds in the page lie within 180 degrees of each other (a
+  bridgehead often has them so), read from the angles two of them and the
+  wedge would say one thing and the other two the opposite
+  (`drawnVolume`). With three drawn and the H left out, the angles are read.
+- A cage drawn in perspective shows its stereochemistry by the drawing
+  itself, with no wedges; what it shows is read back from the solid the
+  cage is drawn from, fitted to where its atoms are and how deep, and the
+  way each bond out of it points (`drawn.ts`). Drawn the other way, a bond
+  turns its centre.
 
 ## How the engine goes about it
 

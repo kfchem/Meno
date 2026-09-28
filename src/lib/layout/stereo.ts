@@ -12,9 +12,11 @@
  * hashes behind it, the rest in it; the wedge's sense is whichever gives
  * that sign back.
  */
-import { angleOf, centroid, segmentsCross, splitOutside, splitWidestGap, sub, type Point } from "./geometry";
+import { angleOf, centroid, drawnVolume, segmentsCross, splitOutside, splitWidestGap, sub, type Point } from "./geometry";
 import { hydrogenSpot } from "./metrics";
 import { key, type Molecule } from "./perceive";
+
+export { drawnVolume };
 
 export type Tetrahedral = {
   /** Neighbours in order; -1 for an implicit H, last. */
@@ -36,32 +38,6 @@ export type Stereo = {
   /** Hydrogens drawn to show a centre that has no other bond to put a wedge on. */
   hydrogens: { on: number; at: Point }[];
 };
-
-type V3 = [number, number, number];
-const det = (a: V3, b: V3, c: V3) =>
-  a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
-
-/**
- * The sign of the volume a centre's first three neighbours span as drawn,
- * or 0 where the drawing does not say. With the first three all in the
- * page, the fourth, on its wedge, says it: it stands opposite them.
- */
-export function drawnVolume(
-  at: Point,
-  neighbours: readonly (Point | null)[],
-  lift: readonly number[],
-): number {
-  const v = neighbours.map((p, i): V3 | null => (p ? [p.x - at.x, p.y - at.y, lift[i]] : null));
-  if (v[0] && v[1] && v[2]) {
-    const d = det(v[0], v[1], v[2]);
-    if (Math.abs(d) > 1e-6) return Math.sign(d);
-  }
-  if (v[0] && v[1] && v[3]) {
-    const d = -det(v[0], v[1], v[3]);
-    if (Math.abs(d) > 1e-6) return Math.sign(d);
-  }
-  return 0;
-}
 
 export function placeStereo(
   mol: Molecule,
