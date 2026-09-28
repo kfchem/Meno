@@ -31,7 +31,7 @@ describe("parseSDF", () => {
       "M  END",
     ].join("\n");
     const [m] = parseSDF(mol);
-    expect(m.atoms.map((a) => a.element)).toEqual(["C", "O"]);
+    expect(m.atoms.map((a) => a.el)).toEqual(["C", "O"]);
     expect(m.bonds[0]).toEqual({ a1: 0, a2: 1, order: 1, stereoCode: 6 });
   });
 
@@ -66,7 +66,82 @@ describe("parseSDF", () => {
       "M  END",
     ].join("\n");
     const [m] = parseSDF(mol);
-    expect(m.atoms.map((a) => a.element)).toEqual(["C", "Cl"]);
+    expect(m.atoms.map((a) => a.el)).toEqual(["C", "Cl"]);
     expect(m.bonds).toEqual([{ a1: 0, a2: 1, order: 1, stereoCode: 1 }]);
+  });
+
+  it("reads charges, radicals and isotopes from a V2000 block", () => {
+    const mol = [
+      "nitromethane, a methyl radical's 13C, and an ammonium",
+      "",
+      "",
+      "  6  3  0  0  0  0  0  0  0  0999 V2000",
+      "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0",
+      "    1.5000    0.0000    0.0000 N   0  0  0  0  0  0",
+      "    2.2500    1.3000    0.0000 O   0  0  0  0  0  0",
+      "    2.2500   -1.3000    0.0000 O   0  0  0  0  0  0",
+      "    5.0000    0.0000    0.0000 C   0  0  0  0  0  0",
+      "    8.0000    0.0000    0.0000 N   0  0  3  0  0  0",
+      "  1  2  1  0",
+      "  2  3  2  0",
+      "  2  4  1  0",
+      "M  CHG  2   2   1   4  -1",
+      "M  RAD  1   5   2",
+      "M  ISO  1   5  13",
+      "M  END",
+    ].join("\n");
+    const [m] = parseSDF(mol);
+    expect(m.atoms.map((a) => [a.el, a.charge, a.radical, a.isotope])).toEqual([
+      ["C", undefined, undefined, undefined],
+      ["N", 1, undefined, undefined],
+      ["O", undefined, undefined, undefined],
+      ["O", -1, undefined, undefined],
+      ["C", undefined, "doublet", 13],
+      // (a CHG line clears the atom block's charges, by the format)
+      ["N", undefined, undefined, undefined],
+    ]);
+  });
+
+  it("reads the atom block's charge field where there are no CHG lines", () => {
+    const mol = [
+      "ammonium",
+      "",
+      "",
+      "  1  0  0  0  0  0  0  0  0  0999 V2000",
+      "    0.0000    0.0000    0.0000 N   0  3  0  0  0  0",
+      "M  END",
+    ].join("\n");
+    // (the charge field follows the mass difference: 3 is +1)
+    expect(parseSDF(mol)[0].atoms[0].charge).toBe(1);
+    expect(parseSDF(mol.replace("N   0  3  0", "N   0  5  0"))[0].atoms[0].charge).toBe(-1);
+    expect(parseSDF(mol.replace("N   0  3  0", "N   0  4  0"))[0].atoms[0].radical).toBe("doublet");
+  });
+
+  it("reads charges, radicals and isotopes from a V3000 block", () => {
+    const mol = [
+      "",
+      "  RDKit          2D",
+      "",
+      "  0  0  0     0  0  0  0  0  0999 V3000",
+      "M  V30 BEGIN CTAB",
+      "M  V30 COUNTS 3 2 0 0 0",
+      "M  V30 BEGIN ATOM",
+      "M  V30 1 C 0 0 0 0 MASS=13 RAD=2",
+      "M  V30 2 N 1.5 0 0 0 CHG=1",
+      "M  V30 3 O 2.25 1.3 0 0 CHG=-1",
+      "M  V30 END ATOM",
+      "M  V30 BEGIN BOND",
+      "M  V30 1 1 1 2",
+      "M  V30 2 1 2 3",
+      "M  V30 END BOND",
+      "M  V30 END CTAB",
+      "M  END",
+    ].join("\n");
+    const [m] = parseSDF(mol);
+    expect(m.atoms.map((a) => [a.el, a.charge, a.radical, a.isotope])).toEqual([
+      ["C", undefined, "doublet", 13],
+      ["N", 1, undefined, undefined],
+      ["O", -1, undefined, undefined],
+    ]);
   });
 });

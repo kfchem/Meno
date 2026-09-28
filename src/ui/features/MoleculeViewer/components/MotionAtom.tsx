@@ -19,7 +19,7 @@ export default function MotionAtom({
   selected?: boolean;
   onClick?: () => void;
 }) {
-  const base = getVdwRadius(atom.element);
+  const base = getVdwRadius(atom.el);
   const defaultScale = mode === "ball" ? base * 0.2 : base;
 
   const springConfig = { stiffness: 100, damping: 20, mass: 0.5 };
@@ -76,7 +76,7 @@ export default function MotionAtom({
         onPointerUp={() => scale.set(defaultScale)}
       >
         <sphereGeometry args={[1.0, 32, 32]} />
-        <meshStandardMaterial color={getColor(atom.element)} />
+        <meshStandardMaterial color={getColor(atom.el)} />
       </mesh>
 
       {selected && (

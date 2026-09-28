@@ -38,6 +38,7 @@ import DocumentStylePanel from "./DocumentStylePanel";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuTarget } from "./PartMenu";
 import {
+  chargeStep,
   isCleanUpKey,
   isDeleteKey,
   isDeselectKey,
@@ -167,6 +168,22 @@ function StructureCanvasContent({
     [store],
   );
   const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const chargeAtom = useCallback(
+    (id: number, step: 1 | -1) => {
+      const st = store.getState();
+      if (st.labelEdit.active || st.moveDrag.active || st.extend.active) return;
+      st.stepCharge(id, step);
+    },
+    [store],
+  );
+  const radicalAtom = useCallback(
+    (id: number) => {
+      const st = store.getState();
+      if (st.labelEdit.active || st.moveDrag.active || st.extend.active) return;
+      st.toggleRadical(id);
+    },
+    [store],
+  );
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -185,6 +202,9 @@ function StructureCanvasContent({
       } else if (isDeleteKey(e) && kind && id != null) {
         e.preventDefault();
         deletePart(kind, id);
+      } else if (chargeStep(e) && kind === "atom" && id != null) {
+        e.preventDefault();
+        chargeAtom(id, chargeStep(e) as 1 | -1);
       } else if (isSelectAllKey(e) && !busy) {
         e.preventDefault();
         st.selectAll();
@@ -195,7 +215,7 @@ function StructureCanvasContent({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, menu]);
+  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
@@ -488,6 +508,13 @@ function StructureCanvasContent({
             if (at != null) store.getState().selectStructure(at);
           }}
           onTurnOver={(axis) => store.getState().turnSelectionOver(axis)}
+          onCharge={(step) => {
+            if (menu.kind === "atom" && menu.id != null) chargeAtom(menu.id, step);
+          }}
+          onRadical={() => {
+            if (menu.kind === "atom" && menu.id != null) radicalAtom(menu.id);
+          }}
+          radical={!!model.atoms.find((a) => a.id === menu.id)?.radical}
         />
       )}
       <Canvas

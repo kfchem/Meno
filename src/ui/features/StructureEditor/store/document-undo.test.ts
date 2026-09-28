@@ -237,6 +237,48 @@ describe("editor store over a document", () => {
     expect(state().model.bonds[0].stereo).toBe("down");
   });
 
+  it("reads a charge, and an isotope, from a label typed", () => {
+    const { doc, state } = editor();
+    const id = state().addAtom(0, 0, "C");
+    const label = (text: string) => {
+      state().beginLabelEdit(id);
+      state().setLabelEditValue(text);
+      state().commitLabelEdit();
+      return state().model.atoms[0];
+    };
+    expect(label("NH3+")).toMatchObject({ el: "N", charge: 1 });
+    // opened again, it shows what it is, as typed
+    state().beginLabelEdit(id);
+    expect(state().labelEdit.value).toBe("N+");
+    state().cancelLabelEdit();
+    expect(label("2-")).toMatchObject({ el: "N", charge: -2 });
+    expect(label("13C")).toMatchObject({ el: "C", isotope: 13 });
+    expect(state().model.atoms[0].charge).toBeUndefined();
+    // a label that is not an element carries no charge
+    label("N+");
+    const text = label("OMe");
+    expect(text.el).toBe("OMe");
+    expect(text.charge).toBeUndefined();
+    doc.undo();
+    expect(state().model.atoms[0]).toMatchObject({ el: "N", charge: 1 });
+  });
+
+  it("steps an atom's charge, and gives and takes its unpaired electron, each as an undo step", () => {
+    const { doc, state } = editor();
+    const id = state().addAtom(0, 0, "N");
+    state().stepCharge(id, 1);
+    expect(state().model.atoms[0].charge).toBe(1);
+    state().stepCharge(id, -1);
+    state().stepCharge(id, -1);
+    expect(state().model.atoms[0].charge).toBe(-1);
+    state().toggleRadical(id);
+    expect(state().model.atoms[0].radical).toBe("doublet");
+    state().toggleRadical(id);
+    expect(state().model.atoms[0].radical).toBeUndefined();
+    doc.undo();
+    expect(state().model.atoms[0].radical).toBe("doublet");
+  });
+
   it("keeps aromatic circles in the document", () => {
     const { doc, state } = editor();
     state().toggleAromatic();

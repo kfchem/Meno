@@ -144,6 +144,21 @@ export const createModelSlice = (
     );
   },
 
+  stepCharge: (id: number, step: 1 | -1) => {
+    const atom = doc.getState().model.atoms.find((a) => a.id === id);
+    if (!atom) return;
+    const charge = (atom.charge ?? 0) + step;
+    doc.edit("change charge", (d) => ops.setAtomChemistry(d, id, { ...atom, charge }));
+  },
+
+  toggleRadical: (id: number) => {
+    const atom = doc.getState().model.atoms.find((a) => a.id === id);
+    if (!atom) return;
+    doc.edit("change radical", (d) =>
+      ops.setAtomChemistry(d, id, { ...atom, radical: atom.radical ? undefined : "doublet" }),
+    );
+  },
+
   deleteAtom: (id: number) => {
     if (doc.edit("delete atom", (d) => ops.deleteParts(d, [id], []))) {
       forgetDeleted(set);

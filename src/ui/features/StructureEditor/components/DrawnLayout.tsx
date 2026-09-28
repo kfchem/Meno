@@ -10,6 +10,7 @@ import {
 import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { needsFallback, useTypefaces } from "../../../fonts/typefaces";
+import { chemistry } from "../../../../lib/chem/molecule";
 import { DrawnLayoutContext } from "./drawnLayoutContext";
 
 /** The id the atom a bond is being drawn out to goes by until it is made. */
@@ -54,6 +55,7 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
       id: a.id,
       ...(a.id === draggedId && dragX != null && dragY != null ? { x: dragX, y: dragY } : { x: a.x, y: a.y }),
       el: a.el,
+      ...chemistry(a),
       ...(a.z != null ? { z: a.z } : {}),
     }));
     stroke?.nodes.forEach((n, i) => {

@@ -7,6 +7,7 @@
  * edit buffer, fit requests. Those belong to the view (see store/).
  */
 import { createDocument, type DocumentStore } from "../../../lib/doc";
+import type { AtomChem } from "../../../lib/chem/molecule";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { Arrow, Atom, Bond, Model } from "./store/types";
 
@@ -305,16 +306,34 @@ export function relayout(doc: StructureDocument, change: Relayout): StructureDoc
   return { ...doc, nextId, model: { atoms, bonds } };
 }
 
-export function setAtomLabel(
+/**
+ * An atom's chemistry set anew - its element or label, charge, radical and
+ * isotope, each left off where it has none - leaving where it is alone.
+ */
+export function setAtomChemistry(
   doc: StructureDocument,
   id: number,
-  el: string,
+  chem: AtomChem,
 ): StructureDocument {
   const atoms = doc.model.atoms;
   const index = atoms.findIndex((a) => a.id === id);
-  if (index < 0 || atoms[index].el === el) return doc;
+  if (index < 0) return doc;
+  const was = atoms[index];
+  const same =
+    was.el === chem.el &&
+    (was.charge ?? 0) === (chem.charge ?? 0) &&
+    was.radical === chem.radical &&
+    was.isotope === chem.isotope;
+  if (same) return doc;
+  const { charge: _q, radical: _r, isotope: _i, ...rest } = was;
   const next = atoms.slice();
-  next[index] = { ...next[index], el };
+  next[index] = {
+    ...rest,
+    el: chem.el,
+    ...(chem.charge ? { charge: chem.charge } : {}),
+    ...(chem.radical ? { radical: chem.radical } : {}),
+    ...(chem.isotope ? { isotope: chem.isotope } : {}),
+  };
   return { ...doc, model: { atoms: next, bonds: doc.model.bonds } };
 }
 

@@ -5,7 +5,7 @@ const A = AROMATIC_BOND;
 
 // A molecule from its element symbols and its bonds as [from, to, order].
 const mol = (elements: string, bonds: [number, number, number][]) => ({
-  atoms: elements.split(" ").map((element) => ({ element })),
+  atoms: elements.split(" ").map((el) => ({ el })),
   bonds: bonds.map(([a1, a2, order]): KekuleBond => ({ a1, a2, order })),
 });
 

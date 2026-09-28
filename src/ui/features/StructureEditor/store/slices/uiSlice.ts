@@ -4,6 +4,8 @@ import type { StructureDocument } from "../../document";
 import { EditorState } from "../types";
 import { StoreApi } from "zustand";
 import type { StyleChoice } from "../../../../../lib/chem/style";
+import { isElementSymbol } from "../../../../../lib/rdkit/molblock";
+import { labelTextOf, readLabel } from "../../utils/labelTyping";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -22,11 +24,8 @@ export function createUiSlice(
     beginLabelEdit: (atomId: number, initial = "", forceLower = false) =>
       set((prev: EditorState) => {
         const base = prev.model.atoms.find((a) => a.id === atomId);
-        const start = initial.length
-          ? initial
-          : base?.el === "C"
-            ? ""
-            : (base?.el ?? "");
+        // (with its charge and mass number, as they are typed: N+, 13C)
+        const start = initial.length ? initial : base ? labelTextOf(base) : "";
         const autoCap = !forceLower;
         const val = start.length
           ? autoCap
@@ -61,7 +60,25 @@ export function createUiSlice(
       // (full-width letters, from an input method, as the ordinary ones)
       const value = labelEdit.value.normalize("NFKC").trim();
       // An empty input keeps the current label.
-      if (value) doc.edit("rename atom", (d) => ops.setAtomLabel(d, id, value));
+      // An element with a charge, or a charge alone, sets the atom's
+      // chemistry (labelTyping); anything else is a label as typed.
+      const atom = get().model.atoms.find((a) => a.id === id);
+      if (value && atom) {
+        const read = readLabel(value, isElementSymbol);
+        const chem =
+          read.kind === "charge"
+            ? { ...atom, charge: read.charge }
+            : read.kind === "element"
+              ? {
+                  el: read.el,
+                  charge: read.charge,
+                  isotope: read.isotope,
+                  // (an unpaired electron stays with its element)
+                  radical: read.el === atom.el ? atom.radical : undefined,
+                }
+              : { el: read.el };
+        doc.edit("rename atom", (d) => ops.setAtomChemistry(d, id, chem));
+      }
       set((prev: EditorState) => ({
         ...prev,
         labelEdit: { active: false, atomId: null, value: "", autoCap: true },

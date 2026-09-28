@@ -1,13 +1,10 @@
 import type { ImportedArrow, Relayout } from "../document";
+import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
 
-export type Atom = {
-  id: number;
-  x: number;
-  y: number;
-  r: number;
-  el: string;
+/** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
+export type Atom = EditorAtom & {
   /**
    * How near the viewer the atom is, where its structure is drawn in
    * perspective - a cage, as Clean-up draws one: a bond passing behind
@@ -126,6 +123,10 @@ export type EditorState = {
    * Deletes an atom and its bonds, or a bond, as one undo step; a carbon
    * left with no bonds goes too.
    */
+  /** An atom's charge one up (+1) or one down (-1), as one undo step. */
+  stepCharge: (id: number, step: 1 | -1) => void;
+  /** An atom's unpaired electron given, or taken away. */
+  toggleRadical: (id: number) => void;
   deleteAtom: (id: number) => void;
   deleteBond: (id: number) => void;
   /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { labelKey, typedLabel } from "./labelTyping";
+import { labelKey, labelTextOf, readLabel, typedLabel } from "./labelTyping";
 
 describe("labelKey", () => {
   it("starts a label with the letter typed", () => {
@@ -30,5 +30,43 @@ describe("typedLabel", () => {
   it("reads full-width letters as the ordinary ones", () => {
     expect(typedLabel("ｃｏｏｈ", true)).toBe("Cooh");
     expect(typedLabel("ＯＭｅ", true)).toBe("OMe");
+  });
+});
+
+describe("readLabel", () => {
+  const isElement = (s: string) => ["C", "N", "O", "Fe", "Na", "Cl", "S"].includes(s);
+  it("reads an element with its charge, H and mass number", () => {
+    expect(readLabel("N+", isElement)).toEqual({ kind: "element", el: "N", charge: 1 });
+    expect(readLabel("O-", isElement)).toEqual({ kind: "element", el: "O", charge: -1 });
+    expect(readLabel("NH3+", isElement)).toEqual({ kind: "element", el: "N", charge: 1 });
+    expect(readLabel("Fe2+", isElement)).toEqual({ kind: "element", el: "Fe", charge: 2 });
+    expect(readLabel("Fe+2", isElement)).toEqual({ kind: "element", el: "Fe", charge: 2 });
+    expect(readLabel("N++", isElement)).toEqual({ kind: "element", el: "N", charge: 2 });
+    expect(readLabel("O−", isElement)).toEqual({ kind: "element", el: "O", charge: -1 });
+    expect(readLabel("13C", isElement)).toEqual({ kind: "element", el: "C", charge: 0, isotope: 13 });
+    expect(readLabel("OH", isElement)).toEqual({ kind: "element", el: "O", charge: 0 });
+  });
+
+  it("reads a charge alone as one for the atom as it is", () => {
+    expect(readLabel("+", isElement)).toEqual({ kind: "charge", charge: 1 });
+    expect(readLabel("2-", isElement)).toEqual({ kind: "charge", charge: -2 });
+  });
+
+  it("keeps anything else as a label, as typed", () => {
+    expect(readLabel("OMe", isElement)).toEqual({ kind: "text", el: "OMe" });
+    expect(readLabel("CO2H", isElement)).toEqual({ kind: "text", el: "CO2H" });
+    expect(readLabel("Me", isElement)).toEqual({ kind: "text", el: "Me" });
+  });
+});
+
+describe("labelTextOf", () => {
+  it("types an atom's label back as readLabel reads it", () => {
+    expect(labelTextOf({ el: "N", charge: 1 })).toBe("N+");
+    expect(labelTextOf({ el: "Fe", charge: 2 })).toBe("Fe2+");
+    expect(labelTextOf({ el: "O", charge: -1 })).toBe("O-");
+    expect(labelTextOf({ el: "C", isotope: 13 })).toBe("13C");
+    expect(labelTextOf({ el: "C", charge: 1 })).toBe("C+");
+    expect(labelTextOf({ el: "C" })).toBe("");
+    expect(labelTextOf({ el: "O" })).toBe("O");
   });
 });

@@ -38,6 +38,9 @@ export default function PartMenu({
   onCleanUp,
   onSelectStructure,
   onTurnOver,
+  onCharge,
+  onRadical,
+  radical,
   onClose,
 }: {
   target: MenuTarget;
@@ -48,6 +51,11 @@ export default function PartMenu({
   onSelectStructure: () => void;
   /** The selection turned over, left to right or top to bottom. */
   onTurnOver: (axis: "vertical" | "horizontal") => void;
+  /** An atom's charge one up or one down. */
+  onCharge: (step: 1 | -1) => void;
+  /** An atom's unpaired electron given or taken away; `radical`, whether it has one. */
+  onRadical: () => void;
+  radical: boolean;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -93,6 +101,14 @@ export default function PartMenu({
             keys: keys ? deleteKey : "",
             run: onDelete,
           },
+          // an atom's charge and radical: the + and - keys do the first
+          ...(target.kind === "atom"
+            ? [
+                { name: "Charge one up", keys: "+", run: () => onCharge(1) },
+                { name: "Charge one down", keys: "\u2212", run: () => onCharge(-1) },
+                { name: radical ? "No unpaired electron" : "Unpaired electron", keys: "", run: onRadical },
+              ]
+            : []),
           { name: "Select this structure", keys: "", run: onSelectStructure },
           {
             name: "Clean up this structure",

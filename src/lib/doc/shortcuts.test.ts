@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addsToSelection,
+  chargeStep,
   isCleanUpKey,
   isDeleteKey,
   isDeselectKey,
@@ -99,5 +100,18 @@ describe("selection keys", () => {
     expect(isSelectAllKey({ key: "a", ctrlKey: true, target: { tagName: "TEXTAREA" } })).toBe(false);
     expect(isDeselectKey({ key: "Escape" })).toBe(true);
     expect(isDeselectKey({ key: "Escape", target: { tagName: "INPUT" } })).toBe(false);
+  });
+});
+
+describe("chargeStep", () => {
+  it("is + or - on its own, outside text fields", () => {
+    expect(chargeStep({ key: "+" })).toBe(1);
+    expect(chargeStep({ key: "+", shiftKey: true })).toBe(1);
+    expect(chargeStep({ key: "-" })).toBe(-1);
+    expect(chargeStep({ key: "=" })).toBe(0);
+    // Ctrl or Cmd with them zoom
+    expect(chargeStep({ key: "+", metaKey: true })).toBe(0);
+    expect(chargeStep({ key: "-", ctrlKey: true })).toBe(0);
+    expect(chargeStep({ key: "-", target: { tagName: "INPUT" } })).toBe(0);
   });
 });

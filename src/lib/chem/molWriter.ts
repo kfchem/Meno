@@ -1,8 +1,9 @@
 import { NOMINAL_BOND_LENGTH } from "./acs";
 import { wedgeNarrowAtom } from "./layout2d";
+import type { AtomChem } from "./molecule";
 
-/** An atom to write: where it is in the editor's world units, and what. */
-export type WriterAtom = { id: number; x: number; y: number; el: string };
+/** An atom to write: what it is (./molecule), and where, in the editor's world units. */
+export type WriterAtom = AtomChem & { id: number; x: number; y: number };
 /** A bond to write, between two atoms by id, as the editor holds it. */
 export type WriterBond = {
   a: number;
@@ -66,6 +67,34 @@ function rows(model: WriterModel, index: Map<number, number>): Row[] {
 const f10 = (v: number) => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(4).padStart(10);
 const i3 = (n: number) => String(n).padStart(3);
 
+/** MOL's radical codes. */
+const RADICAL_CODE = { singlet: 1, doublet: 2, triplet: 3 } as const;
+
+/**
+ * A V2000 block's property lines for its charges, radicals and isotopes,
+ * eight atoms a line, as the format has them. (The atom block's own charge
+ * field is left at 0: a CHG line supersedes it anyway, and holds any
+ * charge, where the field stops at 3.)
+ */
+function propertyLines(model: WriterModel): string[] {
+  const lines: string[] = [];
+  const add = (tag: string, entries: [number, number][]) => {
+    for (let k = 0; k < entries.length; k += 8) {
+      const part = entries.slice(k, k + 8);
+      lines.push(`M  ${tag}${i3(part.length)}${part.map(([i, v]) => ` ${i3(i)} ${i3(v)}`).join("")}`);
+    }
+  };
+  const each = <T>(pick: (a: WriterAtom) => T | undefined, code: (v: T) => number) =>
+    model.atoms.flatMap((a, i): [number, number][] => {
+      const v = pick(a);
+      return v ? [[i + 1, code(v)]] : [];
+    });
+  add("CHG", each((a) => a.charge, (v) => v));
+  add("RAD", each((a) => a.radical, (v) => RADICAL_CODE[v]));
+  add("ISO", each((a) => a.isotope, (v) => v));
+  return lines;
+}
+
 /** The second header line: the program, no date, and that it is 2D. */
 const PROGRAM_LINE = "  Meno    " + " ".repeat(10) + "2D";
 
@@ -91,7 +120,7 @@ function writeV2000(model: WriterModel, title: string): string {
       `${i3(b.first)}${i3(b.second)}${i3(b.type)}${i3(code[b.stereo])}  0  0  0`,
     );
   }
-  lines.push("M  END");
+  lines.push(...propertyLines(model), "M  END");
   return lines.join("\n") + "\n";
 }
 
@@ -111,7 +140,11 @@ function writeV3000(model: WriterModel, title: string): string {
     "M  V30 BEGIN ATOM",
   ];
   model.atoms.forEach((a, i) => {
-    lines.push(`M  V30 ${i + 1} ${a.el} ${num(a.x * scale)} ${num(a.y * scale)} 0 0`);
+    const props =
+      (a.charge ? ` CHG=${a.charge}` : "") +
+      (a.radical ? ` RAD=${RADICAL_CODE[a.radical]}` : "") +
+      (a.isotope ? ` MASS=${a.isotope}` : "");
+    lines.push(`M  V30 ${i + 1} ${a.el} ${num(a.x * scale)} ${num(a.y * scale)} 0 0${props}`);
   });
   lines.push("M  V30 END ATOM");
   if (bonds.length > 0) {
