@@ -3,6 +3,7 @@ import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
 import type { ImportedArrow, StructureDocument } from "../../document";
 import { EditorState, Bond, Arrow, Model } from "../types";
+import { turnedOver } from "../../utils/selection";
 import { StoreApi } from "zustand";
 
 type SetState = StoreApi<EditorState>["setState"];
@@ -106,6 +107,25 @@ export const createModelSlice = (
       if (d <= tol && (!best || d < best.d)) best = { id: a.id, d };
     }
     return best ? best.id : null;
+  },
+
+  moveAtoms: (moves: { id: number; x: number; y: number }[], gesture: string) => {
+    doc.edit("move atoms", (d) => ops.placeAtoms(d, moves), { coalesceKey: `move-atoms:${gesture}` });
+  },
+
+  turnSelectionOver: (axis: "vertical" | "horizontal") => {
+    const { sel, model } = get();
+    if (!sel.atoms.size) return;
+    const over = turnedOver(model, sel.atoms, axis);
+    doc.edit("turn over", (d) => ops.placeAtoms(d, over.atoms, over.bonds));
+  },
+
+  deleteSelection: () => {
+    const { sel } = get();
+    if (!sel.atoms.size && !sel.bonds.size) return;
+    if (doc.edit("delete selection", (d) => ops.deleteParts(d, sel.atoms, sel.bonds))) {
+      forgetDeleted(set);
+    }
   },
 
   moveAtom: (id: number, x: number, y: number) => {

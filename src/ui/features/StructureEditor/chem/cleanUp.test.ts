@@ -6,7 +6,7 @@ import cages from "../../../../lib/layout/testdata/cages.json";
 import { createStructureDocument } from "../document";
 import { connectStoreToDocument, createEditorStore } from "../store";
 import type { Bond, Model } from "../store/types";
-import { cleanUp, fragmentOf, fragmentsOf, laidOut, partOf } from "./cleanUp";
+import { cleanUp, fragmentOf, fragmentsHolding, fragmentsOf, laidOut, partOf } from "./cleanUp";
 import { degrees, drawingOf, forFlatReaders, orientFor } from "./drawing";
 
 const atom = (id: number, x: number, y: number, el = "C") => ({ id, x, y, r: 0.9, el });
@@ -104,6 +104,14 @@ describe("fragmentOf and partOf", () => {
     expect(fragmentsOf(withLone).map((f) => [...f].sort())).toEqual([
       [1, 2, 3, 4],
       [5, 6],
+    ]);
+  });
+
+  it("finds the structures a selection's atoms are in, each once", () => {
+    expect(fragmentsHolding(model, [2, 3, 99]).map((f) => [...f].sort())).toEqual([[1, 2, 3, 4]]);
+    expect(fragmentsHolding(model, [6, 1]).map((f) => [...f].sort())).toEqual([
+      [5, 6],
+      [1, 2, 3, 4],
     ]);
   });
 });

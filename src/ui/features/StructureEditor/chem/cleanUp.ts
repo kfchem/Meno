@@ -51,8 +51,19 @@ export function fragmentsOf(model: Model): Set<number>[] {
   return out;
 }
 
+/** The fragments that hold any of `atoms`, each once. */
+export function fragmentsHolding(model: Model, atoms: Iterable<number>): Set<number>[] {
+  const out: Set<number>[] = [];
+  for (const id of atoms) {
+    if (out.some((f) => f.has(id)) || !model.atoms.some((a) => a.id === id)) continue;
+    out.push(fragmentOf(model, id));
+  }
+  return out;
+}
+
 /**
- * Cleans up the fragment an atom is in, or every structure on the canvas,
+ * Cleans up the fragment an atom is in - or the fragments a selection's
+ * atoms are in, or every structure on the canvas -
  * each where it was: laid out afresh by Meno's own engine (engineLayout),
  * off the drawing's thread, and applied as one undo step. Refuses, rather
  * than moving anything, if the structure changed meanwhile, or if the new
@@ -60,10 +71,14 @@ export function fragmentsOf(model: Model): Set<number>[] {
  */
 export async function cleanUp(
   store: EditorStore,
-  aroundAtom: number | null = null,
+  around: number | Iterable<number> | null = null,
 ): Promise<void> {
   const model = store.getState().model;
-  const parts = (aroundAtom == null ? fragmentsOf(model) : [fragmentOf(model, aroundAtom)])
+  const parts = (
+    around == null
+      ? fragmentsOf(model)
+      : fragmentsHolding(model, typeof around === "number" ? [around] : around)
+  )
     .map((ids) => partOf(model, ids))
     .filter((part) => part.bonds.length > 0);
   if (!parts.length) return; // nothing to lay out

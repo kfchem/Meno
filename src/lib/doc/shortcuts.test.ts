@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isCleanUpKey, isDeleteKey, saveIntent, undoIntent } from "./shortcuts";
+import {
+  addsToSelection,
+  isCleanUpKey,
+  isDeleteKey,
+  isDeselectKey,
+  isSelectAllKey,
+  saveIntent,
+  undoIntent,
+} from "./shortcuts";
 
 const key = (over: Partial<Parameters<typeof undoIntent>[0]> = {}) => ({
   key: "z",
@@ -73,5 +81,23 @@ describe("isDeleteKey", () => {
     expect(
       isDeleteKey({ key: "Backspace", target: { tagName: "TEXTAREA" } }),
     ).toBe(false);
+  });
+});
+
+describe("selection keys", () => {
+  it("adds to the selection with Ctrl, or ⌘ on a Mac (where Ctrl-click is a right-click)", () => {
+    expect(addsToSelection({ ctrlKey: true }, false)).toBe(true);
+    expect(addsToSelection({ metaKey: true }, false)).toBe(false);
+    expect(addsToSelection({ metaKey: true }, true)).toBe(true);
+    expect(addsToSelection({ ctrlKey: true }, true)).toBe(false);
+  });
+
+  it("selects everything on Ctrl/Cmd+A and lets go on Escape, but not in a text field", () => {
+    expect(isSelectAllKey({ key: "a", ctrlKey: true })).toBe(true);
+    expect(isSelectAllKey({ key: "A", metaKey: true })).toBe(true);
+    expect(isSelectAllKey({ key: "a", ctrlKey: true, target: { tagName: "INPUT" } })).toBe(false);
+    expect(isSelectAllKey({ key: "a", ctrlKey: true, target: { tagName: "TEXTAREA" } })).toBe(false);
+    expect(isDeselectKey({ key: "Escape" })).toBe(true);
+    expect(isDeselectKey({ key: "Escape", target: { tagName: "INPUT" } })).toBe(false);
   });
 });

@@ -63,6 +63,8 @@ export function createEditorStore(
 
     // Ephemeral view state: hover, gestures, camera requests, edit buffers.
     sel: { atoms: new Set<number>(), bonds: new Set<number>() },
+    selAnchor: null,
+    boxSelect: { active: false, kind: "box", points: [] },
     hovered: { atomId: null, bondId: null },
     hoverPulse: { id: null, nonce: 0, until: 0 },
     fitNonce: 0,

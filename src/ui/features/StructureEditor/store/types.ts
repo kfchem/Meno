@@ -48,6 +48,13 @@ export type Arrow = {
 export type EditorState = {
   model: Model;
   sel: Sel;
+  /** The last atom chosen into the selection: where a Shift+click's path starts. */
+  selAnchor: number | null;
+  /**
+   * A box or a lasso being drawn to select what it holds, in world units:
+   * the box's two corners, or the lasso's path.
+   */
+  boxSelect: { active: boolean; kind: "box" | "lasso"; points: { x: number; y: number }[] };
   hovered: { atomId: number | null; bondId: number | null };
   hoverPulse: { id: number | null; nonce: number; until: number };
   arrows: Arrow[];
@@ -137,8 +144,20 @@ export type EditorState = {
     id: number,
     orient: NonNullable<Bond["stereoOrient"]>,
   ) => void;
-  toggleAtomSel: (id: number, multi?: boolean) => void;
+  setSel: (sel: Sel, anchor?: number | null) => void;
+  toggleAtomSel: (id: number) => void;
+  toggleBondSel: (id: number) => void;
+  selectPathTo: (id: number) => void;
+  selectStructure: (id: number) => void;
+  selectAll: () => void;
   clearSel: () => void;
+  setBoxSelect: (box: EditorState["boxSelect"]) => void;
+  /** Atoms moved together - a selection dragged or turned - the moves of one gesture one undo step. */
+  moveAtoms: (moves: { id: number; x: number; y: number }[], gesture: string) => void;
+  /** The selection turned over, left to right or top to bottom (utils/selection). */
+  turnSelectionOver: (axis: "vertical" | "horizontal") => void;
+  /** The selection deleted, as one undo step. */
+  deleteSelection: () => void;
   setHoveredFromId: (id: number) => void;
   clearHovered: () => void;
   clearAtomHover: () => void;
