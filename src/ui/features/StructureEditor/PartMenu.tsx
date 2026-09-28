@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * What was right-clicked, where in the canvas the menu opens, and how big
@@ -22,7 +22,12 @@ const MAC =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
-/** The menu's width, and each item's height, for keeping it inside the canvas. */
+/**
+ * The least width the menu takes, and each item's height, for keeping it
+ * inside the canvas. It grows past that to fit its longest item on one line:
+ * a shortcut is written out on Windows (Ctrl+Shift+K) where a Mac has three
+ * symbols, and an item that wrapped would spill into the one below it.
+ */
 const WIDTH = 240;
 const ITEM = 32;
 
@@ -59,6 +64,13 @@ export default function PartMenu({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // the width it came out at, so that the whole of it stays in the canvas
+  const [width, setWidth] = useState(WIDTH);
+  useLayoutEffect(() => {
+    // (the same width again changes nothing: React leaves it be)
+    const w = ref.current?.offsetWidth;
+    if (w) setWidth(w);
+  }, [target, radical]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -124,9 +136,9 @@ export default function PartMenu({
       aria-label={target.selection === "here" ? "Selection" : target.kind === "atom" ? "Atom" : "Bond"}
       className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
       style={{
-        left: Math.max(0, Math.min(target.x, target.within.width - WIDTH - 8)),
+        left: Math.max(0, Math.min(target.x, target.within.width - width - 8)),
         top: Math.max(0, Math.min(target.y, target.within.height - height - 8)),
-        width: WIDTH,
+        minWidth: WIDTH,
       }}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
@@ -144,7 +156,7 @@ export default function PartMenu({
             onClose();
             item.run();
           }}
-          className="w-full h-8 px-3 flex items-center justify-between gap-4 text-left hover:bg-gh-base focus:bg-gh-base outline-none"
+          className="w-full h-8 px-3 flex items-center justify-between gap-4 text-left whitespace-nowrap hover:bg-gh-base focus:bg-gh-base outline-none"
         >
           <span>{item.name}</span>
           <kbd className="font-sans text-xs text-gh-gray">{item.keys}</kbd>
