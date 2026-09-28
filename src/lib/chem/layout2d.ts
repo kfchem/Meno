@@ -751,12 +751,6 @@ function centredMeetPoint(
   return vadd({ x: at.x, y: at.y }, vadd(vscale(n, offset), vscale(d, t)));
 }
 
-/**
- * The two lines of a double bond drawn centred, each carried on to meet the
- * line of a neighbouring double bond where they share an atom. Left to stop
- * short, consecutive double bonds read as four loose lines rather than a
- * chain.
- */
 /** Where the lines of a double bond sit, either side of its own line. */
 function doubleOffsets(
   b: Bond,
@@ -772,6 +766,13 @@ function doubleOffsets(
   return sgn == null ? [off * 0.5, -off * 0.5] : [off * sgn];
 }
 
+/**
+ * The two lines of a double bond drawn centred, each carried on to meet the
+ * line of a neighbouring double bond where they share an atom. Left to stop
+ * short, consecutive double bonds read as four loose lines rather than a
+ * chain. Not at a labelled atom, though: the label has already taken the
+ * bond's end, and a line run on from there would cross the letters.
+ */
 function centredPair(
   p1: Vec2,
   p2: Vec2,
@@ -781,6 +782,7 @@ function centredPair(
   widthPx: number,
   bond: Bond,
   atoms: Atom[],
+  labelled: (idx: number) => boolean,
   adjBonds?: Map<number, Bond[]>,
   doubleSides?: Map<Bond, number | undefined>,
   joinMinDeg = 20,
@@ -789,9 +791,11 @@ function centredPair(
   const limit = off * 2;
   const sideOf = (b: Bond) => doubleOffsets(b, off, doubleSides);
   const others = (idx: number) =>
-    (adjBonds?.get(idx) ?? []).filter(
-      (b) => b !== bond && b.order === 2 && b.stereo !== "up" && b.stereo !== "down",
-    );
+    labelled(idx)
+      ? []
+      : (adjBonds?.get(idx) ?? []).filter(
+          (b) => b !== bond && b.order === 2 && b.stereo !== "up" && b.stereo !== "down",
+        );
   const out: LineSeg[] = [];
   const meets: Meet[] = [];
   const ends: Vec2[] = [];
@@ -832,9 +836,8 @@ function centredPair(
       outward: Vec2,
       end: { at: Vec2; met: boolean },
     ): { at: Vec2; met: boolean; through?: Vec2 } => {
-      if (end.met) return end;
+      if (end.met || labelled(atIdx)) return end;
       const atom = atoms[atIdx];
-      if (atom.el !== "C") return end;
       let best: Vec2 | null = null;
       let bestU: Vec2 | null = null;
       let bestT = -Infinity;
@@ -1871,6 +1874,7 @@ export function buildBondPrimitives(
         lwPx,
         bond,
         atoms,
+        (idx) => hasLabel(atoms[idx].el),
         adjBonds,
         doubleSides,
         opts.centredJoinMinDeg ?? 20,
@@ -1884,7 +1888,8 @@ export function buildBondPrimitives(
     // read as a chain that way, and as four loose lines otherwise. Elsewhere
     // it stops on the bisector of the angle it runs inside, and runs up to an
     // atom with nothing on its side - in a ring, both ends; in a chain, the
-    // end inside the zigzag. A label takes both lines' ends alike.
+    // end inside the zigzag. A label takes both lines' ends alike, and meets
+    // nothing: the lines stop where it has cut them.
     const o = vscale(n, off * sgn);
     const around = (idx: number) =>
       (adjBonds?.get(idx) ?? []).filter((nb) => nb !== bond);
@@ -1908,13 +1913,15 @@ export function buildBondPrimitives(
     const ps1 = vadd(p1, vscale(dir, Math.min(back1, room)));
     const ps2 = vadd(p2, vscale(dir, -Math.min(back2, room)));
     const others = (idx: number) =>
-      (adjBonds?.get(idx) ?? []).filter(
-        (nb) =>
-          nb !== bond &&
-          nb.order === 2 &&
-          nb.stereo !== "up" &&
-          nb.stereo !== "down",
-      );
+      hasLabel(atoms[idx].el)
+        ? []
+        : (adjBonds?.get(idx) ?? []).filter(
+            (nb) =>
+              nb !== bond &&
+              nb.order === 2 &&
+              nb.stereo !== "up" &&
+              nb.stereo !== "down",
+          );
     const sideOf = (nb: Bond) => doubleOffsets(nb, off, doubleSides);
     const ps1b = mitreOffsetEnd(
       atoms,
