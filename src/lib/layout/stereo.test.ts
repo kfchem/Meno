@@ -49,6 +49,31 @@ describe("stereo", () => {
     expect([0, 4]).toContain(out.wedges[0].to);
   });
 
+  it("shows both of a ring atom's two groups, one in front and one behind", () => {
+    // a ring carbon (0) with an OH (6) and a methyl (7), as erythromycin's C6
+    for (const volume of [1, -1] as const) {
+      const input: LayoutInput = {
+        atoms: Array.from({ length: 8 }, (_, i) =>
+          i === 0
+            ? { el: "C", tetra: { neighbours: [1, 5, 6, 7], volume } }
+            : i === 6
+              ? { el: "O", hs: 1 }
+              : { el: "C" },
+        ),
+        bonds: [
+          ...[0, 1, 2, 3, 4, 5].map((i) => ({ a: i, b: (i + 1) % 6, order: 1 })),
+          { a: 0, b: 6, order: 1 },
+          { a: 0, b: 7, order: 1 },
+        ],
+      };
+      const out = layout2D(input);
+      const marks = out.wedges.filter((w) => w.from === 0);
+      expect(marks.map((w) => w.to).sort()).toEqual([6, 7]);
+      expect(new Set(marks.map((w) => w.stereo)).size).toBe(2);
+      expect(readBack(input, 0)).toBe(volume);
+    }
+  });
+
   it("draws an H at a ring fusion with no other way to show it, upright", () => {
     // decalin, one fusion carbon (0) a centre: its other bonds all in rings
     const bonds: [number, number][] = [

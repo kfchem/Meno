@@ -13,6 +13,7 @@
  * that sign back.
  */
 import { angleOf, centroid, segmentsCross, splitOutside, splitWidestGap, sub, type Point } from "./geometry";
+import { hydrogenSpot } from "./metrics";
 import { key, type Molecule } from "./perceive";
 
 export type Tetrahedral = {
@@ -126,6 +127,18 @@ export function placeStereo(
         .filter(([a]) => a !== c)
         .map(([a, p]) => ({ p, label: mol.el[a] !== "C" }));
       others.push(...hydrogens.map((h) => ({ p: h.at, label: true })));
+      // and the H of every label that has one, where the drawing sets it
+      for (const [a, p] of pos) {
+        if (a === c || mol.el[a] === "C" || !(mol.hs[a] > 0) || !mol.neighbours[a].length) continue;
+        const off = hydrogenSpot(
+          mol.neighbours[a].map((b) => {
+            const v = sub(pos.get(b)!, p);
+            const d = Math.hypot(v.x, v.y) || 1;
+            return { x: v.x / d, y: v.y / d };
+          }),
+        );
+        others.push({ p: { x: p.x + off.x, y: p.y + off.y }, label: true });
+      }
       const bonds = [...mol.bondIndex.keys()]
         .map((k) => k.split(",").map(Number) as [number, number])
         .filter(([a, b]) => a !== c && b !== c && pos.has(a) && pos.has(b))
@@ -192,6 +205,17 @@ export function placeStereo(
           else {
             used.add(key(c, choice.to));
             wideEnds.add(choice.to);
+          }
+          // A ring atom's two groups - erythromycin's OH and methyl on one
+          // carbon - each show which face they are on: the one in front on
+          // a wedge, the other behind on hashes. (With the ring bonds in the
+          // page, one stands out of it and the other behind.)
+          const out = mol.neighbours[c].filter((n) => !ringBond(c, n));
+          const other = out.find((n) => n !== choice.to);
+          if (!hasH && out.length === 2 && out.includes(choice.to) && other != null && !used.has(key(c, other))) {
+            wedges.push({ from: c, to: other, stereo: stereo === "up" ? "down" : "up" });
+            used.add(key(c, other));
+            wideEnds.add(other);
           }
           done = true;
           break;
