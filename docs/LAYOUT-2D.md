@@ -280,8 +280,13 @@ Nothing else is moved for it: the drawing is set first, its H's last.
    from the middle of its longest chain, placing each bond by the rules of
    section 2 and choosing among free placements by section 5.
 4. Try the frame's orientations and keep the one that reads best by
-   section 4.
-5. Put the stereo on (section 6).
+   section 4, its free choices tried the other way and its parts
+   untangled (section 5).
+5. Last, turn a macrolide's sugars to their face and make room for the
+   H's of labels, each by a small local move (sections 4 and 5).
+6. Put the stereo on (section 6).
 
 Every step is measured on the benchmark, and a change is kept only if the
-drawings it makes are better.
+drawings it makes are better. How to go about changing the engine, and
+what the maintainer has decided, is in
+[`LAYOUT-2D-TUNING.md`](LAYOUT-2D-TUNING.md).

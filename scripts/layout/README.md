@@ -6,7 +6,12 @@ npm run layout-fetch                                   # fills in molecules.json
 npm run layout-bench                                   # writes .layout/index.html
 npm run layout-bench -- --open                         # and opens it
 npm run layout-bench -- --only=Paclitaxel,D-Glucose    # just those (names as they start)
+npm run layout-labels                                  # a label's H running into anything, as drawn
+npm run layout-compare -- before.json                  # Meno's scores against an earlier .layout/scores.json
 ```
+
+How to tune the engine with these, and what has been decided, is in
+[`docs/LAYOUT-2D-TUNING.md`](../../docs/LAYOUT-2D-TUNING.md).
 
 `<chem python>` is the Python of the chem lock: the app's own environment,
 under its data folder at `uv/chem/venv`, will do.
