@@ -179,4 +179,32 @@ describe("cleanUp", () => {
     const [s0, s1] = [stereo(flat), stereo(laid)];
     for (const [c, t] of s0) expect(sameConfiguration(t, s1.get(c)!), `${c}`).toBe(true);
   });
+
+  it("refuses, rather than lose it, a configuration it cannot carry", async () => {
+    // methyl phenyl sulfoxide's S, wedged: its fourth group a lone pair
+    const sulfoxide: Model = {
+      atoms: [atom(1, 0, 0, "S"), atom(2, 0, 1, "O"), atom(3, -1, -0.5), atom(4, 1, -0.5)],
+      bonds: [
+        { id: 5, a: 1, b: 2, order: 2 },
+        { id: 6, a: 1, b: 3, order: 1, stereo: "up" },
+        { id: 7, a: 1, b: 4, order: 1 },
+      ],
+    };
+    const { store } = canvas(sulfoxide);
+    await expect(cleanUp(store)).rejects.toThrow(/nothing was moved/);
+    expect(store.getState().model).toEqual(sulfoxide);
+  });
+
+  it("drops a wedge that says nothing, on a CH2", async () => {
+    const propane: Model = {
+      atoms: [atom(1, 0, 0), atom(2, 1, 0.5), atom(3, 2, 0)],
+      bonds: [
+        { id: 4, a: 2, b: 1, order: 1, stereo: "up" },
+        { id: 5, a: 2, b: 3, order: 1 },
+      ],
+    };
+    const { store } = canvas(propane);
+    await cleanUp(store);
+    expect(store.getState().model.bonds.every((b) => b.stereo !== "up")).toBe(true);
+  });
 });

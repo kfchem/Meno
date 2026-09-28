@@ -43,6 +43,20 @@ export function layoutJob(part: Model): LayoutJob {
     bondsOf.set(b.a, [...(bondsOf.get(b.a) ?? []), k]);
     bondsOf.set(b.b, [...(bondsOf.get(b.b) ?? []), k]);
   });
+  // A wedge at an atom that could be a stereocentre, but says nothing the
+  // engine can take - wedge and hashes drawn opposite each other, or an
+  // atom with a lone pair for its fourth group (a sulfoxide's S): laid out,
+  // it would be lost, so it is not laid out.
+  for (const b of drawing.bonds) {
+    const c = b.wedge?.narrow;
+    if (c == null || tetra.has(c)) continue;
+    if ((bondsOf.get(c)?.length ?? 0) >= 3 && drawing.atoms[c].hs <= 1) {
+      throw new Error(
+        `the wedges at ${part.atoms[c].el} do not say its configuration in a way Clean-up can keep ` +
+          "(drawn crossed, or on an atom with a lone pair), so nothing was moved",
+      );
+    }
+  }
   // an H on a stereocentre, bonded to nothing else: the centre's own
   const foldedInto = new Map<number, number>();
   part.atoms.forEach((a, h) => {

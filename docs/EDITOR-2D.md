@@ -291,7 +291,11 @@ lipids each have their own way of being drawn, which it should know.
      the depth itself is not saved, so a cage opened again is flat, its
      stereochemistry wedged.
    - The new drawing is read back before anything moves: if it would not
-     say the stereochemistry the old one said, Clean-up refuses.
+     say the stereochemistry the old one said, Clean-up refuses. So it does
+     for a wedge it cannot carry - wedge and hashes drawn opposite each
+     other, or on an atom whose fourth group is a lone pair (a sulfoxide's
+     S), which the engine has no way to take - rather than lose it. A wedge
+     that says nothing (on a CH2) goes.
    - A SMILES is still read by RDKit, whose drawing says what it means;
      the engine then draws it (RDKit's drawing stands, should the engine
      fail).

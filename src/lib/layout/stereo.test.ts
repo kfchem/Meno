@@ -41,6 +41,13 @@ describe("drawnVolume", () => {
     expect(new Set(reads).size).toBe(1);
   });
 
+  it("reads a T as RDKit does, the H in the widest gap", () => {
+    // F, Cl and Br (on a wedge) at 0, 180 and 90 degrees: RDKit reads R,
+    // which with the H last is a volume of +1; the wedge on F instead, S
+    expect(drawnVolume({ x: 0, y: 0 }, [at(0), at(180), at(90), null], [0, 0, 1, 0])).toBe(1);
+    expect(drawnVolume({ x: 0, y: 0 }, [at(0), at(180), at(90), null], [1, 0, 0, 0])).toBe(-1);
+  });
+
   it("reads a centre drawn with a wedge and hashes side by side", () => {
     // two ring bonds in the page, the groups on the ring atom one in front
     // and one behind (erythromycin's tertiary alcohols)
