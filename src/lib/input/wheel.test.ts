@@ -17,9 +17,19 @@ describe("looksLikeFingers", () => {
     expect(looksLikeFingers(ev({ deltaY: 3, deltaMode: 1 }))).toBe(false); // lines
   });
 
+  it("reads a smoothly scrolling mouse's notch as a wheel, and a trackpad's start as fingers", () => {
+    // measured on macOS (WebKit): a Logitech MX Master 3S, a notch and a spin
+    expect(looksLikeFingers(ev({ deltaY: -13 }))).toBe(false);
+    expect(looksLikeFingers(ev({ deltaY: -101 }))).toBe(false);
+    // a trackpad, slowly and flicked: it begins small whichever
+    expect(looksLikeFingers(ev({ deltaY: -1 }))).toBe(true);
+    expect(looksLikeFingers(ev({ deltaY: 1 }))).toBe(true);
+    expect(looksLikeFingers(ev({ deltaY: 2 }))).toBe(true);
+  });
+
   it("reads small, sideways or fractional steps as fingers", () => {
     expect(looksLikeFingers(ev({ deltaY: 7, deltaX: -2 }))).toBe(true);
-    expect(looksLikeFingers(ev({ deltaY: 7 }))).toBe(true);
+    expect(looksLikeFingers(ev({ deltaY: 5 }))).toBe(true);
     expect(looksLikeFingers(ev({ deltaY: 42.5 }))).toBe(true);
     // Shift turns a wheel sideways on Windows: still a wheel
     expect(looksLikeFingers(ev({ deltaX: 100, shiftKey: true }))).toBe(false);

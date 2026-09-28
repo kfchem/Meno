@@ -27,10 +27,13 @@ export type WheelLike = {
 const RUN_MS = 250;
 
 /**
- * The first step of a mouse wheel's notch is 40 px or more (WebKit, macOS)
- * or 100 px (Chromium, Windows); a trackpad's first step is smaller.
+ * A mouse wheel's first step is a notch: 40 px or more for a plain wheel
+ * (WebKit, macOS), 100 px in Chromium on Windows, and 13 px for a mouse
+ * scrolling smoothly - a Logitech MX Master 3S on macOS, measured on the
+ * maintainer's machine, 13 for one notch and about 100 spun fast. Fingers
+ * on a trackpad begin with a step of 1 or 2 px, however fast the stroke.
  */
-const NOTCH_PX = 30;
+const NOTCH_PX = 8;
 
 /** Whether an event, the first of its run, looks like fingers on a trackpad. */
 export function looksLikeFingers(e: WheelLike): boolean {

@@ -11,6 +11,8 @@ type GestureLike = Event & { scale: number; clientX: number; clientY: number };
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 300;
 const PINCH_PER_PX = 0.01;
+/** The least a wheel's step counts for when it zooms, in px: a plain wheel's line. */
+const NOTCH_MIN_PX = 40;
 
 export function PanZoom2D() {
   const { camera, gl, invalidate } = useThree();
@@ -192,7 +194,10 @@ export function PanZoom2D() {
       }
       // lower sensitivity (was 0.001)
       const SENS = 0.00025;
-      zVel.current += -e.deltaY * SENS; // accumulate in log-zoom space
+      // (a notch zooms at least as far as a plain wheel's line of 40 px
+      // does: a smoothly scrolling mouse's notch is only 13 px)
+      const step = Math.sign(e.deltaY) * Math.max(Math.abs(e.deltaY), NOTCH_MIN_PX);
+      zVel.current += -step * SENS; // accumulate in log-zoom space
       // clamp to avoid spikes from large wheel deltas
       zVel.current = Math.max(-0.12, Math.min(0.12, zVel.current));
       const rect = dom.getBoundingClientRect();

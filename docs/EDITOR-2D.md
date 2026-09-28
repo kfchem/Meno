@@ -51,8 +51,11 @@ main movement; everything else moves or zooms the same way in both.
 A mouse wheel and two fingers arrive as the same event, so they are told
 apart by the first event of each run - fingers move sideways, in fractions
 and in small first steps (`lib/input/wheel.ts`); a pinch comes as a WebKit
-gesture or, in Chromium, with Ctrl held. (PR #55; 3D follows when the views
-are joined.)
+gesture or, in Chromium, with Ctrl held. Measured on the maintainer's Mac,
+a trackpad's first step is 1 or 2 px however fast the stroke, and a
+smoothly scrolling mouse's notch (an MX Master 3S) is 13 px, so 8 px tells
+them apart; a notch zooms at least as far as a plain wheel's 40 px line.
+(PR #55; 3D follows when the views are joined.)
 
 **A click keeps each view's own meaning**: in 2D a click on an atom edits
 its label and a click on a bond changes its kind, as drawing wants; in 3D a
