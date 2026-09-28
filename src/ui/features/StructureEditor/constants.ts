@@ -24,6 +24,13 @@ export const DOUBLE_CLICK_MS = 500;
 export const HOLD_MS = 450;
 
 /**
+ * How far a press has to travel to be a drag rather than a click, in px.
+ * The browser calls the end of a drag a click all the same, wherever the
+ * button comes up; the drawing does not (see utils/press).
+ */
+export const MOV_PX = 5;
+
+/**
  * How long a pause in a drag takes to let a bond or an atom go where the
  * pointer is, off the grid - or to lay down the bond a chain is on. Longer
  * than a long press: a drag slows down as it arrives, and should not let go

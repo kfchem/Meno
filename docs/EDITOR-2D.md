@@ -34,7 +34,10 @@ and in particular:
     carbon for every bond length, zigzagging. A click alone edits the
     atom's label once the system's double-click time has passed
     (DOUBLE_CLICK_MS, half a second); a double-click slower than that,
-    finding its first click already editing, takes the edit back.
+    finding its first click already editing, takes the edit back. The end
+    of a drag is not a click, though the browser fires one wherever the
+    button comes up: a bond or a chain let go on the atom it has just
+    drawn does not go on to edit that atom's label (utils/press).
   - A press held still (HOLD_MS) lifts an atom, and the drag moves it.
   - A pause in a drag (FREE_MS, longer than a long press) lets a bond or a
     moved atom go exactly where the pointer is, off the grid; in a chain

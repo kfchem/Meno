@@ -4,11 +4,10 @@ import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { computeMoveSnap } from "../utils/moveSnap";
-import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, HOLD_MS } from "../constants";
+import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, HOLD_MS, MOV_PX } from "../constants";
+import { clickClock, doubleClickedSince } from "../utils/clickCount";
 import { commitInstanceMatrices } from "./instances";
 
-/** How far a press has to travel to be a drag rather than a click, in px. */
-const MOV_PX = 5;
 /** A click edits a label this long after it, unless a second click follows. */
 const EDIT_DELAY_MS = DOUBLE_CLICK_MS;
 
@@ -389,8 +388,11 @@ export function Atoms2D() {
           // then onPointerDown cancels this.
           cancelPendingEdit();
           pendingEdit.current.atomId = a.id;
+          // (unless it turns out to be the second click of a double-click,
+          // as the system reckons one, which draws a bond instead)
+          const since = clickClock();
           pendingEdit.current.tid = window.setTimeout(() => {
-            if (pendingEdit.current.atomId === a.id) beginLabelEdit(a.id);
+            if (pendingEdit.current.atomId === a.id && !doubleClickedSince(since)) beginLabelEdit(a.id);
             cancelPendingEdit();
           }, EDIT_DELAY_MS) as unknown as number;
         };

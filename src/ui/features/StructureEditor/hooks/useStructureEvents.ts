@@ -4,6 +4,8 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useEditorStore } from "../store";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS } from "../constants";
 import { calculateNewBondPosition } from "../utils/geometry";
+import { clickClock, doubleClickedSince, noteClick } from "../utils/clickCount";
+import { endsDrag, movePress, startPress, type Press } from "../utils/press";
 import { editorModelOf, processFileContent } from "../utils/io";
 
 export function useStructureEvents(
@@ -16,6 +18,8 @@ export function useStructureEvents(
   const camRef = useRef<THREE.OrthographicCamera | null>(null);
   const domRef = useRef<HTMLCanvasElement | null>(null);
   const clickTimerRef = useRef<number | null>(null);
+  // The press the next click ends, and whether it has travelled (utils/press)
+  const pressRef = useRef<Press | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Last import failure, shown in the canvas until dismissed or replaced.
   const [importError, setImportError] = useState<string | null>(null);
@@ -220,6 +224,8 @@ export function useStructureEvents(
   };
 
   const handleWrapperMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (pressRef.current && (e.buttons & 1) !== 0)
+      pressRef.current = movePress(pressRef.current, e.clientX, e.clientY);
     const st = store.getState();
     // Over a button or a card, nothing on the drawing is under the pointer,
     // whatever is drawn beneath it: a key pressed there must not reach it.
@@ -243,13 +249,25 @@ export function useStructureEvents(
   };
 
   const handleWrapperClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    noteClick(e.detail);
     if (clickTimerRef.current != null) {
       try {
         window.clearTimeout(clickTimerRef.current);
       } catch {}
       clickTimerRef.current = null;
     }
+    // The end of a drag - a bond or a chain drawn, an atom moved, the view
+    // panned - edits nothing, wherever it lets go: on the atom it has just
+    // drawn, say.
+    const press = pressRef.current;
+    pressRef.current = null;
+    if (endsDrag(press, e.clientX, e.clientY)) return;
+    // The second click of a double-click (as the system reckons one) edits
+    // nothing, and neither does its first, if the edit is not yet begun.
+    if (e.detail >= 2) return;
+    const since = clickClock();
     clickTimerRef.current = window.setTimeout(() => {
+      if (doubleClickedSince(since)) return;
       const st = store.getState();
       const now =
         typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -323,6 +341,16 @@ export function useStructureEvents(
   const dismissImportError = () => setImportError(null);
 
   const handleMouseDownCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    pressRef.current = startPress(e.clientX, e.clientY);
+    // A press takes back the edit a click before it was about to begin: it
+    // is the second click of a double-click - a chain dragged out of the
+    // atom, perhaps - or the start of something else.
+    if (clickTimerRef.current != null) {
+      try {
+        window.clearTimeout(clickTimerRef.current);
+      } catch {}
+      clickTimerRef.current = null;
+    }
     const st = store.getState();
     if (!st.labelEdit.active) return;
     const tgt = e.target as Element | null;
@@ -335,12 +363,6 @@ export function useStructureEvents(
       try {
         st.suppressDoubleClick(320);
       } catch {}
-      if (clickTimerRef.current != null) {
-        try {
-          window.clearTimeout(clickTimerRef.current);
-        } catch {}
-        clickTimerRef.current = null;
-      }
     }
   };
 
