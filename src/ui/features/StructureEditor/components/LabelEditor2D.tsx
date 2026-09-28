@@ -6,6 +6,7 @@ import { useEditor } from "../store";
 import { fontStack, type LayoutOptions } from "../../../../lib/chem/layout2d";
 import { editorLayoutOptions } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
+import { labelKey, typedLabel } from "../utils/labelTyping";
 
 export default function LabelEditor2D() {
   const { camera } = useThree();
@@ -29,6 +30,27 @@ export default function LabelEditor2D() {
     cancelLabelEdit,
   } = useEditor();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // whether an input method is composing in the box: its text is left alone
+  const composing = useRef(false);
+  // Each edit a box of its own, given its text when it opens and not again:
+  // the box is drawn in a React root of its own (drei's Html), a moment
+  // behind the store, and a value written into it from there lands on an
+  // input method's composition in progress - which then puts its text in
+  // a second time. What the label's rules change is set on the box itself.
+  const session = useRef({ active: false, n: 0 });
+  if (labelEdit.active && !session.current.active) session.current.n++;
+  session.current.active = labelEdit.active;
+  /** The box's text as the label's rules have it, set in the box where it differs. */
+  const settle = (el: HTMLInputElement) => {
+    const v = el.value;
+    const t = typedLabel(v, labelEdit.autoCap);
+    if (t !== v) {
+      const at = el.selectionStart ?? t.length;
+      el.value = t;
+      el.setSelectionRange(Math.min(at, t.length), Math.min(at, t.length));
+    }
+    setLabelEditValue(t);
+  };
   // Fade control and position retention
   const [mounted, setMounted] = useState(false);
   const [exiting, setExiting] = useState(false);
@@ -38,6 +60,10 @@ export default function LabelEditor2D() {
   const focusInputEnd = () => {
     const el = inputRef.current;
     if (!el) return false;
+    // (focused already, or an input method composing: the caret is left
+    // where it is - moving it commits the composition, and it comes again)
+    if (document.activeElement === el) return true;
+    if (composing.current) return false;
     try {
       el.focus({ preventScroll: true });
       const v = el.value;
@@ -88,8 +114,8 @@ export default function LabelEditor2D() {
       // typing a label.
       const t = e.target as HTMLElement | null;
       if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
-      const ch = e.key;
-      if (ch && ch.length === 1 && /[a-zA-Z]/.test(ch)) {
+      const ch = labelKey(e);
+      if (ch) {
         // First char uppercase; subsequent chars as typed
         const initial = ch.toUpperCase();
         beginLabelEdit(hovered.atomId, initial);
@@ -197,6 +223,7 @@ export default function LabelEditor2D() {
         }}
       >
         <input
+          key={session.current.n}
           ref={inputRef}
           id={`atom-label-${labelEdit.atomId ?? ""}`}
           name={`atom-label-${labelEdit.atomId ?? ""}`}
@@ -206,7 +233,7 @@ export default function LabelEditor2D() {
           autoCorrect="off"
           autoCapitalize="off"
           autoFocus
-          value={labelEdit.value}
+          defaultValue={labelEdit.value}
           onPointerDown={(e) => {
             try {
               e.stopPropagation();
@@ -218,18 +245,25 @@ export default function LabelEditor2D() {
             } catch {}
           }}
           onChange={(e) => {
-            const v = e.target.value;
-            // First char auto-capitalized; others as typed
-            if (v.length === 0) {
-              setLabelEditValue("");
-            } else if (labelEdit.autoCap) {
-              setLabelEditValue(v[0].toUpperCase() + v.slice(1));
-            } else {
-              setLabelEditValue(v);
+            // an input method composing: its text as it is, for now
+            if (composing.current || (e.nativeEvent as InputEvent).isComposing) {
+              setLabelEditValue(e.currentTarget.value);
+              return;
             }
+            // First char auto-capitalized; others as typed
+            settle(e.currentTarget);
+          }}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={(e) => {
+            composing.current = false;
+            settle(e.currentTarget);
           }}
           placeholder={atom?.el === "C" ? "C" : undefined}
           onKeyDown={(e) => {
+            // (Enter and Escape during a composition are the input method's)
+            if (composing.current || e.nativeEvent.isComposing) return;
             if (e.key === "Enter") {
               commitLabelEdit();
               e.preventDefault();
