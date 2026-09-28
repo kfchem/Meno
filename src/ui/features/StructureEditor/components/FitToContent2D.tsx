@@ -9,6 +9,7 @@ import {
 } from "../../../../lib/chem/layout2d";
 import { editorLayoutOptions, layoutBonds, maxFitZoom } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
+import { chemistry } from "../../../../lib/chem/molecule";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -40,7 +41,7 @@ export default function FitToContent2D({
     const index = new Map<number, number>();
     const la: LAtom[] = atoms.map((a, i) => {
       index.set(a.id, i);
-      return { id: a.id, x: a.x, y: a.y, el: a.el };
+      return { id: a.id, x: a.x, y: a.y, el: a.el, ...chemistry(a) };
     });
     const lb: LBond[] = layoutBonds(model.bonds, index);
     // The layout's sizes are in world units here, so they do not depend on

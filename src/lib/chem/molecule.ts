@@ -80,3 +80,12 @@ export function chargeText(charge: number): string {
   const n = Math.abs(charge);
   return n === 1 ? sign : `${n}${sign}`;
 }
+
+/** An atom's charge, radical and isotope, where it has them: to hand on with its element. */
+export function chemistry(a: AtomChem): Omit<AtomChem, "el"> {
+  return {
+    ...(a.charge ? { charge: a.charge } : {}),
+    ...(a.radical ? { radical: a.radical } : {}),
+    ...(a.isotope ? { isotope: a.isotope } : {}),
+  };
+}

@@ -10,6 +10,7 @@ import { useAppSettings } from "../../../lib/settings/appSettings";
 import { editorLayoutOptions, layoutBonds } from "./layoutOptions";
 import { useEditorStore } from "./store";
 import type { EditorState, Model } from "./store/types";
+import { chemistry } from "../../../lib/chem/molecule";
 
 /** A file's name without its folder or its extension. */
 function stem(path: string): string {
@@ -50,7 +51,7 @@ export function drawingSvg(
   aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
   style: DrawingStyle,
 ): string {
-  const atoms = model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el, ...(a.z != null ? { z: a.z } : {}) }));
+  const atoms = model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el, ...chemistry(a), ...(a.z != null ? { z: a.z } : {}) }));
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const bonds = layoutBonds(model.bonds, index);
   const enabled = Object.keys(aromatic.aromaticRings || {}).filter(

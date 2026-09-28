@@ -1,6 +1,6 @@
 import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
 import { kekuleOrders } from "../lib/chem/kekulize";
-import type { AtomChem, ParsedAtom } from "../lib/chem/molecule";
+import { chemistry, type AtomChem, type ParsedAtom } from "../lib/chem/molecule";
 import {
   parseSDF,
   parseXYZ,
@@ -32,12 +32,7 @@ export type EditorModel = { atoms: EditorAtom[]; bonds: EditorBond[] };
 
 /** A parsed atom's chemistry, as the editor holds it: its symbol normalised, and a charge, radical or isotope only where it has one. */
 function chemistryOf(a: ParsedAtom): AtomChem {
-  return {
-    el: normalizeEl(a.el),
-    ...(a.charge ? { charge: a.charge } : {}),
-    ...(a.radical ? { radical: a.radical } : {}),
-    ...(a.isotope ? { isotope: a.isotope } : {}),
-  };
+  return { el: normalizeEl(a.el), ...chemistry(a) };
 }
 
 /** MOL's bond type for a coordination (dative) bond. */

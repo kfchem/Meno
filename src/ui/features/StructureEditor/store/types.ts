@@ -116,6 +116,10 @@ export type EditorState = {
    * Deletes an atom and its bonds, or a bond, as one undo step; a carbon
    * left with no bonds goes too.
    */
+  /** An atom's charge one up (+1) or one down (-1), as one undo step. */
+  stepCharge: (id: number, step: 1 | -1) => void;
+  /** An atom's unpaired electron given, or taken away. */
+  toggleRadical: (id: number) => void;
   deleteAtom: (id: number) => void;
   deleteBond: (id: number) => void;
   /**

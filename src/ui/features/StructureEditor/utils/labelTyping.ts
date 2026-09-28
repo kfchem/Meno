@@ -36,3 +36,56 @@ export function typedLabel(value: string, autoCap: boolean): string {
   if (!v.length || !autoCap) return v;
   return v[0].toUpperCase() + v.slice(1);
 }
+
+/**
+ * What a typed label says of its atom. An element's symbol, with an
+ * isotope's mass number before it, its H after it and a charge last - 13C,
+ * NH3+, O-, Fe2+, Fe+2, N++ - is that element with that charge (the H the
+ * drawing works out for itself, as it does for any atom). A charge alone -
+ * +, 2-, - - is the atom as it is with that charge. Anything else - Me,
+ * OMe, CO2H - is a label, as typed, with no charge.
+ */
+export type ReadLabel =
+  | { kind: "element"; el: string; charge: number; isotope?: number }
+  | { kind: "charge"; charge: number }
+  | { kind: "text"; el: string };
+
+const SIGN = "[+\\-\\u2212]";
+
+/** A charge as typed - +, ++, 2+, +2, -, 3- - or null. */
+function readCharge(s: string): number | null {
+  if (!s) return 0;
+  const sign = (c: string) => (c === "+" ? 1 : -1);
+  let m = new RegExp(`^(${SIGN})\\1*$`).exec(s);
+  if (m) return sign(m[1]) * s.length;
+  m = new RegExp(`^(\\d+)(${SIGN})$`).exec(s) ?? new RegExp(`^(${SIGN})(\\d+)$`).exec(s);
+  if (!m) return null;
+  const [n, c] = /\d/.test(m[1]) ? [m[1], m[2]] : [m[2], m[1]];
+  return sign(c) * Number.parseInt(n);
+}
+
+export function readLabel(text: string, isElement: (s: string) => boolean): ReadLabel {
+  const t = text.trim();
+  const alone = readCharge(t);
+  if (t && alone != null) return { kind: "charge", charge: alone };
+  const m = new RegExp(`^(\\d{1,3})?([A-Z][a-z]?)(H\\d*)?((?:${SIGN}|\\d)*)$`).exec(t);
+  if (m && isElement(m[2])) {
+    const charge = readCharge(m[4]);
+    if (charge != null) {
+      return { kind: "element", el: m[2], charge, ...(m[1] ? { isotope: Number.parseInt(m[1]) } : {}) };
+    }
+  }
+  return { kind: "text", el: t };
+}
+
+/**
+ * An atom's label as it is typed: the mass number, the symbol and the
+ * charge (2+, -), what `readLabel` reads back. A carbon with none of them
+ * is typed as nothing - its label is its bonds' meeting.
+ */
+export function labelTextOf(a: { el: string; charge?: number; isotope?: number }): string {
+  const q = a.charge ?? 0;
+  const charge = !q ? "" : `${Math.abs(q) === 1 ? "" : Math.abs(q)}${q > 0 ? "+" : "-"}`;
+  if (a.el === "C" && !q && !a.isotope) return "";
+  return `${a.isotope ?? ""}${a.el}${charge}`;
+}
