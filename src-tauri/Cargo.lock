@@ -7,6 +7,8 @@ name = "Meno"
 version = "0.1.0"
 dependencies = [
  "fontdb",
+ "objc2-app-kit",
+ "objc2-foundation 0.3.1",
  "serde",
  "serde_json",
  "tauri",
@@ -19,6 +21,7 @@ dependencies = [
  "ttf-parser",
  "uuid",
  "which",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
