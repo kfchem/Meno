@@ -126,8 +126,8 @@ highlight's colour, under the drawing, and a small handle stands above it.
 - The selection is the view's, not the document's: undo does not change it,
   and what an edit deletes leaves it.
 
-**Copy, cut and paste** (PR #68). Ctrl/⌘ with C, X and V, as everywhere,
-and the same from the menus.
+**Copy, cut and paste** (PR #68; pictures, PR #69). Ctrl/⌘ with C, X and
+V, as everywhere, and the same from the menus.
 
 - What is copied is the selection - its atoms and every bond among them -
   or, with nothing selected, the structure under the pointer.
@@ -139,9 +139,18 @@ and the same from the menus.
   which they exchange there) - and no plain text: PowerPoint pastes plain
   text as a text box in preference to anything offered with it. *Copy as
   SMILES*, in the selection's menu, puts the SMILES alone there as text.
-- A paste reads Meno's own record first, then a MOL file, then plain text
-  that is a MOL file or a SMILES (drawn by the engine, as the SMILES card
-  draws one).
+- With them go pictures of the structure, drawn in the canvas's style at
+  its own size, each carrying Meno's record so that the structure comes
+  back: an EMF (vectors, the record in a comment) in Office's own clip
+  format, which Word and PowerPoint keep as it is on either system; the
+  EMF on its own, for Windows' other programs; and a PNG at 300 dpi (the
+  record in a text chunk) for everything else. Pasted into Word or
+  PowerPoint, the structure is a vector picture; copied there and pasted
+  back into Meno, it is the structure again, wedges and charges and all.
+- A paste reads Meno's own record first, then a picture that carries one
+  (Office's clip format, as Word and PowerPoint hand it back, or a PNG),
+  then a MOL file, then plain text that is a MOL file or a SMILES (drawn by
+  the engine, as the SMILES card draws one).
 - On empty space with nothing selected, a right-click opens *Paste* and
   *Select all*; the selection's menu starts with *Cut*, *Copy* and *Copy
   as SMILES*, and *Paste* when it was opened on empty space.
@@ -380,7 +389,14 @@ traced from reference drawings.
   over in that clip format, is kept as it is, drawn as vectors, and chosen
   over a PDF or a PNG offered with it - and, stored as an EMF, it is what
   Windows draws too. Word rewrites an SVG and drops what it carries. The
-  same trial on Windows is to come.
+  same trial on Windows (Microsoft 365, 2026-09-29) found the same: the
+  EMF in Office's clip format is kept byte for byte and drawn as vectors,
+  and it is only in that clip format that Office hands it back - the EMF
+  it puts on the clipboard itself is drawn afresh, without the comment. With
+  the clip format there, plain text beside it does not become a text box
+  (on either system); a PDF from a Mac shows coarse on Windows (Office draws
+  the bitmap stored with it). (PR #69: every copy carries these pictures;
+  the double-click on Windows is still to come.)
 
 ### 6. Alongside
 
