@@ -396,7 +396,12 @@ traced from reference drawings.
   the clip format there, plain text beside it does not become a text box
   (on either system); a PDF from a Mac shows coarse on Windows (Office draws
   the bitmap stored with it). (PR #69: every copy carries these pictures;
-  the double-click on Windows is still to come.)
+  the double-click on Windows is still to come.) Office on Windows draws
+  an EMF's lines and shapes without anti-aliasing - bonds and wedges come
+  out as stairs on screen - so the EMF draws everything twice: in EMF+
+  records, which Word and PowerPoint draw smooth, and in the EMF records
+  as before, for any reader that knows nothing of EMF+. Both keep it byte
+  for byte, as before (Windows, 2026-09-29; on a Mac, still to be tried).
 
 ### 6. Alongside
 
