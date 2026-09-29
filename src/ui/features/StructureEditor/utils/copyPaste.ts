@@ -36,9 +36,14 @@ const VERSION = 1;
  */
 export function clipItems(part: Model): ClipItem[] {
   return [
-    { flavor: "meno", text: JSON.stringify({ format: RECORD, version: VERSION, atoms: part.atoms, bonds: part.bonds }) },
+    { flavor: "meno", text: recordText(part) },
     { flavor: "mol", text: writeMolfile(forFlatReaders(part)) },
   ];
+}
+
+/** Meno's own record of a structure, as text: what a picture of it carries too. */
+export function recordText(part: Model): string {
+  return JSON.stringify({ format: RECORD, version: VERSION, atoms: part.atoms, bonds: part.bonds });
 }
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);

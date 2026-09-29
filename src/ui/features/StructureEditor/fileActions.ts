@@ -2,7 +2,7 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useCallback, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
-import { createSVG, layoutMolecule } from "../../../lib/chem/layout2d";
+import { createSVG, layoutMolecule, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
 import { writeMolfile, writeSdf } from "../../../lib/chem/molWriter";
 import { forFlatReaders } from "./chem/drawing";
 import { styleOf, type DrawingStyle } from "../../../lib/chem/style";
@@ -42,15 +42,16 @@ export function exportPxPerWorld(style: DrawingStyle): number {
 }
 
 /**
- * The drawing as SVG, exactly as the canvas lays it out, at the style's own
- * size. Lines keep their true width however thin - the canvas's on-screen
- * minimum is for the screen - and the margin round it is a few pixels.
+ * The drawing exactly as the canvas lays it out, at the style's own size,
+ * for a picture made of it. Lines keep their true width however thin - the
+ * canvas's on-screen minimum is for the screen - and the margin round it is
+ * a few pixels.
  */
-export function drawingSvg(
+export function drawingLayout(
   model: Model,
   aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
   style: DrawingStyle,
-): string {
+): { layout: Layout; opts: LayoutOptions } {
   const atoms = model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el, ...chemistry(a), ...(a.z != null ? { z: a.z } : {}) }));
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const bonds = layoutBonds(model.bonds, index);
@@ -66,7 +67,17 @@ export function drawingSvg(
     minLinePx: 0,
     paddingPx: 4,
   });
-  return createSVG(layoutMolecule(atoms, bonds, opts, exportPxPerWorld(style)), opts);
+  return { layout: layoutMolecule(atoms, bonds, opts, exportPxPerWorld(style)), opts };
+}
+
+/** The drawing as SVG (drawingLayout). */
+export function drawingSvg(
+  model: Model,
+  aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
+  style: DrawingStyle,
+): string {
+  const { layout, opts } = drawingLayout(model, aromatic, style);
+  return createSVG(layout, opts);
 }
 
 /**
