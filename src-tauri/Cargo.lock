@@ -6,6 +6,7 @@ version = 4
 name = "Meno"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "fontdb",
  "objc2-app-kit",
  "objc2-foundation 0.3.1",

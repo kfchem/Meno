@@ -31,8 +31,8 @@ describe("the clipboard's items", () => {
   it("are Meno's own record, read back as it was, and a MOL file - never plain text", () => {
     const items = clipItems(model);
     expect(items.map((i) => i.flavor)).toEqual(["meno", "mol"]);
-    expect(readRecord(items[0].text)).toEqual(model);
-    expect(looksLikeMolfile(items[1].text)).toBe(true);
+    expect(readRecord(items[0].text!)).toEqual(model);
+    expect(looksLikeMolfile(items[1].text!)).toBe(true);
     expect(items[1].text).toMatch(/M {2}CHG {2}1 {3}3 {3}1/);
   });
 
@@ -47,7 +47,7 @@ describe("the clipboard's items", () => {
 
 describe("plain text", () => {
   it("is told apart: a MOL file, a SMILES, or neither", () => {
-    expect(looksLikeMolfile(clipItems(model)[1].text)).toBe(true);
+    expect(looksLikeMolfile(clipItems(model)[1].text!)).toBe(true);
     expect(looksLikeSmiles("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")).toBe(true);
     expect(looksLikeSmiles(" CCO\n")).toBe(true);
     expect(looksLikeSmiles("two words")).toBe(false);

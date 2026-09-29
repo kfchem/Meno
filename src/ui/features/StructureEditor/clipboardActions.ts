@@ -1,9 +1,12 @@
 import { useCallback, useMemo } from "react";
 import { writeClipboard } from "../../../lib/clipboard";
+import { styleOf } from "../../../lib/chem/style";
+import { useAppSettings } from "../../../lib/settings/appSettings";
 import { chemMolblock } from "../../../lib/rdkit/molblock";
 import { chemWorker } from "../../../lib/rdkit/worker";
 import { forFlatReaders } from "./chem/drawing";
 import { structureOnClipboard } from "./chem/fromClipboard";
+import { pictureItems } from "./picture";
 import type { EditorStore } from "./store";
 import { centredAt, clipItems, partToCopy } from "./utils/copyPaste";
 
@@ -13,7 +16,8 @@ type Pt = { x: number; y: number };
  * Copy, cut and paste, for the keys and the menu alike.
  *
  * - What is copied is the selection - or, with nothing selected, the
- *   structure under the pointer.
+ *   structure under the pointer - with pictures of it, drawn in the style
+ *   the canvas is drawn in, for Office and other programs (picture.ts).
  * - A paste goes where it is asked to go (the pointer, or where the menu
  *   was opened), selected, so that it can be dragged straight on; one undo
  *   step.
@@ -39,13 +43,28 @@ export function useClipboardActions(
     const p = part();
     if (!p || busy()) return false;
     try {
-      await writeClipboard(clipItems(p));
+      const state = store.getState();
+      // (the structure is copied, pictures or no)
+      const pictures = await pictureItems(
+        p,
+        state,
+        styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle),
+      ).catch((e: unknown) => {
+        console.warn("the structure is copied without its pictures", e);
+        return [];
+      });
+      await writeClipboard([...clipItems(p), ...pictures]).catch(async (e: unknown) => {
+        // a picture the system would not take is left out, not the structure
+        if (!pictures.length) throw e;
+        console.warn("the structure is copied without its pictures", e);
+        await writeClipboard(clipItems(p));
+      });
       return true;
     } catch (e) {
       onError(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
       return false;
     }
-  }, [part, busy, onError]);
+  }, [part, busy, onError, store]);
 
   const cut = useCallback(async () => {
     const p = part();

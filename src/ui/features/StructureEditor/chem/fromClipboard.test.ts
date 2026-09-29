@@ -19,7 +19,7 @@ describe("structureOnClipboard", () => {
   });
 
   it("reads a MOL file another program put there, or one as plain text", async () => {
-    const mol = clipItems({ atoms: model.atoms.map((a) => ({ ...a, el: "C" })), bonds: model.bonds })[1].text;
+    const mol = clipItems({ atoms: model.atoms.map((a) => ({ ...a, el: "C" })), bonds: model.bonds })[1].text!;
     for (const flavor of ["mol", "text"] as const) {
       await writeClipboard([{ flavor, text: mol }]);
       const got = (await structureOnClipboard())!;
