@@ -53,7 +53,12 @@ export function useClipboardActions(
         console.warn("the structure is copied without its pictures", e);
         return [];
       });
-      await writeClipboard([...clipItems(p), ...pictures]);
+      await writeClipboard([...clipItems(p), ...pictures]).catch(async (e: unknown) => {
+        // a picture the system would not take is left out, not the structure
+        if (!pictures.length) throw e;
+        console.warn("the structure is copied without its pictures", e);
+        await writeClipboard(clipItems(p));
+      });
       return true;
     } catch (e) {
       onError(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
