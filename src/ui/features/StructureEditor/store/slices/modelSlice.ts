@@ -241,6 +241,21 @@ export const createModelSlice = (
     }));
   },
 
+  pasteModel: (next: Model) => {
+    if (!next.atoms.length) return;
+    // the ids appendModel gives: atoms first, then bonds, from nextId on
+    const start = doc.getState().nextId;
+    if (!doc.edit("paste", (d) => ops.appendModel(d, next))) return;
+    const atoms = new Set(next.atoms.map((_, i) => start + i));
+    const bonds = new Set(next.bonds.map((_, i) => start + next.atoms.length + i));
+    set((prev: EditorState) => ({
+      ...prev,
+      sel: { atoms, bonds },
+      selAnchor: null,
+      hovered: { atomId: null, bondId: null },
+    }));
+  },
+
   appendModel: (next: Model, arrow?: ImportedArrow) => {
     doc.edit("add structure", (d) =>
       ops.withImportedArrow(ops.appendModel(d, next), arrow),

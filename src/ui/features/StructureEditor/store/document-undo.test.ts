@@ -279,6 +279,30 @@ describe("editor store over a document", () => {
     expect(state().model.atoms[0].radical).toBe("doublet");
   });
 
+  it("pastes a structure as one step, with ids of its own, selected", () => {
+    const { doc, state } = editor();
+    const c = state().addAtom(0, 0, "C");
+    const before = doc.history().undoDepth;
+    state().pasteModel({
+      atoms: [
+        { id: 1, x: 5, y: 0, r: 0.9, el: "C" },
+        { id: 2, x: 6, y: 0, r: 0.9, el: "O", charge: -1 },
+      ],
+      bonds: [{ id: 1, a: 1, b: 2, order: 2 }],
+    });
+    expect(doc.history().undoDepth).toBe(before + 1);
+    const pasted = state().model.atoms.filter((a) => a.id !== c);
+    expect(pasted.map((a) => a.el)).toEqual(["C", "O"]);
+    expect(new Set(pasted.map((a) => a.id)).has(c)).toBe(false);
+    expect(pasted[1].charge).toBe(-1);
+    const bond = state().model.bonds[0];
+    expect([bond.a, bond.b]).toEqual(pasted.map((a) => a.id));
+    expect([...state().sel.atoms]).toEqual(pasted.map((a) => a.id));
+    expect([...state().sel.bonds]).toEqual([bond.id]);
+    doc.undo();
+    expect(state().model.atoms.map((a) => a.id)).toEqual([c]);
+  });
+
   it("keeps aromatic circles in the document", () => {
     const { doc, state } = editor();
     state().toggleAromatic();

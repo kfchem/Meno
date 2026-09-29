@@ -22,6 +22,8 @@ export function useStructureEvents(
   // The press the next click ends, and whether it has travelled (utils/press)
   const pressRef = useRef<Press | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Where the pointer is over the drawing, in the window; null off it
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
   // Last import failure, shown in the canvas until dismissed or replaced.
   const [importError, setImportError] = useState<string | null>(null);
   const reportImportError = (what: string, err: unknown) => {
@@ -233,9 +235,11 @@ export function useStructureEvents(
     // Over a button or a card, nothing on the drawing is under the pointer,
     // whatever is drawn beneath it: a key pressed there must not reach it.
     if (e.target !== domRef.current) {
+      pointerRef.current = null;
       st.clearAtomHover();
       return;
     }
+    pointerRef.current = { x: e.clientX, y: e.clientY };
     const p = clientToWorld(e.clientX, e.clientY);
     if (!p) return;
     const tol = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
@@ -245,6 +249,7 @@ export function useStructureEvents(
   };
 
   const handleWrapperMouseLeave = () => {
+    pointerRef.current = null;
     try {
       store.getState().clearAtomHover();
       store.getState().clearBondHover();
@@ -382,9 +387,18 @@ export function useStructureEvents(
     }
   };
 
+  /** Where a paste goes: the pointer, over the drawing; else the middle of the view. */
+  const pasteTarget = () => {
+    const p = pointerRef.current && clientToWorld(pointerRef.current.x, pointerRef.current.y);
+    const cam = camRef.current;
+    return p ?? { x: cam?.position.x ?? 0, y: cam?.position.y ?? 0 };
+  };
+
   return {
     camRef,
     domRef,
+    clientToWorld,
+    pasteTarget,
     fileInputRef,
     handleDoubleClick,
     handleWrapperMouseMove,

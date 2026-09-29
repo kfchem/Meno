@@ -159,6 +159,8 @@ export type EditorState = {
   turnSelectionOver: (axis: "vertical" | "horizontal") => void;
   /** The selection deleted, as one undo step. */
   deleteSelection: () => void;
+  /** A structure from the clipboard added where it already stands, selected, as one undo step. */
+  pasteModel: (next: Model) => void;
   setHoveredFromId: (id: number) => void;
   clearHovered: () => void;
   clearAtomHover: () => void;

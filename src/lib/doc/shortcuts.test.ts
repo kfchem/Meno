@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addsToSelection,
   chargeStep,
+  clipboardIntent,
   isCleanUpKey,
   isDeleteKey,
   isDeselectKey,
@@ -113,5 +114,17 @@ describe("chargeStep", () => {
     expect(chargeStep({ key: "+", metaKey: true })).toBe(0);
     expect(chargeStep({ key: "-", ctrlKey: true })).toBe(0);
     expect(chargeStep({ key: "-", target: { tagName: "INPUT" } })).toBe(0);
+  });
+});
+
+describe("clipboardIntent", () => {
+  it("copies, cuts and pastes on Ctrl/Cmd with C, X and V, but not in a text field", () => {
+    expect(clipboardIntent({ key: "c", metaKey: true })).toBe("copy");
+    expect(clipboardIntent({ key: "X", ctrlKey: true })).toBe("cut");
+    expect(clipboardIntent({ key: "v", ctrlKey: true })).toBe("paste");
+    expect(clipboardIntent({ key: "v" })).toBeNull();
+    expect(clipboardIntent({ key: "v", ctrlKey: true, shiftKey: true })).toBeNull();
+    expect(clipboardIntent({ key: "c", metaKey: true, target: { tagName: "INPUT" } })).toBeNull();
+    expect(clipboardIntent({ key: "c", metaKey: true, target: { tagName: "TEXTAREA" } })).toBeNull();
   });
 });
