@@ -126,6 +126,26 @@ highlight's colour, under the drawing, and a small handle stands above it.
 - The selection is the view's, not the document's: undo does not change it,
   and what an edit deletes leaves it.
 
+**Copy, cut and paste** (PR #68). Ctrl/⌘ with C, X and V, as everywhere,
+and the same from the menus.
+
+- What is copied is the selection - its atoms and every bond among them -
+  or, with nothing selected, the structure under the pointer.
+- A paste goes where the pointer is (where the menu was opened, from the
+  menu; the middle of the view, if the pointer is off the drawing), comes
+  in selected so it can be dragged straight on, and is one undo step.
+- The clipboard holds Meno's own record of the structure, which loses
+  nothing, and a MOL file for other chemistry programs (MDLCT on Windows,
+  which they exchange there) - and no plain text: PowerPoint pastes plain
+  text as a text box in preference to anything offered with it. *Copy as
+  SMILES*, in the selection's menu, puts the SMILES alone there as text.
+- A paste reads Meno's own record first, then a MOL file, then plain text
+  that is a MOL file or a SMILES (drawn by the engine, as the SMILES card
+  draws one).
+- On empty space with nothing selected, a right-click opens *Paste* and
+  *Select all*; the selection's menu starts with *Cut*, *Copy* and *Copy
+  as SMILES*, and *Paste* when it was opened on empty space.
+
 ## Who does what
 
 - **TypeScript** holds the model, the gestures and the drawing - everything
@@ -276,7 +296,8 @@ All hover-based, as above.
   and E/Z from a button on the canvas; both in Settings › Chemistry, and
   never in an exported picture.)
 - Reaction arrows, "+" and text: create, move, edit, delete.
-- Copy and paste, within Meno and between tabs.
+- Copy and paste, within Meno and between tabs. (PR #68, as above; and
+  between Meno and other programs, through the system clipboard.)
 
 ### 4a. A layout engine of Meno's own
 
@@ -350,6 +371,16 @@ traced from reference drawings.
   at ACS 1996's own size, from a button beside Save (PR #43); PNG to come.
 - The clipboard, for Word and PowerPoint: a vector picture in each platform's
   own form (EMF on Windows, PDF on macOS), PNG and MOL alongside it.
+  Agreed 2026-09-29: the structure is re-edited from Office - on Windows by
+  a double-click (an OLE object), and on either system by copying the
+  picture back into Meno, so the structure travels inside the picture
+  itself. Tried on a Mac with Word and PowerPoint (paste, save, reopen,
+  copy the picture again): a PDF comes back byte for byte, and so does a
+  PNG, inside Office's own clip format; an EMF that Meno writes, handed
+  over in that clip format, is kept as it is, drawn as vectors, and chosen
+  over a PDF or a PNG offered with it - and, stored as an EMF, it is what
+  Windows draws too. Word rewrites an SVG and drops what it carries. The
+  same trial on Windows is to come.
 
 ### 6. Alongside
 
@@ -364,8 +395,5 @@ traced from reference drawings.
 
 ## Open questions
 
-- **"As an object" in Word and PowerPoint**: a crisp vector picture, or one
-  that opens back into Meno for editing? The second is an OLE server on
-  Windows, and Office for Mac has nothing equivalent.
 - **Name to structure, and back**: part of a high-end editor, but outside
   RDKit.

@@ -3,10 +3,9 @@ import { useEffect, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { chemMolblock } from "../../../lib/rdkit/molblock";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
-import { laidOut } from "./chem/cleanUp";
 import { forFlatReaders } from "./chem/drawing";
+import { structureFromSmiles } from "./chem/fromSmiles";
 import { useEditor } from "./store";
-import { editorModelOf, processFileContent } from "./utils/io";
 
 /**
  * SMILES in and out, by RDKit: a structure from a SMILES, laid out by Meno's
@@ -54,16 +53,8 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
     if (!text) return;
     setError(null);
     try {
-      const c = await chemWorker();
-      const { molblock } = await c.request("from_smiles", { smiles: text });
-      const result = await processFileContent("smiles.mol", molblock);
       // RDKit's drawing says what the SMILES does; the engine draws it
-      // (and RDKit's drawing stands, should the engine fail)
-      const drawn = editorModelOf(result.model);
-      const next = await laidOut(drawn).catch((e: unknown) => {
-        console.warn("the SMILES is drawn as RDKit laid it out", e);
-        return drawn;
-      });
+      const next = await structureFromSmiles(text);
       const mid = {
         x: next.atoms.reduce((n, a) => n + a.x, 0) / (next.atoms.length || 1),
         y: next.atoms.reduce((n, a) => n + a.y, 0) / (next.atoms.length || 1),

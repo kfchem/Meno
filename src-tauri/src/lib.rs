@@ -11,6 +11,7 @@ use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 use uuid::Uuid;
 
+mod clipboard;
 mod fonts;
 mod net;
 
@@ -492,6 +493,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
+            // the system clipboard, for structures
+            clipboard::clipboard_write,
+            clipboard::clipboard_read,
             // the system's fonts, for atom labels
             fonts::font_families,
             fonts::font_file,

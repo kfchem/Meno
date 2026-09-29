@@ -67,6 +67,17 @@ function isTextTarget(target: unknown): boolean {
   );
 }
 
+/**
+ * Ctrl/Cmd+C copies, +X cuts and +V pastes a structure - but not while a
+ * text field has the keys, which copies and pastes its own text.
+ */
+export function clipboardIntent(event: KeyLike & { altKey?: boolean }): "copy" | "cut" | "paste" | null {
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return null;
+  if (isTextTarget(event.target)) return null;
+  const key = (event.key || "").toLowerCase();
+  return key === "c" ? "copy" : key === "x" ? "cut" : key === "v" ? "paste" : null;
+}
+
 /** Ctrl/Cmd+S saves; Ctrl/Cmd+Shift+S saves as. */
 export function saveIntent(event: KeyLike): "save" | "saveAs" | null {
   if (!(event.ctrlKey || event.metaKey)) return null;

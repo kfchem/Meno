@@ -37,8 +37,10 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import DocumentStylePanel from "./DocumentStylePanel";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuTarget } from "./PartMenu";
+import { useClipboardActions } from "./clipboardActions";
 import {
   chargeStep,
+  clipboardIntent,
   isCleanUpKey,
   isDeleteKey,
   isDeselectKey,
@@ -90,6 +92,8 @@ function StructureCanvasContent({
     importError,
     dismissImportError,
     handleMouseDownCapture,
+    clientToWorld,
+    pasteTarget,
   } = useStructureEvents(initialPayload, initialFilename);
 
   const onCreated = useCanvasSetup(camRef, domRef);
@@ -168,6 +172,8 @@ function StructureCanvasContent({
     [store],
   );
   const [menu, setMenu] = useState<MenuTarget | null>(null);
+  // Copy, cut and paste, by the keys and from the menu
+  const clip = useClipboardActions(store, setChemError);
   const chargeAtom = useCallback(
     (id: number, step: 1 | -1) => {
       const st = store.getState();
@@ -205,6 +211,12 @@ function StructureCanvasContent({
       } else if (chargeStep(e) && kind === "atom" && id != null) {
         e.preventDefault();
         chargeAtom(id, chargeStep(e) as 1 | -1);
+      } else if (clipboardIntent(e)) {
+        e.preventDefault();
+        const what = clipboardIntent(e);
+        if (what === "copy") void clip.copy();
+        else if (what === "cut") void clip.cut();
+        else void clip.paste(pasteTarget());
       } else if (isSelectAllKey(e) && !busy) {
         e.preventDefault();
         st.selectAll();
@@ -215,7 +227,7 @@ function StructureCanvasContent({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu]);
+  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
@@ -262,22 +274,19 @@ function StructureCanvasContent({
     const kind = hoveredPart();
     const id = kind === "atom" ? hovered.atomId : hovered.bondId;
     // on something selected, or on nothing with a selection: the
-    // selection's menu
+    // selection's menu; on nothing else, the canvas's (paste, select all)
     const { sel } = store.getState();
     const part = kind && id != null;
     const selected = sel.atoms.size > 0 || sel.bonds.size > 0;
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
-    if (!part && !selected) {
-      setMenu(null);
-      return;
-    }
     const box = e.currentTarget.getBoundingClientRect();
     const target: MenuTarget = {
       kind: part ? kind : null,
       id: part ? id : null,
       selection: !selected ? "none" : onSelected || !part ? "here" : "elsewhere",
+      at: clientToWorld(e.clientX, e.clientY) ?? pasteTarget(),
       x: e.clientX - box.left,
       y: e.clientY - box.top,
       within: { width: box.width, height: box.height },
@@ -515,6 +524,13 @@ function StructureCanvasContent({
             if (menu.kind === "atom" && menu.id != null) radicalAtom(menu.id);
           }}
           radical={!!model.atoms.find((a) => a.id === menu.id)?.radical}
+          clipboard={{
+            onCut: () => void clip.cut(),
+            onCopy: () => void clip.copy(),
+            onCopySmiles: () => void clip.copySmiles(),
+            onPaste: () => void clip.paste(menu.at),
+            onSelectAll: () => store.getState().selectAll(),
+          }}
         />
       )}
       <Canvas

@@ -30,3 +30,11 @@ tauri-plugin-dialog = "2"
 fontdb = "0.24"
 ttf-parser = "0.25.1"
 tokio = { version = "1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }
+
+# The system clipboard (src/clipboard.rs), by each platform's own API
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3.1", default-features = false, features = ["std", "NSPasteboard"] }
+objc2-foundation = { version = "0.3.1", default-features = false, features = ["std", "NSArray", "NSData", "NSString"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole"] }
