@@ -319,7 +319,14 @@ export function useStructureEvents(
   // it is dropped, Word or PowerPoint may already have taken it back (on a
   // Mac, the drag pasteboard is emptied as the drag ends).
   const dropReading = useRef<Promise<Model | null> | null>(null);
+  // A drop takes a copy: what was dragged out of Word or PowerPoint stays
+  // where it was (as a move, the document would mark itself changed)
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
   const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.dataTransfer.dropEffect = "copy";
     // (a file from the Finder or Explorer is read when dropped, as ever)
     if (dropReading.current || [...e.dataTransfer.types].includes("Files")) return;
     dropReading.current = structureInDrop().catch(() => null);
@@ -447,6 +454,7 @@ export function useStructureEvents(
     handleWrapperMouseLeave,
     handleWrapperClick,
     onDropAppend,
+    onDragOver,
     onDragEnter,
     onDragLeave,
     onPickFiles,

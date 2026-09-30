@@ -91,6 +91,7 @@ function StructureCanvasContent({
     handleWrapperMouseLeave,
     handleWrapperClick,
     onDropAppend,
+    onDragOver,
     onDragEnter,
     onDragLeave,
     onPickFiles,
@@ -332,7 +333,7 @@ function StructureCanvasContent({
   return (
     <div
       className="flex-1 min-w-0 h-full relative"
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={onDragOver}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDrop={onDropAppend}
