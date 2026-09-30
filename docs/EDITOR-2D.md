@@ -401,7 +401,8 @@ traced from reference drawings.
   out as stairs on screen - so the EMF draws everything twice: in EMF+
   records, which Word and PowerPoint draw smooth, and in the EMF records
   as before, for any reader that knows nothing of EMF+. Both keep it byte
-  for byte, as before (Windows, 2026-09-29; on a Mac, still to be tried).
+  for byte, as before (Windows, 2026-09-29; on a Mac, 2026-09-30, drawn
+  smooth there too).
 - On Windows, a structure copied from Meno goes into Word and PowerPoint as
   an object - a Meno structure, which a double-click opens in Meno - by a
   plain paste. Meno is the object's server (`src-tauri/src/ole.rs`): it
@@ -438,10 +439,22 @@ traced from reference drawings.
   EMF the same way, and keeps it so in the document; nothing seen reads
   it. A metafile picture with its size stated would keep it exact, but
   Word takes an object's changes only as an EMF.) A Mac cannot serve
-  objects: there a document's object should show its picture, and a picture
+  objects: there a document's object shows its picture, and a picture
   pasted from a Mac is a picture on Windows too - copied into Meno and
-  pasted back, it becomes an object. (What a Mac makes of a document's
-  object, and of one copied from it, is still to be tried.)
+  pasted back, it becomes an object.
+- On a Mac (Word and PowerPoint for Mac, 2026-09-30), a document's object
+  shows its picture - smooth, at its size - and survives being saved there
+  byte for byte, moved or not. A double-click on it only says the server
+  cannot be found: Office for Mac has no way to hand another program's
+  object to it. To edit one there, copy it - or drag it - into Meno. Word
+  and PowerPoint for Mac hand an object over as its storage (a compound
+  file, `com.microsoft.Embedded-Object`), without Office's clip format;
+  Meno reads its record out of the storage's `Meno` stream (or its picture,
+  `MenoPicture`), `src/lib/binary/cfb.ts`. A drag is read as it comes over
+  the drawing, not when it is dropped: by then Office has taken it back
+  from the drag pasteboard. On Windows, a drop's data does not reach Meno
+  yet (WebView2 keeps it). A copy on a Mac makes only what the clipboard
+  there takes (`clipboard_takes`): no bitmap or object for Windows.
 
 ### 6. Alongside
 
