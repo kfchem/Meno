@@ -173,6 +173,14 @@ What turned out not to be the same:
 - `Open-MenoFile` types a path into the system file dialog, which is the most
   brittle step here. The app takes no file on its command line; if it ever
   does, this becomes one argument to `Start-Meno` and the step goes away.
+  On Windows it waits for the dialog to be in front before typing, and for
+  it to go after Return, and fails if either does not happen: a path typed
+  too early went to Meno instead, the file was never opened, and the rest
+  of the scenario ran against an empty tab without saying so. (One way the
+  dialog never came: `Get-MenoWindow` had taken the window Tauri's event
+  loop makes for itself, which is briefly the process's main window, and
+  placed that - so the app's own window stayed where it opened and the
+  click on its Open button landed elsewhere. It now waits for the app's.)
 - `Wait-MenoSettled` compares whole screenshots, so a blinking cursor or a
   clock in shot would keep it waiting until it times out. Nothing in the app
   does that today.
