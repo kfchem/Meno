@@ -298,7 +298,11 @@ Nothing else is moved for it: the drawing is set first, its H's last.
    untangled (section 5).
 5. Last, turn a macrolide's sugars to their face and make room for the
    H's of labels, each by a small local move (sections 4 and 5).
-6. Put the stereo on (section 6).
+6. Set the pieces of a salt or a mixture side by side, the largest first,
+   with a bond and a half of paper between one's ink and the next's: a
+   label's symbol, its H beside it and its charge count as ink (an OH
+   facing an HO stands off further than two carbons).
+7. Put the stereo on (section 6).
 
 Every step is measured on the benchmark, and a change is kept only if the
 drawings it makes are better. How to go about changing the engine, and
