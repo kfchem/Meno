@@ -77,8 +77,9 @@ export async function readClipboard(flavors: Flavor[]): Promise<ClipItem | null>
 
 /**
  * The first of `flavors` in what was just dropped on the page - a picture or
- * an object dragged out of Word or PowerPoint - read as the clipboard is. On
- * a Mac only, for now: on Windows the dropped data does not reach Meno yet.
+ * an object dragged out of Word or PowerPoint - read as the clipboard is: on
+ * a Mac, off the drag pasteboard; on Windows, what Meno read of a drag it
+ * took from the webview (lib/drop, src-tauri/src/drop.rs).
  */
 export async function readDrop(flavors: Flavor[]): Promise<ClipItem | null> {
   if (!isTauri()) return null;
