@@ -66,6 +66,24 @@ export function keepPageUnselected(event: KeyLike & { preventDefault(): void }):
   if (isSelectAllKey(event)) event.preventDefault();
 }
 
+/**
+ * Ctrl/Cmd+C or +X with nothing to copy - no text selected on the page, and
+ * no text field with the keys - leaves the clipboard as it was. On a Mac the
+ * Edit menu's Copy would otherwise have the webview write an empty item over
+ * whatever was there. A view that copies things of its own (the structure
+ * canvas) takes the key itself; text selected on the page still copies.
+ */
+export function keepClipboard(
+  event: KeyLike & { preventDefault(): void },
+  selection: { isCollapsed: boolean } | null,
+): void {
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
+  const key = (event.key || "").toLowerCase();
+  if (key !== "c" && key !== "x") return;
+  if (isTextTarget(event.target) || (selection && !selection.isCollapsed)) return;
+  event.preventDefault();
+}
+
 /** Escape lets the selection go - but not while a text field has the keys. */
 export function isDeselectKey(event: KeyLike): boolean {
   return event.key === "Escape" && !isTextTarget(event.target);
