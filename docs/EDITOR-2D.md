@@ -402,6 +402,32 @@ traced from reference drawings.
   records, which Word and PowerPoint draw smooth, and in the EMF records
   as before, for any reader that knows nothing of EMF+. Both keep it byte
   for byte, as before (Windows, 2026-09-29; on a Mac, still to be tried).
+- On Windows, a structure copied from Meno goes into Word and PowerPoint as
+  an object - a Meno structure, which a double-click opens in Meno - by a
+  plain paste. Meno is the object's server (`src-tauri/src/ole.rs`): it
+  offers the class to COM as it starts, so a double-click reaches a Meno
+  already running; with none running, Windows starts one, which goes again
+  once Office is done with it and nothing else is open. The structure opens in a
+  tab of its own; each change goes back into the document as it is drawn -
+  Meno's record, and the same EMF (EMF+ and all) as the picture shown - and
+  closing the tab, or the document, lets it go. Insert > Object makes a new
+  one. The installers register the class (the NSIS hooks run
+  `Meno.exe --register-ole` and `--unregister-ole`, for the user; the MSI
+  writes the same keys for the machine), and so can a developer by hand.
+  What decides a plain paste, found on Windows (Microsoft 365, 2026-09-30):
+  Word pastes a PNG, and PowerPoint Office's clip format or any RTF, in
+  preference to an object; a copy between Word and PowerPoint carries none
+  of these, and pastes as an object in both. So where Meno serves its
+  objects, a copy carries the object, through OLE's own clipboard, with an
+  EMF and a bitmap (DIB) for Windows' other programs, and neither the clip
+  format nor the PNG; elsewhere (a Mac, or Meno not registered) it carries
+  the pictures as before. The object keeps Meno's EMF byte for byte in the
+  saved document, keeps its size when copied between Word and PowerPoint,
+  and copied back into Meno it is the structure again. A Mac cannot serve
+  objects: there a document's object should show its picture, and a picture
+  pasted from a Mac is a picture on Windows too - copied into Meno and
+  pasted back, it becomes an object. (What a Mac makes of a document's
+  object, and of one copied from it, is still to be tried.)
 
 ### 6. Alongside
 
