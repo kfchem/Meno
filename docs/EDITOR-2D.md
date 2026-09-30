@@ -478,8 +478,13 @@ traced from reference drawings.
   copy, so the object stays in its document, and goes as the drag leaves
   the zone or ends (or when no button is held and nothing came to it).
   Tried on Windows (2026-09-30): Word's object dragged onto the drawing
-  arrives there, selected, and Word's document is unchanged; files onto
-  the drawing and onto a new tab open as before. PowerPoint for Windows
+  arrives there, selected, and Word's document is unchanged; so does a
+  picture Meno put in Word (Office's clip format), which Word hands over
+  only when a block of memory is asked for, not "memory or a stream" -
+  so each is asked for in turn; both at 100% and over Remote Desktop at
+  175%. Files onto the drawing and onto a new tab open as before. What a
+  drag carries is read again at the drop if nothing was to be had as it
+  came. PowerPoint for Windows
   was not seen to let a shape be dragged out of its window at all (nothing
   reached a plain drop target either): from there, copy and paste.
 
