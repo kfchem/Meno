@@ -22,10 +22,13 @@ pub enum Payload<'a> {
     Bytes(Vec<u8>),
 }
 
-/// Kinds that are bytes, not text: pictures.
+/// Kinds that are bytes, not text: pictures, and an object Office holds.
 fn is_binary(flavor: &str) -> bool {
-    matches!(flavor, "gvml" | "png" | "emf" | "dib")
+    matches!(flavor, "gvml" | "png" | "emf" | "dib" | "object")
 }
+
+/// The kinds a copy may put on the clipboard (`object` is only ever read).
+const WRITTEN: [&str; 7] = ["meno", "mol", "text", "gvml", "emf", "png", "dib"];
 
 /// What the page's kinds are called on this platform, most preferred first.
 /// A kind the platform has no name for is left out.
@@ -42,6 +45,9 @@ fn names(flavor: &str) -> &'static [&'static str] {
             "text" => &["public.utf8-plain-text"],
             "gvml" => &["com.microsoft.Art--GVML-ClipFormat"],
             "png" => &["public.png"],
+            // an object copied in Word or PowerPoint for Mac: its storage, as
+            // a compound file (read by the page: src/lib/binary/cfb.ts)
+            "object" => &["com.microsoft.Embedded-Object"],
             _ => &[],
         }
     }
@@ -152,25 +158,60 @@ fn embed(items: &[ClipItem], entries: &mut Vec<(&'static str, Payload)>) {
 #[cfg(target_os = "windows")]
 fn embedded_record() -> Result<Option<String>, String> {
     for name in ["Embedded Object", "Embed Source"] {
-        if let Some(record) = platform::read(name)?.and_then(|bytes| crate::ole::record_in_object(&bytes)) {
+        if let Some(record) = platform::read(Board::Clipboard, name)?.and_then(|bytes| crate::ole::record_in_object(&bytes)) {
             return Ok(Some(record));
         }
     }
     Ok(None)
 }
 
+/// The kinds a copy on this platform may put on the clipboard, so that the
+/// page makes no others: a Windows bitmap on a Mac, or an object for Office
+/// where Meno serves none.
+#[tauri::command]
+pub fn clipboard_takes() -> Vec<String> {
+    #[allow(unused_mut)]
+    let mut takes: Vec<String> = WRITTEN.iter().filter(|f| !names(f).is_empty()).map(|f| f.to_string()).collect();
+    #[cfg(target_os = "windows")]
+    if crate::ole::is_registered() {
+        takes.push("embed".into());
+    }
+    takes
+}
+
+/// Where data is read from: the clipboard, or what is being dragged.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Board {
+    Clipboard,
+    Drag,
+}
+
 /// The first of `flavors` the clipboard holds: its text, or its bytes as base64.
 #[tauri::command]
 pub fn clipboard_read(flavors: Vec<String>) -> Result<Option<ClipItem>, String> {
-    for flavor in &flavors {
+    read_from(Board::Clipboard, &flavors)
+}
+
+/// The first of `flavors` in what was just dropped on the page - a picture
+/// or an object dragged out of Word or PowerPoint, say - as `clipboard_read`
+/// reads the clipboard. On a Mac it is the drag pasteboard, which keeps what
+/// was dragged after the drop; on Windows the dropped data does not reach
+/// the page yet, and nothing is read.
+#[tauri::command]
+pub fn drag_read(flavors: Vec<String>) -> Result<Option<ClipItem>, String> {
+    read_from(Board::Drag, &flavors)
+}
+
+fn read_from(board: Board, flavors: &[String]) -> Result<Option<ClipItem>, String> {
+    for flavor in flavors {
         #[cfg(target_os = "windows")]
-        if flavor == "embed" {
+        if flavor == "embed" && board == Board::Clipboard {
             if let Some(text) = embedded_record()? {
                 return Ok(Some(ClipItem { flavor: flavor.clone(), text: Some(text), base64: None }));
             }
         }
         for name in names(flavor) {
-            if let Some(bytes) = platform::read(name)? {
+            if let Some(bytes) = platform::read(board, name)? {
                 let (text, base64) = if is_binary(flavor) {
                     (None, Some(STANDARD.encode(&bytes)))
                 } else {
@@ -185,8 +226,8 @@ pub fn clipboard_read(flavors: Vec<String>) -> Result<Option<ClipItem>, String> 
 
 #[cfg(target_os = "macos")]
 mod platform {
-    use super::Payload;
-    use objc2_app_kit::NSPasteboard;
+    use super::{Board, Payload};
+    use objc2_app_kit::{NSPasteboard, NSPasteboardNameDrag};
     use objc2_foundation::{NSArray, NSData, NSString};
 
     pub fn write(entries: &[(&str, Payload)]) -> Result<(), String> {
@@ -210,17 +251,24 @@ mod platform {
         Ok(())
     }
 
-    /// What is on the clipboard under `name`, as it is there.
-    pub fn read(name: &str) -> Result<Option<Vec<u8>>, String> {
-        // SAFETY: as for `write`.
-        let data = unsafe { NSPasteboard::generalPasteboard().dataForType(&NSString::from_str(name)) };
+    /// What is on the clipboard, or being dragged, under `name`, as it is there.
+    pub fn read(board: Board, name: &str) -> Result<Option<Vec<u8>>, String> {
+        // SAFETY: as for `write`; the drag pasteboard is a pasteboard like
+        // the general one, named by AppKit.
+        let data = unsafe {
+            let pb = match board {
+                Board::Clipboard => NSPasteboard::generalPasteboard(),
+                Board::Drag => NSPasteboard::pasteboardWithName(NSPasteboardNameDrag),
+            };
+            pb.dataForType(&NSString::from_str(name))
+        };
         Ok(data.map(|d| d.to_vec()))
     }
 }
 
 #[cfg(target_os = "windows")]
 mod platform {
-    use super::{from_mdlct, to_mdlct, Payload};
+    use super::{from_mdlct, to_mdlct, Board, Payload};
     use std::ptr::null_mut;
     use windows_sys::Win32::Foundation::{GlobalFree, HANDLE};
     use windows_sys::Win32::Graphics::Gdi::{DeleteEnhMetaFile, SetEnhMetaFileBits};
@@ -356,7 +404,12 @@ mod platform {
     }
 
     /// What is on the clipboard under `name`: text as UTF-8, pictures as they are.
-    pub fn read(name: &str) -> Result<Option<Vec<u8>>, String> {
+    pub fn read(board: Board, name: &str) -> Result<Option<Vec<u8>>, String> {
+        // (a drop's data does not reach Meno on Windows yet: WebView2 keeps
+        // it; reading it wants a drop target of Meno's own)
+        if board == Board::Drag {
+            return Ok(None);
+        }
         // (Office hands an enhanced metafile back drawn afresh, without what
         // was carried in it: the picture is read out of its own clip format)
         if name == "CF_ENHMETAFILE" {
@@ -388,11 +441,11 @@ mod platform {
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod platform {
-    use super::Payload;
+    use super::{Board, Payload};
     pub fn write(_: &[(&str, Payload)]) -> Result<(), String> {
         Err("the clipboard is not reached on this platform".into())
     }
-    pub fn read(_: &str) -> Result<Option<Vec<u8>>, String> {
+    pub fn read(_: Board, _: &str) -> Result<Option<Vec<u8>>, String> {
         Ok(None)
     }
 }
@@ -422,6 +475,19 @@ mod tests {
             }
         }
         assert!(names("nonsense").is_empty());
+    }
+
+    #[test]
+    fn a_copy_names_only_the_kinds_this_platform_takes() {
+        let takes = clipboard_takes();
+        assert!(!takes.iter().any(|f| f == "object"), "an object is only read");
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(takes, ["meno", "mol", "text", "gvml", "png"]);
+            assert_eq!(names("object"), ["com.microsoft.Embedded-Object"]);
+        }
+        #[cfg(target_os = "windows")]
+        assert!(takes.iter().any(|f| f == "emf") && takes.iter().any(|f| f == "dib"));
     }
 
     #[test]

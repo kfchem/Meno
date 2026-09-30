@@ -17,7 +17,8 @@
  * object in place of the clip format and the PNG: Word and PowerPoint take
  * either of those before an object, and an object is what opens in Meno.
  */
-import type { ClipItem } from "../../../lib/clipboard";
+import { clipboardTakes, type ClipItem, type Flavor } from "../../../lib/clipboard";
+import { cfbStreams } from "../../../lib/binary/cfb";
 import { dibOf } from "../../../lib/binary/dib";
 import { textOf, withDpi, withText } from "../../../lib/binary/png";
 import { emfComments, layoutEmf } from "../../../lib/chem/emf";
@@ -48,19 +49,30 @@ export function structurePicture(part: Model, aromatic: Aromatic, style: Drawing
   return { record, layout, opts, ...layoutEmf(layout, opts, utf8.encode(EMF_MARK + record)) };
 }
 
-/** The pictures of `part` that go on the clipboard with it. */
-export async function pictureItems(part: Model, aromatic: Aromatic, style: DrawingStyle): Promise<ClipItem[]> {
+/**
+ * The pictures of `part` that go on the clipboard with it: those this
+ * platform's clipboard takes (lib/clipboard's clipboardTakes), none made for
+ * nothing.
+ */
+export async function pictureItems(
+  part: Model,
+  aromatic: Aromatic,
+  style: DrawingStyle,
+  platformTakes?: Set<Flavor> | null,
+): Promise<ClipItem[]> {
+  const takes = platformTakes === undefined ? await clipboardTakes() : platformTakes;
+  const wanted = (f: ClipItem["flavor"]) => !takes || takes.has(f);
   const { record, layout, opts, emf, widthPt, heightPt } = structurePicture(part, aromatic, style);
   const items: ClipItem[] = [
     { flavor: "gvml", bytes: gvmlPicture(emf, "emf", widthPt, heightPt, "Structure") },
     { flavor: "emf", bytes: emf },
     // (made into an object for Office from this and the EMF, on Windows)
     { flavor: "embed", text: record },
-  ];
-  const raster = await rasterized(createSVG(layout, opts), PNG_DPI / 96).catch(() => null);
-  if (raster) {
-    items.push({ flavor: "png", bytes: withText(withDpi(raster.png, PNG_DPI), PNG_KEY, record) });
-    items.push({ flavor: "dib", bytes: raster.dib });
+  ].filter((i) => wanted(i.flavor as ClipItem["flavor"])) as ClipItem[];
+  if (wanted("png") || wanted("dib")) {
+    const raster = await rasterized(createSVG(layout, opts), PNG_DPI / 96, wanted("dib")).catch(() => null);
+    if (raster && wanted("png")) items.push({ flavor: "png", bytes: withText(withDpi(raster.png, PNG_DPI), PNG_KEY, record) });
+    if (raster?.dib && wanted("dib")) items.push({ flavor: "dib", bytes: raster.dib });
   }
   return items;
 }
@@ -69,6 +81,7 @@ export async function pictureItems(part: Model, aromatic: Aromatic, style: Drawi
 export async function structureInPicture(item: ClipItem): Promise<Model | null> {
   if (!item.bytes) return null;
   if (item.flavor === "png") return fromPng(item.bytes);
+  if (item.flavor === "object") return fromObject(item.bytes);
   if (item.flavor !== "gvml") return null;
   for (const { name, data } of await gvmlImages(item.bytes)) {
     const found = /\.emf$/i.test(name) ? fromEmf(data) : /\.png$/i.test(name) ? fromPng(data) : null;
@@ -86,16 +99,36 @@ function fromEmf(emf: Uint8Array): Model | null {
   return null;
 }
 
+/**
+ * An object Meno served for Office (src-tauri/src/ole.rs), as Word or
+ * PowerPoint for Mac hand it over: its storage keeps the record in a stream
+ * of its own ("Meno"), and the picture it shows, which carries the record
+ * too ("MenoPicture").
+ */
+function fromObject(storage: Uint8Array): Model | null {
+  const streams = cfbStreams(storage);
+  const own = streams?.get("/Meno");
+  const record = own ? readRecord(new TextDecoder().decode(own)) : null;
+  if (record) return record;
+  const picture = streams?.get("/MenoPicture");
+  return picture ? fromEmf(picture) : null;
+}
+
 function fromPng(png: Uint8Array): Model | null {
   const text = textOf(png, PNG_KEY);
   return text ? readRecord(text) : null;
 }
 
 /**
- * An SVG drawn at `scale` pixels to the SVG's pixel: as a PNG, and as a DIB
- * for Windows' bitmap-only programs; null where there is no page to draw it in.
+ * An SVG drawn at `scale` pixels to the SVG's pixel: as a PNG, and - `dib`
+ * asked for - as a DIB for Windows' bitmap-only programs; null where there
+ * is no page to draw it in.
  */
-async function rasterized(svg: string, scale: number): Promise<{ png: Uint8Array; dib: Uint8Array } | null> {
+async function rasterized(
+  svg: string,
+  scale: number,
+  dib: boolean,
+): Promise<{ png: Uint8Array; dib: Uint8Array | null } | null> {
   if (typeof document === "undefined") return null;
   const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   try {
@@ -110,10 +143,9 @@ async function rasterized(svg: string, scale: number): Promise<{ png: Uint8Array
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/png"));
     if (!blob) return null;
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     return {
       png: new Uint8Array(await blob.arrayBuffer()),
-      dib: dibOf(pixels, canvas.width, canvas.height, PNG_DPI),
+      dib: dib ? dibOf(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, PNG_DPI) : null,
     };
   } finally {
     URL.revokeObjectURL(url);

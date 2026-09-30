@@ -576,6 +576,8 @@ pub fn run() {
             // the system clipboard, for structures
             clipboard::clipboard_write,
             clipboard::clipboard_read,
+            clipboard::clipboard_takes,
+            clipboard::drag_read,
             // structures in Office documents (Windows)
             ole_take_pending,
             ole_update,

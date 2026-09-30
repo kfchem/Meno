@@ -23,13 +23,16 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
  *   opens in Meno (src-tauri/src/ole.rs). It is written as the record; the
  *   object is made from that and the `emf` beside it, and read back as the
  *   record again. Elsewhere it is left out. With it, `gvml` and `png` are
- *   left out too: Word and PowerPoint would take either before the object.
+ *   left out too: Word and PowerPoint would take either before the object;
+ * - `object`: an object Office holds, as Word and PowerPoint for Mac hand it
+ *   over when it is copied or dragged - its storage, a compound file (read
+ *   with lib/binary/cfb). Only ever read.
  *
  * Plain text is not put beside a structure: without Office's own format
  * beside it, PowerPoint pastes text as a text box in preference to a
  * picture.
  */
-export type Flavor = "meno" | "mol" | "text" | "gvml" | "emf" | "png" | "dib" | "embed";
+export type Flavor = "meno" | "mol" | "text" | "gvml" | "emf" | "png" | "dib" | "embed" | "object";
 
 export type ClipItem = { flavor: Flavor; text?: string; bytes?: Uint8Array };
 
@@ -69,7 +72,37 @@ export async function readClipboard(flavors: Flavor[]): Promise<ClipItem | null>
     }
     return null;
   }
-  const got = await invoke<Wire | null>("clipboard_read", { flavors });
+  return fromWire(await invoke<Wire | null>("clipboard_read", { flavors }));
+}
+
+/**
+ * The first of `flavors` in what was just dropped on the page - a picture or
+ * an object dragged out of Word or PowerPoint - read as the clipboard is. On
+ * a Mac only, for now: on Windows the dropped data does not reach Meno yet.
+ */
+export async function readDrop(flavors: Flavor[]): Promise<ClipItem | null> {
+  if (!isTauri()) return null;
+  return fromWire(await invoke<Wire | null>("drag_read", { flavors }));
+}
+
+function fromWire(got: Wire | null): ClipItem | null {
   if (!got) return null;
   return got.base64 != null ? { flavor: got.flavor, bytes: fromBase64(got.base64) } : { flavor: got.flavor, text: got.text ?? "" };
+}
+
+let takes: Promise<Set<Flavor> | null> | null = null;
+
+/**
+ * The kinds a copy on this platform may put on the clipboard (the app says),
+ * so that none is made for nothing - a Windows bitmap on a Mac. Null outside
+ * the app: every kind.
+ */
+export function clipboardTakes(): Promise<Set<Flavor> | null> {
+  takes ??= isTauri()
+    ? invoke<Flavor[]>("clipboard_takes").then(
+        (f) => new Set(f),
+        () => null,
+      )
+    : Promise.resolve(null);
+  return takes;
 }

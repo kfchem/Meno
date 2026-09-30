@@ -7,6 +7,12 @@ import { calculateNewBondPosition } from "../utils/geometry";
 import { clickClock, doubleClickedSince, noteClick } from "../utils/clickCount";
 import { endsDrag, movePress, startPress, type Press } from "../utils/press";
 import { editorModelOf, processFileContent } from "../utils/io";
+import { structureInDrop } from "../chem/fromClipboard";
+import { centredAt } from "../utils/copyPaste";
+import type { Model } from "../store/types";
+
+/** The files a drop opens as structures, beside what is drawn. */
+const STRUCTURE_FILE = /\.(mol|sdf|rxn|xyz)$/i;
 import { readRecord } from "../utils/copyPaste";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
@@ -309,17 +315,45 @@ export function useStructureEvents(
     }, DOUBLE_CLICK_MS) as unknown as number;
   };
 
+  // What is being dragged is read as it comes over the drawing: by the time
+  // it is dropped, Word or PowerPoint may already have taken it back (on a
+  // Mac, the drag pasteboard is emptied as the drag ends).
+  const dropReading = useRef<Promise<Model | null> | null>(null);
+  const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    // (a file from the Finder or Explorer is read when dropped, as ever)
+    if (dropReading.current || [...e.dataTransfer.types].includes("Files")) return;
+    dropReading.current = structureInDrop().catch(() => null);
+  };
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // off the canvas altogether: the drag may end anywhere now
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) dropReading.current = null;
+  };
+
   const onDropAppend = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    const reading = dropReading.current;
+    dropReading.current = null;
     const files = e.dataTransfer.files;
-    if (!files || !files.length) return;
-    const f = files[0];
+    const dropped = files?.[0];
+    const at = clientToWorld(e.clientX, e.clientY) || { x: 0, y: 0 };
+    // Not a structure's file: a picture or an object dragged out of Word or
+    // PowerPoint, perhaps, whose structure goes where it was dropped,
+    // selected - as a paste would
+    if (!dropped || !STRUCTURE_FILE.test(dropped.name)) {
+      const found = await (reading ?? structureInDrop()).catch(() => null);
+      if (found?.atoms.length) {
+        store.getState().pasteModel(centredAt(found, at));
+        setImportError(null);
+        return;
+      }
+    }
+    if (!dropped) return;
+    const f = dropped;
     const text = await f.text();
     try {
       const result = await processFileContent(f.name, text);
-      const p = clientToWorld(e.clientX, e.clientY) || { x: 0, y: 0 };
-      const dx = p.x - result.centroid.x;
-      const dy = p.y - result.centroid.y;
+      const dx = at.x - result.centroid.x;
+      const dy = at.y - result.centroid.y;
 
       const shifted = {
         atoms: result.model.atoms.map((a) => ({
@@ -413,6 +447,8 @@ export function useStructureEvents(
     handleWrapperMouseLeave,
     handleWrapperClick,
     onDropAppend,
+    onDragEnter,
+    onDragLeave,
     onPickFiles,
     openFilePicker,
     importError,
