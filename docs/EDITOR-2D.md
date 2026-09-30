@@ -406,8 +406,9 @@ traced from reference drawings.
   an object - a Meno structure, which a double-click opens in Meno - by a
   plain paste. Meno is the object's server (`src-tauri/src/ole.rs`): it
   offers the class to COM as it starts, so a double-click reaches a Meno
-  already running; with none running, Windows starts one, which goes again
-  once Office is done with it and nothing else is open. The structure opens in a
+  already running; with none running, Windows starts one, unseen, which
+  goes again once Office is done with its objects and nothing else is open
+  (Office also starts one only to have a picture). The structure opens in a
   tab of its own; each change goes back into the document as it is drawn -
   Meno's record, and the same EMF (EMF+ and all) as the picture shown - and
   closing the tab, or the document, lets it go. Insert > Object makes a new
@@ -423,10 +424,20 @@ traced from reference drawings.
   format nor the PNG; elsewhere (a Mac, or Meno not registered) it carries
   the pictures as before. The object keeps Meno's EMF byte for byte in the
   saved document, and copied back into Meno it is the structure again.
-  Its size is the drawing's own where Meno gives it (a paste, an edit),
-  but a saved document's cached picture has a size OLE works out again
-  from the screen - 2% small at 100% - and PowerPoint takes that one
-  when it pastes Word's copy of the object. A Mac cannot serve
+  Its size is the drawing's own, through an edit, a save and a copy
+  between Word and PowerPoint (to within 1%). That takes care: Office
+  measures a picture it asks for (Word as it saves an edited object, and
+  as it copies one) by taking the frame's hundredths of a millimetre to
+  pixels by the screen's physical size and back by its logical DPI, which
+  seldom agree - 0.98 on the 100% desktop screen this was found on; 1.6 is
+  likely over Remote Desktop from a laptop - while a picture it is sent as
+  the drawing changes it takes as it says. So Meno sends the EMF as it is,
+  and hands what Office asks for drawn to that measure: the same picture,
+  its frame and all it draws scaled together, so that it looks the same
+  in any box and only its stated size changes. (OLE's own cache sizes an
+  EMF the same way, and keeps it so in the document; nothing seen reads
+  it. A metafile picture with its size stated would keep it exact, but
+  Word takes an object's changes only as an EMF.) A Mac cannot serve
   objects: there a document's object should show its picture, and a picture
   pasted from a Mac is a picture on Windows too - copied into Meno and
   pasted back, it becomes an object. (What a Mac makes of a document's
