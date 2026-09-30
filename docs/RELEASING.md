@@ -32,10 +32,10 @@ repository.
 
 This is not code signing (Authenticode, Apple's Developer ID): without
 that, Windows' SmartScreen warns about an installer downloaded for the
-first time, and macOS asks before opening an app from the internet.
-Updates themselves are checked with the updater's key, whether or not the
-installers are code-signed, and code signing can be taken up, or dropped,
-at any release.
+first time, and macOS will not open Meno until it is let through once
+(see The Mac, below). Updates themselves are checked with the updater's
+key, whether or not the apps are code-signed, and code signing can be
+taken up, or dropped, at any release.
 
 ## Each release
 
@@ -51,14 +51,70 @@ at any release.
 
    The workflow refuses a tag that is not the version in both files.
 3. The workflow builds the Windows installer (NSIS, per user) and its
-   update, signs the update, and puts both on a **draft** release with
-   `latest.json`.
-4. Try the draft's installer, write the release notes (they are shown in
+   update, then the Mac's disk image and its update, signs the updates,
+   and puts them all on a **draft** release with `latest.json`, which
+   names an update for each (`windows-x86_64`, `darwin-aarch64`). The Mac
+   job waits for the Windows one: each reads `latest.json`, adds its own
+   and puts it back whole.
+4. Try the draft's installers, write the release notes (they are shown in
    Meno, as the update's notes), and publish it. The Menos installed find
    it the next time they look - as they start, and every few hours.
 
-A Mac build is to be added to the workflow as a job of its own, with the
-Apple signing it needs; its update goes into the same `latest.json`.
+## The Mac
+
+The workflow builds Meno for Apple silicon only: the `uv` it carries for
+Python (`src-tauri/resources/py/uv`) is an arm64 build. An Intel build
+would need an x86_64 or universal `uv` first.
+
+It is signed **ad hoc** (`signingIdentity: "-"`, in the job's arguments),
+the whole bundle, and not with Apple's Developer ID, which the project has
+not taken up. Without that the bundle would carry only the linker's
+signature on its executable, which macOS takes for a damaged app: a Meno
+downloaded that way cannot be opened at all ("“Meno” is damaged and can't
+be opened"), short of clearing its quarantine in a terminal.
+
+Signed ad hoc, as seen on macOS 26 (with a local update standing in for
+a release's):
+
+- **The first time**, macOS will not open it: "“Meno” Not Opened - Apple
+  could not verify “Meno” is free of malware...", with *Done* and *Move to
+  Trash*. Apple's way to let it through, since macOS 15 (a right-click ›
+  Open no longer does it): drag Meno from the disk image into
+  Applications and open it there, choose *Done*, then in System Settings ›
+  Privacy & Security choose *Open Anyway* for Meno, give the password
+  asked for, and open it. Once is enough.
+- **Updates** are not asked about: Meno downloads them itself, so macOS
+  does not take them for something from the internet (the app put in
+  place carries no quarantine). The app is replaced where it is as Meno
+  quits, or restarts into it, and opens as before.
+- **Where Meno cannot write** to the folder it is in - a user who is not
+  an administrator, with Meno in Applications - macOS asks for an
+  administrator's name and password as Meno quits with an update; cancelled,
+  Meno stays as it was. Meno opened straight from the disk image cannot
+  replace itself; nor, perhaps, one opened from Downloads without being
+  moved first, which macOS may run from a read-only copy.
+- An ad hoc signature changes with every build, so a permission macOS
+  keeps for Meno (a protected folder, say) may be asked for again after an
+  update. A Developer ID signature would keep them.
+
+### Taking up Apple's signing
+
+1. Join the Apple Developer Program (99 USD a year in 2026) and, as the
+   account holder, make a *Developer ID Application* certificate; export
+   it with its key as a `.p12`.
+2. For notarization, make an App Store Connect API key (Users and Access ›
+   Integrations), or an app-specific password for the Apple Account.
+3. Add repository secrets for the job's `env`: `APPLE_CERTIFICATE` (the
+   `.p12`, base64), `APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD` (any,
+   for the build's own keychain) and `APPLE_SIGNING_IDENTITY`; and
+   `APPLE_API_ISSUER`, `APPLE_API_KEY` and the key file (written out for
+   `APPLE_API_KEY_PATH`) - or `APPLE_ID`, `APPLE_PASSWORD` and
+   `APPLE_TEAM_ID`.
+4. Take `"macOS":{"signingIdentity":"-"}` out of the job's arguments.
+
+`tauri build` then signs Meno with the certificate and has Apple notarize
+it; macOS opens it without asking, and keeps its permissions across
+updates. The `uv` inside is already signed and notarized by its makers.
 
 ## What an installed Meno does
 
@@ -67,7 +123,8 @@ Apple signing it needs; its update goes into the same `latest.json`.
   recorded like any other (`docs/ARCHITECTURE.md`, The network).
 - A newer version is downloaded in the background and checked against the
   public key; it is installed as Meno quits (on Windows, the NSIS
-  installer, quietly), or at once through a restart the user asks for.
+  installer, quietly; on a Mac, the app replaced where it is), or at once
+  through a restart the user asks for.
 - The installer registers Meno's class for Office again (its
   `--register-ole` hook), so structures in documents keep opening in the
   Meno installed.
