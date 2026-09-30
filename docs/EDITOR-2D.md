@@ -133,7 +133,10 @@ V, as everywhere, and the same from the menus.
   or, with nothing selected, the structure under the pointer.
 - A paste goes where the pointer is (where the menu was opened, from the
   menu; the middle of the view, if the pointer is off the drawing), comes
-  in selected so it can be dragged straight on, and is one undo step.
+  in selected so it can be dragged straight on, and is one undo step. What
+  is dropped onto the drawing - a structure's file, or a structure dragged
+  out of Word or PowerPoint - comes in the same way where it is dropped, as
+  does a SMILES added beside what is drawn.
 - The clipboard holds Meno's own record of the structure, which loses
   nothing, and a MOL file for other chemistry programs (MDLCT on Windows,
   which they exchange there) - and no plain text: PowerPoint pastes plain

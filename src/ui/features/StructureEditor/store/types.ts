@@ -206,7 +206,7 @@ export type EditorState = {
   openModel: (next: Model, arrow?: ImportedArrow) => void;
   /** A file opened over the canvas's contents, as one undo step. */
   replaceModel: (next: Model, arrow?: ImportedArrow) => void;
-  /** A file dropped onto the canvas, added as one undo step. */
+  /** A file dropped onto the canvas, or a SMILES beside what is drawn: added, selected, as one undo step. */
   appendModel: (next: Model, arrow?: ImportedArrow) => void;
   /** Clears hover, selection and gestures after the structure is replaced. */
   forgetInteraction: () => void;
