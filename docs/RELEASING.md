@@ -52,10 +52,19 @@ at any release.
    The workflow refuses a tag that is not the version in both files.
 3. The workflow builds the Windows installer (NSIS, per user) and its
    update, signs the update, and puts both on a **draft** release with
-   `latest.json`.
-4. Try the draft's installer, write the release notes (they are shown in
-   Meno, as the update's notes), and publish it. The Menos installed find
-   it the next time they look - as they start, and every few hours.
+   `latest.json`. It then checks that the update's signature names the
+   version it is released as (see below).
+4. If the run passed: try the draft's installer, write the release notes
+   (they are shown in Meno, as the update's notes), and publish it. The
+   Menos installed find it the next time they look - as they start, and
+   every few hours. Never publish the draft of a run that failed.
+
+An installed Meno checks more than the signature itself: the signature's
+trusted comment must carry the version `latest.json` announces
+(`requireSignedVersion` in `tauri.conf.json`), so that an older release
+cannot be passed off as a newer one. The Tauri CLI writes that version
+from 2.12 on; an update signed without it is refused by every Meno from
+0.1.1 on, which is what the workflow's last step guards against.
 
 A Mac build is to be added to the workflow as a job of its own, with the
 Apple signing it needs; its update goes into the same `latest.json`.
