@@ -14,6 +14,8 @@ use uuid::Uuid;
 mod clipboard;
 mod fonts;
 mod net;
+#[cfg(windows)]
+mod ole;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -478,8 +480,103 @@ async fn ext_kill(app: AppHandle, id: String, state: State<'_, ProcState>) -> Re
     Ok(())
 }
 
+/// Structures Office has asked to have opened since the page last looked
+/// (Windows: see ole.rs; nothing elsewhere).
+#[tauri::command]
+fn ole_take_pending() -> serde_json::Value {
+    #[cfg(windows)]
+    return serde_json::to_value(ole::take_pending()).unwrap_or_default();
+    #[cfg(not(windows))]
+    serde_json::Value::Array(Vec::new())
+}
+
+/// A structure open from a document, drawn afresh: the document takes it.
+#[tauri::command]
+fn ole_update(id: u32, record: String, emf: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let emf = STANDARD.decode(emf).map_err(|e| e.to_string())?;
+        ole::update(id, record, emf)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (id, record, emf);
+        Err("documents hold structures only on Windows".into())
+    }
+}
+
+/// Whether Windows started this Meno for Office, so that it goes again once
+/// the document is done with it and nothing else is open.
+#[tauri::command]
+fn ole_started_for_office() -> bool {
+    #[cfg(windows)]
+    return ole::started_for_office();
+    #[cfg(not(windows))]
+    false
+}
+
+/// Whether Office still holds any of this Meno's structures (Windows).
+#[tauri::command]
+fn ole_in_use() -> bool {
+    #[cfg(windows)]
+    return ole::in_use();
+    #[cfg(not(windows))]
+    false
+}
+
+/// A structure open from a document is done with: its tab has closed.
+#[tauri::command]
+fn ole_close(id: u32) -> Result<(), String> {
+    #[cfg(windows)]
+    return ole::close(id);
+    #[cfg(not(windows))]
+    {
+        let _ = id;
+        Ok(())
+    }
+}
+
+/// `--register-ole` and `--unregister-ole`, which the installer runs: the
+/// class Office finds Meno's structures by, written or taken out, and then
+/// nothing else. Whether it worked is the exit code.
+#[cfg(windows)]
+fn registration_asked() -> Option<i32> {
+    let args: Vec<String> = std::env::args().collect();
+    let done = |r: Result<(), String>| match r {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("{e}");
+            1
+        }
+    };
+    if args.iter().any(|a| a == "--register-ole") {
+        let exe = std::env::current_exe().map_err(|e| e.to_string());
+        return Some(done(exe.and_then(|p| ole::register(&p.to_string_lossy()))));
+    }
+    if args.iter().any(|a| a == "--unregister-ole") {
+        return Some(done(ole::unregister()));
+    }
+    None
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(windows)]
+    if let Some(code) = registration_asked() {
+        std::process::exit(code);
+    }
+    #[allow(unused_mut)]
+    let mut context = tauri::generate_context!();
+    // A Meno Windows starts for Office opens unseen: it shows itself when a
+    // structure opens in it (ole.rs), and one started only for a picture
+    // goes again without having been seen.
+    #[cfg(windows)]
+    if ole::started_for_office() {
+        for window in &mut context.config_mut().app.windows {
+            window.visible = false;
+        }
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
@@ -489,6 +586,9 @@ pub fn run() {
         .manage(net::Net::default())
         .setup(|app| {
             net::start(app.handle());
+            // structures in Office documents, opened here on a double-click
+            #[cfg(windows)]
+            ole::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -496,6 +596,12 @@ pub fn run() {
             // the system clipboard, for structures
             clipboard::clipboard_write,
             clipboard::clipboard_read,
+            // structures in Office documents (Windows)
+            ole_take_pending,
+            ole_update,
+            ole_close,
+            ole_started_for_office,
+            ole_in_use,
             // the system's fonts, for atom labels
             fonts::font_families,
             fonts::font_file,
@@ -513,12 +619,19 @@ pub fn run() {
             ext_stdin,
             ext_kill
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             // Don't leave Python sidecars running after the window closes.
             if let RunEvent::Exit = event {
                 app.state::<ProcState>().kill_all();
+                // structures open from documents go back into them, and what
+                // was copied stays on the clipboard without Meno
+                #[cfg(windows)]
+                {
+                    ole::shutdown();
+                    ole::flush_clipboard();
+                }
             }
         });
 }

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Meno's structures in Office documents (src/ole.rs): the class Word and
+  PowerPoint find them by, for everyone on the machine, as the MSI installs
+  for the machine. The keys and values are the ones registry_entries() in
+  src/ole.rs writes (a test there holds the two together), served by the
+  installed Meno; the class's own key goes in both views of the registry,
+  as a 32-bit Office looks there. Windows Installer takes them all out
+  again when Meno is removed. (Registry alone: the components sit under
+  TARGETDIR, which has no bitness, so the 32-bit one may too.)
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="TARGETDIR">
+      <Component Id="MenoOleClass" Guid="{1C59B029-232C-4117-B3E0-7CD821C637AA}" Win64="yes">
+        <RegistryKey Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes" />
+        <RegistryKey Root="HKLM" Key="Software\Classes\Meno.Structure" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes" />
+        <RegistryKey Root="HKLM" Key="Software\Classes\Meno.Structure.1" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}" Type="string" Value="Meno Structure" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\AuxUserType\2" Type="string" Value="Meno" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\AuxUserType\3" Type="string" Value="Meno Structure" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\DataFormats\GetSet\0" Type="string" Value="14,1,64,1" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\DefaultIcon" Type="string" Value="&quot;[INSTALLDIR]Meno.exe&quot;,0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\InprocHandler32" Type="string" Value="ole32.dll" />
+        <RegistryKey Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\Insertable" ForceCreateOnInstall="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\LocalServer32" Type="string" Value="&quot;[INSTALLDIR]Meno.exe&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\MiscStatus" Type="string" Value="0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\ProgID" Type="string" Value="Meno.Structure.1" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\Verb\0" Type="string" Value="&amp;Edit,0,2" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\Verb\1" Type="string" Value="&amp;Open,0,2" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\VersionIndependentProgID" Type="string" Value="Meno.Structure" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Meno.Structure" Type="string" Value="Meno Structure" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Meno.Structure\CLSID" Type="string" Value="{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Meno.Structure\CurVer" Type="string" Value="Meno.Structure.1" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Meno.Structure.1" Type="string" Value="Meno Structure" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Meno.Structure.1\CLSID" Type="string" Value="{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}" />
+        <RegistryKey Root="HKLM" Key="Software\Classes\Meno.Structure.1\Insertable" ForceCreateOnInstall="yes" />
+      </Component>
+      <Component Id="MenoOleClass32" Guid="{446AF156-ED5D-4028-9FF4-7348DA096282}" Win64="no">
+        <RegistryKey Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}" Type="string" Value="Meno Structure" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\AuxUserType\2" Type="string" Value="Meno" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\AuxUserType\3" Type="string" Value="Meno Structure" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\DataFormats\GetSet\0" Type="string" Value="14,1,64,1" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\DefaultIcon" Type="string" Value="&quot;[INSTALLDIR]Meno.exe&quot;,0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\InprocHandler32" Type="string" Value="ole32.dll" />
+        <RegistryKey Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\Insertable" ForceCreateOnInstall="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\LocalServer32" Type="string" Value="&quot;[INSTALLDIR]Meno.exe&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\MiscStatus" Type="string" Value="0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\ProgID" Type="string" Value="Meno.Structure.1" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\Verb\0" Type="string" Value="&amp;Edit,0,2" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\Verb\1" Type="string" Value="&amp;Open,0,2" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\CLSID\{3EF2A330-5A2F-4696-B1A2-D1648638DE1D}\VersionIndependentProgID" Type="string" Value="Meno.Structure" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

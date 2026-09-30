@@ -56,6 +56,7 @@ import { CANVAS_DPR } from "./constants";
 import { startingZoom } from "./layoutOptions";
 import { useDrawingStyle } from "./useDrawingStyle";
 import { DrawnLayoutProvider } from "./components/DrawnLayout";
+import { useOfficeLink } from "./hooks/useOfficeLink";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 
@@ -64,6 +65,7 @@ function StructureCanvasContent({
   tabId,
   initialPayload,
   initialFilename,
+  officeId,
   styleOpen,
   toggleStyle,
 }: {
@@ -71,6 +73,8 @@ function StructureCanvasContent({
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
+  /** The object in a document this canvas was opened from (lib/ole). */
+  officeId?: number;
   /** Whether the drawing-style panel is open beside the canvas. */
   styleOpen: boolean;
   toggleStyle: () => void;
@@ -95,6 +99,7 @@ function StructureCanvasContent({
     clientToWorld,
     pasteTarget,
   } = useStructureEvents(initialPayload, initialFilename);
+  useOfficeLink(officeId);
 
   const onCreated = useCanvasSetup(camRef, domRef);
 
@@ -600,12 +605,15 @@ export default function StructureCanvas({
   tabId,
   initialPayload,
   initialFilename,
+  officeId,
   active = true,
   document,
 }: {
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
+  /** The object in a document it was opened from, when it was (lib/ole). */
+  officeId?: number;
   /** False while the owning tab is hidden: pauses the render loop. */
   active?: boolean;
   /** The tab's document; omitted for canvases embedded in other views. */
@@ -622,6 +630,7 @@ export default function StructureCanvas({
           tabId={tabId}
           initialPayload={initialPayload}
           initialFilename={initialFilename}
+          officeId={officeId}
           styleOpen={styleOpen}
           toggleStyle={() => setStyleOpen((v) => !v)}
         />

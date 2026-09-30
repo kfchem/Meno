@@ -7,6 +7,7 @@ import { calculateNewBondPosition } from "../utils/geometry";
 import { clickClock, doubleClickedSince, noteClick } from "../utils/clickCount";
 import { endsDrag, movePress, startPress, type Press } from "../utils/press";
 import { editorModelOf, processFileContent } from "../utils/io";
+import { readRecord } from "../utils/copyPaste";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
 export function useStructureEvents(
@@ -73,6 +74,13 @@ export function useStructureEvents(
       // One import per canvas: this effect runs twice under StrictMode, and
       // importing twice would leave two undo steps for a single file.
       importedInitial.current = true;
+      // A structure from a document (lib/ole): Meno's own record, taken as it is.
+      if (/\.meno$/i.test(initialFilename ?? "")) {
+        const record = readRecord(initialPayload);
+        if (record) store.getState().openModel(record);
+        else reportImportError("initial payload", new Error("The document's structure could not be read."));
+        return;
+      }
       try {
         const result = await processFileContent(
           initialFilename || "",

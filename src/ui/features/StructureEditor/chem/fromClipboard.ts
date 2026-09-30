@@ -7,7 +7,8 @@ import { structureFromSmiles } from "./fromSmiles";
 
 /**
  * The structure on the clipboard, if there is one, from the first of:
- * - Meno's own record of it;
+ * - Meno's own record of it, or the object for Office that holds it (on
+ *   Windows, Word and PowerPoint copy one they hold with it);
  * - a picture Meno made of it - Office's clip format, handed back by Word
  *   or PowerPoint when the picture is copied there, or a PNG;
  * - a MOL file another program put there;
@@ -15,7 +16,7 @@ import { structureFromSmiles } from "./fromSmiles";
  * Null when there is nothing that reads as a structure.
  */
 export async function structureOnClipboard(): Promise<Model | null> {
-  const own = await readClipboard(["meno"]);
+  const own = await readClipboard(["meno", "embed"]);
   const record = own?.text != null ? readRecord(own.text) : null;
   if (record) return record;
   for (const flavor of ["gvml", "png"] as const) {
