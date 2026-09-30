@@ -12,7 +12,7 @@ import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
 import type { TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
-import { keepPageUnselected, undoIntent } from "./lib/doc/shortcuts";
+import { keepClipboard, keepPageUnselected, undoIntent } from "./lib/doc/shortcuts";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
@@ -102,10 +102,16 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // Ctrl/Cmd+A never selects the app's own words: see keepPageUnselected.
+  // Ctrl/Cmd+A never selects the app's own words, and Ctrl/Cmd+C with
+  // nothing to copy leaves the clipboard alone: see keepPageUnselected and
+  // keepClipboard.
   useEffect(() => {
-    window.addEventListener("keydown", keepPageUnselected);
-    return () => window.removeEventListener("keydown", keepPageUnselected);
+    const onKeyDown = (e: KeyboardEvent) => {
+      keepPageUnselected(e);
+      keepClipboard(e, window.getSelection());
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   const closeTab = (id: string) => {

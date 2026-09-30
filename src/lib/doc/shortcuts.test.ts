@@ -7,6 +7,7 @@ import {
   isDeleteKey,
   isDeselectKey,
   isSelectAllKey,
+  keepClipboard,
   keepPageUnselected,
   saveIntent,
   undoIntent,
@@ -121,6 +122,32 @@ describe("selection keys", () => {
     // other keys go by
     expect(pressed({ key: "c" })).toBe(false);
     expect(pressed({ shiftKey: true })).toBe(false);
+  });
+
+  it("holds Ctrl/Cmd+C and +X back when there is nothing to copy, and only then", () => {
+    const none = { isCollapsed: true };
+    const pressed = (
+      over: Partial<Parameters<typeof isSelectAllKey>[0]>,
+      selection: { isCollapsed: boolean } | null = none,
+    ) => {
+      let prevented = false;
+      keepClipboard({ key: "c", metaKey: true, ...over, preventDefault: () => (prevented = true) }, selection);
+      return prevented;
+    };
+    // nothing selected on the page: a start page, a button
+    expect(pressed({ target: { tagName: "DIV" } })).toBe(true);
+    expect(pressed({ target: { tagName: "BUTTON" } }, null)).toBe(true);
+    expect(pressed({ key: "x", target: { tagName: "BODY" } })).toBe(true);
+    expect(pressed({ metaKey: false, ctrlKey: true, key: "C", target: { tagName: "DIV" } })).toBe(true);
+    // text selected on the page: it copies
+    expect(pressed({ target: { tagName: "DIV" } }, { isCollapsed: false })).toBe(false);
+    // a text field copies its own text
+    expect(pressed({ target: { tagName: "INPUT" } })).toBe(false);
+    expect(pressed({ target: { tagName: "TEXTAREA" } })).toBe(false);
+    // other keys go by
+    expect(pressed({ key: "v" })).toBe(false);
+    expect(pressed({ shiftKey: true })).toBe(false);
+    expect(pressed({ altKey: true })).toBe(false);
   });
 });
 
