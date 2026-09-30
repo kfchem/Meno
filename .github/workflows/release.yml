@@ -1,0 +1,52 @@
+name: Release
+
+# A tag v* builds Meno and puts it on a draft GitHub Release, with the
+# update it becomes for the Meno already installed (signed with the
+# updater's key) and latest.json, which those Menos look for. Nothing
+# reaches anyone until the maintainer publishes the draft. See
+# docs/RELEASING.md.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows (NSIS installer and update)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:tauri
+      - name: The tag is the version
+        shell: bash
+        run: |
+          app="v$(node -p "require('./package.json').version")"
+          crate="v$(grep -m1 '^version = ' src-tauri/Cargo.toml | cut -d '"' -f 2)"
+          echo "tag ${{ github.ref_name }}, package.json $app, Cargo.toml $crate"
+          test "$app" = "${{ github.ref_name }}" && test "$crate" = "${{ github.ref_name }}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # the updater's signing key, kept by the maintainer (docs/RELEASING.md)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Meno ${{ github.ref_name }}
+          releaseBody: See the commits since the last release.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: --bundles nsis --config {"bundle":{"createUpdaterArtifacts":true}}

@@ -21,6 +21,16 @@ export type AppSettings = {
   drawingStyle: StyleChoice;
   network: NetworkSettings;
   chemistry: ChemistrySettings;
+  updates: UpdateSettings;
+};
+
+/** Meno keeping itself up to date (lib/update). */
+export type UpdateSettings = {
+  /**
+   * Whether Meno has asked, of its own accord, to keep itself up to date:
+   * it asks once, and after that only when the user turns it on.
+   */
+  asked: boolean;
 };
 
 /** What RDKit points out on a structure as it is drawn. */
@@ -42,6 +52,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   drawingStyle: DEFAULT_STYLE_CHOICE,
   network: { offline: false, granted: [] },
   chemistry: { valenceWarnings: true, stereoLabels: false },
+  updates: { asked: false },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -55,7 +66,13 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     drawingStyle: acceptStyleChoice(r.drawingStyle),
     network: acceptNetwork(r.network),
     chemistry: acceptChemistry(r.chemistry),
+    updates: acceptUpdates(r.updates),
   };
+}
+
+function acceptUpdates(raw: unknown): UpdateSettings {
+  if (typeof raw !== "object" || raw === null) return DEFAULT_APP_SETTINGS.updates;
+  return { asked: (raw as Record<string, unknown>).asked === true };
 }
 
 function acceptChemistry(raw: unknown): ChemistrySettings {
@@ -124,6 +141,7 @@ type SettingsState = AppSettings & {
   setDrawingStyle: (choice: StyleChoice) => void;
   setNetwork: (network: NetworkSettings) => void;
   setChemistry: (chemistry: ChemistrySettings) => void;
+  setUpdates: (updates: UpdateSettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -134,9 +152,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, network, chemistry } = get();
+      const { drawingStyle, network, chemistry, updates } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, network, chemistry }),
+        settingsFileText({ drawingStyle, network, chemistry, updates }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -157,6 +175,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setChemistry: (chemistry) => {
       set({ chemistry });
+      scheduleSave();
+    },
+    setUpdates: (updates) => {
+      set({ updates });
       scheduleSave();
     },
   };

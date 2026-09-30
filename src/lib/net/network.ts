@@ -74,6 +74,7 @@ export const useNetwork = create<NetworkState>(() => ({
 export function purposeName(purpose: string): string {
   if (purpose === "python-code") return "Python run in the console";
   if (purpose === "web-view") return "The window";
+  if (purpose === "app-update") return "Keeping Meno up to date";
   if (purpose === "python-env:console")
     return "Setting up Python for the console";
   if (purpose === "python-env:node") return "Setting up Python for workflows";
@@ -185,12 +186,14 @@ export async function revoke(purpose: string): Promise<void> {
 }
 
 async function grant(purpose: string): Promise<void> {
+  // (the app first: whatever the page does on seeing the purpose allowed -
+  // a look for a newer Meno - is then let through)
+  if (isTauri()) await invoke("net_grant", { purpose }).catch(() => undefined);
   useNetwork.setState((s) =>
     s.granted.includes(purpose)
       ? s
       : { granted: [...s.granted, purpose].sort() },
   );
-  if (isTauri()) await invoke("net_grant", { purpose }).catch(() => undefined);
 }
 
 /**

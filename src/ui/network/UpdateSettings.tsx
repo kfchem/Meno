@@ -1,0 +1,98 @@
+import clsx from "clsx";
+import { revoke, useNetwork } from "../../lib/net/network";
+import {
+  checkForUpdate,
+  keepUpToDate,
+  restartIntoUpdate,
+  UPDATE_PURPOSE,
+  useUpdate,
+  type UpdateState,
+} from "../../lib/update";
+
+const when = (ms: number) =>
+  new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+/** Where the updater is, in a sentence. */
+function status(u: UpdateState, offline: boolean, allowed: boolean): string {
+  if (u.phase === "unavailable") return "This Meno does not update itself: it is a development build, or one Office started.";
+  if (u.phase === "checking") return "Looking on GitHub for a newer Meno…";
+  if (u.phase === "downloading") return `Downloading Meno ${u.version ?? ""}…`;
+  if (u.phase === "ready") return `Meno ${u.version ?? ""} is ready: it goes in when you quit Meno.`;
+  if (!allowed) return "Meno does not look for newer versions.";
+  if (offline) return "Meno works offline: it does not look for newer versions.";
+  if (u.phase === "current") return `Up to date${u.checked ? ` - looked ${when(u.checked)}` : ""}.`;
+  if (u.phase === "failed") return `The last look did not work: ${u.error ?? "no reason given"}.`;
+  return "Meno looks shortly after it starts, and every few hours.";
+}
+
+/**
+ * Keeping Meno up to date, in Settings > Network: whether it may (the
+ * "app-update" purpose, allowed or taken back like any other), where it is,
+ * and a look or a restart at once.
+ */
+export default function UpdateSettings() {
+  const u = useUpdate((s) => s);
+  const offline = useNetwork((s) => s.offline);
+  const allowed = useNetwork((s) => s.granted.includes(UPDATE_PURPOSE));
+  if (!u) return null;
+  const busy = u.phase === "checking" || u.phase === "downloading";
+  const usable = u.phase !== "unavailable";
+
+  return (
+    <div className="rounded-lg border border-gh-line bg-white px-4 py-3 space-y-2">
+      <div className="flex items-start gap-4">
+        <div className="flex-1">
+          <div className="text-sm text-gh-black">Keep Meno up to date</div>
+          <p className="text-xs text-gh-gray mt-0.5">
+            Meno {u.current}. A newer version is looked for on GitHub and downloaded in the
+            background, and goes in when you quit Meno. Each connection is shown as it is made;
+            nothing goes out while Meno works offline.
+          </p>
+        </div>
+        <button
+          role="switch"
+          aria-checked={allowed}
+          aria-label="Keep Meno up to date"
+          disabled={!usable}
+          onClick={() => void (allowed ? revoke(UPDATE_PURPOSE) : keepUpToDate())}
+          className={clsx(
+            "relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50",
+            allowed ? "bg-accel-accent" : "bg-gh-line",
+          )}
+        >
+          <span
+            className={clsx(
+              "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+              allowed ? "left-[1.375rem]" : "left-0.5",
+            )}
+          />
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <p className="flex-1 text-xs text-gh-gray" aria-live="polite">
+          {status(u, offline, allowed)}
+        </p>
+        {u.phase === "ready" ? (
+          <button
+            onClick={() => void restartIntoUpdate()}
+            className="h-7 px-2.5 rounded-md border border-gh-line text-xs hover:bg-gh-base"
+          >
+            Restart now
+          </button>
+        ) : (
+          usable &&
+          allowed &&
+          !offline && (
+            <button
+              disabled={busy}
+              onClick={() => void checkForUpdate()}
+              className="h-7 px-2.5 rounded-md border border-gh-line text-xs hover:bg-gh-base disabled:opacity-50"
+            >
+              Look now
+            </button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}

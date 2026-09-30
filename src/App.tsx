@@ -23,6 +23,8 @@ import {
 } from "./lib/net/network";
 import ConsentDialog from "./ui/network/ConsentDialog";
 import NetworkToasts from "./ui/network/NetworkToasts";
+import UpdateNotice from "./ui/network/UpdateNotice";
+import { startUpdates } from "./lib/update";
 import { showSettingsSection } from "./ui/features/SettingsPanel/section";
 import { letOfficeGo, officeInUse, startedForOffice, takeOfficeStructures, watchOffice } from "./lib/ole";
 
@@ -63,17 +65,26 @@ export default function App() {
   // and the network brought into line with them: offline or not, and what
   // has been allowed. From then on, a change to either is saved.
   useEffect(() => {
+    let stopUpdates: (() => void) | undefined;
+    let gone = false;
     void (async () => {
       await startNetwork();
       await loadAppSettings();
       await applyNetworkSettings(useAppSettings.getState().network);
+      // keeping Meno up to date, as the network now allows (lib/update)
+      if (!gone) stopUpdates = startUpdates();
     })();
-    return useNetwork.subscribe((s, prev) => {
+    const unwatch = useNetwork.subscribe((s, prev) => {
       if (!useAppSettings.getState().loaded) return;
       const sameGrants = s.granted.join("\n") === prev.granted.join("\n");
       if (s.offline === prev.offline && sameGrants) return;
       useAppSettings.getState().setNetwork({ offline: s.offline, granted: s.granted });
     });
+    return () => {
+      gone = true;
+      stopUpdates?.();
+      unwatch();
+    };
   }, []);
 
   // Undo/redo belong to the active tab, not to the app as a whole.
@@ -348,6 +359,7 @@ export default function App() {
         }}
       />
       <ConsentDialog />
+      <UpdateNotice />
       <Deck
         order={state.mountOrder}
         tabs={state.tabsById}

@@ -226,12 +226,14 @@ nothing of Meno's environments lands in the user's own directories.
 | `net_state` | `lib/net/network.ts` | Offline or not, what is allowed, tasks under way, recent connections. |
 | `net_set_offline`, `net_grant`, `net_revoke` | `lib/net/network.ts` | Offline mode; a purpose's leave to use the network, given or withdrawn. |
 | `net_note_blocked` | `lib/net/network.ts` | Records a connection the window was kept from making. |
+| `update_state`, `update_check`, `update_restart_after_quit` | `lib/update.ts` | Where keeping Meno up to date is; a look (and download) through the proxy; a restart into the update downloaded. |
 | `greet` | — | Template leftover, unused. |
 
 Events: `uv:log`, `uv:err` (plain strings); `ext:stdout`, `ext:stderr`,
 `ext:exit` (JSON strings `{ id, line? }`). `ext:exit` is emitted exactly once
 per sidecar, whether it exits by itself or through `ext_kill`. `net:task` and
-`net:connection` carry the network's record (see below).
+`net:connection` carry the network's record (see below); `update:state`, where
+keeping Meno up to date is.
 
 ### What the backend accepts
 
@@ -286,6 +288,18 @@ to be able to work with nothing going out at all.
   (`askToConnect`, remembered in the settings until withdrawn); each task
   has a card in the corner while it runs; the top bar switches offline mode;
   Settings › Network holds the allowed purposes and the record.
+
+- **Meno keeping itself up to date** (`src-tauri/src/update.rs`,
+  `lib/update.ts`) is such a task, of its own: its requests - latest.json
+  on the project's GitHub Releases, then the update itself - are the
+  app's own (tauri-plugin-updater), sent through the proxy with the task's
+  token (`TaskHandle::proxy_url`). Its purpose, `app-update`, is asked for
+  once of Meno's own accord (remembered as `updates.asked` in the settings)
+  and after that only when the user turns it on in Settings › Network. The
+  update is checked against the updater's public key (`tauri.conf.json`)
+  before it is installed, which is as Meno quits; a development build, and
+  a Meno Windows started for Office, neither look nor install. Releases:
+  `docs/RELEASING.md`.
 
 Anything new that needs the network begins a task in `net.rs` and routes
 its process, or its own requests, through the proxy; nothing may reach the
