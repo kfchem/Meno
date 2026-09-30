@@ -17,5 +17,10 @@ dropping any corner standing less than 15 units (of a 2048-unit em) off the
 line between its neighbours, so it cuts into the ink by no more than that -
 under a hundredth of an em, a tenth of a point in a 10 pt label.
 
-`src/lib/chem/arial.ts` predates the tool; regenerated, its hulls pick
-slightly different corners along curves but agree within that tolerance.
+`src/lib/chem/arial.ts` keeps its own form, but nothing in it comes from
+Arial's font file, which is not Meno's to pass on: its hulls are made by
+this tool from Arimo-Regular.ttf (googlefonts/arimo, SIL OFL 1.1), a font
+made to Arial's metrics, and its advances are the ones every such font
+shares - checked equal to Arimo's when the hulls were made. Only the
+capital height is Arial's own figure. Make any other table from a font
+whose licence lets its outlines be passed on.

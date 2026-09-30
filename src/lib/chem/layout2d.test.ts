@@ -18,7 +18,7 @@ import {
   type Vec2,
 } from "./layout2d";
 import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "./acs";
-import { advanceEm } from "./arial";
+import { advanceEm, inkHullEm } from "./arial";
 
 const opts = (over: Partial<LayoutOptions> = {}): LayoutOptions =>
   acsWorldOptions([], [], { units: "world", ...over });
@@ -896,14 +896,15 @@ describe("a label as ACS 1996 sets it", () => {
 
   it("gives a letter's ink as its outline, on the baseline", () => {
     const [hull] = labelHulls(label([{ text: "N" }]), size);
-    // an N fills its box: 156 to 1311 across, and up to 1466, in 2048ths
+    // the N's ink, as the table has it, set on the baseline at the label's size
+    const ink = inkHullEm("N");
     const xs = hull.map((p) => p.x);
     const ys = hull.map((p) => p.y);
     const left = (-advanceEm("N") * size) / 2;
-    expect(Math.min(...xs)).toBeCloseTo(left + (156 / 2048) * size, 9);
-    expect(Math.max(...xs)).toBeCloseTo(left + (1311 / 2048) * size, 9);
+    expect(Math.min(...xs)).toBeCloseTo(left + Math.min(...ink.map((p) => p.x)) * size, 9);
+    expect(Math.max(...xs)).toBeCloseTo(left + Math.max(...ink.map((p) => p.x)) * size, 9);
     expect(Math.min(...ys)).toBeCloseTo(-4, 9);
-    expect(Math.max(...ys)).toBeCloseTo(-4 + (1466 / 2048) * size, 9);
+    expect(Math.max(...ys)).toBeCloseTo(-4 + Math.max(...ink.map((p) => p.y)) * size, 9);
   });
 });
 
@@ -962,7 +963,7 @@ describe("how far a bond stops short of a label", () => {
   it("stops a line from straight above the margin over the capital's top", () => {
     const o = opts();
     const [line] = buildBondPrimitives(fromAngle(90), bond, o, ZOOM, deg).lines;
-    const top = -o.fontPx * 0.4 + (1466 / 2048) * o.fontPx;
+    const top = -o.fontPx * 0.4 + Math.max(...inkHullEm("N").map((p) => p.y)) * o.fontPx;
     expect(line.y2).toBeCloseTo(top + o.labelMarginPx!, 9);
   });
 
