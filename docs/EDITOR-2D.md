@@ -130,7 +130,10 @@ highlight's colour, under the drawing, and a small handle stands above it.
 V, as everywhere, and the same from the menus.
 
 - What is copied is the selection - its atoms and every bond among them -
-  or, with nothing selected, the structure under the pointer.
+  or, with nothing selected, the structure under the pointer. With nothing
+  to copy there, or anywhere else in the app with no text selected, a copy
+  leaves the clipboard as it was (on a Mac the Edit menu's Copy would
+  otherwise have the webview write an empty item over it).
 - A paste goes where the pointer is (where the menu was opened, from the
   menu; the middle of the view, if the pointer is off the drawing), comes
   in selected so it can be dragged straight on, and is one undo step. What
