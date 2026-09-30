@@ -13,6 +13,7 @@ describe("the settings file", () => {
       drawingStyle: { preset: "rsc", changes: { ends: "round" as const } },
       network: { offline: true, granted: ["python-env:console"] },
       chemistry: { valenceWarnings: false, stereoLabels: true },
+      updates: { asked: true },
     };
     const text = settingsFileText(settings);
     expect(JSON.parse(text).format).toBe(1);
@@ -32,6 +33,8 @@ describe("the settings file", () => {
     expect(
       acceptAppSettings({ chemistry: { stereoLabels: "on" } }).chemistry,
     ).toEqual({ valenceWarnings: true, stereoLabels: false });
+    // a file from before Meno updated itself: not asked yet
+    expect(acceptAppSettings({ updates: { asked: "yes" } }).updates).toEqual({ asked: false });
   });
 
   it("loads the defaults where there is no file, and says it has loaded", async () => {

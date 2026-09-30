@@ -8,6 +8,7 @@ import {
   useNetwork,
   type NetConnection,
 } from "../../lib/net/network";
+import UpdateSettings from "./UpdateSettings";
 
 const time = (ms: number) =>
   new Date(ms).toLocaleTimeString(undefined, {
@@ -61,6 +62,8 @@ export default function NetworkSettings() {
           />
         </button>
       </div>
+
+      <UpdateSettings />
 
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-wider text-gh-gray">

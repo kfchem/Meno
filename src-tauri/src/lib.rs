@@ -16,6 +16,7 @@ mod fonts;
 #[cfg(windows)]
 mod drop;
 mod net;
+mod update;
 #[cfg(windows)]
 mod ole;
 
@@ -624,13 +625,17 @@ pub fn run() {
             window.visible = false;
         }
     }
+    let version = context.package_info().version.to_string();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        // keeping Meno up to date, through Meno's network (update.rs)
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ProcState(Mutex::new(HashMap::new())))
         .manage(net::Net::default())
+        .manage(update::Updates::new(version))
         .setup(|app| {
             net::start(app.handle());
             // drags from other programs the webview cannot read (Windows)
@@ -670,6 +675,10 @@ pub fn run() {
             net::net_grant,
             net::net_revoke,
             net::net_note_blocked,
+            // keeping Meno up to date
+            update::update_state,
+            update::update_check,
+            update::update_restart_after_quit,
             // python sidecar
             ext_spawn_sidecar,
             ext_stdin,
@@ -688,6 +697,8 @@ pub fn run() {
                     ole::shutdown();
                     ole::flush_clipboard();
                 }
+                // a newer Meno, downloaded, goes in as this one quits
+                update::install_on_exit(app);
             }
         });
 }

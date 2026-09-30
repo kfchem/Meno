@@ -241,6 +241,12 @@ impl TaskHandle {
         }
     }
 
+    /// The proxy, as this task's, for a request Meno makes itself (the
+    /// updater's): the URL a client is pointed at, credentials and all.
+    pub fn proxy_url(&self) -> Option<String> {
+        self.net.0.port.get().map(|port| format!("http://meno:{}@127.0.0.1:{port}", self.token))
+    }
+
     pub fn finish(mut self, ok: bool) {
         self.net.end(&self.token, if ok { "done" } else { "failed" });
         self.ended = true;

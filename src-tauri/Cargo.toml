@@ -31,6 +31,7 @@ tauri-plugin-dialog = "2"
 fontdb = "0.24"
 ttf-parser = "0.25.1"
 tokio = { version = "1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }
+tauri-plugin-updater = "2"
 
 # The system clipboard (src/clipboard.rs), by each platform's own API
 [target.'cfg(target_os = "macos")'.dependencies]
