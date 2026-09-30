@@ -429,8 +429,8 @@ traced from reference drawings.
   measures a picture it asks for (Word as it saves an edited object, and
   as it copies one) by taking the frame's hundredths of a millimetre to
   pixels by the screen's physical size and back by its logical DPI, which
-  seldom agree - 0.98 on the 100% desktop screen this was found on; 1.6 is
-  likely over Remote Desktop from a laptop - while a picture it is sent as
+  seldom agree - 0.98 on the 100% desktop screen this was found on, 1.59
+  over Remote Desktop at 175% (both tried) - while a picture it is sent as
   the drawing changes it takes as it says. So Meno sends the EMF as it is,
   and hands what Office asks for drawn to that measure: the same picture,
   its frame and all it draws scaled together, so that it looks the same
