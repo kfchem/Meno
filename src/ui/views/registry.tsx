@@ -138,6 +138,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
         document={document as DocumentStore<StructureDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
+        officeId={(content as any)?.data?.officeId}
       />
     ),
     create: (label) => create(label, "structure", {}),

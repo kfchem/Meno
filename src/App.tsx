@@ -24,6 +24,11 @@ import {
 import ConsentDialog from "./ui/network/ConsentDialog";
 import NetworkToasts from "./ui/network/NetworkToasts";
 import { showSettingsSection } from "./ui/features/SettingsPanel/section";
+import { letOfficeGo, startedForOffice, takeOfficeStructures, watchOffice } from "./lib/ole";
+
+/** The object in an Office document a tab was opened from, if it was (lib/ole). */
+const officeIdOf = (tab: TabInstance | undefined) =>
+  (tab?.content.data as { officeId?: number } | undefined)?.officeId;
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
@@ -100,8 +105,9 @@ export default function App() {
   };
 
   // Closing the window - its own button, Alt+F4 - asks first when a tab
-  // holds unsaved changes. The listener reads the tabs through a ref, so it
-  // is registered once and still sees the latest ones.
+  // holds unsaved changes (a structure from a document has none: its
+  // document has them already). The listener reads the tabs through a
+  // ref, so it is registered once and still sees the latest ones.
   const tabsRef = useRef(state.tabsById);
   tabsRef.current = state.tabsById;
   useEffect(() => {
@@ -109,7 +115,7 @@ export default function App() {
     let gone = false;
     getCurrentWindow()
       .onCloseRequested((e) => {
-        if (Object.values(tabsRef.current).some((t) => t.meta.dirty)) {
+        if (Object.values(tabsRef.current).some((t) => t.meta.dirty && officeIdOf(t) == null)) {
           e.preventDefault();
           setPendingClose({ kind: "window" });
         }
@@ -123,6 +129,56 @@ export default function App() {
     };
   }, []);
 
+  // Structures from Office documents (Windows, a double-click on one): each
+  // opens in a tab of its own - or brings its tab forward if it is open -
+  // and the tab closes when the document is done with it.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  useEffect(() => {
+    const tabOf = (officeId: number) =>
+      Object.values(stateRef.current.tabsById).find((t) => officeIdOf(t) === officeId);
+    const open = async () => {
+      for (const s of await takeOfficeStructures()) {
+        const held = tabOf(s.id);
+        if (held) {
+          dispatch({ type: "SELECT_TAB", id: held.meta.id });
+          continue;
+        }
+        if (!canOpenKind(stateRef.current, "structure")) {
+          setNotice(TOO_MANY_CANVASES);
+          void letOfficeGo(s.id);
+          continue;
+        }
+        const tab = viewRegistry.structure.create(s.name ? `${s.name} - Office` : "Structure from Office");
+        const data = { payload: s.record, filename: "office.meno", officeId: s.id };
+        dispatch({ type: "ADD_TAB", tab: { ...tab, content: { ...tab.content, data } } as TabInstance });
+      }
+    };
+    void open(); // (any asked for before the page was up)
+    return watchOffice(
+      () => void open(),
+      (officeId) => {
+        const held = tabOf(officeId);
+        if (!held) return;
+        closeTab(held.meta.id);
+        leaveIfOnlyForOffice(held.meta.id);
+      },
+    );
+  }, []);
+
+  // A Meno Windows started for a document (a double-click on a structure
+  // while Meno was not running) goes again when the document is done with
+  // it, unless something else has been opened in it meanwhile.
+  const leaveIfOnlyForOffice = (closing: string) => {
+    void startedForOffice().then((forOffice) => {
+      if (!forOffice) return;
+      const left = Object.values(stateRef.current.tabsById).filter(
+        (t) => t.meta.id !== closing && (officeIdOf(t) != null || t.content.kind !== "loader"),
+      );
+      if (!left.length) void getCurrentWindow().close();
+    });
+  };
+
   const ctl: TabsController = {
     tabOrder: state.tabOrder,
     tabsById: Object.fromEntries(
@@ -132,7 +188,13 @@ export default function App() {
     reorder: (order) => dispatch({ type: "REORDER", order }),
     select: (id) => dispatch({ type: "SELECT_TAB", id }),
     close: (id) => {
-      if (state.tabsById[id]?.meta.dirty) setPendingClose({ kind: "tab", id });
+      // a structure from a document: its changes are in the document already
+      const officeId = officeIdOf(state.tabsById[id]);
+      if (officeId != null) {
+        void letOfficeGo(officeId);
+        closeTab(id);
+        leaveIfOnlyForOffice(id);
+      } else if (state.tabsById[id]?.meta.dirty) setPendingClose({ kind: "tab", id });
       else closeTab(id);
     },
     add: () => {
