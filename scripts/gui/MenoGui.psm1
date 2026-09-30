@@ -28,6 +28,7 @@ public static class NativeGui {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder name, int size);
   [DllImport("kernel32.dll")] public static extern void Sleep(uint ms);
 
   // Windows hands a process that has not said otherwise a pretend desktop,
@@ -197,12 +198,41 @@ function Complete-FileDialog {
 
       .DESCRIPTION
       It opens with the focus in its name field, which takes a whole path.
+      It is waited for, not slept for: a path typed before it is up goes to
+      whatever has the keys - Meno's window - and the file is never opened,
+      so everything after would be checked against the wrong drawing. It
+      has to go again once Return is pressed; if it stays (a path it could
+      not find brings a message up in the same kind of window), that fails
+      too, rather than going on.
     #>
-    param([Parameter(Mandatory)] [string] $Path)
-    Start-Sleep -Milliseconds 1800
+    param([Parameter(Mandatory)] [string] $Path, [int] $TimeoutMs = 15000)
+    Wait-ForegroundClass -Class $DialogClass -What "the open dialog to come up" -TimeoutMs $TimeoutMs
+    Start-Sleep -Milliseconds 400 # (it takes keys a moment after it is in front)
     Send-MenoText -Text $Path
     Send-MenoKey -Key Enter
-    Start-Sleep -Milliseconds 1500
+    Wait-ForegroundClass -Class $DialogClass -Not -What "the open dialog to go" -TimeoutMs $TimeoutMs
+    Start-Sleep -Milliseconds 800
+}
+
+# The window class of the system's dialogs, the open dialog among them.
+$DialogClass = "#32770"
+
+function Get-WindowClass([IntPtr] $Handle) {
+    $name = New-Object System.Text.StringBuilder 256
+    [void][NativeGui]::GetClassName($Handle, $name, $name.Capacity)
+    $name.ToString()
+}
+
+function Get-ForegroundClass { Get-WindowClass ([NativeGui]::GetForegroundWindow()) }
+
+function Wait-ForegroundClass {
+    # Until the window in front is of this class (or, with -Not, is not).
+    param([string] $Class, [switch] $Not, [string] $What, [int] $TimeoutMs)
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
+    while (((Get-ForegroundClass) -eq $Class) -eq [bool]$Not) {
+        if ((Get-Date) -gt $deadline) { throw "waited $($TimeoutMs / 1000)s for $What" }
+        Start-Sleep -Milliseconds 150
+    }
 }
 
 function Get-MenoWindow {
@@ -210,6 +240,13 @@ function Get-MenoWindow {
       .SYNOPSIS
       The main window of a running process, waited for rather than assumed:
       a freshly started app has no window for a second or two.
+
+      .DESCRIPTION
+      Nor is the first window it has always the one on screen: Tauri's event
+      loop makes a window of its own, and for a moment that is what Windows
+      calls the process's main window. Placed, it moves nothing anyone sees -
+      the app's window stays where it opened, and every click misses - so it
+      is passed over until the app's own window is there.
     #>
     param(
         [string] $ProcessName = "Meno",
@@ -218,7 +255,7 @@ function Get-MenoWindow {
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
         $p = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
-            Where-Object { $_.MainWindowHandle -ne 0 } |
+            Where-Object { $_.MainWindowHandle -ne 0 -and (Get-WindowClass $_.MainWindowHandle) -ne "Tao Thread Event Target" } |
             Select-Object -First 1
         if ($p) {
             $script:Window = $p.MainWindowHandle

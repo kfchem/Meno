@@ -7,6 +7,7 @@ import {
   isDeleteKey,
   isDeselectKey,
   isSelectAllKey,
+  keepPageUnselected,
   saveIntent,
   undoIntent,
 } from "./shortcuts";
@@ -101,6 +102,25 @@ describe("selection keys", () => {
     expect(isSelectAllKey({ key: "a", ctrlKey: true, target: { tagName: "TEXTAREA" } })).toBe(false);
     expect(isDeselectKey({ key: "Escape" })).toBe(true);
     expect(isDeselectKey({ key: "Escape", target: { tagName: "INPUT" } })).toBe(false);
+  });
+
+  it("never lets Ctrl/Cmd+A select the app's own words, but leaves text fields theirs", () => {
+    const pressed = (over: Partial<Parameters<typeof isSelectAllKey>[0]>) => {
+      let prevented = false;
+      keepPageUnselected({ key: "a", ctrlKey: true, ...over, preventDefault: () => (prevented = true) });
+      return prevented;
+    };
+    // on the page itself - a start page, a canvas, a button
+    expect(pressed({ target: { tagName: "DIV" } })).toBe(true);
+    expect(pressed({ target: { tagName: "BUTTON" } })).toBe(true);
+    expect(pressed({ ctrlKey: false, metaKey: true, target: { tagName: "BODY" } })).toBe(true);
+    // in a text field, its own select-all
+    expect(pressed({ target: { tagName: "INPUT" } })).toBe(false);
+    expect(pressed({ target: { tagName: "TEXTAREA" } })).toBe(false);
+    expect(pressed({ target: { tagName: "DIV", isContentEditable: true } })).toBe(false);
+    // other keys go by
+    expect(pressed({ key: "c" })).toBe(false);
+    expect(pressed({ shiftKey: true })).toBe(false);
   });
 });
 

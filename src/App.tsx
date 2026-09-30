@@ -12,7 +12,7 @@ import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
 import type { TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
-import { undoIntent } from "./lib/doc/shortcuts";
+import { keepPageUnselected, undoIntent } from "./lib/doc/shortcuts";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
@@ -100,6 +100,12 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Ctrl/Cmd+A never selects the app's own words: see keepPageUnselected.
+  useEffect(() => {
+    window.addEventListener("keydown", keepPageUnselected);
+    return () => window.removeEventListener("keydown", keepPageUnselected);
   }, []);
 
   const closeTab = (id: string) => {
