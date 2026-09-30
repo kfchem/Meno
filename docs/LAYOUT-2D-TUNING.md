@@ -60,8 +60,10 @@ molecules with their references.
      label's H has room.
 
    Neither takes a move that crosses bonds.
-6. `squareUp` (a piece with no square ring), the depth of a bridge seen
-   from its other side, and `placeStereo`.
+6. `squareUp` (a piece with no square ring); the pieces set side by side,
+   the largest first, a bond and a half of paper between their ink
+   (`inkReach`: how far each atom's label reaches left and right); the
+   depth of a bridge seen from its other side; and `placeStereo`.
 
 The engine proposes and the measure judges. Every convention is a term in
 `metrics.ts`; the engine's part is to offer drawings in which the term can

@@ -526,4 +526,39 @@ describe("layout2D", () => {
       expect(Math.hypot(x[0] - x[i], y[0] - y[i])).toBeGreaterThan(1);
     }
   });
+
+  it("leaves paper between pieces whose labels face each other", () => {
+    // ibuprofen, its acid at the right-hand end, and an ethanol beside it
+    // (0-14), whose O comes first (15-17): OH and HO face each other
+    const input: LayoutInput = {
+      atoms: [
+        ...Array.from({ length: 13 }, () => ({ el: "C" })),
+        { el: "O", hs: 0 },
+        { el: "O", hs: 1 },
+        { el: "O", hs: 1 },
+        { el: "C" },
+        { el: "C" },
+      ],
+      bonds: (
+        [
+          [0, 1], [1, 2], [1, 3], [3, 4], [4, 5, 2], [5, 6], [6, 7, 2], [7, 8], [8, 9, 2], [9, 4],
+          [7, 10], [10, 11], [10, 12], [12, 13, 2], [12, 14], [15, 16], [16, 17],
+        ] as [number, number, number?][]
+      ).map(([a, b, order]) => ({ a, b, order: order ?? 1 })),
+    };
+    const { x } = layout2D(input);
+    const ethanol = [15, 16, 17];
+    const ibuprofen = x.map((_, i) => i).filter((i) => !ethanol.includes(i));
+    expect(Math.max(...ibuprofen.map((i) => x[i]))).toBeCloseTo(x[14], 6);
+    expect(Math.min(...ethanol.map((i) => x[i]))).toBeCloseTo(x[15], 6);
+    // each O's H half a bond beside it, 0.4 of a bond across: more than a
+    // bond of paper between the two H's
+    expect(x[15] - 0.5 - 0.2 - (x[14] + 0.5 + 0.2)).toBeGreaterThan(1);
+  });
+
+  it("keeps two lone ions apart", () => {
+    const input: LayoutInput = { atoms: [{ el: "Na", charge: 1 }, { el: "Cl", charge: -1 }], bonds: [] };
+    const { x, y } = layout2D(input);
+    expect(Math.hypot(x[0] - x[1], y[0] - y[1])).toBeGreaterThan(1.5);
+  });
 });
