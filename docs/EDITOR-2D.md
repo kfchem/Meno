@@ -422,8 +422,11 @@ traced from reference drawings.
   EMF and a bitmap (DIB) for Windows' other programs, and neither the clip
   format nor the PNG; elsewhere (a Mac, or Meno not registered) it carries
   the pictures as before. The object keeps Meno's EMF byte for byte in the
-  saved document, keeps its size when copied between Word and PowerPoint,
-  and copied back into Meno it is the structure again. A Mac cannot serve
+  saved document, and copied back into Meno it is the structure again.
+  Its size is the drawing's own where Meno gives it (a paste, an edit),
+  but a saved document's cached picture has a size OLE works out again
+  from the screen - 2% small at 100% - and PowerPoint takes that one
+  when it pastes Word's copy of the object. A Mac cannot serve
   objects: there a document's object should show its picture, and a picture
   pasted from a Mac is a picture on Windows too - copied into Meno and
   pasted back, it becomes an object. (What a Mac makes of a document's
