@@ -55,6 +55,17 @@ export function isSelectAllKey(event: KeyLike): boolean {
   );
 }
 
+/**
+ * Ctrl/Cmd+A outside a text field never selects the app's own words - a
+ * start page's, a button's - which would otherwise be what Ctrl/Cmd+C then
+ * copies, and would stay highlighted, over menus and buttons, into the next
+ * tab. A view with things of its own to select (the structure canvas)
+ * selects them itself; a text field keeps the key.
+ */
+export function keepPageUnselected(event: KeyLike & { preventDefault(): void }): void {
+  if (isSelectAllKey(event)) event.preventDefault();
+}
+
 /** Escape lets the selection go - but not while a text field has the keys. */
 export function isDeselectKey(event: KeyLike): boolean {
   return event.key === "Escape" && !isTextTarget(event.target);
