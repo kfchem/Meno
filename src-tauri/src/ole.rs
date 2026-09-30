@@ -409,6 +409,102 @@ fn emf_extent(emf: &[u8]) -> Option<SIZE> {
     Some(SIZE { cx: r - l, cy: b - t })
 }
 
+/// How much larger than it says Office takes a picture to be on this
+/// screen, when it measures one it has asked for (saving an object after an
+/// edit, or copying it): it takes the frame's hundredths of a millimetre to
+/// pixels by the screen's physical size, and the pixels back by its logical
+/// DPI. The two seldom agree - 0.98 on the desktop screen this was found
+/// on, 1.6 seen over Remote Desktop - and a structure edited and saved
+/// changed size by as much.
+fn screen_skew() -> f64 {
+    use windows::Win32::Graphics::Gdi::{GetDC, GetDeviceCaps, ReleaseDC, HORZRES, HORZSIZE, LOGPIXELSX, LOGPIXELSY, VERTRES, VERTSIZE};
+    // SAFETY: the screen's DC, released here.
+    let (kx, ky) = unsafe {
+        let dc = GetDC(None);
+        let c = |i| GetDeviceCaps(Some(dc), i) as f64;
+        let k = (25.4 * c(HORZRES) / (c(HORZSIZE) * c(LOGPIXELSX)), 25.4 * c(VERTRES) / (c(VERTSIZE) * c(LOGPIXELSY)));
+        ReleaseDC(None, dc);
+        k
+    };
+    let k = (kx * ky).sqrt();
+    // (a screen that gives no size, or one past believing: taken at its word)
+    if k.is_finite() && (0.2..5.0).contains(&k) {
+        k
+    } else {
+        1.0
+    }
+}
+
+/// Meno's EMF drawn `f` times as large: its frame and bounds, its GDI
+/// records through the window they are drawn in, its EMF+ records through
+/// their page's scale. It looks the same in any box it is put in; only the
+/// size it says it is changes. None for an EMF not drawn as Meno draws one.
+fn scaled_emf(emf: &[u8], f: f64) -> Option<Vec<u8>> {
+    if (f - 1.0).abs() < 1e-4 {
+        return None;
+    }
+    let mut e = emf.to_vec();
+    let get = |e: &[u8], at: usize| e.get(at..at + 4).map(|b| i32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    let put = |e: &mut [u8], at: usize, v: i32| e[at..at + 4].copy_from_slice(&v.to_le_bytes());
+    let scale = |e: &mut [u8], at: usize| {
+        let v = f32::from_le_bytes([e[at], e[at + 1], e[at + 2], e[at + 3]]);
+        e[at..at + 4].copy_from_slice(&((f64::from(v) * f) as f32).to_le_bytes());
+    };
+    // the header: bounds (pixels, both ends in) and frame (hundredths of a mm)
+    if get(&e, 0)? != 1 || get(&e, 40)? != 0x464d4520 {
+        return None;
+    }
+    for at in [16, 20] {
+        let v = get(&e, at)?;
+        put(&mut e, at, (f64::from(v + 1) * f).round() as i32 - 1);
+    }
+    for at in [32, 36] {
+        let v = get(&e, at)?;
+        put(&mut e, at, (f64::from(v) * f).round() as i32);
+    }
+    let mut window = false;
+    let mut at = get(&e, 4)? as usize;
+    while at + 8 <= e.len() {
+        let (kind, size) = (get(&e, at)?, get(&e, at + 4)? as usize);
+        if size < 8 || at + size > e.len() {
+            return None;
+        }
+        match kind {
+            // EMR_SETWINDOWEXTEX: a larger window, a smaller drawing
+            9 if size >= 16 => {
+                for i in [at + 8, at + 12] {
+                    let v = get(&e, i)?;
+                    put(&mut e, i, (f64::from(v) / f).round() as i32);
+                }
+                window = true;
+            }
+            // EMR_EXTTEXTOUTW: its scales, from the unit to hundredths of a mm
+            84 if size >= 36 => {
+                scale(&mut e, at + 28);
+                scale(&mut e, at + 32);
+            }
+            // EMR_COMMENT with EMF+ records: EmfPlusSetPageTransform's scale
+            70 if size >= 16 && get(&e, at + 12)? == 0x2b464d45 => {
+                let end = (at + 12 + get(&e, at + 8)? as usize).min(at + size);
+                let mut r = at + 16;
+                while r + 12 <= end {
+                    let (plus, length) = (u16::from_le_bytes([e[r], e[r + 1]]), get(&e, r + 4)? as usize);
+                    if length < 12 {
+                        break;
+                    }
+                    if plus == 0x4030 && length >= 16 {
+                        scale(&mut e, r + 12);
+                    }
+                    r += length;
+                }
+            }
+            _ => {}
+        }
+        at += size;
+    }
+    window.then_some(e)
+}
+
 /// The picture of a structure not drawn yet: a light frame, 2 by 1.5 cm,
 /// so that there is something to see and to take hold of in the document.
 fn placeholder_emf() -> Vec<u8> {
@@ -498,6 +594,28 @@ impl Structure_Impl {
         sinks.into_iter().filter_map(|a| a.resolve().ok()).collect()
     }
 
+    /// The picture as it is handed over: as it is, to those watching it -
+    /// Office takes what it is sent at its word - and, when Office asks for
+    /// it (`asked`), drawn to Office's measure of the screen, by which it
+    /// sizes what it asks for (`screen_skew`).
+    fn picture(&self, format: &FORMATETC, asked: bool) -> windows::core::Result<STGMEDIUM> {
+        if format.cfFormat != CF_ENHMETAFILE.0 || format.tymed & TYMED_ENHMF.0 as u32 == 0 {
+            return Err(DV_E_FORMATETC.into());
+        }
+        let s = self.st();
+        if s.emf.is_empty() {
+            return Err(E_FAIL.into());
+        }
+        let skewed = if asked { scaled_emf(&s.emf, 1.0 / screen_skew()) } else { None };
+        let emf = skewed.as_deref().unwrap_or(&s.emf);
+        // SAFETY: an EMF's bytes; the handle is the caller's once handed over.
+        let hemf = unsafe { SetEnhMetaFileBits(emf) };
+        if hemf.is_invalid() {
+            return Err(E_FAIL.into());
+        }
+        Ok(STGMEDIUM { tymed: TYMED_ENHMF.0 as u32, u: STGMEDIUM_0 { hEnhMetaFile: hemf }, pUnkForRelease: Default::default() })
+    }
+
     /// The picture, to those who asked to be told of it: when it changes, or
     /// (for those who asked for that) when the object stops.
     fn send_picture(&self, stopping: bool) {
@@ -514,7 +632,7 @@ impl Structure_Impl {
             let medium = if advf & ADVF_NODATA != 0 {
                 Ok(STGMEDIUM { tymed: 0, u: STGMEDIUM_0 { hGlobal: HGLOBAL::default() }, pUnkForRelease: Default::default() })
             } else {
-                IDataObject_Impl::GetData(self, &format)
+                self.picture(&format, false)
             };
             let Ok(mut medium) = medium else { continue };
             // SAFETY: a live sink, and a medium released after it has been read.
@@ -703,19 +821,7 @@ impl IDataObject_Impl for Structure_Impl {
     fn GetData(&self, format: *const FORMATETC) -> windows::core::Result<STGMEDIUM> {
         // SAFETY: a FORMATETC the caller owns.
         let f = unsafe { format.as_ref() }.ok_or(E_POINTER)?;
-        if f.cfFormat != CF_ENHMETAFILE.0 || f.tymed & TYMED_ENHMF.0 as u32 == 0 {
-            return Err(DV_E_FORMATETC.into());
-        }
-        let s = self.st();
-        if s.emf.is_empty() {
-            return Err(E_FAIL.into());
-        }
-        // SAFETY: an EMF's bytes; the handle is the caller's once handed over.
-        let hemf = unsafe { SetEnhMetaFileBits(&s.emf) };
-        if hemf.is_invalid() {
-            return Err(E_FAIL.into());
-        }
-        Ok(STGMEDIUM { tymed: TYMED_ENHMF.0 as u32, u: STGMEDIUM_0 { hEnhMetaFile: hemf }, pUnkForRelease: Default::default() })
+        self.picture(f, true)
     }
     fn GetDataHere(&self, format: *const FORMATETC, medium: *mut STGMEDIUM) -> windows::core::Result<()> {
         // SAFETY: the caller's FORMATETC and STGMEDIUM.
@@ -765,7 +871,7 @@ impl IDataObject_Impl for Structure_Impl {
             cookie
         };
         if advf & ADVF_PRIMEFIRST != 0 && !self.st().emf.is_empty() {
-            if let (Ok(sink), Ok(mut medium)) = (sink.resolve(), IDataObject_Impl::GetData(self, &format)) {
+            if let (Ok(sink), Ok(mut medium)) = (sink.resolve(), self.picture(&format, false)) {
                 // SAFETY: as in `send_picture`.
                 unsafe {
                     sink.OnDataChange(&format, &medium);
@@ -1307,6 +1413,127 @@ mod tests {
         // an EMF by its number, no target device: width and height at 28 and 32
         assert_eq!((at(0), at(4), at(8)), (-1, 14, 4));
         assert_eq!((at(28), at(32)), (size.cx, size.cy));
+    }
+
+    /// An EMF drawn as Meno draws one: a window of logical units onto the
+    /// pixels, an EMF+ page's scale, a (blank) run of text, and a square.
+    fn window_emf() -> Vec<u8> {
+        let rec = |kind: u32, body: &[u8]| {
+            let mut r = kind.to_le_bytes().to_vec();
+            r.extend(((8 + body.len()) as u32).to_le_bytes());
+            r.extend(body);
+            r
+        };
+        let ints = |v: &[i32]| v.iter().flat_map(|i| i.to_le_bytes()).collect::<Vec<u8>>();
+        let mut plus = b"EMF+".to_vec();
+        plus.extend(0x4030u16.to_le_bytes()); // EmfPlusSetPageTransform
+        plus.extend(2u16.to_le_bytes()); // (in pixels)
+        plus.extend(16u32.to_le_bytes());
+        plus.extend(4u32.to_le_bytes());
+        plus.extend(1f32.to_le_bytes());
+        let mut comment = (plus.len() as u32).to_le_bytes().to_vec();
+        comment.extend(&plus);
+        let mut text = ints(&[0, 0, -1, -1, 1]);
+        text.extend(0.25f32.to_le_bytes());
+        text.extend(0.25f32.to_le_bytes());
+        text.extend(ints(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+        let body = [
+            rec(17, &ints(&[8])),               // SETMAPMODE: anisotropic
+            rec(9, &ints(&[2000, 2000])),       // SETWINDOWEXTEX
+            rec(11, &ints(&[100, 100])),        // SETVIEWPORTEXTEX
+            rec(70, &comment),                  // COMMENT: EMF+
+            rec(84, &text),                     // EXTTEXTOUTW
+            rec(39, &ints(&[1, 0, 0, 0])),      // CREATEBRUSHINDIRECT: black
+            rec(37, &ints(&[1])),               // SELECTOBJECT
+            rec(3, &ints(&[200, 200, 1200, 1200, 4, 200, 200, 1200, 200, 1200, 1200, 200, 1200])), // POLYGON
+            rec(14, &ints(&[0, 16, 20])),       // EOF
+        ]
+        .concat();
+        let mut head = ints(&[1, 88, 0, 0, 99, 99, 0, 0, 2646, 2646, 0x464d4520, 0x10000]);
+        head.extend(((88 + body.len()) as u32).to_le_bytes());
+        head.extend(10u32.to_le_bytes()); // records
+        head.extend(2u16.to_le_bytes()); // handles
+        head.extend(0u16.to_le_bytes());
+        head.extend(ints(&[0, 0, 0, 1920, 1080, 508, 286]));
+        [head, body].concat()
+    }
+
+    /// The EMF played into a square of `side` pixels, white first.
+    fn played(emf: &[u8], side: i32) -> Vec<u8> {
+        use windows::Win32::Graphics::Gdi::{
+            CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteEnhMetaFile, DeleteObject, GetDC, GetDIBits, GetStockObject,
+            FillRect, PlayEnhMetaFile, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, HBRUSH, WHITE_BRUSH,
+        };
+        // SAFETY: DCs and a bitmap of this function's own, freed here.
+        unsafe {
+            let screen = GetDC(None);
+            let dc = CreateCompatibleDC(Some(screen));
+            let bitmap = CreateCompatibleBitmap(screen, side, side);
+            let old = SelectObject(dc, bitmap.into());
+            let rect = RECT { left: 0, top: 0, right: side, bottom: side };
+            FillRect(dc, &rect, HBRUSH(GetStockObject(WHITE_BRUSH).0));
+            let hemf = SetEnhMetaFileBits(emf);
+            let _ = PlayEnhMetaFile(dc, hemf, &rect);
+            let _ = DeleteEnhMetaFile(Some(hemf));
+            SelectObject(dc, old);
+            let mut info = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: side,
+                    biHeight: side,
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mut pixels = vec![0u8; (side * side * 4) as usize];
+            GetDIBits(dc, bitmap, 0, side as u32, Some(pixels.as_mut_ptr().cast()), &mut info, DIB_RGB_COLORS);
+            let _ = DeleteObject(bitmap.into());
+            let _ = DeleteDC(dc);
+            ReleaseDC(None, screen);
+            pixels
+        }
+    }
+
+    #[test]
+    fn a_picture_scaled_for_office_says_a_new_size_and_looks_the_same() {
+        let emf = window_emf();
+        let big = scaled_emf(&emf, 2.0).unwrap();
+        let at = |e: &[u8], i: usize| i32::from_le_bytes(e[i..i + 4].try_into().unwrap());
+        let float = |e: &[u8], i: usize| f32::from_le_bytes(e[i..i + 4].try_into().unwrap());
+        // the size it says: frame and bounds
+        assert_eq!((at(&big, 32), at(&big, 36)), (5292, 5292));
+        assert_eq!((at(&big, 16), at(&big, 20)), (199, 199));
+        // what is drawn, drawn as much larger: the window, EMF+'s page, the text's scales
+        let window = 88 + 12 + 8;
+        assert_eq!((at(&big, window), at(&big, window + 4)), (1000, 1000));
+        let page = window + 8 + 16 + 12 + 4 + 12;
+        assert_eq!((float(&emf, page), float(&big, page)), (1.0, 2.0));
+        let text = page + 4 + 28;
+        assert_eq!((float(&big, text), float(&big, text + 4)), (0.5, 0.5));
+        assert_eq!(big.len(), emf.len());
+        // and in any box, it looks as it did
+        for side in [100, 137] {
+            let (a, b) = (played(&emf, side), played(&big, side));
+            // (a pixel's rounding along an edge, at most)
+            let off = a.chunks(4).zip(b.chunks(4)).filter(|(x, y)| x != y).count();
+            assert!(off <= 4 * side as usize, "{off} pixels differ at {side}");
+        }
+        assert!(played(&emf, 100).chunks(4).any(|p| p[0] == 0), "nothing was drawn");
+    }
+
+    #[test]
+    fn a_picture_not_drawn_through_a_window_is_left_as_it_is() {
+        assert!(scaled_emf(&tiny_emf(), 2.0).is_none());
+        assert!(scaled_emf(&window_emf(), 1.0).is_none());
+        assert!(scaled_emf(b"not an emf", 2.0).is_none());
+    }
+
+    #[test]
+    fn the_screen_skew_is_a_believable_factor() {
+        let k = screen_skew();
+        assert!((0.2..5.0).contains(&k), "{k}");
     }
 
     #[test]
