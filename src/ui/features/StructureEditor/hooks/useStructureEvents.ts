@@ -345,7 +345,10 @@ export function useStructureEvents(
     // PowerPoint, perhaps, whose structure goes where it was dropped,
     // selected - as a paste would
     if (!dropped || !STRUCTURE_FILE.test(dropped.name)) {
-      const found = await (reading ?? structureInDrop()).catch(() => null);
+      // (read again if nothing was to be had as it came: a program may
+      // hand over what it drags only once it is dropped)
+      const found =
+        (reading && (await reading.catch(() => null))) || (await structureInDrop().catch(() => null));
       if (found?.atoms.length) {
         store.getState().pasteModel(centredAt(found, at));
         setImportError(null);
