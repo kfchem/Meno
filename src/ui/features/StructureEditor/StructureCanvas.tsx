@@ -57,6 +57,7 @@ import { startingZoom } from "./layoutOptions";
 import { useDrawingStyle } from "./useDrawingStyle";
 import { DrawnLayoutProvider } from "./components/DrawnLayout";
 import { useOfficeLink } from "./hooks/useOfficeLink";
+import { useDropZone } from "../../../lib/drop";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 
@@ -90,10 +91,7 @@ function StructureCanvasContent({
     handleWrapperMouseMove,
     handleWrapperMouseLeave,
     handleWrapperClick,
-    onDropAppend,
-    onDragOver,
-    onDragEnter,
-    onDragLeave,
+    dropZone,
     onPickFiles,
     openFilePicker,
     importError,
@@ -327,16 +325,16 @@ function StructureCanvasContent({
   // Where the view starts, before there is anything to fit
   const style = useDrawingStyle();
   const [startZoom] = useState(() => startingZoom(style));
+  // Drops on the drawing: files, and objects and pictures out of Office (lib/drop)
+  const dropRef = useRef<HTMLDivElement>(null);
+  useDropZone(dropRef, dropZone);
   // SMILES in and out, by RDKit, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
 
   return (
     <div
+      ref={dropRef}
       className="flex-1 min-w-0 h-full relative"
-      onDragOver={onDragOver}
-      onDragEnter={onDragEnter}
-      onDragLeave={onDragLeave}
-      onDrop={onDropAppend}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseMove={handleWrapperMouseMove}
       onMouseLeave={handleWrapperMouseLeave}

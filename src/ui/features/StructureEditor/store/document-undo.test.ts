@@ -143,6 +143,20 @@ describe("editor store over a document", () => {
     expect(appended.state().arrows).toHaveLength(0);
   });
 
+  it("adds a dropped file beside what is drawn, selected, with ids of its own", () => {
+    const { state } = editor();
+    const c = state().addAtom(-5, 0, "C");
+    state().setSel({ atoms: new Set([c]), bonds: new Set() });
+    state().appendModel(ethanal, arrow);
+    const atoms = state().model.atoms.filter((a) => a.id !== c);
+    expect(atoms.map((a) => a.el)).toEqual(["C", "O"]);
+    const bond = state().model.bonds[0];
+    expect([bond.a, bond.b]).toEqual(atoms.map((a) => a.id));
+    // what was selected before is not now: only what came in is
+    expect([...state().sel.atoms]).toEqual(atoms.map((a) => a.id));
+    expect([...state().sel.bonds]).toEqual([bond.id]);
+  });
+
   it("merges repeated moves of one atom into a single step", () => {
     const { doc, state } = editor();
     const id = state().addAtom(0, 0, "C");

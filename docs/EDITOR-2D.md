@@ -133,7 +133,10 @@ V, as everywhere, and the same from the menus.
   or, with nothing selected, the structure under the pointer.
 - A paste goes where the pointer is (where the menu was opened, from the
   menu; the middle of the view, if the pointer is off the drawing), comes
-  in selected so it can be dragged straight on, and is one undo step.
+  in selected so it can be dragged straight on, and is one undo step. What
+  is dropped onto the drawing - a structure's file, or a structure dragged
+  out of Word or PowerPoint - comes in the same way where it is dropped, as
+  does a SMILES added beside what is drawn.
 - The clipboard holds Meno's own record of the structure, which loses
   nothing, and a MOL file for other chemistry programs (MDLCT on Windows,
   which they exchange there) - and no plain text: PowerPoint pastes plain
@@ -452,9 +455,30 @@ traced from reference drawings.
   Meno reads its record out of the storage's `Meno` stream (or its picture,
   `MenoPicture`), `src/lib/binary/cfb.ts`. A drag is read as it comes over
   the drawing, not when it is dropped: by then Office has taken it back
-  from the drag pasteboard. On Windows, a drop's data does not reach Meno
-  yet (WebView2 keeps it). A copy on a Mac makes only what the clipboard
+  from the drag pasteboard. A copy on a Mac makes only what the clipboard
   there takes (`clipboard_takes`): no bitmap or object for Windows.
+- Drops are routed to the part of the page they land on (`src/lib/drop.ts`):
+  a part that takes them - the drawing now; a tab strip, a workflow's node
+  or a 3D view in time - registers as a drop zone, which says what it
+  takes, may start reading a drag as it comes over, and is handed the
+  drop. Files from the Finder or Explorer come through the webview's own
+  drag events on both platforms, as does everything on a Mac. On Windows,
+  WebView2 takes every drop in a process of its own and hands the page
+  only files and text, and Meno nothing, so a drag from another program
+  that is not of files is taken from it where a zone takes such drags:
+  Meno lays a window of its own over the zone, clear to the eye, which
+  Windows hands the drag to from the next move on (`src-tauri/src/drop.rs`).
+  It reads what the drag carries - Meno's record in Word's object (which
+  Word writes into a storage Meno makes, `GetDataHere`), Office's clip
+  format, a PNG, a MOL file - and tells the page where the drag goes and
+  where it is dropped; `drag_read` reads what it read. It offers only a
+  copy, so the object stays in its document, and goes as the drag leaves
+  the zone or ends (or when no button is held and nothing came to it).
+  Tried on Windows (2026-09-30): Word's object dragged onto the drawing
+  arrives there, selected, and Word's document is unchanged; files onto
+  the drawing and onto a new tab open as before. PowerPoint for Windows
+  was not seen to let a shape be dragged out of its window at all (nothing
+  reached a plain drop target either): from there, copy and paste.
 
 ### 6. Alongside
 

@@ -13,6 +13,8 @@ use uuid::Uuid;
 
 mod clipboard;
 mod fonts;
+#[cfg(windows)]
+mod drop;
 mod net;
 #[cfg(windows)]
 mod ole;
@@ -516,6 +518,51 @@ fn ole_started_for_office() -> bool {
     false
 }
 
+/// A drag from another program, not of files, has come over a part of the
+/// page that takes such drags: on Windows, Meno takes it from the webview
+/// there, as the webview cannot read what Office drags (drop.rs), and tells
+/// the page where it goes ("native-drag").
+/// Whether this platform does so - a Mac's page reads drags as they are.
+#[tauri::command]
+fn drop_catch(app: AppHandle, x: f64, y: f64, width: f64, height: f64) -> bool {
+    #[cfg(windows)]
+    {
+        let area = drop::Area { x, y, width, height };
+        // (on the window's own thread: it is that thread's windows OLE
+        // hands drags to)
+        let _ = app.run_on_main_thread(move || {
+            if let Err(e) = drop::catch(area) {
+                eprintln!("drags cannot be taken from the page: {e}");
+            }
+        });
+        true
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, x, y, width, height);
+        false
+    }
+}
+
+/// The drag has ended where the page could read it: Meno's window over the
+/// page, if it laid one, goes.
+#[tauri::command]
+fn drop_release(app: AppHandle) {
+    #[cfg(windows)]
+    let _ = app.run_on_main_thread(drop::release);
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
+/// Whether the page takes a drag Meno took from it, where it now is.
+#[tauri::command]
+fn drop_takes(takes: bool) {
+    #[cfg(windows)]
+    drop::takes(takes);
+    #[cfg(not(windows))]
+    let _ = takes;
+}
+
 /// Whether Office still holds any of this Meno's structures (Windows).
 #[tauri::command]
 fn ole_in_use() -> bool {
@@ -586,6 +633,9 @@ pub fn run() {
         .manage(net::Net::default())
         .setup(|app| {
             net::start(app.handle());
+            // drags from other programs the webview cannot read (Windows)
+            #[cfg(windows)]
+            drop::start(app.handle());
             // structures in Office documents, opened here on a double-click
             #[cfg(windows)]
             ole::start(app.handle());
@@ -598,6 +648,10 @@ pub fn run() {
             clipboard::clipboard_read,
             clipboard::clipboard_takes,
             clipboard::drag_read,
+            // drags the page cannot read, taken from the webview (Windows)
+            drop_catch,
+            drop_release,
+            drop_takes,
             // structures in Office documents (Windows)
             ole_take_pending,
             ole_update,

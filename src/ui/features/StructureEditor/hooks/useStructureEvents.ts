@@ -10,6 +10,7 @@ import { editorModelOf, processFileContent } from "../utils/io";
 import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
 import type { Model } from "../store/types";
+import type { DropZone, Dropped } from "../../../../lib/drop";
 
 /** The files a drop opens as structures, beside what is drawn. */
 const STRUCTURE_FILE = /\.(mol|sdf|rxn|xyz)$/i;
@@ -319,30 +320,27 @@ export function useStructureEvents(
   // it is dropped, Word or PowerPoint may already have taken it back (on a
   // Mac, the drag pasteboard is emptied as the drag ends).
   const dropReading = useRef<Promise<Model | null> | null>(null);
-  // A drop takes a copy: what was dragged out of Word or PowerPoint stays
-  // where it was (as a move, the document would mark itself changed)
-  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  };
-  const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    e.dataTransfer.dropEffect = "copy";
-    // (a file from the Finder or Explorer is read when dropped, as ever)
-    if (dropReading.current || [...e.dataTransfer.types].includes("Files")) return;
-    dropReading.current = structureInDrop().catch(() => null);
-  };
-  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    // off the canvas altogether: the drag may end anywhere now
-    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) dropReading.current = null;
+  // The drawing as a drop zone (lib/drop): it takes files and whatever
+  // else is dragged to it, and reads the latter as it comes
+  const dropZone: DropZone = {
+    takes: () => true,
+    enter: (drag) => {
+      // (a file from the Finder or Explorer is read when dropped, as ever)
+      if (dropReading.current || drag.files) return;
+      dropReading.current = structureInDrop().catch(() => null);
+    },
+    // off the drawing: the drag may end anywhere now
+    leave: () => {
+      dropReading.current = null;
+    },
+    drop: (d) => void dropAppend(d),
   };
 
-  const onDropAppend = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+  const dropAppend = async ({ x, y, files }: Dropped) => {
     const reading = dropReading.current;
     dropReading.current = null;
-    const files = e.dataTransfer.files;
-    const dropped = files?.[0];
-    const at = clientToWorld(e.clientX, e.clientY) || { x: 0, y: 0 };
+    const dropped = files[0];
+    const at = clientToWorld(x, y) || { x: 0, y: 0 };
     // Not a structure's file: a picture or an object dragged out of Word or
     // PowerPoint, perhaps, whose structure goes where it was dropped,
     // selected - as a paste would
@@ -453,10 +451,7 @@ export function useStructureEvents(
     handleWrapperMouseMove,
     handleWrapperMouseLeave,
     handleWrapperClick,
-    onDropAppend,
-    onDragOver,
-    onDragEnter,
-    onDragLeave,
+    dropZone,
     onPickFiles,
     openFilePicker,
     importError,

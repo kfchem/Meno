@@ -572,7 +572,7 @@ fn write_stream(stg: &IStorage, name: PCWSTR, data: &[u8]) -> windows::core::Res
 }
 
 /// An object's own part of its storage: its class, and what it holds.
-fn write_object(stg: &IStorage, record: &str, emf: &[u8]) -> windows::core::Result<()> {
+pub(crate) fn write_object(stg: &IStorage, record: &str, emf: &[u8]) -> windows::core::Result<()> {
     let user_type = wide(USER_TYPE);
     // SAFETY: a live storage, and NUL-terminated strings.
     unsafe {
@@ -1260,8 +1260,25 @@ pub fn object_descriptor(emf: &[u8]) -> Vec<u8> {
 /// Meno's record out of an object's storage on the clipboard (a compound
 /// file's bytes), if the object is a Meno structure.
 pub fn record_in_object(bytes: &[u8]) -> Option<String> {
-    let record = read_stream(&storage_of(bytes).ok()?, RECORD_STREAM).ok()?;
-    String::from_utf8(record).ok()
+    record_in_storage(&storage_of(bytes).ok()?)
+}
+
+/// Meno's record out of an object's storage, if the object is a Meno
+/// structure: one copied (`record_in_object`), or one dragged (drop.rs).
+pub fn record_in_storage(stg: &IStorage) -> Option<String> {
+    String::from_utf8(read_stream(stg, RECORD_STREAM).ok()?).ok()
+}
+
+/// A data object holding `items`, as the clipboard's (for tests elsewhere).
+#[cfg(test)]
+pub(crate) fn clip_object(items: Vec<(u16, ClipData)>) -> IDataObject {
+    Clip { items }.into()
+}
+
+/// A picture to make objects of (for tests elsewhere).
+#[cfg(test)]
+pub(crate) fn test_emf() -> Vec<u8> {
+    placeholder_emf()
 }
 
 #[cfg(test)]

@@ -179,6 +179,11 @@ pub fn clipboard_takes() -> Vec<String> {
     takes
 }
 
+/// A clipboard format's number, and what its bytes hold as Meno reads them
+/// (text as UTF-8): the same for a drag's data as for the clipboard's.
+#[cfg(target_os = "windows")]
+pub(crate) use platform::{format as clip_format, held};
+
 /// Where data is read from: the clipboard, or what is being dragged.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Board {
@@ -195,8 +200,8 @@ pub fn clipboard_read(flavors: Vec<String>) -> Result<Option<ClipItem>, String> 
 /// The first of `flavors` in what was just dropped on the page - a picture
 /// or an object dragged out of Word or PowerPoint, say - as `clipboard_read`
 /// reads the clipboard. On a Mac it is the drag pasteboard, which keeps what
-/// was dragged after the drop; on Windows the dropped data does not reach
-/// the page yet, and nothing is read.
+/// was dragged after the drop; on Windows, what Meno's own window over the
+/// page read of the drag (drop.rs) - files and text the webview reads.
 #[tauri::command]
 pub fn drag_read(flavors: Vec<String>) -> Result<Option<ClipItem>, String> {
     read_from(Board::Drag, &flavors)
@@ -205,8 +210,12 @@ pub fn drag_read(flavors: Vec<String>) -> Result<Option<ClipItem>, String> {
 fn read_from(board: Board, flavors: &[String]) -> Result<Option<ClipItem>, String> {
     for flavor in flavors {
         #[cfg(target_os = "windows")]
-        if flavor == "embed" && board == Board::Clipboard {
-            if let Some(text) = embedded_record()? {
+        if flavor == "embed" {
+            let record = match board {
+                Board::Clipboard => embedded_record()?,
+                Board::Drag => crate::drop::dragged_record(),
+            };
+            if let Some(text) = record {
                 return Ok(Some(ClipItem { flavor: flavor.clone(), text: Some(text), base64: None }));
             }
         }
@@ -301,7 +310,7 @@ mod platform {
         }
     }
 
-    fn format(name: &str) -> u32 {
+    pub fn format(name: &str) -> u32 {
         match name {
             "CF_UNICODETEXT" => CF_UNICODETEXT as u32,
             "CF_ENHMETAFILE" => CF_ENHMETAFILE as u32,
@@ -327,7 +336,7 @@ mod platform {
     }
 
     /// What a kind's bytes on the clipboard hold: text as UTF-8, pictures as they are.
-    fn held(name: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+    pub fn held(name: &str, bytes: &[u8]) -> Option<Vec<u8>> {
         match name {
             "CF_UNICODETEXT" => {
                 let wide: Vec<u16> = bytes.as_chunks().0.iter().map(|&c| u16::from_le_bytes(c)).collect();
@@ -405,10 +414,10 @@ mod platform {
 
     /// What is on the clipboard under `name`: text as UTF-8, pictures as they are.
     pub fn read(board: Board, name: &str) -> Result<Option<Vec<u8>>, String> {
-        // (a drop's data does not reach Meno on Windows yet: WebView2 keeps
-        // it; reading it wants a drop target of Meno's own)
+        // (what a drag carried, as Meno's own window over the page read it:
+        // WebView2 keeps it from the page and from Meno - drop.rs)
         if board == Board::Drag {
-            return Ok(None);
+            return Ok(crate::drop::dragged(name));
         }
         // (Office hands an enhanced metafile back drawn afresh, without what
         // was carried in it: the picture is read out of its own clip format)

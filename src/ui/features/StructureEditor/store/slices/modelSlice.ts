@@ -29,6 +29,18 @@ function forgetDeleted(set: SetState) {
 }
 
 /**
+ * What `appendModel` (../../document) added of `next` to a document whose
+ * next id was `start`: its atoms, then its bonds, numbered on from there -
+ * selected, so that it can be dragged straight on.
+ */
+function added(start: number, next: Model): EditorState["sel"] {
+  return {
+    atoms: new Set(next.atoms.map((_, i) => start + i)),
+    bonds: new Set(next.bonds.map((_, i) => start + next.atoms.length + i)),
+  };
+}
+
+/**
  * Model edits go to the tab's document, which is what undo, redo and saving
  * act on. The store keeps a mirror of it for rendering (see ../index.tsx), so
  * components still read `model` and `arrows` exactly as before.
@@ -243,25 +255,25 @@ export const createModelSlice = (
 
   pasteModel: (next: Model) => {
     if (!next.atoms.length) return;
-    // the ids appendModel gives: atoms first, then bonds, from nextId on
     const start = doc.getState().nextId;
     if (!doc.edit("paste", (d) => ops.appendModel(d, next))) return;
-    const atoms = new Set(next.atoms.map((_, i) => start + i));
-    const bonds = new Set(next.bonds.map((_, i) => start + next.atoms.length + i));
     set((prev: EditorState) => ({
       ...prev,
-      sel: { atoms, bonds },
+      sel: added(start, next),
       selAnchor: null,
       hovered: { atomId: null, bondId: null },
     }));
   },
 
   appendModel: (next: Model, arrow?: ImportedArrow) => {
-    doc.edit("add structure", (d) =>
+    const start = doc.getState().nextId;
+    const edited = doc.edit("add structure", (d) =>
       ops.withImportedArrow(ops.appendModel(d, next), arrow),
     );
     set((prev: EditorState) => ({
       ...prev,
+      // (selected, as a paste is)
+      ...(edited && next.atoms.length ? { sel: added(start, next), selAnchor: null } : {}),
       hovered: { atomId: null, bondId: null },
       fitNonce: prev.fitNonce + 1,
     }));
