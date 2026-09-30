@@ -7,9 +7,18 @@
  *   when the picture is copied again (lib/office/gvml); the record in a
  *   comment of the EMF;
  * - the same EMF on its own, for Windows' other programs;
- * - a PNG at 300 dpi for everything else, the record in a text chunk.
+ * - on Windows, an object for Office to embed, showing that EMF, which a
+ *   double-click opens in Meno (made from the record and the EMF by the
+ *   app: src-tauri/src/ole.rs);
+ * - a PNG at 300 dpi for everything else, the record in a text chunk;
+ * - the same picture as a DIB, for Windows' programs that take only a bitmap.
+ *
+ * Where Meno serves its objects (Windows, installed), the app hands over the
+ * object in place of the clip format and the PNG: Word and PowerPoint take
+ * either of those before an object, and an object is what opens in Meno.
  */
 import type { ClipItem } from "../../../lib/clipboard";
+import { dibOf } from "../../../lib/binary/dib";
 import { textOf, withDpi, withText } from "../../../lib/binary/png";
 import { emfComments, layoutEmf } from "../../../lib/chem/emf";
 import { createSVG } from "../../../lib/chem/layout2d";
@@ -26,21 +35,33 @@ const PNG_DPI = 300;
 
 const utf8 = new TextEncoder();
 
-/** The pictures of `part` that go on the clipboard with it. */
-export async function pictureItems(
-  part: Model,
-  aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
-  style: DrawingStyle,
-): Promise<ClipItem[]> {
+type Aromatic = Pick<EditorState, "aromaticEnabled" | "aromaticRings">;
+
+/**
+ * Meno's record of `part` and the EMF of it that carries the record - what a
+ * copy puts in Office's clip format, and what a document holding the
+ * structure as an object keeps and shows.
+ */
+export function structurePicture(part: Model, aromatic: Aromatic, style: DrawingStyle) {
   const record = recordText(part);
   const { layout, opts } = drawingLayout(part, aromatic, style);
-  const { emf, widthPt, heightPt } = layoutEmf(layout, opts, utf8.encode(EMF_MARK + record));
+  return { record, layout, opts, ...layoutEmf(layout, opts, utf8.encode(EMF_MARK + record)) };
+}
+
+/** The pictures of `part` that go on the clipboard with it. */
+export async function pictureItems(part: Model, aromatic: Aromatic, style: DrawingStyle): Promise<ClipItem[]> {
+  const { record, layout, opts, emf, widthPt, heightPt } = structurePicture(part, aromatic, style);
   const items: ClipItem[] = [
     { flavor: "gvml", bytes: gvmlPicture(emf, "emf", widthPt, heightPt, "Structure") },
     { flavor: "emf", bytes: emf },
+    // (made into an object for Office from this and the EMF, on Windows)
+    { flavor: "embed", text: record },
   ];
-  const png = await rasterized(createSVG(layout, opts), PNG_DPI / 96).catch(() => null);
-  if (png) items.push({ flavor: "png", bytes: withText(withDpi(png, PNG_DPI), PNG_KEY, record) });
+  const raster = await rasterized(createSVG(layout, opts), PNG_DPI / 96).catch(() => null);
+  if (raster) {
+    items.push({ flavor: "png", bytes: withText(withDpi(raster.png, PNG_DPI), PNG_KEY, record) });
+    items.push({ flavor: "dib", bytes: raster.dib });
+  }
   return items;
 }
 
@@ -70,8 +91,11 @@ function fromPng(png: Uint8Array): Model | null {
   return text ? readRecord(text) : null;
 }
 
-/** An SVG drawn into a PNG, `scale` pixels to the SVG's pixel; null where there is no page to draw it in. */
-async function rasterized(svg: string, scale: number): Promise<Uint8Array | null> {
+/**
+ * An SVG drawn at `scale` pixels to the SVG's pixel: as a PNG, and as a DIB
+ * for Windows' bitmap-only programs; null where there is no page to draw it in.
+ */
+async function rasterized(svg: string, scale: number): Promise<{ png: Uint8Array; dib: Uint8Array } | null> {
   if (typeof document === "undefined") return null;
   const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   try {
@@ -85,7 +109,12 @@ async function rasterized(svg: string, scale: number): Promise<Uint8Array | null
     if (!ctx) return null;
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/png"));
-    return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+    if (!blob) return null;
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    return {
+      png: new Uint8Array(await blob.arrayBuffer()),
+      dib: dibOf(pixels, canvas.width, canvas.height, PNG_DPI),
+    };
   } finally {
     URL.revokeObjectURL(url);
   }

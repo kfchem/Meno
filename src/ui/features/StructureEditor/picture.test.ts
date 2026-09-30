@@ -6,7 +6,7 @@ import { ACS_1996 } from "../../../lib/chem/style";
 import { structureOnClipboard } from "./chem/fromClipboard";
 import { pictureItems, structureInPicture } from "./picture";
 import type { Model } from "./store/types";
-import { recordText } from "./utils/copyPaste";
+import { readRecord, recordText } from "./utils/copyPaste";
 
 const L = NOMINAL_BOND_LENGTH;
 const model: Model = {
@@ -25,8 +25,10 @@ const PIXEL = Uint8Array.from(
 describe("pictures of a structure", () => {
   it("are Office's clip format and an EMF (and a PNG where there is a page to draw it in), each carrying the structure", async () => {
     const items = await pictureItems(model, aromatic, ACS_1996);
-    expect(items.map((i) => i.flavor)).toEqual(["gvml", "emf"]);
+    expect(items.map((i) => i.flavor)).toEqual(["gvml", "emf", "embed"]);
     expect(await structureInPicture(items[0])).toEqual(model);
+    // the record, for the app to make an object for Office out of on Windows
+    expect(readRecord(items[2].text!)).toEqual(model);
   });
 
   it("give the structure back when pasted, as Office hands the clip format back", async () => {

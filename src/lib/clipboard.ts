@@ -17,13 +17,19 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
  * - `gvml`: Office's own clip format, a package holding a picture that Word
  *   and PowerPoint keep as it is and hand back (lib/office/gvml);
  * - `emf`: an enhanced metafile, for Windows' other programs;
- * - `png`: a PNG.
+ * - `png`: a PNG;
+ * - `dib`: a bitmap, for Windows' programs that take nothing else;
+ * - `embed`: on Windows, an object for Office to embed - one a double-click
+ *   opens in Meno (src-tauri/src/ole.rs). It is written as the record; the
+ *   object is made from that and the `emf` beside it, and read back as the
+ *   record again. Elsewhere it is left out. With it, `gvml` and `png` are
+ *   left out too: Word and PowerPoint would take either before the object.
  *
  * Plain text is not put beside a structure: without Office's own format
  * beside it, PowerPoint pastes text as a text box in preference to a
  * picture.
  */
-export type Flavor = "meno" | "mol" | "text" | "gvml" | "emf" | "png";
+export type Flavor = "meno" | "mol" | "text" | "gvml" | "emf" | "png" | "dib" | "embed";
 
 export type ClipItem = { flavor: Flavor; text?: string; bytes?: Uint8Array };
 
@@ -31,7 +37,8 @@ type Wire = { flavor: Flavor; text?: string; base64?: string };
 
 let own: ClipItem[] = [];
 
-function toBase64(bytes: Uint8Array): string {
+/** Bytes as base64, as the app's commands take them. */
+export function toBase64(bytes: Uint8Array): string {
   let s = "";
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(s);

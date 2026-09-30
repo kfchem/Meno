@@ -24,7 +24,7 @@ pub enum Payload<'a> {
 
 /// Kinds that are bytes, not text: pictures.
 fn is_binary(flavor: &str) -> bool {
-    matches!(flavor, "gvml" | "png" | "emf")
+    matches!(flavor, "gvml" | "png" | "emf" | "dib")
 }
 
 /// What the page's kinds are called on this platform, most preferred first.
@@ -55,6 +55,7 @@ fn names(flavor: &str) -> &'static [&'static str] {
             "gvml" => &["Art::GVML ClipFormat"],
             "png" => &["PNG"],
             "emf" => &["CF_ENHMETAFILE"],
+            "dib" => &["CF_DIB"],
             _ => &[],
         }
     }
@@ -108,13 +109,66 @@ pub fn clipboard_write(items: Vec<ClipItem>) -> Result<(), String> {
             entries.push((name, payload));
         }
     }
+    #[cfg(target_os = "windows")]
+    embed(&items, &mut entries);
     platform::write(&entries)
+}
+
+/// An object for Office to embed, ahead of the pictures, made from the
+/// record (the "embed" kind) and the EMF beside it - when Meno is registered
+/// to serve one, as Office could do nothing with it otherwise. If it cannot
+/// be made, the pictures go without it.
+///
+/// With the object, Office's clip format and the PNG are left out: Word
+/// pastes a PNG, and PowerPoint the clip format, in preference to an object,
+/// where a plain paste should give the object - as a copy between Word and
+/// PowerPoint does, which carries neither. The EMF and the bitmap stay, for
+/// Windows' other programs.
+#[cfg(target_os = "windows")]
+fn embed(items: &[ClipItem], entries: &mut Vec<(&'static str, Payload)>) {
+    let Some(record) = items.iter().find(|i| i.flavor == "embed").and_then(|i| i.text.as_deref()) else {
+        return;
+    };
+    let emf = entries.iter().find_map(|(name, payload)| match (*name, payload) {
+        ("CF_ENHMETAFILE", Payload::Bytes(bytes)) => Some(bytes.clone()),
+        _ => None,
+    });
+    let Some(emf) = emf.filter(|_| crate::ole::is_registered()) else {
+        return;
+    };
+    match crate::ole::embed_source(record, &emf) {
+        Ok(source) => {
+            let at = entries.iter().position(|(n, _)| *n == "Art::GVML ClipFormat").unwrap_or(entries.len());
+            let descriptor = crate::ole::object_descriptor(&emf);
+            entries.splice(at..at, [("Embed Source", Payload::Bytes(source)), ("Object Descriptor", Payload::Bytes(descriptor))]);
+            entries.retain(|(name, _)| !matches!(*name, "Art::GVML ClipFormat" | "PNG"));
+        }
+        Err(e) => eprintln!("{e}"),
+    }
+}
+
+/// Meno's record out of an object Office has put on the clipboard - its own
+/// copy of one it holds ("Embedded Object"), or Meno's ("Embed Source").
+#[cfg(target_os = "windows")]
+fn embedded_record() -> Result<Option<String>, String> {
+    for name in ["Embedded Object", "Embed Source"] {
+        if let Some(record) = platform::read(name)?.and_then(|bytes| crate::ole::record_in_object(&bytes)) {
+            return Ok(Some(record));
+        }
+    }
+    Ok(None)
 }
 
 /// The first of `flavors` the clipboard holds: its text, or its bytes as base64.
 #[tauri::command]
 pub fn clipboard_read(flavors: Vec<String>) -> Result<Option<ClipItem>, String> {
     for flavor in &flavors {
+        #[cfg(target_os = "windows")]
+        if flavor == "embed" {
+            if let Some(text) = embedded_record()? {
+                return Ok(Some(ClipItem { flavor: flavor.clone(), text: Some(text), base64: None }));
+            }
+        }
         for name in names(flavor) {
             if let Some(bytes) = platform::read(name)? {
                 let (text, base64) = if is_binary(flavor) {
@@ -175,7 +229,7 @@ mod platform {
         RegisterClipboardFormatW, SetClipboardData,
     };
     use windows_sys::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE};
-    use windows_sys::Win32::System::Ole::{CF_ENHMETAFILE, CF_UNICODETEXT};
+    use windows_sys::Win32::System::Ole::{CF_DIB, CF_ENHMETAFILE, CF_UNICODETEXT};
 
     /// The clipboard, open until this is dropped. Another program may hold
     /// it for a moment, so opening it is tried a few times.
@@ -203,6 +257,7 @@ mod platform {
         match name {
             "CF_UNICODETEXT" => CF_UNICODETEXT as u32,
             "CF_ENHMETAFILE" => CF_ENHMETAFILE as u32,
+            "CF_DIB" => CF_DIB as u32,
             _ => {
                 let wide: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
                 // SAFETY: a NUL-terminated wide string.
@@ -227,7 +282,7 @@ mod platform {
     fn held(name: &str, bytes: &[u8]) -> Option<Vec<u8>> {
         match name {
             "CF_UNICODETEXT" => {
-                let wide: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                let wide: Vec<u16> = bytes.as_chunks().0.iter().map(|&c| u16::from_le_bytes(c)).collect();
                 let end = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
                 Some(String::from_utf16_lossy(&wide[..end]).into_bytes())
             }
@@ -241,6 +296,24 @@ mod platform {
     }
 
     pub fn write(entries: &[(&str, Payload)]) -> Result<(), String> {
+        // An object for Office goes through OLE's own clipboard (ole.rs),
+        // which hands it over as the storage it is, as OLE servers do.
+        if entries.iter().any(|(name, _)| *name == "Embed Source") {
+            use crate::ole::ClipData;
+            let items = entries
+                .iter()
+                .map(|(name, payload)| {
+                    let data = stored(name, payload);
+                    let data = match *name {
+                        "CF_ENHMETAFILE" => ClipData::Emf(data),
+                        "Embed Source" => ClipData::Storage(data),
+                        _ => ClipData::Bytes(data),
+                    };
+                    (format(name) as u16, data)
+                })
+                .collect();
+            return crate::ole::set_clipboard(items);
+        }
         let _open = Open::new()?;
         // SAFETY: the clipboard is open; each block is allocated movable,
         // filled while locked, and the clipboard owns it once taken - as it
@@ -353,7 +426,7 @@ mod tests {
 
     #[test]
     fn pictures_travel_as_base64_and_text_as_text() {
-        assert!(is_binary("gvml") && is_binary("png") && is_binary("emf"));
+        assert!(is_binary("gvml") && is_binary("png") && is_binary("emf") && is_binary("dib"));
         assert!(!is_binary("meno") && !is_binary("mol") && !is_binary("text"));
         let item: ClipItem = serde_json::from_str(r#"{"flavor":"png","base64":"iVBO"}"#).unwrap();
         assert_eq!(item.text, None);
