@@ -24,7 +24,10 @@ import {
 import ConsentDialog from "./ui/network/ConsentDialog";
 import NetworkToasts from "./ui/network/NetworkToasts";
 import { showSettingsSection } from "./ui/features/SettingsPanel/section";
-import { letOfficeGo, startedForOffice, takeOfficeStructures, watchOffice } from "./lib/ole";
+import { letOfficeGo, officeInUse, startedForOffice, takeOfficeStructures, watchOffice } from "./lib/ole";
+
+/** How long a Meno started for Office waits for Office to ask it for something. */
+const OFFICE_GRACE_MS = 1500;
 
 /** The object in an Office document a tab was opened from, if it was (lib/ole). */
 const officeIdOf = (tab: TabInstance | undefined) =>
@@ -155,7 +158,7 @@ export default function App() {
       }
     };
     void open(); // (any asked for before the page was up)
-    return watchOffice(
+    const stop = watchOffice(
       () => void open(),
       (officeId) => {
         const held = tabOf(officeId);
@@ -163,13 +166,29 @@ export default function App() {
         closeTab(held.meta.id);
         leaveIfOnlyForOffice(held.meta.id);
       },
+      () => leaveIfOnlyForOffice(),
     );
+    // (Office also starts a Meno only to have an object's picture, and may
+    // be done with it before the page is up: looked at once Office has had
+    // time to ask for one)
+    const idle = window.setTimeout(
+      () =>
+        void officeInUse().then((inUse) => {
+          if (!inUse) leaveIfOnlyForOffice();
+        }),
+      OFFICE_GRACE_MS,
+    );
+    return () => {
+      window.clearTimeout(idle);
+      stop();
+    };
   }, []);
 
   // A Meno Windows started for a document (a double-click on a structure
-  // while Meno was not running) goes again when the document is done with
-  // it, unless something else has been opened in it meanwhile.
-  const leaveIfOnlyForOffice = (closing: string) => {
+  // while Meno was not running, or Office wanting its picture) goes again
+  // when the document is done with it, unless something else has been
+  // opened in it meanwhile.
+  const leaveIfOnlyForOffice = (closing?: string) => {
     void startedForOffice().then((forOffice) => {
       if (!forOffice) return;
       const left = Object.values(stateRef.current.tabsById).filter(

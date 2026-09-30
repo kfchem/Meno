@@ -14,7 +14,7 @@
 //! record; what Office shows is whatever was handed over last.
 
 use serde::Serialize;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{mpsc, Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 use windows::core::{implement, w, AgileReference as Agile, ComObject, IUnknown, IUnknownImpl, Interface, Ref, BOOL, GUID, HRESULT, PCWSTR, PWSTR};
@@ -199,6 +199,11 @@ static PENDING: Mutex<Vec<OpenRequest>> = Mutex::new(Vec::new());
 static APP: OnceLock<AppHandle> = OnceLock::new();
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
+/// How many of this Meno's objects Office holds, open in a tab or not. A
+/// Meno Windows started for Office goes once none is left and nothing else
+/// is open: Office also starts one only to have an object's picture.
+static LIVE: AtomicUsize = AtomicUsize::new(0);
+
 /// An object held while it is open in a tab, so that the page's edits reach
 /// it. (Its interfaces are used only from threads of COM's multithreaded
 /// apartment - see `OUT` - which may use them from any of those threads.)
@@ -257,6 +262,21 @@ pub fn start(app: &AppHandle) {
 /// again once the document is done with it and nothing else is open.)
 pub fn started_for_office() -> bool {
     std::env::args().skip(1).any(|a| a.eq_ignore_ascii_case("-Embedding") || a.eq_ignore_ascii_case("/Embedding"))
+}
+
+/// Whether Office holds any of this Meno's objects still.
+pub fn in_use() -> bool {
+    LIVE.load(Ordering::SeqCst) > 0 || !OPEN.lock().unwrap().is_empty()
+}
+
+/// An object let go: when it was the last, the page is told ("ole-idle"),
+/// so that a Meno started for Office can go.
+fn object_gone() {
+    if LIVE.fetch_sub(1, Ordering::SeqCst) == 1 && started_for_office() {
+        if let Some(app) = APP.get() {
+            let _ = app.emit("ole-idle", ());
+        }
+    }
 }
 
 /// As Meno quits: each structure still open from a document goes back into
@@ -367,6 +387,12 @@ struct State {
 struct Structure {
     id: u32,
     state: Mutex<State>,
+}
+
+impl Drop for Structure {
+    fn drop(&mut self) {
+        object_gone();
+    }
 }
 
 impl Structure {
@@ -832,6 +858,7 @@ impl IClassFactory_Impl for Factory_Impl {
             return Err(CLASS_E_NOAGGREGATION.into());
         }
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        LIVE.fetch_add(1, Ordering::SeqCst); // (given back as it drops)
         let obj = ComObject::new(Structure { id, state: Mutex::new(State::default()) });
         let unknown: IUnknown = obj.to_interface();
         // SAFETY: the caller's IID and out pointer.
