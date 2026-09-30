@@ -303,20 +303,24 @@ impl IDropTarget_Impl for Catcher_Impl {
 fn read(data: &IDataObject) -> Dragged {
     let mut out = Dragged::default();
     for name in KINDS {
-        let format = FORMATETC {
-            cfFormat: crate::clipboard::clip_format(name) as u16,
-            ptd: std::ptr::null_mut(),
-            dwAspect: DVASPECT_CONTENT.0,
-            lindex: -1,
-            tymed: (TYMED_HGLOBAL.0 | TYMED_ISTREAM.0) as u32,
-        };
-        // SAFETY: the drag's data object, for the length of the call that
-        // handed it over; a medium released once read.
-        if let Ok(mut medium) = unsafe { data.GetData(&format) } {
+        // (a block of memory, else a stream - asked for one at a time: Word
+        // hands a picture it drags over nothing when asked for either)
+        for tymed in [TYMED_HGLOBAL, TYMED_ISTREAM] {
+            let format = FORMATETC {
+                cfFormat: crate::clipboard::clip_format(name) as u16,
+                ptd: std::ptr::null_mut(),
+                dwAspect: DVASPECT_CONTENT.0,
+                lindex: -1,
+                tymed: tymed.0 as u32,
+            };
+            // SAFETY: the drag's data object, for the length of the call that
+            // handed it over; a medium released once read.
+            let Ok(mut medium) = (unsafe { data.GetData(&format) }) else { continue };
             let bytes = medium_bytes(&medium);
             unsafe { ReleaseStgMedium(&mut medium) };
             if let Some(bytes) = bytes.and_then(|b| crate::clipboard::held(name, &b)) {
                 out.kinds.push((name, bytes));
+                break;
             }
         }
     }
@@ -478,6 +482,61 @@ mod tests {
             tymed: TYMED_ISTORAGE.0 as u32,
         };
         assert_eq!(object_record(&data, &format).as_deref(), Some(record));
+    }
+
+    /// A picture as Word drags one: its bytes handed out only when asked for
+    /// in a block of memory, and nothing asked for "either".
+    #[implement(IDataObject)]
+    struct OneMediumAtATime(Vec<u8>);
+
+    impl IDataObject_Impl for OneMediumAtATime_Impl {
+        fn GetData(&self, format: *const FORMATETC) -> windows::core::Result<STGMEDIUM> {
+            // SAFETY: the taker's FORMATETC.
+            let f = unsafe { format.as_ref() }.ok_or(DV_E_FORMATETC)?;
+            if f.cfFormat != crate::clipboard::clip_format("Art::GVML ClipFormat") as u16 || f.tymed != TYMED_HGLOBAL.0 as u32 {
+                return Err(DV_E_FORMATETC.into());
+            }
+            // SAFETY: memory of its own, filled while locked; the taker's once handed over.
+            unsafe {
+                let g = windows::Win32::System::Memory::GlobalAlloc(windows::Win32::System::Memory::GMEM_MOVEABLE, self.0.len())?;
+                let at = GlobalLock(g) as *mut u8;
+                std::ptr::copy_nonoverlapping(self.0.as_ptr(), at, self.0.len());
+                let _ = GlobalUnlock(g);
+                Ok(STGMEDIUM { tymed: TYMED_HGLOBAL.0 as u32, u: STGMEDIUM_0 { hGlobal: g }, pUnkForRelease: ManuallyDrop::new(None) })
+            }
+        }
+        fn GetDataHere(&self, _: *const FORMATETC, _: *mut STGMEDIUM) -> windows::core::Result<()> {
+            Err(E_NOTIMPL.into())
+        }
+        fn QueryGetData(&self, _: *const FORMATETC) -> HRESULT {
+            DV_E_FORMATETC
+        }
+        fn GetCanonicalFormatEtc(&self, _: *const FORMATETC, _: *mut FORMATETC) -> HRESULT {
+            E_NOTIMPL
+        }
+        fn SetData(&self, _: *const FORMATETC, _: *const STGMEDIUM, _: BOOL) -> windows::core::Result<()> {
+            Err(E_NOTIMPL.into())
+        }
+        fn EnumFormatEtc(&self, _: u32) -> windows::core::Result<IEnumFORMATETC> {
+            Err(E_NOTIMPL.into())
+        }
+        fn DAdvise(&self, _: *const FORMATETC, _: u32, _: Ref<'_, IAdviseSink>) -> windows::core::Result<u32> {
+            Err(OLE_E_ADVISENOTSUPPORTED.into())
+        }
+        fn DUnadvise(&self, _: u32) -> windows::core::Result<()> {
+            Err(OLE_E_ADVISENOTSUPPORTED.into())
+        }
+        fn EnumDAdvise(&self) -> windows::core::Result<IEnumSTATDATA> {
+            Err(OLE_E_ADVISENOTSUPPORTED.into())
+        }
+    }
+
+    #[test]
+    fn a_program_that_hands_over_one_medium_at_a_time_is_asked_so() {
+        let data: IDataObject = OneMediumAtATime(vec![7, 8, 9]).into();
+        let got = read(&data);
+        let gvml = got.kinds.iter().find(|(k, _)| *k == "Art::GVML ClipFormat").map(|(_, b)| b.clone());
+        assert_eq!(gvml.as_deref(), Some(&[7u8, 8, 9][..]));
     }
 
     #[test]

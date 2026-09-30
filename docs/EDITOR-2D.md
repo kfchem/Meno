@@ -130,7 +130,10 @@ highlight's colour, under the drawing, and a small handle stands above it.
 V, as everywhere, and the same from the menus.
 
 - What is copied is the selection - its atoms and every bond among them -
-  or, with nothing selected, the structure under the pointer.
+  or, with nothing selected, the structure under the pointer. With nothing
+  to copy there, or anywhere else in the app with no text selected, a copy
+  leaves the clipboard as it was (on a Mac the Edit menu's Copy would
+  otherwise have the webview write an empty item over it).
 - A paste goes where the pointer is (where the menu was opened, from the
   menu; the middle of the view, if the pointer is off the drawing), comes
   in selected so it can be dragged straight on, and is one undo step. What
@@ -475,8 +478,13 @@ traced from reference drawings.
   copy, so the object stays in its document, and goes as the drag leaves
   the zone or ends (or when no button is held and nothing came to it).
   Tried on Windows (2026-09-30): Word's object dragged onto the drawing
-  arrives there, selected, and Word's document is unchanged; files onto
-  the drawing and onto a new tab open as before. PowerPoint for Windows
+  arrives there, selected, and Word's document is unchanged; so does a
+  picture Meno put in Word (Office's clip format), which Word hands over
+  only when a block of memory is asked for, not "memory or a stream" -
+  so each is asked for in turn; both at 100% and over Remote Desktop at
+  175%. Files onto the drawing and onto a new tab open as before. What a
+  drag carries is read again at the drop if nothing was to be had as it
+  came. PowerPoint for Windows
   was not seen to let a shape be dragged out of its window at all (nothing
   reached a plain drop target either): from there, copy and paste.
 

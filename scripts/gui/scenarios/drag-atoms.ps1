@@ -16,7 +16,7 @@ Start-Meno
 Open-MenoFile "$PSScriptRoot/../fixtures/depiction-check.mol"
 
 $c = Get-ClientSize
-Invoke-MenoClick -X 31 -Y ($c.Height - 31)   # fit to content, bottom left
+Invoke-MenoClick -X 60 -Y ($c.Height - 60)   # fit to content, bottom left
 Wait-MenoSettled | Out-Null
 Save-Step "fitted"
 
@@ -31,26 +31,26 @@ $midDrag = { param($i) if ($i -eq 3) { Save-Step "$($script:What)-early" }
 # A plain carbon in the middle of a chain. Nothing special about it, which is
 # the point: whatever the others do, this one has to keep working.
 $script:What = "chain"
-Invoke-MenoDrag -FromX 603 -FromY 438 -ToX 603 -ToY 227 -AtStep $midDrag
+Invoke-MenoDrag -FromX 626 -FromY 439 -ToX 626 -ToY 228 -AtStep $midDrag
 Wait-MenoSettled | Out-Null
 Save-Step "chain-dropped"
 
-Invoke-MenoClick -X 31 -Y ($c.Height - 31)
+Invoke-MenoClick -X 60 -Y ($c.Height - 60)
 Wait-MenoSettled | Out-Null
 
 # The oxygen of an OH. A label takes the bond's end away with it, so no cap
 # belongs here - neither at rest nor while it moves.
 $script:What = "label"
-Invoke-MenoDrag -FromX 1344 -FromY 810 -ToX 1577 -ToY 919 -AtStep $midDrag
+Invoke-MenoDrag -FromX 1354 -FromY 809 -ToX 1587 -ToY 918 -AtStep $midDrag
 Wait-MenoSettled | Out-Null
 Save-Step "label-dropped"
 
-Invoke-MenoClick -X 31 -Y ($c.Height - 31)
+Invoke-MenoClick -X 60 -Y ($c.Height - 60)
 Wait-MenoSettled | Out-Null
 
 # The stereocentre of the wedge cluster: three wedges and a hashed one meet
 # here, and all four have to keep their shape for as long as it moves.
 $script:What = "wedge"
-Invoke-MenoDrag -FromX 434 -FromY 1185 -ToX 595 -ToY 1030 -AtStep $midDrag
+Invoke-MenoDrag -FromX 457 -FromY 1175 -ToX 618 -ToY 1020 -AtStep $midDrag
 Wait-MenoSettled | Out-Null
 Save-Step "wedge-dropped"

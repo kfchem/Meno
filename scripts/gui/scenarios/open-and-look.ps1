@@ -13,7 +13,7 @@ Save-Step "opened"
 # Fit to content, bottom left, so the whole structure is in the picture at a
 # size that does not depend on where the camera happened to be.
 $c = Get-ClientSize
-Invoke-MenoClick -X 31 -Y ($c.Height - 31)
+Invoke-MenoClick -X 60 -Y ($c.Height - 60)
 Wait-MenoSettled | Out-Null
 Save-Step "fitted"
 

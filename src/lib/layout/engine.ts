@@ -135,7 +135,8 @@ export function layout2D(input: LayoutInput): Layout2D {
   const used = new Map(local);
   const x = new Array<number>(mol.n).fill(0);
   const y = new Array<number>(mol.n).fill(0);
-  let right = 0;
+  // where the ink of the pieces set down so far ends, on the right
+  let right: number | null = null;
   // the largest piece first, the rest after it to the right
   const pieces = [...mol.pieces].sort((p, q) => q.length - p.length);
   for (const piece of pieces) {
@@ -188,13 +189,20 @@ export function layout2D(input: LayoutInput): Layout2D {
     if (!fixed(piece)) squareUp(mol, piece, best.pos);
     const xs = piece.map((a) => best.pos.get(a)!.x);
     const ys = piece.map((a) => best.pos.get(a)!.y);
-    const shift = (right ? right + 1.5 : 0) - Math.min(...xs);
+    // a bond and a half of paper between one piece's ink and the next's:
+    // a label reaches out past its atom, an OH at an end the further
+    // (ibuprofen's acid, and HO of an ethanol set beside it)
+    const reach = piece.map((a) => inkReach(mol, a, best.pos));
+    const shift =
+      right == null
+        ? -Math.min(...xs)
+        : right + 1.5 - Math.min(...xs.map((v, i) => v - reach[i].left));
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
     for (const a of piece) {
       x[a] = best.pos.get(a)!.x + shift;
       y[a] = best.pos.get(a)!.y - midY;
     }
-    right = Math.max(...piece.map((a) => x[a]));
+    right = Math.max(...piece.map((a, i) => x[a] + reach[i].right));
   }
   // a flat system drawn with depth (a bridge across a ring), seen from its
   // other side (the frame mirrored), is nearer where it was further: the
@@ -282,6 +290,42 @@ function layoutSystem(
     }
   }
   return { pos: flat };
+}
+
+/**
+ * How far an atom's ink reaches to its left and right, in bond lengths, as
+ * the drawing sets it: a carbon's nowhere (its bonds end at it); a label's
+ * first letter centred on it, about 0.45 across, and the rest of its symbol
+ * after it; an H beside it - where the drawing puts it (`hydrogenSpot`),
+ * half a bond off - 0.2 beyond that, and its count after it; a charge's
+ * circle to the right. (An H under or over it reaches no further across.)
+ */
+export function inkReach(mol: Molecule, a: number, pos: ReadonlyMap<number, Point>): { left: number; right: number } {
+  const labelled = mol.el[a] !== "C" || mol.charge[a] !== 0;
+  if (!labelled) return { left: 0, right: 0 };
+  // (a charged carbon is a bare vertex, its charge beside it)
+  const symbol = mol.el[a] === "C" ? 0 : mol.el[a].length;
+  let left = symbol ? 0.25 : 0;
+  let right = symbol ? 0.25 + 0.4 * (symbol - 1) : 0;
+  if (symbol && mol.hs[a] > 0) {
+    const at = pos.get(a)!;
+    const h = mol.neighbours[a].length
+      ? hydrogenSpot(
+          mol.neighbours[a].map((b) => {
+            const p = pos.get(b)!;
+            const d = dist(p, at) || 1;
+            return { x: (p.x - at.x) / d, y: (p.y - at.y) / d };
+          }),
+        )
+      : { x: 0.5, y: 0 };
+    const beyond = Math.abs(h.x) + 0.2 + (mol.hs[a] > 1 ? 0.3 : 0);
+    if (h.x < 0) left = Math.max(left, beyond);
+    else if (h.x > 0) right = Math.max(right, beyond);
+    // (under or over it, its count follows it)
+    else right = Math.max(right, 0.2 + (mol.hs[a] > 1 ? 0.3 : 0));
+  }
+  if (mol.charge[a] !== 0) right += 0.4;
+  return { left, right };
 }
 
 /**
