@@ -17,6 +17,12 @@ export async function startedForOffice(): Promise<boolean> {
   return invoke<boolean>("ole_started_for_office");
 }
 
+/** Whether Office still holds any of this Meno's structures. */
+export async function officeInUse(): Promise<boolean> {
+  if (!isTauri()) return false;
+  return invoke<boolean>("ole_in_use");
+}
+
 /** The structures asked for since the last look. */
 export async function takeOfficeStructures(): Promise<OfficeStructure[]> {
   if (!isTauri()) return [];
@@ -24,13 +30,17 @@ export async function takeOfficeStructures(): Promise<OfficeStructure[]> {
 }
 
 /**
- * `onOpen` when a document asks for a structure to be opened, and `onClose`
- * (with the object) when it is done with one; stops listening when the
- * function returned is called.
+ * `onOpen` when a document asks for a structure to be opened, `onClose`
+ * (with the object) when it is done with one, and `onIdle` when Office
+ * holds none any more; stops listening when the function returned is called.
  */
-export function watchOffice(onOpen: () => void, onClose: (id: number) => void): () => void {
+export function watchOffice(onOpen: () => void, onClose: (id: number) => void, onIdle: () => void): () => void {
   if (!isTauri()) return () => {};
-  const stops = [listen("ole-open", () => onOpen()), listen<number>("ole-close", (e) => onClose(e.payload))];
+  const stops = [
+    listen("ole-open", () => onOpen()),
+    listen<number>("ole-close", (e) => onClose(e.payload)),
+    listen("ole-idle", () => onIdle()),
+  ];
   return () => stops.forEach((s) => void s.then((stop) => stop()));
 }
 

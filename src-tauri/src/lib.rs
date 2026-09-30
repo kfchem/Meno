@@ -516,6 +516,15 @@ fn ole_started_for_office() -> bool {
     false
 }
 
+/// Whether Office still holds any of this Meno's structures (Windows).
+#[tauri::command]
+fn ole_in_use() -> bool {
+    #[cfg(windows)]
+    return ole::in_use();
+    #[cfg(not(windows))]
+    false
+}
+
 /// A structure open from a document is done with: its tab has closed.
 #[tauri::command]
 fn ole_close(id: u32) -> Result<(), String> {
@@ -557,6 +566,17 @@ pub fn run() {
     if let Some(code) = registration_asked() {
         std::process::exit(code);
     }
+    #[allow(unused_mut)]
+    let mut context = tauri::generate_context!();
+    // A Meno Windows starts for Office opens unseen: it shows itself when a
+    // structure opens in it (ole.rs), and one started only for a picture
+    // goes again without having been seen.
+    #[cfg(windows)]
+    if ole::started_for_office() {
+        for window in &mut context.config_mut().app.windows {
+            window.visible = false;
+        }
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
@@ -583,6 +603,7 @@ pub fn run() {
             ole_update,
             ole_close,
             ole_started_for_office,
+            ole_in_use,
             // the system's fonts, for atom labels
             fonts::font_families,
             fonts::font_file,
@@ -600,7 +621,7 @@ pub fn run() {
             ext_stdin,
             ext_kill
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             // Don't leave Python sidecars running after the window closes.
