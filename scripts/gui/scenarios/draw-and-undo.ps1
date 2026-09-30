@@ -12,7 +12,7 @@ Start-Meno
 Open-MenoFile "$PSScriptRoot/../fixtures/depiction-check.mol"
 
 $c = Get-ClientSize
-Invoke-MenoClick -X 31 -Y ($c.Height - 31)   # fit to content, bottom left
+Invoke-MenoClick -X 60 -Y ($c.Height - 60)   # fit to content, bottom left
 Wait-MenoSettled | Out-Null
 Save-Step "fitted"
 
