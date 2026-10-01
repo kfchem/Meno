@@ -22,6 +22,7 @@ import {
   type StyleField,
 } from "../../../lib/chem/styleFields";
 import {
+  arrowSampleSvg,
   SAMPLE_BONDS,
   SAMPLE_MOLECULE,
   sampleSvg,
@@ -293,13 +294,17 @@ function Preview({
     [style, mag, fonts],
   );
   const bonds = useMemo(
-    () =>
-      SAMPLE_BONDS.map((s) => ({
+    () => [
+      ...SAMPLE_BONDS.map((s) => ({
         name: s.name,
         svg: sampleSvg(s, style, 2),
       })),
+      { name: "Reaction arrow", svg: arrowSampleSvg(style, 2) },
+    ],
     [style],
   );
+  // (beside a narrow panel's molecule, the arrow alone)
+  const arrow = useMemo(() => arrowSampleSvg(style, 1.5), [style]);
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -346,6 +351,13 @@ function Preview({
         // The SVG comes from our own layout, not from outside.
         dangerouslySetInnerHTML={{ __html: molecule }}
       />
+      {compact && (
+        <div
+          aria-label="Reaction arrow"
+          className="mt-1.5 rounded-lg border border-gh-line bg-white flex justify-center py-1.5 [&>svg]:max-w-full [&>svg]:h-auto"
+          dangerouslySetInnerHTML={{ __html: arrow }}
+        />
+      )}
       {!compact && (
         <div className="mt-2 grid grid-cols-4 gap-1.5">
           {bonds.map((b) => (
@@ -385,9 +397,45 @@ function FieldRow({
   stacked: boolean;
 }) {
   const key = field.key;
-  const changed = key in choice.changes;
-  const set = (value: DrawingStyle[typeof key] | undefined) =>
-    onChange(withSetting(choice, key, value), key);
+  const preset = presetById(choice.preset);
+  return (
+    <SettingRow
+      field={field}
+      style={style}
+      changed={key in choice.changes}
+      onSet={(value) => onChange(withSetting(choice, key, value), key)}
+      onReset={() => onChange(withSetting(choice, key, preset.style[key] as never), key)}
+      resetTitle={`Back to ${preset.name}'s value`}
+      stacked={stacked}
+    />
+  );
+}
+
+/**
+ * One setting: its name and what it does, and a control for its value in
+ * `style`. `changed` marks it as set where it is shown, over what it would
+ * otherwise be, which `onReset` goes back to; `onSet` is given undefined
+ * for Automatic.
+ */
+export function SettingRow({
+  field,
+  style,
+  changed,
+  onSet,
+  onReset,
+  resetTitle,
+  stacked,
+}: {
+  field: StyleField;
+  style: DrawingStyle;
+  changed: boolean;
+  onSet: (value: DrawingStyle[keyof DrawingStyle] | undefined) => void;
+  onReset: () => void;
+  resetTitle: string;
+  stacked: boolean;
+}) {
+  const key = field.key;
+  const set = (value: DrawingStyle[typeof key] | undefined) => onSet(value);
   const raw = style[key];
   const auto = field.automatic ? automaticValue(key, style) : undefined;
   const isAuto = field.automatic !== undefined && raw === undefined;
@@ -445,14 +493,10 @@ function FieldRow({
             onSet={set}
           />
           <button
-            onClick={() => set(presetById(choice.preset).style[key] as never)}
+            onClick={onReset}
             disabled={!changed}
             aria-label={`Reset ${field.label}`}
-            title={
-              changed
-                ? `Back to ${presetById(choice.preset).name}'s value`
-                : "Not changed"
-            }
+            title={changed ? resetTitle : "Not changed"}
             className="h-6 w-6 rounded-md flex items-center justify-center text-gh-gray hover:bg-gh-base hover:text-gh-black disabled:opacity-0"
           >
             <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
@@ -467,6 +511,7 @@ const SHARE_SUFFIX: Record<ShareOf, string> = {
   bond: "% of bond",
   "font size": "% of font",
   "ring radius": "% of radius",
+  "arrowhead length": "% of head",
 };
 
 function Control({

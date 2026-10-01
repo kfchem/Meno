@@ -24,6 +24,7 @@ const EVERY_SETTING: (keyof DrawingStyle)[] = [
   "wedgeBroadEnd",
   "hashStartOffset",
   "labelBaseline",
+  "reactionArrowThickness",
 ];
 
 describe("the settings list", () => {
@@ -48,11 +49,13 @@ describe("the settings list", () => {
     expect(optional.sort()).toEqual([
       "hashStartOffset",
       "labelBaseline",
+      "reactionArrowThickness",
       "tripleGap",
       "wedgeBroadEnd",
     ]);
     expect(automaticValue("tripleGap", ACS_1996)).toEqual(ACS_1996.doubleGap);
     expect(automaticValue("hashStartOffset", ACS_1996)).toEqual(ACS_1996.hashInterval);
+    expect(automaticValue("reactionArrowThickness", ACS_1996)).toEqual(ACS_1996.lineThickness);
     expect(automaticValue("wedgeBroadEnd", ACS_1996)).toEqual(pt(3));
     // by the typeface's own capitals
     expect(automaticValue("labelBaseline", ACS_1996)).toBeCloseTo(0.4, 12);
