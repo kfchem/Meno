@@ -9,6 +9,7 @@ export default function Arrows2D() {
   const updateArrow = useEditor((s) => s.updateArrow);
   const beginPanHold = useEditor((s) => s.beginPanHold);
   const endPanHold = useEditor((s) => s.endPanHold);
+  const setHoveredArrow = useEditor((s) => s.setHoveredArrow);
   const { camera, gl } = useThree();
   const canvas = gl.domElement as HTMLCanvasElement;
   const toWorld = (cx: number, cy: number) => {
@@ -39,7 +40,12 @@ export default function Arrows2D() {
           <group
             key={a.id}
             position={[0, 0, 0.02]}
+            // (the arrow under the pointer is the one a right-click's menu is for)
+            onPointerOver={() => setHoveredArrow(a.id)}
+            onPointerOut={() => setHoveredArrow(null)}
             onPointerDown={(e) => {
+              // a right press is the menu's, or the view's to move
+              if (((e as any).button ?? (e as any).nativeEvent?.button ?? 0) !== 0) return;
               const cx = (e as any).clientX ?? (e as any).nativeEvent?.clientX;
               const cy = (e as any).clientY ?? (e as any).nativeEvent?.clientY;
               const p = toWorld(cx, cy);
@@ -72,7 +78,7 @@ export default function Arrows2D() {
               window.addEventListener("pointerup", onUp, true);
             }}
           >
-            <ReactionArrow2D x1={x1} y1={y1} x2={x2} y2={y2} />
+            <ReactionArrow2D x1={x1} y1={y1} x2={x2} y2={y2} look={a.look} />
             {/* invisible thicker hit area to ease dragging */}
             <mesh position={[a.x, a.y, 0.015]} rotation={[0, 0, a.angle]}>
               <boxGeometry args={[a.length + 0.8, 0.8, 0.001]} />
