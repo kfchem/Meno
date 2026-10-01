@@ -10,8 +10,14 @@
  * Ts, Cp - marked `free` here; the rest are the protecting groups and
  * substituents of everyday use. Each structure is SMILES (./smiles), the
  * group's attachment first, after a "*".
+ *
+ * The list holds groups and contracted labels only. What is written by
+ * putting them together is read by rule, not listed: a group behind O, S
+ * or NH (OTBS, SPh, NHBoc), an ester (CO2Me), and a substituted aryl group
+ * (2,6-diMeBz, 4-MeOC6H4: ./substitutedAryl).
  */
 import { readSmiles, type Smiles } from "./smiles";
+import { substitutedAryl } from "./substitutedAryl";
 import { kekuleOrders } from "./kekulize";
 import type { TextRun } from "./layout2d";
 import { elements } from "../../utils/atomUtils";
@@ -40,9 +46,10 @@ const GROUPS: Abbreviation[] = [
   { label: "s-Bu", also: ["sBu", "sec-Bu"], smiles: "*C(C)CC", name: "sec-butyl", free: true },
   { label: "t-Bu", also: ["tBu", "tert-Bu"], smiles: "*C(C)(C)C", name: "tert-butyl", free: true },
   { label: "Ac", smiles: "*C(C)=O", name: "acetyl", free: true },
-  { label: "Ph", smiles: "*c1ccccc1", name: "phenyl", free: true },
+  { label: "Ph", also: ["C6H5"], smiles: "*c1ccccc1", name: "phenyl", free: true },
   { label: "Ms", smiles: "*S(=O)(=O)C", name: "methanesulfonyl (mesyl)", free: true },
-  { label: "Ts", smiles: "*S(=O)(=O)c1ccc(C)cc1", name: "4-toluenesulfonyl (tosyl)", free: true },
+  { label: "Ts", also: ["p-Ts"], smiles: "*S(=O)(=O)c1ccc(C)cc1", name: "4-toluenesulfonyl (tosyl)", free: true },
+  // (IUPAC: only where it is bonded to a metal - and so never behind O, S or NH here)
   { label: "Cp", smiles: "*C1C=CC=C1", name: "cyclopentadienyl", free: true },
   { label: "Bn", smiles: "*Cc1ccccc1", name: "benzyl" },
   // (IUPAC discourages Bz, once used for benzyl too; it is benzoyl here)
@@ -87,43 +94,68 @@ const CONTRACTED: Abbreviation[] = [
   { label: "NMe2", smiles: "*N(C)C", name: "dimethylamino" },
   { label: "NEt2", smiles: "*N(CC)CC", name: "diethylamino" },
   { label: "NHNH2", smiles: "*NN", name: "hydrazinyl" },
+  { label: "C6F5", smiles: "*c1c(F)c(F)c(F)c(F)c1F", name: "pentafluorophenyl" },
 ];
 
-/**
- * A group behind O, S or NH (OTBS, SPh, NHBoc), and an alkyl, benzyl or
- * phenyl ester (CO2Me): written as the letters and the group's label, and
- * its structure the atom or atoms they name, then the group's.
- */
-function composed(): Abbreviation[] {
-  const out: Abbreviation[] = [];
-  const behind = (prefix: string, smiles: string, word: string, groups: Abbreviation[]) => {
-    for (const g of groups) {
-      out.push({
-        label: prefix + g.label,
-        ...(g.also ? { also: g.also.map((a) => prefix + a) } : {}),
-        smiles: smiles + g.smiles.slice(1),
-        name: `${g.name}${word}`,
-      });
-    }
-  };
-  behind("O", "*O", "oxy", GROUPS);
-  behind("S", "*S", "sulfanyl", GROUPS);
-  behind("NH", "*N", "amino", GROUPS);
-  const esters = GROUPS.filter((g) => ["Me", "Et", "Pr", "iPr", "Bu", "t-Bu", "Bn", "Ph"].includes(g.label));
-  behind("CO2", "*C(=O)O", "oxycarbonyl", esters);
-  return out;
-}
-
-export const ABBREVIATIONS: Abbreviation[] = [...GROUPS, ...CONTRACTED, ...composed()];
+/** The dictionary: groups, then contracted labels. */
+export const ABBREVIATIONS: Abbreviation[] = [...GROUPS, ...CONTRACTED];
 
 const BY_LABEL = new Map<string, Abbreviation>();
 for (const a of ABBREVIATIONS) {
   for (const l of [a.label, ...(a.also ?? [])]) if (!BY_LABEL.has(l)) BY_LABEL.set(l, a);
 }
+const GROUP_LABELS = new Set(GROUPS.flatMap((g) => [g.label, ...(g.also ?? [])]));
 
-/** The abbreviation a label is, as written (OTBS, or OTBDMS), or none. */
+/**
+ * How labels are put together from a group, by rule: the letters written
+ * before it, the atoms they stand for, and the word its name takes. A
+ * group behind O, S or NH may be any group or contracted label but Cp
+ * (bonded to a metal only, IUPAC GR-2.2) and the hydrazinyl; an ester's
+ * any group.
+ */
+const COMPOSED: { prefix: string; smiles: string; word: string; takes: (a: Abbreviation) => boolean }[] = [
+  { prefix: "CO2", smiles: "*C(=O)O", word: "oxycarbonyl", takes: (a) => GROUP_LABELS.has(a.label) && a.label !== "Cp" },
+  { prefix: "NH", smiles: "*N", word: "amino", takes: (a) => a.label !== "Cp" && a.label !== "NHNH2" },
+  { prefix: "O", smiles: "*O", word: "oxy", takes: (a) => a.label !== "Cp" && a.label !== "NHNH2" },
+  { prefix: "S", smiles: "*S", word: "sulfanyl", takes: (a) => a.label !== "Cp" && a.label !== "NHNH2" },
+];
+
+/** A label put together by rule (OTBS, NHBoc, CO2Me, 2,6-diMeBz), or none. */
+function composedOf(label: string): Abbreviation | undefined {
+  const aryl = substitutedAryl(label);
+  if (aryl) return { label, smiles: aryl.smiles, name: aryl.name };
+  for (const c of COMPOSED) {
+    if (!label.startsWith(c.prefix) || label.length === c.prefix.length) continue;
+    const g = BY_LABEL.get(label.slice(c.prefix.length));
+    if (!g || !c.takes(g)) continue;
+    // (named by the group's own label: OTBDMS is OTBS)
+    const own = c.prefix + g.label;
+    return { label: own, ...(own !== label ? { also: [label] } : {}), smiles: c.smiles + g.smiles.slice(1), name: `${g.name}${c.word}` };
+  }
+  return undefined;
+}
+
+const COMPOSED_SEEN = new Map<string, Abbreviation | undefined>();
+
+/**
+ * The abbreviation a label is, as written (OTBS, or OTBDMS): the
+ * dictionary's, or one put together by rule. None, for any other.
+ */
 export function abbreviationOf(label: string): Abbreviation | undefined {
-  return BY_LABEL.get(label.trim());
+  const l = label.trim();
+  const listed = BY_LABEL.get(l);
+  if (listed) return listed;
+  if (!COMPOSED_SEEN.has(l)) COMPOSED_SEEN.set(l, composedOf(l));
+  return COMPOSED_SEEN.get(l);
+}
+
+/**
+ * Whether a label names its ring's substituents before the ring - 2,6-diMeBz,
+ * 4-MeOC6H4 - and so is attached at its end as written: it is not read
+ * outward, whichever side its bond comes in from.
+ */
+export function namesRingFirst(label: string): boolean {
+  return substitutedAryl(label.trim()) != null;
 }
 
 /**
@@ -195,8 +227,8 @@ export function labelUnits(text: string): string[] {
         (ELEMENTS.has(text.slice(i, i + 2)) && /[a-z]/.test(text[i + 1] ?? "") ? text.slice(i, i + 2) : text[i]);
     }
     i += unit.length;
-    // its count
-    const count = /^\d+/.exec(text.slice(i));
+    // its count - after a letter or a parenthesis, not a ring's position (2,6-)
+    const count = /[A-Za-z)]$/.test(unit) ? /^\d+/.exec(text.slice(i)) : null;
     if (count) {
       unit += count[0];
       i += count[0].length;
@@ -222,28 +254,56 @@ export function reversedLabel(text: string): string {
 }
 
 /**
+ * The prefixes set in italics, as IUPAC's Table II sets them and names have
+ * them: n-, s-, t-, sec-, tert- and i- before a hyphen (t-Bu, but iPr
+ * upright, as isopropyl is), and o-, m-, p- (p-Ts, p-MeOPh).
+ */
+const ITALIC_PREFIX = /^(sec|tert|[nistomp])$/;
+
+/** Which of a label's units are such a prefix: on its own, before a hyphen. */
+export function italicUnits(units: readonly string[]): boolean[] {
+  return units.map((u, k) => ITALIC_PREFIX.test(u) && (units[k + 1] ?? "").startsWith("-"));
+}
+
+/**
  * A label's runs for the drawing: the counts after an element, a group or a
- * parenthesis set as subscripts (CO2Me, CH(CH3)2), and a sign at its end as
- * a superscript charge (NMe3+: the 3 is the methyls' count).
+ * parenthesis set as subscripts (CO2Me, CH(CH3)2), a prefix such as the t
+ * of t-Bu in italics, and a sign at its end as a superscript charge (NMe3+:
+ * the 3 is the methyls' count).
  */
 export function labelRuns(text: string): TextRun[] {
-  const runs: TextRun[] = [];
   const charge = /[+−-]$/.exec(text);
   const body = charge && text.length > charge[0].length ? text.slice(0, -charge[0].length) : text;
-  const push = (t: string, sub = false) => {
+  const units = labelUnits(body);
+  const runs = unitRuns(units, italicUnits(units));
+  if (charge && body !== text) runs.push({ text: charge[0].replace("-", "−"), sup: true });
+  return runs;
+}
+
+/** The runs `units` are set in, those `italic` marks in italics. */
+export function unitRuns(units: readonly string[], italic: readonly boolean[] = []): TextRun[] {
+  const runs: TextRun[] = [];
+  const push = (t: string, sub = false, it = false) => {
     const last = runs[runs.length - 1];
-    if (last && !!last.sub === sub && !last.sup) last.text += t;
-    else runs.push(sub ? { text: t, sub: true } : { text: t });
+    if (last && !!last.sub === sub && !!last.italic === it && !last.sup) last.text += t;
+    else runs.push({ text: t, ...(sub ? { sub: true } : {}), ...(it ? { italic: true } : {}) });
   };
-  for (const unit of labelUnits(body)) {
+  units.forEach((unit, k) => {
+    if (italic[k]) return push(unit, false, true);
     const group = /^\((.*)\)(\d*)$/.exec(unit);
     if (group) {
       // what a parenthesis holds, set the same way
       push("(");
-      for (const r of labelRuns(group[1])) push(r.text, !!r.sub);
+      for (const r of labelRuns(group[1])) push(r.text, !!r.sub, !!r.italic);
       push(")");
       if (group[2]) push(group[2], true);
-      continue;
+      return;
+    }
+    // a group's own prefix: the t of t-Bu, the p of p-Ts
+    const prefixed = /^(sec|tert|[nistomp])(-.+)$/.exec(unit);
+    if (prefixed) {
+      push(prefixed[1], false, true);
+      unit = prefixed[2];
     }
     const m = /^(.*?)(\d+)$/.exec(unit);
     // (a count after something, not a label that is a number)
@@ -251,7 +311,6 @@ export function labelRuns(text: string): TextRun[] {
       push(m[1]);
       push(m[2], true);
     } else push(unit);
-  }
-  if (charge && body !== text) runs.push({ text: charge[0].replace("-", "−"), sup: true });
+  });
   return runs;
 }

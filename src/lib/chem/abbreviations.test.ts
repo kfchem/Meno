@@ -5,8 +5,10 @@ import {
   abbreviationStructure,
   labelRuns,
   labelUnits,
+  namesRingFirst,
   reversedLabel,
 } from "./abbreviations";
+import { substitutedAryl } from "./substitutedAryl";
 import { readSmiles } from "./smiles";
 
 describe("SMILES, read", () => {
@@ -54,7 +56,24 @@ describe("the abbreviations", () => {
     expect(abbreviationOf("OTBDMS")?.label).toBe("OTBS");
     expect(abbreviationOf("COOH")?.label).toBe("CO2H");
     expect(abbreviationOf("tBu")?.label).toBe("t-Bu");
+    expect(abbreviationOf("p-Ts")?.label).toBe("Ts");
+    expect(abbreviationOf("C6H5")?.label).toBe("Ph");
     expect(abbreviationOf("XYZ")).toBeUndefined();
+  });
+
+  it("put together by rule: a group behind O, S or NH, and an ester", () => {
+    expect(abbreviationOf("OTBS")?.smiles).toBe("*O[Si](C)(C)C(C)(C)C");
+    expect(abbreviationOf("NHBoc")?.name).toBe("tert-butoxycarbonylamino");
+    expect(abbreviationOf("SPh")?.smiles).toBe("*Sc1ccccc1");
+    expect(abbreviationOf("CO2t-Bu")?.smiles).toBe("*C(=O)OC(C)(C)C");
+    // a contracted label behind O: trifluoromethoxy, cyanate
+    expect(abbreviationOf("OCF3")?.smiles).toBe("*OC(F)(F)F");
+    // as written, however rarely: an S-Boc
+    expect(abbreviationOf("SBoc")?.smiles).toBe("*SC(=O)OC(C)(C)C");
+    // but Cp only on a metal (IUPAC's Table II), and no ester of a contracted label
+    for (const no of ["OCp", "SCp", "NHCp", "CO2Cp", "CO2CF3", "OO", "NHNHNH2"]) expect(abbreviationOf(no), no).toBeUndefined();
+    // none is listed
+    expect(ABBREVIATIONS.some((a) => a.label === "OTBS")).toBe(false);
   });
 
   it("give the structure behind a label, attached by its first atom", () => {
@@ -68,6 +87,38 @@ describe("the abbreviations", () => {
     const ester = abbreviationStructure("CO2Me")!;
     expect(ester.atoms.map((a) => a.el)).toEqual(["C", "O", "O", "C"]);
     expect(ester.bonds.find((b) => b.order === 2)).toBeTruthy();
+  });
+});
+
+describe("substituted aryl groups", () => {
+  it("read positions, a multiplying prefix and the substituent before the group", () => {
+    expect(substitutedAryl("2,6-diMeBz")).toEqual({ smiles: "*C(=O)c1c(C)cccc1(C)", name: "2,6-dimethylbenzoyl" });
+    expect(substitutedAryl("4-MeOPh")).toEqual({ smiles: "*c1ccc(OC)cc1", name: "4-methoxyphenyl" });
+    expect(substitutedAryl("p-ClBn")).toEqual({ smiles: "*Cc1ccc(Cl)cc1", name: "4-chlorobenzyl" });
+    expect(substitutedAryl("4-MeO-3-NO2Ph")?.name).toBe("4-methoxy-3-nitrophenyl");
+    expect(substitutedAryl("3,5-(CF3)2Ph")?.name).toBe("3,5-ditrifluoromethylphenyl");
+  });
+
+  it("read the ring as a formula, its substituents with their counts before it", () => {
+    expect(substitutedAryl("4-MeOC6H4")?.smiles).toBe(substitutedAryl("4-MeOPh")?.smiles);
+    expect(substitutedAryl("2,6-Me2C6H3")?.smiles).toBe("*c1c(C)cccc1(C)");
+    expect(substitutedAryl("3,5-(CF3)2C6H3")?.smiles).toBe("*c1cc(C(F)(F)F)cc(C(F)(F)F)c1");
+    expect(substitutedAryl("2,4,6-iPr3C6H2")?.name).toBe("2,4,6-triisopropylphenyl");
+  });
+
+  it("are none where the positions, counts or hydrogens do not add up", () => {
+    for (const no of ["7-MePh", "2,2-diMePh", "2,6-MePh", "2-diMePh", "4-MeOC6H5", "2,6-Me2C6H4", "4-XyzPh", "MeOC6H4", "Ph", "4-Me"]) {
+      expect(substitutedAryl(no), no).toBeNull();
+    }
+  });
+
+  it("are abbreviations, drawn and written out as any other", () => {
+    const s = abbreviationStructure("2,6-diMeBz")!;
+    expect(s.atoms.map((a) => a.el).join("")).toBe("COCCCCCCCC");
+    expect(s.attach).toBe(0);
+    expect(s.bonds.filter((b) => b.order === 2)).toHaveLength(4);
+    expect(namesRingFirst("2,6-diMeBz")).toBe(true);
+    expect(namesRingFirst("OTBS")).toBe(false);
   });
 });
 
@@ -99,6 +150,24 @@ describe("a label, written", () => {
       { text: "3", sub: true },
       { text: ")" },
       { text: "2", sub: true },
+    ]);
+  });
+
+  it("sets s-, t-, o-, m- and p- in italics, as IUPAC's Table II prefers, and iPr upright", () => {
+    expect(labelRuns("t-Bu")).toEqual([{ text: "t", italic: true }, { text: "-Bu" }]);
+    expect(labelRuns("s-Bu")).toEqual([{ text: "s", italic: true }, { text: "-Bu" }]);
+    expect(labelRuns("iPr")).toEqual([{ text: "iPr" }]);
+    expect(labelRuns("p-Ts")).toEqual([{ text: "p", italic: true }, { text: "-Ts" }]);
+    expect(labelRuns("p-ClBn")).toEqual([{ text: "p", italic: true }, { text: "-ClBn" }]);
+    expect(labelRuns("CO2t-Bu")).toEqual([{ text: "CO" }, { text: "2", sub: true }, { text: "t", italic: true }, { text: "-Bu" }]);
+    // a ring's positions are no counts
+    expect(labelRuns("2,6-Me2C6H3")).toEqual([
+      { text: "2,6-Me" },
+      { text: "2", sub: true },
+      { text: "C" },
+      { text: "6", sub: true },
+      { text: "H" },
+      { text: "3", sub: true },
     ]);
   });
 });

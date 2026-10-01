@@ -73,6 +73,8 @@ atoms at its ends, as a dative bond does not: an ammine stays NH3.
 | A contracted abbreviation (SUP not expanded, or the old G line) | One atom, labelled, where the group's first attachment is, holding the atoms and bonds it stands for (`abbrev`); its bonds out leave from it. *Expand abbreviation*, in its menu, draws them out, turned with its bond. | |
 | An expanded abbreviation | Its atoms. | |
 | Any other label - an abbreviation, a class (Nu, Alk), a reserved type (A, Q, X, M, R, *) | Its counts subscript (CO2Me), a sign at its end its charge; read outward from its bond when that comes in from the right: TBSO, MeO2C, BocHN, F3C. No hydrogens of its own. | GR-2.3. |
+| The prefixes n-, s-, t-, sec-, tert-, i- (hyphenated) and o-, m-, p- | In italics: *t*-Bu, *s*-Bu, *p*-Ts; iPr and iBu upright, unhyphenated. The canvas leans the label's own letters; an SVG or EMF asks for the typeface's italic. | Table II sets them so, and prefers it (upright is acceptable); the names have them so (isopropyl, *tert*-butyl). |
+| A substituted aryl group named ring last (2,6-diMeBz, 4-MeOC6H4) | As written on either side of its bond - it is not read outward - the ring's group, or a formula's C6, at the bond when that comes in from the right. Positions are no counts: not subscript. | Meno's own: such labels name the ring last. |
 | A valence the file sets (V2000's vvv, V3000's VAL) | Hydrogens counted to it; a carbon of other than four shows its label, CH2. | |
 | A query hydrogen count | Kept, and written back; not drawn. | |
 
@@ -120,12 +122,29 @@ taken from the file's coordinates.
 own list, compiled from what chemists commonly write, not taken from any
 program's table: IUPAC's Table II (GR-2.2) - Me, Et, Pr, iPr, Bu, iBu,
 s-Bu, t-Bu, Ac, Ph, Ms, Ts, Cp, marked as free to use - the protecting
-groups and substituents of everyday use, contracted labels such as CO2H,
-NO2 and NMe2, and each group behind O, S or NH and as an ester (OTBS, SPh,
-NHBoc, CO2Me). Each has its structure, in SMILES (`src/lib/chem/smiles.ts`
-reads it). A label it knows can be expanded, is counted and written out
-whole, and is what RDKit is asked about; one it does not know is text.
-Ar is argon's symbol as well as aryl's (GR-9.2): typed, it is argon.
+groups and substituents of everyday use, and contracted labels such as
+CO2H, NO2, NMe2 and C6F5. Each has its structure, in SMILES
+(`src/lib/chem/smiles.ts` reads it), and may have other names (TBDMS for
+TBS, p-Ts for Ts, C6H5 for Ph).
+
+What is put together from them is read by rule, not listed:
+
+- a group or contracted label behind O, S or NH - OTBS, SPh, NHBoc, OCF3 -
+  but Cp, which Table II allows only bonded to a metal;
+- an ester, CO2 and a group - CO2Me, CO2t-Bu;
+- a substituted aryl group (`src/lib/chem/substitutedAryl.ts`): positions,
+  a multiplying prefix (di, tri, tetra, penta) and a substituent before Ph,
+  Bz (benzoyl) or Bn - 2,6-diMeBz, 4-MeO-3-NO2Ph, p-ClBn - or before the
+  ring written as a formula, with their counts - 4-MeOC6H4, 2,6-Me2C6H3,
+  3,5-(CF3)2C6H3. The substituents are Me, Et, iPr, t-Bu, Ph, F, Cl, Br,
+  I, CF3, OMe, OEt, OCF3, OH, OAc, OBn, NO2, CN, NH2, NMe2, NHAc, SMe, Ac
+  and CO2Me, each either way round (MeO, OMe). Positions must lie on the
+  ring (2 to 6, o-, m-, p-), once each; counts must match them, and a
+  formula's hydrogens make up the rest.
+
+A label known either way can be expanded, is counted and written out whole,
+and is what RDKit is asked about; one not known is text. Ar is argon's
+symbol as well as aryl's (GR-9.2): typed, it is argon.
 
 A bond that came from a file as one of these becomes an ordinary bond once
 its order or stereo is changed in the editor.

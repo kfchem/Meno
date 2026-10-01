@@ -1,4 +1,5 @@
 import { Text } from "@react-three/drei";
+import * as THREE from "three";
 import { useEffect } from "react";
 import { labelSetOf, placeLabel } from "../../../../lib/chem/layout2d";
 import {
@@ -7,6 +8,18 @@ import {
   useLabelFontUrl,
 } from "../../../fonts/typefaces";
 import { useDrawnLayout } from "./drawnLayoutContext";
+
+/**
+ * How far an italic run leans: about the slant of a sans-serif's italic.
+ * The canvas leans the label's own letters; a picture asks for the
+ * typeface's italic.
+ */
+const ITALIC_SLANT = Math.tan((12 * Math.PI) / 180);
+
+/** A run at (x, y), its baseline, leaning to the right above it. */
+function slanted(x: number, y: number): THREE.Matrix4 {
+  return new THREE.Matrix4().set(1, ITALIC_SLANT, 0, x, 0, 1, 0, y, 0, 0, 1, 0, 0, 0, 0, 1);
+}
 
 /**
  * The drawing's atom labels, from the shared layout - which puts an atom
@@ -37,21 +50,22 @@ export default function Labels2D() {
           <group key={`txt-${i}`}>
             {/* (a mark - a charge's circle, a radical's dot - is drawn with the lines) */}
             {placeLabel(t, fontWorld, labelSetOf(opts)).map((run, k) => run.mark ? null : (
-              <Text
-                key={`run-${k}`}
-                font={font}
-                position={[run.x, run.y, 0]}
-                fontSize={run.size}
-                color={opts.labelColor ?? "black"}
-                anchorX="left"
-                anchorY="top-baseline"
-                renderOrder={30}
-                material-toneMapped={false}
-                material-depthTest={false}
-                material-depthWrite={false}
-              >
-                {run.text}
-              </Text>
+              // (an italic run - the t of t-Bu - slanted about its baseline)
+              <group key={`run-${k}`} position={[run.x, run.y, 0]} matrixAutoUpdate={!run.italic} matrix={run.italic ? slanted(run.x, run.y) : undefined}>
+                <Text
+                  font={font}
+                  fontSize={run.size}
+                  color={opts.labelColor ?? "black"}
+                  anchorX="left"
+                  anchorY="top-baseline"
+                  renderOrder={30}
+                  material-toneMapped={false}
+                  material-depthTest={false}
+                  material-depthWrite={false}
+                >
+                  {run.text}
+                </Text>
+              </group>
             ))}
           </group>
         );
