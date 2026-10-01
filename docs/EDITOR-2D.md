@@ -239,6 +239,14 @@ Both go together, because both touch every layer.
   canvas. The application's style is kept in `settings.json` in the app's
   data folder; a document's stays with its tab, as MOL and SD files hold the
   structure only. (PR #46) Per-atom and per-bond overrides are to come.
+- **Reaction arrows.** The style also sets how a reaction arrow is drawn:
+  its line's thickness (a bond's, unless set), its head's length and width,
+  and how far the back of the head is drawn in towards its point - none
+  draws a triangle, more a barbed head. An arrow can set any of these for
+  itself, from *Arrow style…* in the menu a right-click on it opens: a panel
+  beside the canvas, where a setting left alone follows the style. The
+  canvas and the settings' preview draw the arrow from one outline
+  (`lib/chem/reactionArrow.ts`).
 - **Defaults.** ACS 1996, exactly, as a preset. The default is Meno's own
   style built on it: ACS 1996's proportions with round ends and joins and
   labels in IBM Plex Sans, which is also the app's own typeface - its
@@ -316,7 +324,10 @@ All hover-based, as above.
   an atom with too many bonds, saying what is wrong under the pointer; R/S
   and E/Z from a button on the canvas; both in Settings › Chemistry, and
   never in an exported picture.)
-- Reaction arrows, "+" and text: create, move, edit, delete.
+- Reaction arrows, "+" and text: create, move, edit, delete. (So far an
+  arrow comes only from an RXN file; it can be moved, deleted from its
+  menu, and given its own line and head, as above. It is not yet saved,
+  copied or in an exported picture.)
 - Copy and paste, within Meno and between tabs. (PR #68, as above; and
   between Meno and other programs, through the system clipboard.)
 

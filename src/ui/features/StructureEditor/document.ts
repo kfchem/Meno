@@ -9,6 +9,7 @@
 import { createDocument, type DocumentStore } from "../../../lib/doc";
 import type { AtomChem } from "../../../lib/chem/molecule";
 import type { StyleChoice } from "../../../lib/chem/style";
+import type { ArrowLook } from "../../../lib/chem/reactionArrow";
 import type { Arrow, Atom, Bond, Model } from "./store/types";
 
 export type StructureDocument = {
@@ -476,6 +477,20 @@ export function updateArrow(
   if (index < 0) return doc;
   const next = doc.arrows.slice();
   next[index] = { ...next[index], ...patch };
+  return { ...doc, arrows: next };
+}
+
+/** `doc` with the arrow setting `look` for itself, in place of what it set. */
+export function setArrowLook(
+  doc: StructureDocument,
+  id: number,
+  look: ArrowLook,
+): StructureDocument {
+  const index = doc.arrows.findIndex((a) => a.id === id);
+  if (index < 0) return doc;
+  const next = doc.arrows.slice();
+  const { look: _was, ...arrow } = next[index];
+  next[index] = Object.keys(look).length ? { ...arrow, look } : arrow;
   return { ...doc, arrows: next };
 }
 
