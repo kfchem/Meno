@@ -13,7 +13,7 @@
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -100,6 +100,37 @@ fn now_ms() -> u64 {
 impl Net {
     pub fn offline(&self) -> bool {
         self.0.offline.load(Ordering::SeqCst)
+    }
+
+    /// Offline mode and the purposes allowed, as the settings saved them
+    /// (`settings.json`, the window's: `{"network": {"offline", "granted"}}`),
+    /// read as the app starts so that they hold before the window has loaded
+    /// and said so itself. Taken as the window takes them (`acceptNetwork`,
+    /// lib/settings/appSettings.ts): offline only when it says `true`, and
+    /// purposes only as Meno names them. A file that cannot be read leaves
+    /// the defaults: online, nothing allowed but the user's own code.
+    pub fn load_settings(&self, path: &Path) {
+        let Ok(text) = std::fs::read_to_string(path) else { return };
+        let Ok(settings) = serde_json::from_str::<serde_json::Value>(&text) else { return };
+        let network = &settings["network"];
+        if let Some(offline) = network["offline"].as_bool() {
+            self.0.offline.store(offline, Ordering::SeqCst);
+        }
+        if let Some(granted) = network["granted"].as_array() {
+            let mut held = self.0.granted.lock().unwrap();
+            let named = |p: &&str| {
+                (1..=64).contains(&p.len())
+                    && p.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b':' || b == b'-')
+            };
+            held.extend(granted.iter().filter_map(|p| p.as_str()).filter(named).map(String::from));
+        }
+    }
+
+    /// The proxy's port - or, should it not be up, 0: a connection there is
+    /// refused at once, so a child pointed at it reaches nothing rather than
+    /// going out on its own.
+    fn proxy_port(&self) -> u16 {
+        self.0.port.get().copied().unwrap_or(0)
     }
 
     fn allowed(&self, purpose: &str) -> bool {
@@ -214,13 +245,32 @@ fn point_at_proxy(cmd: &mut Command, proxy: &str) {
 }
 
 impl Net {
-    /// Points a child that has no business on the network - the chemistry
-    /// worker - at the proxy with no task's token: whatever it reaches for
-    /// is refused, and goes on the record.
+    /// Points a child that may not use the network - the chemistry worker,
+    /// or the console while Meno is offline - at the proxy with no task's
+    /// token: whatever it reaches for is refused, and goes on the record.
     pub fn route_nowhere(&self, cmd: &mut Command) {
-        if let Some(port) = self.0.port.get() {
-            point_at_proxy(cmd, &format!("http://127.0.0.1:{port}"));
+        point_at_proxy(cmd, &format!("http://127.0.0.1:{}", self.proxy_port()));
+    }
+
+    /// Routes a Python sidecar: the console's, the user's own code, as a task
+    /// for as long as it runs, when Meno may go out; anything else - another
+    /// worker, or the console while Meno is offline - nowhere.
+    pub fn route_sidecar(&self, cmd: &mut Command, console: bool) -> Option<TaskHandle> {
+        let task = console.then(|| self.begin("python-code", "Python run in the console").ok()).flatten();
+        match &task {
+            Some(task) => task.route(cmd),
+            None => self.route_nowhere(cmd),
         }
+        task
+    }
+
+    /// Binds the proxy's port on the loopback address, and knows it from
+    /// then on.
+    fn bind(&self) -> Option<std::net::TcpListener> {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).ok()?;
+        let _ = self.0.port.set(listener.local_addr().ok()?.port());
+        listener.set_nonblocking(true).ok()?;
+        Some(listener)
     }
 }
 
@@ -234,11 +284,10 @@ pub struct TaskHandle {
 impl TaskHandle {
     /// Points a child process's connections at the proxy, as this task's.
     pub fn route(&self, cmd: &mut Command) {
-        if let Some(port) = self.net.0.port.get() {
-            // The token as the password: Python's urllib sends proxy
-            // credentials only when there is one.
-            point_at_proxy(cmd, &format!("http://meno:{}@127.0.0.1:{port}", self.token));
-        }
+        // The token as the password: Python's urllib sends proxy
+        // credentials only when there is one.
+        let port = self.net.proxy_port();
+        point_at_proxy(cmd, &format!("http://meno:{}@127.0.0.1:{port}", self.token));
     }
 
     /// The proxy, as this task's, for a request Meno makes itself (the
@@ -261,7 +310,10 @@ impl Drop for TaskHandle {
     }
 }
 
-/// Starts the proxy on the loopback address, and the log in `data`.
+/// Starts the proxy on the loopback address, and the log in `data`, with
+/// the network's settings as they were saved. Both are in place when this
+/// returns - before anything the window asks for can start a process: a
+/// child begun earlier would have gone out on its own, past offline mode.
 pub fn start(app: &AppHandle) {
     let net = app.state::<Net>().inner().clone();
     let window = app.clone();
@@ -271,14 +323,14 @@ pub fn start(app: &AppHandle) {
     if let Ok(data) = app.path().app_data_dir() {
         let _ = std::fs::create_dir_all(&data);
         let _ = net.0.log.set(data.join("network-log.jsonl"));
+        net.load_settings(&data.join("settings.json"));
     }
+    // (bound here, its port known at once; served on the async runtime)
+    let Some(listener) = net.bind() else { return };
     tauri::async_runtime::spawn(async move {
-        let Ok(listener) = TcpListener::bind(("127.0.0.1", 0)).await else {
+        let Ok(listener) = TcpListener::from_std(listener) else {
             return;
         };
-        if let Ok(addr) = listener.local_addr() {
-            let _ = net.0.port.set(addr.port());
-        }
         while let Ok((stream, _)) = listener.accept().await {
             let net = net.clone();
             tauri::async_runtime::spawn(async move { net.serve(stream).await });
@@ -735,6 +787,93 @@ mod tests {
             .and_then(|(_, v)| v)
             .map(|v| v.to_string_lossy().into_owned());
         assert_eq!(proxy.as_deref(), Some("http://127.0.0.1:4567"));
+    }
+
+    /// The proxy a command was pointed at, by `HTTPS_PROXY` whatever its case.
+    fn proxy_of(cmd: &Command) -> Option<String> {
+        cmd.get_envs()
+            .find(|(k, _)| k.to_string_lossy().eq_ignore_ascii_case("HTTPS_PROXY"))
+            .and_then(|(_, v)| v)
+            .map(|v| v.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn points_a_child_at_no_port_at_all_while_the_proxy_is_not_up() {
+        // (not left without a proxy, to go out on its own)
+        let net = Net::default();
+        let mut nowhere = Command::new("true");
+        net.route_nowhere(&mut nowhere);
+        assert_eq!(proxy_of(&nowhere).as_deref(), Some("http://127.0.0.1:0"));
+        let task = net.begin("python-code", "Python").unwrap();
+        let mut routed = Command::new("true");
+        task.route(&mut routed);
+        assert!(proxy_of(&routed).unwrap().ends_with("@127.0.0.1:0"));
+    }
+
+    #[test]
+    fn knows_its_port_once_bound() {
+        let net = Net::default();
+        let listener = net.bind().expect("a port on the loopback address");
+        let port = listener.local_addr().unwrap().port();
+        let mut cmd = Command::new("true");
+        net.route_nowhere(&mut cmd);
+        assert_eq!(proxy_of(&cmd), Some(format!("http://127.0.0.1:{port}")));
+    }
+
+    #[test]
+    fn routes_the_console_nowhere_while_offline() {
+        let net = Net::default();
+        let _ = net.0.port.set(4567);
+        let mut online = Command::new("true");
+        let task = net.route_sidecar(&mut online, true);
+        assert!(task.is_some());
+        assert!(proxy_of(&online).unwrap().starts_with("http://meno:"));
+        drop(task);
+
+        net.0.offline.store(true, Ordering::SeqCst);
+        let mut offline = Command::new("true");
+        assert!(net.route_sidecar(&mut offline, true).is_none());
+        assert_eq!(proxy_of(&offline).as_deref(), Some("http://127.0.0.1:4567"));
+        // and a worker that runs no one's code, either way
+        let mut worker = Command::new("true");
+        assert!(net.route_sidecar(&mut worker, false).is_none());
+        assert_eq!(proxy_of(&worker).as_deref(), Some("http://127.0.0.1:4567"));
+    }
+
+    #[test]
+    fn takes_offline_mode_and_what_was_allowed_from_the_saved_settings() {
+        let dir = std::env::temp_dir().join(format!("meno-net-settings-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+
+        let offline = Net::default();
+        std::fs::write(
+            &path,
+            r#"{"format":1,"network":{"offline":true,"granted":["app-update","python-env:chem","Not A Purpose!"]}}"#,
+        )
+        .unwrap();
+        offline.load_settings(&path);
+        assert!(offline.offline());
+        assert!(offline.allowed("app-update") && offline.allowed("python-env:chem"));
+        assert!(!offline.allowed("Not A Purpose!"));
+        // offline, not even the user's own code goes out
+        assert!(offline.begin("python-code", "Python").is_err());
+
+        // missing or unreadable: the defaults, as the window takes them
+        for text in [None, Some("not json"), Some(r#"{"network":{"offline":"yes"}}"#)] {
+            let net = Net::default();
+            match text {
+                Some(text) => std::fs::write(&path, text).unwrap(),
+                None => {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+            net.load_settings(&path);
+            assert!(!net.offline(), "{text:?}");
+            assert!(!net.allowed("app-update"), "{text:?}");
+            assert!(net.begin("python-code", "Python").is_ok(), "{text:?}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

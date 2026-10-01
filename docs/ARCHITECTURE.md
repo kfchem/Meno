@@ -282,7 +282,16 @@ to be able to work with nothing going out at all.
   HTTPS, and never in offline mode. Each connection - host, bytes each way,
   times, outcome - goes to the window as it happens (`net:connection`, every
   half second while open) and to `network-log.jsonl` in the app's data
-  folder when it ends.
+  folder when it ends. A child that may not use the network - another
+  worker, or the console while Meno is offline - is pointed at the proxy
+  with no task, so whatever it reaches for is refused and on the record.
+  The proxy is bound, and offline mode and the purposes allowed are read
+  from the saved settings, as the app starts: before the window has loaded,
+  nothing can be started that would go out on its own.
+- **The proxy holds what honours proxy variables** - uv, pip, Python's
+  `urllib`, `requests`. Code in the console that opens a socket of its own,
+  or ignores those variables, is not held by it: Meno does not sandbox the
+  console.
 - **The window asks and shows** (`lib/net/network.ts`, `ui/network/`): a
   purpose's first use of the network waits on the user's yes
   (`askToConnect`, remembered in the settings until withdrawn); each task
