@@ -25,7 +25,8 @@ export type StyleGroup =
   | "Hashes and dashes"
   | "Wavy and dative bonds"
   | "Labels"
-  | "Aromatic rings";
+  | "Aromatic rings"
+  | "Reaction arrows";
 
 export const STYLE_GROUPS: StyleGroup[] = [
   "Size",
@@ -36,10 +37,11 @@ export const STYLE_GROUPS: StyleGroup[] = [
   "Wavy and dative bonds",
   "Labels",
   "Aromatic rings",
+  "Reaction arrows",
 ];
 
 /** What a share is a share of, for a setting given as one. */
-export type ShareOf = "bond" | "font size" | "ring radius";
+export type ShareOf = "bond" | "font size" | "ring radius" | "arrowhead length";
 
 export type FieldKind =
   /** The bond length itself, in points. */
@@ -430,6 +432,38 @@ export const STYLE_FIELDS: StyleField[] = [
       "The circle drawn inside an aromatic ring, as a share of the ring's radius.",
     kind: share("ring radius", 0.2, 0.9, 0.01),
   },
+
+  // --- Reaction arrows -------------------------------------------------------
+  {
+    key: "reactionArrowThickness",
+    group: "Reaction arrows",
+    label: "Reaction arrow: line thickness",
+    description: "How thick a reaction arrow's line is.",
+    kind: length(0.1, 5),
+    automatic: "a bond's line thickness",
+  },
+  {
+    key: "reactionArrowHeadLength",
+    group: "Reaction arrows",
+    label: "Reaction arrow: head length",
+    description: "How long a reaction arrow's head is, from its point to its back corners.",
+    kind: length(0.5, 20),
+  },
+  {
+    key: "reactionArrowHeadWidth",
+    group: "Reaction arrows",
+    label: "Reaction arrow: head width",
+    description: "How wide a reaction arrow's head is, across its back corners.",
+    kind: length(0.5, 20),
+  },
+  {
+    key: "reactionArrowHeadInset",
+    group: "Reaction arrows",
+    label: "Reaction arrow: notch",
+    description:
+      "How far the back of the head is drawn in towards its point, as a share of the head's length: none draws a triangle, more a barbed head.",
+    kind: share("arrowhead length", 0, 0.8, 0.01),
+  },
 ];
 
 const FIELD_BY_KEY = new Map(STYLE_FIELDS.map((f) => [f.key, f]));
@@ -453,6 +487,8 @@ export function automaticValue(
       return wedgeBroadEndOf({ ...style, wedgeBroadEnd: undefined });
     case "hashStartOffset":
       return style.hashInterval;
+    case "reactionArrowThickness":
+      return style.lineThickness;
     case "labelBaseline":
       return automaticBaseline(labelFont(style.fontFamily).capHeight);
     default:

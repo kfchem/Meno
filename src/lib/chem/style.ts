@@ -156,6 +156,21 @@ export type DrawingStyle = {
   // --- Aromatic rings ------------------------------------------------------
   /** The circle drawn in an aromatic ring, as a fraction of the ring's radius. */
   aromaticCircleSize: number;
+
+  // --- Reaction arrows -----------------------------------------------------
+  /** The thickness of a reaction arrow's line; left unset, a bond's. */
+  reactionArrowThickness?: Length;
+  /**
+   * A reaction arrow's head: how long, from its point to its back corners,
+   * and how wide across them.
+   */
+  reactionArrowHeadLength: Length;
+  reactionArrowHeadWidth: Length;
+  /**
+   * How far the back of the head is drawn in towards its point, as a
+   * fraction of the head's length: none draws a triangle, more a barbed head.
+   */
+  reactionArrowHeadInset: number;
 };
 
 /**
@@ -180,6 +195,7 @@ const RULES = {
   chargeCircles: "single",
   chargedCarbonLabel: "hidden",
   aromaticCircleSize: 0.5,
+  reactionArrowHeadInset: 0,
 } satisfies Partial<DrawingStyle>;
 
 /**
@@ -197,12 +213,14 @@ export const ACS_1996: DrawingStyle = {
   doubleGap: ofBond(0.18),
   boldThickness: pt(2.0),
   hashInterval: pt(2.5),
-  // Not yet settled against ACS 1996: a dashed bond's dashes and a dative
-  // bond's arrowhead.
+  // Not yet settled against ACS 1996: a dashed bond's dashes, a dative
+  // bond's arrowhead and a reaction arrow's head.
   dashLength: pt(1.5),
   dashGap: pt(1.0),
   arrowheadLength: pt(3.0),
   arrowheadWidth: pt(2.0),
+  reactionArrowHeadLength: pt(5.0),
+  reactionArrowHeadWidth: pt(3.6),
   waveAmplitude: pt(0.94),
   wavelength: pt(3.76),
   fontFamily: "Arial",
@@ -220,6 +238,8 @@ const ACS_PROPORTIONS = {
   dashGap: ofBond(1.0 / 14.4),
   arrowheadLength: ofBond(3.0 / 14.4),
   arrowheadWidth: ofBond(2.0 / 14.4),
+  reactionArrowHeadLength: ofBond(5.0 / 14.4),
+  reactionArrowHeadWidth: ofBond(3.6 / 14.4),
   waveAmplitude: ofBond(0.94 / 14.4),
   wavelength: ofBond(3.76 / 14.4),
 } satisfies Partial<DrawingStyle>;
