@@ -113,6 +113,27 @@ describe("buildTextLabels", () => {
     expect(labels[0].atom).toBe(0);
   });
 
+  it("writes an atom on its own as its formula is written: H2O, HCl, H3O+, but NH3", () => {
+    const alone = (el: string, charge?: number) =>
+      buildTextLabels([{ id: 1, x: 0, y: 0, el, ...(charge ? { charge } : {}) }], opts(), [])[0];
+    const water = alone("O");
+    expect(water.text).toBe("H2O");
+    expect(water.runs).toEqual([{ text: "H" }, { text: "2", sub: true }, { text: "O" }]);
+    // the oxygen still sits on the atom
+    expect(water.anchorRun).toBe(2);
+    expect(alone("S").text).toBe("H2S");
+    expect(alone("Cl").text).toBe("HCl");
+    expect(alone("Br").text).toBe("HBr");
+    // the charge after the symbol, where the hydrogens come first
+    expect(alone("O", 1).text).toBe("H3O+");
+    expect(alone("O", -1).text).toBe("HO\u2212");
+    // the rest keep the symbol first
+    expect(alone("N").text).toBe("NH3");
+    expect(alone("N", 1).text).toBe("NH4+");
+    expect(alone("P").text).toBe("PH3");
+    expect(alone("C").text).toBe("CH4");
+  });
+
   // O bonded to a carbon that sits up and to the left
   const hydroxyl: Atom[] = [
     { id: 1, x: 0, y: 0, el: "C" },
@@ -190,8 +211,8 @@ describe("buildTextLabels", () => {
       opts(),
       [],
     );
-    // no bonds known: Cl would carry one hydrogen
-    expect(label.text).toBe("ClH");
+    // no bonds known: Cl carries one hydrogen, written first as on its own
+    expect(label.text).toBe("HCl");
   });
 });
 

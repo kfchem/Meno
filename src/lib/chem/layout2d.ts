@@ -1620,6 +1620,9 @@ function tailRuns(a: Atom, opts: Pick<LayoutOptions, "circleCharges">): TextRun[
   return out;
 }
 
+/** The elements whose hydrides are written hydrogens first: groups 16 and 17. */
+const HYDROGENS_FIRST = new Set(["O", "S", "Se", "Te", "Po", "F", "Cl", "Br", "I", "At"]);
+
 /**
  * The labels of the atoms that have one, and where their hydrogens go.
  *
@@ -1762,8 +1765,13 @@ export function buildTextLabels(
       });
       continue;
     }
-    const neighboursRight =
-      toward.x > Math.hypot(toward.x, toward.y) * band;
+    // An atom on its own has no bonds to keep the hydrogens clear of: they
+    // go where its formula is written with them - first for oxygen and the
+    // halogens and their groups, H2O, H2S, HCl, H3O+; after the symbol for
+    // the rest, NH3, CH4, PH3.
+    const neighboursRight = bonded.has(i)
+      ? toward.x > Math.hypot(toward.x, toward.y) * band
+      : HYDROGENS_FIRST.has(a.el);
     // (the charge after all of it where the H follow the symbol: NH3+; after
     // the symbol where they come first: H3N+)
     const runs = neighboursRight
