@@ -55,9 +55,11 @@ at any release.
    `latest.json`. It then checks that the update's signature names the
    version it is released as (see below).
 4. If the run passed: try the draft's installer, write the release notes
-   (they are shown in Meno, as the update's notes), and publish it. The
-   Menos installed find it the next time they look - as they start, and
-   every few hours. Never publish the draft of a run that failed.
+   on the release page if you like, and publish it. The Menos installed
+   find it the next time they look - as they start, and every few hours.
+   Never publish the draft of a run that failed. (Editing the notes does
+   not change `latest.json`, whose `notes` were written as the workflow
+   ran; Meno does not show them for now.)
 
 An installed Meno checks more than the signature itself: the signature's
 trusted comment must carry the version `latest.json` announces
