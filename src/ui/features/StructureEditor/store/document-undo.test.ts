@@ -106,7 +106,7 @@ describe("editor store over a document", () => {
     ],
     bonds: [{ id: 3, a: 1, b: 2, order: 2 as const }],
   };
-  const arrow = { x: 4, y: 0, angle: 0, length: 3 };
+  const arrow = { arrows: [{ x: 4, y: 0, angle: 0, length: 3 }] };
 
   it("opens a tab's file as where the document starts, not as an edit", () => {
     const { doc, state } = editor();
@@ -315,6 +315,87 @@ describe("editor store over a document", () => {
     expect([...state().sel.bonds]).toEqual([bond.id]);
     doc.undo();
     expect(state().model.atoms.map((a) => a.id)).toEqual([c]);
+  });
+
+  it("pastes a reaction with its arrow and plus, ids of their own, and selects all a group's atoms and bonds", () => {
+    const { doc, state } = editor();
+    state().addArrow(0, 0);
+    const before = doc.history().undoDepth;
+    // two atoms of one Sgroup, whose id is handed out between atoms and bonds
+    const group = { id: 4, type: "SRU" as const };
+    state().pasteModel({
+      atoms: [
+        { id: 1, x: 5, y: 0, r: 0.9, el: "C", sgroups: [group] },
+        { id: 2, x: 6, y: 0, r: 0.9, el: "C", sgroups: [group] },
+        { id: 3, x: 9, y: 0, r: 0.9, el: "O" },
+      ],
+      bonds: [{ id: 5, a: 1, b: 2, order: 1 }],
+      arrows: [{ id: 1, x: 7.5, y: 0, angle: 0, length: 2, look: { reactionArrowHeadInset: 0.3 } }],
+      pluses: [{ id: 7, x: 4, y: 0 }],
+    });
+    expect(doc.history().undoDepth).toBe(before + 1);
+    expect(state().arrows).toHaveLength(2);
+    expect(state().arrows[1]).toMatchObject({ id: 2, x: 7.5, look: { reactionArrowHeadInset: 0.3 } });
+    expect(state().pluses).toEqual([{ id: 1, x: 4, y: 0 }]);
+    expect(state().sel.atoms.size).toBe(3);
+    expect([...state().sel.bonds]).toEqual(state().model.bonds.map((b) => b.id));
+    doc.undo();
+    expect(state().arrows).toHaveLength(1);
+    expect(state().pluses).toHaveLength(0);
+  });
+
+  it("cuts atoms, arrows and pluses as one step; moves and deletes a plus", () => {
+    const { doc, state } = editor();
+    state().replaceModel(
+      { atoms: [{ id: 1, x: -2, y: 0, r: 0.9, el: "C" }, { id: 2, x: 2, y: 0, r: 0.9, el: "O" }], bonds: [] },
+      { arrows: [{ x: 0, y: 0, angle: 0, length: 2 }], pluses: [{ x: -3, y: 0 }, { x: 3, y: 0 }] },
+    );
+    const [p1, p2] = state().pluses;
+    state().movePlus(p1.id, -3, 1);
+    state().movePlus(p1.id, -3, 2);
+    expect(state().pluses[0]).toMatchObject({ x: -3, y: 2 });
+    const depth = doc.history().undoDepth;
+    state().deleteDrawn({ atoms: [state().model.atoms[0]], bonds: [], arrows: state().arrows, pluses: [p1] });
+    expect(doc.history().undoDepth).toBe(depth + 1);
+    expect(state().model.atoms.map((a) => a.el)).toEqual(["O"]);
+    expect(state().arrows).toHaveLength(0);
+    expect(state().pluses.map((p) => p.id)).toEqual([p2.id]);
+    state().removePlus(p2.id);
+    expect(state().pluses).toHaveLength(0);
+    doc.undo();
+    doc.undo();
+    expect(state().arrows).toHaveLength(1);
+    expect(state().pluses).toHaveLength(2);
+    // the two moves, one step
+    doc.undo();
+    expect(state().pluses[0]).toMatchObject({ x: -3, y: 0 });
+  });
+
+  it("takes the arrows and pluses among a selection with it, deleted or moved", () => {
+    const { state } = editor();
+    state().replaceModel(
+      {
+        atoms: [
+          { id: 1, x: -2, y: 0, r: 0.9, el: "C" },
+          { id: 2, x: 2, y: 0, r: 0.9, el: "O" },
+          { id: 3, x: 9, y: 0, r: 0.9, el: "N" },
+        ],
+        bonds: [],
+      },
+      { arrows: [{ x: 0, y: 0, angle: 0, length: 2 }], pluses: [{ x: 8, y: 0 }] },
+    );
+    // the C and the O: the arrow between them, not the plus by the N
+    state().setSel({ atoms: new Set([1, 2]), bonds: new Set() });
+    state().moveAtoms(
+      [{ id: 1, x: -2, y: 5 }, { id: 2, x: 2, y: 5 }],
+      "test",
+      { arrows: [{ id: state().arrows[0].id, x: 0, y: 5 }] },
+    );
+    expect(state().arrows[0]).toMatchObject({ x: 0, y: 5 });
+    state().deleteSelection();
+    expect(state().model.atoms.map((a) => a.el)).toEqual(["N"]);
+    expect(state().arrows).toHaveLength(0);
+    expect(state().pluses).toHaveLength(1);
   });
 
   it("keeps aromatic circles in the document", () => {

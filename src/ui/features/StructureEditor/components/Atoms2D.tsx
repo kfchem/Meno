@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { useEffect, useMemo, useRef } from "react";
 import { useThree } from "@react-three/fiber";
-import { useEditor } from "../store";
+import { useEditor, useEditorStore } from "../store";
+import { schemeAmong } from "../utils/copyPaste";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { computeMoveSnap } from "../utils/moveSnap";
 import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
@@ -40,6 +41,7 @@ export function Atoms2D() {
     selectPathTo,
     moveAtoms,
   } = useEditor();
+  const store = useEditorStore();
   const inst = useRef<THREE.InstancedMesh>(null!);
   const tmpM = useMemo(() => new THREE.Matrix4(), []);
   const { camera, gl } = useThree();
@@ -280,6 +282,9 @@ export function Atoms2D() {
     const from = model.atoms
       .filter((a) => sel.atoms.has(a.id))
       .map((a) => ({ id: a.id, x: a.x, y: a.y }));
+    // the arrows and pluses among the selection go with it
+    const st = store.getState();
+    const among = schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses }, sel.atoms);
     const p0 = toWorld(cand.current.sx, cand.current.sy);
     const gesture = `drag-${performance.now()}`;
     let frame: number | null = null;
@@ -288,10 +293,8 @@ export function Atoms2D() {
       frame = null;
       const dx = last.x - p0.x;
       const dy = last.y - p0.y;
-      moveAtoms(
-        from.map((a) => ({ id: a.id, x: a.x + dx, y: a.y + dy })),
-        gesture,
-      );
+      const by = (p: { id: number; x: number; y: number }) => ({ id: p.id, x: p.x + dx, y: p.y + dy });
+      moveAtoms(from.map(by), gesture, { arrows: among.arrows.map(by), pluses: among.pluses.map(by) });
     };
     const onMove = (ev: PointerEvent) => {
       last = toWorld(ev.clientX, ev.clientY);

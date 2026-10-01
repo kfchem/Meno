@@ -5,12 +5,14 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { createSVG, layoutMolecule, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
 import { writeMolfile, writeSdf } from "../../../lib/chem/molWriter";
 import { forFlatReaders } from "./chem/drawing";
+import { reactionFileText } from "./chem/reactionFile";
 import { styleOf, type DrawingStyle } from "../../../lib/chem/style";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { editorLayoutOptions, layoutBonds } from "./layoutOptions";
 import { useEditorStore } from "./store";
-import type { EditorState, Model } from "./store/types";
+import type { Drawn, EditorState } from "./store/types";
 import { chemistry } from "../../../lib/chem/molecule";
+import { schemeOutlines } from "../../../lib/chem/reactionScheme";
 
 /** A file's name without its folder or its extension. */
 function stem(path: string): string {
@@ -19,14 +21,16 @@ function stem(path: string): string {
 }
 
 /**
- * The structure as the file at `path` is to hold it: an SD file for `.sdf`,
- * a MOL file for anything else, titled with the file's own name. A cage
- * drawn in perspective is given the wedges that say its stereochemistry,
- * which the file has no other way to hold.
+ * The drawing as the file at `path` is to hold it: an RXN file for `.rxn` -
+ * the reaction its arrow shows, throwing where it shows none - an SD file
+ * for `.sdf`, a MOL file for anything else, titled with the file's own
+ * name. A cage drawn in perspective is given the wedges that say its
+ * stereochemistry, which the file has no other way to hold.
  */
-export function structureFileText(model: Model, path: string): string {
+export function structureFileText(drawn: Drawn, path: string): string {
   const title = stem(path);
-  const flat = forFlatReaders(model);
+  if (/\.rxn$/i.test(path)) return reactionFileText(drawn, title);
+  const flat = forFlatReaders(drawn);
   return /\.sdf$/i.test(path)
     ? writeSdf(flat, { title })
     : writeMolfile(flat, { title });
@@ -43,12 +47,12 @@ export function exportPxPerWorld(style: DrawingStyle): number {
 
 /**
  * The drawing exactly as the canvas lays it out, at the style's own size,
- * for a picture made of it. Lines keep their true width however thin - the
- * canvas's on-screen minimum is for the screen - and the margin round it is
- * a few pixels.
+ * for a picture made of it - its reaction arrows and "+" signs with it.
+ * Lines keep their true width however thin - the canvas's on-screen minimum
+ * is for the screen - and the margin round it is a few pixels.
  */
 export function drawingLayout(
-  model: Model,
+  model: Drawn,
   aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
   style: DrawingStyle,
 ): { layout: Layout; opts: LayoutOptions } {
@@ -67,12 +71,26 @@ export function drawingLayout(
     minLinePx: 0,
     paddingPx: 4,
   });
-  return { layout: layoutMolecule(atoms, bonds, opts, exportPxPerWorld(style)), opts };
+  const layout = layoutMolecule(atoms, bonds, opts, exportPxPerWorld(style));
+  const outlines = schemeOutlines(model, style, NOMINAL_BOND_LENGTH);
+  if (outlines.length) {
+    const points = outlines.flat();
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const { min, max } = layout.bounds;
+    const none = !model.atoms.length;
+    layout.polys.push(...outlines.map((o) => ({ points: o })));
+    layout.bounds = {
+      min: { x: Math.min(none ? Infinity : min.x, ...xs), y: Math.min(none ? Infinity : min.y, ...ys) },
+      max: { x: Math.max(none ? -Infinity : max.x, ...xs), y: Math.max(none ? -Infinity : max.y, ...ys) },
+    };
+  }
+  return { layout, opts };
 }
 
 /** The drawing as SVG (drawingLayout). */
 export function drawingSvg(
-  model: Model,
+  model: Drawn,
   aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
   style: DrawingStyle,
 ): string {
@@ -101,7 +119,7 @@ export function useFileActions() {
 
   const saveTo = useCallback(
     async (path: string) => {
-      await writeTextFile(path, structureFileText(store.getState().model, path));
+      await writeTextFile(path, structureFileText(drawnOf(store.getState()), path));
       store.getState().markSavedAs(path);
     },
     [store],
@@ -110,13 +128,17 @@ export function useFileActions() {
   const saveAs = useCallback(
     () =>
       attempt("Save", async () => {
+        // a reaction, as an RXN file first
+        const reaction = store.getState().arrows.length > 0;
+        const structure = [
+          { name: "MOL file", extensions: ["mol"] },
+          { name: "SD file", extensions: ["sdf"] },
+        ];
+        const rxn = { name: "RXN file", extensions: ["rxn"] };
         const path = await saveDialog({
-          title: "Save structure",
-          defaultPath: store.getState().savedPath ?? "structure.mol",
-          filters: [
-            { name: "MOL file", extensions: ["mol"] },
-            { name: "SD file", extensions: ["sdf"] },
-          ],
+          title: reaction ? "Save reaction" : "Save structure",
+          defaultPath: store.getState().savedPath ?? (reaction ? "reaction.rxn" : "structure.mol"),
+          filters: reaction ? [rxn, ...structure] : [...structure, rxn],
         });
         if (path) await saveTo(path);
       }),
@@ -141,10 +163,15 @@ export function useFileActions() {
         const state = store.getState();
         // The style the canvas is drawn in: the document's own, or the app's.
         const style = styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle);
-        await writeTextFile(path, drawingSvg(state.model, state, style));
+        await writeTextFile(path, drawingSvg(drawnOf(state), state, style));
       }),
     [attempt, store],
   );
 
   return { save, saveAs, exportSvg, error, dismissError: () => setError(null) };
+}
+
+/** Everything the canvas draws: its structures, arrows and "+" signs. */
+export function drawnOf(state: Pick<EditorState, "model" | "arrows" | "pluses">): Drawn {
+  return { ...state.model, arrows: state.arrows, pluses: state.pluses };
 }

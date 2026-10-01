@@ -28,7 +28,7 @@ fn is_binary(flavor: &str) -> bool {
 }
 
 /// The kinds a copy may put on the clipboard (`object` is only ever read).
-const WRITTEN: [&str; 7] = ["meno", "mol", "text", "gvml", "emf", "png", "dib"];
+const WRITTEN: [&str; 8] = ["meno", "mol", "rxn", "text", "gvml", "emf", "png", "dib"];
 
 /// What the page's kinds are called on this platform, most preferred first.
 /// A kind the platform has no name for is left out.
@@ -42,6 +42,8 @@ fn names(flavor: &str) -> &'static [&'static str] {
         match flavor {
             "meno" => &["com.kfchem.meno.structure"],
             "mol" => &["chemical/x-mdl-molfile"],
+            // a reaction, as an RXN file
+            "rxn" => &["chemical/x-mdl-rxnfile"],
             "text" => &["public.utf8-plain-text"],
             "gvml" => &["com.microsoft.Art--GVML-ClipFormat"],
             "png" => &["public.png"],
@@ -57,6 +59,7 @@ fn names(flavor: &str) -> &'static [&'static str] {
             "meno" => &["Meno Structure"],
             // MDLCT is what the chemistry programs on Windows exchange
             "mol" => &["MDLCT", "chemical/x-mdl-molfile"],
+            "rxn" => &["chemical/x-mdl-rxnfile"],
             "text" => &["CF_UNICODETEXT"],
             "gvml" => &["Art::GVML ClipFormat"],
             "png" => &["PNG"],
@@ -344,7 +347,7 @@ mod platform {
                 Some(String::from_utf16_lossy(&wide[..end]).into_bytes())
             }
             "MDLCT" => from_mdlct(bytes).map(String::into_bytes),
-            "Meno Structure" | "chemical/x-mdl-molfile" => {
+            "Meno Structure" | "chemical/x-mdl-molfile" | "chemical/x-mdl-rxnfile" => {
                 let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
                 Some(bytes[..end].to_vec())
             }
@@ -479,7 +482,7 @@ mod tests {
     fn a_kind_has_its_platforms_names() {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
-            for flavor in ["meno", "mol", "text", "gvml", "png"] {
+            for flavor in ["meno", "mol", "rxn", "text", "gvml", "png"] {
                 assert!(!names(flavor).is_empty(), "{flavor}");
             }
         }
@@ -492,7 +495,7 @@ mod tests {
         assert!(!takes.iter().any(|f| f == "object"), "an object is only read");
         #[cfg(target_os = "macos")]
         {
-            assert_eq!(takes, ["meno", "mol", "text", "gvml", "png"]);
+            assert_eq!(takes, ["meno", "mol", "rxn", "text", "gvml", "png"]);
             assert_eq!(names("object"), ["com.microsoft.Embedded-Object"]);
         }
         #[cfg(target_os = "windows")]
@@ -502,7 +505,7 @@ mod tests {
     #[test]
     fn pictures_travel_as_base64_and_text_as_text() {
         assert!(is_binary("gvml") && is_binary("png") && is_binary("emf") && is_binary("dib"));
-        assert!(!is_binary("meno") && !is_binary("mol") && !is_binary("text"));
+        assert!(!is_binary("meno") && !is_binary("mol") && !is_binary("rxn") && !is_binary("text"));
         let item: ClipItem = serde_json::from_str(r#"{"flavor":"png","base64":"iVBO"}"#).unwrap();
         assert_eq!(item.text, None);
         assert_eq!(serde_json::to_string(&ClipItem { flavor: "mol".into(), text: Some("x".into()), base64: None }).unwrap(), r#"{"flavor":"mol","text":"x"}"#);

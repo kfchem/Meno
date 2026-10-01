@@ -1,4 +1,4 @@
-import type { ImportedArrow, Relayout } from "../document";
+import type { ImportedScheme, MarkPlaces, Relayout } from "../document";
 import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
 import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
@@ -46,6 +46,13 @@ export type Arrow = {
   /** What it sets for itself over the drawing style: its line and its head. */
   look?: ArrowLook;
 };
+/** A "+" between two structures of a reaction scheme: where its middle is. */
+export type Plus = { id: number; x: number; y: number };
+/**
+ * Structures with the arrows and "+" signs drawn among them: what a copy
+ * takes, a picture shows and a paste brings.
+ */
+export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[] };
 
 export type EditorState = {
   model: Model;
@@ -60,8 +67,11 @@ export type EditorState = {
   hovered: { atomId: number | null; bondId: number | null };
   /** The reaction arrow under the pointer: its menu is the one a right-click opens. */
   hoveredArrow: number | null;
+  /** The "+" under the pointer, likewise. */
+  hoveredPlus: number | null;
   hoverPulse: { id: number | null; nonce: number; until: number };
   arrows: Arrow[];
+  pluses: Plus[];
   fitNonce: number;
   autoFitSuspended: boolean;
   aromaticEnabled: boolean; // legacy/global
@@ -107,6 +117,7 @@ export type EditorState = {
   suppressDblClickUntil: number;
   nextId: number;
   nextArrowId: number;
+  nextPlusId: number;
   addAtom: (x: number, y: number, el?: string, r?: number) => number;
   addBond: (a: number, b: number, order?: Bond["order"]) => number;
   /** New atom plus its bond to `baseId`, as one undo step. */
@@ -161,16 +172,21 @@ export type EditorState = {
   clearSel: () => void;
   setBoxSelect: (box: EditorState["boxSelect"]) => void;
   /** Atoms moved together - a selection dragged or turned - the moves of one gesture one undo step. */
-  moveAtoms: (moves: { id: number; x: number; y: number }[], gesture: string) => void;
+  /**
+   * Atoms moved to where they go - and `marks`, arrows and pluses, with them
+   * - all of one gesture one step.
+   */
+  moveAtoms: (moves: { id: number; x: number; y: number }[], gesture: string, marks?: MarkPlaces) => void;
   /** The selection turned over, left to right or top to bottom (utils/selection). */
   turnSelectionOver: (axis: "vertical" | "horizontal") => void;
   /** The selection deleted, as one undo step. */
   deleteSelection: () => void;
   /** A structure from the clipboard added where it already stands, selected, as one undo step. */
-  pasteModel: (next: Model) => void;
+  pasteModel: (next: Drawn) => void;
   setHoveredFromId: (id: number) => void;
   clearHovered: () => void;
   setHoveredArrow: (id: number | null) => void;
+  setHoveredPlus: (id: number | null) => void;
   clearAtomHover: () => void;
   clearBondHover: () => void;
   /** Begins a stroke out of an atom: one bond, or a chain. */
@@ -211,16 +227,21 @@ export type EditorState = {
   ) => void;
   endMoveDrag: () => void;
   /** The structure a tab opens with: where its document starts, not an edit. */
-  openModel: (next: Model, arrow?: ImportedArrow) => void;
+  openModel: (next: Model, scheme?: ImportedScheme) => void;
   /** A file opened over the canvas's contents, as one undo step. */
-  replaceModel: (next: Model, arrow?: ImportedArrow) => void;
+  replaceModel: (next: Model, scheme?: ImportedScheme) => void;
   /** A file dropped onto the canvas, or a SMILES beside what is drawn: added, selected, as one undo step. */
-  appendModel: (next: Model, arrow?: ImportedArrow) => void;
+  appendModel: (next: Model, scheme?: ImportedScheme) => void;
   /** Clears hover, selection and gestures after the structure is replaced. */
   forgetInteraction: () => void;
   addArrow: (x: number, y: number, angle?: number, length?: number) => number;
   updateArrow: (id: number, patch: Partial<Arrow>) => void;
   removeArrow: (id: number) => void;
+  /** A "+" moved; a run of moves of one, a drag, is one step. */
+  movePlus: (id: number, x: number, y: number) => void;
+  removePlus: (id: number) => void;
+  /** What a cut takes, gone as one undo step: atoms, bonds, arrows and pluses. */
+  deleteDrawn: (part: Drawn) => void;
   /** An abbreviation drawn out as the atoms it stands for, as one undo step. */
   expandAbbreviation: (id: number) => void;
   /**

@@ -42,6 +42,11 @@ export function createHoverSlice(set: SetState) {
         prev.hoveredArrow === id ? prev : { ...prev, hoveredArrow: id },
       ),
 
+    setHoveredPlus: (id: number | null) =>
+      set((prev: EditorState) =>
+        prev.hoveredPlus === id ? prev : { ...prev, hoveredPlus: id },
+      ),
+
     clearAtomHover: () =>
       set((prev: EditorState) => ({
         ...prev,

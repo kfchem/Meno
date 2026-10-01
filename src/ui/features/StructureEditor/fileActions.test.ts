@@ -22,6 +22,13 @@ describe("structureFileText", () => {
     expect(mol.startsWith("methanol\n")).toBe(true);
     expect(mol.endsWith("M  END\n")).toBe(true);
   });
+
+  it("writes an RXN file for .rxn, the reaction its arrow shows", () => {
+    const reaction = { ...model, arrows: [{ id: 1, x: 3 * L, y: 0, angle: 0, length: 2 * L }] };
+    const rxn = structureFileText(reaction, "/tmp/oxidation.rxn");
+    expect(rxn.split("\n").slice(0, 5)).toEqual(["$RXN", "oxidation", "      Meno", "", "  1  0"]);
+    expect(() => structureFileText(model, "/tmp/nothing.rxn")).toThrow(/arrow/);
+  });
 });
 
 describe("drawingSvg", () => {
@@ -50,6 +57,21 @@ describe("drawingSvg", () => {
     const w = Number(/stroke-width="([\d.e]+)"/.exec(svg)![1]);
     // 0.6 pt of a 14.4 pt bond, in the drawing's own units
     expect(w).toBeCloseTo((0.6 / 14.4) * L, 9);
+  });
+
+  it("draws a reaction's arrow and pluses, the picture reaching to take them in", () => {
+    const scheme = {
+      ...model,
+      arrows: [{ id: 1, x: 3 * L, y: 0, angle: 0, length: 2 * L }],
+      pluses: [{ id: 1, x: -L, y: 0 }],
+    };
+    const drawn = drawingSvg(scheme, aromatic, ACS_1996);
+    const paths = (text: string) => (text.match(/<path /g) ?? []).length;
+    expect(paths(drawn) - paths(svg)).toBe(2);
+    const box = /viewBox="([-\d.e ]+)"/.exec(drawn)![1].split(" ").map(Number);
+    // from the plus on the left to the arrow's point on the right
+    expect(box[0]).toBeLessThan(-L);
+    expect(box[0] + box[2]).toBeGreaterThan(4 * L);
   });
 
   it("writes the label in Arial", () => {

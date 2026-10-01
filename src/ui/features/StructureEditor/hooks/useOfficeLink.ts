@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { styleOf } from "../../../../lib/chem/style";
 import { sendToOffice } from "../../../../lib/ole";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
+import { drawnOf } from "../fileActions";
 import { structurePicture } from "../picture";
 import { useEditorStore } from "../store";
 
@@ -32,7 +33,7 @@ export function useOfficeLink(officeId: number | undefined) {
       // (an emptied canvas leaves the document the last picture it had)
       if (!s.model.atoms.length) return;
       const style = styleOf(s.docStyle ?? useAppSettings.getState().drawingStyle);
-      const { record, emf } = structurePicture(s.model, s, style);
+      const { record, emf } = structurePicture(drawnOf(s), s, style);
       sendToOffice(officeId, record, emf).catch((e: unknown) =>
         console.warn("the document did not take the structure", e),
       );
@@ -40,6 +41,8 @@ export function useOfficeLink(officeId: number | undefined) {
     const stop = store.subscribe((s, prev) => {
       const same =
         s.model === prev.model &&
+        s.arrows === prev.arrows &&
+        s.pluses === prev.pluses &&
         s.docStyle === prev.docStyle &&
         s.aromaticEnabled === prev.aromaticEnabled &&
         s.aromaticRings === prev.aromaticRings;

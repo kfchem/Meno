@@ -6,7 +6,7 @@ import {
   type EditorModel,
 } from "../../../../utils/importers";
 import { bondChem, chemistry } from "../../../../lib/chem/molecule";
-import type { Model } from "../store/types";
+import type { Drawn, Model } from "../store/types";
 
 /** Extensions the file pickers offer that have no parser yet. */
 const UNSUPPORTED_EXTENSIONS = new Set(["pdb", "ket"]);
@@ -15,6 +15,8 @@ export type ProcessedFileResult = {
   model: EditorModel;
   centroid: { x: number; y: number };
   arrow?: { x1: number; y1: number; x2: number; y2: number };
+  /** A reaction's "+" signs: their middles. */
+  pluses?: { x: number; y: number }[];
 };
 
 /**
@@ -52,6 +54,7 @@ export async function processFileContent(
       model: rxnLayout.model,
       centroid: rxnLayout.centroid,
       arrow: rxnLayout.arrow ?? undefined,
+      pluses: rxnLayout.pluses,
     };
   }
 
@@ -95,5 +98,27 @@ export function editorModelOf(mdl: { atoms: any[]; bonds: any[] }): Model {
       ...(b.dative ? { dative: true } : {}),
       ...bondChem(b),
     })),
+  };
+}
+
+/** What a file read holds as the editor draws it: the structures, and a reaction's arrow and "+" signs. */
+export function drawnOf(result: ProcessedFileResult): Drawn {
+  const a = result.arrow;
+  return {
+    ...editorModelOf(result.model),
+    ...(a
+      ? {
+          arrows: [
+            {
+              id: 1,
+              x: (a.x1 + a.x2) / 2,
+              y: (a.y1 + a.y2) / 2,
+              angle: Math.atan2(a.y2 - a.y1, a.x2 - a.x1),
+              length: Math.hypot(a.x2 - a.x1, a.y2 - a.y1),
+            },
+          ],
+        }
+      : {}),
+    ...(result.pluses?.length ? { pluses: result.pluses.map((p, i) => ({ id: i + 1, ...p })) } : {}),
   };
 }

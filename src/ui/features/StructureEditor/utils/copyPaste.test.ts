@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Model } from "../store/types";
+import type { Drawn, Model } from "../store/types";
 import { centredAt, clipItems, looksLikeMolfile, looksLikeSmiles, partToCopy, readRecord } from "./copyPaste";
 
 const atom = (id: number, x: number, y: number, el = "C") => ({ id, x, y, r: 0.9, el });
@@ -62,5 +62,53 @@ describe("centredAt", () => {
     const xs = moved.atoms.map((a) => a.x);
     expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(100);
     expect(moved.atoms[0].y).toBeCloseTo(50);
+  });
+});
+
+describe("a reaction, copied and pasted", () => {
+  // methane + methanol -> ethanol, with its arrow and plus
+  const scheme: Drawn = {
+    atoms: [atom(1, -4, 0), atom(2, -2, 0), atom(3, -1, 0, "O"), atom(4, 3, 0), atom(5, 4, 0), atom(6, 5, 0, "O")],
+    bonds: [
+      { id: 11, a: 2, b: 3, order: 1 },
+      { id: 12, a: 4, b: 5, order: 1 },
+      { id: 13, a: 5, b: 6, order: 1 },
+    ],
+    arrows: [{ id: 1, x: 1, y: 0, angle: 0, length: 2.5 }],
+    pluses: [{ id: 1, x: -3, y: 0 }],
+  };
+  const everything = { atoms: new Set([1, 2, 3, 4, 5, 6]), bonds: new Set([11, 12, 13]) };
+
+  it("takes the arrows and pluses among what is selected, and none with a structure alone", () => {
+    const all = partToCopy(scheme, everything, null)!;
+    expect(all.arrows).toEqual(scheme.arrows);
+    expect(all.pluses).toEqual(scheme.pluses);
+    // the product alone: neither
+    const product = partToCopy(scheme, { atoms: new Set([4, 5, 6]), bonds: new Set() }, null)!;
+    expect(product.arrows).toBeUndefined();
+    expect(product.pluses).toBeUndefined();
+    expect(partToCopy(scheme, none, 5)!.arrows).toBeUndefined();
+  });
+
+  it("goes on the clipboard as Meno's record with its arrow and plus, a MOL file and an RXN file", () => {
+    const items = clipItems(partToCopy(scheme, everything, null)!);
+    expect(items.map((i) => i.flavor)).toEqual(["meno", "mol", "rxn"]);
+    const back = readRecord(items[0].text!)!;
+    expect(back.arrows).toEqual(scheme.arrows);
+    expect(back.pluses).toEqual(scheme.pluses);
+    expect(items[2].text!.split("\n").slice(0, 5)).toEqual(["$RXN", "", "      Meno", "", "  2  1"]);
+  });
+
+  it("reads a record's structures though its arrows do not read", () => {
+    const text = JSON.stringify({ format: "meno-structure", version: 1, atoms: [atom(1, 0, 0)], bonds: [], arrows: [{ id: 1, x: "a" }] });
+    expect(readRecord(text)).toEqual({ atoms: [atom(1, 0, 0)], bonds: [] });
+  });
+
+  it("is centred as a whole, arrow and plus moved with it", () => {
+    const moved = centredAt(scheme, { x: 0, y: 10 });
+    // the box from the leftmost atom (-4) to the rightmost (5)
+    expect(moved.atoms[0].x).toBeCloseTo(-4.5);
+    expect(moved.arrows![0]).toMatchObject({ x: 0.5, y: 10 });
+    expect(moved.pluses![0]).toMatchObject({ x: -3.5, y: 10 });
   });
 });
