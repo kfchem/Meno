@@ -10,9 +10,10 @@ Configuration* (2006, ST-) - and Meno's own conventions, written down here,
 where they do not. No other program's code or output is a reference for any
 of it.
 
-This is being built in steps; each says here what it adds. So far: the
-reader; bonds besides plain ones; atoms that are not elements; what is said
-about atoms, bonds and structures; Sgroups and haptic bonds.
+This was built in steps, each adding to what is written here: the reader;
+bonds besides plain ones; atoms that are not elements; what is said about
+atoms, bonds and structures; Sgroups and haptic bonds; reaction schemes,
+written back as RXN files.
 
 ## Reading
 
@@ -129,6 +130,26 @@ Ar is argon's symbol as well as aryl's (GR-9.2): typed, it is argon.
 A bond that came from a file as one of these becomes an ordinary bond once
 its order or stereo is changed in the editor.
 
+### Reaction schemes
+
+An Rxnfile says which molecules are reactants, products and reagents, and
+nothing of how the reaction is drawn; IUPAC's recommendations say nothing of
+a scheme's layout either. Meno lays one out after the usual practice of
+journals:
+
+| What | How |
+|---|---|
+| Reactants, products | Along one line, each centred on it: the reactants, the arrow, the products. A bond and a quarter apart, as drawn, labels and all. |
+| "+" | Between each two molecules on one side of the arrow, on its line. A cross about as wide as the sign set in the labels' typeface (0.6 of their font size), its bars as thick as a bond's line, in the bonds' colour. |
+| Reagents | Above the arrow, side by side, their lowest point two fifths of a bond above it - clear of its head. |
+| The arrow | Two and two-thirds of a bond long, or half a bond longer than the reagents above it are wide on either side. Its line and head as the drawing style has them, or as the arrow sets for itself. |
+
+A "+" can be moved and deleted as an arrow can. The arrows and pluses drawn
+among a selection go with it: they are copied, cut, deleted and moved with
+it (but not turned). Pictures - SVG, and the EMF and PNG a copy puts on the
+clipboard - show them, and Meno's own record of a copied drawing keeps
+them.
+
 ## Writing
 
 Every Sgroup goes back with its type, atoms, bonds out, label or
@@ -148,6 +169,28 @@ an abbreviation Sgroup of its one star atom (V3000, which has no alias). An
 Rgroup, an atom list, a valence and a query hydrogen count go in their
 fields. V3000 lines longer than 80 characters are continued, as the format
 has it.
+
+A drawing with one arrow is saved as an RXN file (*Save* to a name ending
+`.rxn`, offered first for a drawing with an arrow), and a copy of a
+reaction puts one on the clipboard beside the MOL file - as
+`chemical/x-mdl-rxnfile` - for chemistry programs that take one; a paste
+reads one back as a scheme. Which molecule is which is read from the
+drawing:
+
+- a molecule is the atoms its bonds join - a haptic bond's to the atoms it
+  reaches, an Sgroup's atoms to one another - and two of those in one role
+  are one molecule, a salt drawn as its ions, where they lie less than a
+  bond apart with no "+" between them;
+- a molecule before the arrow's tail, along the arrow, is a reactant; past
+  its point, a product; alongside it, above or below, a reagent;
+- each in the order drawn along the arrow, reagents above it before those
+  below.
+
+The file is V2000 - $MOL blocks, each a MOL file - where every molecule can
+be written V2000, and V3000 - a CTAB for each in REACTANT, PRODUCT and
+REAGENT blocks - where one cannot. The reagents' count is left out where
+there are none, which the format reads as none. A drawing with no arrow, or
+more than one, is not saved as an RXN file: the save says why.
 
 MOL files are written V2000 where that can say everything, and V3000
 where it cannot: a coordination or hydrogen bond (V2000's types stop at 8),

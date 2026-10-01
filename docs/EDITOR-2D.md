@@ -323,9 +323,10 @@ All hover-based, as above.
 - Everything a molfile, SDfile or Rxnfile can hold, read after CTfile Formats
   and drawn after IUPAC's recommendations: docs/CTFILE.md, step by step.
 - Reaction arrows, "+" and text: create, move, edit, delete. (So far an
-  arrow comes only from an RXN file; it can be moved, deleted from its
-  menu, and given its own line and head, as above. It is not yet saved,
-  copied or in an exported picture.)
+  arrow and its "+" signs come only from an RXN file, or a paste; they can
+  be moved and deleted, the arrow given its own line and head, as above.
+  They are saved - as an RXN file - copied and in an exported picture:
+  docs/CTFILE.md, "Reaction schemes". Text is still to come.)
 - Copy and paste, within Meno and between tabs. (PR #68, as above; and
   between Meno and other programs, through the system clipboard.)
 
