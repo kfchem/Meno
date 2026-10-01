@@ -390,20 +390,13 @@ async fn ext_spawn_sidecar(
     cmd.args(&payload.args).current_dir(cwd);
     no_window(&mut cmd);
     // Whatever the code run in the console reaches for goes through the
-    // proxy, seen and logged, and not at all offline; it lasts as long as
-    // the sidecar. The other workers run no one's code and need no network:
-    // they are pointed at the proxy with no task, so an attempt is refused
-    // and on the record.
+    // proxy, seen and logged, as a task that lasts as long as the sidecar.
+    // The other workers run no one's code and need no network; nor may the
+    // console while Meno is offline. Those are pointed at the proxy with no
+    // task, so an attempt is refused and on the record - never left to go
+    // out on its own.
     let console = worker_name(&payload.args) == Some("interactive_worker.py");
-    let task = if console {
-        net.begin("python-code", "Python run in the console").ok()
-    } else {
-        net.route_nowhere(&mut cmd);
-        None
-    };
-    if let Some(task) = &task {
-        task.route(&mut cmd);
-    }
+    let task = net.route_sidecar(&mut cmd, console);
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
