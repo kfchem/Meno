@@ -1620,9 +1620,11 @@ function besideVertex(
   runs: TextRun[],
   opts: Pick<LayoutOptions, "fontPx">,
   reach?: (dir: Vec2) => number,
+  /** The way it would rather go, in degrees: a charge's 45, above and to the right. */
+  prefer = 45,
 ): TextItem {
   const deg = Math.PI / 180;
-  let best = 45 * deg;
+  let best = prefer * deg;
   let bestScore = -Infinity;
   for (let k = 0; k < 24; k++) {
     const t = k * 15 * deg;
@@ -1631,7 +1633,7 @@ function besideVertex(
       const d = Math.abs(Math.atan2(Math.sin(t - Math.atan2(w.dir.y, w.dir.x)), Math.cos(t - Math.atan2(w.dir.y, w.dir.x))));
       room = Math.min(room, d);
     }
-    const off = Math.abs(Math.atan2(Math.sin(t - 45 * deg), Math.cos(t - 45 * deg)));
+    const off = Math.abs(Math.atan2(Math.sin(t - prefer * deg), Math.cos(t - prefer * deg)));
     const score = Math.min(room, 70 * deg) - 0.15 * off;
     if (score > bestScore + 1e-9) {
       bestScore = score;
@@ -3093,8 +3095,13 @@ function atomNotes(
       if (label) {
         for (const hull of labelHulls(label, font, set, true)) for (const p of hull) far = Math.max(far, p.x * dir.x + p.y * dir.y);
       }
-      return far + font * 0.5 + font * set.subscriptSize * 0.3 * text.length * 0.5;
-    });
+      // and of its own letters: half their extent that way
+      const size = font * ANNOTATION_SIZE * set.subscriptSize;
+      const half = Math.abs(dir.x) * size * 0.3 * text.length + Math.abs(dir.y) * size * 0.4;
+      return far + font * 0.25 + half;
+      // (above, where it can: beside a label's right, a small number reads
+      // as a charge's or a count's - GR-11.1)
+    }, 90);
     out.push(item);
   });
   return out;
