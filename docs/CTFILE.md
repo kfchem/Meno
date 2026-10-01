@@ -11,7 +11,8 @@ where they do not. No other program's code or output is a reference for any
 of it.
 
 This is being built in steps; each says here what it adds. So far: the
-reader; bonds besides plain ones; atoms that are not elements.
+reader; bonds besides plain ones; atoms that are not elements; what is said
+about atoms, bonds and structures.
 
 ## Reading
 
@@ -74,6 +75,30 @@ atoms at its ends, as a dative bond does not: an ammine stays NH3.
 | A valence the file sets (V2000's vvv, V3000's VAL) | Hydrogens counted to it; a carbon of other than four shows its label, CH2. | |
 | A query hydrogen count | Kept, and written back; not drawn. | |
 
+### What is said about atoms, bonds and structures
+
+Annotations are set smaller than labels, close to what they are about and in
+the most open space beside it (IUPAC GR-11.1, GR-11.2); what is said about a
+whole structure is set beneath it, half a bond and more clear of it, as
+large as its labels (GR-11.3).
+
+| What | How | Why |
+|---|---|---|
+| Atom-atom mapping | The number, small, beside the atom. | GR-11.1 |
+| Inversion or retention | "inv" or "ret" beside the atom. | Meno's own words for the format's flag. |
+| Exact change | "exact" beside the atom. | Meno's own. |
+| Reacting centre: bond made or broken (4) | Two short strokes across the bond's middle. | Meno's own marks. |
+| Reacting centre: order changes (8) | One stroke. | Meno's own. |
+| Reacting centre: both (12) | Three strokes. (5, 9 and 13 as 4, 8 and 12.) | Meno's own. |
+| Not a reacting centre (-1) | A small cross on the bond's middle. | Meno's own. |
+| A reacting centre otherwise (1), or no change (2) | "rc", "nc" beside the bond's middle. | Meno's own. |
+| An enhanced stereo group taking in all a structure's centres | Racemic (AND): "and enantiomer" beneath it; relative (OR): "or enantiomer"; absolute: nothing. | ST-6.3 prefers text beside the diagram; ST-6.5 rules out "rac" and "rel" as labels; ST-6.2: a diagram with no indicator shows the configuration drawn. |
+| Groups that do not (more than one in a structure, or of stereo bonds) | Each centre or stereo bond labelled small: abs, and1, or2. | ST-0.8 finds no consensus on how mixtures of diastereoisomers are depicted; these are Meno's, after the format's own names. |
+
+A file with stereo bonds and the chiral flag set but no collections has
+each of its stereocentres (where a wedge starts) taken as absolute, as the
+format says the flag applies; one without the flag, as drawn (ST-6.2).
+
 **The abbreviations Meno knows** (`src/lib/chem/abbreviations.ts`) are its
 own list, compiled from what chemists commonly write, not taken from any
 program's table: IUPAC's Table II (GR-2.2) - Me, Et, Pr, iPr, Bu, iBu,
@@ -89,6 +114,10 @@ A bond that came from a file as one of these becomes an ordinary bond once
 its order or stereo is changed in the editor.
 
 ## Writing
+
+Mapping numbers, inversion and retention, exact change and reacting
+centres go in their fields. Enhanced stereo is written as V3000 collections
+- V2000 says only the chiral flag, set where every group is absolute.
 
 An abbreviation is written out - the atoms a file gave it, or the
 dictionary's, laid out by Meno's own engine on from its bond - with an
