@@ -298,7 +298,10 @@ to be able to work with nothing going out at all.
   and after that only when the user turns it on in Settings › Network. The
   update is checked against the updater's public key (`tauri.conf.json`)
   before it is installed, which is as Meno quits; a development build, and
-  a Meno Windows started for Office, neither look nor install. Releases:
+  a Meno Windows started for Office, neither look nor install. On Windows
+  the installer is left in a folder of the temporary directory
+  (`Meno-<version>-updater-…`), which Meno takes away as it starts once it
+  is some minutes old (`tidy_after_updates`). Releases:
   `docs/RELEASING.md`.
 
 Anything new that needs the network begins a task in `net.rs` and routes

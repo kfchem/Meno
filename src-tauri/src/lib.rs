@@ -644,6 +644,9 @@ pub fn run() {
             // structures in Office documents, opened here on a double-click
             #[cfg(windows)]
             ole::start(app.handle());
+            // the installers updates left in the temporary folder (Windows)
+            #[cfg(windows)]
+            update::tidy_after_updates(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
