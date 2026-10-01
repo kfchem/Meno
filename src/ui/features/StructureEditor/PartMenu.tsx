@@ -5,8 +5,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * the canvas is, so that the menu stays inside it.
  */
 export type MenuTarget = {
-  /** The atom or bond right-clicked; null, when it was nothing. */
-  kind: "atom" | "bond" | null;
+  /** The atom, bond or reaction arrow right-clicked; null, when it was nothing. */
+  kind: "atom" | "bond" | "arrow" | null;
   id: number | null;
   /**
    * Whether there is a selection, and whether the menu is its: right-clicked
@@ -59,6 +59,7 @@ export default function PartMenu({
   onCharge,
   onRadical,
   radical,
+  onArrowStyle,
   clipboard,
   onClose,
 }: {
@@ -75,6 +76,8 @@ export default function PartMenu({
   /** An atom's unpaired electron given or taken away; `radical`, whether it has one. */
   onRadical: () => void;
   radical: boolean;
+  /** A reaction arrow's own line and head, in a panel beside the canvas. */
+  onArrowStyle: () => void;
   clipboard: MenuClipboard;
   onClose: () => void;
 }) {
@@ -117,7 +120,12 @@ export default function PartMenu({
   const keys = target.selection === "none";
   const paste: Item = { name: "Paste", keys: shortcut("V"), run: clipboard.onPaste };
   const items: Item[] =
-    target.selection === "here"
+    target.kind === "arrow"
+      ? [
+          { name: "Arrow style…", keys: "", run: onArrowStyle },
+          { name: "Delete arrow", keys: "", run: onDelete },
+        ]
+      : target.selection === "here"
       ? [
           { name: "Cut", keys: shortcut("X"), run: clipboard.onCut },
           { name: "Copy", keys: shortcut("C"), run: clipboard.onCopy },
@@ -164,7 +172,9 @@ export default function PartMenu({
             ? "Atom"
             : target.kind === "bond"
               ? "Bond"
-              : "Canvas"
+              : target.kind === "arrow"
+                ? "Arrow"
+                : "Canvas"
       }
       className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
       style={{

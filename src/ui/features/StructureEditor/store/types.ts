@@ -1,4 +1,5 @@
 import type { ImportedArrow, Relayout } from "../document";
+import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
 import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
@@ -40,6 +41,8 @@ export type Arrow = {
   y: number;
   angle: number; // radians
   length: number; // world units
+  /** What it sets for itself over the drawing style: its line and its head. */
+  look?: ArrowLook;
 };
 
 export type EditorState = {
@@ -53,6 +56,8 @@ export type EditorState = {
    */
   boxSelect: { active: boolean; kind: "box" | "lasso"; points: { x: number; y: number }[] };
   hovered: { atomId: number | null; bondId: number | null };
+  /** The reaction arrow under the pointer: its menu is the one a right-click opens. */
+  hoveredArrow: number | null;
   hoverPulse: { id: number | null; nonce: number; until: number };
   arrows: Arrow[];
   fitNonce: number;
@@ -163,6 +168,7 @@ export type EditorState = {
   pasteModel: (next: Model) => void;
   setHoveredFromId: (id: number) => void;
   clearHovered: () => void;
+  setHoveredArrow: (id: number | null) => void;
   clearAtomHover: () => void;
   clearBondHover: () => void;
   /** Begins a stroke out of an atom: one bond, or a chain. */
@@ -213,6 +219,11 @@ export type EditorState = {
   addArrow: (x: number, y: number, angle?: number, length?: number) => number;
   updateArrow: (id: number, patch: Partial<Arrow>) => void;
   removeArrow: (id: number) => void;
+  /**
+   * What an arrow sets for itself, in place of what it had. `coalesceKey`
+   * takes a run of changes to one setting - a slider dragged - as one step.
+   */
+  setArrowLook: (id: number, look: ArrowLook, coalesceKey?: string) => void;
   requestFit: () => void;
   beginAutoFitSuspend: () => void;
   endAutoFitSuspend: () => void;

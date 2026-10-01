@@ -2,6 +2,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../../../lib/chem/acs";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
 import type { ImportedArrow, StructureDocument } from "../../document";
+import type { ArrowLook } from "../../../../../lib/chem/reactionArrow";
 import { EditorState, Bond, Arrow, Model } from "../types";
 import { turnedOver } from "../../utils/selection";
 import { StoreApi } from "zustand";
@@ -298,5 +299,9 @@ export const createModelSlice = (
 
   removeArrow: (id: number) => {
     doc.edit("delete arrow", (d) => ops.removeArrow(d, id));
+  },
+
+  setArrowLook: (id: number, look: ArrowLook, coalesceKey?: string) => {
+    doc.edit("arrow style", (d) => ops.setArrowLook(d, id, look), { coalesceKey });
   },
 });
