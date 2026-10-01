@@ -362,6 +362,48 @@ export function expandAbbreviation(doc: StructureDocument, id: number): Structur
   return { ...doc, nextId, model: { atoms: nextAtoms, bonds: nextBonds } };
 }
 
+/**
+ * The atoms `ids` - a group with one bond to the rest of the drawing - shown
+ * as one atom labelled `label` where the group is attached, holding them as
+ * its abbreviation does (`abbrev`), so that *Expand abbreviation* draws them
+ * out again as they were. Unchanged where the atoms are not such a group.
+ */
+export function contractToAbbreviation(
+  doc: StructureDocument,
+  ids: ReadonlySet<number>,
+  label: string,
+): StructureDocument {
+  const inside = doc.model.atoms.filter((a) => ids.has(a.id));
+  const crossing = doc.model.bonds.filter((b) => ids.has(b.a) !== ids.has(b.b));
+  if (!inside.length || crossing.length !== 1) return doc;
+  const out = crossing[0];
+  const attachId = ids.has(out.a) ? out.a : out.b;
+  const att = inside.find((a) => a.id === attachId)!;
+  const other = doc.model.atoms.find((a) => a.id === (attachId === out.a ? out.b : out.a))!;
+  const index = new Map(inside.map((a, i) => [a.id, i]));
+  const inner = doc.model.bonds.filter((b) => ids.has(b.a) && ids.has(b.b));
+  const abbrev = {
+    atoms: inside.map((a) => {
+      const { abbrev: _abbrev, ...chem } = chemistry(a);
+      return { el: a.el, ...chem, x: a.x - att.x, y: a.y - att.y };
+    }),
+    bonds: inner.map((b) => ({
+      a1: index.get(b.a)!,
+      a2: index.get(b.b)!,
+      order: b.order,
+      ...(b.stereo && b.stereo !== "none" ? { stereo: b.stereo } : {}),
+      ...bondChem(b),
+    })),
+    attach: [index.get(attachId)!],
+    toward: { x: other.x - att.x, y: other.y - att.y },
+  };
+  const atoms = doc.model.atoms
+    .filter((a) => !ids.has(a.id) || a.id === attachId)
+    .map((a) => (a.id === attachId ? { id: a.id, x: a.x, y: a.y, r: a.r, el: label, abbrev } : a));
+  const bonds = doc.model.bonds.filter((b) => !(ids.has(b.a) && ids.has(b.b)));
+  return { ...doc, model: { atoms, bonds } };
+}
+
 export function setAtomChemistry(
   doc: StructureDocument,
   id: number,

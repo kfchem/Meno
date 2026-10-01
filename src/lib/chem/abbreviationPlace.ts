@@ -1,6 +1,8 @@
 import { layout2D } from "../layout/engine";
 import { abbreviationStructure } from "./abbreviations";
-import type { AbbreviationStructure } from "./molecule";
+import { kekuleOrders } from "./kekulize";
+import type { AbbreviationStructure, AtomChem } from "./molecule";
+import { readSmiles } from "./smiles";
 
 type P = { x: number; y: number };
 
@@ -44,5 +46,41 @@ export function placedAbbreviation(
     }),
     bonds: s.bonds.map((b) => ({ a1: b.a1, a2: b.a2, order: b.order as 1 | 2 | 3 })),
     attach: [s.attach],
+  };
+}
+
+/**
+ * A structure in SMILES drawn out by Meno's own engine, `bondLength` apart -
+ * an abbreviation's, its "*" where it is attached - for a picture of it:
+ * atoms with ids from 1, an aromatic ring's bonds in Kekulé form. Null for
+ * SMILES that does not read.
+ */
+export function drawnSmiles(
+  smiles: string,
+  bondLength: number,
+): { atoms: (AtomChem & { id: number; x: number; y: number })[]; bonds: { id: number; a: number; b: number; order: 1 | 2 | 3 }[] } | null {
+  let read: ReturnType<typeof readSmiles>;
+  try {
+    read = readSmiles(smiles);
+  } catch {
+    return null;
+  }
+  if (!read.atoms.length) return null;
+  const orders = kekuleOrders(read.atoms, read.bonds);
+  const laid = layout2D({
+    // (the "*" laid out as a carbon would be)
+    atoms: read.atoms.map((a) => ({ el: a.el === "*" ? "C" : a.el, ...(a.charge ? { charge: a.charge } : {}) })),
+    bonds: read.bonds.map((b, i) => ({ a: b.a1, b: b.a2, order: orders[i] })),
+  });
+  return {
+    atoms: read.atoms.map((a, i) => ({
+      id: i + 1,
+      x: laid.x[i] * bondLength,
+      y: laid.y[i] * bondLength,
+      el: a.el,
+      ...(a.charge ? { charge: a.charge } : {}),
+      ...(a.isotope ? { isotope: a.isotope } : {}),
+    })),
+    bonds: read.bonds.map((b, i) => ({ id: read.atoms.length + i + 1, a: b.a1 + 1, b: b.a2 + 1, order: orders[i] as 1 | 2 | 3 })),
   };
 }

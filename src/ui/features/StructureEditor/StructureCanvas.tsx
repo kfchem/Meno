@@ -37,6 +37,8 @@ import {
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
+import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
+import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuTarget } from "./PartMenu";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
@@ -79,6 +81,7 @@ function StructureCanvasContent({
   styleOpen,
   toggleStyle,
   openArrowStyle,
+  openSaveAbbreviation,
 }: {
   active: boolean;
   tabId: string;
@@ -91,6 +94,8 @@ function StructureCanvasContent({
   toggleStyle: () => void;
   /** A reaction arrow's own style, in the panel beside the canvas. */
   openArrowStyle: (id: number) => void;
+  /** The selected group saved as an abbreviation, in the panel beside the canvas. */
+  openSaveAbbreviation: (ids: number[], smiles: string) => void;
 }) {
   const fitNonce = useEditor((s) => s.fitNonce);
   const requestFit = useEditor((s) => s.requestFit);
@@ -557,6 +562,12 @@ function StructureCanvasContent({
             if (menu.kind === "arrow" && menu.id != null) openArrowStyle(menu.id);
           }}
           onAddArrow={() => store.getState().addArrow(menu.at.x, menu.at.y)}
+          onSaveAbbreviation={() => {
+            const { model: m, sel } = store.getState();
+            const made = abbreviationFromSelection(m, sel.atoms);
+            if ("problem" in made) setChemError(`This selection cannot be saved as an abbreviation. ${made.problem}`);
+            else openSaveAbbreviation([...sel.atoms], made.smiles);
+          }}
           onAddPlus={() => store.getState().addPlus(menu.at.x, menu.at.y)}
           onCleanUp={() =>
             runCleanUp(
@@ -676,7 +687,9 @@ export default function StructureCanvas({
   // The document's drawing style - or one reaction arrow's own - opens in a
   // panel beside the canvas rather than over it, so the drawing stays in
   // view while it changes. One panel at a time.
-  const [panel, setPanel] = useState<"style" | { arrow: number } | null>(null);
+  const [panel, setPanel] = useState<
+    "style" | { arrow: number } | { abbreviation: { ids: number[]; smiles: string } } | null
+  >(null);
   const styleOpen = panel === "style";
   return (
     <EditorProvider tabId={tabId} document={document}>
@@ -690,12 +703,21 @@ export default function StructureCanvas({
           styleOpen={styleOpen}
           toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
           openArrowStyle={(id) => setPanel({ arrow: id })}
+          openSaveAbbreviation={(ids, smiles) => setPanel({ abbreviation: { ids, smiles } })}
         />
         {styleOpen && <DocumentStylePanel onClose={() => setPanel(null)} />}
-        {panel && panel !== "style" && (
+        {panel && panel !== "style" && "arrow" in panel && (
           <ArrowStylePanel
             key={panel.arrow}
             arrowId={panel.arrow}
+            onClose={() => setPanel(null)}
+          />
+        )}
+        {panel && panel !== "style" && "abbreviation" in panel && (
+          <SaveAbbreviationPanel
+            key={panel.abbreviation.ids.join(",")}
+            ids={panel.abbreviation.ids}
+            smiles={panel.abbreviation.smiles}
             onClose={() => setPanel(null)}
           />
         )}

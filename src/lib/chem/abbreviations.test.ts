@@ -5,10 +5,14 @@ import {
   abbreviationStructure,
   labelRuns,
   labelUnits,
+  labelProblem,
   namesRingFirst,
   reversedLabel,
+  setCustomAbbreviations,
+  structureProblem,
 } from "./abbreviations";
 import { substitutedAryl } from "./substitutedAryl";
+import { writeSmiles } from "./smiles";
 import { readSmiles } from "./smiles";
 
 describe("SMILES, read", () => {
@@ -31,6 +35,36 @@ describe("SMILES, read", () => {
     expect(() => readSmiles("C(C")).not.toThrow();
     expect(() => readSmiles("C1CC")).toThrow(/Unclosed ring/);
     expect(() => readSmiles("C?")).toThrow(/Cannot read/);
+  });
+});
+
+describe("SMILES, written", () => {
+  const roundTrip = (smiles: string) => {
+    const read = readSmiles(smiles);
+    const atoms = read.atoms.map((a, i) => ({
+      el: a.el,
+      ...(a.charge ? { charge: a.charge } : {}),
+      ...(a.isotope ? { isotope: a.isotope } : {}),
+      // (what a plain atom has by valence, a bracket one says)
+      hs: a.hs ?? Math.max(0, ({ C: 4, N: 3, O: 2, S: 2, F: 1, Cl: 1, Si: 4 } as Record<string, number>)[a.el] ?? 0) - read.bonds.filter((b) => b.a1 === i || b.a2 === i).reduce((n, b) => n + b.order, 0),
+    }));
+    return writeSmiles(atoms.map((a) => (a.el === "*" ? { el: "*", hs: 0 } : { ...a, hs: Math.max(0, a.hs) })), read.bonds, 0);
+  };
+
+  it("writes a chain with its branches from the *, as an abbreviation's is written", () => {
+    expect(roundTrip("*C(=O)OC(C)(C)C")).toBe("*C(=O)OC(C)(C)C");
+    expect(roundTrip("*O[Si](C)(C)C(C)(C)C")).toBe("*O[Si](C)(C)C(C)(C)C");
+  });
+
+  it("closes rings, writes double and triple bonds, charges and isotopes in brackets", () => {
+    expect(roundTrip("*C1=CC=CC=C1")).toBe("*C1=CC=CC=C1");
+    expect(roundTrip("*[N+](=O)[O-]")).toBe("*[N+](=O)[O-]");
+    expect(roundTrip("*C#N")).toBe("*C#N");
+    expect(roundTrip("*[13CH3]")).toBe("*[13CH3]");
+    // what it writes reads back as the same atoms and bonds
+    const fused = "*C1CCC2CCCCC2C1";
+    const back = readSmiles(roundTrip(fused));
+    expect([back.atoms.length, back.bonds.length]).toEqual([11, 12]);
   });
 });
 
@@ -87,6 +121,51 @@ describe("the abbreviations", () => {
     const ester = abbreviationStructure("CO2Me")!;
     expect(ester.atoms.map((a) => a.el)).toEqual(["C", "O", "O", "C"]);
     expect(ester.bonds.find((b) => b.order === 2)).toBeTruthy();
+  });
+});
+
+describe("abbreviations of the user's own", () => {
+  const mmt = { label: "Mmt", also: ["MMTr"], name: "4-methoxytrityl", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1" };
+
+  it("are known as Meno's are, by any of their names, and put together by rule", () => {
+    try {
+      setCustomAbbreviations([mmt]);
+      expect(abbreviationOf("MMTr")?.label).toBe("Mmt");
+      expect(abbreviationStructure("Mmt")!.atoms).toHaveLength(21);
+      expect(abbreviationOf("OMmt")?.smiles).toBe("*OC(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1");
+      expect(abbreviationOf("CO2Mmt")?.name).toBe("4-methoxytrityloxycarbonyl");
+      // read as one unit: on the left of a bond, MmtO
+      expect(reversedLabel("OMmt")).toBe("MmtO");
+    } finally {
+      setCustomAbbreviations([]);
+    }
+    expect(abbreviationOf("Mmt")).toBeUndefined();
+  });
+
+  it("are not written as an element, nor as a label that already means something", () => {
+    expect(labelProblem("Mmt")).toBeNull();
+    expect(labelProblem("Ar")).toMatch(/element/);
+    expect(labelProblem("Boc")).toMatch(/already means tert-butoxycarbonyl/);
+    expect(labelProblem("OTBS")).toMatch(/already means/);
+    expect(labelProblem("2,6-diMeBz")).toMatch(/starts with a letter/);
+    expect(labelProblem("two words")).toMatch(/no spaces/);
+    try {
+      setCustomAbbreviations([mmt]);
+      expect(labelProblem("MMTr")).toMatch(/one of yours/);
+      // the one being changed keeps its names
+      expect(labelProblem("MMTr", mmt)).toBeNull();
+    } finally {
+      setCustomAbbreviations([]);
+    }
+  });
+
+  it("are given a structure with one * bonded to the atom they are attached by", () => {
+    expect(structureProblem(mmt.smiles)).toBeNull();
+    expect(structureProblem("CC")).toMatch(/one "\*"/);
+    expect(structureProblem("*C*")).toMatch(/one "\*"/);
+    expect(structureProblem("C(*)(*)")).toMatch(/one "\*"/);
+    expect(structureProblem("*")).toMatch(/at least one atom/);
+    expect(structureProblem("*C?")).toMatch(/cannot be read/);
   });
 });
 

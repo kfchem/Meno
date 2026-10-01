@@ -248,6 +248,8 @@ export type EditorState = {
   deleteDrawn: (part: Drawn) => void;
   /** An abbreviation drawn out as the atoms it stands for, as one undo step. */
   expandAbbreviation: (id: number) => void;
+  /** A group of atoms shown as one atom labelled `label`, holding them, as one undo step. */
+  contractToAbbreviation: (ids: ReadonlySet<number>, label: string) => void;
   /**
    * What an arrow sets for itself, in place of what it had. `coalesceKey`
    * takes a run of changes to one setting - a slider dragged - as one step.

@@ -63,6 +63,7 @@ export default function PartMenu({
   onArrowStyle,
   onAddArrow,
   onAddPlus,
+  onSaveAbbreviation,
   clipboard,
   onClose,
 }: {
@@ -86,6 +87,8 @@ export default function PartMenu({
   /** A reaction arrow, or a "+", added where the menu was opened on empty space. */
   onAddArrow: () => void;
   onAddPlus: () => void;
+  /** The selection saved as an abbreviation of the user's own. */
+  onSaveAbbreviation: () => void;
   clipboard: MenuClipboard;
   onClose: () => void;
 }) {
@@ -151,6 +154,7 @@ export default function PartMenu({
           { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
           { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
           { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
+          { name: "Save as abbreviation…", keys: "", run: onSaveAbbreviation, divider: true },
           ...(target.kind == null ? scheme : []),
         ]
       : target.kind == null
