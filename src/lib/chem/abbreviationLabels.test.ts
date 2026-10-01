@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { moleculesToEditorModel, readMoleculesFromText } from "../../utils/importers";
-import { buildTextLabels, type Atom, type Bond, type LayoutOptions } from "./layout2d";
+import { ACS_LABEL_SET, buildTextLabels, labelHulls, type Atom, type Bond, type LayoutOptions } from "./layout2d";
 import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "./acs";
 import { writeMolfile } from "./molWriter";
 import { placedAbbreviation } from "./abbreviationPlace";
@@ -119,7 +119,7 @@ describe("a label written", () => {
       { a1: 0, a2: 1, order: 1 },
       { a1: 1, a2: 2, order: 1 },
     ]);
-    expect(labels[0].runs).toEqual([{ text: "R" }, { text: "1", sup: true }]);
+    expect(labels[0].runs).toEqual([{ text: "R" }, { text: "1", sup: true, part: true }]);
     expect(labels[1].text).toBe("[N,O]");
   });
 
@@ -202,5 +202,17 @@ describe("a dictionary abbreviation placed", () => {
     expect(s.atoms[0]).toMatchObject({ el: "O", x: 0, y: 0 });
     expect(Math.hypot(s.atoms[1].x, s.atoms[1].y)).toBeCloseTo(L, 6);
     expect(s.atoms[1].x).toBeGreaterThan(0);
+  });
+});
+
+describe("an Rgroup's number", () => {
+  it("is part of its label: the bonds stop short of it", () => {
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "R#", rgroups: [12] },
+      { id: 2, x: L, y: L, el: "C" },
+    ];
+    const [label] = buildTextLabels(atoms, opts(), [{ a1: 0, a2: 1, order: 1 }]);
+    // R, 1 and 2: every glyph in the outline a bond is cut at
+    expect(labelHulls(label, 1, ACS_LABEL_SET, false)).toHaveLength(3);
   });
 });

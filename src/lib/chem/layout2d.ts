@@ -167,7 +167,18 @@ export type BondPrimitives = {
  * is drawn rather than set in type, where a superscript would go: a charge
  * of one in its circle (its `text` the sign), a radical's dot or dots.
  */
-export type TextRun = { text: string; sub?: boolean; sup?: boolean; mark?: "charge" | "radical" };
+export type TextRun = {
+  text: string;
+  sub?: boolean;
+  sup?: boolean;
+  mark?: "charge" | "radical";
+  /**
+   * A superscript that is part of the label itself - an Rgroup's number -
+   * which bonds stop short of as of the rest, where a charge is moved clear
+   * of them instead.
+   */
+  part?: boolean;
+};
 
 /**
  * How a label is set, as fractions of its font size (ACS 1996): its baseline
@@ -475,7 +486,7 @@ export function labelHulls(
   for (const [k, run] of placeLabel(t, fontSize, set).entries()) {
     // (its charge and a radical's dots, which a bond is kept clear of by
     // where they are put, not by stopping short of them)
-    if (!tail && k > anchor && (runs[k]?.sup || runs[k]?.mark)) continue;
+    if (!tail && k > anchor && (runs[k]?.sup || runs[k]?.mark) && !runs[k]?.part) continue;
     let pen = run.x - t.x;
     if (run.mark) {
       const { c, r } = markCircle(run);
@@ -1546,7 +1557,7 @@ const ELEMENT_SYMBOLS = new Set(elements.map((e) => e.symbol));
 function specialLabel(a: Atom, fromRight: boolean): { runs: TextRun[]; anchor: number } | null {
   if (a.el === "R#" || (a.rgroups?.length && !ELEMENT_SYMBOLS.has(a.el))) {
     const n = a.rgroups?.join(",") ?? "";
-    return { runs: n ? [{ text: "R" }, { text: n, sup: true }] : [{ text: "R" }], anchor: 0 };
+    return { runs: n ? [{ text: "R" }, { text: n, sup: true, part: true }] : [{ text: "R" }], anchor: 0 };
   }
   if (a.list) {
     const text = `${a.list.not ? "NOT " : ""}[${a.list.symbols.join(",")}]`;
