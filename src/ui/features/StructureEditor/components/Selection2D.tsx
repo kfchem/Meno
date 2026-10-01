@@ -4,12 +4,9 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import { ALPHA, COLORS } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { lineHalfOf } from "../../../../lib/chem/layout2d";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, turned } from "../utils/selection";
-import { useDrawnLayout } from "./drawnLayoutContext";
-import { squareBand } from "./bondBand";
 
 /** How far above the selection its turning handle stands, as a share of a bond. */
 const HANDLE_ABOVE = 0.75;
@@ -44,7 +41,6 @@ function overWhite(hex: string, alpha: number): string {
  */
 export default function Selection2D() {
   const { model, sel, boxSelect } = useEditor();
-  const drawn = useDrawnLayout();
   const store = useEditorStore();
   const { camera, gl, invalidate } = useThree();
   const handle = useRef<THREE.Group>(null!);
@@ -192,34 +188,8 @@ export default function Selection2D() {
   const r = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
   const shade = overWhite(COLORS.highlight, ALPHA.highlight * SHADE);
   const byId = useMemo(() => new Map(model.atoms.map((a) => [a.id, a])), [model.atoms]);
+  const shadedBonds = model.bonds.filter((b) => sel.bonds.has(b.id));
   const shadedAtoms = model.atoms.filter((a) => sel.atoms.has(a.id));
-  // The selected bonds' bands, as one shape. Each follows what its bond
-  // draws, as the drawing measures it, so neither a wedge's broad end nor a
-  // double bond's second line stands out past it: a plain bond's band is as
-  // wide as it always was, 1.1 r across, and the others the same margin past
-  // their drawing.
-  const bands = useMemo(() => {
-    const lineHalf = lineHalfOf(drawn.opts, drawn.zoom);
-    const margin = Math.max(0, r * 0.55 - lineHalf);
-    const plain = { left1: lineHalf, right1: lineHalf, left2: lineHalf, right2: lineHalf };
-    const index = new Map(drawn.atoms.map((a, i) => [a.id, i]));
-    const drawnBond = new Map(drawn.bonds.map((b, k) => [`${b.a1} ${b.a2}`, k]));
-    const corners: number[] = [];
-    for (const b of model.bonds) {
-      if (!sel.bonds.has(b.id)) continue;
-      const p = byId.get(b.a);
-      const q = byId.get(b.b);
-      if (!p || !q) continue;
-      const k = drawnBond.get(`${index.get(b.a)} ${index.get(b.b)}`);
-      const reach = (k != null && drawn.layout.reach[k]) || plain;
-      const [c0, c1, c2, c3] = squareBand(p, q, reach, margin);
-      for (const c of [c0, c1, c2, c0, c2, c3]) corners.push(c.x, c.y, 0);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(corners, 3));
-    return g;
-  }, [drawn, model.bonds, sel.bonds, byId, r]);
-  useEffect(() => () => bands.dispose(), [bands]);
   // the box or the lasso being drawn: a pale fill inside a line
   const outline = useMemo(() => {
     if (!boxSelect.active || boxSelect.points.length < 2) return null;
@@ -269,9 +239,23 @@ export default function Selection2D() {
           <meshBasicMaterial color={shade} depthWrite={false} toneMapped={false} />
         </mesh>
       ))}
-      <mesh geometry={bands} position={[0, 0, -0.045]} renderOrder={-2}>
-        <meshBasicMaterial color={shade} depthWrite={false} toneMapped={false} />
-      </mesh>
+      {shadedBonds.map((b) => {
+        const p = byId.get(b.a);
+        const q = byId.get(b.b);
+        if (!p || !q) return null;
+        const len = Math.hypot(q.x - p.x, q.y - p.y);
+        return (
+          <mesh
+            key={`sb-${b.id}`}
+            position={[(p.x + q.x) / 2, (p.y + q.y) / 2, -0.045]}
+            rotation={[0, 0, Math.atan2(q.y - p.y, q.x - p.x)]}
+            renderOrder={-2}
+          >
+            <planeGeometry args={[len, r * 1.1]} />
+            <meshBasicMaterial color={shade} depthWrite={false} toneMapped={false} />
+          </mesh>
+        );
+      })}
       {outline && <primitive object={outline.fill} />}
       {outline && <primitive object={outline.line} />}
       {handleAt && (

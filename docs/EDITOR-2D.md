@@ -115,10 +115,6 @@ selection; drawn without, it replaces it.
 
 **What is done to a selection** (2D, PR #66). It is shaded in the hover
 highlight's colour, under the drawing, and a small handle stands above it.
-A selected bond's shading follows what the bond draws, as the hover
-highlight does: square at either atom, where the atom's own shading rounds
-it off, it widens with a wedge to its broad end and takes in a double bond's
-second line, a plain bond's margin past the drawing all along.
 
 - Dragging any of its atoms moves the whole of it, off the grid, as one undo
   step; an atom that is not selected moves on its own as before.
