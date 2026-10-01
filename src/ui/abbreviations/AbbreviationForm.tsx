@@ -61,22 +61,22 @@ export default function AbbreviationForm({
       <div className="grid grid-cols-2 gap-3">
         <label className="block text-xs text-gh-gray" htmlFor={`${id}-label`}>
           Label
-          <input id={`${id}-label`} className={field} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Mmt" autoFocus spellCheck={false} />
+          <input id={`${id}-label`} className={field} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Mmt" autoFocus spellCheck={false} />
           {problem(labelWrong)}
         </label>
         <label className="block text-xs text-gh-gray" htmlFor={`${id}-also`}>
           Also written
-          <input id={`${id}-also`} className={field} value={also} onChange={(e) => setAlso(e.target.value)} placeholder="MMTr" spellCheck={false} />
+          <input id={`${id}-also`} className={field} value={also} onChange={(e) => setAlso(e.target.value)} placeholder="e.g. MMTr" spellCheck={false} />
           {problem(alsoWrong)}
         </label>
       </div>
       <label className="block text-xs text-gh-gray" htmlFor={`${id}-name`}>
         Name
-        <input id={`${id}-name`} className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="4-methoxytrityl" spellCheck={false} />
+        <input id={`${id}-name`} className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 4-methoxytrityl" spellCheck={false} />
       </label>
       <label className="block text-xs text-gh-gray" htmlFor={`${id}-smiles`}>
         Structure, as SMILES: a * where it is attached
-        <input id={`${id}-smiles`} className={`${field} font-mono`} value={smiles} onChange={(e) => setSmiles(e.target.value)} placeholder="*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1" spellCheck={false} />
+        <input id={`${id}-smiles`} className={`${field} font-mono`} value={smiles} onChange={(e) => setSmiles(e.target.value)} placeholder="e.g. *C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1" spellCheck={false} />
         {problem(smilesWrong)}
       </label>
       {smiles.trim() && !smilesWrong && (

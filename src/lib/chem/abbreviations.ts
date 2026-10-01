@@ -123,6 +123,22 @@ const COMPOSED: { prefix: string; smiles: string; word: string; takes: (a: Abbre
   { prefix: "S", smiles: "*S", word: "sulfanyl", takes: (a) => a.label !== "Cp" && a.label !== "NHNH2" },
 ];
 
+/**
+ * A put-together group's name: the group's, without what it is also called,
+ * and the word - an alkyl's and phenyl's as their oxy names are written
+ * (methoxy, tert-butoxy, phenoxy; methoxycarbonyl), any other's in full
+ * (benzyloxy, trimethylsilyloxy).
+ */
+function composedName(group: string, word: string): string {
+  const name = group.replace(/ \(.*\)$/, "");
+  if (word.startsWith("oxy")) {
+    const alkyl = /^(.*(?:meth|eth|prop|but))yl$/.exec(name);
+    if (alkyl) return alkyl[1] + word;
+    if (name === "phenyl") return "phen" + word;
+  }
+  return name + word;
+}
+
 /** A label put together by rule (OTBS, NHBoc, CO2Me, 2,6-diMeBz), or none. */
 function composedOf(label: string): Abbreviation | undefined {
   const aryl = substitutedAryl(label);
@@ -135,7 +151,7 @@ function composedOf(label: string): Abbreviation | undefined {
     if (!g || !(c.takes(g) || custom.get(rest) === g)) continue;
     // (named by the group's own label: OTBDMS is OTBS)
     const own = c.prefix + g.label;
-    return { label: own, ...(own !== label ? { also: [label] } : {}), smiles: c.smiles + g.smiles.slice(1), name: `${g.name}${c.word}` };
+    return { label: own, ...(own !== label ? { also: [label] } : {}), smiles: c.smiles + g.smiles.slice(1), name: composedName(g.name, c.word) };
   }
   return undefined;
 }
