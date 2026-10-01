@@ -19,6 +19,9 @@ export function layoutBond(b: Bond, a1: number, a2: number): LBond {
     stereoOrient: b.stereoOrient ?? "principle",
     ...(b.display ? { display: b.display } : {}),
     ...(b.dative ? { dative: true } : {}),
+    ...(b.query ? { query: b.query } : {}),
+    ...(b.hydrogen ? { hydrogen: true } : {}),
+    ...(b.coordination ? { coordination: true } : {}),
   };
 }
 

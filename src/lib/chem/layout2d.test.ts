@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  unspecifiedDoubles,
   bondKind,
   buildAllPrimitives,
   buildBondPrimitives,
@@ -1989,5 +1990,82 @@ describe("charges, radicals and isotopes", () => {
     // and a charge where nothing is in its way stays after the label
     const up = nitro.map((a) => (a.id === 2 ? { ...a, x: 0, y: L } : a));
     expect(buildTextLabels(up, opts(), bonds).find((t) => t.atom === 1)!.runs!.map((r) => r.text)).toEqual(["N", "+"]);
+  });
+});
+
+describe("bonds a file can hold besides plain ones", () => {
+  const L = NOMINAL_BOND_LENGTH;
+  const at = (x: number, y: number, el = "C"): Atom => ({ id: Math.random(), x, y, el });
+  // but-2-ene drawn as a zigzag: C1-C2=C3-C4
+  const butene = [at(0, 0), at(L * 0.866, L / 2), at(L * 1.732, 0), at(L * 2.598, L / 2)];
+  const zigzag: Bond[] = [
+    { a1: 0, a2: 1, order: 1 },
+    { a1: 1, a2: 2, order: 2, stereo: "either" },
+    { a1: 2, a2: 3, order: 1 },
+  ];
+
+  it("shows a double bond of either configuration with a wave beside it (IUPAC ST-4.4)", () => {
+    const drawn = unspecifiedDoubles(butene, zigzag);
+    // the double bond itself plain, one substituent wavy
+    expect(drawn[1].stereo).toBe("none");
+    expect(drawn.filter((b) => b.stereo === "wavy")).toHaveLength(1);
+    // the bonds as given are left as they were
+    expect(zigzag[1].stereo).toBe("either");
+  });
+
+  it("puts no wave on a bond to another stereocentre", () => {
+    // C1 a stereocentre: its wedge to C5
+    const atoms = [...butene, at(-L * 0.866, L / 2)];
+    const bonds: Bond[] = [...zigzag, { a1: 0, a2: 4, order: 1, stereo: "up" }];
+    const drawn = unspecifiedDoubles(atoms, bonds);
+    expect(drawn[0].stereo).not.toBe("wavy");
+    expect(drawn[2].stereo).toBe("wavy");
+  });
+
+  it("waves both substituents of an end that has two, where neither end has one free", () => {
+    // C2=C3, C3 bearing two methyls, C2's single substituent a stereocentre
+    const atoms = [at(0, 0), at(L * 0.866, L / 2), at(L * 1.732, 0), at(L * 2.598, L / 2), at(L * 1.732, -L), at(-L * 0.866, L / 2)];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 1, a2: 2, order: 2, stereo: "either" },
+      { a1: 2, a2: 3, order: 1 },
+      { a1: 2, a2: 4, order: 1 },
+      { a1: 0, a2: 5, order: 1, stereo: "up" },
+    ];
+    const drawn = unspecifiedDoubles(atoms, bonds);
+    expect(drawn.map((b) => b.stereo === "wavy")).toEqual([false, false, true, true, false]);
+  });
+
+  it("adds nothing where the drawing shows no configuration: straight on", () => {
+    const line = [at(0, 0), at(L, 0), at(2 * L, 0), at(3 * L, 0)];
+    const drawn = unspecifiedDoubles(line, zigzag);
+    expect(drawn.some((b) => b.stereo === "wavy")).toBe(false);
+  });
+
+  it("dots a hydrogen bond, at least three dots and no line, and gives it no hydrogen to take", () => {
+    const atoms = [at(0, 0, "O"), at(L, 0, "O")];
+    const layout = layoutMolecule(atoms, [{ a1: 0, a2: 1, order: 1, hydrogen: true }], opts({ units: "world", lineWidthPx: 0.05 }), 40);
+    expect(layout.lines).toHaveLength(0);
+    expect(layout.polys.length).toBeGreaterThanOrEqual(3);
+    // each O still carries its two hydrogens
+    expect(layout.texts.map((t) => t.text)).toEqual(["H2O", "OH2"]);
+  });
+
+  it("draws a coordination bond as a plain line, and an ammine keeps its three hydrogens", () => {
+    const atoms = [at(0, 0, "Cu"), at(L, 0, "N")];
+    const layout = layoutMolecule(atoms, [{ a1: 0, a2: 1, order: 1, coordination: true }], opts({ units: "world" }), 40);
+    expect(layout.polys).toHaveLength(0);
+    expect(layout.lines.length).toBeGreaterThan(0);
+    expect(layout.texts.map((t) => t.text)).toContain("NH3");
+  });
+
+  it("labels a query bond beside its middle, small", () => {
+    const atoms = [at(0, 0), at(L, 0)];
+    const layout = layoutMolecule(atoms, [{ a1: 0, a2: 1, order: 1, query: "single-or-double" }], opts({ units: "world" }), 40);
+    const label = layout.texts.find((t) => t.text === "S/D")!;
+    expect(label.beside).toBe(true);
+    expect(label.runs).toEqual([{ text: "S/D", sup: true }]);
+    expect(label.x).toBeCloseTo(L / 2, 6);
+    expect(Math.abs(label.y)).toBeGreaterThan(0);
   });
 });

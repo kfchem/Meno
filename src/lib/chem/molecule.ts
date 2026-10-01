@@ -23,6 +23,23 @@ export type AtomChem = {
   isotope?: number;
 };
 
+/**
+ * A query bond (CTfile bond types 5 to 8): one that stands for either of
+ * two kinds, or any. It is drawn as the first of them, labelled.
+ */
+export type BondQuery = "single-or-double" | "single-or-aromatic" | "double-or-aromatic" | "any";
+
+/**
+ * What a bond is besides its order, where it is not a plain covalent bond:
+ * a query, a hydrogen bond (drawn dotted, IUPAC GR-1.8), or a coordination
+ * bond drawn as a plain line (GR-1.7) rather than as a dative arrow.
+ */
+export type BondChem = {
+  query?: BondQuery;
+  hydrogen?: boolean;
+  coordination?: boolean;
+};
+
 /** An atom as a file gives it: where it is, in the file's own units. */
 export type ParsedAtom = AtomChem & { x: number; y: number; z: number };
 /**

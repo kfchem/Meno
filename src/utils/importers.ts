@@ -1,6 +1,6 @@
 import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
 import { kekuleOrders } from "../lib/chem/kekulize";
-import { chemistry, type AtomChem, type ParsedAtom } from "../lib/chem/molecule";
+import { chemistry, type AtomChem, type BondChem, type ParsedAtom } from "../lib/chem/molecule";
 import {
   layoutMolecule,
   type Atom as LayoutAtom,
@@ -22,12 +22,17 @@ export type EditorAtom = AtomChem & {
   y: number;
   r: number;
 };
-export type EditorBond = {
+export type EditorBond = BondChem & {
   id: number;
   a: number;
   b: number;
   order: 1 | 2 | 3;
-  stereo?: "up" | "down" | "wavy" | "none";
+  /**
+   * A single bond's wedge, hashed wedge or wavy line; a double bond's
+   * "either": cis or trans, not known (drawn as IUPAC ST-4.4 has it, with a
+   * wavy bond beside it).
+   */
+  stereo?: "up" | "down" | "wavy" | "either" | "none";
   /**
    * Set when the file puts a wedge's narrow end where the drawing would not
    * by itself - at the atom with fewer bonds.
@@ -45,6 +50,14 @@ function chemistryOf(a: ParsedAtom): AtomChem {
 
 /** MOL's bond type for a coordination (dative) bond. */
 const COORDINATION_BOND = 9;
+const HYDROGEN_BOND = 10;
+/** The query bond types, 5 to 8. */
+const QUERY_OF: Record<number, EditorBond["query"]> = {
+  5: "single-or-double",
+  6: "single-or-aromatic",
+  7: "double-or-aromatic",
+  8: "any",
+};
 
 const normalizeNewlines = (s: string) => s.replace(/\r\n?/g, "\n");
 
@@ -328,6 +341,33 @@ function drawnBox(model: EditorModel): { minX: number; maxX: number } {
   return { minX: bounds.min.x, maxX: bounds.max.x };
 }
 
+/**
+ * A file's bond `i` as the editor holds it, but for its id and atoms: its
+ * order - an aromatic ring's Kekulé one (`orders`) - its stereo, and what
+ * else the file says it is.
+ */
+function bondOf(
+  m: ParsedMol,
+  i: number,
+  orders: (1 | 2 | 3)[],
+  reversed: boolean[],
+): Omit<EditorBond, "id" | "a" | "b"> {
+  const b = m.bonds[i];
+  const query = QUERY_OF[b.order];
+  // A coordination bond is a dative arrow unless the file says to show it
+  // plainly (V3000 DISP=COORD); a hydrogen bond is drawn dotted.
+  const coord = b.order === COORDINATION_BOND && m.ct?.bonds[i]?.display === "COORD";
+  return {
+    // (a "double or aromatic" query is drawn double, the others single)
+    order: query === "double-or-aromatic" ? 2 : orders[i],
+    stereo: mapStereo(b),
+    ...(reversed[i] ? { stereoOrient: "reverse" as const } : {}),
+    ...(b.order === COORDINATION_BOND ? (coord ? { coordination: true } : { dative: true }) : {}),
+    ...(b.order === HYDROGEN_BOND ? { hydrogen: true } : {}),
+    ...(query ? { query } : {}),
+  };
+}
+
 export function convertMolToEditorModel(m: ParsedMol, scale: number) {
   const atoms: EditorAtom[] = m.atoms.map((a, i) => ({
     id: i + 1,
@@ -344,10 +384,7 @@ export function convertMolToEditorModel(m: ParsedMol, scale: number) {
     id: bondIdBase + i + 1,
     a: b.a1 + 1,
     b: b.a2 + 1,
-    order: orders[i],
-    stereo: mapStereo(b as any),
-    ...(reversed[i] ? { stereoOrient: "reverse" as const } : {}),
-    ...(b.order === COORDINATION_BOND ? { dative: true } : {}),
+    ...bondOf(m, i, orders, reversed),
   }));
   // centroid
   let cx = 0,
@@ -414,10 +451,7 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
         id: idCounter++,
         a: a1,
         b: a2,
-        order: orders[i],
-        stereo: mapStereo(b as any),
-        ...(reversed[i] ? { stereoOrient: "reverse" as const } : {}),
-        ...(b.order === COORDINATION_BOND ? { dative: true } : {}),
+        ...bondOf(m, i, orders, reversed),
       });
     });
   }
@@ -471,11 +505,14 @@ function wedgesNarrowAtFewerBonds(
 }
 
 function mapStereo(
-  b: { stereoCode?: number } | undefined
+  b: { order: number; stereoCode?: number } | undefined
 ): EditorBond["stereo"] {
   const code = b?.stereoCode;
   if (code == null || !Number.isFinite(code)) return "none";
-  // MDL codes: 0 none, 1 up, 6 down, 3/4 either (wavy)
+  // A double bond's 3 is cis or trans, not known - the double bond's own
+  // property, not a wavy line in its place. A single bond's: 1 up, 6 down,
+  // 4 either.
+  if (b?.order === 2) return code === 3 ? "either" : "none";
   if (code === 1) return "up";
   if (code === 6) return "down";
   if (code === 3 || code === 4) return "wavy";

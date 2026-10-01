@@ -239,3 +239,21 @@ describe("structure document operations", () => {
     expect(d.aromaticRings).toEqual({ "ring-a": true });
   });
 });
+
+describe("a bond the file made more than plain", () => {
+  it("is the bond it is made once its order or stereo is changed", () => {
+    let d = emptyStructureDocument();
+    d = ops.addAtom(d, 0, 0);
+    d = ops.addAtom(d, 1, 0);
+    const [a, b] = d.model.atoms.map((x) => x.id);
+    d = ops.addBond(d, a, b, 2);
+    const id = d.model.bonds[0].id;
+    d = { ...d, model: { ...d.model, bonds: [{ ...d.model.bonds[0], stereo: "either", query: "double-or-aromatic" }] } };
+    // (a change that is not to its order or stereo leaves it)
+    d = ops.updateBond(d, id, { doubleMode: "center" });
+    expect(d.model.bonds[0]).toMatchObject({ stereo: "either", query: "double-or-aromatic" });
+    d = ops.updateBond(d, id, { order: 1 });
+    expect(d.model.bonds[0].query).toBeUndefined();
+    expect(d.model.bonds[0].stereo).toBe("none");
+  });
+});

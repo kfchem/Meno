@@ -312,6 +312,8 @@ All hover-based, as above.
   an atom with too many bonds, saying what is wrong under the pointer; R/S
   and E/Z from a button on the canvas; both in Settings › Chemistry, and
   never in an exported picture.)
+- Everything a molfile, SDfile or Rxnfile can hold, read after CTfile Formats
+  and drawn after IUPAC's recommendations: docs/CTFILE.md, step by step.
 - Reaction arrows, "+" and text: create, move, edit, delete.
 - Copy and paste, within Meno and between tabs. (PR #68, as above; and
   between Meno and other programs, through the system clipboard.)
