@@ -50,6 +50,17 @@ jobs:
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
           args: --bundles nsis --config {"bundle":{"createUpdaterArtifacts":true}}
+      # An installed Meno takes an update only when its signature names the
+      # version it is announced as (requireSignedVersion), which the Tauri
+      # CLI writes from 2.12 on. The draft of a run that fails here must not
+      # be published (docs/RELEASING.md).
+      - name: The update is signed for this version
+        shell: bash
+        run: |
+          sig="src-tauri/target/release/bundle/nsis/Meno_${GITHUB_REF_NAME#v}_x64-setup.exe.sig"
+          comment=$(base64 -d "$sig" | tr -d '\r' | grep '^trusted comment: ')
+          echo "$sig: $comment"
+          echo "${comment#trusted comment: }" | tr '\t' '\n' | grep -qx "version:${GITHUB_REF_NAME#v}"
 
   macos:
     name: macOS (app, disk image and update)
@@ -94,3 +105,10 @@ jobs:
           # executable, the bundle would be refused as damaged instead, with
           # no way to open it. See docs/RELEASING.md, The Mac.
           args: --bundles app,dmg --config {"bundle":{"createUpdaterArtifacts":true,"macOS":{"signingIdentity":"-"}}}
+      # (the same check as Windows'; macOS's base64 takes the file on stdin)
+      - name: The update is signed for this version
+        run: |
+          sig="src-tauri/target/release/bundle/macos/Meno.app.tar.gz.sig"
+          comment=$(base64 -d < "$sig" | tr -d '\r' | grep '^trusted comment: ')
+          echo "$sig: $comment"
+          echo "${comment#trusted comment: }" | tr '\t' '\n' | grep -qx "version:${GITHUB_REF_NAME#v}"

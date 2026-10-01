@@ -55,10 +55,21 @@ taken up, or dropped, at any release.
    and puts them all on a **draft** release with `latest.json`, which
    names an update for each (`windows-x86_64`, `darwin-aarch64`). The Mac
    job waits for the Windows one: each reads `latest.json`, adds its own
-   and puts it back whole.
-4. Try the draft's installers, write the release notes (they are shown in
-   Meno, as the update's notes), and publish it. The Menos installed find
-   it the next time they look - as they start, and every few hours.
+   and puts it back whole. Each job then checks that its update's
+   signature names the version it is released as (see below).
+4. If the run passed: try the draft's installers, write the release notes
+   on the release page if you like, and publish it. The Menos installed
+   find it the next time they look - as they start, and every few hours.
+   Never publish the draft of a run that failed. (Editing the notes does
+   not change `latest.json`, whose `notes` were written as the workflow
+   ran; Meno does not show them for now.)
+
+An installed Meno checks more than the signature itself: the signature's
+trusted comment must carry the version `latest.json` announces
+(`requireSignedVersion` in `tauri.conf.json`), so that an older release
+cannot be passed off as a newer one. The Tauri CLI writes that version
+from 2.12 on; an update signed without it is refused by every Meno from
+0.1.1 on, which is what each job's last step guards against.
 
 ## The Mac
 
@@ -125,6 +136,11 @@ updates. The `uv` inside is already signed and notarized by its makers.
   public key; it is installed as Meno quits (on Windows, the NSIS
   installer, quietly; on a Mac, the app replaced where it is), or at once
   through a restart the user asks for.
-- The installer registers Meno's class for Office again (its
+- On Windows, the installer registers Meno's class for Office again (its
   `--register-ole` hook), so structures in documents keep opening in the
   Meno installed.
+- On Windows, the installer it ran stays in the temporary folder
+  (`%TEMP%\Meno-<version>-updater-…`, some 17 MB), since Meno has ended
+  by then; the next Meno to start takes it away, once it is ten minutes
+  old. A Mac leaves nothing behind: Meno itself unpacks the update and
+  puts it in place, and the temporary folders it used go with it.
