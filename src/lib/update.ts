@@ -58,7 +58,8 @@ const CONSENT: ConsentRequest = {
     "downloads it in the background (about 20 MB), and installs it when you quit. Every " +
     "connection is shown as it is made, and nothing goes out while Meno works offline. " +
     "You can take this back in Settings, under Network.",
-  sources: ["github.com", "objects.githubusercontent.com"],
+  // (GitHub hands a release's files out from release-assets, by redirect)
+  sources: ["github.com", "release-assets.githubusercontent.com"],
 };
 
 /** Whether Meno may look now: online, and allowed to. */
