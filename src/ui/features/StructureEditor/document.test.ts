@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as ops from "./document";
 import { emptyStructureDocument, type StructureDocument } from "./document";
+import { pt } from "../../../lib/chem/style";
 
 const doc = () => emptyStructureDocument();
 
@@ -230,6 +231,19 @@ describe("structure document operations", () => {
     expect(d.arrows[0].x).toBe(9);
     d = ops.removeArrow(d, 1);
     expect(d.arrows).toEqual([]);
+  });
+
+  it("gives an arrow its own look, and takes it away again", () => {
+    let d = ops.addArrow(ethane(), 1, 2, 0, 3);
+    d = ops.setArrowLook(d, 1, { reactionArrowHeadInset: 0.3, reactionArrowThickness: pt(1) });
+    expect(d.arrows[0].look).toEqual({ reactionArrowHeadInset: 0.3, reactionArrowThickness: pt(1) });
+    // in place of what it had, not over it
+    d = ops.setArrowLook(d, 1, { reactionArrowHeadInset: 0.5 });
+    expect(d.arrows[0].look).toEqual({ reactionArrowHeadInset: 0.5 });
+    // nothing of its own, and the arrow is as it was
+    d = ops.setArrowLook(d, 1, {});
+    expect(d.arrows[0]).toEqual({ id: 1, x: 1, y: 2, angle: 0, length: 3 });
+    expect(ops.setArrowLook(d, 9, { reactionArrowHeadInset: 0.5 })).toBe(d);
   });
 
   it("toggles aromatic circles", () => {

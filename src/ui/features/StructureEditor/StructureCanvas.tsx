@@ -35,6 +35,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import DocumentStylePanel from "./DocumentStylePanel";
+import ArrowStylePanel from "./ArrowStylePanel";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuTarget } from "./PartMenu";
 import { useClipboardActions } from "./clipboardActions";
@@ -69,6 +70,7 @@ function StructureCanvasContent({
   officeId,
   styleOpen,
   toggleStyle,
+  openArrowStyle,
 }: {
   active: boolean;
   tabId: string;
@@ -79,6 +81,8 @@ function StructureCanvasContent({
   /** Whether the drawing-style panel is open beside the canvas. */
   styleOpen: boolean;
   toggleStyle: () => void;
+  /** A reaction arrow's own style, in the panel beside the canvas. */
+  openArrowStyle: (id: number) => void;
 }) {
   const fitNonce = useEditor((s) => s.fitNonce);
   const requestFit = useEditor((s) => s.requestFit);
@@ -276,8 +280,23 @@ function StructureCanvasContent({
     // A card's text field keeps the system's own menu - cut, copy, paste.
     if (e.target !== domRef.current) return;
     e.preventDefault(); // no browser menu over the drawing
-    const { hovered } = store.getState();
+    const { hovered, hoveredArrow, arrows } = store.getState();
+    const box = e.currentTarget.getBoundingClientRect();
+    const place = {
+      at: clientToWorld(e.clientX, e.clientY) ?? pasteTarget(),
+      x: e.clientX - box.left,
+      y: e.clientY - box.top,
+      within: { width: box.width, height: box.height },
+    };
     const kind = hoveredPart();
+    const r = rightPress.current;
+    // on a reaction arrow, and nothing else: the arrow's menu
+    if (!kind && hoveredArrow != null && arrows.some((a) => a.id === hoveredArrow)) {
+      const target: MenuTarget = { kind: "arrow", id: hoveredArrow, selection: "none", ...place };
+      if (r?.down) r.pending = target;
+      else if (!r?.moved) setMenu(target);
+      return;
+    }
     const id = kind === "atom" ? hovered.atomId : hovered.bondId;
     // on something selected, or on nothing with a selection: the
     // selection's menu; on nothing else, the canvas's (paste, select all)
@@ -287,17 +306,12 @@ function StructureCanvasContent({
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
-    const box = e.currentTarget.getBoundingClientRect();
     const target: MenuTarget = {
       kind: part ? kind : null,
       id: part ? id : null,
       selection: !selected ? "none" : onSelected || !part ? "here" : "elsewhere",
-      at: clientToWorld(e.clientX, e.clientY) ?? pasteTarget(),
-      x: e.clientX - box.left,
-      y: e.clientY - box.top,
-      within: { width: box.width, height: box.height },
+      ...place,
     };
-    const r = rightPress.current;
     if (r?.down) r.pending = target; // macOS: open on the way up
     else if (!r?.moved) setMenu(target); // Windows, or a Ctrl-click on a Mac
   };
@@ -510,8 +524,12 @@ function StructureCanvasContent({
           target={menu}
           onClose={closeMenu}
           onDelete={() => {
-            if (menu.selection === "here") store.getState().deleteSelection();
+            if (menu.kind === "arrow" && menu.id != null) store.getState().removeArrow(menu.id);
+            else if (menu.selection === "here") store.getState().deleteSelection();
             else if (menu.kind && menu.id != null) deletePart(menu.kind, menu.id);
+          }}
+          onArrowStyle={() => {
+            if (menu.kind === "arrow" && menu.id != null) openArrowStyle(menu.id);
           }}
           onCleanUp={() =>
             runCleanUp(
@@ -622,9 +640,11 @@ export default function StructureCanvas({
   /** The tab's document; omitted for canvases embedded in other views. */
   document?: DocumentStore<StructureDocument>;
 }) {
-  // The document's drawing style opens in a panel beside the canvas rather
-  // than over it, so the drawing stays in view while it changes.
-  const [styleOpen, setStyleOpen] = useState(false);
+  // The document's drawing style - or one reaction arrow's own - opens in a
+  // panel beside the canvas rather than over it, so the drawing stays in
+  // view while it changes. One panel at a time.
+  const [panel, setPanel] = useState<"style" | { arrow: number } | null>(null);
+  const styleOpen = panel === "style";
   return (
     <EditorProvider tabId={tabId} document={document}>
       <div className="w-full h-full flex">
@@ -635,10 +655,16 @@ export default function StructureCanvas({
           initialFilename={initialFilename}
           officeId={officeId}
           styleOpen={styleOpen}
-          toggleStyle={() => setStyleOpen((v) => !v)}
+          toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
+          openArrowStyle={(id) => setPanel({ arrow: id })}
         />
-        {styleOpen && (
-          <DocumentStylePanel onClose={() => setStyleOpen(false)} />
+        {styleOpen && <DocumentStylePanel onClose={() => setPanel(null)} />}
+        {panel && panel !== "style" && (
+          <ArrowStylePanel
+            key={panel.arrow}
+            arrowId={panel.arrow}
+            onClose={() => setPanel(null)}
+          />
         )}
       </div>
     </EditorProvider>
