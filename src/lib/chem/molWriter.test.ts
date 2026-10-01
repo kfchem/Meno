@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { writeMolfile, writeSdf, MOL_BOND_LENGTH, type WriterModel } from "./molWriter";
+import { writeMolfile, writeRxnfile, writeSdf, MOL_BOND_LENGTH, type WriterModel } from "./molWriter";
+import { readRxnfile } from "./ctfile";
 import { NOMINAL_BOND_LENGTH } from "./acs";
 import {
   moleculesToEditorModel,
@@ -237,5 +238,70 @@ describe("bonds besides plain ones, through a file and back", () => {
       { version: "V3000" },
     );
     expect(out).toMatch(/M {2}V30 1 2 1 2 CFG=2\n/);
+  });
+});
+
+describe("writeRxnfile", () => {
+  const methane: WriterModel = { atoms: [{ id: 1, x: 0, y: 0, el: "C" }], bonds: [] };
+  const ethanol: WriterModel = {
+    atoms: [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: L, y: 0, el: "C" },
+      { id: 3, x: 2 * L, y: 0, el: "O", map: 3 },
+    ],
+    bonds: [
+      { a: 1, b: 2, order: 1 },
+      { a: 2, b: 3, order: 1, reactingCentre: 4 },
+    ],
+  };
+  const water: WriterModel = { atoms: [{ id: 7, x: 0, y: 0, el: "O" }], bonds: [] };
+
+  it("writes V2000 as the format has it: header, counts, a MOL file for each molecule in order", () => {
+    const text = writeRxnfile({ reactants: [ethanol, methane], products: [water], reagents: [methane] }, { title: "step 1" });
+    const lines = text.split("\n");
+    expect(lines.slice(0, 5)).toEqual(["$RXN", "step 1", "      Meno", "", "  2  1  1"]);
+    expect(lines.filter((l) => l === "$MOL")).toHaveLength(4);
+    expect(lines.filter((l) => l === "M  END")).toHaveLength(4);
+    // each block a MOL file: its three header lines, then its counts
+    const first = lines.indexOf("$MOL");
+    expect(lines[first + 4]).toMatch(/^ {2}3 {2}2 .* V2000$/);
+  });
+
+  it("leaves the reagents' count out when there are none", () => {
+    const text = writeRxnfile({ reactants: [ethanol], products: [water], reagents: [] });
+    expect(text.split("\n")[4]).toBe("  1  1");
+  });
+
+  it("reads back as the reaction it was, V2000 and V3000 alike", () => {
+    for (const version of ["V2000", "V3000"] as const) {
+      const r = readRxnfile(writeRxnfile({ reactants: [ethanol, methane], products: [water], reagents: [methane] }, { version }));
+      expect([r.reactants.length, r.products.length, r.reagents.length], version).toEqual([2, 1, 1]);
+      expect(r.reactants[0].atoms.map((a) => a.symbol), version).toEqual(["C", "C", "O"]);
+      expect(r.reactants[0].atoms[2].map, version).toBe(3);
+      expect(r.reactants[0].bonds[1].reactingCentre, version).toBe(4);
+      expect(r.products[0].atoms.map((a) => a.symbol), version).toEqual(["O"]);
+      expect(r.reactants[0].version, version).toBe(version);
+    }
+  });
+
+  it("is V3000 where a molecule cannot be written V2000, and V3000 as the format has it", () => {
+    const bonded: WriterModel = {
+      atoms: [
+        { id: 1, x: 0, y: 0, el: "O" },
+        { id: 2, x: L, y: 0, el: "H" },
+      ],
+      bonds: [{ a: 1, b: 2, order: 1, hydrogen: true }],
+    };
+    const text = writeRxnfile({ reactants: [bonded], products: [water], reagents: [] });
+    const lines = text.split("\n");
+    expect(lines[0]).toBe("$RXN V3000");
+    expect(lines[4]).toBe("M  V30 COUNTS 1 1");
+    expect(lines.filter((l) => l === "M  V30 BEGIN CTAB")).toHaveLength(2);
+    expect(text).toMatch(/M {2}V30 BEGIN REACTANT\nM {2}V30 BEGIN CTAB\n/);
+    expect(text).toMatch(/M {2}V30 END CTAB\nM {2}V30 END PRODUCT\nM {2}END\n$/);
+    expect(text).not.toMatch(/REAGENT/);
+    // one M  END, at the end
+    expect(lines.filter((l) => l === "M  END")).toHaveLength(1);
+    expect(readRxnfile(text).reactants[0].bonds[0].type).toBe(10);
   });
 });

@@ -445,6 +445,12 @@ function fitV3000(line: string): string[] {
 }
 
 function writeV3000(given: WriterModel, title: string): string {
+  const lines = [title, PROGRAM_LINE, "", "  0  0  0     0  0  0  0  0  0999 V3000", ...ctabV3000(given), "M  END"];
+  return lines.join("\n") + "\n";
+}
+
+/** The structure as a V3000 CTAB block, BEGIN CTAB to END CTAB: a MOL file's, or one molecule's in an RXN file. */
+function ctabV3000(given: WriterModel): string[] {
   const { model, sups: found, aliases } = prepared(given);
   // (V3000 has no alias: a label is an abbreviation Sgroup of its one star atom)
   const sups = [...found, ...[...aliases].map(([id, label]) => ({ label, atoms: [id] }))];
@@ -455,10 +461,6 @@ function writeV3000(given: WriterModel, title: string): string {
   const cfg = { up: 1, down: 3, wavy: 2, either: 2, none: 0 } as const;
   const num = (v: number) => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(4);
   const lines = [
-    title,
-    PROGRAM_LINE,
-    "",
-    "  0  0  0     0  0  0  0  0  0999 V3000",
     "M  V30 BEGIN CTAB",
     `M  V30 COUNTS ${model.atoms.length} ${bonds.length} ${groups.length} 0 ${chiralFlag(model) ? 1 : 0}`,
     "M  V30 BEGIN ATOM",
@@ -525,8 +527,8 @@ function writeV3000(given: WriterModel, title: string): string {
   }
   const collections = stereoCollections(model, index);
   if (collections.length) lines.push("M  V30 BEGIN COLLECTION", ...collections, "M  V30 END COLLECTION");
-  lines.push("M  V30 END CTAB", "M  END");
-  return lines.flatMap(fitV3000).join("\n") + "\n";
+  lines.push("M  V30 END CTAB");
+  return lines.flatMap(fitV3000);
 }
 
 /**
@@ -541,19 +543,96 @@ export function writeMolfile(
   model: WriterModel,
   options: { title?: string; version?: "V2000" | "V3000" | "auto" } = {},
 ): string {
-  const title = (options.title ?? "").replace(/[\r\n]+/g, " ").slice(0, 80);
+  const title = titleLine(options.title);
   const version = options.version ?? "auto";
-  // (V2000's bond types stop at 8: a coordination or a hydrogen bond, and
-  // whether the one is drawn as a plain line, are V3000's)
-  const needsV3000 =
+  return version === "V3000" || (version === "auto" && needsV3000(model))
+    ? writeV3000(model, title)
+    : writeV2000(model, title);
+}
+
+/** A title as a header's line: one line, of no more than 80 characters. */
+function titleLine(title: string | undefined): string {
+  return (title ?? "").replace(/[\r\n]+/g, " ").slice(0, 80);
+}
+
+/**
+ * Whether V2000 cannot say all there is to say of the structure: past 999
+ * atoms or bonds; a coordination or a hydrogen bond, and whether the one is
+ * drawn as a plain line (V2000's bond types stop at 8); racemic and relative
+ * stereo groups, a stereo bond's group and a haptic bond's endpoints.
+ */
+export function needsV3000(model: WriterModel): boolean {
+  return (
     model.atoms.length > 999 ||
     model.bonds.length > 999 ||
     model.bonds.some((b) => ((b.dative || b.coordination) && b.order === 1) || b.hydrogen || b.stereoGroup || b.endpoints?.length) ||
     // (V2000 has only the chiral flag: no racemic nor relative groups)
-    model.atoms.some((a) => a.stereoGroup && a.stereoGroup.kind !== "abs");
-  return version === "V3000" || (version === "auto" && needsV3000)
-    ? writeV3000(model, title)
-    : writeV2000(model, title);
+    model.atoms.some((a) => a.stereoGroup && a.stereoGroup.kind !== "abs")
+  );
+}
+
+/** A reaction to write: its molecules by role, each in the drawing's coordinates. */
+export type WriterReaction = {
+  reactants: WriterModel[];
+  products: WriterModel[];
+  reagents: WriterModel[];
+};
+
+/**
+ * An RXN file's third line: the user's initials (six characters), the
+ * program (nine), the date (twelve) and a registry number (seven) - here
+ * the program alone ("CTfile Formats", the Rxnfile header block).
+ */
+const RXN_PROGRAM_LINE = " ".repeat(6) + "Meno";
+
+/**
+ * The reaction as an RXN file ("CTfile Formats", the V2000 and V3000
+ * Rxnfile chapters): V2000 - $MOL blocks, each a MOL file - wherever every
+ * molecule can be written V2000, and V3000 - one CTAB block for each, in
+ * REACTANT, PRODUCT and REAGENT blocks - where one cannot, unless one is
+ * asked for. Reactants, then products, then reagents, as the format has
+ * them; the reagents' count is left out when there are none, which a
+ * reader takes as none.
+ */
+export function writeRxnfile(
+  reaction: WriterReaction,
+  options: { title?: string; version?: "V2000" | "V3000" | "auto" } = {},
+): string {
+  const title = titleLine(options.title);
+  const { reactants, products, reagents } = reaction;
+  const all = [...reactants, ...products, ...reagents];
+  const version = options.version ?? "auto";
+  const v3000 =
+    version === "V3000" ||
+    (version === "auto" && (all.some(needsV3000) || Math.max(reactants.length, products.length, reagents.length) > 999));
+  if (!v3000) {
+    const lines = [
+      "$RXN",
+      title,
+      RXN_PROGRAM_LINE,
+      "",
+      `${i3(reactants.length)}${i3(products.length)}${reagents.length ? i3(reagents.length) : ""}`,
+    ];
+    const blocks = all.map((m) => "$MOL\n" + writeV2000(m, ""));
+    return lines.join("\n") + "\n" + blocks.join("");
+  }
+  const block = (name: string, mols: WriterModel[]) => [
+    `M  V30 BEGIN ${name}`,
+    ...mols.flatMap(ctabV3000),
+    `M  V30 END ${name}`,
+  ];
+  const lines = [
+    "$RXN V3000",
+    title,
+    RXN_PROGRAM_LINE,
+    "",
+    `M  V30 COUNTS ${reactants.length} ${products.length}${reagents.length ? ` ${reagents.length}` : ""}`,
+    ...block("REACTANT", reactants),
+    ...block("PRODUCT", products),
+    ...(reagents.length ? block("REAGENT", reagents) : []),
+    "M  END",
+  ];
+  return lines.join("\n") + "\n";
 }
 
 /** The structure as a one-record SD file. */

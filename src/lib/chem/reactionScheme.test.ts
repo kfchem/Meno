@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest";
+import { NOMINAL_BOND_LENGTH } from "./acs";
+import { arrowEnds, plusMeasures, plusOutline, reactionRoles, schemeOutlines } from "./reactionScheme";
+import { ACS_1996, bondFraction } from "./style";
+
+const L = NOMINAL_BOND_LENGTH;
+const atom = (id: number, x: number, y: number, extra: object = {}) => ({ id, x, y, ...extra });
+
+describe("a plus", () => {
+  it("is about as wide as the sign set in the labels' typeface, its bars a bond's line", () => {
+    const m = plusMeasures(ACS_1996, L);
+    expect(m.size).toBeCloseTo(0.6 * bondFraction(ACS_1996.fontSize, ACS_1996) * L, 9);
+    expect(m.thickness).toBeCloseTo(bondFraction(ACS_1996.lineThickness, ACS_1996) * L, 9);
+  });
+
+  it("is a cross of twelve corners about its middle", () => {
+    const outline = plusOutline({ x: 5, y: 1 }, { size: 2, thickness: 0.2 });
+    expect(outline).toHaveLength(12);
+    const xs = outline.map((p) => p.x);
+    const ys = outline.map((p) => p.y);
+    expect([Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]).toEqual([4, 6, 0, 2]);
+    // anticlockwise: a positive area
+    let area = 0;
+    outline.forEach((p, i) => {
+      const q = outline[(i + 1) % outline.length];
+      area += p.x * q.y - q.x * p.y;
+    });
+    // two bars, less the square they share
+    expect(area / 2).toBeCloseTo(2 * (2 * 0.2) - 0.2 * 0.2, 9);
+  });
+
+  it("goes into a picture with the arrows, each in its own outline", () => {
+    const outlines = schemeOutlines(
+      { arrows: [{ x: 0, y: 0, angle: 0, length: 3 }], pluses: [{ x: -3, y: 0 }, { x: 3, y: 0 }] },
+      ACS_1996,
+      L,
+    );
+    expect(outlines).toHaveLength(3);
+    expect(outlines.slice(1).map((o) => o.length)).toEqual([12, 12]);
+    // the arrow's point, at the end it points to
+    expect(Math.max(...outlines[0].map((p) => p.x))).toBeCloseTo(1.5, 9);
+  });
+});
+
+describe("a drawn reaction's roles", () => {
+  // the arrow from x = 0 to 3, pointing right
+  const arrow = { x: 1.5, y: 0, angle: 0, length: 3 };
+
+  it("are by where each structure is against the arrow: before, past or beside it", () => {
+    const model = {
+      atoms: [atom(1, -3, 0), atom(2, -2, 0), atom(3, 5, 0), atom(4, 1.5, 1.2), atom(5, 1.5, -1.2)],
+      bonds: [{ a: 1, b: 2 }],
+    };
+    expect(reactionRoles(model, arrow, [], L)).toEqual({
+      reactants: [[1, 2]],
+      products: [[3]],
+      // the one above an arrow pointing right first
+      reagents: [[4], [5]],
+    });
+    expect(arrowEnds(arrow)).toEqual({ from: { x: 0, y: 0 }, to: { x: 3, y: 0 } });
+  });
+
+  it("follow the arrow whichever way it points", () => {
+    // pointing down: what is above it reacts, what is below is made
+    const down = { x: 0, y: 0, angle: -Math.PI / 2, length: 3 };
+    const model = { atoms: [atom(1, 0, 4), atom(2, 0, -4), atom(3, 1, 0)], bonds: [] };
+    expect(reactionRoles(model, down, [], L)).toEqual({ reactants: [[1]], products: [[2]], reagents: [[3]] });
+  });
+
+  it("make two molecules of structures a plus stands between, or a bond and more apart", () => {
+    // two close together with a plus between, two far apart without one
+    const model = {
+      atoms: [atom(1, -6, 0), atom(2, -5.5, 0), atom(3, 4, 0), atom(4, 8, 0)],
+      bonds: [],
+    };
+    const roles = reactionRoles(model, arrow, [{ x: -5.75, y: 0 }], L);
+    expect(roles.reactants).toEqual([[1], [2]]);
+    expect(roles.products).toEqual([[3], [4]]);
+  });
+
+  it("make one molecule of ions drawn close together, with no plus between them", () => {
+    const model = {
+      atoms: [atom(1, -3, 0, { el: "Na" }), atom(2, -2.2, 0, { el: "Cl" }), atom(3, 5, 0)],
+      bonds: [],
+    };
+    expect(reactionRoles(model, arrow, [], L).reactants).toEqual([[1, 2]]);
+  });
+
+  it("keep together a haptic bond's atoms and an Sgroup's", () => {
+    // a metal bonded to a star at a ring's middle, the ring's atoms its
+    // endpoints but bonded to nothing else here; and two atoms of one group
+    const model = {
+      atoms: [
+        atom(1, -4, 0, { el: "Fe" }),
+        atom(2, -4, 1, { el: "*" }),
+        atom(3, -4.5, 6),
+        atom(4, -3.5, 6),
+        atom(5, 8, 0, { sgroups: [{ id: 9 }] }),
+        atom(6, 12, 0, { sgroups: [{ id: 9 }] }),
+      ],
+      bonds: [{ a: 1, b: 2, endpoints: [3, 4] }],
+    };
+    const roles = reactionRoles(model, arrow, [], L);
+    expect(roles.reactants).toEqual([[1, 2, 3, 4]]);
+    expect(roles.products).toEqual([[5, 6]]);
+  });
+});
