@@ -66,6 +66,7 @@ export function createEditorStore(
     selAnchor: null,
     boxSelect: { active: false, kind: "box", points: [] },
     hovered: { atomId: null, bondId: null },
+    hoveredArrow: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
     fitNonce: 0,
     autoFitSuspended: false,
