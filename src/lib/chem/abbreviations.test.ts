@@ -64,6 +64,19 @@ describe("the abbreviations", () => {
   it("put together by rule: a group behind O, S or NH, and an ester", () => {
     expect(abbreviationOf("OTBS")?.smiles).toBe("*O[Si](C)(C)C(C)(C)C");
     expect(abbreviationOf("NHBoc")?.name).toBe("tert-butoxycarbonylamino");
+    // named as such groups are
+    expect(["OMe", "OEt", "Ot-Bu", "OiPr", "OPh", "OBn", "OTMS", "OMs", "CO2Me", "SMe"].map((l) => abbreviationOf(l)?.name)).toEqual([
+      "methoxy",
+      "ethoxy",
+      "tert-butoxy",
+      "isopropoxy",
+      "phenoxy",
+      "benzyloxy",
+      "trimethylsilyloxy",
+      "methanesulfonyloxy",
+      "methoxycarbonyl",
+      "methylsulfanyl",
+    ]);
     expect(abbreviationOf("SPh")?.smiles).toBe("*Sc1ccccc1");
     expect(abbreviationOf("CO2t-Bu")?.smiles).toBe("*C(=O)OC(C)(C)C");
     // a contracted label behind O: trifluoromethoxy, cyanate
