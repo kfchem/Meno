@@ -50,6 +50,17 @@ const hashesOf = (polys: { points: Vec2[] }[]) =>
     })
     .sort((a, b) => a.at - b.at);
 
+/** Whether `p` lies inside the polygon `pts` (crossing count). */
+const inside = (p: Vec2, pts: Vec2[]) => {
+  let crossings = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    if (a.y > p.y !== b.y > p.y && p.x < a.x + ((p.y - a.y) * (b.x - a.x)) / (b.y - a.y)) crossings++;
+  }
+  return crossings % 2 === 1;
+};
+
 const polyArea = (pts: Vec2[]) => {
   let s = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -681,21 +692,67 @@ describe("a wedge and a bond of more than one line", () => {
     { a1: 1, a2: 3, order: 1, stereo: "none" },
   ];
 
-  it("cuts past the far line, so neither line ends in mid air", () => {
+  it("closes a centred double bond's gap with the wedge, neither line ending in mid air", () => {
     const o = opts();
+    const half = o.lineWidthPx / 2;
     const { polys, lines } = buildAllPrimitives(atoms, bonds, o, 40);
     const wedge = polys.reduce((big, p) =>
       polyArea(p.points) > polyArea(big.points) ? p : big,
     );
-    // the double bond runs along +x from the atom; its lines sit either side.
-    // The lower one runs on past the atom to meet the plain bond leaving it
-    // on that side, so only where they end is asked.
-    const ys = lines.filter((l) => l.x2 > 1).map((l) => l.y2);
-    expect(ys.length).toBe(2);
-    const lowest = Math.min(...ys);
-    // the wedge reaches below the lower line, so its end is covered
+    // the double bond runs along +x from the atom, drawn centred: a line
+    // either side, the near one towards the wedge's narrow end (above)
+    const pair = lines.filter((l) => Math.max(l.x1, l.x2) > 1);
+    expect(pair.length).toBe(2);
+    const [far, near] = [...pair].sort((a, b) => a.y1 - b.y1);
+    const atomEnd = (l: (typeof pair)[number]) =>
+      l.x1 < l.x2 ? { x: l.x1, y: l.y1 } : { x: l.x2, y: l.y2 };
+    // the near line runs into the wedge
+    expect(inside(atomEnd(near), wedge.points)).toBe(true);
+    // the far one runs on past the atom to meet the plain bond leaving it on
+    // that side: its end is on that bond's line
+    const end = atomEnd(far);
+    const u = { x: -1.3 / Math.hypot(1.3, 0.75), y: -0.75 / Math.hypot(1.3, 0.75) };
+    expect(Math.abs(end.x * u.y - end.y * u.x)).toBeLessThanOrEqual(half + 1e-9);
+    // and the wedge stops short of the far line, closing the gap between the
+    // two rather than reaching across it to stand out beneath
     const under = Math.min(...wedge.points.map((p) => p.y));
-    expect(under).toBeLessThanOrEqual(lowest);
+    expect(under).toBeGreaterThan(far.y1 + half);
+  });
+
+  it("stops at a double bond's own line on the side its second line is not", () => {
+    // the wedge's wide end on atom 1, where only a double bond carries on,
+    // its second line on the side of the wedge's narrow end (+y)
+    const alone: Bond[] = [
+      { a1: 0, a2: 1, order: 1, stereo: "up", stereoOrient: "reverse" },
+      { a1: 1, a2: 2, order: 2, stereo: "none", doubleMode: "left" },
+    ];
+    const o = opts();
+    const { polys, lines } = buildAllPrimitives(atoms.slice(0, 3), alone, o, 40);
+    const wedge = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    expect(Math.max(...lines.map((l) => l.y1))).toBeGreaterThan(0);
+    // nothing of the bond is below its own line, so no corner of the wedge
+    // stands out below that line's edge
+    const under = Math.min(...wedge.points.map((p) => p.y));
+    expect(under).toBeGreaterThanOrEqual(-o.lineWidthPx / 2 - 1e-9);
+  });
+
+  it("leaves a second line in the dent between two bonds short of the wedge", () => {
+    // as before, a plain bond carrying on too, and the double bond's second
+    // line on its side (-y), in the dent between the two
+    const sided: Bond[] = [bonds[0], { ...bonds[1], doubleMode: "right" }, bonds[2]];
+    const o = opts();
+    const { polys } = buildAllPrimitives(atoms, sided, o, 40);
+    const wedge = polys.reduce((big, p) =>
+      polyArea(p.points) > polyArea(big.points) ? p : big,
+    );
+    // its corner on the double bond's side keeps to that bond's own line,
+    // the edge nearest the narrow end, and is not drawn down towards the
+    // second line, which runs it into a spike
+    const corner = wedge.points.filter((p) => p.x > 0.05 && p.y < 0.75);
+    expect(corner.length).toBeGreaterThan(0);
+    for (const p of corner) expect(p.y).toBeGreaterThanOrEqual(o.lineWidthPx / 2 - 1e-9);
   });
 
   it("runs a line of a double bond up to the atom the wedge covers", () => {

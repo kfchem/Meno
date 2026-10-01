@@ -58,6 +58,36 @@ function wedgeWithNeighbour(deg: number): Structure {
 }
 
 /**
+ * A wedge widening onto the atom of a double bond, at `deg` between the two,
+ * the double bond drawn `mode`; with `single`, a single bond carries on from
+ * that atom too, mirrored across the wedge from the double bond. The wedge
+ * narrows towards atom 0, as in wedgeWithNeighbour.
+ */
+function wedgeOntoDouble(deg: number, mode: Bond["doubleMode"], single: boolean): Structure {
+  const a0: Atom = { id: 0, x: 0, y: 0, el: "C" };
+  const a1: Atom = { id: 1, x: L, y: 0, el: "C" };
+  const a2 = bend(a1, deg, 2);
+  const atoms: Atom[] = [
+    a0,
+    a1,
+    a2,
+    { id: 3, x: -L * 0.5, y: L * 0.87, el: "C" },
+    { id: 4, x: -L * 0.5, y: -L * 0.87, el: "C" },
+  ];
+  const bonds: Bond[] = [
+    { a1: 0, a2: 1, order: 1, stereo: "up" },
+    { a1: 1, a2: 2, order: 2, stereo: "none", doubleMode: mode },
+    { a1: 0, a2: 3, order: 1, stereo: "none" },
+    { a1: 0, a2: 4, order: 1, stereo: "none" },
+  ];
+  if (single) {
+    atoms.push({ id: 5, x: a2.x, y: -a2.y, el: "C" });
+    bonds.push({ a1: 1, a2: 5, order: 1, stereo: "none" });
+  }
+  return { atoms, bonds };
+}
+
+/**
  * Two double bonds sharing an atom, at `deg` between them: carbons, or the
  * elements given, shared atom in the middle.
  */
@@ -137,6 +167,36 @@ export const sweeps: Sweep[] = [
       label: `${d}°`,
       structure: wedgeWithNeighbour(d),
     })),
+  },
+  {
+    title: "A wedge's wide end onto a double bond",
+    note:
+      "The end is cut along the double bond, taking in whatever it draws on " +
+      "the side away from the wedge's narrow end and nothing more: the far " +
+      "line of a centred one, the bond's own line when its second line is " +
+      "on the near side. A corner standing out past the bond, or a line " +
+      "left stranded off the end, is a fault.",
+    frames: [110, 120, 135, 150, 165].flatMap((d) =>
+      (["left", "right", "center"] as const).map((mode) => ({
+        label: `${d}° ${mode}`,
+        structure: wedgeOntoDouble(d, mode, false),
+      })),
+    ),
+  },
+  {
+    title: "A wedge's wide end between a double bond and a single one",
+    note:
+      "A centred double bond has no line to the atom: its near line runs " +
+      "into the end, its far line on to meet the single bond, and the gap " +
+      "between them is closed by one straight edge of the end. A flag of the " +
+      "wedge out past the near line, or the single bond's square end " +
+      "standing into the gap, is a fault.",
+    frames: [110, 120, 135, 150].flatMap((d) =>
+      (["center", "auto", "left", "right"] as const).map((mode) => ({
+        label: `${d}° ${mode}`,
+        structure: wedgeOntoDouble(d, mode, true),
+      })),
+    ),
   },
   {
     title: "Two double bonds sharing an atom",
