@@ -32,7 +32,7 @@ export default function Pluses2D() {
     v.unproject(camera as any);
     return { x: v.x, y: v.y };
   };
-  const dragRef = useRef<{ id: number; offx: number; offy: number } | null>(null);
+  const dragRef = useRef<{ id: number; offx: number; offy: number; gesture: string } | null>(null);
 
   // one shape for every "+", about its middle
   const geometry = useMemo(() => {
@@ -59,12 +59,13 @@ export default function Pluses2D() {
             const cx = (e as any).clientX ?? (e as any).nativeEvent?.clientX;
             const cy = (e as any).clientY ?? (e as any).nativeEvent?.clientY;
             const at = toWorld(cx, cy);
-            dragRef.current = { id: p.id, offx: p.x - at.x, offy: p.y - at.y };
+            dragRef.current = { id: p.id, offx: p.x - at.x, offy: p.y - at.y, gesture: `move-${performance.now()}` };
             beginPanHold((e as any).pointerId ?? (e as any).nativeEvent?.pointerId ?? null);
             const onMove = (ev: PointerEvent) => {
               if (!dragRef.current) return;
               const q = toWorld(ev.clientX, ev.clientY);
-              movePlus(dragRef.current.id, q.x + dragRef.current.offx, q.y + dragRef.current.offy);
+              const d = dragRef.current;
+              movePlus(d.id, q.x + d.offx, q.y + d.offy, d.gesture);
             };
             const onUp = (ev: PointerEvent) => {
               dragRef.current = null;

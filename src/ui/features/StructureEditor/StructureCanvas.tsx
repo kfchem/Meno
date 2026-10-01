@@ -226,6 +226,15 @@ function StructureCanvasContent({
       } else if (isDeleteKey(e) && kind && id != null) {
         e.preventDefault();
         deletePart(kind, id);
+      } else if (isDeleteKey(e) && !busy && st.hoveredArrow != null && st.arrows.some((a) => a.id === st.hoveredArrow)) {
+        // a reaction arrow under the pointer, and nothing else
+        e.preventDefault();
+        st.removeArrow(st.hoveredArrow);
+        st.setHoveredArrow(null);
+      } else if (isDeleteKey(e) && !busy && st.hoveredPlus != null && st.pluses.some((p) => p.id === st.hoveredPlus)) {
+        e.preventDefault();
+        st.removePlus(st.hoveredPlus);
+        st.setHoveredPlus(null);
       } else if (chargeStep(e) && kind === "atom" && id != null) {
         e.preventDefault();
         chargeAtom(id, chargeStep(e) as 1 | -1);
@@ -547,6 +556,8 @@ function StructureCanvasContent({
           onArrowStyle={() => {
             if (menu.kind === "arrow" && menu.id != null) openArrowStyle(menu.id);
           }}
+          onAddArrow={() => store.getState().addArrow(menu.at.x, menu.at.y)}
+          onAddPlus={() => store.getState().addPlus(menu.at.x, menu.at.y)}
           onCleanUp={() =>
             runCleanUp(
               menu.selection === "here"

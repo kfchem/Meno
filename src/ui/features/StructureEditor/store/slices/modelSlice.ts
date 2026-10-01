@@ -3,6 +3,7 @@ import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
 import type { ImportedScheme, StructureDocument } from "../../document";
 import type { ArrowLook } from "../../../../../lib/chem/reactionArrow";
+import { ARROW_LENGTH_BONDS } from "../../../../../lib/chem/reactionScheme";
 import { EditorState, Bond, Arrow, Model, Drawn } from "../types";
 import { turnedOver } from "../../utils/selection";
 import { schemeAmong } from "../../utils/copyPaste";
@@ -291,25 +292,31 @@ export const createModelSlice = (
     x: number,
     y: number,
     angle: number = 0,
-    length: number = NOMINAL_BOND_LENGTH * 4,
+    length: number = NOMINAL_BOND_LENGTH * ARROW_LENGTH_BONDS,
   ) => {
     const id = doc.getState().nextArrowId;
     doc.edit("add arrow", (d) => ops.addArrow(d, x, y, angle, length));
     return id;
   },
 
-  updateArrow: (id: number, patch: Partial<Arrow>) => {
+  updateArrow: (id: number, patch: Partial<Arrow>, gesture?: string) => {
     doc.edit("move arrow", (d) => ops.updateArrow(d, id, patch), {
-      coalesceKey: `arrow:${id}`,
+      coalesceKey: `arrow:${id}:${gesture ?? ""}`,
     });
+  },
+
+  addPlus: (x: number, y: number) => {
+    const id = doc.getState().nextPlusId ?? 1;
+    doc.edit("add plus", (d) => ops.addPlus(d, x, y));
+    return id;
   },
 
   removeArrow: (id: number) => {
     doc.edit("delete arrow", (d) => ops.removeArrow(d, id));
   },
 
-  movePlus: (id: number, x: number, y: number) => {
-    doc.edit("move plus", (d) => ops.movePlus(d, id, x, y), { coalesceKey: `plus:${id}` });
+  movePlus: (id: number, x: number, y: number, gesture?: string) => {
+    doc.edit("move plus", (d) => ops.movePlus(d, id, x, y), { coalesceKey: `plus:${id}:${gesture ?? ""}` });
   },
 
   removePlus: (id: number) => {

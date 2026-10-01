@@ -234,11 +234,15 @@ export type EditorState = {
   appendModel: (next: Model, scheme?: ImportedScheme) => void;
   /** Clears hover, selection and gestures after the structure is replaced. */
   forgetInteraction: () => void;
+  /** A reaction arrow added, pointing `angle` radians from the x axis (right), as one step; its id. */
   addArrow: (x: number, y: number, angle?: number, length?: number) => number;
-  updateArrow: (id: number, patch: Partial<Arrow>) => void;
+  /** An arrow moved or reshaped; a run of changes in one gesture - a drag - is one step. */
+  updateArrow: (id: number, patch: Partial<Arrow>, gesture?: string) => void;
+  /** A "+" added, as one step; its id. */
+  addPlus: (x: number, y: number) => number;
   removeArrow: (id: number) => void;
-  /** A "+" moved; a run of moves of one, a drag, is one step. */
-  movePlus: (id: number, x: number, y: number) => void;
+  /** A "+" moved; a run of moves in one gesture, a drag, is one step. */
+  movePlus: (id: number, x: number, y: number, gesture?: string) => void;
   removePlus: (id: number) => void;
   /** What a cut takes, gone as one undo step: atoms, bonds, arrows and pluses. */
   deleteDrawn: (part: Drawn) => void;

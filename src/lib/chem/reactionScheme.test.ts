@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NOMINAL_BOND_LENGTH } from "./acs";
-import { arrowEnds, plusMeasures, plusOutline, reactionRoles, schemeOutlines } from "./reactionScheme";
+import { arrowEnds, plusMeasures, plusOutline, reactionRoles, reshapedArrow, schemeOutlines } from "./reactionScheme";
 import { ACS_1996, bondFraction } from "./style";
 
 const L = NOMINAL_BOND_LENGTH;
@@ -103,5 +103,37 @@ describe("a drawn reaction's roles", () => {
     const roles = reactionRoles(model, arrow, [], L);
     expect(roles.reactants).toEqual([[1, 2, 3, 4]]);
     expect(roles.products).toEqual([[5, 6]]);
+  });
+});
+
+describe("an arrow drawn out by one end", () => {
+  const step = Math.PI / 12;
+
+  it("takes its point to the pointer, its tail staying, the direction in steps", () => {
+    // 6 degrees off level: level
+    const a = reshapedArrow("head", { x: 0, y: 0 }, { x: 4 * Math.cos(0.1), y: 4 * Math.sin(0.1) }, { step, minLength: 0.5 });
+    expect(arrowEnds(a).from).toEqual({ x: 0, y: 0 });
+    expect(a.angle).toBeCloseTo(0, 9);
+    expect(a.length).toBeCloseTo(4, 9);
+    // and freely, with no steps
+    const free = reshapedArrow("head", { x: 0, y: 0 }, { x: 4 * Math.cos(0.1), y: 4 * Math.sin(0.1) }, { minLength: 0.5 });
+    expect(free.angle).toBeCloseTo(0.1, 9);
+  });
+
+  it("takes its tail to the pointer, its point staying where it was", () => {
+    // the tail dragged up and to the left of the point at (3, 0): pointing down and right
+    const a = reshapedArrow("tail", { x: 3, y: 0 }, { x: 0, y: 3 }, { step, minLength: 0.5 });
+    const { from, to } = arrowEnds(a);
+    expect(to.x).toBeCloseTo(3, 9);
+    expect(to.y).toBeCloseTo(0, 9);
+    expect(from.x).toBeCloseTo(0, 9);
+    expect(from.y).toBeCloseTo(3, 9);
+    expect(a.angle).toBeCloseTo(-Math.PI / 4, 9);
+  });
+
+  it("is never shorter than it is allowed to be", () => {
+    const a = reshapedArrow("head", { x: 0, y: 0 }, { x: 0.1, y: 0 }, { step, minLength: 0.5 });
+    expect(a.length).toBe(0.5);
+    expect(arrowEnds(a).to.x).toBeCloseTo(0.5, 9);
   });
 });

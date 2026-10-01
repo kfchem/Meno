@@ -190,3 +190,30 @@ export function schemeOutlines(
     ...(scheme.pluses ?? []).map((p) => plusOutline(p, plus)),
   ].filter((o) => o.length > 2);
 }
+
+/** A new reaction arrow's length, in bonds: what a file's arrow is given too. */
+export const ARROW_LENGTH_BONDS = 8 / 3;
+
+/**
+ * The arrow with one end - its point (`head`) or its tail - taken to
+ * `pointer`, the other end staying at `fixed`: its direction a multiple of
+ * `step` radians where one is given, its length no less than `minLength`.
+ */
+export function reshapedArrow(
+  end: "head" | "tail",
+  fixed: P,
+  pointer: P,
+  { step, minLength }: { step?: number; minLength: number },
+): SchemeArrow {
+  let angle = Math.atan2(pointer.y - fixed.y, pointer.x - fixed.x);
+  if (step) angle = Math.round(angle / step) * step;
+  const length = Math.max(minLength, Math.hypot(pointer.x - fixed.x, pointer.y - fixed.y));
+  const moving = { x: fixed.x + Math.cos(angle) * length, y: fixed.y + Math.sin(angle) * length };
+  const [from, to] = end === "head" ? [fixed, moving] : [moving, fixed];
+  return {
+    x: (from.x + to.x) / 2,
+    y: (from.y + to.y) / 2,
+    angle: Math.atan2(to.y - from.y, to.x - from.x),
+    length,
+  };
+}
