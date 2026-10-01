@@ -708,6 +708,64 @@ describe("a wedge and a bond of more than one line", () => {
   });
 });
 
+describe("how far a bond reaches off its own line", () => {
+  const ZOOM = 40;
+  const pair: Atom[] = [
+    { id: 1, x: 0, y: 0, el: "C" },
+    { id: 2, x: 1.5, y: 0, el: "C" },
+  ];
+  const reachOf = (bond: Bond) => layoutMolecule(pair, [bond], opts(), ZOOM).reach[0];
+  const o = opts();
+  const line = o.lineWidthPx / 2;
+
+  it("is half a line's width for a plain bond", () => {
+    expect(reachOf({ a1: 0, a2: 1, order: 1 })).toEqual({ left1: line, right1: line, left2: line, right2: line });
+  });
+
+  it("widens to a wedge's broad end at the end it is drawn at", () => {
+    // with nothing else at either atom the narrow end is at a1
+    const r = reachOf({ a1: 0, a2: 1, order: 1, stereo: "up" });
+    expect(r.left1).toBeCloseTo(line, 9);
+    expect(r.left2).toBeCloseTo(o.wedgeWidthPx / 2, 9);
+    expect(r.right2).toBeCloseTo(o.wedgeWidthPx / 2, 9);
+    const hashed = reachOf({ a1: 0, a2: 1, order: 1, stereo: "down" });
+    expect(hashed.left2).toBeCloseTo(o.wedgeWidthPx / 2, 9);
+  });
+
+  it("reaches a double bond's second line on its side, or half the gap either side when centred", () => {
+    const left = reachOf({ a1: 0, a2: 1, order: 2, doubleMode: "left" });
+    expect(left.left1).toBeCloseTo(line + o.doubleOffsetPx, 9);
+    expect(left.right1).toBeCloseTo(line, 9);
+    const right = reachOf({ a1: 0, a2: 1, order: 2, doubleMode: "right" });
+    expect(right.right2).toBeCloseTo(line + o.doubleOffsetPx, 9);
+    expect(right.left2).toBeCloseTo(line, 9);
+    const centred = reachOf({ a1: 0, a2: 1, order: 2, doubleMode: "center" });
+    expect(centred.left1).toBeCloseTo(line + o.doubleOffsetPx / 2, 9);
+    expect(centred.right1).toBeCloseTo(line + o.doubleOffsetPx / 2, 9);
+  });
+
+  it("reaches a triple bond's outer lines and a wavy bond's swing", () => {
+    expect(reachOf({ a1: 0, a2: 1, order: 3 }).left1).toBeCloseTo(line + o.tripleOffsetPx, 9);
+    expect(reachOf({ a1: 0, a2: 1, order: 1, stereo: "wavy" }).right2).toBeCloseTo(line + o.wavyAmpPx, 9);
+  });
+
+  it("gives every bond one, in the bonds' order", () => {
+    const three: Atom[] = [...pair, { id: 3, x: 2.8, y: 0.75, el: "C" }];
+    const { reach } = layoutMolecule(
+      three,
+      [
+        { a1: 0, a2: 1, order: 1 },
+        { a1: 1, a2: 2, order: 1, stereo: "up" },
+      ],
+      opts(),
+      ZOOM,
+    );
+    expect(reach).toHaveLength(2);
+    expect(reach[0].left2).toBeCloseTo(line, 9);
+    expect(Math.max(reach[1].left1, reach[1].left2)).toBeCloseTo(o.wedgeWidthPx / 2, 9);
+  });
+});
+
 describe("a label must not change how a bond is drawn", () => {
   const ZOOM = 40;
   const deg = new Map([
