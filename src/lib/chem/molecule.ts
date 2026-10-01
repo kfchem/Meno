@@ -1,3 +1,5 @@
+import type { CtMolecule } from "./ctfile";
+
 /**
  * What an atom is, chemically - the one place it is said, for every kind of
  * molecule the app handles: a file's as parsed, the editor's, the one the
@@ -23,10 +25,17 @@ export type AtomChem = {
 
 /** An atom as a file gives it: where it is, in the file's own units. */
 export type ParsedAtom = AtomChem & { x: number; y: number; z: number };
-/** A bond as a file gives it, between atoms by index; `stereoCode` is MOL's. */
+/**
+ * A bond as a file gives it, between atoms by index: its CTfile bond type
+ * (1 to 10) as `order`, and its stereo as V2000 codes - a single bond's 1
+ * up, 4 either, 6 down; a double bond's 3, cis or trans not known.
+ */
 export type ParsedBond = { a1: number; a2: number; order: number; stereoCode?: number };
-/** A molecule as a file gives it. */
-export type Molecule = { atoms: ParsedAtom[]; bonds: ParsedBond[] };
+/**
+ * A molecule as a file gives it. A CTfile's carries all the file said
+ * besides (lib/chem/ctfile), its atoms and bonds in the same order.
+ */
+export type Molecule = { atoms: ParsedAtom[]; bonds: ParsedBond[]; ct?: CtMolecule };
 
 /**
  * Valences used to work out how many hydrogens an atom carries, for the

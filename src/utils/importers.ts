@@ -8,10 +8,12 @@ import {
 } from "../lib/chem/layout2d";
 import { layoutOptionsFor, MENO } from "../lib/chem/style";
 import {
+  fromCtfile,
   parseSDF,
   parseXYZ,
   type Molecule as ParsedMol,
 } from "./structureParsers";
+import { readRxnfile } from "../lib/chem/ctfile";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), and where it is. */
 export type EditorAtom = AtomChem & {
@@ -129,81 +131,14 @@ export type RXNLayout = {
  * This is more robust than a flat split when we need to layout reaction components.
  */
 export function parseRXNGroups(text: string): RXNGroups {
-  const src = normalizeNewlines(text);
-  // Find header area after $RXN and before first $MOL
-  const headerMatch = src.match(/\$RXN[\s\S]*?(?=\$MOL)/i);
-  let reactCount = 0;
-  let prodCount = 0;
-  let agentCount = 0;
-  if (headerMatch) {
-    const header = headerMatch[0];
-    const lines = header.split("\n").map((l) => l.trim());
-    // CTfile RXN header: $RXN, name, program line, comment, then the counts
-    // line ("rrrppp[aaa]"). Read it at its fixed position first, so a
-    // reaction name such as "step 1 of 2" is never mistaken for the counts.
-    const fixed = (lines[4] ?? "").match(/^(\d+)\s+(\d+)(?:\s+(\d+))?$/);
-    // Otherwise look for a counts-like line containing at least two integers
-    const candidates = fixed ? [lines[4]] : lines;
-    for (const l of candidates) {
-      const nums = l.match(/(-?\d+)/g);
-      if (nums && nums.length >= 2) {
-        reactCount = parseInt(nums[0], 10) || 0;
-        prodCount = parseInt(nums[1], 10) || 0;
-        if (nums.length >= 3) agentCount = parseInt(nums[2], 10) || 0;
-        break;
-      }
-    }
-  }
-
-  // Split on $MOL tokens; include trailing content in each part
-  const parts = src.split(/(^\s*\$MOL\s*$)/gim).filter(Boolean);
-  // parts will contain alternating separators and blocks; rebuild blocks that start with $MOL
-  const molBlocks: string[] = [];
-  for (let i = 0; i < parts.length; i++) {
-    if (/^\s*\$MOL\s*$/i.test(parts[i])) {
-      // next chunk is the actual block (if present)
-      const next = parts[i + 1] ?? "";
-      molBlocks.push(next);
-      i++; // skip next
-    }
-  }
-
-  const all: ParsedMol[] = [];
-  for (const b of molBlocks) {
-    const blk = b.trim();
-    if (!blk) continue;
-    try {
-      const mm = parseSDF(blk);
-      if (mm && mm.length > 0) all.push(mm[0]);
-    } catch {
-      // ignore
-    }
-  }
-
-  // Partition by counts, if available; otherwise heuristically split half/half
-  const reactants: ParsedMol[] = [];
-  const products: ParsedMol[] = [];
-  const agents: ParsedMol[] = [];
-  let idx = 0;
-  if (reactCount + prodCount + agentCount > 0) {
-    for (let i = 0; i < reactCount && idx < all.length; i++, idx++)
-      reactants.push(all[idx]);
-    for (let i = 0; i < agentCount && idx < all.length; i++, idx++)
-      agents.push(all[idx]);
-    for (let i = 0; i < prodCount && idx < all.length; i++, idx++)
-      products.push(all[idx]);
-    // any remaining treat as products
-    while (idx < all.length) products.push(all[idx++]);
-  } else {
-    // fallback: if only a few blocks, assume first half reactants, last half products
-    const half = Math.ceil(all.length / 2);
-    for (let i = 0; i < all.length; i++) {
-      if (i < half) reactants.push(all[i]);
-      else products.push(all[i]);
-    }
-  }
-
-  return { reactants, products, agents };
+  // V2000 or V3000; its molecules in the file's order - reactants,
+  // products, then reagents ("CTfile Formats", the Rxnfile chapters)
+  const r = readRxnfile(normalizeNewlines(text));
+  return {
+    reactants: r.reactants.map(fromCtfile),
+    products: r.products.map(fromCtfile),
+    agents: r.reagents.map(fromCtfile),
+  };
 }
 
 /**
