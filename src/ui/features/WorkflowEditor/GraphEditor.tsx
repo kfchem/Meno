@@ -30,7 +30,7 @@ import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { StructureCanvas } from "../StructureEditor";
 import MoleculeViewer from "../MoleculeViewer/MoleculeViewer";
 import { Molecule, parseXYZ } from "../../../utils/structureParsers";
-import testXyz from "../../../assets/KEF20633_b_296.xyz?raw";
+import testXyz from "../../../samples/cholesterol.xyz?raw";
 
 /**
  * False while the Workflow tab is hidden, so the canvases embedded in nodes
