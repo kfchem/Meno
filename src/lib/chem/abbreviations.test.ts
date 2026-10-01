@@ -127,7 +127,7 @@ describe("the abbreviations", () => {
   it("give the structure behind a label, attached by its first atom", () => {
     const otbs = abbreviationStructure("OTBS")!;
     expect(otbs.atoms.map((a) => a.el)).toEqual(["O", "Si", "C", "C", "C", "C", "C", "C"]);
-    expect(otbs.attach).toBe(0);
+    expect(otbs.attach).toEqual([0]);
     expect(otbs.bonds).toHaveLength(7);
     // a phenyl's ring in Kekulé form
     const ph = abbreviationStructure("Ph")!;
@@ -146,7 +146,7 @@ function formulaOf(label: string): string {
     sums[b.a1] += b.order;
     sums[b.a2] += b.order;
   }
-  sums[s.attach] += 1;
+  for (const k of s.attach) sums[k] += 1;
   const count = new Map<string, number>();
   const add = (el: string, n: number) => n && count.set(el, (count.get(el) ?? 0) + n);
   s.atoms.forEach((a, i) => {
@@ -225,6 +225,30 @@ describe("the groups' structures", () => {
     Ts: "C7H7O2S",
     Bpin: "C6H12BO2",
   };
+
+  it("have their rings as drawn: each ring bond in a five- or six-membered ring", () => {
+    for (const a of ABBREVIATIONS) {
+      const s = abbreviationStructure(a.label)!;
+      const near = s.atoms.map(() => [] as number[]);
+      for (const b of s.bonds) {
+        near[b.a1].push(b.a2);
+        near[b.a2].push(b.a1);
+      }
+      for (const b of s.bonds) {
+        const seen = new Map([[b.a1, 0]]);
+        const queue = [b.a1];
+        while (queue.length && !seen.has(b.a2)) {
+          const u = queue.shift()!;
+          for (const w of near[u]) {
+            if (seen.has(w) || (u === b.a1 && w === b.a2)) continue;
+            seen.set(w, seen.get(u)! + 1);
+            queue.push(w);
+          }
+        }
+        if (seen.has(b.a2)) expect(seen.get(b.a2)! + 1, a.label).toBeLessThanOrEqual(6);
+      }
+    }
+  });
 
   it("have the formulas their names give them", () => {
     for (const [label, formula] of Object.entries(formulas)) expect(formulaOf(label), label).toBe(formula);
@@ -313,7 +337,7 @@ describe("substituted aryl groups", () => {
   it("are abbreviations, drawn and written out as any other", () => {
     const s = abbreviationStructure("2,6-diMeBz")!;
     expect(s.atoms.map((a) => a.el).join("")).toBe("COCCCCCCCC");
-    expect(s.attach).toBe(0);
+    expect(s.attach).toEqual([0]);
     expect(s.bonds.filter((b) => b.order === 2)).toHaveLength(4);
     expect(namesRingFirst("2,6-diMeBz")).toBe(true);
     expect(namesRingFirst("OTBS")).toBe(false);

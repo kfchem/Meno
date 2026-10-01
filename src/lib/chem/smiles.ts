@@ -4,7 +4,8 @@
  * aromatic atoms, branches, ring closures and bond symbols, and "*" for an
  * atom of any kind - enough for the groups Meno's abbreviations stand for
  * (./abbreviations), written by hand. Stereo marks are read past and not
- * kept; neither is an atom class.
+ * kept. An atom class is kept: a ligand's (./ligands) marks the atoms
+ * that bind a metal.
  */
 
 export type SmilesAtom = {
@@ -14,6 +15,8 @@ export type SmilesAtom = {
   hs?: number;
   isotope?: number;
   aromatic?: boolean;
+  /** Its atom class ([P:1]): which of a ligand's donors it is. */
+  cls?: number;
 };
 /** A bond by atom index; order 4 is aromatic. */
 export type SmilesBond = { a1: number; a2: number; order: number };
@@ -112,14 +115,15 @@ export function readSmiles(text: string): Smiles {
 
 /** What is inside a bracket: [isotope] symbol [chirality] [H count] [charge] [:class]. */
 function bracketAtom(body: string): SmilesAtom {
-  const m = /^(\d+)?(\*|[A-Z][a-z]?|[a-z][a-z]?)(@*)(H\d*)?([+-]\d*|\+\+|--)?(?::\d+)?$/.exec(body);
+  const m = /^(\d+)?(\*|[A-Z][a-z]?|[a-z][a-z]?)(@*)(H\d*)?([+-]\d*|\+\+|--)?(?::(\d+))?$/.exec(body);
   if (!m) throw new Error(`Cannot read [${body}]`);
-  const [, iso, sym, , h, q] = m;
+  const [, iso, sym, , h, q, cls] = m;
   const aromatic = /^[a-z]/.test(sym);
   const atom: SmilesAtom = { el: aromatic ? sym[0].toUpperCase() + sym.slice(1) : sym };
   if (aromatic) atom.aromatic = true;
   if (iso) atom.isotope = Number.parseInt(iso, 10);
   atom.hs = h ? (h.length > 1 ? Number.parseInt(h.slice(1), 10) : 1) : 0;
+  if (cls) atom.cls = Number.parseInt(cls, 10);
   if (q) {
     const sign = q[0] === "+" ? 1 : -1;
     atom.charge = q === "++" || q === "--" ? 2 * sign : sign * (q.length > 1 ? Number.parseInt(q.slice(1), 10) : 1);

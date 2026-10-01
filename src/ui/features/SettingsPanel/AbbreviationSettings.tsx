@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ABBREVIATIONS, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
+import { ABBREVIATIONS, abbreviationOf, abbreviationStructure, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
+import { LIGANDS, ligandPicture, structureFormula, type GroupStructure } from "../../../lib/chem/ligands";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import AbbreviationForm from "../../abbreviations/AbbreviationForm";
 import AbbreviationPicture from "../../abbreviations/AbbreviationPicture";
@@ -15,13 +16,22 @@ export default function AbbreviationSettings() {
   // the one being changed, or "new" while one is being added
   const [editing, setEditing] = useState<CustomAbbreviation | "new" | null>(null);
   const [query, setQuery] = useState("");
-  const shown = useMemo(() => {
+  const matches = (a: { label: string; also?: string[]; name: string; smiles: string }) => {
     const q = query.trim().toLowerCase();
-    if (!q) return ABBREVIATIONS;
-    return ABBREVIATIONS.filter((a) =>
-      [a.label, ...(a.also ?? []), a.name, a.smiles].some((t) => t.toLowerCase().includes(q)),
-    );
-  }, [query]);
+    return !q || [a.label, ...(a.also ?? []), a.name, a.smiles].some((t) => t.toLowerCase().includes(q));
+  };
+  const shown = ABBREVIATIONS.filter(matches);
+  // each ligand with its donors marked
+  const ligands = useMemo(() => LIGANDS.map((l) => ({ l, structure: ligandPicture(l) })), []);
+  const complexes = useMemo(
+    () =>
+      COMPLEXES.map((label) => ({
+        label,
+        name: abbreviationOf(label)!.name,
+        formula: structureFormula(abbreviationStructure(label)!),
+      })),
+    [],
+  );
 
   return (
     <div className="space-y-8">
@@ -145,15 +155,70 @@ export default function AbbreviationSettings() {
         </div>
         {shown.length === 0 && <p className="mt-3 text-sm text-gh-gray">Nothing matches.</p>}
       </section>
+
+      <section aria-labelledby="ligands-heading">
+        <h3 id="ligands-heading" className="text-sm font-semibold text-gh-black">
+          Ligands
+        </h3>
+        <p className="mt-1 text-xs text-gh-gray max-w-2xl">
+          Each drawn with a * on the atoms it binds a metal by, and at the centre of each pi system it binds
+          through. A label bonded to a metal binds it so when it is expanded or written out: a neutral donor by a
+          coordination bond, an anionic one by a bond, a pi system by a bond to its centre. CO, H2O, NH3 and Cp are
+          read as ligands inside a complex&apos;s formula only.
+        </p>
+        <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
+          {ligands
+            .filter(({ l }) => matches(l))
+            .map(({ l, structure }) => (
+              <Entry key={l.label} a={l} structure={structure} />
+            ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="complexes-heading">
+        <h3 id="complexes-heading" className="text-sm font-semibold text-gh-black">
+          Complexes
+        </h3>
+        <p className="mt-1 text-xs text-gh-gray max-w-2xl">
+          A complex&apos;s formula is read as the structure it stands for: its metals, its ligands - in parentheses
+          or not - halides, hydrides and groups bound by one bond (OAc, OTf), a part in brackets made as often as
+          its count, and the counter-anions after it (BF4, PF6, SbF6, ClO4, BArF). Where a part has several metals,
+          its ligands are shared among them in turn: which bridge them, a formula does not say. For example:
+        </p>
+        <ul className="mt-3 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(18rem,1fr))]">
+          {complexes.map(({ label, name, formula }) => (
+            <li key={label} className="rounded-lg border border-gh-line bg-white px-3 py-2">
+              <div className="text-sm font-semibold text-gh-black">{label}</div>
+              <div className="text-xs text-gh-black">{name}</div>
+              <code className="font-mono text-[0.7rem] text-gh-gray">{formula}</code>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }
 
+/** Complexes' formulas shown as examples. */
+const COMPLEXES = ["Pd(PPh3)4", "PdCl2(dppf)", "Pd2(dba)3", "Pd(OAc)2", "[Ir(cod)Cl]2", "[Rh(cod)2]BF4", "Cp2ZrCl2", "Ni(cod)2"];
+
 /** One abbreviation: what it stands for, drawn, and its label, names and SMILES. */
-function Entry({ a, children }: { a: CustomAbbreviation & { free?: boolean }; children?: ReactNode }) {
+function Entry({
+  a,
+  structure,
+  children,
+}: {
+  a: CustomAbbreviation & { free?: boolean };
+  structure?: GroupStructure;
+  children?: ReactNode;
+}) {
   return (
     <article className="min-w-0 overflow-hidden rounded-lg border border-gh-line bg-white">
-      <AbbreviationPicture smiles={a.smiles} className="flex h-32 items-center justify-center border-b border-gh-line p-2" />
+      <AbbreviationPicture
+        smiles={a.smiles}
+        structure={structure}
+        className="flex h-32 items-center justify-center border-b border-gh-line p-2"
+      />
       <div className="space-y-0.5 px-3 py-2">
         <div className="flex items-baseline gap-2">
           <span className="text-base font-semibold text-gh-black">{a.label}</span>
@@ -161,7 +226,7 @@ function Entry({ a, children }: { a: CustomAbbreviation & { free?: boolean }; ch
         </div>
         {a.name && <div className="text-xs text-gh-black">{a.name}</div>}
         {a.also?.length ? <div className="text-xs text-gh-gray">also {a.also.join(", ")}</div> : null}
-        <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{a.smiles}</code>
+        {a.smiles && <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{a.smiles}</code>}
         {children}
       </div>
     </article>

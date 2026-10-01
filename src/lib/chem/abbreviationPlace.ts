@@ -1,5 +1,6 @@
 import { layout2D } from "../layout/engine";
 import { abbreviationStructure } from "./abbreviations";
+import type { GroupStructure } from "./ligands";
 import { kekuleOrders } from "./kekulize";
 import type { AbbreviationStructure, AtomChem } from "./molecule";
 import { readSmiles } from "./smiles";
@@ -7,12 +8,14 @@ import { readSmiles } from "./smiles";
 type P = { x: number; y: number };
 
 /**
- * The atoms a dictionary abbreviation stands for, placed: laid out by
- * Meno's own engine, `bondLength` apart, and turned so that the bond into
- * it runs on from `neighbour` - where the atom it is bonded to is, from the
- * label's atom - through the label's atom, where its attachment sits.
- * Positions are from the label's atom, as an abbreviation from a file has
- * them. Nothing, for a label the dictionary does not know.
+ * The atoms an abbreviation stands for, placed: laid out by Meno's own
+ * engine, `bondLength` apart, and turned so that the bond into it runs on
+ * from `neighbour` - where the atom it is bonded to is, from the label's
+ * atom - through the label's atom, where its first attachment sits.
+ * Positions are from that atom (from a complex's first metal, for one
+ * attached by nothing), as an abbreviation from a file has them. A pi
+ * system's star is set at its centre. Nothing, for a label Meno does not
+ * know.
  */
 export function placedAbbreviation(
   label: string,
@@ -20,21 +23,34 @@ export function placedAbbreviation(
   bondLength: number,
 ): AbbreviationStructure | null {
   const s = abbreviationStructure(label);
-  if (!s) return null;
-  // the group, and an atom where its bond comes from
+  return s ? placedStructure(s, neighbour, bondLength) : null;
+}
+
+/** A structure laid out as `placedAbbreviation` lays out an abbreviation's. */
+export function placedStructure(s: GroupStructure, neighbour: P | null, bondLength: number): AbbreviationStructure {
+  const stars = new Map((s.haptic ?? []).map((h) => [h.star, h.atoms]));
+  // laid out without the stars: a haptic bond to one stands in for a bond
+  // to the first atom of its pi system
+  const end = (i: number) => (stars.has(i) ? stars.get(i)![0] : i);
+  const head = s.attach[0] ?? 0;
   const from = s.atoms.length;
   const laid = layout2D({
-    atoms: [...s.atoms.map((a) => ({ el: a.el, ...(a.charge ? { charge: a.charge } : {}) })), { el: "C" }],
+    atoms: [...s.atoms.map((a) => ({ el: a.el === "*" ? "C" : a.el, ...(a.charge ? { charge: a.charge } : {}) })), { el: "C" }],
     bonds: [
-      ...s.bonds.map((b) => ({ a: b.a1, b: b.a2, order: b.order })),
-      { a: from, b: s.attach, order: 1 },
+      ...s.bonds.map((b) => ({ a: end(b.a1), b: end(b.a2), order: b.coordination ? 1 : b.order })).filter((b) => b.a !== b.b),
+      ...(s.attach.length ? [{ a: from, b: end(head), order: 1 }] : []),
     ],
   });
-  const at = { x: laid.x[s.attach], y: laid.y[s.attach] };
+  // each star at its pi system's centre
+  for (const [star, ring] of stars) {
+    laid.x[star] = ring.reduce((t, k) => t + laid.x[k], 0) / ring.length;
+    laid.y[star] = ring.reduce((t, k) => t + laid.y[k], 0) / ring.length;
+  }
+  const at = { x: laid.x[head], y: laid.y[head] };
   const into = { x: at.x - laid.x[from], y: at.y - laid.y[from] };
   // the way the bond runs now: from the neighbour to the label's atom
-  const want = neighbour ? { x: -neighbour.x, y: -neighbour.y } : into;
-  const turn = Math.atan2(want.y, want.x) - Math.atan2(into.y, into.x);
+  const want = neighbour && s.attach.length ? { x: -neighbour.x, y: -neighbour.y } : into;
+  const turn = s.attach.length ? Math.atan2(want.y, want.x) - Math.atan2(into.y, into.x) : 0;
   const cos = Math.cos(turn) * bondLength;
   const sin = Math.sin(turn) * bondLength;
   return {
@@ -44,8 +60,15 @@ export function placedAbbreviation(
       const { hs: _hs, ...chem } = a;
       return { ...chem, x: dx * cos - dy * sin, y: dx * sin + dy * cos };
     }),
-    bonds: s.bonds.map((b) => ({ a1: b.a1, a2: b.a2, order: b.order as 1 | 2 | 3 })),
-    attach: [s.attach],
+    bonds: s.bonds.map((b) => ({
+      a1: b.a1,
+      a2: b.a2,
+      order: (b.coordination ? 1 : b.order) as 1 | 2 | 3,
+      ...(b.coordination ? { coordination: true } : {}),
+      ...(b.endpoints ? { endpoints: b.endpoints, attach: "all" as const } : {}),
+    })),
+    attach: s.attach,
+    ...(s.haptic?.length ? { haptic: s.haptic } : {}),
   };
 }
 

@@ -149,12 +149,18 @@ function prepared(model: WriterModel): { model: WriterModel; sups: Sup[]; aliase
       if (k === head) Object.assign(at, { ...atom, abbrev: undefined, rgroups: undefined });
       else atoms.push(atom);
     });
-    for (const b of structure.bonds) bonds.push({ ...b, a: ids[b.a1], b: ids[b.a2] });
-    // the bonds out, to the atoms it is attached by, in order
+    for (const b of structure.bonds) {
+      bonds.push({ ...b, a: ids[b.a1], b: ids[b.a2], ...(b.endpoints ? { endpoints: b.endpoints.map((e) => ids[e]) } : {}) });
+    }
+    // the bonds out, to the atoms it is attached by, in order - haptic
+    // where that is a pi system's star
     touching.forEach((b, k) => {
-      const to = ids[structure.attach[k] ?? head];
+      const at = structure.attach[k] ?? head;
+      const to = ids[at];
       if (b.a === a.id) b.a = to;
       else b.b = to;
+      const pi = structure.haptic?.find((h) => h.star === at);
+      if (pi) Object.assign(b, { endpoints: pi.atoms.map((e) => ids[e]), attach: "all", coordination: true });
     });
     sups.push({ label: a.el, atoms: [a.id, ...ids.filter((id) => id !== a.id)] });
   }
@@ -556,12 +562,15 @@ function titleLine(title: string | undefined): string {
 }
 
 /**
- * Whether V2000 cannot say all there is to say of the structure: past 999
- * atoms or bonds; a coordination or a hydrogen bond, and whether the one is
- * drawn as a plain line (V2000's bond types stop at 8); racemic and relative
- * stereo groups, a stereo bond's group and a haptic bond's endpoints.
+ * Whether V2000 cannot say all there is to say of the structure, its
+ * labels written out: past 999 atoms or bonds; a coordination or a
+ * hydrogen bond, and whether the one is drawn as a plain line (V2000's
+ * bond types stop at 8); racemic and relative stereo groups, a stereo
+ * bond's group and a haptic bond's endpoints.
  */
-export function needsV3000(model: WriterModel): boolean {
+export function needsV3000(given: WriterModel): boolean {
+  // (as written: a label's atoms - a complex's coordination bonds - among them)
+  const model = prepared(given).model;
   return (
     model.atoms.length > 999 ||
     model.bonds.length > 999 ||

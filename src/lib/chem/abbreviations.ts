@@ -18,6 +18,7 @@
  */
 import { readSmiles, type Smiles } from "./smiles";
 import { substitutedAryl } from "./substitutedAryl";
+import { complexStructure, LIGAND_UNITS, ligandOf, ligandStructure, type GroupStructure } from "./ligands";
 import { kekuleOrders } from "./kekulize";
 import type { TextRun } from "./layout2d";
 import { elements } from "../../utils/atomUtils";
@@ -33,6 +34,8 @@ export type Abbreviation = {
   name: string;
   /** In IUPAC's Table II: may be used without explanation. */
   free?: boolean;
+  /** A ligand (./ligands), or a complex's formula, rather than a group: its structure is made, not read from `smiles`. */
+  kind?: "ligand" | "complex";
 };
 
 /** Groups attached by one bond. */
@@ -206,8 +209,22 @@ function composedName(group: string, word: string): string {
   return name + word;
 }
 
-/** A label put together by rule (OTBS, NHBoc, CO2Me, 2,6-diMeBz), or none. */
+/**
+ * A label put together by rule (OTBS, NHBoc, CO2Me, 2,6-diMeBz) - or a
+ * ligand (PPh3, dppf) or a complex's formula (Pd(PPh3)4) - or none.
+ */
 function composedOf(label: string): Abbreviation | undefined {
+  const ligand = ligandOf(label);
+  if (ligand) return { label: ligand.label, ...(ligand.also ? { also: ligand.also } : {}), name: ligand.name, smiles: ligand.smiles, kind: "ligand" };
+  const group = composedGroupOf(label);
+  if (group) return group;
+  const complex = complexStructure(label, groupStructure);
+  if (complex) return { label, name: complex.name, smiles: "", kind: "complex" };
+  return undefined;
+}
+
+/** A group put together by rule - a substituted aryl group, a group behind O, S or NH, an ester - or none. */
+function composedGroupOf(label: string): Abbreviation | undefined {
   const aryl = substitutedAryl(label);
   if (aryl) return { label, smiles: aryl.smiles, name: aryl.name };
   for (const c of COMPOSED) {
@@ -317,13 +334,35 @@ export function namesRingFirst(label: string): boolean {
 
 /**
  * The structure an abbreviation stands for: its atoms and bonds, an
- * aromatic ring's in Kekulé form, without the "*" - and which atom it is
- * attached by.
+ * aromatic ring's in Kekulé form, without the "*" - and where it is
+ * attached: a group by one atom, a ligand by its donors (each an atom, or
+ * the star at the centre of a pi system), a complex by none.
  */
-export function abbreviationStructure(label: string): (Smiles & { attach: number }) | null {
+export function abbreviationStructure(label: string): GroupStructure | null {
   const a = abbreviationOf(label);
   if (!a) return null;
-  const read = readSmiles(a.smiles);
+  if (a.kind === "ligand") {
+    const { anionic: _anionic, ...s } = ligandStructure(ligandOf(a.label)!);
+    return s;
+  }
+  if (a.kind === "complex") {
+    const c = complexStructure(label.trim(), groupStructure);
+    if (!c) return null;
+    const { name: _name, ...s } = c;
+    return s;
+  }
+  return smilesGroup(a.smiles);
+}
+
+/** A group bound by one bond (OAc, OTf, Me) - inside a complex's formula - or null. */
+function groupStructure(label: string): GroupStructure | null {
+  const a = BY_LABEL.get(label) ?? custom.get(label) ?? composedGroupOf(label);
+  return a ? smilesGroup(a.smiles) : null;
+}
+
+/** A group's SMILES, "*" first, as its structure. */
+function smilesGroup(smiles: string): GroupStructure {
+  const read = readSmiles(smiles);
   const star = read.atoms.findIndex((x) => x.el === "*");
   const orders = kekuleOrders(read.atoms, read.bonds);
   const keep = read.atoms.map((_, i) => i).filter((i) => i !== star);
@@ -339,11 +378,11 @@ export function abbreviationStructure(label: string): (Smiles & { attach: number
   });
   return {
     atoms: keep.map((i) => {
-      const { aromatic: _aromatic, ...atom } = read.atoms[i];
+      const { aromatic: _aromatic, cls: _cls, ...atom } = read.atoms[i];
       return atom;
     }),
     bonds,
-    attach,
+    attach: [attach],
   };
 }
 
@@ -357,7 +396,7 @@ const ELEMENTS = new Set(elements.map((e) => e.symbol));
 let UNITS: string[] = [];
 /** The units labels are read into: the groups', the user's own among them. */
 function setUnits(): void {
-  UNITS = [...new Set([...[...GROUPS, ...custom.values()].flatMap((g) => [g.label, ...(g.also ?? [])]), "pin", "Phth"])]
+  UNITS = [...new Set([...[...GROUPS, ...custom.values()].flatMap((g) => [g.label, ...(g.also ?? [])]), ...LIGAND_UNITS, "pin", "Phth"])]
     // (Bpin is B and pin, and so on the left pinB)
     .filter((u) => u.length > 1 && u !== "Bpin")
     .sort((x, y) => y.length - x.length);
@@ -389,8 +428,8 @@ export function labelUnits(text: string): string[] {
         (ELEMENTS.has(text.slice(i, i + 2)) && /[a-z]/.test(text[i + 1] ?? "") ? text.slice(i, i + 2) : text[i]);
     }
     i += unit.length;
-    // its count - after a letter or a parenthesis, not a ring's position (2,6-)
-    const count = /[A-Za-z)]$/.test(unit) ? /^\d+/.exec(text.slice(i)) : null;
+    // its count - after a letter or a bracket, not a ring's position (2,6-)
+    const count = /[A-Za-z)\]*]$/.test(unit) ? /^\d+/.exec(text.slice(i)) : null;
     if (count) {
       unit += count[0];
       i += count[0].length;
