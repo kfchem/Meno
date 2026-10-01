@@ -2,6 +2,12 @@ import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
 import { kekuleOrders } from "../lib/chem/kekulize";
 import { chemistry, type AtomChem, type ParsedAtom } from "../lib/chem/molecule";
 import {
+  layoutMolecule,
+  type Atom as LayoutAtom,
+  type Bond as LayoutBond,
+} from "../lib/chem/layout2d";
+import { layoutOptionsFor, MENO } from "../lib/chem/style";
+import {
   parseSDF,
   parseXYZ,
   type Molecule as ParsedMol,
@@ -216,24 +222,17 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
     };
   const scale = computeScaleForMols(allMols);
   const conv = allMols.map((m) => convertMolToEditorModel(m, scale));
-  const hGap = 0.8;
-  const computeBBox = (c: (typeof conv)[number]) => {
-    const xs = c.model.atoms.map((a) => a.x);
-    const ys = c.model.atoms.map((a) => a.y);
-    if (!xs.length)
-      return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-    return { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY };
-  };
-  const getClusterWidth = (items: typeof conv) => {
-    if (!items || !items.length) return 0;
-    const widths = items.map((it) =>
-      Math.max(0.6, computeBBox(it).width || 0.6)
-    );
-    return widths.reduce((s, v) => s + v, 0) + hGap * (widths.length - 1);
+  // Between two structures on one side of the arrow: room for a "+".
+  const hGap = NOMINAL_BOND_LENGTH;
+  // Each structure's width as it is drawn, its labels included: measured at
+  // its atoms, an OH at the end of a structure ran into the arrow.
+  const boxes = conv.map((c) => drawnBox(c.model));
+  const widthOf = (i: number) => Math.max(0.6, boxes[i].maxX - boxes[i].minX);
+  const getClusterWidth = (from: number, count: number) => {
+    if (!count) return 0;
+    let w = hGap * (count - 1);
+    for (let i = from; i < from + count; i++) w += widthOf(i);
+    return w;
   };
   const reactConv = conv.slice(0, groups.reactants.length);
   const prodConv = conv.slice(
@@ -243,12 +242,12 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
   const agentConv = conv.slice(
     groups.reactants.length + groups.products.length
   );
-  const reactW = getClusterWidth(reactConv);
-  const prodW = getClusterWidth(prodConv);
+  const reactW = getClusterWidth(0, reactConv.length);
+  const prodW = getClusterWidth(reactConv.length, prodConv.length);
   // Fixed arrow length ~ NOMINAL_BOND_LENGTH * (4 * 2/3) = 8/3
   const ARROW_LEN = (NOMINAL_BOND_LENGTH * 8) / 3;
-  // Ensure enough horizontal gap to fit the arrow fully with a small margin
-  const arrowGap = ARROW_LEN + 0.6;
+  // The arrow, and half a bond clear of what is drawn on either side of it
+  const arrowGap = ARROW_LEN + NOMINAL_BOND_LENGTH;
   const totalW = reactW + prodW + arrowGap;
   const startX = -totalW / 2;
   const reactCenterX = startX + reactW / 2;
@@ -259,22 +258,21 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
   let idCounter = 1;
   const placeCluster = (
     items: typeof conv,
+    first: number,
     centerX: number,
     targetArr?: EditorAtom[],
     baselineY = 0
   ) => {
-    const bboxes = items.map((it) => computeBBox(it));
-    const widths = bboxes.map((b) => Math.max(0.6, b.width || 0.6));
-    const tw = widths.reduce((s, v) => s + v, 0) + hGap * (widths.length - 1);
+    const tw = getClusterWidth(first, items.length);
     const sx = centerX - tw / 2;
     let cursorX = sx;
     for (let i = 0; i < items.length; i++) {
       const c = items[i];
-      const bbox = bboxes[i];
-      const centerOfBBoxX = (bbox.minX + bbox.maxX) / 2;
-      const targetCenterX = cursorX + widths[i] / 2;
-      const offsetX =
-        targetCenterX - centerOfBBoxX - c.centroid.x + centerOfBBoxX;
+      const box = boxes[first + i];
+      const width = widthOf(first + i);
+      // the middle of what is drawn where it belongs, not the atoms' centroid,
+      // which a long chain pulls to one side
+      const offsetX = cursorX + width / 2 - (box.minX + box.maxX) / 2;
       // Align each cluster's centroid to baselineY (do not use bbox center)
       const offsetY = baselineY - c.centroid.y;
       const base = idCounter;
@@ -300,14 +298,20 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
           if (pa) targetArr.push(pa);
         }
       }
-      cursorX += widths[i] + hGap;
+      cursorX += width + hGap;
     }
   };
   const reactPlaced: EditorAtom[] = [];
   const prodPlaced: EditorAtom[] = [];
-  placeCluster(reactConv, reactCenterX, reactPlaced, 0);
-  placeCluster(prodConv, prodCenterX, prodPlaced, 0);
-  placeCluster(agentConv, arrowCenterX, undefined, -3.0);
+  placeCluster(reactConv, 0, reactCenterX, reactPlaced, 0);
+  placeCluster(prodConv, reactConv.length, prodCenterX, prodPlaced, 0);
+  placeCluster(
+    agentConv,
+    reactConv.length + prodConv.length,
+    arrowCenterX,
+    undefined,
+    -3.0
+  );
   const centroid = (() => {
     if (!placedAtoms.length) return { x: 0, y: 0 };
     let sx = 0,
@@ -356,6 +360,39 @@ export function computeScaleForMols(mols: ParsedMol[]): number {
 /**
  * Convert a single parsed molecule into an EditorModel using an externally supplied scale.
  */
+/**
+ * How far a structure reaches as it is drawn - its labels and what its bonds
+ * draw, not only its atoms - in Meno's own style, whose labels are as large
+ * against the bond as any preset's.
+ */
+function drawnBox(model: EditorModel): { minX: number; maxX: number } {
+  if (!model.atoms.length) return { minX: 0, maxX: 0 };
+  const index = new Map(model.atoms.map((a, i) => [a.id, i]));
+  const atoms: LayoutAtom[] = model.atoms.map((a) => ({
+    id: a.id,
+    x: a.x,
+    y: a.y,
+    el: a.el,
+    ...chemistry(a),
+  }));
+  const bonds: LayoutBond[] = [];
+  for (const b of model.bonds) {
+    const a1 = index.get(b.a);
+    const a2 = index.get(b.b);
+    if (a1 == null || a2 == null) continue;
+    bonds.push({
+      a1,
+      a2,
+      order: b.order,
+      stereo: b.stereo ?? "none",
+      ...(b.dative ? { dative: true } : {}),
+    });
+  }
+  const opts = layoutOptionsFor(MENO, NOMINAL_BOND_LENGTH, { units: "world" });
+  const { bounds } = layoutMolecule(atoms, bonds, opts, 50);
+  return { minX: bounds.min.x, maxX: bounds.max.x };
+}
+
 export function convertMolToEditorModel(m: ParsedMol, scale: number) {
   const atoms: EditorAtom[] = m.atoms.map((a, i) => ({
     id: i + 1,
