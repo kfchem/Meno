@@ -1,16 +1,22 @@
 import * as THREE from "three";
-import { useMemo, useRef } from "react";
+import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import { COLORS, ALPHA } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { lineHalfOf, type BondReach } from "../../../../lib/chem/layout2d";
+import { useDrawnLayout } from "./drawnLayoutContext";
+import { bandAround } from "./hoverBand";
+
+/** The highlight's width once it has come in, over THICKNESS_RATIO's. */
+const SETTLED = 1.35;
 
 export default function HoverOverlay2D() {
   const { model, hovered, hoverPulse } = useEditor();
+  const drawn = useDrawnLayout();
   const invalidate = useThree((s) => s.invalidate);
   const mesh = useRef<THREE.Mesh>(null!);
   const mat = useRef<THREE.MeshBasicMaterial>(null!);
-  const q = useMemo(() => new THREE.Quaternion(), []);
   const wRef = useRef(0);
   const oRef = useRef(0);
   const THICKNESS_RATIO = 0.16;
@@ -26,30 +32,6 @@ export default function HoverOverlay2D() {
     startW: number;
     seg: { x1: number; y1: number; x2: number; y2: number } | null;
   }>({ mode: "idle", t: 0, id: null, startW: 0, seg: null });
-
-  // Build a rounded-ends rectangle (capsule when corner = height/2)
-  function buildRoundedRect(
-    length: number,
-    height: number,
-    corner: number
-  ): THREE.ShapeGeometry {
-    const w = Math.max(1e-6, length);
-    const h = Math.max(1e-6, height);
-    const hw = w * 0.5;
-    const hh = h * 0.5;
-    const r = Math.min(Math.max(0, corner), hh);
-    const s = new THREE.Shape();
-    s.moveTo(-hw + r, -hh);
-    s.lineTo(hw - r, -hh);
-    s.quadraticCurveTo(hw, -hh, hw, -hh + r);
-    s.lineTo(hw, hh - r);
-    s.quadraticCurveTo(hw, hh, hw - r, hh);
-    s.lineTo(-hw + r, hh);
-    s.quadraticCurveTo(-hw, hh, -hw, hh - r);
-    s.lineTo(-hw, -hh + r);
-    s.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
-    return new THREE.ShapeGeometry(s, 24);
-  }
 
   useFrame((_, dt) => {
     if (!mesh.current) return;
@@ -113,7 +95,7 @@ export default function HoverOverlay2D() {
         wRef.current = baseTarget * s;
       } else {
         const k = (u - t1) / (1 - t1);
-        const s = 1.0 + (1.35 - 1.0) * (1 - Math.pow(1 - k, 2)); // strong overshoot
+        const s = 1.0 + (SETTLED - 1.0) * (1 - Math.pow(1 - k, 2)); // strong overshoot
         wRef.current = baseTarget * s;
       }
       const baseO = maxOpacity * easeOutCubic(u);
@@ -139,31 +121,46 @@ export default function HoverOverlay2D() {
       mesh.current.visible = false;
       return;
     }
-    const dx = seg.x2 - seg.x1;
-    const dy = seg.y2 - seg.y1;
-    const len = Math.hypot(dx, dy);
-    const ang = Math.atan2(dy, dx);
-    q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), ang);
+    // How far the bond's drawing reaches off its line at each end, as the
+    // drawing measures it: the band follows that, so neither a wedge's broad
+    // end nor a double bond's second line stands out past it, and it can sit
+    // behind the drawing all the same.
+    const bondId = hb ?? anim.current.id;
+    const bond = bondId != null ? model.bonds.find((x) => x.id === bondId) : undefined;
+    const lineHalf = lineHalfOf(drawn.opts, drawn.zoom);
+    let reach: BondReach = { left1: lineHalf, right1: lineHalf, left2: lineHalf, right2: lineHalf };
+    if (bond) {
+      const i1 = drawn.atoms.findIndex((a) => a.id === bond.a);
+      const i2 = drawn.atoms.findIndex((a) => a.id === bond.b);
+      const k = drawn.bonds.findIndex((b) => b.a1 === i1 && b.a2 === i2);
+      if (k >= 0 && drawn.layout.reach[k]) reach = drawn.layout.reach[k];
+    }
+    // the band beyond the drawing: what a plain bond's band leaves either side
+    // of its line once settled
+    const settledHalf = (targetWorld * SETTLED) / 2;
+    const margin = Math.max(0, settledHalf - lineHalf);
     // Slightly extend beyond endpoints
     const EXT_RATIO = 0.04; // extend 5% of L on each side
     const ext = EXT_RATIO * L;
-    const cx = (seg.x1 + seg.x2) / 2;
-    const cy = (seg.y1 + seg.y2) / 2;
-    // Render behind bonds/joins (negative z) as originally designed
-    mesh.current.position.set(cx, cy, -0.02);
-    mesh.current.quaternion.copy(q);
-    // Rebuild geometry per-frame to keep end-caps circular
-    const cornerParam = 1.0; // 1 => fully round ends (capsule), 0 => sharp corners
-    const desiredCorner = wRef.current * 0.5 * cornerParam;
-    const newGeom = buildRoundedRect(
-      len + 2 * ext,
-      wRef.current,
-      desiredCorner
+    const outline = bandAround(
+      { x: seg.x1, y: seg.y1 },
+      { x: seg.x2, y: seg.y2 },
+      reach,
+      margin,
+      wRef.current / 2,
+      ext,
+      wRef.current / (targetWorld * SETTLED),
+    );
+    // Behind the drawing: depth-tested behind its lines, and drawn before the
+    // shapes and caps that draw over it (Wedges2D, JoinCaps2D)
+    mesh.current.position.set(0, 0, -0.02);
+    mesh.current.quaternion.identity();
+    const newGeom = new THREE.ShapeGeometry(
+      new THREE.Shape(outline.map((p) => new THREE.Vector2(p.x, p.y))),
     );
     const old = mesh.current.geometry as THREE.BufferGeometry | undefined;
     mesh.current.geometry = newGeom;
     old?.dispose?.();
-    mesh.current.scale.set(1, 1, 1);
     mesh.current.visible = true;
     if (mat.current) mat.current.opacity = oRef.current;
     // Keep the highlight animating under on-demand rendering.
