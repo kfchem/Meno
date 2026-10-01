@@ -36,6 +36,9 @@ type Row = {
   coord?: boolean;
   /** Its reacting centre status. */
   centre?: number;
+  /** A bond to several atoms at once (V3000 ENDPTS), 1-based, and to all of them or any. */
+  endpoints?: number[];
+  attach?: "all" | "any";
 };
 
 /** A bond's CTfile type. */
@@ -85,6 +88,12 @@ function rows(model: WriterModel, index: Map<number, number>): Row[] {
       stereo: stereo === "either" && !either ? "none" : stereo,
       ...(b.coordination && !b.dative ? { coord: true } : {}),
       ...(b.reactingCentre ? { centre: b.reactingCentre } : {}),
+      ...(b.endpoints?.length
+        ? {
+            endpoints: b.endpoints.flatMap((id) => (index.has(id) ? [index.get(id)! + 1] : [])),
+            attach: b.attach ?? "all",
+          }
+        : {}),
     });
   }
   return out;
@@ -152,6 +161,97 @@ function prepared(model: WriterModel): { model: WriterModel; sups: Sup[]; aliase
   return { model: { atoms, bonds }, sups, aliases };
 }
 
+/** An Sgroup to write: its type, its atoms by id, and what the file says of it. */
+type Group = {
+  type: string;
+  atoms: number[];
+  label?: string;
+  subtype?: string;
+  connect?: string;
+  paren?: boolean;
+  multiplier?: number;
+  patoms?: number[];
+  expanded?: boolean;
+  componentNumber?: number;
+  /** Its parent, by its place in the list. */
+  parent?: number;
+  field?: { name: string; data: string[]; units?: string; type?: string };
+};
+
+/**
+ * Every Sgroup to write: the abbreviations written out, then the groups
+ * the atoms carry (SgroupMark), each once, in the order they first come.
+ */
+function groupsOf(model: WriterModel, sups: Sup[]): Group[] {
+  const out: Group[] = sups.map((g) => ({ type: "SUP", atoms: g.atoms, label: g.label }));
+  const at = new Map<number, number>();
+  const parents: (number | undefined)[] = [];
+  for (const a of model.atoms) {
+    for (const m of a.sgroups ?? []) {
+      let k = at.get(m.id);
+      if (k == null) {
+        k = out.length;
+        at.set(m.id, k);
+        out.push({
+          type: m.type,
+          atoms: [],
+          ...(m.label ? { label: m.label } : {}),
+          ...(m.subtype ? { subtype: m.subtype } : {}),
+          ...(m.connect ? { connect: m.connect } : {}),
+          ...(m.bracketStyle === "paren" ? { paren: true } : {}),
+          ...(m.multiplier ? { multiplier: m.multiplier } : {}),
+          ...(m.type === "MUL" ? { patoms: [] } : {}),
+          ...(m.type === "SUP" ? { expanded: true } : {}),
+          ...(m.componentNumber ? { componentNumber: m.componentNumber } : {}),
+          ...(m.field ? { field: m.field } : {}),
+        });
+        parents[k] = m.parent;
+      }
+      out[k].atoms.push(a.id);
+      if (m.paradigm) out[k].patoms!.push(a.id);
+    }
+  }
+  parents.forEach((p, k) => {
+    if (p != null && at.has(p)) out[k].parent = at.get(p);
+  });
+  return out;
+}
+
+/** The types whose brackets are drawn, and so written. */
+const BRACKETED = new Set(["SRU", "COP", "MON", "MER", "CRO", "MOD", "GRA", "COM", "MIX", "FOR", "ANY", "GEN"]);
+
+/**
+ * A group's brackets as the file has them, in its units: one across each
+ * bond out of it, at its middle, or for a group with no bond out, one
+ * either side of it - as Meno draws them.
+ */
+function bracketsOf(model: WriterModel, g: Group, scale: number): { x1: number; y1: number; x2: number; y2: number }[] {
+  const inside = new Set(g.atoms);
+  const byId = new Map(model.atoms.map((a) => [a.id, a]));
+  const out: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  for (const b of model.bonds) {
+    if (inside.has(b.a) === inside.has(b.b) || b.endpoints?.length) continue;
+    const p = byId.get(b.a);
+    const q = byId.get(b.b);
+    if (!p || !q) continue;
+    const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    const n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
+    const c = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+    const h = len * 0.35;
+    out.push({ x1: (c.x - n.x * h) * scale, y1: (c.y - n.y * h) * scale, x2: (c.x + n.x * h) * scale, y2: (c.y + n.y * h) * scale });
+  }
+  if (!out.length && g.atoms.length) {
+    const ats = g.atoms.map((id) => byId.get(id)!).filter(Boolean);
+    const xs = ats.map((a) => a.x);
+    const ys = ats.map((a) => a.y);
+    const pad = NOMINAL_BOND_LENGTH * 0.5;
+    const [x0, x1, y0, y1] = [Math.min(...xs) - pad, Math.max(...xs) + pad, Math.min(...ys) - pad, Math.max(...ys) + pad];
+    out.push({ x1: x0 * scale, y1: y0 * scale, x2: x0 * scale, y2: y1 * scale });
+    out.push({ x1: x1 * scale, y1: y0 * scale, x2: x1 * scale, y2: y1 * scale });
+  }
+  return out;
+}
+
 /** An atom's type as written: its element, a reserved type, a star for a label, L for a list. */
 function symbolOf(a: WriterAtom, aliases: Map<number, string>): string {
   if (a.list) return "L";
@@ -196,27 +296,57 @@ function propertyLines(model: WriterModel, sups: Sup[] = [], aliases = new Map<n
     const text = aliases.get(a.id);
     if (text) lines.push(`A  ${i3(i + 1)}`, text);
   });
-  if (sups.length) {
+  const groups = groupsOf(model, sups);
+  if (groups.length) {
     const index = new Map(model.atoms.map((a, i) => [a.id, i + 1]));
     const rowOf = new Map(model.bonds.map((b, i) => [b, i + 1]));
-    for (let k = 0; k < sups.length; k += 8) {
-      const part = sups.slice(k, k + 8);
-      lines.push(`M  STY${i3(part.length)}${part.map((_, j) => ` ${i3(k + j + 1)} SUP`).join("")}`);
+    const scale = MOL_BOND_LENGTH / NOMINAL_BOND_LENGTH;
+    const each = (tag: string, entries: string[], per: number) => {
+      for (let k = 0; k < entries.length; k += per) {
+        const part = entries.slice(k, k + per);
+        lines.push(`M  ${tag}${i3(part.length)}${part.join("")}`);
+      }
+    };
+    each("STY", groups.map((g, k) => ` ${i3(k + 1)} ${g.type}`), 8);
+    each("SST", groups.flatMap((g, k) => (g.subtype ? [` ${i3(k + 1)} ${g.subtype.padEnd(3)}`] : [])), 8);
+    each("SCN", groups.flatMap((g, k) => (g.connect ? [` ${i3(k + 1)} ${g.connect.padEnd(3)}`] : [])), 8);
+    each("SBT", groups.flatMap((g, k) => (g.paren ? [` ${i3(k + 1)} ${i3(1)}`] : [])), 8);
+    each("SPL", groups.flatMap((g, k) => (g.parent != null ? [` ${i3(k + 1)} ${i3(g.parent + 1)}`] : [])), 8);
+    each("SNC", groups.flatMap((g, k) => (g.componentNumber ? [` ${i3(k + 1)} ${i3(g.componentNumber)}`] : [])), 8);
+    const expanded = groups.flatMap((g, k) => (g.expanded ? [` ${i3(k + 1)}`] : []));
+    for (let k = 0; k < expanded.length; k += 15) {
+      const part = expanded.slice(k, k + 15);
+      lines.push(`M  SDS EXP${i3(part.length)}${part.join("")}`);
     }
-    sups.forEach((g, k) => {
+    groups.forEach((g, k) => {
       const n = k + 1;
       const inside = new Set(g.atoms);
-      const ats = g.atoms.map((id) => index.get(id)!);
-      for (let j = 0; j < ats.length; j += 15) {
-        const part = ats.slice(j, j + 15);
-        lines.push(`M  SAL ${i3(n)}${i3(part.length)}${part.map((v) => ` ${i3(v)}`).join("")}`);
+      const list = (tag: string, values: number[]) => {
+        for (let j = 0; j < values.length; j += 15) {
+          const part = values.slice(j, j + 15);
+          lines.push(`M  ${tag} ${i3(n)}${i3(part.length)}${part.map((v) => ` ${i3(v)}`).join("")}`);
+        }
+      };
+      list("SAL", g.atoms.map((id) => index.get(id)!).filter((v) => v != null));
+      if (g.type !== "DAT") {
+        list("SBL", model.bonds.filter((b) => inside.has(b.a) !== inside.has(b.b)).map((b) => rowOf.get(b)!));
       }
-      const crossing = model.bonds.filter((b) => inside.has(b.a) !== inside.has(b.b)).map((b) => rowOf.get(b)!);
-      for (let j = 0; j < crossing.length; j += 15) {
-        const part = crossing.slice(j, j + 15);
-        lines.push(`M  SBL ${i3(n)}${i3(part.length)}${part.map((v) => ` ${i3(v)}`).join("")}`);
+      if (g.patoms?.length) list("SPA", g.patoms.map((id) => index.get(id)!));
+      const text = g.type === "MUL" && g.multiplier ? String(g.multiplier) : g.label;
+      if (text) lines.push(`M  SMT ${i3(n)} ${text}`);
+      if (BRACKETED.has(g.type)) {
+        for (const br of bracketsOf(model, g, scale)) {
+          lines.push(`M  SDI ${i3(n)}${i3(4)}${f10(br.x1)}${f10(br.y1)}${f10(br.x2)}${f10(br.y2)}`);
+        }
       }
-      lines.push(`M  SMT ${i3(n)} ${g.label}`);
+      if (g.type === "DAT" && g.field) {
+        lines.push(`M  SDT ${i3(n)} ${g.field.name.padEnd(30).slice(0, 30)}${(g.field.type ?? "T").slice(0, 1)}${(g.field.units ?? "").padEnd(20).slice(0, 20)}`);
+        for (const d of g.field.data) {
+          // 69 characters a line: SCD for all but the last, SED for that
+          for (let j = 0; j + 69 < d.length; j += 69) lines.push(`M  SCD ${i3(n)} ${d.slice(j, j + 69)}`);
+          lines.push(`M  SED ${i3(n)} ${d.slice(Math.floor(Math.max(0, d.length - 1) / 69) * 69)}`);
+        }
+      }
     });
   }
   return lines;
@@ -318,6 +448,7 @@ function writeV3000(given: WriterModel, title: string): string {
   const { model, sups: found, aliases } = prepared(given);
   // (V3000 has no alias: a label is an abbreviation Sgroup of its one star atom)
   const sups = [...found, ...[...aliases].map(([id, label]) => ({ label, atoms: [id] }))];
+  const groups = groupsOf(model, sups);
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const scale = MOL_BOND_LENGTH / NOMINAL_BOND_LENGTH;
   const bonds = rows(model, index);
@@ -329,7 +460,7 @@ function writeV3000(given: WriterModel, title: string): string {
     "",
     "  0  0  0     0  0  0  0  0  0999 V3000",
     "M  V30 BEGIN CTAB",
-    `M  V30 COUNTS ${model.atoms.length} ${bonds.length} ${sups.length} 0 ${chiralFlag(model) ? 1 : 0}`,
+    `M  V30 COUNTS ${model.atoms.length} ${bonds.length} ${groups.length} 0 ${chiralFlag(model) ? 1 : 0}`,
     "M  V30 BEGIN ATOM",
   ];
   model.atoms.forEach((a, i) => {
@@ -357,23 +488,37 @@ function writeV3000(given: WriterModel, title: string): string {
         `M  V30 ${i + 1} ${b.type} ${b.first} ${b.second}` +
           (c ? ` CFG=${c}` : "") +
           (b.coord ? " DISP=COORD" : "") +
-          (b.centre ? ` RXCTR=${b.centre}` : ""),
+          (b.centre ? ` RXCTR=${b.centre}` : "") +
+          (b.endpoints?.length ? ` ENDPTS=(${b.endpoints.length} ${b.endpoints.join(" ")}) ATTACH=${b.attach === "any" ? "ANY" : "ALL"}` : ""),
       );
     });
     lines.push("M  V30 END BOND");
   }
-  if (sups.length) {
+  if (groups.length) {
     const quote = (t: string) => (/[\s"=()]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t);
     const rowOf = new Map(model.bonds.map((b, i) => [b, i + 1]));
+    const listOf = (values: number[]) => `(${values.length} ${values.join(" ")})`;
     lines.push("M  V30 BEGIN SGROUP");
-    sups.forEach((g, k) => {
+    groups.forEach((g, k) => {
       const inside = new Set(g.atoms);
       const ats = g.atoms.map((id) => index.get(id)! + 1);
-      const crossing = model.bonds.filter((b) => inside.has(b.a) !== inside.has(b.b)).map((b) => rowOf.get(b)!);
+      const crossing =
+        g.type === "DAT" ? [] : model.bonds.filter((b) => inside.has(b.a) !== inside.has(b.b)).map((b) => rowOf.get(b)!);
+      const brackets = BRACKETED.has(g.type) ? bracketsOf(model, g, scale) : [];
       lines.push(
-        `M  V30 ${k + 1} SUP 0 ATOMS=(${ats.length} ${ats.join(" ")})` +
-          (crossing.length ? ` XBONDS=(${crossing.length} ${crossing.join(" ")})` : "") +
-          ` LABEL=${quote(g.label)}`,
+        `M  V30 ${k + 1} ${g.type} 0 ATOMS=${listOf(ats)}` +
+          (crossing.length ? ` XBONDS=${listOf(crossing)}` : "") +
+          (g.patoms?.length ? ` PATOMS=${listOf(g.patoms.map((id) => index.get(id)! + 1))}` : "") +
+          (g.subtype ? ` SUBTYPE=${g.subtype}` : "") +
+          (g.multiplier ? ` MULT=${g.multiplier}` : "") +
+          (g.connect ? ` CONNECT=${g.connect}` : "") +
+          (g.parent != null ? ` PARENT=${g.parent + 1}` : "") +
+          (g.componentNumber ? ` COMPNO=${g.componentNumber}` : "") +
+          (g.label && g.type !== "MUL" ? ` LABEL=${quote(g.label)}` : "") +
+          brackets.map((b) => ` BRKXYZ=(9 ${num(b.x1)} ${num(b.y1)} 0 ${num(b.x2)} ${num(b.y2)} 0 0 0 0)`).join("") +
+          (g.paren ? " BRKTYP=PAREN" : "") +
+          (g.expanded ? " ESTATE=E" : "") +
+          (g.field ? ` FIELDNAME=${quote(g.field.name)}${g.field.data.map((d) => ` FIELDDATA=${quote(d)}`).join("")}` : ""),
       );
     });
     lines.push("M  V30 END SGROUP");
@@ -403,7 +548,7 @@ export function writeMolfile(
   const needsV3000 =
     model.atoms.length > 999 ||
     model.bonds.length > 999 ||
-    model.bonds.some((b) => ((b.dative || b.coordination) && b.order === 1) || b.hydrogen || b.stereoGroup) ||
+    model.bonds.some((b) => ((b.dative || b.coordination) && b.order === 1) || b.hydrogen || b.stereoGroup || b.endpoints?.length) ||
     // (V2000 has only the chiral flag: no racemic nor relative groups)
     model.atoms.some((a) => a.stereoGroup && a.stereoGroup.kind !== "abs");
   return version === "V3000" || (version === "auto" && needsV3000)

@@ -2,7 +2,15 @@ import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
 import { ringSidesOf } from "./aromaticSides";
-import { chargeText, implicitHydrogens, valenceOrder, type AtomChem, type BondChem, type StereoGroup } from "./molecule";
+import {
+  chargeText,
+  implicitHydrogens,
+  valenceOrder,
+  type AtomChem,
+  type BondChem,
+  type SgroupMark,
+  type StereoGroup,
+} from "./molecule";
 import { labelRuns, labelUnits, reversedLabel } from "./abbreviations";
 import { elements } from "../../utils/atomUtils";
 
@@ -51,6 +59,8 @@ export function bondKind(
 ): "wedge" | "hashedWedge" | "wavy" | "bold" | "hashed" | "dashed" | "dotted" | "dative" | "lines" {
   // A hydrogen bond is a partial bond, dotted (IUPAC GR-1.8)
   if (b.hydrogen) return "dotted";
+  // A bond to a pi system's centre, plain (GR-1.7), whatever its type
+  if (b.endpoints?.length) return "lines";
   if (b.stereo === "up") return "wedge";
   if (b.stereo === "down") return "hashedWedge";
   if (b.stereo === "wavy") return "wavy";
@@ -1729,11 +1739,18 @@ export function buildTextLabels(
     note(b.a2, b.a1, order);
   }
 
+  const hapticCentres = new Set<number>();
+  for (const b of bonds) {
+    if (!b.endpoints?.length) continue;
+    for (const e of [b.a1, b.a2]) if (atoms[e]?.el === "*") hapticCentres.add(e);
+  }
   const out: TextItem[] = [];
   for (let i = 0; i < atoms.length; i++) {
     const a = atoms[i];
     // A carbon with no bonds has nothing to stand for it but its label: ACS
     // 1996 writes methane CH4.
+    // (a pi system's centre, where a haptic bond ends, is drawn as nothing)
+    if (hapticCentres.has(i)) continue;
     const show = showsLabel(a, opts) || !bonded.has(i);
     // its charge and its radical's dots, after the symbol on its line; its
     // mass number before it
@@ -3146,6 +3163,127 @@ function typicalBond(atoms: Atom[], part: number[]): number {
   return n ? sum / n : 1;
 }
 
+/** What a polymer's or other group's bracket says, by its type: Meno's, after IUPAC's polymer terms where they have one. */
+function bracketLabel(g: SgroupMark): string {
+  switch (g.type) {
+    case "SRU":
+      return g.label || "n";
+    case "COP":
+      return g.subtype === "ALT" ? "alt" : g.subtype === "RAN" ? "ran" : g.subtype === "BLO" ? "block" : "co";
+    case "GRA":
+      return "graft";
+    case "MON":
+      return "mon";
+    case "MER":
+      return "mer";
+    case "CRO":
+      return "xl";
+    case "MOD":
+      return "mod";
+    case "COM":
+      return `c${g.componentNumber ?? ""}`;
+    case "MIX":
+      return "mix";
+    case "FOR":
+      return "f";
+    case "ANY":
+      return "any";
+    default:
+      return g.label ?? "";
+  }
+}
+
+/**
+ * The brackets of a file's polymer and other bracketed Sgroups (CTfile
+ * Formats' SRU, COP, MON, MER, CRO, MOD, GRA, COM, MIX, FOR, ANY, GEN),
+ * worked out from where their atoms are: one across each bond out of the
+ * group, at its middle, its ends turned in towards the group - or, for a
+ * group with no bond out, one either side of it - in square brackets or
+ * parentheses as the file has them, with what the group is set small at the
+ * lower outside end of its last bracket (an SRU's n), and its connectivity
+ * (hh, ht) at the upper. A data Sgroup's data is set small beneath its atoms.
+ * A multiple group and an abbreviation shown expanded are their atoms alone.
+ */
+function sgroupDrawing(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, zoom: number): { lines: LineSeg[]; texts: TextItem[] } {
+  const lines: LineSeg[] = [];
+  const texts: TextItem[] = [];
+  const groups = new Map<number, { mark: SgroupMark; members: Set<number> }>();
+  atoms.forEach((a, i) => {
+    for (const g of a.sgroups ?? []) {
+      if (!groups.has(g.id)) groups.set(g.id, { mark: g, members: new Set() });
+      groups.get(g.id)!.members.add(i);
+    }
+  });
+  if (!groups.size) return { lines, texts };
+  const units = opts.units ?? "px";
+  const lwPx = Math.max(units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx, Math.max(0.5, opts.minLinePx ?? 1));
+  const fontPx = opts.fontPx * ANNOTATION_SIZE;
+  const font = toWorld(opts.fontPx, zoom, opts.units);
+  const lens = bonds.map((b) => Math.hypot(atoms[b.a1].x - atoms[b.a2].x, atoms[b.a1].y - atoms[b.a2].y)).filter((l) => l > 1e-9).sort((p, q) => p - q);
+  const L = lens[lens.length >> 1] ?? font * 3;
+  const seg = (p: Vec2, q: Vec2) => lines.push({ x1: p.x, y1: p.y, x2: q.x, y2: q.y, widthPx: lwPx });
+  const note = (at: Vec2, text: string) =>
+    texts.push({ x: at.x, y: at.y, text, fontPx, runs: [{ text, sup: true }], anchorRun: 0, beside: true });
+  let dataRow = 0;
+  for (const { mark, members } of groups.values()) {
+    const xs = [...members].map((i) => atoms[i].x);
+    const ys = [...members].map((i) => atoms[i].y);
+    if (mark.type === "DAT") {
+      const text = [...(mark.field?.data ?? []), mark.field?.units ?? ""].filter(Boolean).join(" ");
+      if (text) note({ x: (Math.min(...xs) + Math.max(...xs)) / 2, y: Math.min(...ys) - L * (0.6 + 0.35 * dataRow++) - font * 0.5 }, text);
+      continue;
+    }
+    if (mark.type === "MUL" || mark.type === "SUP") continue;
+    // a bracket: from its centre `c`, `half` either way along `n`, its ends turned in along `inward`
+    const brackets: { c: Vec2; n: Vec2; inward: Vec2; half: number }[] = [];
+    for (const b of bonds) {
+      if (b.endpoints?.length) continue;
+      const in1 = members.has(b.a1);
+      if (in1 === members.has(b.a2)) continue;
+      const inside = in1 ? atoms[b.a1] : atoms[b.a2];
+      const outside = in1 ? atoms[b.a2] : atoms[b.a1];
+      const d = vsub({ x: inside.x, y: inside.y }, { x: outside.x, y: outside.y });
+      const len = vlen(d);
+      if (len < 1e-9) continue;
+      const inward = vscale(d, 1 / len);
+      brackets.push({ c: vscale(vadd(inside, outside), 0.5), n: vperp(inward), inward, half: L * 0.35 });
+    }
+    if (!brackets.length) {
+      const pad = L * 0.4 + font * 0.5;
+      const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const half = (Math.max(...ys) - Math.min(...ys)) / 2 + pad;
+      brackets.push({ c: { x: Math.min(...xs) - pad, y: cy }, n: { x: 0, y: 1 }, inward: { x: 1, y: 0 }, half });
+      brackets.push({ c: { x: Math.max(...xs) + pad, y: cy }, n: { x: 0, y: 1 }, inward: { x: -1, y: 0 }, half });
+    }
+    const tick = L * 0.1;
+    for (const k of brackets) {
+      const a = vsub(k.c, vscale(k.n, k.half));
+      const b = vadd(k.c, vscale(k.n, k.half));
+      if (mark.bracketStyle === "paren") {
+        // a parenthesis: bowed out from the group, its ends at the bracket's
+        const pts: Vec2[] = [];
+        for (let j = 0; j <= 8; j++) {
+          const t = -1 + j / 4;
+          pts.push(vadd(vadd(k.c, vscale(k.n, t * k.half)), vscale(k.inward, -tick * (1 - t * t) + tick)));
+        }
+        for (let j = 0; j < pts.length - 1; j++) seg(pts[j], pts[j + 1]);
+      } else {
+        seg(a, b);
+        seg(a, vadd(a, vscale(k.inward, tick)));
+        seg(b, vadd(b, vscale(k.inward, tick)));
+      }
+    }
+    // what it is, by its last bracket's lower outside end; its connectivity by the upper
+    const last = brackets.reduce((p, q) => (q.c.x > p.c.x + 1e-9 ? q : p));
+    const ends = [vsub(last.c, vscale(last.n, last.half)), vadd(last.c, vscale(last.n, last.half))].sort((p, q) => p.y - q.y);
+    const out = vscale(last.inward, -font * 0.45);
+    const text = bracketLabel(mark);
+    if (text) note(vadd(ends[0], out), text);
+    if (mark.connect === "HH" || mark.connect === "HT") note(vadd(ends[1], out), mark.connect.toLowerCase());
+  }
+  return { lines, texts };
+}
+
 export function layoutMolecule(
   atoms: Atom[],
   given: Bond[],
@@ -3158,7 +3296,10 @@ export function layoutMolecule(
   // what is said about bonds, atoms and whole structures (IUPAC GR-11)
   const groups = centresLabelled(atoms, bonds);
   prim.lines.push(...centreStrokes(atoms, bonds, opts, zoom));
+  const sgroups = sgroupDrawing(atoms, bonds, opts, zoom);
+  prim.lines.push(...sgroups.lines);
   const texts = [
+    ...sgroups.texts,
     ...labels,
     ...bondNotes(atoms, bonds, groups.bonds, opts, zoom),
     ...atomNotes(atoms, bonds, labels, groups.atoms, opts, zoom),

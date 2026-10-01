@@ -477,16 +477,32 @@ export function appendModel(
   if (next.atoms.length === 0 && next.bonds.length === 0) return doc;
   const idMap = new Map<number, number>();
   let cursor = doc.nextId;
-  const atoms = next.atoms.map((a) => {
-    const id = cursor++;
-    idMap.set(a.id, id);
-    return { ...a, id };
-  });
+  for (const a of next.atoms) idMap.set(a.id, cursor++);
+  // its Sgroups made its own, apart from any of the same id already here
+  const groups = new Map<number, number>();
+  const groupId = (g: number) => {
+    if (!groups.has(g)) groups.set(g, cursor++);
+    return groups.get(g)!;
+  };
+  const atoms = next.atoms.map((a) => ({
+    ...a,
+    id: idMap.get(a.id)!,
+    ...(a.sgroups
+      ? {
+          sgroups: a.sgroups.map((g) => ({
+            ...g,
+            id: groupId(g.id),
+            ...(g.parent != null ? { parent: groupId(g.parent) } : {}),
+          })),
+        }
+      : {}),
+  }));
   const bonds = next.bonds.map((b) => ({
     ...b,
     id: cursor++,
     a: idMap.get(b.a) ?? b.a,
     b: idMap.get(b.b) ?? b.b,
+    ...(b.endpoints ? { endpoints: b.endpoints.map((e) => idMap.get(e) ?? e) } : {}),
   }));
   return {
     ...doc,

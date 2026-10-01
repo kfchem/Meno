@@ -12,7 +12,7 @@ of it.
 
 This is being built in steps; each says here what it adds. So far: the
 reader; bonds besides plain ones; atoms that are not elements; what is said
-about atoms, bonds and structures.
+about atoms, bonds and structures; Sgroups and haptic bonds.
 
 ## Reading
 
@@ -99,6 +99,22 @@ A file with stereo bonds and the chiral flag set but no collections has
 each of its stereocentres (where a wedge starts) taken as absolute, as the
 format says the flag applies; one without the flag, as drawn (ST-6.2).
 
+### Sgroups and haptic bonds
+
+A file's Sgroups - all but a contracted abbreviation - are kept as marks
+on their atoms (`SgroupMark`), the same on each, so that they go where the
+atoms go; their brackets are worked out from where the atoms are, not
+taken from the file's coordinates.
+
+| What | How | Why |
+|---|---|---|
+| A polymer or other bracketed group (SRU, COP, MON, MER, CRO, MOD, GRA, COM, MIX, FOR, ANY, GEN) | A bracket across each bond out of the group at its middle, its ends turned in towards it; for a group with no bond out, one either side of it. Parentheses where the file says so (SBT, BRKTYP). | Meno's drawing of the format's brackets. |
+| What the group is | Small, at the last bracket's lower outside end: an SRU's subscript (n, as the file has it); co, alt, ran, block for a copolymer by its subtype; graft, mon, mer, xl (crosslink), mod, c and its number (component), mix, f (formulation), any; a generic group's label. Its connectivity, hh or ht, at the upper end (EU says nothing). | IUPAC's polymer words where they have one (co, alt, ran, block, graft); Meno's otherwise. |
+| A data Sgroup (DAT) | Its data, and units, small beneath its atoms. Where the file places it is not followed. | |
+| A multiple group (MUL) | Its atoms, expanded, as the file holds them; no bracket. | Drawn contracted, the repeats would have to be hidden and their bonds redrawn; expanded, the drawing is the structure. |
+| An abbreviation shown expanded | Its atoms; written back as the expanded abbreviation it was. | |
+| A haptic bond (V3000 ENDPTS) | A plain line to the star atom at the pi system's centre, the star drawn as nothing - to all its atoms (ATTACH=ALL) or any one (ANY, a variable attachment). | GR-1.7: coordination to contiguous atoms drawn to show it; GR-9.4. |
+
 **The abbreviations Meno knows** (`src/lib/chem/abbreviations.ts`) are its
 own list, compiled from what chemists commonly write, not taken from any
 program's table: IUPAC's Table II (GR-2.2) - Me, Et, Pr, iPr, Bu, iBu,
@@ -114,6 +130,11 @@ A bond that came from a file as one of these becomes an ordinary bond once
 its order or stereo is changed in the editor.
 
 ## Writing
+
+Every Sgroup goes back with its type, atoms, bonds out, label or
+multiplier, subtype, connectivity, bracket style, parent, component number,
+expansion state and data, and its brackets where Meno draws them; a haptic
+bond with its endpoints (V3000).
 
 Mapping numbers, inversion and retention, exact change and reacting
 centres go in their fields. Enhanced stereo is written as V3000 collections
