@@ -298,7 +298,68 @@ export type Layout = {
    * it to land back in the coordinates everything else is in.
    */
   zoom: number;
+  /** How far each bond's drawing reaches off its own line, by the bonds' order. */
+  reach: BondReach[];
 };
+
+/**
+ * How far a bond's drawing reaches either side of its own line, at each end,
+ * in the drawing's coordinates: `left` on the side `vperp(a2 - a1)` points
+ * to, `right` on the other; `1` at its a1 and `2` at its a2. A line reaches
+ * half its width; a wedge widens to its broad end; a double bond reaches its
+ * second line, or half the gap either side when it is centred; a triple bond
+ * its outer lines; a wavy bond its swing; a bold or hashed bond its width.
+ * What a highlight round the bond follows, so that nothing of the bond stands
+ * out past it.
+ */
+export type BondReach = { left1: number; right1: number; left2: number; right2: number };
+
+/** Half the width of a line as the drawing draws it, in its coordinates. */
+export function lineHalfOf(opts: LayoutOptions, zoom: number): number {
+  const units = opts.units ?? "px";
+  let lwPx = units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx;
+  const minPx = Math.max(0.5, opts.minLinePx ?? 1);
+  if (!(lwPx >= minPx)) lwPx = minPx;
+  return pxToWorld(lwPx * 0.5, zoom);
+}
+
+/** See BondReach. `doubleSides` and `deg` as the drawing works them out. */
+export function bondReach(
+  bond: Bond,
+  opts: LayoutOptions,
+  zoom: number,
+  deg?: Map<number, number>,
+  doubleSides?: Map<Bond, number | undefined>,
+): BondReach {
+  const units = opts.units ?? "px";
+  const line = lineHalfOf(opts, zoom);
+  const even = (half: number): BondReach => ({ left1: half, right1: half, left2: half, right2: half });
+  const kind = bondKind(bond);
+  if (kind === "wedge" || kind === "hashedWedge") {
+    // narrow at one end, a line's width there, to its broad end at the other
+    const broad = Math.max(line, toWorld(opts.wedgeWidthPx * 0.5, zoom, units));
+    const [h1, h2] = wedgeBaseAtom(bond, deg) === bond.a1 ? [broad, line] : [line, broad];
+    return { left1: h1, right1: h1, left2: h2, right2: h2 };
+  }
+  if (kind === "wavy") return even(toWorld(opts.wavyAmpPx, zoom, units) + line);
+  if (kind === "bold" || kind === "hashed") {
+    const bold =
+      (opts.boldWidthPx != null
+        ? toWorld(opts.boldWidthPx, zoom, units)
+        : (toWorld(opts.wedgeWidthPx, zoom, units) * 2) / 3) / 2;
+    return even(Math.max(line, bold));
+  }
+  if (bond.order === 3) return even(toWorld(opts.tripleOffsetPx, zoom, units) + line);
+  if (bond.order === 2) {
+    const offsets = doubleOffsets(bond, toWorld(opts.doubleOffsetPx, zoom, units), doubleSides);
+    // (a double bond with one line off its axis has its other line on it)
+    const lines = offsets.length === 1 ? [0, ...offsets] : offsets;
+    const left = line + Math.max(0, ...lines);
+    const right = line + Math.max(0, ...lines.map((v) => -v));
+    return { left1: left, right1: right, left2: left, right2: right };
+  }
+  return even(line);
+}
 
 export function pxToWorld(px: number, zoom: number): number {
   return px / Math.max(zoom, 1e-6);
@@ -2435,7 +2496,13 @@ export function buildAllPrimitives(
   bonds: Bond[],
   opts: LayoutOptions,
   zoom: number
-): { lines: LineSeg[]; polys: Poly[]; circles: Circle[]; fills: Circle[] } {
+): {
+  lines: LineSeg[];
+  polys: Poly[];
+  circles: Circle[];
+  fills: Circle[];
+  reach: BondReach[];
+} {
   const lines: LineSeg[] = [];
   const polys: Poly[] = [];
   const circles: Circle[] = [];
@@ -2698,6 +2765,7 @@ export function buildAllPrimitives(
   const meets: Meet[] = [];
   const freeEnds: Vec2[] = [];
   const bends: Bend[] = [];
+  const reach: BondReach[] = [];
   for (const b of bonds) {
     const u = atoms[b.a1].id,
       v = atoms[b.a2].id;
@@ -2719,6 +2787,7 @@ export function buildAllPrimitives(
       labelShapes,
       doubleSides
     );
+    reach.push(bondReach(beff, opts, zoom, deg, doubleSides));
     const behind = brokenBehind(atoms, bonds, b, r.lines, rWorld);
     lines.push(...behind.lines);
     polys.push(...r.polys);
@@ -2747,7 +2816,7 @@ export function buildAllPrimitives(
       polys.push(...mitreJoinPolys(g.at, g.dirs, rWorld));
     }
   }
-  return { lines, polys, circles, fills };
+  return { lines, polys, circles, fills, reach };
 }
 
 /**
@@ -2861,6 +2930,7 @@ export function layoutMolecule(
     fills: prim.fills,
     bounds,
     zoom,
+    reach: prim.reach,
   };
 }
 

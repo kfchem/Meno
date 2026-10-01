@@ -23,6 +23,12 @@ and in particular:
 - **Hover, then act.** The atom or bond under the pointer is the subject of
   whatever comes next - a click, a drag, a wheel turn, a key. This is already
   how labels are typed.
+  - What is under the pointer is lit from behind: the highlight sits under
+    every bond and shape, so it never tints the drawing. A bond's highlight
+    follows what the bond draws - it widens with a wedge to its broad end
+    and takes in a double bond's second line, the same margin past the
+    drawing all along (the drawing reports how far each bond reaches,
+    `Layout.reach`).
 - **Drawing is dragging bonds out of atoms**, and the editor is made for
   that way of drawing rather than for keys to learn: there are no keyboard
   shortcuts for building structures (agreed 2026-09-27).
