@@ -1,6 +1,7 @@
 /**
- * The highlight round a bond under the pointer, as an outline: drawn behind
- * the bond, so it has to reach past whatever the bond draws (HoverOverlay2D).
+ * The bands that light a bond from behind, as outlines - the highlight under
+ * the pointer (HoverOverlay2D) and the selection's shading (Selection2D).
+ * Drawn behind the bond, each has to reach past whatever the bond draws.
  */
 import type { BondReach } from "../../../../lib/chem/layout2d";
 
@@ -53,4 +54,24 @@ export function bandAround(p: P, q: P, reach: BondReach, margin: number, plainHa
     }
   }
   return hull(pts);
+}
+
+/**
+ * The selection's shading along a bond from `p` to `q`: a band that ends
+ * square at either atom, where the atom's own shading rounds it off, each end
+ * as wide as the drawing reaches there (`reach`) and `margin` more - so a
+ * plain bond's band is as it always was, a wedge's widens to its broad end
+ * and a double bond's takes in its second line. Four corners, anticlockwise,
+ * in the drawing's coordinates.
+ */
+export function squareBand(p: P, q: P, reach: BondReach, margin: number): P[] {
+  const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+  const n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
+  const at = (c: P, s: number) => ({ x: c.x + n.x * s, y: c.y + n.y * s });
+  return [
+    at(p, -(reach.right1 + margin)),
+    at(q, -(reach.right2 + margin)),
+    at(q, reach.left2 + margin),
+    at(p, reach.left1 + margin),
+  ];
 }

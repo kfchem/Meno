@@ -6,7 +6,7 @@ import { COLORS, ALPHA } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { lineHalfOf, type BondReach } from "../../../../lib/chem/layout2d";
 import { useDrawnLayout } from "./drawnLayoutContext";
-import { bandAround } from "./hoverBand";
+import { bandAround } from "./bondBand";
 
 /** The highlight's width once it has come in, over THICKNESS_RATIO's. */
 const SETTLED = 1.35;

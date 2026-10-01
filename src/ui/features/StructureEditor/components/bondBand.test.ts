@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bandAround, hull } from "./hoverBand";
+import { bandAround, hull, squareBand } from "./bondBand";
 
 type P = { x: number; y: number };
 const even = (h: number) => ({ left1: h, right1: h, left2: h, right2: h });
@@ -76,5 +76,57 @@ describe("the band round a bond under the pointer", () => {
       area += a.x * b.y - b.x * a.y;
     }
     expect(area).toBeGreaterThan(0);
+  });
+});
+
+/** Twice the outline's area, positive when it runs anticlockwise. */
+function area2(outline: P[]): number {
+  let a = 0;
+  for (let i = 0; i < outline.length; i++) {
+    const u = outline[i];
+    const v = outline[(i + 1) % outline.length];
+    a += u.x * v.y - v.x * u.y;
+  }
+  return a;
+}
+
+describe("the selection's band along a bond", () => {
+  it("is a plain bond's rectangle, square at either atom", () => {
+    const band = squareBand(p, q, even(line), margin);
+    expect(band).toHaveLength(4);
+    expect(area2(band)).toBeGreaterThan(0);
+    const [lo, hi] = acrossAt(band, 1);
+    expect(lo).toBeCloseTo(-plainHalf, 6);
+    expect(hi).toBeCloseTo(plainHalf, 6);
+    const xs = band.map((v) => v.x);
+    expect(Math.min(...xs)).toBeCloseTo(0, 6);
+    expect(Math.max(...xs)).toBeCloseTo(2, 6);
+  });
+
+  it("widens with a wedge to its broad end, the margin past it all the way", () => {
+    const broad = 0.2;
+    const band = squareBand(p, q, { left1: line, right1: line, left2: broad, right2: broad }, margin);
+    expect(acrossAt(band, 0)[1]).toBeCloseTo(plainHalf, 6);
+    const [lo, hi] = acrossAt(band, 2);
+    expect(hi).toBeCloseTo(broad + margin, 6);
+    expect(lo).toBeCloseTo(-(broad + margin), 6);
+  });
+
+  it("takes in a double bond's second line on its side only", () => {
+    const second = 0.3;
+    const reach = { left1: line + second, right1: line, left2: line + second, right2: line };
+    const [lo, hi] = acrossAt(squareBand(p, q, reach, margin), 1);
+    expect(hi).toBeCloseTo(second + line + margin, 6);
+    expect(lo).toBeCloseTo(-(line + margin), 6);
+  });
+
+  it("knows a bond's left from the way it runs", () => {
+    // the same bond the other way round: its left is now -y
+    const reach = { left1: 0.5, right1: line, left2: 0.5, right2: line };
+    const band = squareBand(q, p, reach, margin);
+    expect(area2(band)).toBeGreaterThan(0);
+    const [lo, hi] = acrossAt(band, 1);
+    expect(lo).toBeCloseTo(-(0.5 + margin), 6);
+    expect(hi).toBeCloseTo(line + margin, 6);
   });
 });
