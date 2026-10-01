@@ -40,6 +40,23 @@ export type BondChem = {
   coordination?: boolean;
 };
 
+/** What a bond is besides its order, where it is: to hand on with it, as `chemistry` an atom's. */
+export function bondChem(b: BondChem): BondChem {
+  return {
+    ...(b.query ? { query: b.query } : {}),
+    ...(b.hydrogen ? { hydrogen: true } : {}),
+    ...(b.coordination ? { coordination: true } : {}),
+  };
+}
+
+/**
+ * How much of an atom's valence a bond takes: its order - none for a dative
+ * bond, which lends a pair, nor for a coordination or a hydrogen bond.
+ */
+export function valenceOrder(b: BondChem & { order: number; dative?: boolean }): number {
+  return b.dative || b.coordination || b.hydrogen ? 0 : b.order;
+}
+
 /** An atom as a file gives it: where it is, in the file's own units. */
 export type ParsedAtom = AtomChem & { x: number; y: number; z: number };
 /**

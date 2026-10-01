@@ -2,7 +2,7 @@ import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
 import { ringSidesOf } from "./aromaticSides";
-import { chargeText, implicitHydrogens, type AtomChem, type BondChem } from "./molecule";
+import { chargeText, implicitHydrogens, valenceOrder, type AtomChem, type BondChem } from "./molecule";
 
 export { implicitHydrogens };
 
@@ -1676,7 +1676,7 @@ export function buildTextLabels(
   for (const b of bonds) {
     // a dative bond lends a pair rather than sharing one: it takes no
     // hydrogen from either end, so H3N->BH3 keeps all six
-    const order = bondKind(b) === "dative" || b.coordination || b.hydrogen ? 0 : (b.order ?? 1);
+    const order = valenceOrder({ ...b, dative: bondKind(b) === "dative" });
     note(b.a1, b.a2, order);
     note(b.a2, b.a1, order);
   }

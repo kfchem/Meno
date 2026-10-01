@@ -2,6 +2,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { Bond as LBond, LayoutOptions } from "../../../lib/chem/layout2d";
 import { layoutOptionsFor, type DrawingStyle } from "../../../lib/chem/style";
 import type { Bond } from "./store/types";
+import { bondChem } from "../../../lib/chem/molecule";
 
 /**
  * A model bond as the layout takes it, between the atoms at layout indices
@@ -19,9 +20,7 @@ export function layoutBond(b: Bond, a1: number, a2: number): LBond {
     stereoOrient: b.stereoOrient ?? "principle",
     ...(b.display ? { display: b.display } : {}),
     ...(b.dative ? { dative: true } : {}),
-    ...(b.query ? { query: b.query } : {}),
-    ...(b.hydrogen ? { hydrogen: true } : {}),
-    ...(b.coordination ? { coordination: true } : {}),
+    ...bondChem(b),
   };
 }
 

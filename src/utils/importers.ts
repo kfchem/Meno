@@ -1,6 +1,6 @@
 import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
 import { kekuleOrders } from "../lib/chem/kekulize";
-import { chemistry, type AtomChem, type BondChem, type ParsedAtom } from "../lib/chem/molecule";
+import { bondChem, chemistry, type AtomChem, type BondChem, type ParsedAtom } from "../lib/chem/molecule";
 import {
   layoutMolecule,
   type Atom as LayoutAtom,
@@ -334,6 +334,7 @@ function drawnBox(model: EditorModel): { minX: number; maxX: number } {
       order: b.order,
       stereo: b.stereo ?? "none",
       ...(b.dative ? { dative: true } : {}),
+      ...bondChem(b),
     });
   }
   const opts = layoutOptionsFor(MENO, NOMINAL_BOND_LENGTH, { units: "world" });

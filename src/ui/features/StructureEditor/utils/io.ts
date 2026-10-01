@@ -5,7 +5,7 @@ import {
   buildEditorModelFromRXN,
   type EditorModel,
 } from "../../../../utils/importers";
-import { chemistry } from "../../../../lib/chem/molecule";
+import { bondChem, chemistry } from "../../../../lib/chem/molecule";
 import type { Model } from "../store/types";
 
 /** Extensions the file pickers offer that have no parser yet. */
@@ -93,6 +93,7 @@ export function editorModelOf(mdl: { atoms: any[]; bonds: any[] }): Model {
       ...(b.doubleMode ? { doubleMode: b.doubleMode } : {}),
       ...(b.display ? { display: b.display } : {}),
       ...(b.dative ? { dative: true } : {}),
+      ...bondChem(b),
     })),
   };
 }
