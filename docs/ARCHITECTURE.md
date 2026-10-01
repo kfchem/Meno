@@ -35,6 +35,8 @@ src/
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
   utils/importers         detectFormat, readMoleculesFromText, RXN grouping/layout, EditorModel conversion
   utils/atomUtils         element table (radii, colours)
+  samples/                textbook structures and reactions for the tests and the workflow's 3D node
+                          (see samples/README.md)
   ui/layouts/TopBar       custom title bar: tabs, "New…" menu, online/offline, Settings, window buttons
   ui/fonts/               the typefaces labels are drawn in, read from their files
   ui/network/             consent dialog, activity cards, Settings › Network

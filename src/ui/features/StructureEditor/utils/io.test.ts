@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { processFileContent } from "./io";
-import sampleSdf from "../../../../assets/KEF20633.sdf?raw";
-import sampleRxn from "../../../../assets/KEF96002.rxn?raw";
+import sampleSdf from "../../../../samples/cholesterol.sdf?raw";
+import sampleRxn from "../../../../samples/esterification.rxn?raw";
 
 describe("processFileContent", () => {
   it("imports an SDF", async () => {
-    const r = await processFileContent("KEF20633.sdf", sampleSdf);
-    expect(r.model.atoms).toHaveLength(38);
+    const r = await processFileContent("cholesterol.sdf", sampleSdf);
+    expect(r.model.atoms).toHaveLength(28);
     expect(r.arrow).toBeUndefined();
   });
 
   it("imports an RXN with its arrow", async () => {
-    const r = await processFileContent("KEF96002.rxn", sampleRxn);
+    const r = await processFileContent("esterification.rxn", sampleRxn);
     expect(r.model.atoms.length).toBeGreaterThan(0);
     expect(r.arrow).toBeDefined();
   });

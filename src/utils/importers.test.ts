@@ -6,10 +6,10 @@ import {
   buildEditorModelFromRXN,
   moleculesToEditorModel,
 } from "./importers";
-import sampleSdf from "../assets/KEF20633.sdf?raw";
-import sampleRxn from "../assets/KEF20633.rxn?raw";
-import sampleRxn2 from "../assets/KEF96002.rxn?raw";
-import sampleXyz from "../assets/KEF20633_b_296.xyz?raw";
+import sampleSdf from "../samples/cholesterol.sdf?raw";
+import sampleRxn from "../samples/diels-alder.rxn?raw";
+import sampleRxn2 from "../samples/esterification.rxn?raw";
+import sampleXyz from "../samples/cholesterol.xyz?raw";
 
 // Ethane (CH3-CH3) as a V2000 molfile. The title line is a bare number, as in
 // PubChem SDF downloads where it holds the compound id.
@@ -25,10 +25,10 @@ const numericTitleMol = [
 ].join("\n");
 
 describe("detectFormat", () => {
-  it("detects the bundled samples", () => {
-    expect(detectFormat("KEF20633.sdf", sampleSdf)).toBe("sdf");
-    expect(detectFormat("KEF20633.rxn", sampleRxn)).toBe("rxn");
-    expect(detectFormat("KEF20633_b_296.xyz", sampleXyz)).toBe("xyz");
+  it("detects the samples", () => {
+    expect(detectFormat("cholesterol.sdf", sampleSdf)).toBe("sdf");
+    expect(detectFormat("diels-alder.rxn", sampleRxn)).toBe("rxn");
+    expect(detectFormat("cholesterol.xyz", sampleXyz)).toBe("xyz");
   });
 
   it("does not mistake a MOL/SDF with a numeric title for XYZ", () => {
@@ -68,23 +68,23 @@ describe("readMoleculesFromText", () => {
     ]);
   });
 
-  it("parses the bundled SDF sample", () => {
+  it("parses the SDF sample", () => {
     const mols = readMoleculesFromText(sampleSdf, "sdf");
     expect(mols).toHaveLength(1);
-    expect(mols[0].atoms).toHaveLength(38);
-    expect(mols[0].bonds).toHaveLength(42);
+    expect(mols[0].atoms).toHaveLength(28);
+    expect(mols[0].bonds).toHaveLength(31);
   });
 });
 
 describe("parseRXNGroups", () => {
-  it("splits the bundled RXN samples by their counts line", () => {
+  it("splits the RXN samples by their counts line", () => {
     const g1 = parseRXNGroups(sampleRxn);
     expect([g1.reactants.length, g1.products.length, g1.agents.length]).toEqual(
-      [1, 4, 0]
+      [2, 1, 0]
     );
     const g2 = parseRXNGroups(sampleRxn2);
     expect([g2.reactants.length, g2.products.length, g2.agents.length]).toEqual(
-      [1, 2, 0]
+      [2, 2, 0]
     );
   });
 
