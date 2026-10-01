@@ -1243,7 +1243,7 @@ function broadEnd(
   const soften = [!mitredL];
   const close =
     mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key
-      ? centredClose(p, dir, neighbours, cutL.key, cutR.key)
+      ? centredClose(p, neighbours, cutL.key, cutR.key)
       : null;
   if (close) {
     // one of the two is a centred double bond: the end closes the gap between
@@ -1292,7 +1292,6 @@ function broadEnd(
  */
 function centredClose(
   p: Vec2,
-  axis: Vec2,
   neighbours: Neighbour[],
   keyL: number,
   keyR: number,
@@ -1301,9 +1300,7 @@ function centredClose(
   const b = neighbours[keyR];
   if (!a || !b || a.centred === b.centred) return null;
   const [double, other] = a.centred ? [a, b] : [b, a];
-  // (axis kept for the signature's sake: which side is the gap's is told by
-  // where the double bond lies from the other bond, not by the wedge)
-  void axis;
+  // (the gap's side is told by where the double bond lies from the other)
   const n = vperp(other.dir);
   const towardsDouble = vdot(n, double.dir) >= 0 ? 1 : -1;
   // the other bond's own line's half width, on that side
