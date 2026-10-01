@@ -82,3 +82,7 @@ Apple signing it needs; its update goes into the same `latest.json`.
 - The installer registers Meno's class for Office again (its
   `--register-ole` hook), so structures in documents keep opening in the
   Meno installed.
+- The installer it ran stays in the temporary folder
+  (`%TEMP%\Meno-<version>-updater-…`, some 17 MB), since Meno has ended
+  by then; the next Meno to start takes it away, once it is ten minutes
+  old.
