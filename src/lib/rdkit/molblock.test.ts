@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chemMolblock, isElementSymbol, molIndex } from "./molblock";
 
 describe("chemMolblock", () => {
-  it("writes V3000, and a label that is not an element as any atom", () => {
+  it("writes V3000, an abbreviation written out, and any other label as any atom", () => {
     const block = chemMolblock({
       atoms: [
         { id: 1, x: 0, y: 0, el: "C" },
@@ -21,7 +21,9 @@ describe("chemMolblock", () => {
     const atoms = lines
       .slice(lines.indexOf("M  V30 BEGIN ATOM") + 1, lines.indexOf("M  V30 END ATOM"))
       .map((l) => l.split(" ")[4]);
-    expect(atoms).toEqual(["C", "*", "Cl", "*"]);
+    // Me is a methyl the dictionary knows, written as such, and shown as Me
+    expect(atoms).toEqual(["C", "C", "Cl", "*"]);
+    expect(block).toMatch(/M {2}V30 1 SUP 0 ATOMS=\(1 2\) XBONDS=\(1 1\) LABEL=Me/);
   });
 });
 

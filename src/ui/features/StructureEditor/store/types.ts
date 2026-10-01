@@ -215,6 +215,8 @@ export type EditorState = {
   addArrow: (x: number, y: number, angle?: number, length?: number) => number;
   updateArrow: (id: number, patch: Partial<Arrow>) => void;
   removeArrow: (id: number) => void;
+  /** An abbreviation drawn out as the atoms it stands for, as one undo step. */
+  expandAbbreviation: (id: number) => void;
   requestFit: () => void;
   beginAutoFitSuspend: () => void;
   endAutoFitSuspend: () => void;

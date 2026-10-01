@@ -17,10 +17,16 @@ export function fromCtfile(ct: CtMolecule): Molecule {
     x: a.x,
     y: a.y,
     z: a.z,
-    el: a.symbol,
+    // an alias is the label the atom is drawn with: it is what the atom is
+    // taken to be (an abbreviation, if the dictionary knows it)
+    el: a.alias || a.symbol,
     ...(a.charge ? { charge: a.charge } : {}),
     ...(a.radical ? { radical: a.radical } : {}),
     ...(a.mass ? { isotope: a.mass } : {}),
+    ...(a.rgroups?.length ? { rgroups: a.rgroups } : {}),
+    ...(a.list ? { list: a.list } : {}),
+    ...(a.valence != null ? { valence: a.valence } : {}),
+    ...(a.hCount != null ? { hCount: a.hCount } : {}),
   }));
   const bonds: Bond[] = ct.bonds.map((b) => {
     const code =

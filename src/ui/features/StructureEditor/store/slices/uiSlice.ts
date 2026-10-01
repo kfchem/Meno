@@ -76,7 +76,10 @@ export function createUiSlice(
                   // (an unpaired electron stays with its element)
                   radical: read.el === atom.el ? atom.radical : undefined,
                 }
-              : { el: read.el };
+              : // R1, R2: an Rgroup, drawn R¹ (IUPAC GR-9.1)
+                /^R\d+$/.test(read.el)
+                ? { el: "R#", rgroups: [Number.parseInt(read.el.slice(1), 10)] }
+                : { el: read.el };
         doc.edit("rename atom", (d) => ops.setAtomChemistry(d, id, chem));
       }
       set((prev: EditorState) => ({

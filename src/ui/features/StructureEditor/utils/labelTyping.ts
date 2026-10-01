@@ -83,7 +83,9 @@ export function readLabel(text: string, isElement: (s: string) => boolean): Read
  * charge (2+, -), what `readLabel` reads back. A carbon with none of them
  * is typed as nothing - its label is its bonds' meeting.
  */
-export function labelTextOf(a: { el: string; charge?: number; isotope?: number }): string {
+export function labelTextOf(a: { el: string; charge?: number; isotope?: number; rgroups?: number[] }): string {
+  // (an Rgroup as it is typed: R1)
+  if (a.el === "R#") return `R${a.rgroups?.[0] ?? ""}`;
   const q = a.charge ?? 0;
   const charge = !q ? "" : `${Math.abs(q) === 1 ? "" : Math.abs(q)}${q > 0 ? "+" : "-"}`;
   if (a.el === "C" && !q && !a.isotope) return "";

@@ -299,4 +299,8 @@ export const createModelSlice = (
   removeArrow: (id: number) => {
     doc.edit("delete arrow", (d) => ops.removeArrow(d, id));
   },
+
+  expandAbbreviation: (id: number) => {
+    doc.edit("expand abbreviation", (d) => ops.expandAbbreviation(d, id));
+  },
 });

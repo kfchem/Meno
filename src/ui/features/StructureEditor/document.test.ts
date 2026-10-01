@@ -257,3 +257,57 @@ describe("a bond the file made more than plain", () => {
     expect(d.model.bonds[0].stereo).toBe("none");
   });
 });
+
+describe("an abbreviation", () => {
+  const L = 1.8;
+  // a C bonded to an atom labelled OMe, to its right
+  const withOMe = (abbrev?: StructureDocument["model"]["atoms"][number]["abbrev"]) => {
+    let d = emptyStructureDocument();
+    d = ops.addAtom(d, 0, 0);
+    d = ops.addAtom(d, L, 0, "OMe");
+    const [c, o] = d.model.atoms.map((a) => a.id);
+    d = ops.addBond(d, c, o, 1);
+    if (abbrev) d = { ...d, model: { ...d.model, atoms: d.model.atoms.map((a) => (a.id === o ? { ...a, abbrev } : a)) } };
+    return { d, c, o };
+  };
+
+  it("is drawn out as the dictionary has it, on from its bond", () => {
+    const { d, c, o } = withOMe();
+    const out = ops.expandAbbreviation(d, o);
+    const atoms = out.model.atoms;
+    expect(atoms.map((a) => a.el)).toEqual(["C", "O", "C"]);
+    // the labelled atom is its O, where it was; the methyl a bond further on
+    expect(atoms[1]).toMatchObject({ id: o, el: "O", x: L, y: 0 });
+    expect(Math.hypot(atoms[2].x - L, atoms[2].y)).toBeCloseTo(L, 6);
+    expect(atoms[2].x).toBeGreaterThan(L);
+    expect(out.model.bonds.map((b) => [b.a, b.b])).toEqual([
+      [c, o],
+      [o, atoms[2].id],
+    ]);
+  });
+
+  it("is drawn out as the file gave it, turned with its bond", () => {
+    // as a file had it: its bond out pointing down, the methyl straight up
+    const { d, o } = withOMe({
+      atoms: [
+        { el: "O", x: 0, y: 0 },
+        { el: "C", x: 0, y: L },
+      ],
+      bonds: [{ a1: 0, a2: 1, order: 1 }],
+      attach: [0],
+      toward: { x: 0, y: -L },
+    });
+    const out = ops.expandAbbreviation(d, o);
+    // its bond out now points left: turned a quarter, the methyl to the right
+    const methyl = out.model.atoms[2];
+    expect(methyl.x).toBeCloseTo(2 * L, 6);
+    expect(methyl.y).toBeCloseTo(0, 6);
+  });
+
+  it("is gone with what it stood for once relabelled", () => {
+    const { d, o } = withOMe({ atoms: [{ el: "O", x: 0, y: 0 }], bonds: [], attach: [0] });
+    const out = ops.setAtomChemistry(d, o, { el: "N" });
+    expect(out.model.atoms[1].abbrev).toBeUndefined();
+    expect(out.model.atoms[1].el).toBe("N");
+  });
+});

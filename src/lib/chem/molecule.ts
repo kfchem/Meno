@@ -13,14 +13,51 @@ import type { CtMolecule } from "./ctfile";
  */
 export type Radical = "doublet" | "singlet" | "triplet";
 
+/** An atom list: the atom is one of `symbols`, or with `not`, none of them. */
+export type AtomList = { not: boolean; symbols: string[] };
+
+/**
+ * The atoms and bonds an abbreviation's label stands for, where a file gave
+ * them: each atom where it was, from the labelled atom; `attach`, the ones
+ * its bonds out of the group leave from, in order.
+ */
+export type AbbreviationStructure = {
+  atoms: (Omit<AtomChem, "abbrev"> & { x: number; y: number })[];
+  bonds: (BondChem & { a1: number; a2: number; order: 1 | 2 | 3; stereo?: "up" | "down" | "wavy" | "either" | "none" })[];
+  attach: number[];
+  /**
+   * Which way its first bond out went, from the labelled atom, with the
+   * atoms where they are: so that it can be turned to where that bond goes
+   * now.
+   */
+  toward?: { x: number; y: number };
+};
+
 export type AtomChem = {
-  /** Its element's symbol - or, for an atom that stands for more, the label: Me, Ph, R. */
+  /**
+   * Its element's symbol - or, for an atom that stands for more, the label:
+   * an abbreviation (Me, OTBS), a class (R, Ar, X), any text; R# for an
+   * Rgroup (`rgroups`), L for an atom list (`list`).
+   */
   el: string;
   /** Its formal charge; none when unset. */
   charge?: number;
   radical?: Radical;
   /** Its mass number, where it is one isotope in particular: 13 for ¹³C. */
   isotope?: number;
+  /** An Rgroup's numbers, for an R# atom: drawn R¹ (IUPAC GR-9.1). */
+  rgroups?: number[];
+  /** The elements an L atom may be, or with `not`, may not. */
+  list?: AtomList;
+  /**
+   * Its valence, where a file sets it to other than its element's usual:
+   * the hydrogens it carries are what its bonds leave of it; 0, none.
+   */
+  valence?: number;
+  /** [Query] how many hydrogens it must have at least; kept, not drawn. */
+  hCount?: number;
+  /** What an abbreviation from a file stands for (an abbreviation Sgroup's atoms). */
+  abbrev?: AbbreviationStructure;
 };
 
 /**
@@ -130,5 +167,10 @@ export function chemistry(a: AtomChem): Omit<AtomChem, "el"> {
     ...(a.charge ? { charge: a.charge } : {}),
     ...(a.radical ? { radical: a.radical } : {}),
     ...(a.isotope ? { isotope: a.isotope } : {}),
+    ...(a.rgroups?.length ? { rgroups: a.rgroups } : {}),
+    ...(a.list ? { list: a.list } : {}),
+    ...(a.valence != null ? { valence: a.valence } : {}),
+    ...(a.hCount != null ? { hCount: a.hCount } : {}),
+    ...(a.abbrev ? { abbrev: a.abbrev } : {}),
   };
 }
