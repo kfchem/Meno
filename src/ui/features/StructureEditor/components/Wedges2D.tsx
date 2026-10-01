@@ -8,6 +8,12 @@ import { useDrawnLayout } from "./drawnLayoutContext";
  * hashes cut as trapezoids, arrowheads, and the mitres where lines meet. All
  * of them in one mesh, rebuilt when the layout changes - which is every frame
  * of a drag - with the old geometry let go each time.
+ *
+ * Drawn with the see-through layers, in their order, though it is opaque:
+ * the highlights under the pointer (HoverOverlay2D, AtomsHoverRings2D) are
+ * see-through and come before it, so they sit behind these shapes as they
+ * sit behind the lines, which hide them by depth. Drawn with the opaque
+ * layers, before every see-through one, it would have them on top.
  */
 export default function Wedges2D() {
   const { layout, opts } = useDrawnLayout();
@@ -38,6 +44,7 @@ export default function Wedges2D() {
         toneMapped={false}
         depthTest={false}
         depthWrite={false}
+        transparent
         side={THREE.DoubleSide}
       />
     </mesh>

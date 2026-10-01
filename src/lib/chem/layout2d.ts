@@ -314,7 +314,68 @@ export type Layout = {
    * it to land back in the coordinates everything else is in.
    */
   zoom: number;
+  /** How far each bond's drawing reaches off its own line, by the bonds' order. */
+  reach: BondReach[];
 };
+
+/**
+ * How far a bond's drawing reaches either side of its own line, at each end,
+ * in the drawing's coordinates: `left` on the side `vperp(a2 - a1)` points
+ * to, `right` on the other; `1` at its a1 and `2` at its a2. A line reaches
+ * half its width; a wedge widens to its broad end; a double bond reaches its
+ * second line, or half the gap either side when it is centred; a triple bond
+ * its outer lines; a wavy bond its swing; a bold or hashed bond its width.
+ * What a highlight round the bond follows, so that nothing of the bond stands
+ * out past it.
+ */
+export type BondReach = { left1: number; right1: number; left2: number; right2: number };
+
+/** Half the width of a line as the drawing draws it, in its coordinates. */
+export function lineHalfOf(opts: LayoutOptions, zoom: number): number {
+  const units = opts.units ?? "px";
+  let lwPx = units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx;
+  const minPx = Math.max(0.5, opts.minLinePx ?? 1);
+  if (!(lwPx >= minPx)) lwPx = minPx;
+  return pxToWorld(lwPx * 0.5, zoom);
+}
+
+/** See BondReach. `doubleSides` and `deg` as the drawing works them out. */
+export function bondReach(
+  bond: Bond,
+  opts: LayoutOptions,
+  zoom: number,
+  deg?: Map<number, number>,
+  doubleSides?: Map<Bond, number | undefined>,
+): BondReach {
+  const units = opts.units ?? "px";
+  const line = lineHalfOf(opts, zoom);
+  const even = (half: number): BondReach => ({ left1: half, right1: half, left2: half, right2: half });
+  const kind = bondKind(bond);
+  if (kind === "wedge" || kind === "hashedWedge") {
+    // narrow at one end, a line's width there, to its broad end at the other
+    const broad = Math.max(line, toWorld(opts.wedgeWidthPx * 0.5, zoom, units));
+    const [h1, h2] = wedgeBaseAtom(bond, deg) === bond.a1 ? [broad, line] : [line, broad];
+    return { left1: h1, right1: h1, left2: h2, right2: h2 };
+  }
+  if (kind === "wavy") return even(toWorld(opts.wavyAmpPx, zoom, units) + line);
+  if (kind === "bold" || kind === "hashed") {
+    const bold =
+      (opts.boldWidthPx != null
+        ? toWorld(opts.boldWidthPx, zoom, units)
+        : (toWorld(opts.wedgeWidthPx, zoom, units) * 2) / 3) / 2;
+    return even(Math.max(line, bold));
+  }
+  if (bond.order === 3) return even(toWorld(opts.tripleOffsetPx, zoom, units) + line);
+  if (bond.order === 2) {
+    const offsets = doubleOffsets(bond, toWorld(opts.doubleOffsetPx, zoom, units), doubleSides);
+    // (a double bond with one line off its axis has its other line on it)
+    const lines = offsets.length === 1 ? [0, ...offsets] : offsets;
+    const left = line + Math.max(0, ...lines);
+    const right = line + Math.max(0, ...lines.map((v) => -v));
+    return { left1: left, right1: right, left2: left, right2: right };
+  }
+  return even(line);
+}
 
 export function pxToWorld(px: number, zoom: number): number {
   return px / Math.max(zoom, 1e-6);
@@ -665,12 +726,28 @@ type Cut = { on: Vec2; dir: Vec2; key: number; reach: number };
 
 /**
  * A bond carrying on from the wide end of a wedge: which way it goes, how far
- * it reaches either side of its own line, and how long it is. A double bond
- * reaches past its centre by the gap between its two lines, and a cut that
- * only knew about a single line would leave the outer one stranded off the
- * wedge.
+ * it reaches either side of its own line - `plus` on the side `vperp(dir)`
+ * points to, `minus` on the other - and how long it is. A double bond reaches
+ * past its centre where its lines are: half the gap either side when it is
+ * drawn centred, and the whole gap on the one side its second line takes
+ * otherwise, with nothing past its own line on the other. A cut that only
+ * knew about a single line would leave the outer one stranded off the wedge;
+ * one that took a second line to be on both sides would stand the wedge's
+ * corner out past a bond that has nothing there.
+ *
+ * `wide` says it is drawn as more than one line, and `centred` that none of
+ * them runs along the bond itself: the two lines of a centred double bond.
  */
-type Neighbour = { dir: Vec2; half: number; wide: boolean; len: number };
+type Neighbour = {
+  dir: Vec2;
+  plus: number;
+  minus: number;
+  wide: boolean;
+  centred: boolean;
+  len: number;
+  /** Where its lines lie off its own line, the `plus` side positive. */
+  lines: number[];
+};
 
 /**
  * A bond that runs nearly straight on through the wide end of a wedge cannot
@@ -736,7 +813,8 @@ function baseCut(
     }
   }
   if (key < 0) return null;
-  const { dir, half, wide, len } = neighbours[key];
+  const { dir, plus, minus, wide, centred, len } = neighbours[key];
+  const half = Math.max(plus, minus);
   // A bond running nearly straight on through the wide end cannot usefully be
   // cut along: its line is almost the wedge's own, and following it would
   // draw the end out into a spike. Square across the wedge is what carries
@@ -753,13 +831,25 @@ function baseCut(
   }
   const off = vperp(dir);
   const towardsTip = off.x * axis.x + off.y * axis.y >= 0 ? 1 : -1;
-  // Take the bond in whole when it is the only one carrying on, or when it is
-  // drawn as more than one line: a second line ends beside its own, not on the
-  // atom, so a cut that stopped at the atom would leave it stranded.
-  const takeWhole = neighbours.length === 1 || wide;
+  // Take the bond in whole when it is the only one carrying on: its second
+  // line, wherever it is, then runs into the end rather than stopping short
+  // of it. Where another bond carries on too, each is followed by the edge of
+  // its own line nearest the narrow end, as a single bond is, and a second
+  // line beside it is left short, as it is drawn - it lies in the dent
+  // between the two, where the end has no business; drawn out to it, the
+  // corner would run into a spike. A centred double bond has no line of its
+  // own there: its near line is followed, which runs into the end, while its
+  // far one goes on to meet the other bond (see centredClose). A triple bond,
+  // a line either side of its own, is taken whole as before.
+  const lines = neighbours[key].lines;
+  const triple = lines.length > 2;
+  const takeWhole = neighbours.length === 1 || triple;
   const edge = takeWhole ? -towardsTip : towardsTip;
+  // (its own line's edge: a second line beside it does not count here)
+  const ownHalf = Math.min(plus, minus);
+  const reach = !takeWhole && wide && !centred ? ownHalf : edge > 0 ? plus : minus;
   return {
-    on: vadd(atom, vscale(off, edge * half)),
+    on: vadd(atom, vscale(off, edge * reach)),
     dir,
     key,
     reach: len * rule.reach,
@@ -1228,7 +1318,16 @@ function broadEnd(
   // A corner cut along a bond carries on into that bond, so it is not a free
   // corner and must stay as it is; the rest may be softened.
   const soften = [!mitredL];
-  if (mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key) {
+  const close =
+    mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key
+      ? centredClose(p, neighbours, cutL.key, cutR.key)
+      : null;
+  if (close) {
+    // one of the two is a centred double bond: the end closes the gap between
+    // its lines (see centredClose)
+    points.push(close);
+    soften.push(false);
+  } else if (mitredL && mitredR && cutL && cutR && cutL.key !== cutR.key) {
     // Two bonds carry on from the end, so the cut follows one on each side
     // and turns between them.
     const edge = vsub(baseR, baseL);
@@ -1255,6 +1354,35 @@ function broadEnd(
   points.push(baseR);
   soften.push(!mitredR);
   return { points, soften };
+}
+
+/**
+ * Where a broad end between two bonds turns when one of them is a centred
+ * double bond, or null when neither or both are. A centred double bond has
+ * no line along its own: its near line runs into the end, which follows that
+ * line's edge, and its far line runs on to meet the other bond. Between them
+ * is a gap, open towards the atom. A turn at the atom would cut back across
+ * it and leave the other bond's square end standing in it; a straight cut
+ * from corner to corner would leave the atom out. Turning at the corner of
+ * the other bond's end on the gap's side closes the gap with one straight
+ * edge and takes that end in whole.
+ */
+function centredClose(
+  p: Vec2,
+  neighbours: Neighbour[],
+  keyL: number,
+  keyR: number,
+): Vec2 | null {
+  const a = neighbours[keyL];
+  const b = neighbours[keyR];
+  if (!a || !b || a.centred === b.centred) return null;
+  const [double, other] = a.centred ? [a, b] : [b, a];
+  // (the gap's side is told by where the double bond lies from the other)
+  const n = vperp(other.dir);
+  const towardsDouble = vdot(n, double.dir) >= 0 ? 1 : -1;
+  // the other bond's own line's half width, on that side
+  const half = towardsDouble > 0 ? other.plus - Math.max(0, ...other.lines) : other.minus - Math.max(0, ...other.lines.map((v) => -v));
+  return vadd(p, vscale(n, towardsDouble * half));
 }
 
 /**
@@ -1974,8 +2102,8 @@ export function buildBondPrimitives(
     const atom = atoms[at];
     const out: Neighbour[] = [];
     if (!atom || hasLabel(atom)) return out;
-    const doubleHalf = toWorld(opts.doubleOffsetPx, zoom, units) * 0.5;
-    const tripleHalf = toWorld(opts.tripleOffsetPx, zoom, units);
+    const doubleOff = toWorld(opts.doubleOffsetPx, zoom, units);
+    const tripleOff = toWorld(opts.tripleOffsetPx, zoom, units);
     for (const b of adjBonds?.get(at) ?? []) {
       const far = b.a1 === at ? b.a2 : b.a1;
       if (far === other || far === at) continue;
@@ -1983,13 +2111,28 @@ export function buildBondPrimitives(
       if (!o) continue;
       const d = vsub({ x: o.x, y: o.y }, { x: atom.x, y: atom.y });
       if (vlen(d) < 1e-9) continue;
-      // how far that bond reaches either side of its own line
-      const spread = b.order === 3 ? tripleHalf : b.order === 2 ? doubleHalf : 0;
+      // Where that bond's lines lie either side of its own line, seen going
+      // out from this atom: its offsets are taken from a1 to a2, so they turn
+      // over when it leaves this atom from its a2 end.
+      const turn = b.a1 === at ? 1 : -1;
+      const offsets =
+        b.order === 3
+          ? [0, tripleOff, -tripleOff]
+          : b.order === 2
+            ? doubleOffsets(b, doubleOff, doubleSides)
+            : [0];
+      // (a double bond with one line off its axis has its other line on it)
+      const lines = (b.order === 2 && offsets.length === 1 ? [0, ...offsets] : offsets).map(
+        (v) => v * turn,
+      );
       out.push({
         dir: vnorm(d),
-        half: lineHalf + spread,
-        wide: spread > 0,
+        plus: lineHalf + Math.max(0, ...lines),
+        minus: lineHalf + Math.max(0, ...lines.map((v) => -v)),
+        wide: lines.length > 1,
+        centred: !lines.includes(0),
         len: vlen(d),
+        lines,
       });
     }
     return out;
@@ -2440,7 +2583,13 @@ export function buildAllPrimitives(
   bonds: Bond[],
   opts: LayoutOptions,
   zoom: number
-): { lines: LineSeg[]; polys: Poly[]; circles: Circle[]; fills: Circle[] } {
+): {
+  lines: LineSeg[];
+  polys: Poly[];
+  circles: Circle[];
+  fills: Circle[];
+  reach: BondReach[];
+} {
   const lines: LineSeg[] = [];
   const polys: Poly[] = [];
   const circles: Circle[] = [];
@@ -2703,6 +2852,7 @@ export function buildAllPrimitives(
   const meets: Meet[] = [];
   const freeEnds: Vec2[] = [];
   const bends: Bend[] = [];
+  const reach: BondReach[] = [];
   for (const b of bonds) {
     const u = atoms[b.a1].id,
       v = atoms[b.a2].id;
@@ -2724,6 +2874,7 @@ export function buildAllPrimitives(
       labelShapes,
       doubleSides
     );
+    reach.push(bondReach(beff, opts, zoom, deg, doubleSides));
     const behind = brokenBehind(atoms, bonds, b, r.lines, rWorld);
     lines.push(...behind.lines);
     polys.push(...r.polys);
@@ -2752,7 +2903,7 @@ export function buildAllPrimitives(
       polys.push(...mitreJoinPolys(g.at, g.dirs, rWorld));
     }
   }
-  return { lines, polys, circles, fills };
+  return { lines, polys, circles, fills, reach };
 }
 
 /**
@@ -3003,6 +3154,7 @@ export function layoutMolecule(
     fills: prim.fills,
     bounds,
     zoom,
+    reach: prim.reach,
   };
 }
 
