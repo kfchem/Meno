@@ -1141,6 +1141,31 @@ describe("how far a bond stops short of a label", () => {
     // but at 45 degrees the O's curve leaves more room
     expect(at("O", 45)).toBeLessThan(at("N", 45));
   });
+
+  it("stops a bond for the letters in its path, not an H set below beside it", () => {
+    const o = opts();
+    // an N+ with three bonds and an H, which goes below (the bonds rise
+    // furthest): the two bonds leaving it downward at a slant pass it clear
+    const v = (deg: number) => ({ x: L * Math.cos((deg * Math.PI) / 180), y: L * Math.sin((deg * Math.PI) / 180) });
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "N", charge: 1 },
+      { id: 2, ...v(90), el: "C" },
+      { id: 3, ...v(210), el: "C" },
+      { id: 4, ...v(330), el: "C" },
+    ];
+    const bonds: Bond[] = [1, 2, 3].map((k) => ({ a1: 0, a2: k, order: 1 }));
+    expect(buildTextLabels(atoms, o, bonds)[0].stack).toBe("below");
+    // where the bond at 330 degrees starts, with the H and without it
+    const start = (over: Partial<LayoutOptions>) => {
+      const { lines } = buildAllPrimitives(atoms, bonds, opts(over), ZOOM);
+      const line = lines.find((l) => {
+        const mid = Math.atan2((l.y1 + l.y2) / 2, (l.x1 + l.x2) / 2);
+        return Math.abs(mid + Math.PI / 6) < 0.05;
+      })!;
+      return Math.min(Math.hypot(line.x1, line.y1), Math.hypot(line.x2, line.y2));
+    };
+    expect(start({})).toBeCloseTo(start({ showImplicitHydrogens: false }), 9);
+  });
 });
 
 describe("a wedge with a bond carrying straight on", () => {
