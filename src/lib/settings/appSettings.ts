@@ -10,6 +10,7 @@ import {
 import { create } from "zustand";
 import { DEFAULT_STYLE_CHOICE, type StyleChoice } from "../chem/style";
 import { acceptStyleChoice } from "../chem/styleFields";
+import { setCustomAbbreviations, structureProblem, type CustomAbbreviation } from "../chem/abbreviations";
 
 /**
  * The application's own settings: what applies to every tab unless a tab
@@ -22,6 +23,8 @@ export type AppSettings = {
   network: NetworkSettings;
   chemistry: ChemistrySettings;
   updates: UpdateSettings;
+  /** The user's own abbreviations, known as Meno's own are (lib/chem/abbreviations). */
+  abbreviations: CustomAbbreviation[];
 };
 
 /** Meno keeping itself up to date (lib/update). */
@@ -53,6 +56,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   network: { offline: false, granted: [] },
   chemistry: { valenceWarnings: true, stereoLabels: false },
   updates: { asked: false },
+  abbreviations: [],
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -67,7 +71,25 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     network: acceptNetwork(r.network),
     chemistry: acceptChemistry(r.chemistry),
     updates: acceptUpdates(r.updates),
+    abbreviations: acceptAbbreviations(r.abbreviations),
   };
+}
+
+/** The user's abbreviations the file holds that read: a label, a name, other names and a structure Meno reads. */
+function acceptAbbreviations(raw: unknown): CustomAbbreviation[] {
+  if (!Array.isArray(raw)) return [];
+  const text = (v: unknown, most: number) => (typeof v === "string" && v.trim() && v.length <= most ? v.trim() : null);
+  const out: CustomAbbreviation[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const r = item as Record<string, unknown>;
+    const label = text(r.label, 24);
+    const smiles = text(r.smiles, 500);
+    if (!label || /\s/.test(label) || !smiles || structureProblem(smiles)) continue;
+    const also = Array.isArray(r.also) ? r.also.map((a) => text(a, 24)).filter((a): a is string => !!a && !/\s/.test(a)) : [];
+    out.push({ label, smiles, name: text(r.name, 200) ?? "", ...(also.length ? { also } : {}) });
+  }
+  return out;
 }
 
 function acceptUpdates(raw: unknown): UpdateSettings {
@@ -142,6 +164,7 @@ type SettingsState = AppSettings & {
   setNetwork: (network: NetworkSettings) => void;
   setChemistry: (chemistry: ChemistrySettings) => void;
   setUpdates: (updates: UpdateSettings) => void;
+  setAbbreviations: (abbreviations: CustomAbbreviation[]) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -152,9 +175,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, network, chemistry, updates } = get();
+      const { drawingStyle, network, chemistry, updates, abbreviations } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, network, chemistry, updates }),
+        settingsFileText({ drawingStyle, network, chemistry, updates, abbreviations }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -181,6 +204,11 @@ export const useAppSettings = create<SettingsState>((set, get) => {
       set({ updates });
       scheduleSave();
     },
+    setAbbreviations: (abbreviations) => {
+      setCustomAbbreviations(abbreviations);
+      set({ abbreviations });
+      scheduleSave();
+    },
   };
 });
 
@@ -193,6 +221,7 @@ export function loadAppSettings(): Promise<void> {
       const settings = text
         ? acceptAppSettings(JSON.parse(text))
         : DEFAULT_APP_SETTINGS;
+      setCustomAbbreviations(settings.abbreviations);
       useAppSettings.setState({ ...settings, loaded: true });
     })
     .catch((e) =>

@@ -11,6 +11,7 @@ import { editorLayoutOptions, layoutBonds } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { needsFallback, useTypefaces } from "../../../fonts/typefaces";
 import { chemistry } from "../../../../lib/chem/molecule";
+import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { DrawnLayoutContext } from "./drawnLayoutContext";
 
 /** The id the atom a bond is being drawn out to goes by until it is made. */
@@ -118,10 +119,12 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
     style.fontFamily,
     needsFallback(model.atoms.map((a) => a.el)),
   );
+  // (a label is read by the abbreviations Meno knows, the user's among them)
+  const abbreviations = useAppSettings((s) => s.abbreviations);
   const layout = useMemo(
     () => layoutMolecule(atoms, bonds, opts, zoom),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fonts: see above
-    [atoms, bonds, opts, zoom, fonts],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fonts, abbreviations: see above
+    [atoms, bonds, opts, zoom, fonts, abbreviations],
   );
   const value = useMemo(
     () => ({ atoms, bonds, opts, layout, zoom }),

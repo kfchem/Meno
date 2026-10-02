@@ -340,6 +340,10 @@ export const createModelSlice = (
     doc.edit("expand abbreviation", (d) => ops.expandAbbreviation(d, id));
   },
 
+  contractToAbbreviation: (ids: ReadonlySet<number>, label: string) => {
+    if (doc.edit("show as abbreviation", (d) => ops.contractToAbbreviation(d, ids, label))) forgetDeleted(set);
+  },
+
   setArrowLook: (id: number, look: ArrowLook, coalesceKey?: string) => {
     doc.edit("arrow style", (d) => ops.setArrowLook(d, id, look), { coalesceKey });
   },

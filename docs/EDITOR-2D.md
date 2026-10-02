@@ -329,6 +329,9 @@ All hover-based, as above.
   never in an exported picture.)
 - Everything a molfile, SDfile or Rxnfile can hold, read after CTfile Formats
   and drawn after IUPAC's recommendations: docs/CTFILE.md, step by step.
+- Abbreviations: Meno's own, those put together by rule (OTBS, 2,6-diMeBz)
+  and the user's own, from Settings › Abbreviations or a selection's *Save
+  as abbreviation…*: docs/CTFILE.md, "Atoms that are not elements".
 - Reaction arrows, "+" and text: create, move, edit, delete. (An arrow or
   a "+" is added from the menu a right-click on empty space opens, where it
   was opened: the arrow pointing right, two and two-thirds of a bond long.

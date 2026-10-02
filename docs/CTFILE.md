@@ -142,9 +142,22 @@ What is put together from them is read by rule, not listed:
   ring (2 to 6, o-, m-, p-), once each; counts must match them, and a
   formula's hydrogens make up the rest.
 
-A label known either way can be expanded, is counted and written out whole,
-and is what RDKit is asked about; one not known is text. Ar is argon's
-symbol as well as aryl's (GR-9.2): typed, it is argon.
+**Abbreviations of the user's own** are kept in Settings › Abbreviations
+(`settings.json`): a label, other ways of writing it, a name, and the
+structure as SMILES with a "*" where it is attached, drawn as it is typed.
+A group on a canvas can be saved as one too: selected, *Save as
+abbreviation…* in its menu takes its structure (written by Meno's own
+SMILES writer, `writeSmiles`), and shows the atoms as the new label unless
+asked not to. A label of one's own may not be an element's symbol, nor one
+that already means something - Meno's, one put together by rule, or
+another of one's own - as IUPAC (GR-2.2) does not accept either. Once
+saved it is known as Meno's own are, and stands behind O, S or NH and in an
+ester as a group does.
+
+A label known any of these ways can be expanded, is counted and written out
+whole, and is what RDKit is asked about; one not known is text. Ar is
+argon's symbol as well as aryl's (GR-9.2): typed, it is argon. Settings ›
+Abbreviations shows Meno's list, each drawn as what it stands for.
 
 A bond that came from a file as one of these becomes an ordinary bond once
 its order or stereo is changed in the editor.

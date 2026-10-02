@@ -105,6 +105,9 @@ for (const a of ABBREVIATIONS) {
   for (const l of [a.label, ...(a.also ?? [])]) if (!BY_LABEL.has(l)) BY_LABEL.set(l, a);
 }
 const GROUP_LABELS = new Set(GROUPS.flatMap((g) => [g.label, ...(g.also ?? [])]));
+/** The user's own, by each of their names (setCustomAbbreviations). */
+const custom = new Map<string, Abbreviation>();
+let customList: readonly Abbreviation[] = [];
 
 /**
  * How labels are put together from a group, by rule: the letters written
@@ -142,8 +145,10 @@ function composedOf(label: string): Abbreviation | undefined {
   if (aryl) return { label, smiles: aryl.smiles, name: aryl.name };
   for (const c of COMPOSED) {
     if (!label.startsWith(c.prefix) || label.length === c.prefix.length) continue;
-    const g = BY_LABEL.get(label.slice(c.prefix.length));
-    if (!g || !c.takes(g)) continue;
+    const rest = label.slice(c.prefix.length);
+    const g = BY_LABEL.get(rest) ?? custom.get(rest);
+    // (one of the user's own is a group like any other)
+    if (!g || !(c.takes(g) || custom.get(rest) === g)) continue;
     // (named by the group's own label: OTBDMS is OTBS)
     const own = c.prefix + g.label;
     return { label: own, ...(own !== label ? { also: [label] } : {}), smiles: c.smiles + g.smiles.slice(1), name: composedName(g.name, c.word) };
@@ -155,14 +160,83 @@ const COMPOSED_SEEN = new Map<string, Abbreviation | undefined>();
 
 /**
  * The abbreviation a label is, as written (OTBS, or OTBDMS): the
- * dictionary's, or one put together by rule. None, for any other.
+ * dictionary's, the user's own, or one put together by rule. None, for any
+ * other.
  */
 export function abbreviationOf(label: string): Abbreviation | undefined {
   const l = label.trim();
-  const listed = BY_LABEL.get(l);
+  const listed = BY_LABEL.get(l) ?? custom.get(l);
   if (listed) return listed;
   if (!COMPOSED_SEEN.has(l)) COMPOSED_SEEN.set(l, composedOf(l));
   return COMPOSED_SEEN.get(l);
+}
+
+// --- the user's own ------------------------------------------------------------
+
+/**
+ * An abbreviation of the user's own (Settings), as one of Meno's: a group,
+ * which may stand behind O, S or NH and in an ester as Meno's own may.
+ */
+export type CustomAbbreviation = Abbreviation;
+
+/** The user's own abbreviations, from now on known as Meno's own are. */
+export function setCustomAbbreviations(list: readonly CustomAbbreviation[]): void {
+  if (list === customList) return;
+  customList = list;
+  custom.clear();
+  for (const a of list) {
+    for (const l of [a.label, ...(a.also ?? [])]) if (!BY_LABEL.has(l) && !custom.has(l)) custom.set(l, a);
+  }
+  COMPOSED_SEEN.clear();
+  setUnits();
+}
+
+/** The user's own abbreviations, as last given. */
+export function customAbbreviations(): readonly CustomAbbreviation[] {
+  return customList;
+}
+
+/**
+ * Why a label cannot be one of the user's own, or null if it can: it must
+ * be written without spaces, and be neither an element's symbol nor a label
+ * that already means something - IUPAC (GR-2.2) does not accept an
+ * abbreviation written as an element or as another in common use.
+ * `except` is the abbreviation being edited, which may keep its names.
+ */
+export function labelProblem(label: string, except?: CustomAbbreviation): string | null {
+  const l = label.trim();
+  if (!l) return "Give it a label.";
+  if (/\s/.test(l)) return "A label has no spaces.";
+  if (l.length > 24) return "A label is at most 24 characters.";
+  if (/^[\d,]/.test(l) || /^[+−-]|[+−-]$/.test(l)) return "A label starts with a letter and ends without a charge.";
+  if (ELEMENTS.has(l)) return `${l} is an element's symbol.`;
+  const own = custom.get(l);
+  if (own && own !== except) return `${l} is already one of yours: ${own.name || own.label}.`;
+  if (!own) {
+    const known = BY_LABEL.get(l) ?? composedOf(l);
+    if (known) return `${l} already means ${known.name}.`;
+  }
+  return null;
+}
+
+/**
+ * Why a structure cannot be an abbreviation's, or null if it can: SMILES
+ * Meno reads, with one "*" - where it is attached - bonded to one atom.
+ */
+export function structureProblem(smiles: string): string | null {
+  let read: Smiles;
+  try {
+    read = readSmiles(smiles.trim());
+  } catch (e) {
+    return `The SMILES cannot be read: ${e instanceof Error ? e.message : String(e)}`;
+  }
+  const stars = read.atoms.flatMap((a, i) => (a.el === "*" ? [i] : []));
+  if (stars.length !== 1) return 'Mark where it is attached with one "*".';
+  if (read.atoms.length < 2) return "Give it at least one atom besides the *.";
+  if (read.bonds.filter((b) => b.a1 === stars[0] || b.a2 === stars[0]).length !== 1) {
+    return 'The "*" is bonded to the one atom the group is attached by.';
+  }
+  return null;
 }
 
 /**
@@ -213,10 +287,15 @@ const ELEMENTS = new Set(elements.map((e) => e.symbol));
  * What a label is read into: the groups the abbreviations name, longest
  * first - and "pin", for pinacolato - before element symbols.
  */
-const UNITS = [...new Set([...GROUPS.flatMap((g) => [g.label, ...(g.also ?? [])]), "pin"])]
-  // (Bpin is B and pin, and so on the left pinB)
-  .filter((u) => u.length > 1 && u !== "Bpin")
-  .sort((x, y) => y.length - x.length);
+let UNITS: string[] = [];
+/** The units labels are read into: the groups', the user's own among them. */
+function setUnits(): void {
+  UNITS = [...new Set([...[...GROUPS, ...custom.values()].flatMap((g) => [g.label, ...(g.also ?? [])]), "pin"])]
+    // (Bpin is B and pin, and so on the left pinB)
+    .filter((u) => u.length > 1 && u !== "Bpin")
+    .sort((x, y) => y.length - x.length);
+}
+setUnits();
 
 /**
  * A label's units, as a chemist reads it: each element or group with its

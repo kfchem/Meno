@@ -126,3 +126,95 @@ function bracketAtom(body: string): SmilesAtom {
   }
   return atom;
 }
+
+// --- writing -----------------------------------------------------------------
+
+/** An atom to write: its element ("*" for an attachment), and what a bracket says of it. */
+export type SmilesAtomOut = { el: string; charge?: number; isotope?: number; hs: number };
+
+/** The valences an organic-subset atom may have, as OpenSMILES fills its hydrogens to. */
+const NORMAL_VALENCES: Record<string, number[]> = {
+  B: [3], C: [4], N: [3, 5], O: [2], P: [3, 5], S: [2, 4, 6], F: [1], Cl: [1], Br: [1], I: [1],
+};
+
+/** The hydrogens OpenSMILES gives an organic-subset atom written plainly, for bonds summing to `sum`. */
+function plainHydrogens(el: string, sum: number): number | null {
+  const normal = NORMAL_VALENCES[el];
+  if (!normal) return null;
+  const v = normal.find((n) => n >= sum);
+  return v == null ? 0 : v - sum;
+}
+
+/**
+ * Atoms and bonds as SMILES (OpenSMILES), from atom `start` - an
+ * abbreviation's "*" first, as Meno writes them. Bonds are written as
+ * their orders (Kekulé), an atom plainly where the organic subset's
+ * hydrogens are its own and in brackets otherwise: with its isotope, its
+ * hydrogens and its charge. Rings are closed with digits, then %nn; parts
+ * not joined to the rest follow after a dot.
+ */
+export function writeSmiles(atoms: readonly SmilesAtomOut[], bonds: readonly SmilesBond[], start = 0): string {
+  const near = atoms.map(() => [] as { to: number; order: number; bond: number }[]);
+  bonds.forEach((b, i) => {
+    near[b.a1].push({ to: b.a2, order: b.order, bond: i });
+    near[b.a2].push({ to: b.a1, order: b.order, bond: i });
+  });
+  const sums = atoms.map((_, i) => near[i].reduce((s, e) => s + e.order, 0));
+  // which bonds the walk goes along; the rest close rings
+  const seen = atoms.map(() => false);
+  const tree = new Set<number>();
+  const walk = (u: number) => {
+    seen[u] = true;
+    for (const e of near[u]) {
+      if (!seen[e.to]) {
+        tree.add(e.bond);
+        walk(e.to);
+      }
+    }
+  };
+  const roots: number[] = [];
+  for (const r of [start, ...atoms.map((_, i) => i)]) {
+    if (r < atoms.length && !seen[r]) {
+      roots.push(r);
+      walk(r);
+    }
+  }
+  const symbol = (order: number) => (order === 2 ? "=" : order === 3 ? "#" : order === 4 ? ":" : "");
+  const atomText = (i: number) => {
+    const a = atoms[i];
+    if (a.el === "*" && !a.charge && !a.isotope && !a.hs) return "*";
+    const plain = plainHydrogens(a.el, sums[i]);
+    if (!a.charge && !a.isotope && plain === a.hs) return a.el;
+    const charge = !a.charge ? "" : `${a.charge > 0 ? "+" : "-"}${Math.abs(a.charge) > 1 ? Math.abs(a.charge) : ""}`;
+    return `[${a.isotope ?? ""}${a.el}${a.hs ? `H${a.hs > 1 ? a.hs : ""}` : ""}${charge}]`;
+  };
+  const digits = new Map<number, number>();
+  const free: number[] = [];
+  let next = 1;
+  const written = atoms.map(() => false);
+  const write = (u: number): string => {
+    written[u] = true;
+    let out = atomText(u);
+    for (const e of near[u]) {
+      if (tree.has(e.bond)) continue;
+      const open = digits.get(e.bond);
+      if (open != null) {
+        out += open < 10 ? `${open}` : `%${open}`;
+        digits.delete(e.bond);
+        free.push(open);
+      } else {
+        free.sort((x, y) => x - y);
+        const n = free.length ? free.shift()! : next++;
+        digits.set(e.bond, n);
+        out += symbol(e.order) + (n < 10 ? `${n}` : `%${n}`);
+      }
+    }
+    const children = near[u].filter((e) => tree.has(e.bond) && !written[e.to]);
+    children.forEach((e, k) => {
+      const branch = symbol(e.order) + write(e.to);
+      out += k < children.length - 1 ? `(${branch})` : branch;
+    });
+    return out;
+  };
+  return roots.map(write).join(".");
+}
