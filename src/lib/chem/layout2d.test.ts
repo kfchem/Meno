@@ -114,6 +114,20 @@ describe("buildTextLabels", () => {
     expect(at(150, 270).text).toBe("NH");
   });
 
+  it("writes them on the side further from every bond where three spread evenly, a hair either way", () => {
+    const L = NOMINAL_BOND_LENGTH;
+    const v = (deg: number) => ({ x: L * Math.cos((deg * Math.PI) / 180), y: L * Math.sin((deg * Math.PI) / 180) });
+    const at = (...degs: number[]) => {
+      const atoms: Atom[] = [{ id: 1, x: 0, y: 0, el: "B", charge: -1 }, ...degs.map((d, k) => ({ id: k + 2, ...v(d), el: "O" }))];
+      const [bh] = buildTextLabels(atoms, opts(), degs.map((_, k) => ({ a1: 0, a2: k + 1, order: 1 })));
+      return bh.stack;
+    };
+    // a borate's BH, one bond straight down: the H above, clear of it
+    for (const e of [0, 1e-9, -1e-9]) expect(at(30 + e, 150 - e, 270 + e)).toBe("above");
+    // and one straight up: below
+    for (const e of [0, 1e-9, -1e-9]) expect(at(90 + e, 210 - e, 330 + e)).toBe("below");
+  });
+
   it("writes a carbon with no bonds as CH4, and a bonded one not at all", () => {
     const atoms: Atom[] = [
       { id: 1, x: 0, y: 0, el: "C" },
