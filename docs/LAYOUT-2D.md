@@ -332,7 +332,9 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   reads best.
 - **Clean-up draws a complex as writing out its label does**: the same
   engine, given the same structure - a haptic bond's star with its pi
-  system - so a complex expanded and then cleaned up does not move.
+  system - and each star put afterwards at the centre of its system's
+  atoms (a ring's is there already; a C=C's, cod's, is not), so a complex
+  expanded and then cleaned up does not move.
 
 ## How the engine goes about it
 
