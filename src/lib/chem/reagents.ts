@@ -16,8 +16,10 @@ import { readSmiles } from "./smiles";
  * as one enantiomer, with the descriptors that name it and its mirror
  * image (./enantiomers).
  *
- * Simple formulas - Et3N, n-BuLi, TMSCl, Ac2O, BF3·OEt2 - are not listed:
- * they are read by rule (./condensed).
+ * What is read by rule is not listed: simple formulas - Et3N, n-BuLi, TMSCl,
+ * Ac2O, KOt-Bu, HOBt, TsOH - (./condensed), adducts (BF3·OEt2) and
+ * Buchwald's precatalysts (below). A reagent named otherwise as well (TEA,
+ * LiHMDS) is listed by that name alone.
  */
 
 export type ReagentUse =
@@ -106,7 +108,6 @@ export const REAGENTS: Reagent[] = [
   { label: "KMnO4", use: "oxidation", smiles: "[K+].[O-][Mn](=O)(=O)=O", name: "potassium permanganate", formula: true },
   { label: "NaIO4", use: "oxidation", smiles: "[Na+].[O-][I](=O)(=O)=O", name: "sodium periodate", formula: true },
   { label: "NaClO2", use: "oxidation", smiles: "[Na+].[O-][Cl]=O", name: "sodium chlorite", formula: true },
-  { label: "NaOCl", use: "oxidation", smiles: "[Na+].[O-]Cl", name: "sodium hypochlorite", formula: true },
   { label: "MnO2", use: "oxidation", smiles: "O=[Mn]=O", name: "manganese dioxide", formula: true },
   { label: "SeO2", use: "oxidation", smiles: "O=[Se]=O", name: "selenium dioxide", formula: true },
   { label: "CrO3", use: "oxidation", smiles: "O=[Cr](=O)=O", name: "chromium trioxide", formula: true },
@@ -137,10 +138,9 @@ export const REAGENTS: Reagent[] = [
   { label: "K-Selectride", use: "reduction", smiles: `[K+].${SEC_BU3BH}`, name: "potassium tri-sec-butylborohydride" },
   { label: "Super-Hydride", also: ["LiBHEt3", "LiEt3BH"], use: "reduction", smiles: "[Li+].CC[BH-](CC)CC", name: "lithium triethylborohydride" },
   { label: "9-BBN", also: ["9-BBN-H"], use: "reduction", smiles: "[BH]1C2CCCC1CCC2", name: "9-borabicyclo[3.3.1]nonane" },
-  { label: "HBpin", also: ["pinacolborane"], use: "reduction", smiles: "[BH]1OC(C)(C)C(C)(C)O1", name: "pinacolborane" },
   { label: "HBcat", also: ["catecholborane"], use: "reduction", smiles: "[BH]1Oc2ccccc2O1", name: "catecholborane" },
   { label: "B2pin2", use: "reduction", smiles: "CC1(C)OB(B2OC(C)(C)C(C)(C)O2)OC1(C)C", name: "bis(pinacolato)diboron", formula: true },
-  { label: "TTMSS", also: ["(TMS)3SiH", "(Me3Si)3SiH"], use: "reduction", smiles: "C[Si](C)(C)[SiH]([Si](C)(C)C)[Si](C)(C)C", name: "tris(trimethylsilyl)silane" },
+  { label: "TTMSS", also: ["(Me3Si)3SiH"], use: "reduction", smiles: "C[Si](C)(C)[SiH]([Si](C)(C)C)[Si](C)(C)C", name: "tris(trimethylsilyl)silane" },
   { label: "HEH", also: ["Hantzsch ester"], use: "reduction", smiles: "CCOC(=O)C1=C(C)NC(C)=C(C(=O)OCC)C1", name: "diethyl 1,4-dihydro-2,6-dimethylpyridine-3,5-dicarboxylate (Hantzsch ester)" },
 
   // --- bases -------------------------------------------------------------------
@@ -149,7 +149,7 @@ export const REAGENTS: Reagent[] = [
   { label: "TBD", use: "base", smiles: "C1CNC2=NCCCN2C1", name: "1,5,7-triazabicyclo[4.4.0]dec-5-ene" },
   { label: "DMAP", use: "base", smiles: "CN(C)c1ccncc1", name: "4-(dimethylamino)pyridine" },
   { label: "DIPEA", also: ["DIEA", "Hünig's base", "Hunig's base"], use: "base", smiles: "CCN(C(C)C)C(C)C", name: "N,N-diisopropylethylamine" },
-  { label: "TEA", also: ["Et3N", "NEt3"], use: "base", smiles: "CCN(CC)CC", name: "triethylamine" },
+  { label: "TEA", use: "base", smiles: "CCN(CC)CC", name: "triethylamine" },
   { label: "DABCO", use: "base", smiles: "C1CN2CCN1CC2", name: "1,4-diazabicyclo[2.2.2]octane" },
   { label: "NMM", use: "base", smiles: "CN1CCOCC1", name: "N-methylmorpholine" },
   { label: "2,6-lutidine", also: ["lutidine"], use: "base", smiles: "Cc1cccc(C)n1", name: "2,6-dimethylpyridine" },
@@ -158,14 +158,10 @@ export const REAGENTS: Reagent[] = [
   { label: "TMG", use: "base", smiles: "CN(C)C(=N)N(C)C", name: "1,1,3,3-tetramethylguanidine" },
   { label: "imidazole", use: "base", smiles: "c1c[nH]cn1", name: "imidazole" },
   { label: "LDA", use: "base", smiles: "[Li+].CC(C)[N-]C(C)C", name: "lithium diisopropylamide" },
-  { label: "LiHMDS", also: ["LHMDS", "LiN(TMS)2"], use: "base", smiles: `[Li+].${HMDS}`, name: "lithium bis(trimethylsilyl)amide" },
-  { label: "NaHMDS", also: ["NaN(TMS)2"], use: "base", smiles: `[Na+].${HMDS}`, name: "sodium bis(trimethylsilyl)amide" },
-  { label: "KHMDS", also: ["KN(TMS)2"], use: "base", smiles: `[K+].${HMDS}`, name: "potassium bis(trimethylsilyl)amide" },
+  { label: "LiHMDS", also: ["LHMDS"], use: "base", smiles: `[Li+].${HMDS}`, name: "lithium bis(trimethylsilyl)amide" },
+  { label: "NaHMDS", use: "base", smiles: `[Na+].${HMDS}`, name: "sodium bis(trimethylsilyl)amide" },
+  { label: "KHMDS", use: "base", smiles: `[K+].${HMDS}`, name: "potassium bis(trimethylsilyl)amide" },
   { label: "LiTMP", also: ["LTMP"], use: "base", smiles: "[Li+].CC1(C)CCCC(C)(C)[N-]1", name: "lithium 2,2,6,6-tetramethylpiperidide" },
-  { label: "KOt-Bu", also: ["KOtBu", "t-BuOK", "tBuOK"], use: "base", smiles: "[K+].CC(C)(C)[O-]", name: "potassium tert-butoxide", formula: true },
-  { label: "NaOt-Bu", also: ["NaOtBu", "t-BuONa", "tBuONa"], use: "base", smiles: "[Na+].CC(C)(C)[O-]", name: "sodium tert-butoxide", formula: true },
-  { label: "NaH", use: "base", smiles: "[Na+].[H-]", name: "sodium hydride", formula: true },
-  { label: "KH", use: "base", smiles: "[K+].[H-]", name: "potassium hydride", formula: true },
   { label: "K2CO3", use: "base", smiles: "[K+].[K+].[O-]C([O-])=O", name: "potassium carbonate", formula: true },
   { label: "Cs2CO3", use: "base", smiles: "[Cs+].[Cs+].[O-]C([O-])=O", name: "caesium carbonate", formula: true },
   { label: "Na2CO3", use: "base", smiles: "[Na+].[Na+].[O-]C([O-])=O", name: "sodium carbonate", formula: true },
@@ -174,8 +170,7 @@ export const REAGENTS: Reagent[] = [
 
   // --- acids -------------------------------------------------------------------
   { label: "TFA", use: "acid", smiles: "OC(=O)C(F)(F)F", name: "trifluoroacetic acid" },
-  { label: "TfOH", also: ["triflic acid"], use: "acid", smiles: "OS(=O)(=O)C(F)(F)F", name: "trifluoromethanesulfonic acid", formula: true },
-  { label: "TsOH", also: ["p-TsOH", "PTSA", "p-TSA", "PTS"], use: "acid", smiles: "Cc1ccc(cc1)S(=O)(=O)O", name: "p-toluenesulfonic acid", formula: true },
+  { label: "PTSA", also: ["p-TSA", "PTS"], use: "acid", smiles: "Cc1ccc(cc1)S(=O)(=O)O", name: "p-toluenesulfonic acid" },
   {
     label: "CSA",
     use: "acid",
@@ -191,8 +186,6 @@ export const REAGENTS: Reagent[] = [
   { label: "DIC", use: "coupling", smiles: "CC(C)N=C=NC(C)C", name: "N,N'-diisopropylcarbodiimide" },
   { label: "EDC", also: ["EDCI", "WSC", "WSCI"], use: "coupling", smiles: "CCN=C=NCCCN(C)C", name: "1-ethyl-3-(3-dimethylaminopropyl)carbodiimide" },
   // (in Kekulé form: the triazole's ring, given aromatic, is not kekulized the way it is bonded)
-  { label: "HOBt", use: "coupling", smiles: "ON1N=NC2=CC=CC=C21", name: "1-hydroxybenzotriazole" },
-  { label: "HOAt", use: "coupling", smiles: "ON1N=NC2=CC=CN=C21", name: "1-hydroxy-7-azabenzotriazole" },
   // (the uronium salts as they are, guanidinium N-oxides)
   { label: "HATU", use: "coupling", smiles: `CN(C)C(=[N+](C)C)N1N=[N+]([O-])C2=NC=CC=C21.${PF6}`, name: "1-[bis(dimethylamino)methylene]-1H-1,2,3-triazolo[4,5-b]pyridinium 3-oxide hexafluorophosphate" },
   { label: "HBTU", use: "coupling", smiles: `CN(C)C(=[N+](C)C)N1N=[N+]([O-])C2=CC=CC=C21.${PF6}`, name: "1-[bis(dimethylamino)methylene]-1H-benzotriazolium 3-oxide hexafluorophosphate" },
@@ -204,7 +197,7 @@ export const REAGENTS: Reagent[] = [
   { label: "CDI", use: "coupling", smiles: "O=C(n1ccnc1)n1ccnc1", name: "1,1'-carbonyldiimidazole" },
   { label: "DMTMM", use: "coupling", smiles: "COc1nc(OC)nc([N+]2(C)CCOCC2)n1.[Cl-]", name: "4-(4,6-dimethoxy-1,3,5-triazin-2-yl)-4-methylmorpholinium chloride" },
   { label: "Oxyma", also: ["OxymaPure"], use: "coupling", smiles: "CCOC(=O)C(C#N)=NO", name: "ethyl cyano(hydroxyimino)acetate" },
-  { label: "NHS", also: ["HOSu"], use: "coupling", smiles: "ON1C(=O)CCC1=O", name: "N-hydroxysuccinimide" },
+  { label: "NHS", use: "coupling", smiles: "ON1C(=O)CCC1=O", name: "N-hydroxysuccinimide" },
   { label: "Yamaguchi reagent", also: ["TCBC"], use: "coupling", smiles: "O=C(Cl)c1c(Cl)cc(Cl)cc1Cl", name: "2,4,6-trichlorobenzoyl chloride" },
   { label: "Mukaiyama reagent", also: ["Mukaiyama's reagent"], use: "coupling", smiles: "C[n+]1ccccc1Cl.[I-]", name: "2-chloro-1-methylpyridinium iodide" },
   { label: "DPPA", use: "coupling", smiles: "[N-]=[N+]=NP(=O)(Oc1ccccc1)Oc1ccccc1", name: "diphenyl phosphorazidate" },
@@ -223,7 +216,7 @@ export const REAGENTS: Reagent[] = [
   { label: "Deoxo-Fluor", use: "halogenation", smiles: "COCCN(CCOC)S(F)(F)F", name: "bis(2-methoxyethyl)aminosulfur trifluoride" },
   { label: "Togni I", also: ["Togni reagent I", "Togni's reagent I"], use: "halogenation", smiles: "CC1(C)O[I](C(F)(F)F)c2ccccc21", name: "3,3-dimethyl-1-(trifluoromethyl)-1,2-benziodoxole" },
   { label: "Togni II", also: ["Togni reagent II", "Togni's reagent II"], use: "halogenation", smiles: "FC(F)(F)[I]1OC(=O)c2ccccc21", name: "1-(trifluoromethyl)-1,2-benziodoxol-3(1H)-one" },
-  { label: "TMSCF3", also: ["Ruppert–Prakash reagent", "Ruppert-Prakash reagent"], use: "halogenation", smiles: "C[Si](C)(C)C(F)(F)F", name: "(trifluoromethyl)trimethylsilane (Ruppert–Prakash reagent)", formula: true },
+  { label: "Ruppert–Prakash reagent", also: ["Ruppert-Prakash reagent"], use: "halogenation", smiles: "C[Si](C)(C)C(F)(F)F", name: "(trifluoromethyl)trimethylsilane" },
   { label: "CF3SO2Na", also: ["Langlois reagent", "Langlois' reagent"], use: "halogenation", smiles: "[Na+].[O-]S(=O)C(F)(F)F", name: "sodium trifluoromethanesulfinate (Langlois reagent)", formula: true },
   { label: "SOCl2", use: "halogenation", smiles: "O=S(Cl)Cl", name: "thionyl chloride", formula: true },
   { label: "POCl3", use: "halogenation", smiles: "O=P(Cl)(Cl)Cl", name: "phosphoryl chloride", formula: true },
@@ -231,11 +224,7 @@ export const REAGENTS: Reagent[] = [
   { label: "(COCl)2", also: ["oxalyl chloride"], use: "halogenation", smiles: "O=C(Cl)C(=O)Cl", name: "oxalyl chloride", formula: true },
 
   // --- acylation, sulfonylation, silylation and alkylation -----------------------
-  { label: "Boc2O", also: ["(Boc)2O", "Boc anhydride"], use: "electrophile", smiles: "CC(C)(C)OC(=O)OC(=O)OC(C)(C)C", name: "di-tert-butyl dicarbonate", formula: true },
-  { label: "Ac2O", use: "electrophile", smiles: "CC(=O)OC(C)=O", name: "acetic anhydride", formula: true },
   { label: "TFAA", also: ["(CF3CO)2O"], use: "electrophile", smiles: "O=C(OC(=O)C(F)(F)F)C(F)(F)F", name: "trifluoroacetic anhydride" },
-  { label: "Tf2O", use: "electrophile", smiles: "O=S(=O)(OS(=O)(=O)C(F)(F)F)C(F)(F)F", name: "trifluoromethanesulfonic anhydride", formula: true },
-  { label: "PhNTf2", use: "electrophile", smiles: "O=S(=O)(N(c1ccccc1)S(=O)(=O)C(F)(F)F)C(F)(F)F", name: "N-phenylbis(trifluoromethanesulfonimide)", formula: true },
   { label: "Comins' reagent", also: ["Comins reagent", "Comins’ reagent"], use: "electrophile", smiles: "O=S(=O)(N(c1ccc(Cl)cn1)S(=O)(=O)C(F)(F)F)C(F)(F)F", name: "N-(5-chloro-2-pyridyl)bis(trifluoromethanesulfonimide)" },
   { label: "HMDS", use: "electrophile", smiles: "C[Si](C)(C)N[Si](C)(C)C", name: "hexamethyldisilazane" },
   { label: "Meerwein's salt", also: ["Me3OBF4", "Meerwein salt"], use: "electrophile", smiles: `C[O+](C)C.${BF4}`, name: "trimethyloxonium tetrafluoroborate" },
@@ -304,13 +293,14 @@ export const REAGENTS: Reagent[] = [
     label: "Krische's catalyst",
     also: ["Krische catalyst", "Krische's cat."],
     use: "catalyst",
-    // its benzoate bound by its carboxylate and the carbon between that and the nitro group
+    // as it is sold: its 3-nitrobenzoate bound by its carboxylate and the
+    // carbon ortho to that away from the nitro group (para to it)
     complex: "Ir(allyl)(SEGPHOS)(benzoate)",
     ligands: {
-      benzoate: { label: "benzoate", smiles: "[O:2]C(=O)c9ccc(C#N)c([N+](=O)[O-])[c:1]9", anionic: [1, 2], name: "4-cyano-3-nitrobenzoate (C,O)" },
+      benzoate: { label: "benzoate", smiles: "[O:2]C(=O)c9cc([N+](=O)[O-])cc[c:1]9", anionic: [1, 2], name: "3-nitrobenzoate (C,O)" },
     },
     enantiomers: AXIAL,
-    name: "π-allyliridium C,O-benzoate (SEGPHOS, 4-cyano-3-nitrobenzoate)",
+    name: "π-allyliridium C,O-benzoate (SEGPHOS, 3-nitrobenzoate)",
   },
 
   // --- organocatalysts and chiral reagents ---------------------------------------
@@ -372,7 +362,6 @@ export const REAGENTS: Reagent[] = [
   { label: "CPME", use: "solvent", smiles: "COC1CCCC1", name: "cyclopentyl methyl ether" },
   { label: "2-MeTHF", use: "solvent", smiles: "CC1CCCO1", name: "2-methyltetrahydrofuran" },
   { label: "dioxane", also: ["1,4-dioxane"], use: "solvent", smiles: "C1COCCO1", name: "1,4-dioxane" },
-  { label: "EtOAc", also: ["AcOEt"], use: "solvent", smiles: "CCOC(C)=O", name: "ethyl acetate", formula: true },
   { label: "acetone", use: "solvent", smiles: "CC(C)=O", name: "acetone" },
   { label: "toluene", use: "solvent", smiles: "Cc1ccccc1", name: "toluene" },
   { label: "benzene", use: "solvent", smiles: "c1ccccc1", name: "benzene" },
@@ -424,7 +413,7 @@ export function reagentOf(label: string): { reagent: Reagent; descriptor: string
 /**
  * The reagents' labels that are names, not formulas: each read as one unit
  * of a label, its digits not counts (T3P, not T, 3, P; XPhos Pd G3). Other
- * names written as formulas (Et3N for TEA, (TMS)3SiH) are not: their
+ * names written as formulas ((Me3Si)3SiH for TTMSS) are not: their
  * counts are.
  */
 export const REAGENT_UNITS = [
@@ -444,8 +433,8 @@ export function smilesStructure(smiles: string): GroupStructure {
 }
 
 /**
- * What a label naming a reagent stands for - the molecule, with the
- * configuration its descriptor says (./enantiomers) - and its name; or
+ * What a label naming one of the reagents stands for - the molecule, with
+ * the configuration its descriptor says (./enantiomers) - and its name; or
  * null. `groupOf` gives a group bound by one bond, which a complex's
  * formula may name (OMs).
  */
@@ -462,7 +451,7 @@ export function reagentStructure(
     if (!atoms) return null;
     return { ...made, atoms, attach: [], name: `${descriptor ? `${descriptor}-` : ""}${r.name}` };
   }
-  return precatalyst(label, groupOf);
+  return null;
 }
 
 // --- Buchwald's precatalysts, by rule ---------------------------------------------
@@ -475,6 +464,13 @@ const AMINOBIPHENYL: Record<string, Ligand> = {
 /** Each generation's palladacycle, as a complex's formula: its ligand where `L` is. */
 const GENERATIONS: Record<string, string> = { G2: "PdCl(L)(abp)", G3: "Pd(OMs)(L)(abp)", G4: "Pd(OMs)(L)(mabp)" };
 
+/** What each generation of Buchwald's precatalysts is, for a list of them. */
+export const PRECATALYST_GENERATIONS: { generation: string; name: string }[] = [
+  { generation: "G2", name: "the phosphine's palladium(II) chloride, cyclometallated by 2-aminobiphenyl (C,N)" },
+  { generation: "G3", name: "the phosphine's palladium(II) methanesulfonate, cyclometallated by 2-aminobiphenyl (C,N)" },
+  { generation: "G4", name: "the phosphine's palladium(II) methanesulfonate, cyclometallated by 2'-(methylamino)biphenyl-2-yl (C,N)" },
+];
+
 /**
  * A Buchwald precatalyst named by its phosphine and its generation - XPhos
  * Pd G2, SPhos-Pd-G3, RuPhos Pd G4 - as the palladacycle it is: the
@@ -482,7 +478,10 @@ const GENERATIONS: Record<string, string> = { G2: "PdCl(L)(abp)", G3: "Pd(OMs)(L
  * 2-aminobiphenyl's carbon and nitrogen and a chloride (G2) or a mesylate
  * (G3; G4 with the amine N-methylated). Null for any other label.
  */
-function precatalyst(label: string, groupOf: (label: string) => GroupStructure | null): (GroupStructure & { name: string }) | null {
+export function precatalystStructure(
+  label: string,
+  groupOf: (label: string) => GroupStructure | null,
+): (GroupStructure & { name: string }) | null {
   const m = /^(.+?)[ -]Pd[ -](G[234])$/.exec(label);
   const ligand = m && LIGANDS.find((l) => l.label === m[1] || l.also?.includes(m[1]));
   if (!m || !ligand || /:2\]/.test(ligand.smiles)) return null;

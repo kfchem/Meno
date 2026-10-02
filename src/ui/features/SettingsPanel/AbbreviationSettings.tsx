@@ -1,8 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ABBREVIATIONS, abbreviationOf, abbreviationStructure, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
-import { LIGANDS, ligandPicture, structureFormula, type GroupStructure } from "../../../lib/chem/ligands";
+import { COUNTER_IONS, LIGANDS, ligandPicture, structureFormula, type GroupStructure } from "../../../lib/chem/ligands";
 import { shownAs } from "../../../lib/chem/enantiomers";
-import { REAGENT_USES, REAGENTS, type Reagent } from "../../../lib/chem/reagents";
+import { PRECATALYST_GENERATIONS, REAGENT_USES, REAGENTS, type Reagent } from "../../../lib/chem/reagents";
+import { ARYL_SUBSTITUENTS } from "../../../lib/chem/substitutedAryl";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import AbbreviationForm from "../../abbreviations/AbbreviationForm";
 import AbbreviationPicture from "../../abbreviations/AbbreviationPicture";
@@ -47,6 +48,18 @@ export default function AbbreviationSettings() {
     [],
   );
   const reagentMatches = (r: Reagent) => matches({ ...r, smiles: r.smiles ?? r.complex ?? "" });
+  // Buchwald's precatalysts, by rule: each generation, with XPhos
+  const precatalysts = useMemo(
+    () =>
+      PRECATALYST_GENERATIONS.map(({ generation, name }) => {
+        const label = `XPhos Pd ${generation}`;
+        return { generation, name, label, formula: structureFormula(abbreviationStructure(label)!) };
+      }),
+    [],
+  );
+  // the phosphines a precatalyst may be named by: Meno's bound by one atom
+  const phosphines = LIGANDS.filter((l) => !l.inComplex && /\[P:1\]/.test(l.smiles) && !/:2\]/.test(l.smiles)).map((l) => l.label);
+  const ions = Object.entries(COUNTER_IONS).map(([label, ion]) => ({ label, ...ion }));
 
   return (
     <div className="space-y-8">
@@ -136,7 +149,8 @@ export default function AbbreviationSettings() {
           <li>An ester, CO2 and a group: CO2Me, CO2t-Bu.</li>
           <li>
             A substituted aryl group: positions, di or tri and a substituent before Ph, Bz or Bn (2,6-diMeBz,
-            p-ClBn), or before the ring as a formula (4-MeOC6H4, 2,6-Me2C6H3, 3,5-(CF3)2C6H3).
+            p-ClBn), or before the ring as a formula (4-MeOC6H4, 2,6-Me2C6H3, 3,5-(CF3)2C6H3). The substituents:{" "}
+            {ARYL_SUBSTITUENTS.map((x) => x.label).join(", ")}.
           </li>
           <li>
             The <i>t</i> of <i>t</i>-Bu, the <i>s</i> of <i>s</i>-Bu and <i>o</i>-, <i>m</i>-, <i>p</i>- are set in
@@ -149,7 +163,7 @@ export default function AbbreviationSettings() {
             A label with a bond left free (OMe, NMe2, CH2Br) stays the group it is.
           </li>
           <li>An adduct of known parts, a middle dot between them, each counted: BF3·OEt2, CeCl3·7H2O, EDC·HCl.</li>
-          <li>A Buchwald precatalyst, by its phosphine and generation: XPhos Pd G2, SPhos Pd G3, RuPhos Pd G4.</li>
+          <li>A Buchwald precatalyst, by its phosphine and generation: XPhos Pd G2, SPhos Pd G3 (listed below).</li>
           <li>
             One enantiomer of a chiral reagent or ligand, its descriptor before its label: (S,S)-DPEN, (R)-CBS,
             L-proline, (1S)-CSA, (R,R)-Jacobsen&apos;s catalyst. Without one, no configuration is said, and none is
@@ -247,6 +261,27 @@ export default function AbbreviationSettings() {
         </div>
       </section>
 
+      <section aria-labelledby="precatalysts-heading">
+        <h3 id="precatalysts-heading" className="text-sm font-semibold text-gh-black">
+          Buchwald precatalysts
+        </h3>
+        <p className="mt-1 text-xs text-gh-gray max-w-2xl">
+          Read by rule: a phosphine, Pd and the generation - XPhos Pd G2, SPhos-Pd-G3 - is the palladacycle that
+          generation is, with the phosphine. The phosphine may be any of these: {phosphines.join(", ")}.
+        </p>
+        <ul className="mt-3 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(18rem,1fr))]">
+          {precatalysts.map(({ generation, name, label, formula }) => (
+            <li key={generation} className="rounded-lg border border-gh-line bg-white px-3 py-2">
+              <div className="text-sm font-semibold text-gh-black">… Pd {generation}</div>
+              <div className="text-xs text-gh-black">{name}</div>
+              <div className="text-xs text-gh-gray">
+                {label}: <code className="font-mono text-[0.7rem]">{formula}</code>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <section aria-labelledby="complexes-heading">
         <h3 id="complexes-heading" className="text-sm font-semibold text-gh-black">
           Complexes
@@ -268,6 +303,12 @@ export default function AbbreviationSettings() {
             </li>
           ))}
         </ul>
+        <h4 className="mt-4 text-xs font-semibold text-gh-black">Counter-anions</h4>
+        <div className="mt-2 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
+          {ions.map((ion) => (
+            <Entry key={ion.label} a={ion} />
+          ))}
+        </div>
       </section>
     </div>
   );

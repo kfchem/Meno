@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NOMINAL_BOND_LENGTH as L } from "./acs";
-import { abbreviationOf, abbreviationStructure, italicUnits, labelRuns, labelUnits } from "./abbreviations";
+import { abbreviationOf, abbreviationStructure, byRule, italicUnits, labelRuns, labelUnits } from "./abbreviations";
 import { wedgeNarrowAtom } from "./layout2d";
 import { placedAbbreviation } from "./abbreviationPlace";
 import { structureFormula, type GroupStructure } from "./ligands";
@@ -18,29 +18,29 @@ describe("the reagents", () => {
   const formulas: Record<string, string> = {
     DMP: "C13H13IO8", IBX: "C7H5IO4", PIDA: "C10H11IO4", PIFA: "C10H5F6IO4", TEMPO: "C9H18NO", AZADO: "C9H14NO",
     PCC: "C5H6ClCrNO3", PDC: "C10H12Cr2N2O7", TPAP: "C12H28NO4Ru", NMO: "C5H11NO2", mCPBA: "C7H5ClO3", DDQ: "C8Cl2N2O2",
-    Oxone: "H3K5O18S4", OsO4: "O4Os", KMnO4: "KMnO4", NaIO4: "INaO4", NaClO2: "ClNaO2", NaOCl: "ClNaO", MnO2: "MnO2",
+    Oxone: "H3K5O18S4", OsO4: "O4Os", KMnO4: "KMnO4", NaIO4: "INaO4", NaClO2: "ClNaO2", MnO2: "MnO2",
     SeO2: "O2Se", CrO3: "CrO3", CAN: "CeH8N8O18", "Pb(OAc)4": "C8H12O8Pb", "SO3·py": "C5H5NO3S", DMDO: "C3H6O2",
     TBHP: "C4H10O2", H2O2: "H2O2", O3: "O3", "Davis oxaziridine": "C13H11NO3S",
     NaBH4: "BH4Na", LiBH4: "BH4Li", LiAlH4: "AlH4Li", NaBH3CN: "CH3BNNa", "NaBH(OAc)3": "C6H10BNaO6",
     "LiAlH(Ot-Bu)3": "C12H28AlLiO3", DIBAL: "C8H19Al", "Red-Al": "C6H16AlNaO4", "L-Selectride": "C12H28BLi",
-    "K-Selectride": "C12H28BK", "Super-Hydride": "C6H16BLi", "9-BBN": "C8H15B", HBpin: "C6H13BO2", HBcat: "C6H5BO2",
+    "K-Selectride": "C12H28BK", "Super-Hydride": "C6H16BLi", "9-BBN": "C8H15B", HBcat: "C6H5BO2",
     B2pin2: "C12H24B2O4", TTMSS: "C9H28Si4", HEH: "C13H19NO4",
     DBU: "C9H16N2", DBN: "C7H12N2", TBD: "C7H13N3", DMAP: "C7H10N2", DIPEA: "C8H19N", TEA: "C6H15N", DABCO: "C6H12N2",
     NMM: "C5H11NO", "2,6-lutidine": "C7H9N", collidine: "C8H11N", "Proton-Sponge": "C14H18N2", TMG: "C5H13N3",
     imidazole: "C3H4N2", LDA: "C6H14LiN", LiHMDS: "C6H18LiNSi2", NaHMDS: "C6H18NNaSi2", KHMDS: "C6H18KNSi2",
-    LiTMP: "C9H18LiN", "KOt-Bu": "C4H9KO", "NaOt-Bu": "C4H9NaO", NaH: "HNa", KH: "HK", K2CO3: "CK2O3", Cs2CO3: "CCs2O3",
+    LiTMP: "C9H18LiN", K2CO3: "CK2O3", Cs2CO3: "CCs2O3",
     Na2CO3: "CNa2O3", NaHCO3: "CHNaO3", K3PO4: "K3O4P",
-    TFA: "C2HF3O2", TfOH: "CHF3O3S", TsOH: "C7H8O3S", CSA: "C10H16O4S", PPTS: "C12H13NO3S", H2SO4: "H2O4S",
-    DCC: "C13H22N2", DIC: "C7H14N2", EDC: "C8H17N3", HOBt: "C6H5N3O", HOAt: "C5H4N4O", HATU: "C10H15F6N6OP",
+    TFA: "C2HF3O2", PTSA: "C7H8O3S", CSA: "C10H16O4S", PPTS: "C12H13NO3S", H2SO4: "H2O4S",
+    DCC: "C13H22N2", DIC: "C7H14N2", EDC: "C8H17N3", HATU: "C10H15F6N6OP",
     HBTU: "C11H16F6N5OP", TBTU: "C11H16BF4N5O", COMU: "C12H19F6N4O4P", PyBOP: "C18H28F6N6OP2", BOP: "C12H22F6N6OP2",
     T3P: "C9H21O6P3", CDI: "C7H6N4O", DMTMM: "C10H17ClN4O3", Oxyma: "C5H6N2O3", NHS: "C4H5NO3",
     "Yamaguchi reagent": "C7H2Cl4O", "Mukaiyama reagent": "C6H7ClIN", DPPA: "C12H10N3O3P", DEAD: "C6H10N2O4",
     DIAD: "C8H14N2O4",
     NBS: "C4H4BrNO2", NCS: "C4H4ClNO2", NIS: "C4H4INO2", DBDMH: "C5H6Br2N2O2", TCCA: "C3Cl3N3O3",
     Selectfluor: "C7H14B2ClF9N2", NFSI: "C12H10FNO4S2", DAST: "C4H10F3NS", "Deoxo-Fluor": "C6H14F3NO2S",
-    "Togni I": "C10H10F3IO", "Togni II": "C8H4F3IO2", TMSCF3: "C4H9F3Si", CF3SO2Na: "CF3NaO2S", SOCl2: "Cl2OS",
+    "Togni I": "C10H10F3IO", "Togni II": "C8H4F3IO2", "Ruppert–Prakash reagent": "C4H9F3Si", CF3SO2Na: "CF3NaO2S", SOCl2: "Cl2OS",
     POCl3: "Cl3OP", PCl5: "Cl5P", "(COCl)2": "C2Cl2O2",
-    Boc2O: "C10H18O5", Ac2O: "C4H6O3", TFAA: "C4F6O3", Tf2O: "C2F6O5S2", PhNTf2: "C8H5F6NO4S2",
+    TFAA: "C4F6O3",
     "Comins' reagent": "C7H3ClF6N2O4S2", HMDS: "C6H19NSi2", "Meerwein's salt": "C3H9BF4O", "Eschenmoser's salt": "C3H8IN",
     TMSCHN2: "C4H10N2Si", CH2N2: "CH2N2", "Mander's reagent": "C3H3NO2",
     "Tebbe reagent": "C13H18AlClTi", "Petasis reagent": "C12H16Ti", "Schwartz's reagent": "C10H11ClZr",
@@ -48,12 +48,12 @@ describe("the reagents", () => {
     "Grubbs I": "C43H72Cl2P2Ru", "Grubbs II": "C46H65Cl2N2PRu", "Grubbs III": "C38H42Cl2N4Ru", "HG-I": "C28H45Cl2OPRu",
     "HG-II": "C31H38Cl2N2ORu", "Schrock's catalyst": "C30H35F12MoNO2", "Wilkinson's catalyst": "C54H45ClP3Rh",
     "Crabtree's catalyst": "C31H50F6IrNP2", "PEPPSI-IPr": "C32H40Cl3N3Pd", "Jacobsen's catalyst": "C36H52ClMnN2O2",
-    "Karstedt's catalyst": "C24H54O3Pt2Si6", "Krische's catalyst": "C49H35IrN2O8P2",
+    "Karstedt's catalyst": "C24H54O3Pt2Si6", "Krische's catalyst": "C48H36IrNO8P2",
     proline: "C5H9NO2", "MacMillan's catalyst I": "C13H18N2O", "MacMillan's catalyst II": "C15H22N2O",
     "Hayashi–Jørgensen catalyst": "C20H27NOSi", CBS: "C18H20BNO", "Shi's catalyst": "C12H18O6",
     DMF: "C3H7NO", DMSO: "C2H6OS", DMA: "C4H9NO", NMP: "C5H9NO", HMPA: "C6H18N3OP", DMPU: "C6H12N2O", DME: "C4H10O2",
     diglyme: "C6H14O3", DCM: "CH2Cl2", DCE: "C2H4Cl2", MTBE: "C5H12O", CPME: "C6H12O", "2-MeTHF": "C5H10O",
-    dioxane: "C4H8O2", EtOAc: "C4H8O2", acetone: "C3H6O", toluene: "C7H8", benzene: "C6H6", hexane: "C6H14",
+    dioxane: "C4H8O2", acetone: "C3H6O", toluene: "C7H8", benzene: "C6H6", hexane: "C6H14",
     pentane: "C5H12", IPA: "C3H8O", HFIP: "C3H2F6O", TFE: "C2H3F3O",
     "Burgess reagent": "C8H18N2O4S", "Martin sulfurane": "C30H20F12O2S", "Lawesson's reagent": "C14H14O2P2S4",
     "Bestmann–Ohira reagent": "C5H9N2O4P", "Me3S(O)I": "C3H9IOS", TBAF: "C16H36FN", TBAI: "C16H36IN", TBAB: "C16H36BrN",
@@ -66,6 +66,15 @@ describe("the reagents", () => {
       expect(formula(r.label), r.label).toBe(formulas[r.label]);
       expect(charge(of(r.label)), r.label).toBe(0);
       expect(of(r.label).attach, r.label).toEqual([]);
+    }
+  });
+
+  it("hold nothing the rules read as the same molecule (Ac2O, KOt-Bu, HOBt: by rule)", () => {
+    for (const r of REAGENTS) {
+      for (const name of [r.label, ...(r.also ?? [])]) {
+        const made = byRule(name);
+        if (made) expect(structureFormula(made), name).not.toBe(formula(r.label));
+      }
     }
   });
 
@@ -173,6 +182,10 @@ describe("simple formulas, read by rule", () => {
       TBSOTf: "C7H15F3O3SSi", "(Boc)2O": "C10H18O5", CH2Cl2: "CH2Cl2", CHCl3: "CHCl3", MeOH: "CH4O", AcOH: "C2H4O2",
       HCO2H: "CH2O2", H2: "H2", HCl: "ClH", TMSCN: "C4H9NSi", "Fmoc-OSu": "C19H15NO5", PhH: "C6H6", BnBr: "C7H7Br",
       Et2O: "C4H10O", AlCl3: "AlCl3", BBr3: "BBr3", NH3: "H3N", H2O: "H2O",
+      // (once in the dictionary, now read so)
+      Ac2O: "C4H6O3", Boc2O: "C10H18O5", Tf2O: "C2F6O5S2", PhNTf2: "C8H5F6NO4S2", TfOH: "CHF3O3S", TsOH: "C7H8O3S",
+      HOBt: "C6H5N3O", HOAt: "C5H4N4O", HBpin: "C6H13BO2", EtOAc: "C4H8O2", "KOt-Bu": "C4H9KO", NaH: "HNa",
+      NaOCl: "ClNaO", Et3N: "C6H15N", TMSCF3: "C4H9F3Si",
     };
     for (const [label, f] of Object.entries(cases)) {
       expect(abbreviationOf(label)?.kind, label).toBe("reagent");

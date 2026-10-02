@@ -20,7 +20,7 @@ import { readSmiles, type Smiles } from "./smiles";
 import { substitutedAryl } from "./substitutedAryl";
 import { condensedStructure } from "./condensed";
 import { complexStructure, LIGAND_UNITS, ligandStructure, namedLigand, type GroupStructure } from "./ligands";
-import { REAGENT_UNITS, reagentOf, reagentStructure } from "./reagents";
+import { precatalystStructure, REAGENT_UNITS, reagentOf, reagentStructure } from "./reagents";
 import { kekuleOrders } from "./kekulize";
 import type { TextRun } from "./layout2d";
 import { elements } from "../../utils/atomUtils";
@@ -242,15 +242,21 @@ function composedOf(label: string): Abbreviation | undefined {
   return undefined;
 }
 
-/**
- * A whole molecule a label stands for by rule: a Buchwald precatalyst
- * (XPhos Pd G3, ./reagents), an adduct of known parts joined by a middle
- * dot (BF3·OEt2, CeCl3·7H2O, each part counted), or a simple formula
- * (./condensed). Null for any other label.
- */
+/** A whole molecule a label stands for: one of the reagents, or one made by rule (`byRule`). */
 function madeStructure(label: string): (GroupStructure & { name: string }) | null {
-  const reagent = reagentStructure(label, groupStructure);
-  if (reagent) return reagent;
+  return reagentStructure(label, groupStructure) ?? byRule(label);
+}
+
+/**
+ * A whole molecule a label stands for by rule alone - what the reagent
+ * dictionary need not hold: a Buchwald precatalyst (XPhos Pd G3,
+ * ./reagents), an adduct of known parts joined by a middle dot (BF3·OEt2,
+ * CeCl3·7H2O, each part counted), or a simple formula (./condensed). Null
+ * for any other label.
+ */
+export function byRule(label: string): (GroupStructure & { name: string }) | null {
+  const precatalyst = precatalystStructure(label, groupStructure);
+  if (precatalyst) return precatalyst;
   const pieces = label.split(/[·•∙]/);
   if (pieces.length > 1) {
     const atoms: GroupStructure["atoms"] = [];

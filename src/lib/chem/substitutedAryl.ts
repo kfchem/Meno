@@ -42,6 +42,9 @@ const SUBSTITUENTS: Substituent[] = [
   { forms: ["CO2Me", "MeO2C"], smiles: "C(=O)OC", name: "methoxycarbonyl" },
 ];
 
+/** The substituents a substituted aryl group may have, each as first written and its name: for a list of them. */
+export const ARYL_SUBSTITUENTS = SUBSTITUENTS.map((s) => ({ label: s.forms[0], name: s.name }));
+
 /** Every way a substituent is written, longest first, so that OMe is not O and Me. */
 const FORMS = SUBSTITUENTS.flatMap((s) => s.forms.map((form) => ({ form, s }))).sort(
   (a, b) => b.form.length - a.form.length,
