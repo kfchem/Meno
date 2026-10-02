@@ -82,6 +82,16 @@ export function layoutJob(part: Model): LayoutJob {
     const neighbours = [...order.slice(0, h), ...order.slice(h + 1), -1];
     return { neighbours, volume: (moves % 2 ? -t.volume : t.volume) as 1 | -1 };
   };
+  // a star at a haptic bond's end: the pi system it stands for, which the
+  // engine draws round it (a ring face-on to its metal), as it does a
+  // written-out label's
+  const pi = new Map<number, number[]>();
+  for (const b of part.bonds) {
+    if (!b.endpoints?.length || b.attach === "any") continue;
+    const star = [b.a, b.b].map((id) => drawing.index.get(id)!).find((i) => i != null && part.atoms[i].el === "*");
+    const atoms = b.endpoints.map((id) => drawing.index.get(id)).filter((i): i is number => i != null && at.has(i));
+    if (star != null && atoms.length === b.endpoints.length) pi.set(star, atoms.map((i) => at.get(i)!));
+  }
   const input: LayoutInput = {
     atoms: kept.map((i) => {
       const t = configuration(i);
@@ -90,6 +100,7 @@ export function layoutJob(part: Model): LayoutJob {
         ...(part.atoms[i].charge ? { charge: part.atoms[i].charge } : {}),
         hs: drawing.atoms[i].hs + (folded.get(at.get(i)!)?.length ?? 0),
         ...(t ? { tetra: t } : {}),
+        ...(pi.has(i) ? { pi: pi.get(i)! } : {}),
       };
     }),
     bonds: drawing.bonds.flatMap((b, k) => {
@@ -117,12 +128,19 @@ export function relayoutFrom(model: Model, part: Model, job: LayoutJob, laid: La
   const { input, ids } = job;
   const n = input.atoms.length;
   const byId = new Map(model.atoms.map((a) => [a.id, a]));
-  // at the drawing's own bond length
+  // at the drawing's own bond length: each bond as drawn against as the
+  // engine has it (a bond to a metal longer, a ring in perspective's
+  // shorter, in both), the middle one of those
+  const indexOf = new Map(ids.map((id, i) => [id, i]));
   const lengths = part.bonds
     .map((b) => {
       const p = byId.get(b.a);
       const q = byId.get(b.b);
-      return p && q ? Math.hypot(p.x - q.x, p.y - q.y) : 0;
+      const u = indexOf.get(b.a);
+      const v = indexOf.get(b.b);
+      if (!p || !q || u == null || v == null) return 0;
+      const engine = Math.hypot(laid.x[u] - laid.x[v], laid.y[u] - laid.y[v]);
+      return engine > 0.3 ? Math.hypot(p.x - q.x, p.y - q.y) / engine : 0;
     })
     .filter((l) => l > 0)
     .sort((p, q) => p - q);
@@ -179,11 +197,23 @@ export function relayoutFrom(model: Model, part: Model, job: LayoutJob, laid: La
     const bond = model.bonds.find((b) => (b.a === from && b.b === to) || (b.a === to && b.b === from));
     if (bond) wedgeOn.set(bond.id, { stereo: w.stereo, narrow: from });
   }
+  // a ring in perspective (face-on to a metal, or turned on its bond): its
+  // near edges bold, the rest of it plain
+  const boldOnes = new Set(laid.bold.map(([u, v]) => [ids[u], ids[v]].sort((p, q) => p - q).join(",")));
+  const display = (b: Bond): Pick<Bond, "display"> | null => {
+    const u = indexOf.get(b.a);
+    const v = indexOf.get(b.b);
+    if (u == null || v == null || laid.depth[u] == null || laid.depth[v] == null || b.endpoints?.length) return null;
+    const want = boldOnes.has([b.a, b.b].sort((p, q) => p - q).join(",")) ? "bold" : undefined;
+    return want === b.display || (!want && b.display !== "bold") ? null : { display: want };
+  };
   const bonds: Relayout["bonds"] = model.bonds.flatMap((b): Relayout["bonds"] => {
     if (!inPart.has(b.a) || !inPart.has(b.b) || gone.has(b.a) || gone.has(b.b)) return [];
     const w = wedgeOn.get(b.id);
-    if (w) return [{ id: b.id, stereo: w.stereo, stereoOrient: orientFor(b, w.narrow, degree) }];
-    if (b.stereo === "up" || b.stereo === "down") return [{ id: b.id, stereo: "none", stereoOrient: "principle" }];
+    const d = display(b);
+    if (w) return [{ id: b.id, stereo: w.stereo, stereoOrient: orientFor(b, w.narrow, degree), ...d }];
+    if (b.stereo === "up" || b.stereo === "down") return [{ id: b.id, stereo: "none", stereoOrient: "principle", ...d }];
+    if (d) return [{ id: b.id, stereo: b.stereo, stereoOrient: b.stereoOrient, ...d }];
     return [];
   });
   const change: Relayout = { atoms, bonds, added, removed };

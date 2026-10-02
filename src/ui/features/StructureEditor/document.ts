@@ -257,7 +257,7 @@ export function deleteParts(
  */
 export type Relayout = {
   atoms: { id: number; x: number; y: number; z?: number; stereoCentre?: boolean }[];
-  bonds: Pick<Bond, "id" | "stereo" | "stereoOrient">[];
+  bonds: (Pick<Bond, "id" | "stereo" | "stereoOrient"> & { display?: Bond["display"] })[];
   /** H atoms to add, each bonded to `on`, the bond wedged as given. */
   added?: {
     x: number;
@@ -300,9 +300,11 @@ export function relayout(doc: StructureDocument, change: Relayout): StructureDoc
   const bonds = doc.model.bonds.flatMap((b): Bond[] => {
     if (gone.has(b.a) || gone.has(b.b)) return [];
     const p = patch.get(b.id);
-    if (!p || (p.stereo === b.stereo && p.stereoOrient === b.stereoOrient)) return [b];
+    const display = p && "display" in p ? p.display : b.display;
+    if (!p || (p.stereo === b.stereo && p.stereoOrient === b.stereoOrient && display === b.display)) return [b];
     changed = true;
-    return [{ ...b, stereo: p.stereo, stereoOrient: p.stereoOrient }];
+    const { display: _display, ...rest } = b;
+    return [{ ...rest, stereo: p.stereo, stereoOrient: p.stereoOrient, ...(display ? { display } : {}) }];
   });
   if (!changed) return doc;
   let nextId = doc.nextId;
@@ -380,6 +382,7 @@ export function expandAbbreviation(doc: StructureDocument, id: number): Structur
       order: b.order,
       stereo: b.stereo ?? "none",
       ...(b.stereoOrient ? { stereoOrient: b.stereoOrient } : {}),
+      ...(b.display ? { display: b.display } : {}),
       ...bondChem(b),
       ...(b.endpoints ? { endpoints: b.endpoints.map((e) => ids[e]) } : {}),
     });
