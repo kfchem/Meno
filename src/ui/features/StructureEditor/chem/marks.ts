@@ -1,6 +1,7 @@
 /**
  * What RDKit says about a structure, as marks on it: atoms with more bonds
- * than they can have, R and S at stereocentres, E and Z at double bonds.
+ * than they can have, R and S at stereocentres, E and Z at double bonds,
+ * Ra and Sa at axes of chirality (BINAP's).
  * Marks are the editor's, not the drawing's: they are never exported.
  */
 import type { Analysis } from "../../../../lib/rdkit/client";
@@ -15,8 +16,8 @@ export type ChemMarks = {
   valence: Map<number, ValenceProblem>;
   /** Stereocentres, by atom id: R or S (r or s when pseudo-asymmetric). */
   centres: Map<number, "R" | "S" | "r" | "s">;
-  /** Stereogenic double bonds, by bond id. */
-  doubleBonds: Map<number, "E" | "Z">;
+  /** Stereogenic double bonds, and axes of chirality, by bond id. */
+  doubleBonds: Map<number, "E" | "Z" | "Ra" | "Sa">;
 };
 
 export const NO_MARKS: ChemMarks = {
@@ -41,7 +42,9 @@ export function marksOf(model: Model, analysis: Analysis): ChemMarks {
   }
   for (const b of analysis.bonds) {
     const bond = bonds[b.index];
-    if (bond && b.cip) marks.doubleBonds.set(bond.id, b.cip);
+    // (an axis's helicity said as the descriptor its labels have, (R)-BINAP:
+    // M is Ra and P is Sa, both read from the groups CIP ranks first)
+    if (bond && b.cip) marks.doubleBonds.set(bond.id, b.cip === "M" ? "Ra" : b.cip === "P" ? "Sa" : b.cip);
   }
   return marks;
 }

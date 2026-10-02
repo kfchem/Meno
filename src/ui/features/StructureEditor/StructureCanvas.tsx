@@ -519,7 +519,7 @@ function StructureCanvasContent({
         <button
           aria-label="Show R and S"
           aria-pressed={chemistry.stereoLabels}
-          title="R and S at stereocentres, E and Z at double bonds"
+          title="R and S at stereocentres, E and Z at double bonds, Ra and Sa at axes"
           onClick={(e) => {
             e.stopPropagation();
             toggleStereoLabels();
