@@ -201,20 +201,23 @@ describe("how a drawing sits", () => {
   });
 
   it("counts a bond between two labels that their letters all but cover", () => {
-    // Pd-NH, the N a bond off at 30 degrees: the d reaches along the bond
-    // nearly to the N; straight down, the two clear each other
+    // Pd-NH, the N a bond off at 30 degrees (a chelate's ring bond, drawn
+    // as long as the rest): the d reaches along the bond nearly to the N;
+    // straight down, the two clear each other
     const at = (nx: number, ny: number) =>
       layoutMetrics({
-        x: [-1, 0, nx, nx],
-        y: [0, 0, ny, ny + 1],
+        x: [-2, -1, 0, nx, nx, nx],
+        y: [0, 0, 0, ny, ny + 1, ny + 2],
         edges: [
           [0, 1],
           [1, 2],
           [2, 3],
+          [3, 4],
+          [4, 5],
         ],
-        elements: ["C", "Pd", "N", "C"],
-        hydrogens: [3, 0, 1, 3],
-        labelled: [false, true, true, false],
+        elements: ["C", "C", "Pd", "N", "C", "C"],
+        hydrogens: [3, 2, 0, 1, 2, 3],
+        labelled: [false, false, true, true, false, false],
         hydrogenRoom: 0,
       }).crowdedLabels;
     expect(at(Math.cos(Math.PI / 6), Math.sin(Math.PI / 6))).toBe(1);
