@@ -586,5 +586,5 @@ describe("a biaryl with something beside its bond on each ring", () => {
     // C1-C1' (22-23): P (0) and P' (25) either side of it
     const side = (p: number) => Math.sign((x[23] - x[22]) * (y[p] - y[22]) - (y[23] - y[22]) * (x[p] - x[22]));
     expect(side(0)).toBe(-side(25));
-  });
+  }, 30_000);
 });

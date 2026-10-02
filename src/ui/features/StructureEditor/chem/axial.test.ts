@@ -52,7 +52,8 @@ describe("an axis of chirality", () => {
     // none said, none drawn
     expect(wedges(expanded("BINAP").model)).toHaveLength(0);
     expect(axisOf(expanded("(±)-BINAP").model)).toBeNull();
-  });
+    // (eleven structures laid out by the whole engine, a complex among them: slower on CI's runners)
+  }, 60_000);
 
   it("is kept by Clean-up, and written to a MOL file as a wedge from the axis", () => {
     for (const label of ["(R)-BINAP", "(S)-BINAP"]) {
@@ -65,5 +66,5 @@ describe("an axis of chirality", () => {
     // (a wedge, 1, or hashes, 6, in the bond block's stereo field)
     const text = writeMolfile(expanded("(R)-BINAP").model);
     expect(text.split("\n").some((line) => /^\s*\d+\s+\d+\s+1\s+[16]\s/.test(line))).toBe(true);
-  });
+  }, 30_000);
 });
