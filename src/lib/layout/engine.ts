@@ -104,7 +104,7 @@ export function layout2D(input: LayoutInput): Layout2D {
   });
   // what is measured as drawn in perspective: a cage, and a ring bound
   // face-on (foreshortened, not misshapen)
-  const faceOn = new Set(mol.eta.flatMap((e) => e.atoms));
+  const faceOn = new Set([...mol.eta.flatMap((e) => e.atoms), ...mol.dienes.flatMap((d) => d.atoms)]);
   const measured = solid.map((s, a) => s || faceOn.has(a));
   // what a frame grows from: in a mirrored one, each cage seen from its
   // other side
@@ -319,6 +319,11 @@ export function layout2D(input: LayoutInput): Layout2D {
     for (const a of e.atoms) depth[a] = (lifts.get(a) ?? 0) * down;
     if (e.metal >= 0) depth[e.metal] ??= 0;
   }
+  // a tub, as near as it was built to be (placeTub)
+  for (const d of mol.dienes) {
+    for (const a of d.atoms) depth[a] = lifts.get(a) ?? 0;
+    depth[d.metal] ??= 0;
+  }
   // a ring in perspective - bound face-on, or turned on its bond - drawn as
   // Haworth drew rings: a bond with both its atoms near, bold; one running
   // from the far half to the near one, a wedge toward the viewer, narrow at
@@ -344,6 +349,7 @@ export function layout2D(input: LayoutInput): Layout2D {
       if (here.has(a) && here.has(b)) perspective(a, b);
     }
   }
+  for (const d of mol.dienes) d.ring.forEach((a, i) => perspective(a, d.ring[(i + 1) % d.ring.length]));
   // a stereocentre in a cage drawn in perspective shows itself there
   const tetra = new Map<number, Tetrahedral>();
   input.atoms.forEach((a, i) => a.tetra && !solid[i] && tetra.set(i, a.tetra));
@@ -354,12 +360,30 @@ export function layout2D(input: LayoutInput): Layout2D {
 /**
  * A piece with a ring bound face-on to a metal, turned so that the first
  * such ring is above its metal: a half-sandwich's legs below; a sandwich -
- * bent or not - with its rings one above the other (section 7).
+ * bent or not - with its rings one above the other (section 7). One with a
+ * tub (cod) turned so that its C=C stand upright, the metal beside them, as
+ * the tub was seen.
  */
 function standUp(mol: Molecule, piece: number[], pos: Grown): void {
   const here = new Set(piece);
   const e = mol.eta.find((r) => here.has(r.star) && r.metal >= 0);
-  if (!e) return;
+  if (!e) {
+    const d = mol.dienes.find((r) => here.has(r.metal));
+    if (!d) return;
+    const [u, v] = d.stars[0].pi.map((a) => pos.get(a)!);
+    const m = pos.get(d.metal)!;
+    // (either way up: the nearer to how it lies now)
+    const now = Math.atan2(v.y - u.y, v.x - u.x);
+    const up = Math.cos(now - Math.PI / 2) >= 0 ? Math.PI / 2 : -Math.PI / 2;
+    const turn = up - now;
+    const c = Math.cos(turn);
+    const sn = Math.sin(turn);
+    for (const a of piece) {
+      const p = sub(pos.get(a)!, m);
+      pos.set(a, { x: m.x + p.x * c - p.y * sn, y: m.y + p.x * sn + p.y * c });
+    }
+    return;
+  }
   const m = pos.get(e.metal)!;
   const second = mol.eta.find((r) => r !== e && r.metal === e.metal);
   const s = pos.get(e.star)!;
@@ -689,7 +713,9 @@ function clashing(mol: Molecule, piece: number[], pos: Grown): Set<number> {
   // (a ring bound face-on and its star - and so its metal's bond to the
   // star - are meant to lie over each other)
   const together = (a: number, b: number) =>
-    mol.linked[a].includes(b) || mol.eta.some((e) => e.atoms.includes(a) && e.atoms.includes(b));
+    mol.linked[a].includes(b) ||
+    mol.eta.some((e) => e.atoms.includes(a) && e.atoms.includes(b)) ||
+    mol.dienes.some((d) => d.atoms.includes(a) && d.atoms.includes(b));
   for (let i = 0; i < piece.length; i++) {
     for (let j = i + 1; j < piece.length; j++) {
       const a = piece[i];

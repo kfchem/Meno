@@ -152,6 +152,35 @@ describe("ligands round a metal", () => {
   }, 30_000);
 });
 
+describe("a ring bound to a metal through two of its C=C (cod)", () => {
+  it("is a tub facing the metal: each C=C cis, nothing crossing, its near edges bold, the metal beside both", () => {
+    for (const label of ["Ni(cod)2", "[Rh(cod)2]BF4", "[Ir(cod)Cl]2", "Crabtree's catalyst"]) {
+      const s = laid(label);
+      const ringOf = (a: number) => s.bonds.filter((b) => b.a1 === a || b.a2 === a).map((b) => (b.a1 === a ? b.a2 : b.a1));
+      // each C=C drawn cis: the ring's atoms on either side of it on the same side of its line
+      const bound = new Set(s.bonds.flatMap((x) => x.endpoints ?? []));
+      for (const b of s.bonds.filter((x) => x.order === 2 && bound.has(x.a1) && bound.has(x.a2))) {
+        const p = s.atoms[b.a1];
+        const q = s.atoms[b.a2];
+        const side = (r: number) => Math.sign((q.x - p.x) * (s.atoms[r].y - p.y) - (q.y - p.y) * (s.atoms[r].x - p.x));
+        const outP = ringOf(b.a1).filter((r) => r !== b.a2 && s.atoms[r].el === "C");
+        const outQ = ringOf(b.a2).filter((r) => r !== b.a1 && s.atoms[r].el === "C");
+        expect(side(outP[0]), label).toBe(side(outQ[0]));
+      }
+      expect(s.bonds.some((b) => b.display === "bold"), label).toBe(true);
+    }
+    // the metal as far from each C=C's middle (a bond and a half, foreshortened alike)
+    const ni = laid("Ni(cod)2");
+    const [m] = find(ni, "Ni");
+    const stars = find(ni, "*");
+    expect(stars).toHaveLength(4);
+    // the two tubs either side of the metal
+    const xs = stars.map((k) => Math.sign(ni.atoms[k].x - ni.atoms[m].x));
+    expect(xs.filter((x) => x > 0)).toHaveLength(2);
+    expect(xs.filter((x) => x < 0)).toHaveLength(2);
+  });
+});
+
 describe("a structure with no metal", () => {
   it("has nothing drawn bold, and no depth outside a cage", () => {
     const out = layout2D({
