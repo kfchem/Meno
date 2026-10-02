@@ -163,6 +163,11 @@ lie level either way round - the drawing takes the one that reads best
   right of it. Phenanthrene's third ring goes up and to the right; a
   steroid's A and B rings form the row, with C and D above and to the right
   - the way steroids are always drawn.
+- **A biaryl drawn anti**: a ring system hung from a ring's atom by a
+  bond, where both have something beside the bond, is hung the way round
+  that puts the heavier of each on opposite sides - BINOL's two OH, BINAP's
+  two PPh2 - as chemists draw them; grown the other way, BINAP's phenyls
+  fell on its other naphthalene.
 - **A benzene ring at the left of its ring system**, where reading
   begins: indole, quinoline and coumarin with their benzene rings on the
   left, estradiol's aromatic A ring, griseofulvin's, reserpine's indole at
@@ -340,7 +345,9 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   round (a propeller), and so seen in perspective: foreshortened across
   the bond, its near edges bold and the bonds toward them wedges. Done
   only where it reads better by the benchmark's measures, at 45, 60 or 70
-  degrees, whichever reads best.
+  degrees, whichever reads best - and only to rings that hang from the
+  atom, not to what the atom hangs from (BINAP's naphthalene, beyond its
+  P, is the rest of the molecule).
 - **Clean-up draws a complex as writing out its label does**: the same
   engine, given the same structure - a haptic bond's star with its pi
   system - and each star put afterwards at the centre of its system's

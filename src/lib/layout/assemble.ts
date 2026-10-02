@@ -237,7 +237,7 @@ export function grow(
         queue.push(child);
         continue;
       }
-      placeChild(mol, pos, local, queue, a, child, t, transforms, hints, upright);
+      placeChild(mol, pos, local, queue, a, child, t, transforms, hints, upright, sides);
     }
   }
   return pos;
@@ -612,6 +612,7 @@ function placeChild(
   transforms: Map<number, (p: Point) => Point>,
   hints: Map<number, Map<number, Point>>,
   upright: ReadonlySet<number> = new Set(),
+  sides?: Map<string, number>,
 ): void {
   // (a metal's bond to a ligand drawn longer, as it is: room for the ligands)
   const length = isMetal(mol.el[a]) !== isMetal(mol.el[child]) && mol.el[a] !== "*" && mol.el[child] !== "*" ? METAL_BOND : 1;
@@ -649,12 +650,66 @@ function placeChild(
     ? angleOf(sub(hinted, c0))
     : [...slots].sort((p, q) => Math.abs(wrap(p - mid)) - Math.abs(wrap(q - mid)))[0];
   const turn = t + Math.PI - slot;
-  transforms.set(s, (p) => add(at, rotate(sub(p, c0), turn)));
+  // hung from a ring's atom (a biaryl's bond), the ring system the way round
+  // that puts what hangs beside the bond on its side opposite what hangs
+  // beside it on the parent's - BINOL's OH, BINAP's PPh2, anti - where both
+  // have something there; mirrored across the bond, if not
+  const place = (p: Point) => add(at, rotate(sub(p, c0), turn));
+  const mirrored = (p: Point) => add(at, rotate(reflect(sub(p, c0), slot), turn));
+  const T = sides && biarylSyn(mol, pos, sides, a, child, L, place) ? mirrored : place;
+  transforms.set(s, T);
   for (const [v, p] of L) {
     if (pos.has(v)) continue;
-    pos.set(v, add(at, rotate(sub(p, c0), turn)));
+    pos.set(v, T(p));
     queue.push(v);
   }
+}
+
+/** `v` reflected across the line through the origin at angle `t`. */
+function reflect(v: Point, t: number): Point {
+  const u = rotate(v, -t);
+  return rotate({ x: u.x, y: -u.y }, t);
+}
+
+/**
+ * Whether a ring system hung from ring atom `a` by its atom `child`, set
+ * down by `place`, has the heavier of what hangs beside `child` on the same
+ * side of the bond as the heavier of what hangs beside `a`: false where
+ * either has nothing there, or `a` is in no ring.
+ */
+function biarylSyn(
+  mol: Molecule,
+  pos: Grown,
+  sides: Map<string, number>,
+  a: number,
+  child: number,
+  L: Map<number, Point>,
+  place: (p: Point) => Point,
+): boolean {
+  const sa = mol.systemOf[a];
+  if (sa < 0) return false;
+  /** The ring neighbour of `x` (not `other`) with the most hanging beside it outside its system, and that much. */
+  const heaviest = (x: number, other: number, inSystem: (v: number) => boolean) => {
+    let best: number | null = null;
+    let most = 0;
+    for (const n of mol.neighbours[x]) {
+      if (n === other || !inSystem(n)) continue;
+      const out = mol.neighbours[n].filter((v) => v !== x && !inSystem(v));
+      const w = out.reduce((t, v) => t + (sides.get(`${n}>${v}`) ?? 1), 0);
+      if (w > most) {
+        most = w;
+        best = n;
+      }
+    }
+    return best;
+  };
+  const ha = heaviest(a, child, (v) => mol.systemOf[v] === sa);
+  const hc = heaviest(child, a, (v) => L.has(v));
+  if (ha == null || hc == null || !pos.has(ha)) return false;
+  const pa = pos.get(a)!;
+  const along = sub(place(L.get(child)!), pa);
+  const side = (p: Point) => Math.sign(along.x * (p.y - pa.y) - along.y * (p.x - pa.x));
+  return side(pos.get(ha)!) === side(place(L.get(hc)!));
 }
 
 /**

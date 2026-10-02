@@ -755,7 +755,11 @@ function propellers(
         const s = mol.systemOf[c];
         if (s < 0 || s === mol.systemOf[x] || faceOn.has(c) || orderOf(mol, x, c) !== 1) return false;
         if (!mol.ringsOf[c].some((r) => isAryl(mol, mol.rings[r]))) return false;
-        return !sideAtoms(mol, x, c).some((v) => v !== c && mol.neighbours[x].includes(v));
+        // (a blade hangs from x, it is not what x hangs from: BINAP's
+        // naphthalene, beyond its P, is the rest of the molecule)
+        const side = sideAtoms(mol, x, c);
+        if (side.length * 2 >= piece.length) return false;
+        return !side.some((v) => v !== c && mol.neighbours[x].includes(v));
       });
       return { x, rings };
     })
