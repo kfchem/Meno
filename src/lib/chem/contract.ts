@@ -19,6 +19,10 @@
  * - Where the drawing still hides something, the largest groups left,
  *   alike ones together, are written by name too, as long as that hides
  *   less (`contractionTrials`).
+ * - A group written as its formula wherever it hangs - an atom and the
+ *   halogens on it (CF3, CCl3, CHF2, SF5) and a nitro group, NO2 - is
+ *   written so, but where the rest of the molecule is one atom or none
+ *   (CF3I). CO2H, CN, SO2Cl, SO3H and PO3H2 are drawn.
  * - A group the user has just drawn out (`keep`) is left drawn out.
  *
  * A heteroatom that hangs by one bond, all else on it now named, is written
@@ -242,6 +246,55 @@ function found(g: ContractGraph, P: Prepared): Found[] {
   return out.sort((x, y) => y.heavy - x.heavy);
 }
 
+const HALOGENS = ["F", "Cl", "Br", "I"];
+
+/**
+ * The groups written as their formulas wherever they hang (by one single
+ * bond): an atom and the halogens on it, two or more - CF3, CCl3, CHF2,
+ * SF5 - and a nitro group, NO2. (Not one whose atoms beyond the first
+ * carry H, nor a carbonyl's or a sulfonyl's: CO2H, CN, SO2Cl, SO3H and
+ * PO3H2 are drawn.) Each with its formula, where Meno reads that formula
+ * as the same atoms.
+ */
+function formulas(g: ContractGraph, P: Prepared): Found[] {
+  const out: Found[] = [];
+  const terminal = (t: number, c: number) => P.heavy(t).length === 1 && P.heavy(t)[0] === c && !P.next[t].some(P.isH);
+  for (const b of g.bonds) {
+    if (b.order !== 1) continue;
+    for (const [p, c] of [
+      [b.a, b.b],
+      [b.b, b.a],
+    ]) {
+      const el = g.atoms[c].el;
+      if (P.isH(p) || P.isH(c) || !ELEMENT.test(el) || isMetal(el) || !ELEMENT.test(g.atoms[p].el)) continue;
+      const ends = P.heavy(c).filter((t) => t !== p);
+      if (ends.length < 2 || !ends.every((t) => terminal(t, c))) continue;
+      const els = ends.map((t) => g.atoms[t].el);
+      let label: string | null = null;
+      if (els.every((x) => HALOGENS.includes(x)) && !(g.atoms[c].charge ?? 0)) {
+        // its H, drawn or not, after it; then the halogens, the most first
+        const heavyOrders = P.heavy(c).reduce((t, v) => t + (P.order.get(key(c, v)) || 1), 0);
+        const hs = implicitHydrogens(el, heavyOrders, 0) + P.next[c].filter(P.isH).length;
+        const counts = HALOGENS.map((x) => [x, els.filter((y) => y === x).length] as const)
+          .filter(([, n]) => n > 0)
+          .sort((u, v) => v[1] - u[1]);
+        label = `${el}${hs ? `H${hs > 1 ? hs : ""}` : ""}${counts.map(([x, n]) => `${x}${n > 1 ? n : ""}`).join("")}`;
+      } else if (el === "N" && els.length === 2 && els.every((x) => x === "O")) {
+        label = "NO2";
+      }
+      if (!label) continue;
+      // (read as the same atoms)
+      const read = abbreviationStructure(label);
+      const heavyOf = (xs: string[]) => xs.filter((x) => x !== "H" && x !== "*").sort().join();
+      if (!read || read.attach.length !== 1 || heavyOf(read.atoms.map((a) => a.el)) !== heavyOf([el, ...els])) continue;
+      const atoms = beyond(P, p, c);
+      if (!atoms) continue;
+      out.push({ group: { label, smiles: "", name: label }, p, c, atoms, heavy: 1 + ends.length });
+    }
+  }
+  return out;
+}
+
 /** How many atoms a structure's atoms stand for: a label its group's heavy atoms. */
 function weightOf(el: string): number {
   if (el === "H" || el === "*") return 0;
@@ -277,6 +330,15 @@ export function contractions(g: ContractGraph, keep: ReadonlySet<number> = new S
   }
   const rest = total - roles.reduce((s, f) => s + f.heavy, 0);
   if (rest > 1) roles.forEach(take);
+  // groups written as their formulas, where something besides them is
+  // drawn - two atoms or more, a label counting as one (CF3I and the
+  // Ruppert-Prakash reagent's CF3 on its TMS are drawn)
+  let drawn = g.atoms.filter((_, i) => !P.isH(i) && !taken.has(i)).length + chosen.length;
+  for (const f of formulas(g, P)) {
+    if (!free(f) || drawn - f.heavy < 2) continue;
+    take(f);
+    drawn -= f.heavy - 1;
+  }
   // other named groups, small beside the molecule, on a heteroatom or a metal
   for (const f of all) {
     if (working(f) || f.heavy < 3 || !free(f)) continue;

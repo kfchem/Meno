@@ -422,6 +422,13 @@ lipids each have their own way of being drawn, which it should know.
        15% of the molecule's atoms: taxol's OAc and OBz, Pd(PPh3)4's
        phenyls, but not aspirin's acetyl, a quarter of it. Methyl and ethyl
        are always drawn;
+     - a group written as its formula wherever it hangs - an atom and the
+       halogens on it, two or more (CF3, CCl3, CHF2, SF5), and a nitro
+       group, NO2 - is written so (agreed 2026-10-02), unless the rest of
+       the molecule is one atom or none (CF3I; the Ruppert-Prakash
+       reagent's CF3, beside its TMS). Acids, amides, nitriles and
+       sulfonyl groups - CO2H, CONH2, CN, SO2Cl, SO2NH2, SO3H, PO3H2 -
+       are drawn;
      - where the drawing still hides something - atoms on each other, or
        on a bond - the largest groups left, alike ones together, are
        written by name too, for as long as each time hides less;

@@ -326,6 +326,51 @@ const CARRIERS: Record<string, { valence: number; word: string }> = {
   Sn: { valence: 4, word: "stannyl" },
 };
 
+/**
+ * Atoms that carry halogens as a group, by the valence each is read at -
+ * its bond out, its H and its halogens - and what the group is called after
+ * it: CF3 trifluoromethyl, SiCl3 trichlorosilyl, SF5 pentafluoro-λ6-sulfanyl.
+ */
+const HALIDED: Record<string, Record<number, string>> = {
+  C: { 4: "methyl" },
+  Si: { 4: "silyl" },
+  Ge: { 4: "germyl" },
+  Sn: { 4: "stannyl" },
+  B: { 3: "boranyl" },
+  N: { 3: "amino" },
+  P: { 3: "phosphanyl", 5: "λ5-phosphanyl" },
+  S: { 4: "λ4-sulfanyl", 6: "λ6-sulfanyl" },
+  Se: { 4: "λ4-selanyl", 6: "λ6-selanyl" },
+  I: { 3: "λ3-iodanyl", 5: "λ5-iodanyl" },
+};
+const HALO_WORD: Record<string, string> = { F: "fluoro", Cl: "chloro", Br: "bromo", I: "iodo" };
+const TIMES = ["", "", "di", "tri", "tetra", "penta", "hexa", "hepta"];
+
+/**
+ * An atom and the halogens on it, two or more - CF3, CHF2, CF2Cl, SF5,
+ * SiCl3 - its H after it, then each halogen and its count; or none, where
+ * the bond out, the H and the halogens make no valence the atom has (PCl3
+ * and SiCl4 are molecules).
+ */
+function halidedGroupOf(label: string): Abbreviation | undefined {
+  const m = /^([A-Z][a-z]?)(?:H(\d*))?((?:(?:F|Cl|Br|I)\d*)+)$/.exec(label);
+  const parents = m && HALIDED[m[1]];
+  if (!m || !parents) return undefined;
+  const hs = m[2] == null ? 0 : m[2] === "" ? 1 : Number(m[2]);
+  const counts = new Map<string, number>();
+  for (const [, x, n] of m[3].matchAll(/(F|Cl|Br|I)(\d*)/g)) counts.set(x, (counts.get(x) ?? 0) + (n ? Number(n) : 1));
+  const halogens = [...counts.values()].reduce((t, n) => t + n, 0);
+  const parent = parents[1 + hs + halogens];
+  if (halogens < 2 || !parent || [...counts.values()].some((n) => n >= TIMES.length)) return undefined;
+  const smiles = `*[${m[1]}${hs ? `H${hs > 1 ? hs : ""}` : ""}]` + [...counts].map(([x, n]) => `(${x})`.repeat(n)).join("");
+  // (the halogens' prefixes in the order of their names, multiplied)
+  const prefix = [...counts]
+    .sort(([a], [b]) => HALO_WORD[a].localeCompare(HALO_WORD[b]))
+    .map(([x, n]) => TIMES[n] + HALO_WORD[x])
+    .join("");
+  return { label, smiles, name: parent.startsWith("λ") ? `${prefix}-${parent}` : prefix + parent };
+}
+
 /** An atom and as many of one group as fill its valence but its bond out - PPh2, PCy2, NBn2 - or none. */
 function carriedGroupOf(label: string): Abbreviation | undefined {
   const m = /^([A-Z][a-z]?)(.+?)([2-3])$/.exec(label);
@@ -348,12 +393,14 @@ function carriedGroupOf(label: string): Abbreviation | undefined {
   };
 }
 
-/** A group put together by rule - a substituted aryl group, a group behind O, S or NH, an ester - or none. */
+/** A group put together by rule - a substituted aryl group, a group behind O, S or NH, an ester, an atom and the groups or halogens on it - or none. */
 function composedGroupOf(label: string): Abbreviation | undefined {
   const aryl = substitutedAryl(label);
   if (aryl) return { label, smiles: aryl.smiles, name: aryl.name };
   const carried = carriedGroupOf(label);
   if (carried) return carried;
+  const halided = halidedGroupOf(label);
+  if (halided) return halided;
   for (const c of COMPOSED) {
     if (!label.startsWith(c.prefix) || label.length === c.prefix.length) continue;
     const rest = label.slice(c.prefix.length);

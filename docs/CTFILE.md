@@ -139,6 +139,9 @@ What is put together from them is read by rule, not listed:
 - an atom with as many of one group as fill its valence but the bond out -
   PPh2, PCy2, AsPh2, NBn2, NBoc2, BEt2, SiPh3, SnBu3 (B, N, P and As take
   two, Si, Ge and Sn three); three on P (PPh3, PCy3) is the ligand;
+- an atom and two or more halogens on it, its H after it - CBr3, CHF2,
+  CF2Cl, SF5, SiCl3, BCl2 - where the bond out, the H and the halogens
+  make a valence the atom has (PCl3 and SiCl4 are molecules);
 - a substituted aryl group (`src/lib/chem/substitutedAryl.ts`): positions,
   a multiplying prefix (di, tri, tetra, penta) and a substituent before Ph,
   Bz (benzoyl) or Bn - 2,6-diMeBz, 4-MeO-3-NO2Ph, p-ClBn - or before the

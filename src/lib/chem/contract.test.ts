@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { picturedStructure } from "./abbreviationPlace";
-import { abbreviationStructure } from "./abbreviations";
+import { abbreviationOf, abbreviationStructure } from "./abbreviations";
 import { ligandPicture, namedLigand } from "./ligands";
 import { contractGraph, contractionTrials, contractions, type ContractGraph } from "./contract";
 import { kekuleOrders } from "./kekulize";
@@ -67,6 +67,37 @@ describe("contractions", () => {
   });
 });
 
+describe("groups written as their formulas", () => {
+  it("writes an atom with halogens on it, and a nitro group, by formula wherever it hangs", () => {
+    // fluoxetine's CF3 on its ring
+    expect(written(fromSmiles("CNCCC(Oc1ccc(cc1)C(F)(F)F)c1ccccc1"))).toEqual(["CF3"]);
+    // chloramphenicol's nitro group, and its dichloromethyl
+    expect(written(fromSmiles("OC[C@@H](NC(=O)C(Cl)Cl)[C@H](O)c1ccc(cc1)[N+](=O)[O-]"))).toEqual(["CHCl2", "NO2"]);
+    // difluoromethyl, pentafluorosulfanyl
+    expect(written(fromSmiles("FC(F)c1ccccc1"))).toEqual(["CHF2"]);
+    expect(written(fromSmiles("FS(F)(F)(F)(F)c1ccccc1"))).toEqual(["SF5"]);
+    // on an O, with it: OCF3
+    expect(written(fromSmiles("FC(F)(F)Oc1ccccc1"))).toEqual(["OCF3"]);
+  });
+
+  it("draws acids, amides, nitriles and sulfonyl groups, and the group's own small molecule", () => {
+    // trifluoroacetic acid: its CF3 by formula, its CO2H drawn
+    expect(written(fromSmiles("OC(=O)C(F)(F)F"))).toEqual(["CF3"]);
+    for (const smiles of [
+      "N#Cc1ccccc1", // benzonitrile
+      "ClS(=O)(=O)c1ccccc1", // benzenesulfonyl chloride
+      "OS(=O)(=O)c1ccccc1", // benzenesulfonic acid
+      "OP(O)(=O)c1ccccc1", // phenylphosphonic acid
+      "FC(F)(F)I", // CF3I: its rest one atom
+      "C[N+](=O)[O-]", // nitromethane
+    ]) {
+      expect(written(fromSmiles(smiles)), smiles).toEqual([]);
+    }
+    // the Ruppert-Prakash reagent: its TMS by name, its CF3 then all that is left besides, drawn
+    expect(written(fromSmiles("C[Si](C)(C)C(F)(F)F"))).toEqual(["TMS"]);
+  });
+});
+
 describe("contractionTrials", () => {
   it("tries more groups by name, the largest first, only while each try hides less", () => {
     // a phenyl and two benzyls on carbon: nothing by the rules
@@ -94,6 +125,21 @@ describe("a label of an atom and its groups", () => {
     expect(heavy("NBn2")).toBe(15);
     // three on P is the ligand, bound by its lone pair
     expect(abbreviationStructure("PPh3")?.attach).toEqual([0]);
+  });
+
+  it("reads an atom and the halogens on it as a group, where they leave it one bond out", () => {
+    for (const [label, name] of [
+      ["CBr3", "tribromomethyl"],
+      ["CHF2", "difluoromethyl"],
+      ["CF2Cl", "chlorodifluoromethyl"],
+      ["SF5", "pentafluoro-λ6-sulfanyl"],
+      ["SiCl3", "trichlorosilyl"],
+    ]) {
+      expect(abbreviationOf(label)?.name, label).toBe(name);
+      expect(abbreviationStructure(label)?.attach, label).toEqual([0]);
+    }
+    // (molecules, their valence full)
+    for (const label of ["PCl3", "SiCl4", "BF3", "CHCl3"]) expect(abbreviationStructure(label)?.attach, label).toEqual([]);
   });
 });
 
