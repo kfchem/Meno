@@ -31,6 +31,13 @@ export type AbbreviationStructure = {
    * now.
    */
   toward?: { x: number; y: number };
+  /**
+   * Its pi systems bound through all their atoms (a ligand's: Cp*, cod), by
+   * index: the star at each one's centre - which may be where it is
+   * attached, a bond to it then haptic - and the system's atoms. A bond's
+   * `endpoints` here are indices too.
+   */
+  haptic?: { star: number; atoms: number[] }[];
 };
 
 export type AtomChem = {

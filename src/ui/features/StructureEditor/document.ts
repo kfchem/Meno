@@ -353,11 +353,23 @@ export function expandAbbreviation(doc: StructureDocument, id: number): Structur
   const nextBonds = doc.model.bonds.map((b) => {
     const k = order.get(b.id);
     if (k == null) return b;
-    const to = ids[s.attach[k] ?? head];
-    return b.a === id ? { ...b, a: to } : { ...b, b: to };
+    const at = s.attach[k] ?? head;
+    const to = ids[at];
+    const moved = b.a === id ? { ...b, a: to } : { ...b, b: to };
+    // to a pi system's star: a haptic bond, to all its atoms
+    const pi = s.haptic?.find((h) => h.star === at);
+    return pi ? { ...moved, endpoints: pi.atoms.map((e) => ids[e]), attach: "all" as const, coordination: true } : moved;
   });
   for (const b of s.bonds) {
-    nextBonds.push({ id: nextId++, a: ids[b.a1], b: ids[b.a2], order: b.order, stereo: b.stereo ?? "none", ...bondChem(b) });
+    nextBonds.push({
+      id: nextId++,
+      a: ids[b.a1],
+      b: ids[b.a2],
+      order: b.order,
+      stereo: b.stereo ?? "none",
+      ...bondChem(b),
+      ...(b.endpoints ? { endpoints: b.endpoints.map((e) => ids[e]) } : {}),
+    });
   }
   return { ...doc, nextId, model: { atoms: nextAtoms, bonds: nextBonds } };
 }
@@ -393,6 +405,8 @@ export function contractToAbbreviation(
       order: b.order,
       ...(b.stereo && b.stereo !== "none" ? { stereo: b.stereo } : {}),
       ...bondChem(b),
+      // (a haptic bond's ends by index, as an abbreviation keeps them)
+      ...(b.endpoints ? { endpoints: b.endpoints.map((e) => index.get(e)!).filter((e) => e != null) } : {}),
     })),
     attach: [index.get(attachId)!],
     toward: { x: other.x - att.x, y: other.y - att.y },

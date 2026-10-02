@@ -146,6 +146,37 @@ What is put together from them is read by rule, not listed:
   ring (2 to 6, o-, m-, p-), once each; counts must match them, and a
   formula's hydrogens make up the rest.
 
+**Ligands and complexes** (`src/lib/chem/ligands.ts`). The ligands of
+transition-metal chemistry are known by their labels, each the molecule it
+is, in SMILES, its donor atoms marked by atom class ([P:1], [P:2] for a
+chelating diphosphine; several atoms of one class for a pi system bound
+through all of them): phosphines, arsines and phosphites (PPh3, PCy3,
+P(t-Bu)3, P(o-Tol)3, TFP, AsPh3 ...), the biaryl phosphines (XPhos, SPhos,
+RuPhos, BrettPhos, tBuXPhos, DavePhos, JohnPhos), chelating diphosphines
+(dppm to dppb, dppf, BINAP, Xantphos, DPEphos), N donors (bpy, dtbpy,
+phen, py, TMEDA, en, MeCN), N-heterocyclic carbenes (IPr, IMes, SIPr,
+SIMes), pi ligands (cod, nbd, dba, p-cymene, Cp*), acac and THF; and, in a
+complex's formula only, CO, H2O, NH3 and Cp (η⁵). A label bonded to a
+metal binds it as the ligand does when it is expanded or written out: a
+neutral donor by a coordination bond from it, an anionic one (acac's O) by
+a bond, a pi system by a haptic bond to the star at its centre. Each
+ligand's formula, and that each of its ring bonds is in a ring of five or
+six (cod's of eight), is checked in the tests.
+
+A complex's formula is read as the structure it stands for - Pd(PPh3)4,
+PdCl2(dppf), Pd2(dba)3, Pd(OAc)2, Cp2ZrCl2, [Ir(cod)Cl]2, [Rh(cod)2]BF4,
+Mo(CO)6 - from its metals (the d block and the lanthanides), its ligands in
+parentheses or not, halides, hydrides and groups bound by one bond (OAc,
+OTf, Me), a part in brackets made as many times as its count, and the
+counter-anions after it (BF4, PF6, SbF6, ClO4, BArF), each leaving a
+positive charge on the part's metal. A ligand written as an anion (Cp⁻,
+Cp*⁻) leaves its charge on the metal, so that the whole is as charged as
+the formula says. Where one part has several metals - Pd2(dba)3 - the
+ligands are shared among them in turn: which bridge them, a formula does
+not say. A complex written out is V3000, its coordination bonds needing it.
+Expanded on the canvas it is laid out by Meno's engine, which is not made
+for coordination compounds: the drawing of a large complex is crowded.
+
 **Abbreviations of the user's own** are kept in Settings › Abbreviations
 (`settings.json`): a label, other ways of writing it, a name, and the
 structure as SMILES with a "*" where it is attached, drawn as it is typed.
