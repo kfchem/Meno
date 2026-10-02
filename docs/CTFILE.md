@@ -194,7 +194,13 @@ bridging halide or group to each of them. A part of one metal with a
 halide or a group on it, in brackets and made twice with no counter-anion
 - [Ir(cod)Cl]2, [RhCl(cod)]2, [RuCl2(p-cymene)]2, [Pd(allyl)Cl]2,
 [Rh(cod)OMe]2 - is the dimer they bridge, as such dimers are: each part's
-first halide (or group) is bound to the other part's metal as well. A
+first halide (or group) is bound to the other part's metal as well. One
+with a hydride on it, made six times - [CuH(PPh3)]6, Stryker's reagent -
+is the octahedral cluster such hydrides make: the metals its corners, in
+contact along its twelve edges (drawn dashed), each part's hydride
+bridging an edge from its metal to the next part's (μ2-H, as neutron
+diffraction places them: Bennett et al., Inorg. Chem. 2014, 53, 2963),
+the six edges round the octahedron's side. A
 complex written out is V3000,
 its coordination bonds needing it. Expanded on the canvas it is laid out
 by Meno's engine, which is not yet made for coordination compounds: the

@@ -13,6 +13,7 @@
  */
 import { add, angleOf, centroid, dir, rotate, sub, type Point } from "./geometry";
 import { METAL_BOND, type DieneRing, type EtaRing, type MetalUnit, type Molecule } from "./perceive";
+import { placeCluster } from "./cluster";
 import { placeRingSystem } from "./ringSystem";
 
 /**
@@ -198,6 +199,7 @@ export function unitVariants(mol: Molecule, unit: MetalUnit): number {
  */
 export function placeUnit(mol: Molecule, unit: MetalUnit, variant = 0): EtaLayout {
   if (unit.pair) return placePair(mol, unit, variant);
+  if (unit.cluster) return placeCluster(mol, unit);
   if (unit.dienes.length && !unit.eta.length) return placeTubs(mol, unit);
   const m = unit.metal;
   const stars = new Set(unit.eta.map((e) => e.star));

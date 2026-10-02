@@ -119,7 +119,9 @@ export type DieneRing = {
  * A metal and the rings bound face-on to it - or by two C=C each - drawn as
  * one system. Or two metals bridged by two atoms ([Rh(cod)Cl]2's chlorides),
  * their four-membered ring and each one's rings: `metal` the first, `pair`
- * the second and the bridging atoms.
+ * the second and the bridging atoms. Or six metals in contact as an
+ * octahedron (Stryker's reagent's Cu6), `cluster` its corners - `metal`
+ * the first - and the atoms bridging its edges.
  */
 export type MetalUnit = {
   metal: number;
@@ -127,6 +129,7 @@ export type MetalUnit = {
   dienes: DieneRing[];
   system: number;
   pair?: { metal: number; bridges: [number, number] };
+  cluster?: { metals: number[]; bridges: number[] };
 };
 
 export const key = (a: number, b: number): string => (a < b ? `${a},${b}` : `${b},${a}`);
@@ -232,6 +235,18 @@ export function perceive(input: LayoutInput): Molecule {
     }
     for (const a of merged.atoms) systemOf[a] = index;
     units.push({ metal: m1, eta: own, dienes: tubs, system: index, pair: { metal: m2, bridges: [r[k + 1], r[(k + 3) % 4]] } });
+  });
+  // six metals each in contact with four of the others - an octahedron -
+  // and atoms each bridging two of them, nothing else in their system
+  systems.forEach((sys, i) => {
+    const metals = sys.atoms.filter((a) => isMetal(input.atoms[a].el));
+    if (metals.length !== 6) return;
+    const inSys = new Set(sys.atoms);
+    const corners = metals.every((m) => neighbours[m].filter((b) => metals.includes(b)).length === 4);
+    const bridges = sys.atoms.filter((a) => !metals.includes(a));
+    const bridging = bridges.every((b) => neighbours[b].filter((x) => inSys.has(x)).every((x) => metals.includes(x)));
+    if (!corners || !bridging) return;
+    units.push({ metal: metals[0], eta: [], dienes: [], system: i, cluster: { metals, bridges } });
   });
   for (let m = 0; m < n; m++) {
     const own = eta.filter((e) => e.metal === m);

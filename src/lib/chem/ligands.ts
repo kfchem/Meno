@@ -33,6 +33,25 @@ export type StructureBond = SmilesBond & {
 };
 
 /**
+ * Six metals as an octahedron, by their places 0 to 5 round it seen down
+ * one of its threefold axes - 0, 2 and 4 the near face, 1, 3 and 5 the far
+ * one: its twelve edges, each a pair of places. Opposite corners (0 and 3,
+ * 1 and 4, 2 and 5) are joined by none.
+ */
+export const OCTAHEDRON_EDGES: readonly (readonly [number, number])[] = [
+  [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0],
+  [0, 2], [2, 4], [4, 0],
+  [1, 3], [3, 5], [5, 1],
+];
+
+/**
+ * Which edge each of a hexamer's bridging hydrides spans, the one put on
+ * the metal at place `k` going to the metal at place `k + CLUSTER_BRIDGE`:
+ * 1 bridges the six edges round the side, 2 the edges of the two faces.
+ */
+const CLUSTER_BRIDGE = 1;
+
+/**
  * What a label stands for, as atoms and bonds (Kekulé): where it is attached
  * (`attach`: an atom, or the star at the centre of a pi system bound through
  * all its atoms - `haptic` says which), and its stars' pi systems. A group
@@ -656,10 +675,21 @@ export function complexStructure(
       bind(made[1], firstX.get(made[0])!, false);
       bind(made[0], firstX.get(made[1])!, false);
     }
+    // a hexamer of one metal each, a hydride on it and no counter-anion -
+    // [CuH(PPh3)]6, Stryker's reagent - the octahedral cluster such
+    // hydrides make: the metals its corners, in contact along its edges,
+    // each copy's hydride bridging an edge from its metal (μ2-H)
+    const cluster =
+      u.n === 6 && oneMetal && !counters.length && made.every((m) => firstX.has(m) && atoms[firstX.get(m)!].el === "H");
+    if (cluster) {
+      for (const [p, q] of OCTAHEDRON_EDGES) bonds.push({ a1: made[p], a2: made[q], order: 1 });
+      made.forEach((m, k) => bind(made[(k + CLUSTER_BRIDGE) % 6], firstX.get(m)!, false));
+    }
     // a part made twice: 2 × (its words), and what bridges them
     if (u.n > 1) {
       const x = u.items.find((it): it is Extract<Item, { kind: "x" }> => it.kind === "x");
-      parts.splice(at, parts.length - at, `${u.n} × (${parts.slice(at).join(", ")})${bridged && x ? ` bridged by ${x.label}` : ""}`);
+      const how = cluster ? ", an octahedron bridged by H" : bridged && x ? ` bridged by ${x.label}` : "";
+      parts.splice(at, parts.length - at, `${u.n} × (${parts.slice(at).join(", ")})${how}`);
     }
   }
   let turn = 0;

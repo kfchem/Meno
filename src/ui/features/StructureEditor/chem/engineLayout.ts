@@ -217,6 +217,8 @@ export function relayoutFrom(model: Model, part: Model, job: LayoutJob, laid: La
   // end, the rest of it plain
   const pairKey = (p: number, q: number) => (p < q ? `${p},${q}` : `${q},${p}`);
   const boldOnes = new Set(laid.bold.map(([u, v]) => pairKey(ids[u], ids[v])));
+  // (and a cluster's metals in contact, dashed)
+  const dashedOnes = new Set(laid.dashed.map(([u, v]) => pairKey(ids[u], ids[v])));
   const farEnd = new Map(laid.toward.map(([u, v]) => [pairKey(ids[u], ids[v]), ids[u]]));
   const display = (b: Bond): Pick<Bond, "display" | "stereoOrient"> | null => {
     const u = indexOf.get(b.a);
@@ -228,7 +230,7 @@ export function relayoutFrom(model: Model, part: Model, job: LayoutJob, laid: La
       const stereoOrient = orientFor(b, far, degree);
       return b.display === "wedge" && b.stereoOrient === stereoOrient ? null : { display: "wedge", stereoOrient };
     }
-    const want = boldOnes.has(key) ? "bold" : undefined;
+    const want = boldOnes.has(key) ? "bold" : dashedOnes.has(key) ? "dashed" : undefined;
     return want === b.display || (!want && b.display !== "bold" && b.display !== "wedge") ? null : { display: want };
   };
   const bonds: Relayout["bonds"] = model.bonds.flatMap((b): Relayout["bonds"] => {

@@ -6,7 +6,7 @@ import { layoutMetrics } from "../../../../lib/layout/metrics";
 import cages from "../../../../lib/layout/testdata/cages.json";
 import { kekuleOrders } from "../../../../lib/chem/kekulize";
 import { readSmiles } from "../../../../lib/chem/smiles";
-import { createStructureDocument } from "../document";
+import { createStructureDocument, emptyStructureDocument, expandAbbreviation } from "../document";
 import { connectStoreToDocument, createEditorStore } from "../store";
 import type { Bond, Model } from "../store/types";
 import { cleanUp, fragmentOf, fragmentsHolding, fragmentsOf, laidOut, partOf } from "./cleanUp";
@@ -244,6 +244,25 @@ describe("cleanUp", () => {
       }).crowdedLabels;
     expect(crowding(1) - crowding(0)).toBe(0);
   });
+
+  it("cleans up Stryker's reagent just drawn out, and writes its phosphines by name the next time", async () => {
+    const model = expandAbbreviation(
+      { ...emptyStructureDocument(), model: { atoms: [{ id: 1, x: 0, y: 0, r: 0.9, el: "Stryker's reagent" }], bonds: [] }, nextId: 10 },
+      1,
+    ).model;
+    // (as a file has it: its metals' contacts plain bonds)
+    const plain: Model = { atoms: model.atoms, bonds: model.bonds.map(({ display: _d, ...b }) => b) };
+    const { doc, store } = canvas(plain);
+    // drawn out just now
+    doc.edit("expand abbreviation", (d) => ({ ...d, expanded: plain.atoms.map((a) => a.id) }));
+    await cleanUp(store);
+    const drawn = store.getState().model;
+    expect(drawn.atoms.filter((a) => a.el === "PPh3")).toHaveLength(0);
+    const cus = new Set(drawn.atoms.filter((a) => a.el === "Cu").map((a) => a.id));
+    expect(drawn.bonds.filter((b) => cus.has(b.a) && cus.has(b.b) && b.display === "dashed")).toHaveLength(12);
+    await cleanUp(store);
+    expect(store.getState().model.atoms.filter((a) => a.el === "PPh3")).toHaveLength(6);
+  }, 20000);
 
   it("writes a protecting group by name, in the same step, and leaves one just drawn out drawn", async () => {
     // tert-butyldimethylsilyl ethyl ether, drawn atom by atom

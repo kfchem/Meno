@@ -57,6 +57,8 @@ export type Layout2D = {
    * the viewer, drawn as wedges: [its narrow, far end; its broad, near one].
    */
   toward: [number, number][];
+  /** The bonds between a cluster's metals - contacts, as they are written - drawn dashed. */
+  dashed: [number, number][];
 } & Stereo;
 
 export function layout2D(input: LayoutInput): Layout2D {
@@ -105,7 +107,12 @@ export function layout2D(input: LayoutInput): Layout2D {
   });
   // what is measured as drawn in perspective: a cage, and a ring bound
   // face-on (foreshortened, not misshapen)
-  const faceOn = new Set([...mol.eta.flatMap((e) => e.atoms), ...mol.dienes.flatMap((d) => d.atoms)]);
+  const faceOn = new Set([
+    ...mol.eta.flatMap((e) => e.atoms),
+    ...mol.dienes.flatMap((d) => d.atoms),
+    // (and a cluster, a solid)
+    ...mol.units.flatMap((u) => (u.cluster ? [...u.cluster.metals, ...u.cluster.bridges] : [])),
+  ]);
   const measured = solid.map((s, a) => s || faceOn.has(a));
   // what a frame grows from: in a mirrored one, each cage seen from its
   // other side
@@ -325,6 +332,11 @@ export function layout2D(input: LayoutInput): Layout2D {
     for (const a of d.atoms) depth[a] = lifts.get(a) ?? 0;
     depth[d.metal] ??= 0;
   }
+  // a cluster, as near as it was seen (placeCluster)
+  for (const u of mol.units) {
+    if (!u.cluster) continue;
+    for (const a of [...u.cluster.metals, ...u.cluster.bridges]) depth[a] = lifts.get(a) ?? 0;
+  }
   // two metals' bridges: their ring seen a little from above, the lower
   // bridge the nearer (placePair)
   for (const u of mol.units) {
@@ -371,7 +383,14 @@ export function layout2D(input: LayoutInput): Layout2D {
     const w = axisWedge(mol, final, axis);
     if (w) stereo.wedges.push(w);
   }
-  return { x, y, depth, solid, bold, toward, ...stereo };
+  // a cluster's metals in contact, dashed
+  const dashed: [number, number][] = [];
+  for (const u of mol.units) {
+    if (!u.cluster) continue;
+    const ms = u.cluster.metals;
+    for (const a of ms) for (const b of mol.neighbours[a]) if (a < b && ms.includes(b)) dashed.push([a, b]);
+  }
+  return { x, y, depth, solid, bold, toward, dashed, ...stereo };
 }
 
 /**
@@ -384,6 +403,21 @@ export function layout2D(input: LayoutInput): Layout2D {
  */
 function standUp(mol: Molecule, piece: number[], pos: Grown): void {
   const here = new Set(piece);
+  // a cluster with its first corner straight up from its middle
+  const cluster = mol.units.find((u) => u.cluster && here.has(u.metal));
+  if (cluster) {
+    const ms = cluster.cluster!.metals.map((m) => pos.get(m)!);
+    const c = { x: ms.reduce((t, p) => t + p.x, 0) / ms.length, y: ms.reduce((t, p) => t + p.y, 0) / ms.length };
+    const t = pos.get(cluster.metal)!;
+    const turn = Math.PI / 2 - Math.atan2(t.y - c.y, t.x - c.x);
+    const cs = Math.cos(turn);
+    const sn = Math.sin(turn);
+    for (const a of piece) {
+      const p = sub(pos.get(a)!, c);
+      pos.set(a, { x: c.x + p.x * cs - p.y * sn, y: c.y + p.x * sn + p.y * cs });
+    }
+    return;
+  }
   const pair = mol.units.find((u) => u.pair && here.has(u.metal));
   if (pair) {
     const m = pos.get(pair.metal)!;

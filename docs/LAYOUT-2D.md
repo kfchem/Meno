@@ -377,6 +377,19 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   the outside, a metal's bond off so that the metal's label stays clear of
   it, its other ligands below (the second metal's the other way round, as
   [RuCl2(p-cymene)]2 is drawn). The metals and their rings are one system.
+- **Six metals in contact as an octahedron** - Stryker's reagent's Cu6,
+  each metal in contact with four others, atoms bridging its edges - are
+  the solid they are (`src/lib/layout/cluster.ts`): the octahedron, its
+  edges long enough that the metals' labels and those of the atoms
+  bridging them stand clear, each bridging atom just outside its edge,
+  each metal's other ligands straight out from the middle. It is seen
+  from the side that hides least: no label on another or on an edge, the
+  ligands clear of it and of each other, the fewest edges crossing - a
+  face seen straight on where that does as well. Stryker's reagent, its
+  hydrides round its side, is seen down the axis its two clear faces
+  share: a hexagon, a corner up, each hydride outside an edge of it, each
+  PPh3 straight out. Its atoms keep their depths, as a cage's do; its
+  metals' contacts are drawn dashed, as they are written.
 - **Ligands round a metal** with no ring go evenly round it - two in a
   line, four in a cross - and the bulkiest go furthest apart: two bulky
   ligands trans to each other, the small ones (Cl, H, CO) between them. A
