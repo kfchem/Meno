@@ -192,9 +192,13 @@ export const createModelSlice = (
     }
   },
 
-  relayout: (change: Parameters<typeof ops.relayout>[1]) => {
-    doc.edit("clean up", (d) => ops.relayout(d, change));
+  relayout: (change: Parameters<typeof ops.relayout>[1], labels: readonly ops.WrittenAsLabel[] = []) => {
+    const edited = doc.edit("clean up", (d) => ops.relayout(labels.length ? ops.writtenAsLabels(d, labels) : d, change));
+    if (edited && labels.length) forgetDeleted(set);
   },
+
+  justExpanded: () =>
+    new Set(doc.history().undoLabel === "expand abbreviation" ? (doc.getState().expanded ?? []) : []),
 
   updateBond: (id: number, patch: Partial<Bond>) => {
     doc.edit("change bond", (d) => ops.updateBond(d, id, patch));
@@ -337,7 +341,12 @@ export const createModelSlice = (
   },
 
   expandAbbreviation: (id: number) => {
-    doc.edit("expand abbreviation", (d) => ops.expandAbbreviation(d, id));
+    // (one after another, they are one run of drawing out)
+    const run = doc.history().undoLabel === "expand abbreviation" ? (doc.getState().expanded ?? []) : [];
+    doc.edit("expand abbreviation", (d) => {
+      const out = ops.expandAbbreviation(d, id);
+      return out === d ? d : { ...out, expanded: [...run, ...(out.expanded ?? [])] };
+    });
   },
 
   contractToAbbreviation: (ids: ReadonlySet<number>, label: string) => {

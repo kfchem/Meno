@@ -1,5 +1,7 @@
-import { layout2D } from "../layout/engine";
+import { layout2D, type Layout2D } from "../layout/engine";
+import type { LayoutInput } from "../layout/perceive";
 import { abbreviationStructure } from "./abbreviations";
+import { contractGraph, contractionTrials, hiddenIn, type Contraction } from "./contract";
 import { wedgeNarrowAtom } from "./layout2d";
 import type { GroupStructure, StructureBond } from "./ligands";
 import { kekuleOrders } from "./kekulize";
@@ -31,12 +33,84 @@ export function placedAbbreviation(
 /** A structure laid out as `placedAbbreviation` lays out an abbreviation's. */
 export function placedStructure(given: GroupStructure, neighbour: P | null, bondLength: number): AbbreviationStructure {
   const s = drawnAsSaid(given);
+  return placedFrom(given, s, layout2D(inputFor(s)), neighbour, bondLength);
+}
+
+/**
+ * A structure as the dictionary pictures it: laid out as `placedStructure`
+ * lays it out - a whole molecule (a reagent, a complex) with the groups a
+ * chemist would write by name written so, as Clean-up writes them
+ * (./contract): Grubbs I's phosphines as PCy3, not at a stereocentre or an
+ * axis. A group or a ligand, attached to something, is its own picture,
+ * drawn out.
+ */
+export function picturedStructure(given: GroupStructure, bondLength: number): AbbreviationStructure {
+  // (a ligand's own picture has a star where it is bound)
+  const bound = given.atoms.some((a, i) => a.el === "*" && !given.haptic?.some((h) => h.star === i));
+  if (given.attach.length || bound) return placedStructure(given, null, bondLength);
+  const keep = new Set([
+    ...given.atoms.flatMap((a, i) => (a.tetra || a.isotope ? [i] : [])),
+    ...(given.axes ?? []).flatMap((ax) => [...ax.atoms, ...ax.refs]),
+  ]);
+  const trials = contractionTrials(contractGraph(given.atoms, given.bonds), keep);
+  let best: { given: GroupStructure; s: ReturnType<typeof drawnAsSaid>; laid: Layout2D; hidden: number } | null = null;
+  for (let trial = trials.next(); !trial.done; ) {
+    const written = writtenShort(given, trial.value);
+    const s = drawnAsSaid(written);
+    const input = inputFor(s);
+    const laid = layout2D(input);
+    const hidden = hiddenIn(input, laid);
+    if (!best || hidden < best.hidden) best = { given: written, s, laid, hidden };
+    trial = trials.next(hidden);
+  }
+  return placedFrom(best!.given, best!.s, best!.laid, null, bondLength);
+}
+
+/** A structure with these of its groups written as their labels: each one atom, where it was attached. */
+function writtenShort(given: GroupStructure, cs: readonly Contraction[]): GroupStructure {
+  if (!cs.length) return given;
+  const groupOf = new Map<number, number>();
+  cs.forEach((c, k) => c.atoms.forEach((a) => groupOf.set(a, k)));
+  const label = new Map(cs.map((c) => [c.at, c.label]));
+  const kept = given.atoms.map((_, i) => i).filter((i) => !groupOf.has(i) || label.has(i));
+  const at = new Map(kept.map((i, k) => [i, k]));
+  const to = (i: number) => at.get(i)!;
+  return {
+    atoms: kept.map((i): SmilesAtom => {
+      if (label.has(i)) return { el: label.get(i)!, hs: 0 };
+      const a = given.atoms[i];
+      return a.tetra ? { ...a, tetra: { ...a.tetra, neighbours: a.tetra.neighbours.map((n) => (n < 0 ? n : to(n))) } } : a;
+    }),
+    bonds: given.bonds
+      .filter((b) => !(groupOf.has(b.a1) && groupOf.get(b.a1) === groupOf.get(b.a2)))
+      .map((b) => ({ ...b, a1: to(b.a1), a2: to(b.a2), ...(b.endpoints ? { endpoints: b.endpoints.map(to) } : {}) })),
+    attach: given.attach.map(to),
+    ...(given.haptic ? { haptic: given.haptic.map((h) => ({ star: to(h.star), atoms: h.atoms.map(to) })) } : {}),
+    ...(given.lends ? { lends: given.lends } : {}),
+    ...(given.axes
+      ? {
+          axes: given.axes.map((ax) => ({
+            ...ax,
+            atoms: [to(ax.atoms[0]), to(ax.atoms[1])] as const,
+            refs: [to(ax.refs[0]), to(ax.refs[1])] as const,
+          })),
+        }
+      : {}),
+  };
+}
+
+/**
+ * What the engine is given for a structure as a drawing shows it: its
+ * atoms, their H and bonds, a carbon after them for its bond out where it
+ * is attached, and its axes.
+ */
+function inputFor(s: ReturnType<typeof drawnAsSaid>): LayoutInput {
   const stars = new Map((s.haptic ?? []).map((h) => [h.star, h.atoms]));
   const head = s.attach[0] ?? 0;
   const from = s.atoms.length;
   // (a star given its pi system: the engine draws a ring of it face-on to
   // its metal, as Clean-up's does)
-  const laid = layout2D({
+  return {
     atoms: [
       ...s.atoms.map((a, i) => ({
         el: a.el,
@@ -52,7 +126,20 @@ export function placedStructure(given: GroupStructure, neighbour: P | null, bond
       ...(s.attach.length ? [{ a: from, b: head, order: 1 }] : []),
     ],
     ...(s.axes?.length ? { axes: s.axes } : {}),
-  });
+  };
+}
+
+/** A structure placed as `placedStructure` places it, from the engine's layout of it (`inputFor`). */
+function placedFrom(
+  given: GroupStructure,
+  s: ReturnType<typeof drawnAsSaid>,
+  laid: Layout2D,
+  neighbour: P | null,
+  bondLength: number,
+): AbbreviationStructure {
+  const stars = new Map((s.haptic ?? []).map((h) => [h.star, h.atoms]));
+  const head = s.attach[0] ?? 0;
+  const from = s.atoms.length;
   // each star at its pi system's centre
   for (const [star, ring] of stars) {
     laid.x[star] = ring.reduce((t, k) => t + laid.x[k], 0) / ring.length;

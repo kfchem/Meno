@@ -32,6 +32,11 @@ export type StructureDocument = {
    * application's. Saving to a MOL or SD file keeps the structure only.
    */
   style?: StyleChoice;
+  /**
+   * The atoms *Expand abbreviation* drew out last, which the Clean-up
+   * straight after it leaves drawn out (chem/cleanUp). Not saved.
+   */
+  expanded?: number[];
 };
 
 export function emptyStructureDocument(): StructureDocument {
@@ -387,7 +392,33 @@ export function expandAbbreviation(doc: StructureDocument, id: number): Structur
       ...(b.endpoints ? { endpoints: b.endpoints.map((e) => ids[e]) } : {}),
     });
   }
-  return { ...doc, nextId, model: { atoms: nextAtoms, bonds: nextBonds } };
+  return { ...doc, nextId, model: { atoms: nextAtoms, bonds: nextBonds }, expanded: ids };
+}
+
+/** Atoms to show as one, labelled `label` where the atom `at` is (chem/cleanUp). */
+export type WrittenAsLabel = { atoms: readonly number[]; at: number; label: string };
+
+/**
+ * Groups written by their labels, as Clean-up writes them: each group's
+ * atoms - with one bond to the rest of the drawing, from `at` - shown as
+ * the one atom `at`, labelled, standing for the group as the label does
+ * (drawn out again as the dictionary draws it). A group that is not so
+ * attached is left as it is.
+ */
+export function writtenAsLabels(doc: StructureDocument, groups: readonly WrittenAsLabel[]): StructureDocument {
+  let atoms = doc.model.atoms;
+  let bonds = doc.model.bonds;
+  for (const g of groups) {
+    const ids = new Set(g.atoms);
+    const crossing = bonds.filter((b) => ids.has(b.a) !== ids.has(b.b) || b.endpoints?.some((e) => ids.has(e) !== ids.has(b.a)));
+    if (crossing.length !== 1 || ![crossing[0].a, crossing[0].b].includes(g.at)) continue;
+    atoms = atoms.flatMap((a) =>
+      a.id === g.at ? [{ id: a.id, x: a.x, y: a.y, r: a.r, el: g.label }] : ids.has(a.id) ? [] : [a],
+    );
+    bonds = bonds.filter((b) => !(ids.has(b.a) && ids.has(b.b)));
+  }
+  if (atoms === doc.model.atoms) return doc;
+  return { ...doc, model: { atoms, bonds } };
 }
 
 /**

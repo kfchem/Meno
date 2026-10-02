@@ -402,6 +402,39 @@ lipids each have their own way of being drawn, which it should know.
    - A SMILES is still read by RDKit, whose drawing says what it means;
      the engine then draws it (RDKit's drawing stands, should the engine
      fail).
+   - Clean-up writes by name the groups a chemist would write so
+     (`lib/chem/contract.ts`, agreed 2026-10-02). Drawing a label out
+     (*Expand abbreviation*) still draws all of it; what is shown by name
+     is Clean-up's to decide, by what the group does and how much of the
+     molecule it is:
+     - a protecting, activating or leaving group (`role` in
+       `abbreviations.ts`: TBS, Boc, Ts, Tf, MOM, Bpin...) is written by
+       name wherever it does that work - on a heteroatom or a metal, TBS
+       even on ethanol, or on a carbon by an atom not carbon (TMS, Bpin,
+       Ts) - unless the rest of the molecule is one atom or none: TsCl,
+       Boc2O, B2pin2 and TBSOH are the group's own reagents, and are drawn.
+       On a carbon by a carbon it is something else - "Boc" so is a
+       tert-butyl ester, "MOM" a methoxymethyl - and goes by the next rule;
+     - any other named group of three atoms or more, hanging by one bond
+       from a heteroatom or a metal, is written by name where it is under
+       15% of the molecule's atoms: taxol's OAc and OBz, Pd(PPh3)4's
+       phenyls, but not aspirin's acetyl, a quarter of it. Methyl and ethyl
+       are always drawn;
+     - where the drawing still hides something - atoms on each other, or
+       on a bond - the largest groups left, alike ones together, are
+       written by name too, for as long as each time hides less;
+     - a heteroatom hanging by one bond, everything else on it written by
+       name, goes into the label with them: OTBS, NHBoc, PPh3, PPh2;
+     - what the last edit drew out of a label stays drawn out for the
+       Clean-up straight after it, and for that one only, so that nothing
+       is left drawn out for good;
+     - a group holding a wedge's stereocentre, or an atom with more to it
+       than its element and charge (an isotope, a radical, an atom map), is
+       drawn: its label would not say it.
+
+     It is one undo step with the layout. The dictionary's pictures of
+     reagents and complexes follow the same rules; a group's or a ligand's
+     own picture is drawn out.
 
 Its code is Meno's own: nothing taken from other depiction code, nothing
 traced from reference drawings.

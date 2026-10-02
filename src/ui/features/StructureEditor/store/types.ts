@@ -1,4 +1,4 @@
-import type { ImportedScheme, MarkPlaces, Relayout } from "../document";
+import type { ImportedScheme, MarkPlaces, Relayout, WrittenAsLabel } from "../document";
 import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
 import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
@@ -154,9 +154,16 @@ export type EditorState = {
   deleteBond: (id: number) => void;
   /**
    * A new layout for some of the structure - a clean-up - as one undo step:
-   * atoms moved, and wedges changed where the layout needs them.
+   * groups written by their labels first, where it writes them, then atoms
+   * moved, and wedges changed where the layout needs them.
    */
-  relayout: (change: Relayout) => void;
+  relayout: (change: Relayout, labels?: readonly WrittenAsLabel[]) => void;
+  /**
+   * The atoms the last edit drew out of an abbreviation - a run of them,
+   * where the edits before it did too - which Clean-up leaves drawn out;
+   * none after any other edit.
+   */
+  justExpanded: () => ReadonlySet<number>;
   updateBond: (id: number, patch: Partial<Bond>) => void;
   setBondOrder: (id: number, order: Bond["order"]) => void;
   setBondStereo: (id: number, stereo: NonNullable<Bond["stereo"]>) => void;

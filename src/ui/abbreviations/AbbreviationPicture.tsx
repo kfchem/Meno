@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../lib/chem/acs";
-import { drawnSmiles, placedStructure } from "../../lib/chem/abbreviationPlace";
+import { drawnSmiles, picturedStructure } from "../../lib/chem/abbreviationPlace";
 import type { GroupStructure } from "../../lib/chem/ligands";
 import { styleOf, type StyleChoice } from "../../lib/chem/style";
 import { useAppSettings } from "../../lib/settings/appSettings";
 import { drawingSvg } from "../features/StructureEditor/fileActions";
 import type { Model } from "../features/StructureEditor/store/types";
 
-/** A structure, laid out by Meno: atoms with ids from 1, its bonds as the editor holds them. */
+/**
+ * A structure, laid out by Meno, its groups written by name where Clean-up
+ * writes them so: atoms with ids from 1, its bonds as the editor holds them.
+ */
 function modelOf(s: GroupStructure): Model {
-  const placed = placedStructure(s, null, NOMINAL_BOND_LENGTH);
+  const placed = picturedStructure(s, NOMINAL_BOND_LENGTH);
   return {
     atoms: placed.atoms.map((a, i) => ({ ...a, id: i + 1, r: 0.9 })),
     bonds: placed.bonds.map((b, k) => ({

@@ -1,12 +1,17 @@
 /**
  * Clean-up: a structure laid out afresh by Meno's own engine - the drawing a
- * chemist would make of it (docs/LAYOUT-2D.md) - where it was drawn, as one
- * undo step.
+ * chemist would make of it (docs/LAYOUT-2D.md) - where it was drawn, with
+ * the groups a chemist would write by name written so (lib/chem/contract),
+ * as one undo step.
  */
-import { emptyStructureDocument, relayout } from "../document";
+import { contractGraph, contractionTrials, hiddenIn } from "../../../../lib/chem/contract";
+import { chemistry } from "../../../../lib/chem/molecule";
+import type { Layout2D } from "../../../../lib/layout/engine";
+import { emptyStructureDocument, relayout, writtenAsLabels, type WrittenAsLabel } from "../document";
 import type { EditorStore } from "../store";
 import type { Model } from "../store/types";
-import { layoutJob, nextFree, relayoutFrom } from "./engineLayout";
+import { drawingOf } from "./drawing";
+import { layoutJob, nextFree, relayoutFrom, type LayoutJob } from "./engineLayout";
 import { layOut } from "./layOut";
 
 /**
@@ -70,18 +75,75 @@ export function fragmentsHolding(model: Model, atoms: Iterable<number>): Set<num
 }
 
 /**
+ * The atoms of `part` Clean-up leaves drawn out, whatever groups they are
+ * in: those `expanded` holds - just drawn out of their label - a
+ * stereocentre's, wedged, and any atom with more to it than its element and
+ * charge (an isotope, a radical, an atom map...), which a label would not
+ * say.
+ */
+function keptDrawn(part: Model, expanded: ReadonlySet<number>): Set<number> {
+  const keep = new Set([...expanded].filter((id) => part.atoms.some((a) => a.id === id)));
+  for (const a of part.atoms) {
+    if (a.stereoCentre || Object.keys(chemistry(a)).some((k) => k !== "charge")) keep.add(a.id);
+  }
+  const drawing = drawingOf(part);
+  for (const b of drawing.bonds) if (b.wedge) keep.add(part.atoms[b.wedge.narrow].id);
+  return keep;
+}
+
+type Cleaned = { labels: WrittenAsLabel[]; part: Model; job: LayoutJob; laid: Layout2D };
+
+/**
+ * `part` laid out by the engine with the groups a chemist would write by
+ * name written so: those the rules choose, and more, where the drawing
+ * would hide something, as long as each more hides less (contractionTrials).
+ */
+async function laidOutWithLabels(part: Model, expanded: ReadonlySet<number>): Promise<Cleaned> {
+  const index = new Map(part.atoms.map((a, i) => [a.id, i]));
+  const graph = contractGraph(
+    part.atoms,
+    part.bonds.map((b) => ({
+      a1: index.get(b.a)!,
+      a2: index.get(b.b)!,
+      order: b.order,
+      ...(b.endpoints ? { endpoints: b.endpoints.flatMap((e) => (index.has(e) ? [index.get(e)!] : [])) } : {}),
+    })),
+  );
+  const keep = new Set([...keptDrawn(part, expanded)].map((id) => index.get(id)!));
+  const trials = contractionTrials(graph, keep);
+  let best: (Cleaned & { hidden: number }) | null = null;
+  for (let trial = trials.next(); !trial.done; ) {
+    const labels = trial.value.map((c) => ({
+      atoms: c.atoms.map((i) => part.atoms[i].id),
+      at: part.atoms[c.at].id,
+      label: c.label,
+    }));
+    const written = labels.length ? writtenAsLabels({ ...emptyStructureDocument(), model: part }, labels).model : part;
+    const job = layoutJob(written);
+    const laid = await layOut(job.input);
+    const hidden = hiddenIn(job.input, laid);
+    if (!best || hidden < best.hidden) best = { labels, part: written, job, laid, hidden };
+    trial = trials.next(hidden);
+  }
+  return best!;
+}
+
+/**
  * Cleans up the fragment an atom is in - or the fragments a selection's
  * atoms are in, or every structure on the canvas -
  * each where it was: laid out afresh by Meno's own engine (engineLayout),
- * off the drawing's thread, and applied as one undo step. Refuses, rather
- * than moving anything, if the structure changed meanwhile, or if the new
- * layout would not say the stereochemistry the old one said.
+ * off the drawing's thread, the groups a chemist would write by name
+ * written so, and applied as one undo step. What *Expand abbreviation* has
+ * just drawn out is left drawn out. Refuses, rather than changing anything,
+ * if the structure changed meanwhile, or if the new layout would not say
+ * the stereochemistry the old one said.
  */
 export async function cleanUp(
   store: EditorStore,
   around: number | Iterable<number> | null = null,
 ): Promise<void> {
   const model = store.getState().model;
+  const expanded = store.getState().justExpanded();
   const parts = (
     around == null
       ? fragmentsOf(model)
@@ -90,20 +152,24 @@ export async function cleanUp(
     .map((ids) => partOf(model, ids))
     .filter((part) => part.bonds.length > 0);
   if (!parts.length) return; // nothing to lay out
-  const jobs = parts.map(layoutJob);
-  const laid = await Promise.all(jobs.map((job) => layOut(job.input)));
+  const cleaned = await Promise.all(parts.map((part) => laidOutWithLabels(part, expanded)));
   if (store.getState().model !== model) {
     throw new Error(
       "The structure changed while it was being cleaned up, so nothing was moved.",
     );
   }
-  const changes = parts.map((part, i) => relayoutFrom(model, part, jobs[i], laid[i]));
-  store.getState().relayout({
-    atoms: changes.flatMap((c) => c.atoms),
-    bonds: changes.flatMap((c) => c.bonds),
-    added: changes.flatMap((c) => c.added ?? []),
-    removed: changes.flatMap((c) => c.removed ?? []),
-  });
+  const labels = cleaned.flatMap((c) => c.labels);
+  const written = labels.length ? writtenAsLabels({ ...emptyStructureDocument(), model }, labels).model : model;
+  const changes = cleaned.map((c) => relayoutFrom(written, c.part, c.job, c.laid));
+  store.getState().relayout(
+    {
+      atoms: changes.flatMap((c) => c.atoms),
+      bonds: changes.flatMap((c) => c.bonds),
+      added: changes.flatMap((c) => c.added ?? []),
+      removed: changes.flatMap((c) => c.removed ?? []),
+    },
+    labels,
+  );
 }
 
 /**
