@@ -144,7 +144,9 @@ journals:
 | Reagents | Above the arrow, side by side, their lowest point two fifths of a bond above it - clear of its head. |
 | The arrow | Two and two-thirds of a bond long, or half a bond longer than the reagents above it are wide on either side. Its line and head as the drawing style has them, or as the arrow sets for itself. |
 
-A "+" can be moved and deleted as an arrow can. The arrows and pluses drawn
+An arrow and a "+" can also be added - from the menu a right-click on
+empty space opens - moved and deleted, and an arrow drawn out by either
+end (docs/EDITOR-2D.md). The arrows and pluses drawn
 among a selection go with it: they are copied, cut, deleted and moved with
 it (but not turned). Pictures - SVG, and the EMF and PNG a copy puts on the
 clipboard - show them, and Meno's own record of a copied drawing keeps

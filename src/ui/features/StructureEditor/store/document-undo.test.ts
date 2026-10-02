@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { createStructureDocument } from "../document";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
 /** Store wired to a document, the way a structure tab is put together. */
 function editor() {
@@ -396,6 +397,30 @@ describe("editor store over a document", () => {
     expect(state().model.atoms.map((a) => a.el)).toEqual(["N"]);
     expect(state().arrows).toHaveLength(0);
     expect(state().pluses).toHaveLength(1);
+  });
+
+  it("adds a reaction arrow and a plus, each one step; a drag of either is one step", () => {
+    const { doc, state } = editor();
+    const arrow = state().addArrow(1, 2);
+    const plus = state().addPlus(-3, 2);
+    expect(doc.history().undoDepth).toBe(2);
+    // pointing right, as long as a file's
+    expect(state().arrows[0]).toMatchObject({ id: arrow, x: 1, y: 2, angle: 0, length: (8 / 3) * NOMINAL_BOND_LENGTH });
+    expect(state().pluses).toEqual([{ id: plus, x: -3, y: 2 }]);
+    // two drags of the arrow, each of two moves; one of the plus
+    state().updateArrow(arrow, { x: 2 }, "drag-1");
+    state().updateArrow(arrow, { x: 3 }, "drag-1");
+    state().updateArrow(arrow, { angle: 1, length: 5 }, "drag-2");
+    state().updateArrow(arrow, { angle: 1.2, length: 6 }, "drag-2");
+    state().movePlus(plus, -4, 2, "drag-3");
+    state().movePlus(plus, -5, 2, "drag-3");
+    expect(doc.history().undoDepth).toBe(5);
+    doc.undo();
+    expect(state().pluses[0]).toMatchObject({ x: -3 });
+    doc.undo();
+    expect(state().arrows[0]).toMatchObject({ x: 3, angle: 0 });
+    doc.undo();
+    expect(state().arrows[0]).toMatchObject({ x: 1 });
   });
 
   it("keeps aromatic circles in the document", () => {

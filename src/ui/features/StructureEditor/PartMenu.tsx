@@ -61,6 +61,8 @@ export default function PartMenu({
   radical,
   onExpand,
   onArrowStyle,
+  onAddArrow,
+  onAddPlus,
   clipboard,
   onClose,
 }: {
@@ -81,6 +83,9 @@ export default function PartMenu({
   onExpand?: () => void;
   /** A reaction arrow's own line and head, in a panel beside the canvas. */
   onArrowStyle: () => void;
+  /** A reaction arrow, or a "+", added where the menu was opened on empty space. */
+  onAddArrow: () => void;
+  onAddPlus: () => void;
   clipboard: MenuClipboard;
   onClose: () => void;
 }) {
@@ -122,14 +127,19 @@ export default function PartMenu({
   // (with a selection elsewhere, the keys are the selection's)
   const keys = target.selection === "none";
   const paste: Item = { name: "Paste", keys: shortcut("V"), run: clipboard.onPaste };
+  // (on empty space: a reaction scheme's arrow, or a "+", there)
+  const scheme: Item[] = [
+    { name: "Add reaction arrow", keys: "", run: onAddArrow, divider: true },
+    { name: "Add plus", keys: "", run: onAddPlus },
+  ];
   const items: Item[] =
     target.kind === "arrow"
       ? [
           { name: "Arrow style…", keys: "", run: onArrowStyle },
-          { name: "Delete arrow", keys: "", run: onDelete },
+          { name: "Delete arrow", keys: deleteKey, run: onDelete },
         ]
       : target.kind === "plus"
-      ? [{ name: "Delete plus", keys: "", run: onDelete }]
+      ? [{ name: "Delete plus", keys: deleteKey, run: onDelete }]
       : target.selection === "here"
       ? [
           { name: "Cut", keys: shortcut("X"), run: clipboard.onCut },
@@ -141,9 +151,10 @@ export default function PartMenu({
           { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
           { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
           { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
+          ...(target.kind == null ? scheme : []),
         ]
       : target.kind == null
-        ? [paste, { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll }]
+        ? [paste, { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll }, ...scheme]
         : [
           {
             name: target.kind === "atom" ? "Delete atom" : "Delete bond",

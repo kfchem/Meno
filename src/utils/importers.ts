@@ -23,6 +23,7 @@ import {
   type Molecule as ParsedMol,
 } from "./structureParsers";
 import { readRxnfile } from "../lib/chem/ctfile";
+import { ARROW_LENGTH_BONDS } from "../lib/chem/reactionScheme";
 import { elements } from "./atomUtils";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), and where it is. */
@@ -212,7 +213,7 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
   const agentW = getClusterWidth(reactConv.length + prodConv.length, agentConv.length);
   // The arrow: two and two-thirds of a bond, or half a bond longer than the
   // reagents above it are wide on either side
-  const ARROW_LEN = Math.max((NOMINAL_BOND_LENGTH * 8) / 3, agentW + NOMINAL_BOND_LENGTH);
+  const ARROW_LEN = Math.max(NOMINAL_BOND_LENGTH * ARROW_LENGTH_BONDS, agentW + NOMINAL_BOND_LENGTH);
   // The arrow, and half a bond clear of what is drawn on either side of it
   const arrowGap = ARROW_LEN + NOMINAL_BOND_LENGTH;
   const totalW = reactW + prodW + arrowGap;

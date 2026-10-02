@@ -23,6 +23,12 @@ and in particular:
 - **Hover, then act.** The atom or bond under the pointer is the subject of
   whatever comes next - a click, a drag, a wheel turn, a key. This is already
   how labels are typed.
+  - What is under the pointer is lit from behind: the highlight sits under
+    every bond and shape, so it never tints the drawing. A bond's highlight
+    follows what the bond draws - it widens with a wedge to its broad end
+    and takes in a double bond's second line, the same margin past the
+    drawing all along (the drawing reports how far each bond reaches,
+    `Layout.reach`).
 - **Drawing is dragging bonds out of atoms**, and the editor is made for
   that way of drawing rather than for keys to learn: there are no keyboard
   shortcuts for building structures (agreed 2026-09-27).
@@ -159,7 +165,8 @@ V, as everywhere, and the same from the menus.
   the engine, as the SMILES card draws one).
 - On empty space with nothing selected, a right-click opens *Paste* and
   *Select all*; the selection's menu starts with *Cut*, *Copy* and *Copy
-  as SMILES*, and *Paste* when it was opened on empty space.
+  as SMILES*, and *Paste* when it was opened on empty space. Either, opened
+  on empty space, ends with *Add reaction arrow* and *Add plus*.
 
 ## Who does what
 
@@ -322,11 +329,17 @@ All hover-based, as above.
   never in an exported picture.)
 - Everything a molfile, SDfile or Rxnfile can hold, read after CTfile Formats
   and drawn after IUPAC's recommendations: docs/CTFILE.md, step by step.
-- Reaction arrows, "+" and text: create, move, edit, delete. (So far an
-  arrow and its "+" signs come only from an RXN file, or a paste; they can
-  be moved and deleted, the arrow given its own line and head, as above.
-  They are saved - as an RXN file - copied and in an exported picture:
-  docs/CTFILE.md, "Reaction schemes". Text is still to come.)
+- Reaction arrows, "+" and text: create, move, edit, delete. (An arrow or
+  a "+" is added from the menu a right-click on empty space opens, where it
+  was opened: the arrow pointing right, two and two-thirds of a bond long.
+  Either is moved by dragging it and deleted by Delete or Backspace under
+  the pointer, or from its menu. The arrow under the pointer shows a handle
+  at each end: dragged, that end goes where the pointer goes and the other
+  stays, its direction in steps of 15 degrees, as a bond's, or freely after
+  a pause - one undo step. An arrow sets its own line and head, as above.
+  They come from an RXN file too, and are saved - as an RXN file - copied
+  and in an exported picture: docs/CTFILE.md, "Reaction schemes". Text is
+  still to come.)
 - Copy and paste, within Meno and between tabs. (PR #68, as above; and
   between Meno and other programs, through the system clipboard.)
 
