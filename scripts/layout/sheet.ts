@@ -29,6 +29,7 @@ import {
   type LayoutMetrics,
 } from "../../src/lib/layout/metrics";
 import { layout2D } from "../../src/lib/layout/engine";
+import { placedAbbreviation } from "../../src/lib/chem/abbreviationPlace";
 import type { Molecule } from "./fetch";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -256,7 +257,67 @@ for (const m of listed) {
 <div class="row">${ref}${cells.join("")}</div></section>`);
 }
 
+// Complexes of metals, from organometallics.json: each laid out as Meno's
+// own label for it stands for it (PubChem's SMILES leaves a haptic bond
+// out), drawn and measured as the rest - but a pi system's star, and the
+// haptic bond to it, which are no atom and no bond to measure.
+type Metal = { name: string; label: string; page: string; category: string };
+const metals: Metal[] = JSON.parse(readFileSync(resolve(here, "organometallics.json"), "utf8")).molecules;
+const metalTotals = { score: 0, overlaps: 0, crossings: 0, n: 0 };
+let metalCategory = "";
+for (const m of metals) {
+  if (only && !only.some((o) => m.name.toLowerCase().startsWith(o))) continue;
+  if (m.category !== metalCategory) {
+    metalCategory = m.category;
+    rows.push(`<h2>Metals: ${escape(metalCategory)}</h2>`);
+  }
+  const t = performance.now();
+  const s = placedAbbreviation(m.label, null, 1);
+  const ms = Math.round((performance.now() - t) * 10) / 10;
+  const ref = `<figure class="ref"><div class="art empty"><a href="${m.page}">${escape(m.name)} on Wikipedia</a></div><figcaption>Meno's label: <code>${escape(m.label)}</code></figcaption></figure>`;
+  if (!s) {
+    rows.push(`<section><h3>${escape(m.name)}</h3><div class="row">${ref}<figure><div class="art empty">not read</div></figure></div></section>`);
+    continue;
+  }
+  const keep = s.atoms.map((_, i) => i).filter((i) => s.atoms[i].el !== "*");
+  const index = new Map(keep.map((i, k) => [i, k]));
+  const own = s.bonds.filter((b) => !b.endpoints && index.has(b.a1) && index.has(b.a2));
+  const metrics = layoutMetrics({
+    x: keep.map((i) => s.atoms[i].x),
+    y: keep.map((i) => s.atoms[i].y),
+    edges: own.map((b) => [index.get(b.a1)!, index.get(b.a2)!] as const),
+    orders: own.map((b) => b.order),
+    wedged: own.flatMap((b, k) => (b.stereo === "up" || b.stereo === "down" ? [k] : [])),
+    labelled: keep.map((i) => s.atoms[i].el !== "C" || !!s.atoms[i].charge),
+    elements: keep.map((i) => s.atoms[i].el),
+    hydrogens: keep.map(() => 0),
+    cisTrans: [],
+    depth: keep.map((i) => s.atoms[i].z ?? null),
+    // (a ring in perspective - face-on to its metal, turned on its bond - as a cage is)
+    perspective: keep.map((i) => s.atoms[i].z != null),
+    tetra: keep.map(() => undefined),
+  });
+  (scores[m.name] ??= {}).Meno = metrics;
+  metalTotals.score += metrics.score;
+  metalTotals.overlaps += metrics.overlaps;
+  metalTotals.crossings += metrics.crossings;
+  metalTotals.n++;
+  const atoms: Atom[] = s.atoms.map((a, i) => ({
+    ...a,
+    id: i,
+    x: a.x * NOMINAL_BOND_LENGTH,
+    y: a.y * NOMINAL_BOND_LENGTH,
+    ...(a.z != null ? { z: a.z * NOMINAL_BOND_LENGTH } : {}),
+  }));
+  const bonds: Bond[] = s.bonds.map((b) => ({ ...b, stereo: b.stereo ?? "none" }));
+  const opts = acsWorldOptions(atoms, bonds, { units: "world", minLinePx: 1.25 });
+  const svg = createSVG(layoutMolecule(atoms, bonds, opts, ZOOM), opts);
+  rows.push(`<section><h3>${escape(m.name)} <span class="cid">${keep.length} atoms</span></h3>
+<div class="row">${ref}<figure><div class="art">${svg}</div><figcaption><b>Meno</b> · ${ms} ms<br>${fmt(metrics)}</figcaption></figure></div></section>`);
+}
+
 const summary = engines
+  .filter((e) => totals.has(e))
   .map((e) => {
     const t = totals.get(e)!;
     return `<tr><td>${e}</td><td>${(t.score / t.n).toFixed(1)}</td><td>${t.overlaps}</td><td>${t.crossings}</td></tr>`;
@@ -308,6 +369,7 @@ score is made of, the largest part first. Written by
 <code>npm run layout-bench</code>; nothing here is checked in, and the Wikipedia images are shown from
 Wikimedia Commons under the licences given.</p>
 <table><tr><th>engine</th><th>mean score</th><th>overlaps</th><th>crossings</th></tr>${summary}</table>
+${metalTotals.n ? `<table><tr><th>metals</th><th>mean score</th><th>overlaps</th><th>crossings</th></tr><tr><td>Meno</td><td>${(metalTotals.score / metalTotals.n).toFixed(1)}</td><td>${metalTotals.overlaps}</td><td>${metalTotals.crossings}</td></tr></table>` : ""}
 <table><tr><th>mean score by category</th>${engines.map((e) => `<th>${e}</th>`).join("")}</tr>${categories}</table>
 ${rows.join("\n")}
 `;
@@ -319,7 +381,12 @@ writeFileSync(out, page);
 console.log(`${rows.length} rows -> ${out}`);
 for (const e of engines) {
   const t = totals.get(e)!;
+  if (!t) continue;
   console.log(`${e.padEnd(10)} mean score ${(t.score / t.n).toFixed(1)}, overlaps ${t.overlaps}, crossings ${t.crossings}`);
+}
+if (metalTotals.n) {
+  const t = metalTotals;
+  console.log(`${"metals".padEnd(10)} mean score ${(t.score / t.n).toFixed(1)}, overlaps ${t.overlaps}, crossings ${t.crossings} (Meno, ${t.n})`);
 }
 if (process.argv.includes("--open")) {
   const [cmd, args] =
