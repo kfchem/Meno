@@ -1,8 +1,8 @@
 import { readClipboard, readDrop, type ClipItem, type Flavor } from "../../../../lib/clipboard";
 import { structureInPicture } from "../picture";
-import type { Model } from "../store/types";
+import type { Drawn } from "../store/types";
 import { looksLikeMolfile, looksLikeSmiles, readRecord } from "../utils/copyPaste";
-import { editorModelOf, processFileContent } from "../utils/io";
+import { drawnOf, processFileContent } from "../utils/io";
 import { structureFromSmiles } from "./fromSmiles";
 
 /**
@@ -12,11 +12,12 @@ import { structureFromSmiles } from "./fromSmiles";
  *   Word and PowerPoint hand over its storage);
  * - a picture Meno made of it - Office's clip format, handed back by Word
  *   or PowerPoint when the picture is copied there, or a PNG;
+ * - an RXN file another program put there, laid out as a scheme;
  * - a MOL file another program put there;
  * - plain text that is a MOL file or a SMILES.
  * Null when there is nothing that reads as a structure.
  */
-export async function structureOnClipboard(): Promise<Model | null> {
+export async function structureOnClipboard(): Promise<Drawn | null> {
   return structureIn(readClipboard, true);
 }
 
@@ -25,14 +26,14 @@ export async function structureOnClipboard(): Promise<Model | null> {
  * object dragged out of Word or PowerPoint - read as a paste reads the
  * clipboard, but for plain text: a dragged file's path, say, is no SMILES.
  */
-export async function structureInDrop(): Promise<Model | null> {
+export async function structureInDrop(): Promise<Drawn | null> {
   return structureIn(readDrop, false);
 }
 
 async function structureIn(
   read: (flavors: Flavor[]) => Promise<ClipItem | null>,
   withText: boolean,
-): Promise<Model | null> {
+): Promise<Drawn | null> {
   const own = await read(["meno", "embed"]);
   const record = own?.text != null ? readRecord(own.text) : null;
   if (record) return record;
@@ -41,18 +42,22 @@ async function structureIn(
     const found = picture && (await structureInPicture(picture));
     if (found) return found;
   }
+  const rxn = await read(["rxn"]);
+  if (rxn?.text) {
+    const reaction = await processFileContent("clipboard.rxn", rxn.text).catch(() => null);
+    if (reaction) return drawnOf(reaction);
+  }
   if (!withText) {
     const mol = await read(["mol"]);
     if (!mol?.text) return null;
-    const { model } = await processFileContent("dropped.mol", mol.text);
-    return editorModelOf(model);
+    return drawnOf(await processFileContent("dropped.mol", mol.text));
   }
   const item = await read(["mol", "text"]);
   const text = item?.text;
   if (!item || text == null) return null;
   if (item.flavor === "mol" || looksLikeMolfile(text)) {
-    const { model } = await processFileContent("clipboard.mol", text);
-    return editorModelOf(model);
+    // (an RXN file as text is read as one: it starts $RXN)
+    return drawnOf(await processFileContent("clipboard.mol", text));
   }
   if (looksLikeSmiles(text)) return structureFromSmiles(text.trim());
   return null;

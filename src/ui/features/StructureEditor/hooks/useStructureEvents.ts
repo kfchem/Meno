@@ -6,7 +6,8 @@ import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS } from "../constants";
 import { calculateNewBondPosition } from "../utils/geometry";
 import { clickClock, doubleClickedSince, noteClick } from "../utils/clickCount";
 import { endsDrag, movePress, startPress, type Press } from "../utils/press";
-import { editorModelOf, processFileContent } from "../utils/io";
+import { editorModelOf, processFileContent, type ProcessedFileResult } from "../utils/io";
+import { schemeOf, type ImportedScheme } from "../document";
 import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
 import type { Model } from "../store/types";
@@ -57,21 +58,28 @@ export function useStructureEvents(
   // rather than being replayed atom by atom.
   const toModel = editorModelOf;
 
-  // A file's reaction arrow, moved by (dx, dy) along with its atoms, and
-  // placed in the same edit as they are.
-  const importedArrow = (
-    a: { x1: number; y1: number; x2: number; y2: number } | undefined,
+  // A file's reaction arrow and pluses, moved by (dx, dy) along with its
+  // atoms, and placed in the same edit as they are.
+  const importedScheme = (
+    result: Pick<ProcessedFileResult, "arrow" | "pluses">,
     dx: number,
     dy: number,
-  ) =>
-    a
-      ? {
-          x: (a.x1 + a.x2) / 2 + dx,
-          y: (a.y1 + a.y2) / 2 + dy,
-          angle: 0,
-          length: Math.hypot(a.x2 - a.x1, a.y2 - a.y1),
-        }
-      : undefined;
+  ): ImportedScheme => {
+    const a = result.arrow;
+    return {
+      arrows: a
+        ? [
+            {
+              x: (a.x1 + a.x2) / 2 + dx,
+              y: (a.y1 + a.y2) / 2 + dy,
+              angle: Math.atan2(a.y2 - a.y1, a.x2 - a.x1),
+              length: Math.hypot(a.x2 - a.x1, a.y2 - a.y1),
+            },
+          ]
+        : [],
+      pluses: (result.pluses ?? []).map((p) => ({ x: p.x + dx, y: p.y + dy })),
+    };
+  };
 
   // Effect: Initial Payload
   const importedInitial = useRef(false);
@@ -84,7 +92,7 @@ export function useStructureEvents(
       // A structure from a document (lib/ole): Meno's own record, taken as it is.
       if (/\.meno$/i.test(initialFilename ?? "")) {
         const record = readRecord(initialPayload);
-        if (record) store.getState().openModel(record);
+        if (record) store.getState().openModel(record, schemeOf(record));
         else reportImportError("initial payload", new Error("The document's structure could not be read."));
         return;
       }
@@ -107,7 +115,7 @@ export function useStructureEvents(
           .getState()
           .openModel(
             toModel(shifted),
-            importedArrow(result.arrow, -result.centroid.x, -result.centroid.y),
+            importedScheme(result, -result.centroid.x, -result.centroid.y),
           );
       } catch (e) {
         reportImportError("initial payload", e);
@@ -374,7 +382,7 @@ export function useStructureEvents(
 
       store
         .getState()
-        .appendModel(toModel(shifted), importedArrow(result.arrow, dx, dy));
+        .appendModel(toModel(shifted), importedScheme(result, dx, dy));
       setImportError(null);
     } catch (err) {
       reportImportError("append", err);
@@ -400,7 +408,7 @@ export function useStructureEvents(
         .getState()
         .replaceModel(
           toModel(shifted),
-          importedArrow(result.arrow, -result.centroid.x, -result.centroid.y),
+          importedScheme(result, -result.centroid.x, -result.centroid.y),
         );
       setImportError(null);
     } catch (err) {

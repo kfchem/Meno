@@ -1,0 +1,95 @@
+import * as THREE from "three";
+import { useEffect, useMemo, useRef } from "react";
+import { useThree } from "@react-three/fiber";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { plusMeasures, plusOutline } from "../../../../lib/chem/reactionScheme";
+import { useEditor } from "../store";
+import { useDrawingStyle } from "../useDrawingStyle";
+import { useDrawnLayout } from "./drawnLayoutContext";
+
+/**
+ * The "+" signs of a reaction scheme, as the drawing style draws them, in
+ * the bonds' colour: each dragged to move it, and the one under the pointer
+ * the one a right-click's menu is for.
+ */
+export default function Pluses2D() {
+  const pluses = useEditor((s) => s.pluses);
+  const movePlus = useEditor((s) => s.movePlus);
+  const beginPanHold = useEditor((s) => s.beginPanHold);
+  const endPanHold = useEditor((s) => s.endPanHold);
+  const setHoveredPlus = useEditor((s) => s.setHoveredPlus);
+  const style = useDrawingStyle();
+  const { opts, zoom } = useDrawnLayout();
+  const { camera, gl } = useThree();
+  const canvas = gl.domElement as HTMLCanvasElement;
+  const toWorld = (cx: number, cy: number) => {
+    const rect = canvas.getBoundingClientRect();
+    const v = new THREE.Vector3(
+      ((cx - rect.left) / rect.width) * 2 - 1,
+      -(((cy - rect.top) / rect.height) * 2 - 1),
+      0,
+    );
+    v.unproject(camera as any);
+    return { x: v.x, y: v.y };
+  };
+  const dragRef = useRef<{ id: number; offx: number; offy: number } | null>(null);
+
+  // one shape for every "+", about its middle
+  const geometry = useMemo(() => {
+    const m = plusMeasures(style, NOMINAL_BOND_LENGTH);
+    // no thinner on the screen than a bond is kept (ReactionArrow2D)
+    const least = Math.max(0.5, opts.minLinePx ?? 1) / Math.max(zoom, 1e-6);
+    const outline = plusOutline({ x: 0, y: 0 }, { ...m, thickness: Math.max(m.thickness, least) });
+    return new THREE.ShapeGeometry(new THREE.Shape(outline.map((p) => new THREE.Vector2(p.x, p.y))));
+  }, [style, opts.minLinePx, zoom]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  const fill = opts.bondColor ?? "black";
+
+  return (
+    <group>
+      {pluses.map((p) => (
+        <group
+          key={p.id}
+          position={[p.x, p.y, 0.02]}
+          onPointerOver={() => setHoveredPlus(p.id)}
+          onPointerOut={() => setHoveredPlus(null)}
+          onPointerDown={(e) => {
+            // a right press is the menu's, or the view's to move
+            if (((e as any).button ?? (e as any).nativeEvent?.button ?? 0) !== 0) return;
+            const cx = (e as any).clientX ?? (e as any).nativeEvent?.clientX;
+            const cy = (e as any).clientY ?? (e as any).nativeEvent?.clientY;
+            const at = toWorld(cx, cy);
+            dragRef.current = { id: p.id, offx: p.x - at.x, offy: p.y - at.y };
+            beginPanHold((e as any).pointerId ?? (e as any).nativeEvent?.pointerId ?? null);
+            const onMove = (ev: PointerEvent) => {
+              if (!dragRef.current) return;
+              const q = toWorld(ev.clientX, ev.clientY);
+              movePlus(dragRef.current.id, q.x + dragRef.current.offx, q.y + dragRef.current.offy);
+            };
+            const onUp = (ev: PointerEvent) => {
+              dragRef.current = null;
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp, true);
+              try {
+                endPanHold(ev.pointerId);
+              } catch {
+                endPanHold(null);
+              }
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp, true);
+          }}
+        >
+          <mesh geometry={geometry}>
+            <meshBasicMaterial color={fill} toneMapped={false} depthTest={false} depthWrite={false} />
+          </mesh>
+          {/* an invisible square round it, easier to take hold of */}
+          <mesh position={[0, 0, -0.005]}>
+            <boxGeometry args={[0.8, 0.8, 0.001]} />
+            <meshBasicMaterial transparent opacity={0} depthTest={false} depthWrite={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}

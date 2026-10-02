@@ -12,11 +12,13 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Model } from "./store/types";
+import type { Arrow, Atom, Bond, Drawn, Model, Plus } from "./store/types";
 
 export type StructureDocument = {
   model: Model;
   arrows: Arrow[];
+  /** The "+" signs of a reaction scheme. */
+  pluses: Plus[];
   /** Legacy global aromatic circles toggle. */
   aromaticEnabled: boolean;
   /** Per-ring aromatic circle flags, keyed by ring key. */
@@ -24,6 +26,7 @@ export type StructureDocument = {
   /** Ids are handed out from one counter shared by atoms and bonds. */
   nextId: number;
   nextArrowId: number;
+  nextPlusId: number;
   /**
    * The document's own drawing style; unset, it is drawn in the
    * application's. Saving to a MOL or SD file keeps the structure only.
@@ -35,10 +38,12 @@ export function emptyStructureDocument(): StructureDocument {
   return {
     model: { atoms: [], bonds: [] },
     arrows: [],
+    pluses: [],
     aromaticEnabled: false,
     aromaticRings: {},
     nextId: 1,
     nextArrowId: 1,
+    nextPlusId: 1,
   };
 }
 
@@ -464,6 +469,8 @@ export function replaceModel(
     model: { atoms: next.atoms.slice(), bonds: next.bonds.slice() },
     arrows: [],
     nextArrowId: 1,
+    pluses: [],
+    nextPlusId: 1,
     aromaticEnabled: false,
     aromaticRings: {},
     nextId: Math.max(1, maxId + 1),
@@ -515,17 +522,37 @@ export function appendModel(
   };
 }
 
-// --- arrows ----------------------------------------------------------------
+// --- arrows and pluses ----------------------------------------------------
 
-/** The reaction arrow a file brings with it, where it lies once placed. */
-export type ImportedArrow = { x: number; y: number; angle: number; length: number };
+/**
+ * The arrows and "+" signs a file or a paste brings with it, where they lie
+ * once placed: given ids of the document's own as they are added.
+ */
+export type ImportedScheme = {
+  arrows?: Omit<Arrow, "id">[];
+  pluses?: Omit<Plus, "id">[];
+};
 
-/** `doc` with the file's arrow added, if it brought one. */
-export function withImportedArrow(
+/** The arrows and pluses drawn with a part - a paste, a document's record - as a scheme to add. */
+export function schemeOf(part: Drawn): ImportedScheme {
+  return {
+    arrows: (part.arrows ?? []).map(({ id: _id, ...a }) => a),
+    pluses: (part.pluses ?? []).map(({ id: _id, ...p }) => p),
+  };
+}
+
+/** `doc` with the scheme's arrows and pluses added, if it brought any. */
+export function withImportedScheme(
   doc: StructureDocument,
-  arrow?: ImportedArrow,
+  scheme?: ImportedScheme,
 ): StructureDocument {
-  return arrow ? addArrow(doc, arrow.x, arrow.y, arrow.angle, arrow.length) : doc;
+  let next = doc;
+  for (const a of scheme?.arrows ?? []) {
+    next = addArrow(next, a.x, a.y, a.angle, a.length);
+    if (a.look) next = setArrowLook(next, next.nextArrowId - 1, a.look);
+  }
+  for (const p of scheme?.pluses ?? []) next = addPlus(next, p.x, p.y);
+  return next;
 }
 
 export function addArrow(
@@ -575,6 +602,64 @@ export function removeArrow(
 ): StructureDocument {
   const arrows = doc.arrows.filter((a) => a.id !== id);
   return arrows.length === doc.arrows.length ? doc : { ...doc, arrows };
+}
+
+export function addPlus(doc: StructureDocument, x: number, y: number): StructureDocument {
+  const pluses = doc.pluses ?? [];
+  const nextPlusId = doc.nextPlusId ?? 1;
+  return { ...doc, nextPlusId: nextPlusId + 1, pluses: [...pluses, { id: nextPlusId, x, y }] };
+}
+
+export function movePlus(doc: StructureDocument, id: number, x: number, y: number): StructureDocument {
+  const pluses = doc.pluses ?? [];
+  const index = pluses.findIndex((p) => p.id === id);
+  if (index < 0) return doc;
+  const next = pluses.slice();
+  next[index] = { ...next[index], x, y };
+  return { ...doc, pluses: next };
+}
+
+export function removePlus(doc: StructureDocument, id: number): StructureDocument {
+  const pluses = (doc.pluses ?? []).filter((p) => p.id !== id);
+  return pluses.length === (doc.pluses ?? []).length ? doc : { ...doc, pluses };
+}
+
+/** Where arrows and pluses go, by id. */
+export type MarkPlaces = {
+  arrows?: { id: number; x: number; y: number }[];
+  pluses?: { id: number; x: number; y: number }[];
+};
+
+/** `doc` with the arrows and pluses `places` names where it says. */
+export function placeMarks(doc: StructureDocument, places?: MarkPlaces): StructureDocument {
+  if (!places?.arrows?.length && !places?.pluses?.length) return doc;
+  const arrowAt = new Map((places.arrows ?? []).map((p) => [p.id, p]));
+  const plusAt = new Map((places.pluses ?? []).map((p) => [p.id, p]));
+  const at = <T extends { id: number; x: number; y: number }>(t: T, m: Map<number, { x: number; y: number }>): T => {
+    const p = m.get(t.id);
+    return p ? { ...t, x: p.x, y: p.y } : t;
+  };
+  return {
+    ...doc,
+    arrows: doc.arrows.map((a) => at(a, arrowAt)),
+    pluses: (doc.pluses ?? []).map((p) => at(p, plusAt)),
+  };
+}
+
+/** `doc` without the atoms and bonds given, nor the arrows and pluses: what a cut takes. */
+export function deleteDrawn(
+  doc: StructureDocument,
+  atoms: Set<number>,
+  bonds: Set<number>,
+  arrows: Set<number>,
+  pluses: Set<number>,
+): StructureDocument {
+  const rest = atoms.size || bonds.size ? deleteParts(doc, atoms, bonds) : doc;
+  const keptArrows = rest.arrows.filter((a) => !arrows.has(a.id));
+  const keptPluses = (rest.pluses ?? []).filter((p) => !pluses.has(p.id));
+  return keptArrows.length === rest.arrows.length && keptPluses.length === (rest.pluses ?? []).length
+    ? rest
+    : { ...rest, arrows: keptArrows, pluses: keptPluses };
 }
 
 // --- aromatic circles ------------------------------------------------------

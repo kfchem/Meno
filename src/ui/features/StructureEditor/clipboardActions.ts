@@ -6,6 +6,7 @@ import { chemMolblock } from "../../../lib/rdkit/molblock";
 import { chemWorker } from "../../../lib/rdkit/worker";
 import { forFlatReaders } from "./chem/drawing";
 import { structureOnClipboard } from "./chem/fromClipboard";
+import { drawnOf } from "./fileActions";
 import { pictureItems } from "./picture";
 import type { EditorStore } from "./store";
 import { centredAt, clipItems, partToCopy } from "./utils/copyPaste";
@@ -15,9 +16,10 @@ type Pt = { x: number; y: number };
 /**
  * Copy, cut and paste, for the keys and the menu alike.
  *
- * - What is copied is the selection - or, with nothing selected, the
- *   structure under the pointer - with pictures of it, drawn in the style
- *   the canvas is drawn in, for Office and other programs (picture.ts).
+ * - What is copied is the selection, with the reaction arrows and "+"
+ *   signs among it - or, with nothing selected, the structure under the
+ *   pointer - with pictures of it, drawn in the style the canvas is drawn
+ *   in, for Office and other programs (picture.ts).
  * - A paste goes where it is asked to go (the pointer, or where the menu
  *   was opened), selected, so that it can be dragged straight on; one undo
  *   step.
@@ -33,10 +35,11 @@ export function useClipboardActions(
   }, [store]);
 
   const part = useCallback(() => {
-    const { model, sel, hovered } = store.getState();
+    const state = store.getState();
+    const { model, sel, hovered } = state;
     const around =
       hovered.atomId ?? model.bonds.find((b) => b.id === hovered.bondId)?.a ?? null;
-    return partToCopy(model, sel, around);
+    return partToCopy(drawnOf(state), sel, around);
   }, [store]);
 
   const copy = useCallback(async () => {
@@ -69,10 +72,9 @@ export function useClipboardActions(
   const cut = useCallback(async () => {
     const p = part();
     if (!p || !(await copy())) return;
-    const st = store.getState();
-    // what was copied is what goes: the selection, or the structure
-    st.setSel({ atoms: new Set(p.atoms.map((a) => a.id)), bonds: new Set(p.bonds.map((b) => b.id)) });
-    st.deleteSelection();
+    // what was copied is what goes: the selection, or the structure, and
+    // the arrows and pluses that went with it
+    store.getState().deleteDrawn(p);
   }, [part, copy, store]);
 
   const paste = useCallback(

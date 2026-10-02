@@ -5,8 +5,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * the canvas is, so that the menu stays inside it.
  */
 export type MenuTarget = {
-  /** The atom, bond or reaction arrow right-clicked; null, when it was nothing. */
-  kind: "atom" | "bond" | "arrow" | null;
+  /** The atom, bond, reaction arrow or "+" right-clicked; null, when it was nothing. */
+  kind: "atom" | "bond" | "arrow" | "plus" | null;
   id: number | null;
   /**
    * Whether there is a selection, and whether the menu is its: right-clicked
@@ -128,6 +128,8 @@ export default function PartMenu({
           { name: "Arrow style…", keys: "", run: onArrowStyle },
           { name: "Delete arrow", keys: "", run: onDelete },
         ]
+      : target.kind === "plus"
+      ? [{ name: "Delete plus", keys: "", run: onDelete }]
       : target.selection === "here"
       ? [
           { name: "Cut", keys: shortcut("X"), run: clipboard.onCut },
@@ -178,7 +180,9 @@ export default function PartMenu({
               ? "Bond"
               : target.kind === "arrow"
                 ? "Arrow"
-                : "Canvas"
+                : target.kind === "plus"
+                  ? "Plus"
+                  : "Canvas"
       }
       className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
       style={{

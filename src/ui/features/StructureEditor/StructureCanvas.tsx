@@ -13,6 +13,7 @@ import {
   ExtendPreview2D,
   MovePreview2D,
   Arrows2D,
+  Pluses2D,
   AromaticCircles2D,
   Wedges2D,
   Labels2D,
@@ -287,7 +288,7 @@ function StructureCanvasContent({
     // A card's text field keeps the system's own menu - cut, copy, paste.
     if (e.target !== domRef.current) return;
     e.preventDefault(); // no browser menu over the drawing
-    const { hovered, hoveredArrow, arrows } = store.getState();
+    const { hovered, hoveredArrow, arrows, hoveredPlus, pluses } = store.getState();
     const box = e.currentTarget.getBoundingClientRect();
     const place = {
       at: clientToWorld(e.clientX, e.clientY) ?? pasteTarget(),
@@ -300,6 +301,13 @@ function StructureCanvasContent({
     // on a reaction arrow, and nothing else: the arrow's menu
     if (!kind && hoveredArrow != null && arrows.some((a) => a.id === hoveredArrow)) {
       const target: MenuTarget = { kind: "arrow", id: hoveredArrow, selection: "none", ...place };
+      if (r?.down) r.pending = target;
+      else if (!r?.moved) setMenu(target);
+      return;
+    }
+    // likewise a "+"
+    if (!kind && hoveredPlus != null && pluses.some((p) => p.id === hoveredPlus)) {
+      const target: MenuTarget = { kind: "plus", id: hoveredPlus, selection: "none", ...place };
       if (r?.down) r.pending = target;
       else if (!r?.moved) setMenu(target);
       return;
@@ -532,6 +540,7 @@ function StructureCanvasContent({
           onClose={closeMenu}
           onDelete={() => {
             if (menu.kind === "arrow" && menu.id != null) store.getState().removeArrow(menu.id);
+            else if (menu.kind === "plus" && menu.id != null) store.getState().removePlus(menu.id);
             else if (menu.selection === "here") store.getState().deleteSelection();
             else if (menu.kind && menu.id != null) deletePart(menu.kind, menu.id);
           }}
@@ -625,8 +634,9 @@ function StructureCanvasContent({
           {/* Move preview */}
           <MovePreview2D />
           <HoverOverlay2D />
-          {/* Free arrows (no semantics) */}
+          {/* A reaction scheme's arrows and "+" signs */}
           <Arrows2D />
+          <Pluses2D />
         </DrawnLayoutProvider>
         <PanZoom2D />
       </Canvas>

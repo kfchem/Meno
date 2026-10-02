@@ -1,10 +1,11 @@
 import { NOMINAL_BOND_LENGTH } from "../../../../../lib/chem/acs";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
-import type { ImportedArrow, StructureDocument } from "../../document";
+import type { ImportedScheme, StructureDocument } from "../../document";
 import type { ArrowLook } from "../../../../../lib/chem/reactionArrow";
-import { EditorState, Bond, Arrow, Model } from "../types";
+import { EditorState, Bond, Arrow, Model, Drawn } from "../types";
 import { turnedOver } from "../../utils/selection";
+import { schemeAmong } from "../../utils/copyPaste";
 import { StoreApi } from "zustand";
 
 type SetState = StoreApi<EditorState>["setState"];
@@ -30,14 +31,15 @@ function forgetDeleted(set: SetState) {
 }
 
 /**
- * What `appendModel` (../../document) added of `next` to a document whose
- * next id was `start`: its atoms, then its bonds, numbered on from there -
- * selected, so that it can be dragged straight on.
+ * What `appendModel` (../../document) added to `model`, whose next id was
+ * `start`: every atom and bond numbered from there on - ids are handed out
+ * in order and never again, an Sgroup's among them - selected, so that it
+ * can be dragged straight on.
  */
-function added(start: number, next: Model): EditorState["sel"] {
+function added(start: number, model: Model): EditorState["sel"] {
   return {
-    atoms: new Set(next.atoms.map((_, i) => start + i)),
-    bonds: new Set(next.bonds.map((_, i) => start + next.atoms.length + i)),
+    atoms: new Set(model.atoms.filter((a) => a.id >= start).map((a) => a.id)),
+    bonds: new Set(model.bonds.filter((b) => b.id >= start).map((b) => b.id)),
   };
 }
 
@@ -122,8 +124,10 @@ export const createModelSlice = (
     return best ? best.id : null;
   },
 
-  moveAtoms: (moves: { id: number; x: number; y: number }[], gesture: string) => {
-    doc.edit("move atoms", (d) => ops.placeAtoms(d, moves), { coalesceKey: `move-atoms:${gesture}` });
+  moveAtoms: (moves: { id: number; x: number; y: number }[], gesture: string, marks?: ops.MarkPlaces) => {
+    doc.edit("move atoms", (d) => ops.placeMarks(ops.placeAtoms(d, moves), marks), {
+      coalesceKey: `move-atoms:${gesture}`,
+    });
   },
 
   turnSelectionOver: (axis: "vertical" | "horizontal") => {
@@ -134,9 +138,12 @@ export const createModelSlice = (
   },
 
   deleteSelection: () => {
-    const { sel } = get();
+    const { sel, model, arrows, pluses } = get();
     if (!sel.atoms.size && !sel.bonds.size) return;
-    if (doc.edit("delete selection", (d) => ops.deleteParts(d, sel.atoms, sel.bonds))) {
+    // the arrows and pluses among it go with it, as with a cut
+    const among = schemeAmong({ ...model, arrows, pluses }, sel.atoms);
+    const ids = (xs: { id: number }[]) => new Set(xs.map((x) => x.id));
+    if (doc.edit("delete selection", (d) => ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses)))) {
       forgetDeleted(set);
     }
   },
@@ -219,18 +226,18 @@ export const createModelSlice = (
    * The structure a tab opens with. That is where the document starts, not
    * an edit made to it: nothing to undo, nothing unsaved.
    */
-  openModel: (next: Model, arrow?: ImportedArrow) => {
+  openModel: (next: Model, scheme?: ImportedScheme) => {
     doc.reset(
-      ops.withImportedArrow(ops.replaceModel(doc.getState(), next), arrow),
+      ops.withImportedScheme(ops.replaceModel(doc.getState(), next), scheme),
       "open structure",
     );
     get().forgetInteraction();
   },
 
   /** A file opened over what the canvas holds: one step, arrow and all. */
-  replaceModel: (next: Model, arrow?: ImportedArrow) => {
+  replaceModel: (next: Model, scheme?: ImportedScheme) => {
     doc.edit("open structure", (d) =>
-      ops.withImportedArrow(ops.replaceModel(d, next), arrow),
+      ops.withImportedScheme(ops.replaceModel(d, next), scheme),
     );
     get().forgetInteraction();
   },
@@ -254,27 +261,27 @@ export const createModelSlice = (
     }));
   },
 
-  pasteModel: (next: Model) => {
+  pasteModel: (next: Drawn) => {
     if (!next.atoms.length) return;
     const start = doc.getState().nextId;
-    if (!doc.edit("paste", (d) => ops.appendModel(d, next))) return;
+    if (!doc.edit("paste", (d) => ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(next)))) return;
     set((prev: EditorState) => ({
       ...prev,
-      sel: added(start, next),
+      sel: added(start, doc.getState().model),
       selAnchor: null,
       hovered: { atomId: null, bondId: null },
     }));
   },
 
-  appendModel: (next: Model, arrow?: ImportedArrow) => {
+  appendModel: (next: Model, scheme?: ImportedScheme) => {
     const start = doc.getState().nextId;
     const edited = doc.edit("add structure", (d) =>
-      ops.withImportedArrow(ops.appendModel(d, next), arrow),
+      ops.withImportedScheme(ops.appendModel(d, next), scheme),
     );
     set((prev: EditorState) => ({
       ...prev,
       // (selected, as a paste is)
-      ...(edited && next.atoms.length ? { sel: added(start, next), selAnchor: null } : {}),
+      ...(edited && next.atoms.length ? { sel: added(start, doc.getState().model), selAnchor: null } : {}),
       hovered: { atomId: null, bondId: null },
       fitNonce: prev.fitNonce + 1,
     }));
@@ -299,6 +306,27 @@ export const createModelSlice = (
 
   removeArrow: (id: number) => {
     doc.edit("delete arrow", (d) => ops.removeArrow(d, id));
+  },
+
+  movePlus: (id: number, x: number, y: number) => {
+    doc.edit("move plus", (d) => ops.movePlus(d, id, x, y), { coalesceKey: `plus:${id}` });
+  },
+
+  removePlus: (id: number) => {
+    doc.edit("delete plus", (d) => ops.removePlus(d, id));
+  },
+
+  deleteDrawn: (part: Drawn) => {
+    const edited = doc.edit("cut", (d) =>
+      ops.deleteDrawn(
+        d,
+        new Set(part.atoms.map((a) => a.id)),
+        new Set(part.bonds.map((b) => b.id)),
+        new Set((part.arrows ?? []).map((a) => a.id)),
+        new Set((part.pluses ?? []).map((p) => p.id)),
+      ),
+    );
+    if (edited) forgetDeleted(set);
   },
 
   expandAbbreviation: (id: number) => {

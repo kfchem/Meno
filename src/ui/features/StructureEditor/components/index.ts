@@ -14,6 +14,7 @@ export { default as AtomsHoverRings2D } from "./AtomsHoverRings2D";
 export { default as MovePreview2D } from "./MovePreview2D";
 export { default as ReactionArrow2D } from "./ReactionArrow2D";
 export { default as Arrows2D } from "./Arrows2D";
+export { default as Pluses2D } from "./Pluses2D";
 export { default as ChemMarks2D } from "./ChemMarks2D";
 export { default as SnapArc2D } from "./SnapArc2D";
 export { default as Selection2D } from "./Selection2D";

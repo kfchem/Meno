@@ -13,6 +13,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
  * A kind of data on the clipboard:
  * - `meno`: Meno's own record of a structure, nothing lost;
  * - `mol`: a MOL file, for other chemistry programs;
+ * - `rxn`: an RXN file, likewise, for a reaction;
  * - `text`: plain text;
  * - `gvml`: Office's own clip format, a package holding a picture that Word
  *   and PowerPoint keep as it is and hand back (lib/office/gvml);
@@ -32,7 +33,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
  * beside it, PowerPoint pastes text as a text box in preference to a
  * picture.
  */
-export type Flavor = "meno" | "mol" | "text" | "gvml" | "emf" | "png" | "dib" | "embed" | "object";
+export type Flavor = "meno" | "mol" | "rxn" | "text" | "gvml" | "emf" | "png" | "dib" | "embed" | "object";
 
 export type ClipItem = { flavor: Flavor; text?: string; bytes?: Uint8Array };
 

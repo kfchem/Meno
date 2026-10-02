@@ -26,7 +26,7 @@ import { createSVG } from "../../../lib/chem/layout2d";
 import type { DrawingStyle } from "../../../lib/chem/style";
 import { gvmlImages, gvmlPicture } from "../../../lib/office/gvml";
 import { drawingLayout } from "./fileActions";
-import type { EditorState, Model } from "./store/types";
+import type { Drawn, EditorState } from "./store/types";
 import { readRecord, recordText } from "./utils/copyPaste";
 
 /** What marks Meno's record in an EMF's comment, and names it in a PNG. */
@@ -41,9 +41,10 @@ type Aromatic = Pick<EditorState, "aromaticEnabled" | "aromaticRings">;
 /**
  * Meno's record of `part` and the EMF of it that carries the record - what a
  * copy puts in Office's clip format, and what a document holding the
- * structure as an object keeps and shows.
+ * structure as an object keeps and shows. A reaction's arrows and "+" signs
+ * are in both.
  */
-export function structurePicture(part: Model, aromatic: Aromatic, style: DrawingStyle) {
+export function structurePicture(part: Drawn, aromatic: Aromatic, style: DrawingStyle) {
   const record = recordText(part);
   const { layout, opts } = drawingLayout(part, aromatic, style);
   return { record, layout, opts, ...layoutEmf(layout, opts, utf8.encode(EMF_MARK + record)) };
@@ -55,7 +56,7 @@ export function structurePicture(part: Model, aromatic: Aromatic, style: Drawing
  * nothing.
  */
 export async function pictureItems(
-  part: Model,
+  part: Drawn,
   aromatic: Aromatic,
   style: DrawingStyle,
   platformTakes?: Set<Flavor> | null,
@@ -78,7 +79,7 @@ export async function pictureItems(
 }
 
 /** The structure a picture on the clipboard carries, if it carries one. */
-export async function structureInPicture(item: ClipItem): Promise<Model | null> {
+export async function structureInPicture(item: ClipItem): Promise<Drawn | null> {
   if (!item.bytes) return null;
   if (item.flavor === "png") return fromPng(item.bytes);
   if (item.flavor === "object") return fromObject(item.bytes);
@@ -90,7 +91,7 @@ export async function structureInPicture(item: ClipItem): Promise<Model | null> 
   return null;
 }
 
-function fromEmf(emf: Uint8Array): Model | null {
+function fromEmf(emf: Uint8Array): Drawn | null {
   const decoder = new TextDecoder();
   for (const c of emfComments(emf)) {
     const text = decoder.decode(c);
@@ -105,7 +106,7 @@ function fromEmf(emf: Uint8Array): Model | null {
  * of its own ("Meno"), and the picture it shows, which carries the record
  * too ("MenoPicture").
  */
-function fromObject(storage: Uint8Array): Model | null {
+function fromObject(storage: Uint8Array): Drawn | null {
   const streams = cfbStreams(storage);
   const own = streams?.get("/Meno");
   const record = own ? readRecord(new TextDecoder().decode(own)) : null;
@@ -114,7 +115,7 @@ function fromObject(storage: Uint8Array): Model | null {
   return picture ? fromEmf(picture) : null;
 }
 
-function fromPng(png: Uint8Array): Model | null {
+function fromPng(png: Uint8Array): Drawn | null {
   const text = textOf(png, PNG_KEY);
   return text ? readRecord(text) : null;
 }

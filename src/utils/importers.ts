@@ -146,6 +146,8 @@ export type RXNGroups = {
 export type RXNLayout = {
   model: EditorModel;
   arrow: { x1: number; y1: number; x2: number; y2: number } | null;
+  /** The "+" signs between the molecules on either side of the arrow: their middles. */
+  pluses: { x: number; y: number }[];
   centroid: { x: number; y: number };
 };
 
@@ -165,9 +167,12 @@ export function parseRXNGroups(text: string): RXNGroups {
 }
 
 /**
- * Build a horizontally laid-out EditorModel from an RXN text with ordering:
- * reactants (left) -> arrow (center) -> products (right). Agents near the arrow.
- * Returns combined model, optional arrow endpoints, and centroid.
+ * A reaction from an RXN file, laid out as a scheme: the reactants, a "+"
+ * between each two, the arrow, and the products likewise, along one line;
+ * the reagents above the arrow, side by side, sitting on a line two fifths
+ * of a bond above it, and the arrow long enough to reach half a bond past
+ * them either side. Returns the model, the arrow's ends, the
+ * pluses and the atoms' centroid.
  */
 export function buildEditorModelFromRXN(text: string): RXNLayout {
   const groups = parseRXNGroups(text);
@@ -176,12 +181,14 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
     return {
       model: { atoms: [], bonds: [] },
       arrow: null,
+      pluses: [],
       centroid: { x: 0, y: 0 },
     };
   const scale = computeScaleForMols(allMols);
   const conv = allMols.map((m) => convertMolToEditorModel(m, scale));
-  // Between two structures on one side of the arrow: room for a "+".
-  const hGap = NOMINAL_BOND_LENGTH;
+  // Between two structures on one side of the arrow: room for a "+", and
+  // two fifths of a bond clear of it either side
+  const hGap = NOMINAL_BOND_LENGTH * 1.25;
   // Each structure's width as it is drawn, its labels included: measured at
   // its atoms, an OH at the end of a structure ran into the arrow.
   const boxes = conv.map((c) => drawnBox(c.model));
@@ -202,8 +209,10 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
   );
   const reactW = getClusterWidth(0, reactConv.length);
   const prodW = getClusterWidth(reactConv.length, prodConv.length);
-  // Fixed arrow length ~ NOMINAL_BOND_LENGTH * (4 * 2/3) = 8/3
-  const ARROW_LEN = (NOMINAL_BOND_LENGTH * 8) / 3;
+  const agentW = getClusterWidth(reactConv.length + prodConv.length, agentConv.length);
+  // The arrow: two and two-thirds of a bond, or half a bond longer than the
+  // reagents above it are wide on either side
+  const ARROW_LEN = Math.max((NOMINAL_BOND_LENGTH * 8) / 3, agentW + NOMINAL_BOND_LENGTH);
   // The arrow, and half a bond clear of what is drawn on either side of it
   const arrowGap = ARROW_LEN + NOMINAL_BOND_LENGTH;
   const totalW = reactW + prodW + arrowGap;
@@ -213,13 +222,20 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
   const prodCenterX = startX + reactW + arrowGap + prodW / 2;
   const placedAtoms: EditorAtom[] = [];
   const placedBonds: EditorBond[] = [];
+  const pluses: { x: number; y: number }[] = [];
   let idCounter = 1;
+  /**
+   * Lays `items` out side by side about `centerX`: each centroid on
+   * `baselineY`, or - `sitOn` given - the bottom of each, as drawn, on that
+   * line. `plus`: a "+" in each gap between them.
+   */
   const placeCluster = (
     items: typeof conv,
     first: number,
     centerX: number,
     targetArr?: EditorAtom[],
-    baselineY = 0
+    baselineY = 0,
+    { sitOn, plus }: { sitOn?: number; plus?: boolean } = {},
   ) => {
     const tw = getClusterWidth(first, items.length);
     const sx = centerX - tw / 2;
@@ -232,7 +248,8 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
       // which a long chain pulls to one side
       const offsetX = cursorX + width / 2 - (box.minX + box.maxX) / 2;
       // Align each cluster's centroid to baselineY (do not use bbox center)
-      const offsetY = baselineY - c.centroid.y;
+      const offsetY = sitOn != null ? sitOn - box.minY : baselineY - c.centroid.y;
+      if (plus && i > 0) pluses.push({ x: cursorX - hGap / 2, y: baselineY });
       const base = idCounter;
       // (by id: an abbreviation's atoms are gone from among them)
       const ids = new Map<number, number>();
@@ -279,15 +296,12 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
   };
   const reactPlaced: EditorAtom[] = [];
   const prodPlaced: EditorAtom[] = [];
-  placeCluster(reactConv, 0, reactCenterX, reactPlaced, 0);
-  placeCluster(prodConv, reactConv.length, prodCenterX, prodPlaced, 0);
-  placeCluster(
-    agentConv,
-    reactConv.length + prodConv.length,
-    arrowCenterX,
-    undefined,
-    -3.0
-  );
+  placeCluster(reactConv, 0, reactCenterX, reactPlaced, 0, { plus: true });
+  placeCluster(prodConv, reactConv.length, prodCenterX, prodPlaced, 0, { plus: true });
+  // the reagents above the arrow, clear of its head
+  placeCluster(agentConv, reactConv.length + prodConv.length, arrowCenterX, undefined, 0, {
+    sitOn: REAGENT_CLEARANCE,
+  });
   const centroid = (() => {
     if (!placedAtoms.length) return { x: 0, y: 0 };
     let sx = 0,
@@ -305,8 +319,11 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
     x2: arrowCenterX + ARROW_LEN / 2,
     y2: 0,
   };
-  return { model: { atoms: placedAtoms, bonds: placedBonds }, arrow, centroid };
+  return { model: { atoms: placedAtoms, bonds: placedBonds }, arrow, pluses, centroid };
 }
+
+/** How far above a reaction arrow the reagents over it sit: two fifths of a bond. */
+const REAGENT_CLEARANCE = NOMINAL_BOND_LENGTH * 0.4;
 
 /**
  * Compute uniform scale for an array of parsed molecules based on average bond length.
@@ -341,8 +358,8 @@ export function computeScaleForMols(mols: ParsedMol[]): number {
  * draw, not only its atoms - in Meno's own style, whose labels are as large
  * against the bond as any preset's.
  */
-function drawnBox(model: EditorModel): { minX: number; maxX: number } {
-  if (!model.atoms.length) return { minX: 0, maxX: 0 };
+function drawnBox(model: EditorModel): { minX: number; maxX: number; minY: number; maxY: number } {
+  if (!model.atoms.length) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const atoms: LayoutAtom[] = model.atoms.map((a) => ({
     id: a.id,
@@ -367,7 +384,7 @@ function drawnBox(model: EditorModel): { minX: number; maxX: number } {
   }
   const opts = layoutOptionsFor(MENO, NOMINAL_BOND_LENGTH, { units: "world" });
   const { bounds } = layoutMolecule(atoms, bonds, opts, 50);
-  return { minX: bounds.min.x, maxX: bounds.max.x };
+  return { minX: bounds.min.x, maxX: bounds.max.x, minY: bounds.min.y, maxY: bounds.max.y };
 }
 
 /**

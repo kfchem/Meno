@@ -29,10 +29,12 @@ function mirrorOf(doc: StructureDocument) {
   return {
     model: doc.model,
     arrows: doc.arrows,
+    pluses: doc.pluses ?? [],
     aromaticEnabled: doc.aromaticEnabled,
     aromaticRings: doc.aromaticRings,
     nextId: doc.nextId,
     nextArrowId: doc.nextArrowId,
+    nextPlusId: doc.nextPlusId ?? 1,
     docStyle: doc.style,
   };
 }
@@ -67,6 +69,7 @@ export function createEditorStore(
     boxSelect: { active: false, kind: "box", points: [] },
     hovered: { atomId: null, bondId: null },
     hoveredArrow: null,
+    hoveredPlus: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
     fitNonce: 0,
     autoFitSuspended: false,
