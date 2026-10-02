@@ -34,6 +34,16 @@ graph: elements, charges, H counts, bond orders, each double bond's cis or
 trans, and each stereocentre's configuration (as its neighbours in order
 and the sign of the volume the first three span, from a 3D embedding).
 
+Complexes of metals are in `organometallics.json`: ferrocene and the
+metallocenes, phosphine complexes, metathesis catalysts, alkene and allyl
+complexes, and other catalysts up to Krische's. PubChem's SMILES leaves a
+haptic bond out, so each is given as the label Meno reads it by
+(`src/lib/chem/reagents.ts`, `ligands.ts`), laid out as writing out that
+label lays it out - which Clean-up does too - and measured as the rest, but
+for the star at a pi system's centre and the haptic bond to it. Each links
+the Wikipedia page that shows it; nothing of those is copied. RDKit draws
+no haptic bond, and has no column there.
+
 The molecules are chosen for what makes layout hard: fused and bridged ring
 systems (steroids, alkaloids, taxol), cages, spiro centres, macrocycles
 (macrolides, cyclic peptides, cyclodextrins), long chains with stereo double

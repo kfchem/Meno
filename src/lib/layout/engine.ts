@@ -22,11 +22,12 @@ import {
 } from "./assemble";
 import { angleOf, dist, mirror, segmentsCross, sub } from "./geometry";
 import { hydrogenRunsInto, hydrogenSpot, layoutMetrics } from "./metrics";
-import { perceive, type LayoutInput, type Molecule } from "./perceive";
+import { orderOf, perceive, type LayoutInput, type Molecule } from "./perceive";
 import { misshapen, placeRingSystem, regularize, ringSystemVariants } from "./ringSystem";
 import { bridgeAcross } from "./bridge";
 import { flatCost, isCage, projectCage, type CageView } from "./cage";
 import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
+import { etaSpins, placeEta, placeUnit, unitVariants } from "./hapto";
 import type { Point } from "./geometry";
 
 export type { LayoutInput } from "./perceive";
@@ -44,6 +45,17 @@ export type Layout2D = {
    * its stereochemistry shown by the drawing itself rather than by wedges.
    */
   solid: boolean[];
+  /**
+   * The bonds drawn bold, by their atoms: the near edges of a ring seen in
+   * perspective - one bound face-on to a metal, or turned on its bond
+   * (section 7).
+   */
+  bold: [number, number][];
+  /**
+   * The bonds of a ring in perspective that run from its far half toward
+   * the viewer, drawn as wedges: [its narrow, far end; its broad, near one].
+   */
+  toward: [number, number][];
 } & Stereo;
 
 export function layout2D(input: LayoutInput): Layout2D {
@@ -56,7 +68,30 @@ export function layout2D(input: LayoutInput): Layout2D {
   const solid = new Array<boolean>(mol.n).fill(false);
   // and each seen from its other side, for a frame set down mirrored
   const others = new Map<number, Omit<CageView, "other">>();
+  // a ring bound face-on to a metal: laid out by its own rule, spun about
+  // its axis as a macrocycle's shapes are tried; how far across its plane
+  // each of its atoms is, for its near edges
+  // (and a metal with its rings, as one)
+  const unitOf = new Map(mol.units.map((u) => [u.system, u]));
+  const etaOf = new Map(mol.eta.filter((e) => !unitOf.has(e.system)).map((e) => [e.system, e]));
+  const lifts = new Map<number, number>();
+  const hintsM = new Map<number, Map<number, Point>>();
+  const variantsOf = (i: number) => {
+    const e = etaOf.get(i);
+    const u = unitOf.get(i);
+    return e ? etaSpins(mol, e) : u ? unitVariants(mol, u) : ringSystemVariants(mol, mol.systems[i]);
+  };
+  const setVariant = (i: number, v: number) => {
+    const e = etaOf.get(i);
+    const u = unitOf.get(i);
+    if (!e && !u) return void local.set(i, placeRingSystem(mol, mol.systems[i], v));
+    const laid = u ? placeUnit(mol, u, v) : placeEta(mol, e!, v);
+    local.set(i, laid.pos);
+    laid.hints.forEach((m, a) => (hints.set(a, m), hintsM.set(a, m)));
+    laid.lift.forEach((l, a) => lifts.set(a, l));
+  };
   mol.systems.forEach((sys, i) => {
+    if (etaOf.has(i) || unitOf.has(i)) return setVariant(i, 0);
     const laid = layoutSystem(mol, i);
     local.set(i, laid.pos);
     laid.depth?.forEach((d, a) => (depth[a] = d));
@@ -67,9 +102,13 @@ export function layout2D(input: LayoutInput): Layout2D {
       if (laid.other) others.set(i, laid.other);
     }
   });
+  // what is measured as drawn in perspective: a cage, and a ring bound
+  // face-on (foreshortened, not misshapen)
+  const faceOn = new Set([...mol.eta.flatMap((e) => e.atoms), ...mol.dienes.flatMap((d) => d.atoms)]);
+  const measured = solid.map((s, a) => s || faceOn.has(a));
   // what a frame grows from: in a mirrored one, each cage seen from its
   // other side
-  const hintsM = new Map(hints);
+  hints.forEach((m, a) => hintsM.has(a) || hintsM.set(a, m));
   for (const view of others.values()) view.hints.forEach((m, a) => hintsM.set(a, m));
   const setUp = (frame: Frame) => {
     if (!frame.mirrored || !others.size) return { L: local, H: hints };
@@ -77,7 +116,10 @@ export function layout2D(input: LayoutInput): Layout2D {
     for (const [i, view] of others) L.set(i, view.pos);
     return { L, H: hintsM };
   };
-  const fixed = (atoms: readonly number[]) => atoms.some((a) => upright.has(mol.systemOf[a]));
+  // (nor is a ring bound face-on turned or mirrored on its own: it stays
+  // square to its metal)
+  const fixed = (atoms: readonly number[]) =>
+    atoms.some((a) => upright.has(mol.systemOf[a]) || etaOf.has(mol.systemOf[a]) || unitOf.has(mol.systemOf[a]));
   const sides = sidesOf(mol);
   // (a flip mirrors a side across a bond's line, which would tip a cage over)
   const flips = flippable(mol, sides).filter(([a, b]) => {
@@ -97,17 +139,17 @@ export function layout2D(input: LayoutInput): Layout2D {
   // a macrocycle's shape chosen for what hangs from it: each shape offered
   // tried, grown in every frame, and the best kept
   mol.systems.forEach((sys, i) => {
-    const count = ringSystemVariants(mol, sys);
+    const count = variantsOf(i);
     if (count < 2) return;
     const piece = mol.pieces.find((p) => p.includes(sys.atoms[0]))!;
-    const score = scorer(mol, piece, depth, solid, 0, false);
+    const score = scorer(mol, piece, depth, measured, 0, false);
     let best = 0;
     let bestScore = Infinity;
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
     const swapsHere = swaps.filter(([a]) => here.has(a));
     for (let v = 0; v < count; v++) {
-      local.set(i, placeRingSystem(mol, sys, v));
+      setVariant(i, v);
       // the frame it grows best in - the best few, for a piece of up to
       // sixty atoms - each tried the other way and untangled where it helps:
       // substituents inside a macrocycle are crowded until then, and the
@@ -128,11 +170,13 @@ export function layout2D(input: LayoutInput): Layout2D {
         }
       }
     }
-    local.set(i, placeRingSystem(mol, sys, best));
+    setVariant(i, best);
   });
 
   // the drawing each system ended up as
   const used = new Map(local);
+  // the rings turned as a propeller's blades, by their atoms
+  const turned: number[][] = [];
   const x = new Array<number>(mol.n).fill(0);
   const y = new Array<number>(mol.n).fill(0);
   // where the ink of the pieces set down so far ends, on the right
@@ -144,8 +188,8 @@ export function layout2D(input: LayoutInput): Layout2D {
     // H's of labels, last: by turning a sugar over on its link, and by
     // moving bonds a little - an H on a label counting then as much as a
     // label on a label)
-    const score = scorer(mol, piece, depth, solid, 0, false);
-    const scoreH = scorer(mol, piece, depth, solid, 1);
+    const score = scorer(mol, piece, depth, measured, 0, false);
+    const scoreH = scorer(mol, piece, depth, measured, 1);
     const here = new Set(piece);
     const flipsHere = flips.filter(([a]) => here.has(a));
     const swapsHere = swaps.filter(([a]) => here.has(a));
@@ -186,7 +230,10 @@ export function layout2D(input: LayoutInput): Layout2D {
         view.depth.forEach((d, a) => (depth[a] = d));
       }
     }
-    if (!fixed(piece)) squareUp(mol, piece, best.pos);
+    // rings crowded round an atom (PPh3 on a metal), turned as a propeller
+    propellers(mol, piece, best.pos, depth, measured, turned);
+    if (!fixed(piece) && !turned.some((side) => side.some((v) => here.has(v)))) squareUp(mol, piece, best.pos);
+    else standUp(mol, piece, best.pos);
     const xs = piece.map((a) => best.pos.get(a)!.x);
     const ys = piece.map((a) => best.pos.get(a)!.y);
     // a bond and a half of paper between one piece's ink and the next's:
@@ -228,11 +275,127 @@ export function layout2D(input: LayoutInput): Layout2D {
     const after = turn((v) => ({ x: x[v], y: y[v] }), ...widest);
     if (Math.sign(before) !== Math.sign(after)) for (const a of sys.atoms) depth[a] = -depth[a]!;
   });
+  // a ring bound face-on, seen from a little above: the half of it lower on
+  // the page nearer - each atom as near as it is across the ring's axis
+  // (its lift), that way round on the page; its star and metal in its
+  // plane. A ring with nothing hanging from it, seen with a corner
+  // nearest, is spun half a step to have an edge there instead, as
+  // Haworth drew rings.
+  for (const e of mol.eta) {
+    const own = new Set(e.atoms.filter((a) => a !== e.star));
+    const s = { x: x[e.star], y: y[e.star] };
+    // the page's way for a lift: how its atoms lie off its star against their lifts
+    let vx = 0;
+    let vy = 0;
+    let ll = 0;
+    for (const a of own) {
+      const l = lifts.get(a) ?? 0;
+      vx += l * (x[a] - s.x);
+      vy += l * (y[a] - s.y);
+      ll += l * l;
+    }
+    if (ll < 1e-12) continue;
+    const v = { x: vx / ll, y: vy / ll };
+    // (+y is up the page: a lift is nearer where it goes down it)
+    const down = Math.abs(v.y) < 1e-6 * Math.hypot(v.x, v.y) ? 1 : -Math.sign(v.y);
+    const bare = e.ring.length === own.size && e.ring.every((a) => mol.neighbours[a].every((b) => own.has(b) || b === e.star));
+    if (bare) {
+      const u = { x: -v.y / Math.hypot(v.x, v.y), y: v.x / Math.hypot(v.x, v.y) };
+      // in its plane: along its axis's square, and across
+      const flat = e.ring.map((a) => ({ a, w: (x[a] - s.x) * u.x + (y[a] - s.y) * u.y, l: lifts.get(a) ?? 0 }));
+      const front = Math.atan2(down, 0);
+      const corner = flat.some(({ w, l }) => Math.abs(Math.atan2(Math.sin(Math.atan2(l, w) - front), Math.cos(Math.atan2(l, w) - front))) < 1e-3);
+      if (corner) {
+        const t = Math.PI / e.ring.length;
+        for (const { a, w, l } of flat) {
+          const w2 = w * Math.cos(t) - l * Math.sin(t);
+          const l2 = w * Math.sin(t) + l * Math.cos(t);
+          x[a] = s.x + u.x * w2 + v.x * l2;
+          y[a] = s.y + u.y * w2 + v.y * l2;
+          lifts.set(a, l2);
+        }
+      }
+    }
+    for (const a of e.atoms) depth[a] = (lifts.get(a) ?? 0) * down;
+    if (e.metal >= 0) depth[e.metal] ??= 0;
+  }
+  // a tub, as near as it was built to be (placeTub)
+  for (const d of mol.dienes) {
+    for (const a of d.atoms) depth[a] = lifts.get(a) ?? 0;
+    depth[d.metal] ??= 0;
+  }
+  // a ring in perspective - bound face-on, or turned on its bond - drawn as
+  // Haworth drew rings: a bond with both its atoms near, bold; one running
+  // from the far half to the near one, a wedge toward the viewer, narrow at
+  // its far end; the rest plain
+  const bold: [number, number][] = [];
+  const toward: [number, number][] = [];
+  const near = (a: number) => depth[a]! > 1e-6;
+  const perspective = (a: number, b: number) => {
+    if (near(a) && near(b)) bold.push([a, b]);
+    else if (near(a) !== near(b)) toward.push(near(a) ? [b, a] : [a, b]);
+  };
+  for (const e of mol.eta) {
+    const here = new Set(e.atoms);
+    for (const [k] of mol.bondIndex) {
+      const [a, b] = k.split(",").map(Number);
+      if (here.has(a) && here.has(b) && a !== e.star && b !== e.star) perspective(a, b);
+    }
+  }
+  for (const side of turned) {
+    const here = new Set(side);
+    for (const k of mol.ringBonds) {
+      const [a, b] = k.split(",").map(Number);
+      if (here.has(a) && here.has(b)) perspective(a, b);
+    }
+  }
+  for (const d of mol.dienes) d.ring.forEach((a, i) => perspective(a, d.ring[(i + 1) % d.ring.length]));
   // a stereocentre in a cage drawn in perspective shows itself there
   const tetra = new Map<number, Tetrahedral>();
   input.atoms.forEach((a, i) => a.tetra && !solid[i] && tetra.set(i, a.tetra));
   const final = new Map(x.map((v, i) => [i, { x: v, y: y[i] }]));
-  return { x, y, depth, solid, ...placeStereo(mol, final, tetra) };
+  return { x, y, depth, solid, bold, toward, ...placeStereo(mol, final, tetra) };
+}
+
+/**
+ * A piece with a ring bound face-on to a metal, turned so that the first
+ * such ring is above its metal: a half-sandwich's legs below; a sandwich -
+ * bent or not - with its rings one above the other (section 7). One with a
+ * tub (cod) turned so that its C=C stand upright, the metal beside them, as
+ * the tub was seen.
+ */
+function standUp(mol: Molecule, piece: number[], pos: Grown): void {
+  const here = new Set(piece);
+  const e = mol.eta.find((r) => here.has(r.star) && r.metal >= 0);
+  if (!e) {
+    const d = mol.dienes.find((r) => here.has(r.metal));
+    if (!d) return;
+    const [u, v] = d.stars[0].pi.map((a) => pos.get(a)!);
+    const m = pos.get(d.metal)!;
+    // (either way up: the nearer to how it lies now)
+    const now = Math.atan2(v.y - u.y, v.x - u.x);
+    const up = Math.cos(now - Math.PI / 2) >= 0 ? Math.PI / 2 : -Math.PI / 2;
+    const turn = up - now;
+    const c = Math.cos(turn);
+    const sn = Math.sin(turn);
+    for (const a of piece) {
+      const p = sub(pos.get(a)!, m);
+      pos.set(a, { x: m.x + p.x * c - p.y * sn, y: m.y + p.x * sn + p.y * c });
+    }
+    return;
+  }
+  const m = pos.get(e.metal)!;
+  const second = mol.eta.find((r) => r !== e && r.metal === e.metal);
+  const s = pos.get(e.star)!;
+  const under = second ? pos.get(second.star)! : m;
+  // (+y is up the page)
+  const turn = Math.PI / 2 - Math.atan2(s.y - under.y, s.x - under.x);
+  const c = Math.cos(turn);
+  const sn = Math.sin(turn);
+  for (const a of piece) {
+    const p = sub(pos.get(a)!, m);
+    pos.set(a, { x: m.x + p.x * c - p.y * sn, y: m.y + p.x * sn + p.y * c });
+  }
 }
 
 /**
@@ -301,7 +464,8 @@ function layoutSystem(
  * circle to the right. (An H under or over it reaches no further across.)
  */
 export function inkReach(mol: Molecule, a: number, pos: ReadonlyMap<number, Point>): { left: number; right: number } {
-  const labelled = mol.el[a] !== "C" || mol.charge[a] !== 0;
+  // (a star at a pi system's centre is drawn as nothing)
+  const labelled = (mol.el[a] !== "C" && mol.el[a] !== "*") || mol.charge[a] !== 0;
   if (!labelled) return { left: 0, right: 0 };
   // (a charged carbon is a bare vertex, its charge beside it)
   const symbol = mol.el[a] === "C" ? 0 : mol.el[a].length;
@@ -546,11 +710,17 @@ function clashing(mol: Molecule, piece: number[], pos: Grown): Set<number> {
   const bonds = [...mol.bondIndex.keys()]
     .map((k) => k.split(",").map(Number) as [number, number])
     .filter(([a]) => pos.has(a));
+  // (a ring bound face-on and its star - and so its metal's bond to the
+  // star - are meant to lie over each other)
+  const together = (a: number, b: number) =>
+    mol.linked[a].includes(b) ||
+    mol.eta.some((e) => e.atoms.includes(a) && e.atoms.includes(b)) ||
+    mol.dienes.some((d) => d.atoms.includes(a) && d.atoms.includes(b));
   for (let i = 0; i < piece.length; i++) {
     for (let j = i + 1; j < piece.length; j++) {
       const a = piece[i];
       const b = piece[j];
-      if (mol.neighbours[a].includes(b)) continue;
+      if (mol.neighbours[a].includes(b) || together(a, b)) continue;
       const d = dist(pos.get(a)!, pos.get(b)!);
       // labels need more room than bare carbons
       const labelled = mol.el[a] !== "C" && mol.el[b] !== "C";
@@ -562,12 +732,103 @@ function clashing(mol: Molecule, piece: number[], pos: Grown): Set<number> {
     for (let j = i + 1; j < bonds.length; j++) {
       const [c, d] = bonds[j];
       if (a === c || a === d || b === c || b === d) continue;
+      if ([a, b].some((u) => [c, d].some((v) => together(u, v)))) continue;
       if (segmentsCross(pos.get(a)!, pos.get(b)!, pos.get(c)!, pos.get(d)!)) {
         out.add(a).add(b).add(c).add(d);
       }
     }
   }
   return out;
+}
+
+/** A benzene ring's: six atoms, its bonds three double and three single. */
+function isAryl(mol: Molecule, ring: number[]): boolean {
+  if (ring.length !== 6) return false;
+  const orders = ring.map((a, i) => orderOf(mol, a, ring[(i + 1) % 6]));
+  return orders.filter((o) => o === 2).length === 3 && orders.filter((o) => o === 1).length === 3;
+}
+
+/** The angles a crowded ring is tried turned on its bond out of the page: 45, 60 and 70 degrees. */
+const PROPELLER = [Math.PI / 4, Math.PI / 3, (7 * Math.PI) / 18];
+
+/**
+ * Aryl rings crowded round one atom - PPh3's phenyls round a metal - each
+ * turned on its bond out of the page, all the same way round
+ * (a propeller), and so seen in perspective: foreshortened across its bond,
+ * what hangs from it with it, its near half nearer (section 7). Done for
+ * an atom with two rings or more hanging from it by single bonds, any of
+ * them crowded; at the angle that reads best by the benchmark's measures
+ * (the rings turned measured as a drawing in perspective is) - none, where
+ * turning reads no better. The rings turned, by their atoms, go to
+ * `turned`; their depth to `depth`.
+ */
+function propellers(
+  mol: Molecule,
+  piece: number[],
+  pos: Grown,
+  depth: (number | null)[],
+  solid: readonly boolean[],
+  turned: number[][],
+): void {
+  let crowded = clashing(mol, piece, pos);
+  if (!crowded.size) return;
+  const faceOn = new Set(mol.eta.flatMap((e) => e.atoms));
+  const hubs = piece
+    .map((x) => {
+      // a ring hangs from x by a single bond where nothing else joins it to x's side
+      // (an aryl ring - six atoms, three double bonds - hanging by a single bond, nothing else joining it to x)
+      const rings = mol.neighbours[x].filter((c) => {
+        const s = mol.systemOf[c];
+        if (s < 0 || s === mol.systemOf[x] || faceOn.has(c) || orderOf(mol, x, c) !== 1) return false;
+        if (!mol.ringsOf[c].some((r) => isAryl(mol, mol.rings[r]))) return false;
+        return !sideAtoms(mol, x, c).some((v) => v !== c && mol.neighbours[x].includes(v));
+      });
+      return { x, rings };
+    })
+    .filter((h) => h.rings.length >= 2 && !faceOn.has(h.x));
+  for (const { x, rings } of hubs) {
+    const sides = rings.map((c) => sideAtoms(mol, x, c));
+    if (!sides.some((side) => side.some((v) => crowded.has(v)))) continue;
+    const at = pos.get(x)!;
+    const was = new Map(sides.flat().map((v) => [v, pos.get(v)!]));
+    const turnTo = (phi: number) => {
+      const trial = new Map(pos);
+      const lift = new Map<number, number>();
+      sides.forEach((side, k) => {
+        const u = sub(pos.get(rings[k])!, at);
+        const len = Math.hypot(u.x, u.y) || 1;
+        const ux = u.x / len;
+        const uy = u.y / len;
+        for (const v of side) {
+          const p = sub(was.get(v)!, at);
+          const along = p.x * ux + p.y * uy;
+          const across = -p.x * uy + p.y * ux;
+          trial.set(v, { x: at.x + along * ux - across * Math.cos(phi) * uy, y: at.y + along * uy + across * Math.cos(phi) * ux });
+          lift.set(v, across * Math.sin(phi));
+        }
+      });
+      return { trial, lift };
+    };
+    const before = scorer(mol, piece, depth, solid)(pos);
+    let best: { score: number; trial: Grown; lift: Map<number, number> } | null = null;
+    for (const phi of PROPELLER) {
+      const { trial, lift } = turnTo(phi);
+      const seen = [...depth];
+      const persp = [...solid];
+      for (const [v, l] of lift) {
+        seen[v] = l;
+        persp[v] = true;
+      }
+      const score = scorer(mol, piece, seen, persp)(trial);
+      if (!best || score < best.score) best = { score, trial, lift };
+    }
+    if (!best || best.score >= before - 1e-6) continue;
+    for (const [v, p] of best.trial) pos.set(v, p);
+    for (const [v, l] of best.lift) depth[v] = l;
+    turned.push(...sides);
+    crowded = clashing(mol, piece, pos);
+    if (!crowded.size) return;
+  }
 }
 
 /** How far a point is from the segment p-q. */
@@ -922,7 +1183,8 @@ export function scorer(
     .map((r) => r.map((a) => index.get(a)!));
   const elements = piece.map((a) => mol.el[a]);
   const hydrogens = piece.map((a) => mol.hs[a]);
-  const labelled = piece.map((a) => mol.el[a] !== "C" || mol.charge[a] !== 0);
+  // (a star at a pi system's centre is drawn as nothing)
+  const labelled = piece.map((a) => (mol.el[a] !== "C" && mol.el[a] !== "*") || mol.charge[a] !== 0);
   const perspective = piece.map((a) => solid[a] ?? false);
   const depths = piece.map((a) => depth[a] ?? null);
   const tetra = piece.map((a) => {

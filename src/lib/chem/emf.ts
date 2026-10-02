@@ -14,7 +14,7 @@
  * multiple of four, which PowerPoint's reader is strict about.
  */
 import { labelFont } from "./labelFonts";
-import { labelSetOf, placeLabel, type Layout, type LayoutOptions, type Poly } from "./layout2d";
+import { circlePoints, labelSetOf, placeLabel, type Layout, type LayoutOptions, type Poly } from "./layout2d";
 
 /** Logical units to the pixel: coordinates are whole numbers, so they are kept fine. */
 const S = 20;
@@ -302,6 +302,16 @@ export function layoutEmf(
     const id = penFor(opts.lineWidthPx);
     select(NULL_BRUSH);
     for (const c of layout.circles) {
+      // (an ellipse in perspective: as the points round it)
+      if (c.squash != null && c.squash < 1) {
+        const pts = points(circlePoints(c, 48));
+        w.plus(PLUS.DRAW_LINES, id, 4 + 8 * pts.length, (v) => {
+          v.setUint32(0, pts.length, true);
+          plusPoints(v, 4, pts);
+        });
+        poly(EMR.POLYLINE, pts);
+        continue;
+      }
       w.plus(PLUS.DRAW_ELLIPSE, id, 16, (v) => plusBox(v, 0, c.c, c.r));
       ellipse(c.c, c.r);
     }

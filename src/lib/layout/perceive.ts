@@ -19,6 +19,11 @@ export type LayoutAtom = {
   hs?: number;
   /** Its configuration, where it is a stereocentre. */
   tetra?: Tetrahedral;
+  /**
+   * For a star ("*") at the centre of a pi system bound to a metal through
+   * all its atoms (a haptic bond): the system's atoms.
+   */
+  pi?: readonly number[];
 };
 export type LayoutBond = { a: number; b: number; order: number; stereo?: CisTrans };
 export type LayoutInput = { atoms: readonly LayoutAtom[]; bonds: readonly LayoutBond[] };
@@ -51,7 +56,62 @@ export type Molecule = {
   pieces: number[][];
   /** Each stereocentre's configuration, as given. */
   tetra: Map<number, Tetrahedral>;
+  /**
+   * The rings bound face-on to a metal through all their atoms (η⁵-Cp,
+   * η⁶-arene): each one's star - at its centre, a member of its ring
+   * system - its ring in order round, and its metal (-1 for none).
+   */
+  eta: EtaRing[];
+  /**
+   * The metals in no ring with rings bound face-on, each with them as one
+   * system (a sandwich, a half-sandwich): drawn as one, the metal at its
+   * middle.
+   */
+  units: MetalUnit[];
+  /**
+   * The rings bound to a metal through two C=C of their own (cod's), each
+   * drawn as the tub it is (section 7): its ring in order round, its two
+   * stars, its metal.
+   */
+  dienes: DieneRing[];
+  /**
+   * Each atom's neighbours and, for a ring bound face-on and its star, each
+   * other: what is moved with an atom - a side of a bond, a branch - goes
+   * through a metal to its rings and on.
+   */
+  linked: number[][];
 };
+
+/** A ring bound face-on to a metal through all its atoms, as `Molecule.eta` has it. */
+export type EtaRing = {
+  star: number;
+  ring: number[];
+  metal: number;
+  /** The atoms of its own ring system, and its star. */
+  atoms: number[];
+  /** The system it is drawn in: its own, or its metal's unit's. */
+  system: number;
+};
+
+/**
+ * A ring of its own (no other ring sharing its atoms) bound to one metal
+ * through two of its C=C, each by a star at it: 1,5-cyclooctadiene's, as
+ * `Molecule.dienes` has it.
+ */
+export type DieneRing = {
+  metal: number;
+  /** The ring, in order round it. */
+  ring: number[];
+  /** The stars, each with its C=C. */
+  stars: { star: number; pi: [number, number] }[];
+  /** The ring's atoms and its stars. */
+  atoms: number[];
+  /** The system it is drawn in: its metal's unit's. */
+  system: number;
+};
+
+/** A metal and the rings bound face-on to it - or by two C=C each - drawn as one system. */
+export type MetalUnit = { metal: number; eta: EtaRing[]; dienes: DieneRing[]; system: number };
 
 export const key = (a: number, b: number): string => (a < b ? `${a},${b}` : `${b},${a}`);
 
@@ -59,11 +119,32 @@ export function perceive(input: LayoutInput): Molecule {
   const n = input.atoms.length;
   const neighbours: number[][] = Array.from({ length: n }, () => []);
   const bondIndex = new Map<string, number>();
-  input.bonds.forEach(({ a, b }, i) => {
+  const bonds: LayoutBond[] = [...input.bonds];
+  const join = (a: number, b: number, i: number) => {
     if (a === b || bondIndex.has(key(a, b))) return;
     neighbours[a].push(b);
     neighbours[b].push(a);
     bondIndex.set(key(a, b), i);
+  };
+  input.bonds.forEach(({ a, b }, i) => join(a, b, i));
+  // A ring of its own bound to a metal by stars at two of its C=C, and by
+  // nothing else of its pi systems (cod on Ni, Rh, Ir): drawn as a tub, the
+  // stars at those C=C - no bond of theirs into the ring, which would make a
+  // ring through the metal of it
+  const dienesFound = dieneRings(input, neighbours);
+  const ofDiene = new Map(dienesFound.flatMap((d) => d.stars.map((s) => [s.star, s.pi] as const)));
+  // A star's pi system: a ring of it (Cp, an arene) is drawn round it, the
+  // star a member of the ring's system; any other (an alkene's C=C, an
+  // allyl) hangs from it by a bond to its first atom, as a chain would
+  const ringOfPi = new Map<number, number[]>();
+  input.atoms.forEach((a, star) => {
+    if (!a.pi || a.pi.length < 2 || ofDiene.has(star)) return;
+    const cycle = cycleOf(a.pi, neighbours);
+    if (cycle) ringOfPi.set(star, cycle);
+    else {
+      bonds.push({ a: star, b: a.pi[0], order: 1 });
+      join(star, a.pi[0], bonds.length - 1);
+    }
   });
   const edges = [...bondIndex.keys()].map((k) => k.split(",").map(Number) as [number, number]);
   const rings = smallestRings(n, edges);
@@ -90,6 +171,53 @@ export function perceive(input: LayoutInput): Molecule {
   });
   const systems = [...byGroup.values()];
   systems.forEach((s, i) => s.atoms.forEach((a) => (systemOf[a] = i)));
+  // each ring bound face-on joined by its star, at its centre
+  const eta: EtaRing[] = [];
+  for (const [star, ring] of ringOfPi) {
+    const system = systemOf[ring[0]];
+    if (system < 0 || systemOf[star] >= 0) continue;
+    systems[system].atoms.push(star);
+    systemOf[star] = system;
+    const metal = neighbours[star].find((m) => isMetal(input.atoms[m].el)) ?? -1;
+    eta.push({ star, ring, metal, atoms: systems[system].atoms, system });
+  }
+  // each ring bound by two C=C, its stars joined to its system
+  const dienes: DieneRing[] = [];
+  for (const d of dienesFound) {
+    const system = systemOf[d.ring[0]];
+    if (system < 0 || d.stars.some((s) => systemOf[s.star] >= 0)) continue;
+    for (const s of d.stars) {
+      systems[system].atoms.push(s.star);
+      systemOf[s.star] = system;
+    }
+    dienes.push({ ...d, atoms: systems[system].atoms, system });
+  }
+  // and a metal in no ring with its rings bound face-on, or by two C=C:
+  // one system
+  const units: MetalUnit[] = [];
+  for (let m = 0; m < n; m++) {
+    const own = eta.filter((e) => e.metal === m);
+    const tubs = dienes.filter((d) => d.metal === m);
+    if ((!own.length && !tubs.length) || systemOf[m] >= 0 || !isMetal(input.atoms[m].el)) continue;
+    const parts = [...own, ...tubs];
+    const merged = { atoms: [m, ...parts.flatMap((e) => e.atoms)], rings: parts.flatMap((e) => systems[e.system].rings) };
+    const index = systems.length;
+    systems.push(merged);
+    for (const e of parts) {
+      systems[e.system] = { atoms: [], rings: [] };
+      e.system = index;
+    }
+    for (const a of merged.atoms) systemOf[a] = index;
+    units.push({ metal: m, eta: own, dienes: tubs, system: index });
+  }
+  // (the systems a unit took in, emptied, are left out)
+  const kept = systems.map((sys, i) => (sys.atoms.length ? i : -1)).filter((i) => i >= 0);
+  const renumber = new Map(kept.map((old, i) => [old, i]));
+  systems.splice(0, systems.length, ...kept.map((i) => systems[i]));
+  for (let a = 0; a < n; a++) if (systemOf[a] >= 0) systemOf[a] = renumber.get(systemOf[a])!;
+  for (const e of eta) e.system = renumber.get(e.system)!;
+  for (const d of dienes) d.system = renumber.get(d.system)!;
+  for (const u of units) u.system = renumber.get(u.system)!;
 
   const pieces: number[][] = [];
   const seen = new Array<boolean>(n).fill(false);
@@ -98,7 +226,16 @@ export function perceive(input: LayoutInput): Molecule {
     const piece = [s];
     seen[s] = true;
     for (let h = 0; h < piece.length; h++) {
-      for (const b of neighbours[piece[h]]) {
+      // (a ring bound face-on is the same piece as its star)
+      const u = piece[h];
+      const near = [
+        ...neighbours[u],
+        ...(ringOfPi.get(u) ?? []),
+        ...eta.filter((e) => e.ring.includes(u)).map((e) => e.star),
+        ...(ofDiene.get(u) ?? []),
+        ...[...ofDiene].filter(([, pi]) => pi.includes(u)).map(([star]) => star),
+      ];
+      for (const b of near) {
         if (!seen[b]) {
           seen[b] = true;
           piece.push(b);
@@ -113,7 +250,7 @@ export function perceive(input: LayoutInput): Molecule {
     el: input.atoms.map((a) => a.el),
     hs: input.atoms.map((a) => a.hs ?? 0),
     charge: input.atoms.map((a) => a.charge ?? 0),
-    bonds: input.bonds,
+    bonds,
     neighbours,
     bondIndex,
     rings,
@@ -125,7 +262,90 @@ export function perceive(input: LayoutInput): Molecule {
     tetra: new Map(
       input.atoms.flatMap((a, i): [number, Tetrahedral][] => (a.tetra ? [[i, a.tetra]] : [])),
     ),
+    eta,
+    units,
+    dienes,
+    linked: neighbours.map((nb, a) => [
+      ...nb,
+      ...(ringOfPi.get(a) ?? []),
+      ...eta.filter((e) => e.ring.includes(a)).map((e) => e.star),
+      ...(ofDiene.get(a) ?? []),
+      ...[...ofDiene].filter(([, pi]) => pi.includes(a)).map(([star]) => star),
+    ]),
   };
+}
+
+/**
+ * How long a bond between a metal and a ligand's atom is drawn, in bond
+ * lengths: longer, as it is (Pd-P 2.3 Å against C-C 1.5 Å), so that the
+ * ligands round a metal have room (docs/LAYOUT-2D.md, section 7).
+ */
+export const METAL_BOND = 1.4;
+
+/**
+ * The metals: the d block and the lanthanides, as a complex's formula has
+ * them (chem/ligands) - Pr aside, being propyl's label as well.
+ */
+const METALS = new Set(
+  "Sc Ti V Cr Mn Fe Co Ni Cu Zn Y Zr Nb Mo Tc Ru Rh Pd Ag Cd Hf Ta W Re Os Ir Pt Au Hg La Ce Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split(" "),
+);
+
+/** Whether an atom is a metal's: one ligands are drawn round (docs/LAYOUT-2D.md, section 7). */
+export function isMetal(el: string): boolean {
+  return METALS.has(el);
+}
+
+/**
+ * The atoms of a pi system in order round, where they make a ring by
+ * their own bonds (Cp, an arene), or null (an alkene's two, an allyl's
+ * three).
+ */
+/**
+ * The rings bound to a metal through two C=C of their own, as stars at them
+ * (`LayoutAtom.pi`, two atoms each, bonded): rings of their own, sharing no
+ * atom with another ring, whose metal has no ring bound face-on.
+ */
+function dieneRings(input: LayoutInput, neighbours: number[][]): Omit<DieneRing, "atoms" | "system">[] {
+  const n = input.atoms.length;
+  const edges: [number, number][] = [];
+  for (let a = 0; a < n; a++) for (const b of neighbours[a]) if (a < b) edges.push([a, b]);
+  const rings = smallestRings(n, edges);
+  const count = new Array<number>(n).fill(0);
+  for (const r of rings) for (const a of r) count[a]++;
+  const own = rings.filter((r) => r.every((a) => count[a] === 1));
+  const byKey = new Map<string, Omit<DieneRing, "atoms" | "system">>();
+  const faceOn = new Set<number>();
+  input.atoms.forEach((a, star) => {
+    if (!a.pi || a.pi.length < 2) return;
+    const metal = neighbours[star].find((m) => isMetal(input.atoms[m].el)) ?? -1;
+    if (metal < 0) return;
+    if (cycleOf(a.pi, neighbours)) return void faceOn.add(metal);
+    if (a.pi.length !== 2 || !neighbours[a.pi[0]].includes(a.pi[1])) return;
+    const ring = own.find((r) => a.pi!.every((p) => r.includes(p)));
+    if (!ring) return;
+    const k = `${metal}:${Math.min(...ring)}`;
+    const found = byKey.get(k) ?? { metal, ring: cycleOf(ring, neighbours) ?? ring, stars: [] };
+    found.stars.push({ star, pi: [a.pi[0], a.pi[1]] });
+    byKey.set(k, found);
+  });
+  return [...byKey.values()].filter((d) => d.stars.length === 2 && !faceOn.has(d.metal));
+}
+
+function cycleOf(atoms: readonly number[], neighbours: number[][]): number[] | null {
+  if (atoms.length < 3) return null;
+  const inside = new Set(atoms);
+  const near = (a: number) => neighbours[a].filter((b) => inside.has(b));
+  if (atoms.some((a) => near(a).length !== 2)) return null;
+  const order = [atoms[0]];
+  let prev = -1;
+  while (order.length < atoms.length) {
+    const at = order[order.length - 1];
+    const next = near(at).find((b) => b !== prev && !order.includes(b));
+    if (next == null) return null;
+    prev = at;
+    order.push(next);
+  }
+  return near(order[order.length - 1]).includes(order[0]) ? order : null;
 }
 
 /** The order of the bond between two atoms, or 0. */

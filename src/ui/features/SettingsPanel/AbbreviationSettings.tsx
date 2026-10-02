@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { ABBREVIATIONS, abbreviationStructure, labelRuns, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
+import { useState, type ReactNode } from "react";
+import { ABBREVIATIONS, abbreviationStructure, labelRuns, precatalystDrawn, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
 import { COUNTER_IONS, LIGAND_FAMILIES, ligandPicture, structureFormula, type GroupStructure, type Ligand } from "../../../lib/chem/ligands";
 import { shownAs } from "../../../lib/chem/enantiomers";
 import { PRECATALYST_GENERATIONS, REAGENT_USES, REAGENTS, type Reagent } from "../../../lib/chem/reagents";
@@ -25,11 +25,6 @@ export default function AbbreviationSettings() {
   };
   const groups = ABBREVIATIONS.filter(matches);
   const reagentMatches = (r: Reagent) => matches({ ...r, smiles: r.smiles ?? r.complex ?? "" });
-  // a metal's catalyst or reagent: its formula, until the engine draws complexes
-  const formulas = useMemo(
-    () => new Map(REAGENTS.filter(drawnAsFormula).map((r) => [r.label, structureFormula(abbreviationStructure(r.label)!)])),
-    [],
-  );
   const precatalysts = PRECATALYST_GENERATIONS.map(({ generation, name }) => {
     const label = `XPhos Pd ${generation}`;
     return { generation, name, label };
@@ -152,22 +147,9 @@ export default function AbbreviationSettings() {
               <div key={use} className="mt-3">
                 <h4 className="text-xs font-semibold text-gh-black">{title}</h4>
                 <div className="mt-2 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
-                  {these.map((r) =>
-                    drawnAsFormula(r) ? (
-                      <article key={r.label} className="min-w-0 overflow-hidden rounded-lg border border-gh-line bg-white px-3 py-2">
-                        <div className="text-base font-semibold text-gh-black">
-                          <LabelText label={r.label} />
-                        </div>
-                        <div className="text-xs text-gh-black">{r.name}</div>
-                        <AlsoNames names={r.also} />
-                        <div className="text-xs text-gh-gray">
-                          <LabelText label={formulas.get(r.label)!} />
-                        </div>
-                      </article>
-                    ) : (
-                      <ReagentEntry key={r.label} r={r} />
-                    ),
-                  )}
+                  {these.map((r) => (
+                    <ReagentEntry key={r.label} r={r} />
+                  ))}
                 </div>
               </div>
             );
@@ -200,11 +182,18 @@ export default function AbbreviationSettings() {
       {precatalysts.length > 0 && (
         <Listed title="Buchwald precatalysts">
           {precatalysts.map(({ generation, name, label }) => (
-            <article key={generation} className="min-w-0 overflow-hidden rounded-lg border border-gh-line bg-white px-3 py-2">
-              <div className="text-base font-semibold text-gh-black">… Pd {generation}</div>
-              <div className="text-xs text-gh-black">{name}, with any of the Buchwald ligands</div>
-              <div className="text-xs text-gh-gray">
-                {label}: <LabelText label={structureFormula(abbreviationStructure(label)!)} />
+            <article key={generation} className="min-w-0 overflow-hidden rounded-lg border border-gh-line bg-white">
+              <AbbreviationPicture
+                of={() => precatalystDrawn(generation)!}
+                keep={`precatalyst:${generation}`}
+                className="flex h-32 items-center justify-center border-b border-gh-line p-2"
+              />
+              <div className="space-y-0.5 px-3 py-2">
+                <div className="text-base font-semibold text-gh-black">L Pd {generation}</div>
+                <div className="text-xs text-gh-black">{name}, L any of the Buchwald ligands</div>
+                <div className="text-xs text-gh-gray">
+                  {label}: <LabelText label={structureFormula(abbreviationStructure(label)!)} />
+                </div>
               </div>
             </article>
           ))}
@@ -222,9 +211,6 @@ export default function AbbreviationSettings() {
   );
 }
 
-/** A metal's catalyst or organometallic reagent, shown by its formula. */
-const drawnAsFormula = (r: Reagent) => r.use === "catalyst" || r.use === "organometallic";
-
 /** A heading and its entries. */
 function Listed({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -235,12 +221,17 @@ function Listed({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** A reagent as the molecule it is - a chiral one as the enantiomer its SMILES is, with its descriptors. */
+/**
+ * A reagent as the molecule it is - a chiral one as the enantiomer its
+ * SMILES is, with its descriptors; a metal's complex drawn from its formula,
+ * which is shown with its name.
+ */
 function ReagentEntry({ r }: { r: Reagent }) {
   const as = shownAs(r.enantiomers);
   return (
     <Entry
       a={{ ...r, smiles: r.smiles ?? "" }}
+      formula={r.complex}
       of={() => abbreviationStructure(as ? `${as}-${r.label}` : r.label)!}
       keep={`reagent:${r.label}`}
     >
@@ -273,11 +264,14 @@ function Entry({
   a,
   of,
   keep,
+  formula,
   children,
 }: {
   a: CustomAbbreviation & { free?: boolean };
   of?: () => GroupStructure;
   keep?: string;
+  /** A metal complex's formula, shown in place of SMILES. */
+  formula?: string;
   children?: ReactNode;
 }) {
   return (
@@ -304,6 +298,11 @@ function Entry({
         </div>
         {a.name && <div className="text-xs text-gh-black">{a.name}</div>}
         <AlsoNames names={a.also} />
+        {formula && (
+          <div className="text-xs text-gh-gray">
+            <LabelText label={formula} />
+          </div>
+        )}
         {a.smiles && <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{a.smiles}</code>}
         {children}
       </div>

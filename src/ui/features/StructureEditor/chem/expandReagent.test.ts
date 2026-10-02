@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { NOMINAL_BOND_LENGTH as L } from "../../../../lib/chem/acs";
 import { abbreviationStructure } from "../../../../lib/chem/abbreviations";
 import { sameConfiguration } from "../../../../lib/layout/drawn";
-import { emptyStructureDocument, expandAbbreviation } from "../document";
+import { layout2D } from "../../../../lib/layout/engine";
+import { emptyStructureDocument, expandAbbreviation, relayout } from "../document";
 import type { Model } from "../store/types";
 import { undrawnHydrogens } from "./drawing";
-import { layoutJob } from "./engineLayout";
+import { layoutJob, relayoutFrom } from "./engineLayout";
 
 const alone = (el: string): Model => ({ atoms: [{ id: 1, x: 0, y: 0, r: 0.9, el }], bonds: [] });
 const expanded = (model: Model, id = 1) => expandAbbreviation({ ...emptyStructureDocument(), model, nextId: 100 }, id).model;
@@ -45,4 +46,28 @@ describe("a reagent's label written out on the canvas", () => {
     expect(carbene.el).toBe("C");
     expect(undrawnHydrogens(out).get(2)).toBe(0);
   });
+
+  it("is drawn as Clean-up draws it: a complex cleaned up after it is written out does not move", () => {
+    for (const label of ["Cp2Fe", "Cp2ZrCl2", "PdCl2(dppf)", "Cp*RuCl(PPh3)2", "PdCl2(PPh3)2", "Grubbs II", "Ni(cod)2", "[Rh(cod)2]BF4", "[Ir(cod)Cl]2"]) {
+      const doc = { ...emptyStructureDocument(), model: alone(label), nextId: 100 };
+      const out = expandAbbreviation(doc, 1);
+      const model = out.model;
+      const job = layoutJob(model);
+      const after = relayout(out, relayoutFrom(model, model, job, layout2D(job.input))).model;
+      const byId = new Map(after.atoms.map((a) => [a.id, a]));
+      const [first] = model.atoms;
+      const moved = Math.max(
+        ...model.atoms.map((a) => {
+          const b = byId.get(a.id)!;
+          const f = byId.get(first.id)!;
+          return Math.hypot(a.x - first.x - (b.x - f.x), a.y - first.y - (b.y - f.y));
+        }),
+      );
+      expect(moved, label).toBeLessThan(1e-6);
+      const bold = (m: Model) => m.bonds.filter((b) => b.display === "bold").map((b) => b.id).sort();
+      expect(bold(after), label).toEqual(bold(model));
+      expect(after.atoms.length, label).toBe(model.atoms.length);
+    }
+    // (nine complexes, each laid out twice by the whole engine: slower on CI's runners)
+  }, 60_000);
 });

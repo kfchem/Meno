@@ -28,8 +28,13 @@ export type Bond = BondChem & {
   stereo?: "up" | "down" | "wavy" | "either" | "none";
   doubleMode?: "auto" | "center" | "left" | "right";
   stereoOrient?: "principle" | "reverse";
-  /** How a single bond with no stereo is drawn; plain when unset. */
-  display?: "plain" | "bold" | "hashed" | "dashed";
+  /**
+   * How a single bond with no stereo is drawn; plain when unset. "wedge" is
+   * a ring's bond in perspective toward the viewer, narrow where
+   * `stereoOrient` says; on a double bond it, or "bold", is the line the
+   * second one is drawn beside.
+   */
+  display?: "plain" | "bold" | "hashed" | "dashed" | "wedge";
   /** A dative bond, drawn as an arrow from `a`, the donor, to `b`. */
   dative?: boolean;
 };

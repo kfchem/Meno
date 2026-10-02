@@ -1,0 +1,167 @@
+{
+  "comment": "Complexes of metals, laid out as Meno's own labels stand for them (src/lib/chem/reagents.ts, ligands.ts): PubChem's SMILES leaves a haptic bond out. Each with the Wikipedia page that shows it, linked, nothing copied.",
+  "molecules": [
+    {
+      "name": "Ferrocene",
+      "label": "Cp2Fe",
+      "page": "https://en.wikipedia.org/wiki/Ferrocene",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "Decamethylferrocene",
+      "label": "Fe(Cp*)2",
+      "page": "https://en.wikipedia.org/wiki/Decamethylferrocene",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "1,1'-Bis(diphenylphosphino)ferrocene",
+      "label": "dppf",
+      "page": "https://en.wikipedia.org/wiki/1,1%27-Bis(diphenylphosphino)ferrocene",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "PdCl2(dppf)",
+      "label": "PdCl2(dppf)",
+      "page": "https://en.wikipedia.org/wiki/(1,1%27-Bis(diphenylphosphino)ferrocene)palladium(II)_dichloride",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "Zirconocene dichloride",
+      "label": "Cp2ZrCl2",
+      "page": "https://en.wikipedia.org/wiki/Zirconocene_dichloride",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "Titanocene dichloride",
+      "label": "Cp2TiCl2",
+      "page": "https://en.wikipedia.org/wiki/Titanocene_dichloride",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "Schwartz's reagent",
+      "label": "Schwartz's reagent",
+      "page": "https://en.wikipedia.org/wiki/Schwartz%27s_reagent",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "Petasis reagent",
+      "label": "Petasis reagent",
+      "page": "https://en.wikipedia.org/wiki/Petasis_reagent",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "Tebbe's reagent",
+      "label": "Tebbe reagent",
+      "page": "https://en.wikipedia.org/wiki/Tebbe%27s_reagent",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "(Cymene)ruthenium dichloride dimer",
+      "label": "[RuCl2(p-cymene)]2",
+      "page": "https://en.wikipedia.org/wiki/(Cymene)ruthenium_dichloride_dimer",
+      "category": "Sandwich and half-sandwich complexes"
+    },
+    {
+      "name": "Tetrakis(triphenylphosphine)palladium(0)",
+      "label": "Pd(PPh3)4",
+      "page": "https://en.wikipedia.org/wiki/Tetrakis(triphenylphosphine)palladium(0)",
+      "category": "Phosphine complexes"
+    },
+    {
+      "name": "Bis(triphenylphosphine)palladium chloride",
+      "label": "PdCl2(PPh3)2",
+      "page": "https://en.wikipedia.org/wiki/Bis(triphenylphosphine)palladium_chloride",
+      "category": "Phosphine complexes"
+    },
+    {
+      "name": "Wilkinson's catalyst",
+      "label": "Wilkinson's catalyst",
+      "page": "https://en.wikipedia.org/wiki/Wilkinson%27s_catalyst",
+      "category": "Phosphine complexes"
+    },
+    {
+      "name": "Crabtree's catalyst",
+      "label": "Crabtree's catalyst",
+      "page": "https://en.wikipedia.org/wiki/Crabtree%27s_catalyst",
+      "category": "Phosphine complexes"
+    },
+    {
+      "name": "Grubbs catalyst, first generation",
+      "label": "Grubbs I",
+      "page": "https://en.wikipedia.org/wiki/Grubbs_catalyst",
+      "category": "Metathesis catalysts"
+    },
+    {
+      "name": "Grubbs catalyst, second generation",
+      "label": "Grubbs II",
+      "page": "https://en.wikipedia.org/wiki/Grubbs_catalyst",
+      "category": "Metathesis catalysts"
+    },
+    {
+      "name": "Hoveyda–Grubbs catalyst, second generation",
+      "label": "HG-II",
+      "page": "https://en.wikipedia.org/wiki/Grubbs_catalyst",
+      "category": "Metathesis catalysts"
+    },
+    {
+      "name": "Schrock's catalyst",
+      "label": "Schrock's catalyst",
+      "page": "https://en.wikipedia.org/wiki/Schrock_carbene",
+      "category": "Metathesis catalysts"
+    },
+    {
+      "name": "Bis(cyclooctadiene)nickel(0)",
+      "label": "Ni(cod)2",
+      "page": "https://en.wikipedia.org/wiki/Bis(cyclooctadiene)nickel(0)",
+      "category": "Alkene and allyl complexes"
+    },
+    {
+      "name": "Cyclooctadiene iridium chloride dimer",
+      "label": "[Ir(cod)Cl]2",
+      "page": "https://en.wikipedia.org/wiki/Cyclooctadiene_iridium_chloride_dimer",
+      "category": "Alkene and allyl complexes"
+    },
+    {
+      "name": "Tris(dibenzylideneacetone)dipalladium(0)",
+      "label": "Pd2(dba)3",
+      "page": "https://en.wikipedia.org/wiki/Tris(dibenzylideneacetone)dipalladium(0)",
+      "category": "Alkene and allyl complexes"
+    },
+    {
+      "name": "Allylpalladium chloride dimer",
+      "label": "[Pd(allyl)Cl]2",
+      "page": "https://en.wikipedia.org/wiki/Allylpalladium_chloride_dimer",
+      "category": "Alkene and allyl complexes"
+    },
+    {
+      "name": "Karstedt's catalyst",
+      "label": "Karstedt's catalyst",
+      "page": "https://en.wikipedia.org/wiki/Karstedt%27s_catalyst",
+      "category": "Alkene and allyl complexes"
+    },
+    {
+      "name": "Jacobsen's catalyst",
+      "label": "(R,R)-Jacobsen's catalyst",
+      "page": "https://en.wikipedia.org/wiki/Jacobsen%27s_catalyst",
+      "category": "Other catalysts"
+    },
+    {
+      "name": "PEPPSI-IPr",
+      "label": "PEPPSI-IPr",
+      "page": "https://en.wikipedia.org/wiki/PEPPSI",
+      "category": "Other catalysts"
+    },
+    {
+      "name": "XPhos Pd G3",
+      "label": "XPhos Pd G3",
+      "page": "https://en.wikipedia.org/wiki/Dialkylbiaryl_phosphine_ligands",
+      "category": "Other catalysts"
+    },
+    {
+      "name": "Krische's catalyst",
+      "label": "(R)-Krische's catalyst",
+      "page": "https://en.wikipedia.org/wiki/Krische_allylation",
+      "category": "Other catalysts"
+    }
+  ]
+}

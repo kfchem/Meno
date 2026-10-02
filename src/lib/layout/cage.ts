@@ -15,7 +15,7 @@
  * nearly one length.
  */
 import { segmentsCross, type Point } from "./geometry";
-import type { Molecule, RingSystem } from "./perceive";
+import { isMetal, type Molecule, type RingSystem } from "./perceive";
 
 export type Vec3 = [number, number, number];
 
@@ -923,6 +923,9 @@ function outward(
  */
 export function isCage(mol: Molecule, sys: RingSystem): boolean {
   if (sys.rings.length < 2 || sys.atoms.length > 16) return false;
+  // (rings through a metal - a chelate, a diene bound to it - or round a
+  // star are no cage: they are drawn flat, or face-on to their metal)
+  if (sys.atoms.some((a) => mol.el[a] === "*" || isMetal(mol.el[a]))) return false;
   const rings = sys.rings.map((i) => mol.rings[i]);
   if (rings.some((r) => r.length > 8)) return false;
   const bridged = rings.every((r) => rings.some((q) => q !== r && q.filter((a) => r.includes(a)).length >= 3));

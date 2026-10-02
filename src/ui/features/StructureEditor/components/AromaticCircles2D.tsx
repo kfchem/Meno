@@ -4,6 +4,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useMemo, useRef, useState, useEffect } from "react";
 import { useEditor } from "../store";
 import {
+  circlePoints,
   layoutMolecule,
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
@@ -191,12 +192,8 @@ export default function AromaticCircles2D() {
   return (
     <group>
       {(layout as any).circles?.map((c: any, i: number) => {
-        const N = 64;
-        const pts: [number, number, number][] = [];
-        for (let k = 0; k <= N; k++) {
-          const t = (k / N) * Math.PI * 2;
-          pts.push([c.c.x + Math.cos(t) * c.r, c.c.y + Math.sin(t) * c.r, 0]);
-        }
+        // (an ellipse, for a ring seen in perspective)
+        const pts: [number, number, number][] = circlePoints(c).map((p) => [p.x, p.y, 0]);
         const lw =
           opts.units === "world"
             ? opts.lineWidthPx * Math.max(zoom, 1e-6)

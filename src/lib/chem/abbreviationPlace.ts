@@ -32,24 +32,24 @@ export function placedAbbreviation(
 export function placedStructure(given: GroupStructure, neighbour: P | null, bondLength: number): AbbreviationStructure {
   const s = drawnAsSaid(given);
   const stars = new Map((s.haptic ?? []).map((h) => [h.star, h.atoms]));
-  // laid out without the stars: a haptic bond to one stands in for a bond
-  // to the first atom of its pi system
-  const end = (i: number) => (stars.has(i) ? stars.get(i)![0] : i);
   const head = s.attach[0] ?? 0;
   const from = s.atoms.length;
+  // (a star given its pi system: the engine draws a ring of it face-on to
+  // its metal, as Clean-up's does)
   const laid = layout2D({
     atoms: [
       ...s.atoms.map((a, i) => ({
-        el: a.el === "*" ? "C" : a.el,
+        el: a.el,
         ...(a.charge ? { charge: a.charge } : {}),
         hs: s.hs[i],
         ...(a.tetra ? { tetra: a.tetra } : {}),
+        ...(stars.has(i) ? { pi: stars.get(i)! } : {}),
       })),
       { el: "C" },
     ],
     bonds: [
-      ...s.bonds.map((b) => ({ a: end(b.a1), b: end(b.a2), order: b.coordination ? 1 : b.order })).filter((b) => b.a !== b.b),
-      ...(s.attach.length ? [{ a: from, b: end(head), order: 1 }] : []),
+      ...s.bonds.map((b) => ({ a: b.a1, b: b.a2, order: b.coordination ? 1 : b.order })),
+      ...(s.attach.length ? [{ a: from, b: head, order: 1 }] : []),
     ],
   });
   // each star at its pi system's centre
@@ -76,6 +76,13 @@ export function placedStructure(given: GroupStructure, neighbour: P | null, bond
     ...(b.coordination ? { coordination: true } : {}),
     ...(b.endpoints ? { endpoints: b.endpoints, attach: "all" as const } : {}),
   }));
+  // a ring seen in perspective: its near edges bold (a double bond's where
+  // it is drawn as a single one - a ring face-on to its metal, drawn with
+  // its circle)
+  for (const [u, v] of laid.bold) {
+    const b = bonds.find((x) => (x.a1 === u && x.a2 === v) || (x.a1 === v && x.a2 === u));
+    if (b) b.display = "bold";
+  }
   // a stereocentre's H the engine draws to carry its wedge
   const hydrogenOn = new Map<number, number>();
   for (const h of laid.hydrogens) {
@@ -98,6 +105,14 @@ export function placedStructure(given: GroupStructure, neighbour: P | null, bond
     b.stereo = w.stereo;
     const usual = wedgeNarrowAtom({ a1: b.a1, a2: b.a2, order: b.order, stereoOrient: "principle" }, degree);
     if (usual !== w.from) b.stereoOrient = "reverse";
+  }
+  // and a ring's bond toward the viewer, a wedge narrow at its far end
+  for (const [far, nearer] of laid.toward) {
+    const b = bonds.find((x) => (x.a1 === far && x.a2 === nearer) || (x.a1 === nearer && x.a2 === far));
+    if (!b) continue;
+    b.display = "wedge";
+    const usual = wedgeNarrowAtom({ a1: b.a1, a2: b.a2, order: b.order, stereoOrient: "principle" }, degree);
+    if (usual !== far) b.stereoOrient = "reverse";
   }
 
   const into = { x: laid.x[head] - laid.x[from], y: laid.y[head] - laid.y[from] };
@@ -144,8 +159,9 @@ type Said = SmilesAtom & Pick<AtomChem, "radical" | "valence">;
  * a drawing counts them (molecule.valenceOrder, implicitHydrogens): one
  * that says more than that - Bu3SnH's tin, a metal's hydride - has the
  * rest drawn as atoms; one that says fewer is a radical where it is one
- * short and bonded to nothing outside (TEMPO's oxygen), and else keeps
- * the valence it has (a carbene's carbon). With each atom's H as drawn.
+ * short and bonded to nothing outside (TEMPO's oxygen, a neutral Cp*'s
+ * ring), and else keeps the valence it has (a carbene's carbon). With each
+ * atom's H as drawn.
  */
 function drawnAsSaid(s: GroupStructure): GroupStructure & { atoms: Said[]; hs: number[] } {
   const atoms: Said[] = s.atoms.map((a) => ({ ...a }));
@@ -160,6 +176,9 @@ function drawnAsSaid(s: GroupStructure): GroupStructure & { atoms: Said[]; hs: n
     sum[at] += s.lends?.[k] ? valenceOrder({ order: 1, coordination: true }, atoms[at].el) : 1;
   });
   const outside = new Set(s.attach);
+  // (a pi system's atom, bound face-on: one short is the ring's unpaired
+  // electron - Cp* as a neutral ligand - drawn as the ring's circle is)
+  const pi = new Set((s.haptic ?? []).flatMap((h) => h.atoms));
   const n = atoms.length;
   for (let i = 0; i < n; i++) {
     const a = atoms[i];
@@ -171,7 +190,7 @@ function drawnAsSaid(s: GroupStructure): GroupStructure & { atoms: Said[]; hs: n
         bonds.push({ a1: i, a2: atoms.length - 1, order: 1 });
       }
     } else if (a.hs < usual) {
-      if (usual - a.hs === 1 && !outside.has(i) && a.el !== "C") atoms[i] = { ...a, radical: "doublet" };
+      if (usual - a.hs === 1 && !outside.has(i) && (a.el !== "C" || pi.has(i))) atoms[i] = { ...a, radical: "doublet" };
       else atoms[i] = { ...a, valence: sum[i] + a.hs };
     }
   }

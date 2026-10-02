@@ -287,12 +287,85 @@ Nothing else is moved for it: the drawing is set first, its H's last.
   H, is drawn the way the solid has it - never straight out from the
   cage's bonds, which is where neither of its corners is and says nothing.
 
+## 7. Metals
+
+A metal's complex is drawn as chemists draw one: the metal in the middle,
+its ligands round it, what is three-dimensional shown in perspective. None
+of it is a template - each is a rule, and the drawing is what the rules
+make of the molecule (`hapto.ts`, `assemble.ts`).
+
+- **A ring bound face-on to a metal through all its atoms** - η⁵-Cp, Cp*,
+  η⁶-benzene, p-cymene - is seen as it is: the metal on its axis, a bond
+  from its centre, the ring seen from a little above its plane (about 24
+  degrees), so that it is drawn as deep as 0.4 of its width - a flattened
+  polygon. Its lower half on the page is nearer - whichever side of it the
+  metal is, and with no metal at all (a ligand's picture) - each atom as
+  near as it is across the ring's axis. What hangs from it lies in its
+  plane, pointing out from its centre and foreshortened as the ring is
+  (Cp*'s methyls). The ring may be spun about its axis: where its first
+  substituent points - to either side, or away from the metal - is tried
+  each way, and the one that reads best kept; a ring with nothing hanging
+  from it, seen with a corner nearest, is spun half a step to have an edge
+  there instead.
+- **Drawn as Haworth drew rings.** A ring in perspective - bound face-on,
+  or a phenyl turned on its bond (below) - has a bond with both its atoms
+  near drawn bold (the edge in front), a bond running from its far half
+  toward the near one drawn as a wedge, broad at the near end, and the
+  rest plain. These say nothing of configuration: they are how the bond
+  is displayed (`display`: "bold", "wedge"), and on a double bond the bold
+  bar or the wedge is the line its second line is drawn beside.
+- **Its circle.** Such a ring is drawn with a circle - an ellipse, in
+  perspective - for its pi system, not as a diene (Cp is never drawn with
+  two double bonds). A charge its carbons carry is the circle's and is not
+  drawn, nor is it on the metal: ferrocene, Fe²⁺ and two Cp⁻ as written,
+  is drawn neutral, as chemists draw it.
+- **Where the rings go.** A metal with two such rings - a sandwich - has
+  them opposite each other, upright, one above it and one below; with
+  other ligands too (Cp₂ZrCl₂), the rings lean 20 degrees away from them
+  and they lie between, to one side. A metal with one ring has it above,
+  the rest spread below as a stool's legs. A metal and its rings are laid
+  out together, as one system.
+- **A ring bound through two C=C of its own** - cod on Ni, Rh, Ir - is the
+  tub it is: its two C=C parallel, a little apart, facing the metal, which
+  lies beyond their middle; what runs between them on each side arching
+  away from the metal. Seen from in front and a little above (the near C=C
+  below and to the side of the far one), its near edges bold and the bonds
+  toward them wedges, as for a ring face-on; stood with its C=C upright,
+  the metal beside them. A second such ring goes to the metal's other
+  side; the metal's other ligands opposite a lone one. Both C=C are cis,
+  as they are; drawn as one ring with the metal, one came out trans.
+- **Ligands round a metal** with no ring go evenly round it - two in a
+  line, four in a cross - and the bulkiest go furthest apart: two bulky
+  ligands trans to each other, the small ones (Cl, H, CO) between them. A
+  complex is grown from its metal, unless a ring runs through the metal
+  (a chelate), where the ring is drawn as rings are.
+- **A metal's bonds are long.** A bond between a metal and a ligand is
+  drawn 1.4 bond lengths long (Pd-P is 2.3 Å against C-C's 1.5 Å), which
+  gives the ligands room - but in a chelate's ring, which is drawn regular.
+- **A donor bonded to a metal** (a phosphine's P) spreads what it carries
+  away from the metal, as a tripod's legs, 75 degrees apart.
+- **A chelate that closes at a metal** - dppf's two P on Pd, through the
+  ferrocene - has the metal at the apex over its two donors, its bonds
+  alike and as long as a square angle there needs.
+- **Aryl rings crowded round one atom** - PPh₃'s phenyls on a crowded
+  metal - are each turned on their bond out of the page, all the same way
+  round (a propeller), and so seen in perspective: foreshortened across
+  the bond, its near edges bold and the bonds toward them wedges. Done
+  only where it reads better by the benchmark's measures, at 45, 60 or 70
+  degrees, whichever reads best.
+- **Clean-up draws a complex as writing out its label does**: the same
+  engine, given the same structure - a haptic bond's star with its pi
+  system - and each star put afterwards at the centre of its system's
+  atoms (a ring's is there already; a C=C's, cod's, is not), so a complex
+  expanded and then cleaned up does not move.
+
 ## How the engine goes about it
 
 1. Find the rings (smallest set of smallest rings) and the ring systems -
    fused, bridged, spiro - and the chains between them.
 2. Lay each ring system out in its own frame, square on the lattice - or,
-   for a cage, in perspective and upright.
+   for a cage, in perspective and upright; a ring bound face-on to a metal,
+   with the metal, in perspective (section 7).
 3. Grow the structure out from the frame (section 3), or, with no ring,
    from the middle of its longest chain, placing each bond by the rules of
    section 2 and choosing among free placements by section 5.
@@ -300,7 +373,8 @@ Nothing else is moved for it: the drawing is set first, its H's last.
    section 4, its free choices tried the other way and its parts
    untangled (section 5).
 5. Last, turn a macrolide's sugars to their face and make room for the
-   H's of labels, each by a small local move (sections 4 and 5).
+   H's of labels, each by a small local move (sections 4 and 5); and turn
+   aryl rings crowded round an atom as a propeller (section 7).
 6. Set the pieces of a salt or a mixture side by side, the largest first,
    with a bond and a half of paper between one's ink and the next's: a
    label's symbol, its H beside it and its charge count as ink (an OH

@@ -9,12 +9,20 @@ import type { Model } from "../store/types";
 import { layoutJob, nextFree, relayoutFrom } from "./engineLayout";
 import { layOut } from "./layOut";
 
-/** An atom and every atom bonded to it, however far along. */
+/**
+ * An atom and every atom bonded to it, however far along - a haptic bond
+ * joining a metal to every atom of its pi system (a Cp ring is one
+ * structure with its metal).
+ */
 export function fragmentOf(model: Model, atomId: number): Set<number> {
   const next = new Map<number, number[]>();
+  const join = (u: number, v: number) => {
+    next.set(u, [...(next.get(u) ?? []), v]);
+    next.set(v, [...(next.get(v) ?? []), u]);
+  };
   for (const b of model.bonds) {
-    next.set(b.a, [...(next.get(b.a) ?? []), b.b]);
-    next.set(b.b, [...(next.get(b.b) ?? []), b.a]);
+    join(b.a, b.b);
+    for (const e of b.endpoints ?? []) join(b.a, e);
   }
   const seen = new Set([atomId]);
   const todo = [atomId];
