@@ -11,7 +11,7 @@ import {
   type SgroupMark,
   type StereoGroup,
 } from "./molecule";
-import { labelRuns, labelUnits, reversedLabel } from "./abbreviations";
+import { italicUnits, labelRuns, labelUnits, namesRingFirst, reversedLabel, unitRuns } from "./abbreviations";
 import { elements } from "../../utils/atomUtils";
 
 export { implicitHydrogens };
@@ -188,6 +188,8 @@ export type TextRun = {
    * of them instead.
    */
   part?: boolean;
+  /** Set in italics: the t of t-Bu, the p of p-Ts (IUPAC's Table II). */
+  italic?: boolean;
 };
 
 /**
@@ -303,6 +305,8 @@ export type LabelBox = {
 export type PlacedRun = {
   text: string;
   sub: boolean;
+  /** In italics: see `TextRun`. */
+  italic?: boolean;
   /** Drawn, not set in type: see `TextRun`. */
   mark?: "charge" | "radical";
   x: number;
@@ -442,6 +446,7 @@ export function placeLabel(
   const setRun = (i: number, x: number, line: number): PlacedRun => ({
     text: runs[i].text,
     sub: !!runs[i].sub,
+    ...(runs[i].italic ? { italic: true } : {}),
     ...(runs[i].mark ? { mark: runs[i].mark } : {}),
     x,
     y: runs[i].sub ? line - fontSize * set.subscriptDrop : runs[i].sup || runs[i].mark ? line + rise : line,
@@ -1702,13 +1707,19 @@ function specialLabel(a: Atom, fromRight: boolean): { runs: TextRun[]; anchor: n
     return { runs: [{ text }], anchor: 0 };
   }
   if (ELEMENT_SYMBOLS.has(a.el)) return null;
-  const units = labelUnits(fromRight ? reversedLabel(a.el) : a.el);
+  // (a ring's substituents named before it - 2,6-diMeBz - are not read
+  // outward: on the right of its bond, the label starts at the bond)
+  const ringFirst = namesRingFirst(a.el);
+  const units = labelUnits(fromRight && !ringFirst ? reversedLabel(a.el) : a.el);
   if (units.length < 2) return { runs: labelRuns(a.el), anchor: 0 };
-  // the unit at the bond as runs of its own, so that it sits on the atom
-  const at = fromRight ? units.length - 1 : 0;
-  const before = labelRuns(units.slice(0, at).join(""));
-  const own = labelRuns(units[at]);
-  const after = labelRuns(units.slice(at + 1).join(""));
+  // the unit at the bond as runs of its own, so that it sits on the atom:
+  // a formula's ring by its C6
+  const ring = ringFirst ? units.lastIndexOf("C6") : -1;
+  const at = fromRight ? (ring >= 0 ? ring : units.length - 1) : 0;
+  const italic = italicUnits(units);
+  const before = unitRuns(units.slice(0, at), italic.slice(0, at));
+  const own = unitRuns([units[at]], [italic[at]]);
+  const after = unitRuns(units.slice(at + 1), italic.slice(at + 1));
   const runs = [...(at > 0 ? before : []), ...own, ...(at < units.length - 1 ? after : [])];
   return { runs, anchor: at > 0 ? before.length : 0 };
 }
@@ -3547,7 +3558,7 @@ function svgLabel(
     if (run.mark) continue;
     out +=
       `<text x="${run.x}" y="${-run.y}" font-family="${fontFamily}"` +
-      ` font-size="${run.size}" fill="${fill}" stroke="none"` +
+      ` font-size="${run.size}"${run.italic ? ' font-style="italic"' : ""} fill="${fill}" stroke="none"` +
       ` text-anchor="start">${escapeXml(run.text)}</text>`;
   }
   return out;

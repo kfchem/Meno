@@ -329,12 +329,15 @@ export function layoutEmf(
     const fontSize = opts.units === "world" ? opts.fontPx : opts.fontPx / zoom;
     w.add(EMR.SETTEXTALIGN, 4, (v) => v.setUint32(0, 24, true)); // TA_BASELINE | TA_LEFT
     w.add(EMR.SETTEXTCOLOR, 4, (v) => v.setUint32(0, ink, true));
-    const fonts = new Map<number, number>();
+    // (by size, and whether in italics: the t of t-Bu)
+    const fonts = new Map<string, number>();
     for (const t of layout.texts) {
       for (const run of placeLabel(t, fontSize, set)) {
         if (run.mark || !run.text) continue; // (a mark is drawn with the lines and shapes)
         const height = L(run.size);
-        let h = fonts.get(height);
+        const italic = !!run.italic;
+        const key = `${height}${italic ? " italic" : ""}`;
+        let h = fonts.get(key);
         if (h == null) {
           h = w.handle();
           const handle = h;
@@ -342,12 +345,13 @@ export function layoutEmf(
             v.setUint32(0, handle, true);
             v.setInt32(4, -height, true); // the em, not the cell
             v.setInt32(20, 400, true); // FW_NORMAL
+            if (italic) v.setUint8(24, 1); // lfItalic
             v.setUint8(27, 1); // DEFAULT_CHARSET
             v.setUint8(28, 4); // OUT_TT_PRECIS
             v.setUint8(30, 4); // ANTIALIASED_QUALITY
             [...face].forEach((ch, i) => v.setUint16(32 + 2 * i, ch.charCodeAt(0), true));
           });
-          fonts.set(height, h);
+          fonts.set(key, h);
         }
         select(h);
         const units = [...run.text].flatMap((ch) => {
@@ -370,11 +374,11 @@ export function layoutEmf(
           return u.unit >= 0xd800 && u.unit < 0xe000 ? [] : [{ unit: u.unit, x }];
         });
         if (glyphs.length) {
-          const id = object(`font ${height}`, PLUS_OBJECT.FONT, 24 + 2 * face.length, (v) => {
+          const id = object(`font ${key}`, PLUS_OBJECT.FONT, 24 + 2 * face.length, (v) => {
             v.setUint32(0, PLUS_VERSION, true);
             v.setFloat32(4, px(height), true); // the em
             v.setUint32(8, 0, true); // in the drawing's own units
-            v.setUint32(12, 0, true); // regular
+            v.setUint32(12, italic ? 2 : 0, true); // FontStyleItalic, or regular
             v.setUint32(16, 0, true);
             v.setUint32(20, face.length, true);
             for (let i = 0; i < face.length; i++) v.setUint16(24 + 2 * i, face.charCodeAt(i), true);

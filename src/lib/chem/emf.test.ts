@@ -125,6 +125,20 @@ describe("layoutEmf", () => {
     widths.forEach((width, i) => expect(width).toBeCloseTo(Math.round(lines[i].widthPx * 20) / 20, 4));
   });
 
+  it("asks for the typeface's italic for an italic run: the t of Ot-Bu", () => {
+    const ether: Model = {
+      atoms: [
+        { id: 1, x: 0, y: 0, r: 0.9, el: "C" },
+        { id: 2, x: L, y: 0, r: 0.9, el: "Ot-Bu" },
+      ],
+      bonds: [{ id: 3, a: 1, b: 2, order: 1, stereo: "none" }],
+    };
+    const drawn = drawingLayout(ether, aromatic, ACS_1996);
+    const fonts = emfRecords(layoutEmf(drawn.layout, drawn.opts).emf)!.filter((r) => r.type === 82);
+    // one font upright, one italic (EXTCREATEFONTINDIRECTW: lfItalic)
+    expect(fonts.map((f) => f.body[24]).sort()).toEqual([0, 1]);
+  });
+
   it("reads no records out of what is not an EMF", () => {
     expect(emfRecords(new Uint8Array(100))).toBeNull();
     expect(emfComments(new Uint8Array(4))).toEqual([]);

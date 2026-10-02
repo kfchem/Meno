@@ -102,6 +102,29 @@ describe("a label written", () => {
     expect(r.runs![r.anchorRun!].text).toBe("O");
   });
 
+  it("reads a ring's substituents named first as written, whichever side its bond is on", () => {
+    // on the right of its bond: from the bond, the ring's name last
+    const left = two("2,6-diMeBz", "left");
+    const [l] = buildTextLabels(left.atoms, opts(), left.bonds);
+    expect(l.text).toBe("2,6-diMeBz");
+    expect(l.runs![l.anchorRun!].text.startsWith("2")).toBe(true);
+    // on its left: the ring at the bond, a formula's by its C6
+    const right = two("4-MeOC6H4", "right");
+    const [r] = buildTextLabels(right.atoms, opts(), right.bonds);
+    expect(r.text).toBe("4-MeOC6H4");
+    expect(r.runs![r.anchorRun!].text).toBe("C");
+  });
+
+  it("sets the t of t-Bu in italics, on either side", () => {
+    const left = two("Ot-Bu", "left");
+    const [l] = buildTextLabels(left.atoms, opts(), left.bonds);
+    expect(l.runs!.filter((r) => r.italic).map((r) => r.text)).toEqual(["t"]);
+    const right = two("Ot-Bu", "right");
+    const [r] = buildTextLabels(right.atoms, opts(), right.bonds);
+    expect(r.text).toBe("t-BuO");
+    expect(r.runs!.filter((x) => x.italic).map((x) => x.text)).toEqual(["t"]);
+  });
+
   it("sets counts as subscripts and takes no hydrogens", () => {
     const right = two("CO2Me", "right");
     const [label] = buildTextLabels(right.atoms, opts(), right.bonds);
