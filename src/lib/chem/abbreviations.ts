@@ -342,8 +342,10 @@ export function abbreviationStructure(label: string): GroupStructure | null {
   const a = abbreviationOf(label);
   if (!a) return null;
   if (a.kind === "ligand") {
+    // a label bonded to a metal as drawn: neutral, as the drawing is (only a
+    // complex's formula balances a Cp*- against its metal)
     const { anionic: _anionic, ...s } = ligandStructure(ligandOf(a.label)!);
-    return s;
+    return { ...s, atoms: s.atoms.map(({ charge: _charge, ...atom }) => atom) };
   }
   if (a.kind === "complex") {
     const c = complexStructure(label.trim(), groupStructure);

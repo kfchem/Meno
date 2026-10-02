@@ -46,8 +46,13 @@ export function placedStructure(s: GroupStructure, neighbour: P | null, bondLeng
     laid.x[star] = ring.reduce((t, k) => t + laid.x[k], 0) / ring.length;
     laid.y[star] = ring.reduce((t, k) => t + laid.y[k], 0) / ring.length;
   }
-  const at = { x: laid.x[head], y: laid.y[head] };
-  const into = { x: at.x - laid.x[from], y: at.y - laid.y[from] };
+  const into = { x: laid.x[head] - laid.x[from], y: laid.y[head] - laid.y[from] };
+  // attached through a pi system: its centre as far again from the bond's
+  // other end as the system is wide, so that its atoms keep clear of it
+  const pi = stars.get(head);
+  const reach = pi && neighbour ? Math.max(...pi.map((k) => Math.hypot(laid.x[k] - laid.x[head], laid.y[k] - laid.y[head]))) : 0;
+  const away = Math.hypot(into.x, into.y) || 1;
+  const at = { x: laid.x[head] - (into.x / away) * reach, y: laid.y[head] - (into.y / away) * reach };
   // the way the bond runs now: from the neighbour to the label's atom
   const want = neighbour && s.attach.length ? { x: -neighbour.x, y: -neighbour.y } : into;
   const turn = s.attach.length ? Math.atan2(want.y, want.x) - Math.atan2(into.y, into.x) : 0;

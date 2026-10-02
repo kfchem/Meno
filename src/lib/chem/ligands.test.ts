@@ -70,11 +70,40 @@ describe("the ligands", () => {
     const mean = (k: "x" | "y") => atoms.reduce((t, i) => t + cp.atoms[i][k], 0) / atoms.length;
     expect(cp.atoms[star].x).toBeCloseTo(mean("x"), 9);
     expect(cp.atoms[star].y).toBeCloseTo(mean("y"), 9);
+    // its ring kept a bond and more from the metal its bond comes from (at -L, 0)
+    const nearest = Math.min(...atoms.map((i) => Math.hypot(cp.atoms[i].x + L, cp.atoms[i].y)));
+    expect(nearest).toBeGreaterThanOrEqual(L * 0.99);
+    // drawn as a label is: neutral
+    expect(cp.atoms.every((a) => !a.charge)).toBe(true);
     // cod by its two C=C
     expect(abbreviationStructure("cod")!.haptic!.map((h) => h.atoms.length)).toEqual([2, 2]);
     // a picture: a * on each donor atom, and at each pi system's centre
     const pictured = (label: string) => ligandPicture(LIGANDS.find((l) => l.label === label)!).atoms.filter((a) => a.el === "*").length;
     expect([pictured("PPh3"), pictured("dppe"), pictured("cod"), pictured("acac")]).toEqual([1, 2, 2, 2]);
+  });
+
+  it("bonded to a metal as labels, are written out bound by their donor atoms", () => {
+    // Pd-PPh3 and Fe-Cp*, as drawn
+    const text = writeMolfile({
+      atoms: [
+        { id: 1, x: 0, y: 0, el: "Pd" },
+        { id: 2, x: L, y: 0, el: "PPh3" },
+        { id: 3, x: 0, y: -3 * L, el: "Fe" },
+        { id: 4, x: L, y: -3 * L, el: "Cp*" },
+      ],
+      bonds: [
+        { a: 1, b: 2, order: 1 },
+        { a: 3, b: 4, order: 1 },
+      ],
+    });
+    const lines = text.split("\n");
+    const atoms = lines.filter((l) => /^M {2}V30 \d+ [A-Z*][a-z]? /.test(l)).map((l) => l.split(" ")[4]);
+    const bonds = lines.filter((l) => /^M {2}V30 \d+ \d+ \d+ \d+/.test(l)).map((l) => l.split(" ").slice(4, 7).map(Number));
+    // the PPh3's first atom, where the label was, is its P, bonded to Pd
+    expect(atoms[1]).toBe("P");
+    expect(bonds.some(([, a, b]) => (a === 1 && b === 2) || (a === 2 && b === 1))).toBe(true);
+    // the Cp*'s: a haptic bond from Fe to a star with the ring's five atoms
+    expect(text).toMatch(/ENDPTS=\(5 /);
   });
 
   it("are labels: known on their own, read as one unit or as a formula", () => {
@@ -114,6 +143,7 @@ describe("complexes' formulas", () => {
     expect(formula(pd2)).toBe("C51H42O3Pd2");
     expect(pd2.bonds.filter((b) => b.endpoints)).toHaveLength(3);
     expect(formula(of("[Ir(cod)Cl]2"))).toBe("C16H24Cl2Ir2");
+    expect(abbreviationOf("[Ir(cod)Cl]2")?.name).toBe("2 × (iridium, 1,5-cyclooctadiene, Cl)");
     expect(formula(of("Ni(cod)2"))).toBe("C16H24Ni");
     // Cp- on Zr: Zr(2+), the whole neutral
     const zr = of("Cp2ZrCl2");

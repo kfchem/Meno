@@ -356,8 +356,9 @@ export function complexStructure(
     else bonds.push({ a1: at, a2: metal, order: 1, coordination: true });
   };
 
-  /** One part, its metals first: the index of its first metal, or -1. */
-  const build = (unit: Item[]): number => {
+  /** One part, its metals first: the index of its first metal, or -1. Its words go to `parts` once. */
+  const build = (unit: Item[], named: boolean): number => {
+    const named0 = parts.length;
     const metals: number[] = [];
     for (const it of unit) {
       if (it.kind !== "metal") continue;
@@ -391,6 +392,7 @@ export function complexStructure(
         parts.push(`${it.n > 1 ? `${it.n} ` : ""}${it.kind === "ligand" ? it.ligand.name : it.label}`);
       }
     }
+    if (!named) parts.length = named0;
     return metals[0];
   };
 
@@ -405,11 +407,14 @@ export function complexStructure(
   if (!holds(items)) return null;
   const firsts: number[] = [];
   for (const u of units.length ? units : [{ kind: "unit" as const, items: loose, n: 1 }]) {
+    const at = parts.length;
     for (let k = 0; k < u.n; k++) {
-      const first = build(u.items);
+      const first = build(u.items, k === 0);
       if (first < 0) return null;
       firsts.push(first);
     }
+    // a part made twice: 2 × (its words)
+    if (u.n > 1) parts.splice(at, parts.length - at, `${u.n} × (${parts.slice(at).join(", ")})`);
   }
   let turn = 0;
   for (const c of counters) {
