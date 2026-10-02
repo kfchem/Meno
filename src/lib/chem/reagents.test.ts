@@ -245,6 +245,8 @@ describe("simple formulas, read by rule", () => {
     expect(formula("XPhos Pd G2")).toBe("C45H59ClNPPd");
     expect(formula("XPhos-Pd-G3")).toBe("C46H62NO3PPdS");
     expect(formula("SPhos Pd G4")).toBe("C40H50NO5PPdS");
+    // (any of Meno's Buchwald ligands: AdBrettPhos Pd G3 as it is sold)
+    expect(formula("AdBrettPhos Pd G3")).toBe("C56H74NO5PPdS");
     // (a chelating one has no such palladacycle)
     expect(abbreviationOf("dppf Pd G3")).toBeUndefined();
   });

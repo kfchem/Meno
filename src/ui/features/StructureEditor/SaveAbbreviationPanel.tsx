@@ -40,7 +40,7 @@ export default function SaveAbbreviationPanel({
       </header>
       <div className="flex-1 overflow-auto px-4 py-3">
         <p className="mb-3 text-xs leading-snug text-gh-gray">
-          The selected atoms, as a label of your own: kept in Settings › Abbreviations, and read on every canvas
+          The selected atoms, as a label of your own: kept in Settings › Dictionary, and read on every canvas
           as Meno&apos;s own abbreviations are. The * is where the group is attached.
         </p>
         <AbbreviationForm
