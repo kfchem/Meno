@@ -13,7 +13,9 @@
  *   which one is read from the way it is drawn. Turn a substituent the other
  *   way - from one side of a chair to the other - and the configuration
  *   turns with it.
- * - A double bond's groups are on the side they are drawn on.
+ * - A double bond's groups are on the side they are drawn on - but in a
+ *   ring of seven atoms or fewer, which has them as its ring does (cis),
+ *   however it is drawn: a benzene ring's bonds say nothing.
  * - An axis of chirality - a single bond in no ring, each end with two
  *   other neighbours (a biaryl's) - shows how it turns by a wedge out of an
  *   end, narrow there: that neighbour out of the page (or behind it, on
@@ -121,7 +123,7 @@ export function readStereo(
     const { a, b } = bond;
     const ra = neighbours[a].find((n) => n !== b);
     const rb = neighbours[b].find((n) => n !== a);
-    if (ra == null || rb == null) return;
+    if (ra == null || rb == null || inSmallRing(neighbours, a, b)) return;
     // a wavy bond at either end: either configuration
     if ([a, b].some((x) => neighbours[x].some((n) => bondOf.get(key(x, n))!.either))) return;
     const along = { x: atoms[b].x - atoms[a].x, y: atoms[b].y - atoms[a].y };
@@ -348,6 +350,25 @@ export function sameConfiguration(
     if (len) swaps += len - 1;
   }
   return (swaps % 2 === 0) === (p.volume === q.volume);
+}
+
+/** Whether the bond i-j is in a ring of seven atoms or fewer: j reached from i some other way within six bonds. */
+function inSmallRing(neighbours: readonly number[][], i: number, j: number): boolean {
+  let level = neighbours[i].filter((n) => n !== j);
+  const seen = new Set([i, ...level]);
+  for (let step = 1; step < 6 && level.length; step++) {
+    if (level.includes(j)) return true;
+    const next: number[] = [];
+    for (const u of level) {
+      for (const v of neighbours[u]) {
+        if (seen.has(v)) continue;
+        seen.add(v);
+        next.push(v);
+      }
+    }
+    level = next;
+  }
+  return level.includes(j);
 }
 
 /**

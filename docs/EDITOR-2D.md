@@ -398,7 +398,9 @@ lipids each have their own way of being drawn, which it should know.
      for a wedge it cannot carry - wedge and hashes drawn opposite each
      other, or on an atom whose fourth group is a lone pair (a sulfoxide's
      S), which the engine has no way to take - rather than lose it. A wedge
-     that says nothing (on a CH2) goes.
+     that says nothing (on a CH2) goes, and a double bond in a ring of
+     seven atoms or fewer says nothing either: its ring has it cis, however
+     the ring is drawn.
    - A SMILES is still read by RDKit, whose drawing says what it means;
      the engine then draws it (RDKit's drawing stands, should the engine
      fail).

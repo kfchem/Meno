@@ -77,6 +77,18 @@ describe("readStereo", () => {
     expect(readStereo(hs(cis), bonds).cisTrans.get(1)).toEqual({ refs: [0, 3], cis: true });
   });
 
+  it("reads nothing of a double bond in a ring of seven or fewer, but one in a larger ring", () => {
+    // a ring of n atoms, its bond 0=1 double, drawn as a regular polygon
+    const ring = (n: number) => {
+      const atoms = Array.from({ length: n }, (_, i) => ({ ...at((360 * i) / n), hs: 1 }));
+      const bonds: DrawnBond[] = atoms.map((_, i) => ({ a: i, b: (i + 1) % n, order: i === 0 ? 2 : 1 }));
+      return readStereo(atoms, bonds).cisTrans;
+    };
+    expect(ring(6).size).toBe(0);
+    expect(ring(7).size).toBe(0);
+    expect(ring(8).size).toBe(1);
+  });
+
   it("reads back every centre the engine draws, cages in perspective among them", () => {
     for (const [name, g] of Object.entries(cages)) {
       const input = g as LayoutInput;
