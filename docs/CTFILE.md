@@ -151,8 +151,11 @@ transition-metal chemistry are known by their labels, each the molecule it
 is, in SMILES, its donor atoms marked by atom class ([P:1], [P:2] for a
 chelating diphosphine; several atoms of one class for a pi system bound
 through all of them): phosphines, arsines and phosphites (PPh3, PCy3,
-P(t-Bu)3, P(o-Tol)3, TFP, AsPh3 ...), the biaryl phosphines (XPhos, SPhos,
-RuPhos, BrettPhos, tBuXPhos, DavePhos, JohnPhos), chelating diphosphines
+P(t-Bu)3, P(o-Tol)3, TFP, AsPh3 ...), Buchwald's biaryl phosphines
+(XPhos, SPhos, RuPhos, BrettPhos, tBuXPhos, DavePhos, JohnPhos, and the
+less common CyJohnPhos, MePhos, tBuMePhos, tBuDavePhos, PhDavePhos, CPhos,
+tBuBrettPhos, AdBrettPhos, RockPhos, Me4tBuXPhos, EPhos, GPhos, sSPhos),
+chelating diphosphines
 (dppm to dppb, dppf, BINAP, SEGPHOS, DTBM-SEGPHOS, Xantphos, DPEphos), N
 donors (bpy, dtbpy, phen, py, TMEDA, en, MeCN), chiral diamines (DPEN,
 TsDPEN, DACH), salen, N-heterocyclic carbenes (IPr, IMes, SIPr, SIMes), pi
@@ -218,9 +221,11 @@ The list holds only what no rule reads: Ac2O, Boc2O, Tf2O, TfOH, TsOH,
 HOBt, KOt-Bu, NaH, EtOAc, NaBH4, LiAlH4, NaIO4 and K2CO3 are read by rule
 (below), not listed - and the tests check that no name in it is read by
 rule as the same molecule.
-Settings › Abbreviations shows every entry of it, Meno's groups and
-ligands, the counter-anion no rule reads (BArF), and Buchwald's
-precatalysts by generation.
+Settings › Dictionary shows every entry of it, Meno's groups and
+ligands (by family, the Buchwald ligands one of them), the counter-anion
+no rule reads (BArF), and Buchwald's precatalysts by generation - what
+each label is, drawn as it comes into view; how labels are read is
+documented here, not there.
 
 Read by rule, besides, as whole molecules:
 
@@ -277,7 +282,7 @@ an NHC's or a carbene's, CO's - and the pair is two of its valence, so it
 carries no H for it (`molecule.valenceOrder`); any other atom's lent pair
 takes none, as before.
 
-**Abbreviations of the user's own** are kept in Settings › Abbreviations
+**Abbreviations of the user's own** are kept in Settings › Dictionary
 (`settings.json`): a label, other ways of writing it, a name, and the
 structure as SMILES with a "*" where it is attached, drawn as it is typed.
 A group on a canvas can be saved as one too: selected, *Save as

@@ -10,14 +10,14 @@ import { useSettingsSection, type SettingsSection } from "./section";
 const SECTIONS: { id: SettingsSection; name: string }[] = [
   { id: "style", name: "Drawing style" },
   { id: "chemistry", name: "Chemistry" },
-  { id: "abbreviations", name: "Abbreviations" },
+  { id: "abbreviations", name: "Dictionary" },
   { id: "network", name: "Network" },
 ];
 
 /**
  * The application's settings: the drawing style every structure is drawn
- * in unless its document has its own, what RDKit points out on it, the
- * abbreviations Meno reads, and what Meno may do on the network.
+ * in unless its document has its own, what RDKit points out on it, what
+ * the labels Meno reads stand for, and what Meno may do on the network.
  */
 export default function SettingsPanel() {
   const drawingStyle = useAppSettings((s) => s.drawingStyle);
@@ -84,10 +84,9 @@ export default function SettingsPanel() {
           </section>
         ) : section === "abbreviations" ? (
           <section className="mt-6">
-            <h2 className="text-base font-semibold text-gh-black">Abbreviations</h2>
+            <h2 className="text-base font-semibold text-gh-black">Dictionary</h2>
             <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
-              The labels Meno reads as a group of atoms - Me, Boc, OTBS - each drawn as what it stands for.
-              Add your own here; changes are saved as you make them.
+              What each label stands for - Boc, DMP, XPhos, Grubbs II - drawn. Labels of your own are saved as you add them.
             </p>
             <AbbreviationSettings />
           </section>

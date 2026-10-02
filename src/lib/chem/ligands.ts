@@ -72,11 +72,17 @@ const PH = "c9ccccc9";
 const CY = "C9CCCCC9";
 const TBU = "C(C)(C)C";
 const DTBM = "c9cc(C(C)(C)C)c(OC)c(C(C)(C)C)c9";
+/** 1-Adamantyl, by its bridgehead (ring numbers 6 to 8, used nowhere else). */
+const AD = "C78CC6CC(CC(C6)C7)C8";
+/** The 2,4,6-triisopropylphenyl of XPhos and its kin. */
+const TRIP = "c1c(C(C)C)cc(C(C)C)cc1C(C)C";
 /** An axially chiral ligand's: (R) and (S), read and not shown. */
 const AXIAL: Enantiomers = { as: ["(R)", "(Ra)"], mirror: ["(S)", "(Sa)"], axial: true };
 
-export const LIGANDS: Ligand[] = [
-  // --- phosphines, arsines and phosphites -----------------------------------
+// --- Meno's ligands, by family ----------------------------------------------
+
+/** Phosphines, an arsine and phosphites. */
+const PHOSPHINES: Ligand[] = [
   { label: "PPh3", also: ["Ph3P"], smiles: `[P:1](${PH})(${PH})${PH}`, name: "triphenylphosphine", formula: true },
   { label: "PCy3", also: ["Cy3P"], smiles: `[P:1](${CY})(${CY})${CY}`, name: "tricyclohexylphosphine", formula: true },
   { label: "P(t-Bu)3", also: ["PtBu3", "P(tBu)3", "t-Bu3P", "tBu3P"], smiles: `[P:1](${TBU})(${TBU})${TBU}`, name: "tri-tert-butylphosphine", formula: true },
@@ -88,7 +94,10 @@ export const LIGANDS: Ligand[] = [
   { label: "P(OMe)3", also: ["(MeO)3P"], smiles: "[P:1](OC)(OC)OC", name: "trimethyl phosphite", formula: true },
   { label: "TFP", also: ["P(2-furyl)3"], smiles: "[P:1](c1ccco1)(c1ccco1)c1ccco1", name: "tri(2-furyl)phosphine" },
   { label: "AsPh3", also: ["Ph3As"], smiles: `[As:1](${PH})(${PH})${PH}`, name: "triphenylarsine", formula: true },
-  // biaryl phosphines
+];
+
+/** Buchwald's dialkylbiaryl phosphines, bound by their P (a precatalyst is named by one: XPhos Pd G3). */
+const BUCHWALD: Ligand[] = [
   { label: "XPhos", smiles: `[P:1](${CY})(${CY})c1ccccc1-c1c(C(C)C)cc(C(C)C)cc1C(C)C`, name: "2-dicyclohexylphosphino-2',4',6'-triisopropylbiphenyl" },
   { label: "SPhos", smiles: `[P:1](${CY})(${CY})c1ccccc1-c1c(OC)cccc1OC`, name: "2-dicyclohexylphosphino-2',6'-dimethoxybiphenyl" },
   { label: "RuPhos", smiles: `[P:1](${CY})(${CY})c1ccccc1-c1c(OC(C)C)cccc1OC(C)C`, name: "2-dicyclohexylphosphino-2',6'-diisopropoxybiphenyl" },
@@ -96,7 +105,28 @@ export const LIGANDS: Ligand[] = [
   { label: "tBuXPhos", also: ["t-BuXPhos"], smiles: `[P:1](${TBU})(${TBU})c1ccccc1-c1c(C(C)C)cc(C(C)C)cc1C(C)C`, name: "2-di-tert-butylphosphino-2',4',6'-triisopropylbiphenyl" },
   { label: "DavePhos", smiles: `[P:1](${CY})(${CY})c1ccccc1-c1ccccc1N(C)C`, name: "2-dicyclohexylphosphino-2'-(dimethylamino)biphenyl" },
   { label: "JohnPhos", smiles: `[P:1](${TBU})(${TBU})c1ccccc1-c1ccccc1`, name: "(2-biphenyl)di-tert-butylphosphine" },
-  // chelating diphosphines
+  { label: "CyJohnPhos", smiles: `[P:1](${CY})(${CY})c1ccccc1-c1ccccc1`, name: "(2-biphenyl)dicyclohexylphosphine" },
+  { label: "MePhos", smiles: `[P:1](${CY})(${CY})c1ccccc1-c1ccccc1C`, name: "2-dicyclohexylphosphino-2'-methylbiphenyl" },
+  { label: "tBuMePhos", also: ["t-BuMePhos"], smiles: `[P:1](${TBU})(${TBU})c1ccccc1-c1ccccc1C`, name: "2-di-tert-butylphosphino-2'-methylbiphenyl" },
+  { label: "tBuDavePhos", also: ["t-BuDavePhos"], smiles: `[P:1](${TBU})(${TBU})c1ccccc1-c1ccccc1N(C)C`, name: "2-di-tert-butylphosphino-2'-(dimethylamino)biphenyl" },
+  { label: "PhDavePhos", smiles: `[P:1](${PH})(${PH})c1ccccc1-c1ccccc1N(C)C`, name: "2-diphenylphosphino-2'-(dimethylamino)biphenyl" },
+  { label: "CPhos", smiles: `[P:1](${CY})(${CY})c1ccccc1-c1c(N(C)C)cccc1N(C)C`, name: "2-dicyclohexylphosphino-2',6'-bis(dimethylamino)biphenyl" },
+  { label: "tBuBrettPhos", also: ["t-BuBrettPhos"], smiles: `[P:1](${TBU})(${TBU})c1c(OC)ccc(OC)c1-${TRIP}`, name: "2-di-tert-butylphosphino-3,6-dimethoxy-2',4',6'-triisopropylbiphenyl" },
+  { label: "AdBrettPhos", smiles: `[P:1](${AD})(${AD})c1c(OC)ccc(OC)c1-${TRIP}`, name: "2-di(1-adamantyl)phosphino-3,6-dimethoxy-2',4',6'-triisopropylbiphenyl" },
+  { label: "RockPhos", smiles: `[P:1](${TBU})(${TBU})c1c(OC)ccc(C)c1-${TRIP}`, name: "2-di-tert-butylphosphino-3-methoxy-6-methyl-2',4',6'-triisopropylbiphenyl" },
+  { label: "Me4tBuXPhos", also: ["Me4t-BuXPhos"], smiles: `[P:1](${TBU})(${TBU})c1c(C)c(C)c(C)c(C)c1-${TRIP}`, name: "2-di-tert-butylphosphino-3,4,5,6-tetramethyl-2',4',6'-triisopropylbiphenyl" },
+  { label: "EPhos", smiles: `[P:1](${CY})(${CY})c1c(OC(C)C)cccc1-${TRIP}`, name: "2-dicyclohexylphosphino-3-isopropoxy-2',4',6'-triisopropylbiphenyl" },
+  { label: "GPhos", smiles: `[P:1](${CY})(${CY})c1c(OC(C)(C)C)ccc(OC)c1-c1c(C(C)C)cccc1C(C)C`, name: "2-dicyclohexylphosphino-3-tert-butoxy-6-methoxy-2',6'-diisopropylbiphenyl" },
+  {
+    label: "sSPhos",
+    also: ["SPhos-SO3Na"],
+    smiles: `[P:1](${CY})(${CY})c1ccccc1-c1c(OC)ccc(S(=O)(=O)[O-])c1OC.[Na+]`,
+    name: "sodium 2'-dicyclohexylphosphino-2,6-dimethoxybiphenyl-3-sulfonate",
+  },
+];
+
+/** Chelating diphosphines. */
+const DIPHOSPHINES: Ligand[] = [
   { label: "dppm", smiles: `[P:1](${PH})(${PH})C[P:2](${PH})${PH}`, name: "1,1-bis(diphenylphosphino)methane" },
   { label: "dppe", smiles: `[P:1](${PH})(${PH})CC[P:2](${PH})${PH}`, name: "1,2-bis(diphenylphosphino)ethane" },
   { label: "dppp", smiles: `[P:1](${PH})(${PH})CCC[P:2](${PH})${PH}`, name: "1,3-bis(diphenylphosphino)propane" },
@@ -131,7 +161,10 @@ export const LIGANDS: Ligand[] = [
   },
   { label: "Xantphos", smiles: `CC1(C)c2cccc([P:1](${PH})${PH})c2Oc2c([P:2](${PH})${PH})cccc21`, name: "4,5-bis(diphenylphosphino)-9,9-dimethylxanthene" },
   { label: "DPEphos", smiles: `[P:1](${PH})(${PH})c1ccccc1Oc1ccccc1[P:2](${PH})${PH}`, name: "bis[2-(diphenylphosphino)phenyl] ether" },
-  // N donors
+];
+
+/** N donors: pyridines, amines, chiral diamines, salen, nitriles. */
+const NITROGEN: Ligand[] = [
   { label: "bpy", also: ["bipy"], smiles: "c1cc[n:1]c(c1)-c1cccc[n:2]1", name: "2,2'-bipyridine" },
   { label: "dtbpy", also: ["dtbbpy"], smiles: "CC(C)(C)c1cc[n:1]c(c1)-c1cc(C(C)(C)C)cc[n:2]1", name: "4,4'-di-tert-butyl-2,2'-bipyridine" },
   { label: "phen", smiles: "c1c[n:1]c2c(c1)ccc1ccc[n:2]c12", name: "1,10-phenanthroline" },
@@ -168,12 +201,18 @@ export const LIGANDS: Ligand[] = [
   },
   { label: "MeCN", also: ["CH3CN"], smiles: "CC#[N:1]", name: "acetonitrile", formula: true },
   { label: "NH3", smiles: "[NH3:1]", name: "ammonia", formula: true, inComplex: true },
-  // N-heterocyclic carbenes, bound by their carbene carbon
+];
+
+/** N-heterocyclic carbenes, bound by their carbene carbon. */
+const CARBENES: Ligand[] = [
   { label: "IPr", smiles: "CC(C)c1cccc(C(C)C)c1N1C=CN(c2c(C(C)C)cccc2C(C)C)[C:1]1", name: "1,3-bis(2,6-diisopropylphenyl)imidazol-2-ylidene" },
   { label: "IMes", smiles: "Cc1cc(C)c(N2C=CN(c3c(C)cc(C)cc3C)[C:1]2)c(C)c1", name: "1,3-bis(2,4,6-trimethylphenyl)imidazol-2-ylidene" },
   { label: "SIPr", smiles: "CC(C)c1cccc(C(C)C)c1N1CCN(c2c(C(C)C)cccc2C(C)C)[C:1]1", name: "1,3-bis(2,6-diisopropylphenyl)imidazolidin-2-ylidene" },
   { label: "SIMes", smiles: "Cc1cc(C)c(N2CCN(c3c(C)cc(C)cc3C)[C:1]2)c(C)c1", name: "1,3-bis(2,4,6-trimethylphenyl)imidazolidin-2-ylidene" },
-  // pi ligands
+];
+
+/** Pi ligands, bound through all the atoms of each pi system. */
+const PI: Ligand[] = [
   { label: "cod", also: ["COD"], smiles: "C1C[CH:1]=[CH:1]CC[CH:2]=[CH:2]1", name: "1,5-cyclooctadiene" },
   { label: "nbd", also: ["NBD"], smiles: "[CH:1]1=[CH:1][CH]2[CH:2]=[CH:2][CH]1C2", name: "norbornadiene" },
   { label: "dba", smiles: `O=C(C=C${PH})[CH:1]=[CH:1]${PH}`, name: "dibenzylideneacetone" },
@@ -188,16 +227,36 @@ export const LIGANDS: Ligand[] = [
     smiles: "C[Si](C)([CH:1]=[CH2:1])O[Si](C)(C)[CH:2]=[CH2:2]",
     name: "1,3-divinyl-1,1,3,3-tetramethyldisiloxane",
   },
-  // alkylidenes, bound by a double bond
+];
+
+/** Alkylidenes, bound by a double bond. */
+const ALKYLIDENES: Ligand[] = [
   { label: "=CHPh", smiles: `[CH:1]${PH}`, double: [1], name: "benzylidene", inComplex: true },
   { label: "=CH2", smiles: "[CH2:1]", double: [1], name: "methylidene", inComplex: true },
-  // O donors
+];
+
+/** O donors, and carbon monoxide. */
+const OTHERS: Ligand[] = [
   { label: "acac", smiles: "CC(=[O:2])C=C(C)[O:1]", anionic: [1], name: "acetylacetonato" },
   { label: "THF", smiles: "[O:1]1CCCC1", name: "tetrahydrofuran" },
   { label: "H2O", smiles: "[OH2:1]", name: "water", formula: true, inComplex: true },
   // and carbon monoxide
   { label: "CO", smiles: "[C-:1]#[O+]", name: "carbon monoxide", formula: true, inComplex: true },
 ];
+
+/** Meno's ligands by family, as Settings › Dictionary lists them. */
+export const LIGAND_FAMILIES: { title: string; ligands: Ligand[] }[] = [
+  { title: "Phosphines", ligands: PHOSPHINES },
+  { title: "Buchwald ligands", ligands: BUCHWALD },
+  { title: "Diphosphines", ligands: DIPHOSPHINES },
+  { title: "Nitrogen ligands", ligands: NITROGEN },
+  { title: "N-heterocyclic carbenes", ligands: CARBENES },
+  { title: "Pi ligands", ligands: PI },
+  { title: "Alkylidenes", ligands: ALKYLIDENES },
+  { title: "Other ligands", ligands: OTHERS },
+];
+
+export const LIGANDS: Ligand[] = LIGAND_FAMILIES.flatMap((f) => f.ligands);
 
 const LIGAND_BY_LABEL = new Map<string, Ligand>();
 for (const l of LIGANDS) for (const name of [l.label, ...(l.also ?? [])]) LIGAND_BY_LABEL.set(name, l);
