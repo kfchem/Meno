@@ -213,7 +213,10 @@ now kept by a rule in `LAYOUT-2D.md`:
     near edges bold, so that it looks three-dimensional;
   - (2026-10-02) the bold on the near side - it was on the far side of a
     lone Cp - and the bonds running toward the viewer drawn as wedges,
-    not one bond bold alone; the phenyls alike;
+    not one bond bold alone; the phenyls alike; where the bold edge and a
+    wedge meet, no dent;
+  - (2026-10-02) cod's C=C both cis - one was drawn trans - (a tub);
+    =C= and CO straight;
   - by rules, not templates, and without losing anything on the organic
     molecules;
   - Clean-up drawing a complex as writing out its label does.

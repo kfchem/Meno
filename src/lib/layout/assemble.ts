@@ -157,10 +157,14 @@ export function grow(
     // through it and a double-bonded O above)
     const cross = isCross(mol, middle);
     const between = deg === 2 && along.length === 2 && along.every((v) => isCross(mol, v));
+    // (an atom straight through - between two double bonds, or by a triple
+    // one: an allene's, a ketene's, CO2's middle - as it is in a chain)
+    const orders = along.map((v) => orderOf(mol, middle, v));
+    const linear = deg === 2 && along.length === 2 && (orders.includes(3) || orders.every((o) => o === 2));
     const slots =
       deg === 1
         ? [0]
-        : between
+        : between || linear
           ? [Math.PI, 0]
           : cross && along.length === 2
             ? [Math.PI, 0, Math.PI / 2, -Math.PI / 2]

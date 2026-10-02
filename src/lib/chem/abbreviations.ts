@@ -20,7 +20,7 @@ import { readSmiles, type Smiles } from "./smiles";
 import { substitutedAryl } from "./substitutedAryl";
 import { condensedStructure } from "./condensed";
 import { complexStructure, LIGAND_UNITS, ligandStructure, namedLigand, type GroupStructure } from "./ligands";
-import { precatalystStructure, REAGENT_UNITS, reagentOf, reagentStructure } from "./reagents";
+import { precatalystPicture, precatalystStructure, REAGENT_UNITS, reagentOf, reagentStructure } from "./reagents";
 import { kekuleOrders } from "./kekulize";
 import type { TextRun } from "./layout2d";
 import { elements } from "../../utils/atomUtils";
@@ -240,6 +240,11 @@ function composedOf(label: string): Abbreviation | undefined {
   const made = madeStructure(label);
   if (made) return { label, name: made.name, smiles: "", kind: "reagent" };
   return undefined;
+}
+
+/** A generation of Buchwald's precatalysts drawn with its phosphine as L (`precatalystPicture`), or null. */
+export function precatalystDrawn(generation: string): GroupStructure | null {
+  return precatalystPicture(generation, groupStructure);
 }
 
 /** A whole molecule a label stands for: one of the reagents, or one made by rule (`byRule`). */

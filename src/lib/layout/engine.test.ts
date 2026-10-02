@@ -588,3 +588,22 @@ describe("a biaryl with something beside its bond on each ring", () => {
     expect(side(0)).toBe(-side(25));
   }, 30_000);
 });
+
+describe("an atom its bonds run straight through", () => {
+  it("is drawn straight, between two double bonds or by a triple one - as the middle a piece is grown from, too", () => {
+    const angleAt = (input: LayoutInput, c: number) => {
+      const { x, y } = layout2D(input);
+      const [p, q] = input.bonds.filter((b) => b.a === c || b.b === c).map((b) => (b.a === c ? b.b : b.a));
+      const u = { x: x[p] - x[c], y: y[p] - y[c] };
+      const v = { x: x[q] - x[c], y: y[q] - y[c] };
+      return (Math.acos(Math.max(-1, Math.min(1, (u.x * v.x + u.y * v.y) / Math.hypot(u.x, u.y) / Math.hypot(v.x, v.y)))) * 180) / Math.PI;
+    };
+    // allene, ketene, CO2: three atoms, the middle one the root
+    expect(angleAt(carbons(3, [[0, 1, 2], [1, 2, 2]]), 1)).toBeCloseTo(180, 6);
+    const ketene: LayoutInput = { atoms: [{ el: "C" }, { el: "C" }, { el: "O" }], bonds: [{ a: 0, b: 1, order: 2 }, { a: 1, b: 2, order: 2 }] };
+    expect(angleAt(ketene, 1)).toBeCloseTo(180, 6);
+    // and in a chain: a carbodiimide's C
+    const chain = carbons(7, [[0, 1], [1, 2], [2, 3, 2], [3, 4, 2], [4, 5], [5, 6]]);
+    expect(angleAt(chain, 3)).toBeCloseTo(180, 6);
+  });
+});

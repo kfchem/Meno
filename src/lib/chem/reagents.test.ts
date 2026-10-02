@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NOMINAL_BOND_LENGTH as L } from "./acs";
-import { abbreviationOf, abbreviationStructure, byRule, italicUnits, labelRuns, labelUnits } from "./abbreviations";
+import { abbreviationOf, abbreviationStructure, byRule, italicUnits, labelRuns, labelUnits, precatalystDrawn } from "./abbreviations";
 import { wedgeNarrowAtom } from "./layout2d";
 import { placedAbbreviation } from "./abbreviationPlace";
 import { structureFormula, type GroupStructure } from "./ligands";
@@ -249,6 +249,13 @@ describe("simple formulas, read by rule", () => {
     expect(formula("SPhos Pd G4")).toBe("C40H50NO5PPdS");
     // (any of Meno's Buchwald ligands: AdBrettPhos Pd G3 as it is sold)
     expect(formula("AdBrettPhos Pd G3")).toBe("C56H74NO5PPdS");
+    // each generation drawn as itself, its phosphine an L
+    for (const g of ["G2", "G3", "G4"]) {
+      const pic = precatalystDrawn(g)!;
+      expect(pic.atoms.filter((x) => x.el === "L"), g).toHaveLength(1);
+      expect(pic.atoms.some((x) => x.el === "P"), g).toBe(false);
+      expect(pic.atoms.some((x) => x.el === "Pd"), g).toBe(true);
+    }
     // (a chelating one has no such palladacycle)
     expect(abbreviationOf("dppf Pd G3")).toBeUndefined();
   });

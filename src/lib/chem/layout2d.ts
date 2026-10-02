@@ -27,6 +27,12 @@ export type Atom = AtomChem & {
    * crosses it.
    */
   z?: number;
+  /**
+   * Its symbol drawn, whatever it is: a carbon between two double bonds (an
+   * allene's, a ketene's, a carbodiimide's middle), which a straight line
+   * through it would hide (`cumulatedShown`).
+   */
+  shown?: boolean;
 };
 export type Bond = BondChem & {
   a1: number;
@@ -373,6 +379,23 @@ export function hapticRings(atoms: readonly Atom[], bonds: readonly Bond[]): num
  * none. So is an unpaired electron of the ring's (Cp* as a neutral ligand),
  * or of any pi system bound so (an η³-allyl's).
  */
+/**
+ * The atoms, a carbon between two double bonds with its symbol drawn: the
+ * middle of an allene, a ketene, CO2 or a carbodiimide, which its bonds run
+ * straight through, hidden in a line as it would be (O=C=O read as O=O).
+ */
+export function cumulatedShown(atoms: Atom[], bonds: readonly Bond[]): Atom[] {
+  const doubles = atoms.map(() => 0);
+  const all = atoms.map(() => 0);
+  for (const b of bonds) {
+    for (const e of [b.a1, b.a2]) {
+      all[e]++;
+      if (b.order === 2) doubles[e]++;
+    }
+  }
+  return atoms.map((a, i) => (a.el === "C" && doubles[i] === 2 && all[i] === 2 ? { ...a, shown: true } : a));
+}
+
 function chargesAsDrawn(atoms: Atom[], bonds: readonly Bond[]): Atom[] {
   const rings = hapticRings(atoms, bonds);
   const indexOf = new Map(atoms.map((a, i) => [a.id, i]));
@@ -1757,12 +1780,13 @@ function buildWavySegments(
  * its charge sits beside it.
  */
 export function showsLabel(
-  a: Pick<Atom, "el" | "charge" | "radical" | "isotope" | "valence">,
+  a: Pick<Atom, "el" | "charge" | "radical" | "isotope" | "valence" | "shown">,
   opts: Pick<LayoutOptions, "showCarbonLabels" | "showChargedCarbons">,
 ): boolean {
   return (
     opts.showCarbonLabels ||
     a.el !== "C" ||
+    !!a.shown ||
     !!a.isotope ||
     // (a carbon of other than four bonds' valence says so: its hydrogens with it)
     (a.valence != null && a.valence !== 4) ||
@@ -2178,6 +2202,12 @@ export function buildBondPrimitives(
       ? toWorld(opts.labelMarginPx, zoom, units)
       : fontWorld * 0.16;
   const lineHalf = pxToWorld(lwPx * 0.5, zoom);
+  // how wide a bold bond is, and a wedge at its broad end, either side of its line
+  const boldHalf =
+    (opts.boldWidthPx != null
+      ? toWorld(opts.boldWidthPx, zoom, units)
+      : (toWorld(opts.wedgeWidthPx, zoom, units) * 2) / 3) / 2;
+  const broadHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
   const dir0 = vsub(p2o, p1o);
   const L0 = vlen(dir0);
   const dir = L0 > 1e-9 ? vscale(dir0, 1 / L0) : { x: 1, y: 0 };
@@ -2226,6 +2256,9 @@ export function buildBondPrimitives(
     for (const b of adjBonds?.get(at) ?? []) {
       const far = b.a1 === at ? b.a2 : b.a1;
       if (far === other || far === at) continue;
+      // (a ring in perspective's bold edge and wedge meet square, their
+      // outer corner filled to a point after (perspectiveCorners))
+      if (inPerspective(bond) && inPerspective(b)) continue;
       const o = atoms[far];
       if (!o) continue;
       const d = vsub({ x: o.x, y: o.y }, { x: atom.x, y: atom.y });
@@ -2244,10 +2277,18 @@ export function buildBondPrimitives(
       const lines = (b.order === 2 && offsets.length === 1 ? [0, ...offsets] : offsets).map(
         (v) => v * turn,
       );
+      // its own line as wide as it is drawn here: a bold bond's, a wedge's
+      // broad end (a ring in perspective's front edge and the bonds toward
+      // it meet flush, not with a step)
+      const kind = bondKind(b);
+      const shape = kind === "bold" || (b.order === 2 && b.display === "bold") ? "bold" : kind === "wedge" || (b.order === 2 && b.display === "wedge") ? "wedge" : null;
+      const broad = b.display === "wedge" && b.stereo !== "up" ? boldHalf : broadHalf;
+      const own = shape === "bold" ? boldHalf : shape === "wedge" && wedgeBaseAtom(b, deg) === at ? broad : lineHalf;
+      const halfOf = (v: number) => (Math.abs(v) < 1e-12 ? own : lineHalf);
       out.push({
         dir: vnorm(d),
-        plus: lineHalf + Math.max(0, ...lines),
-        minus: lineHalf + Math.max(0, ...lines.map((v) => -v)),
+        plus: Math.max(own, ...lines.map((v) => v + halfOf(v))),
+        minus: Math.max(own, ...lines.map((v) => -v + halfOf(v))),
         wide: lines.length > 1,
         centred: !lines.includes(0),
         len: vlen(d),
@@ -2259,10 +2300,6 @@ export function buildBondPrimitives(
   const kind = bondKind(bond);
   // how far the first hash sits from a bare atom the hashes start at
   const firstGap = toWorld(opts.hashFirstGapPx ?? opts.hashSpacingPx, zoom, units);
-  const boldHalf =
-    (opts.boldWidthPx != null
-      ? toWorld(opts.boldWidthPx, zoom, units)
-      : (toWorld(opts.wedgeWidthPx, zoom, units) * 2) / 3) / 2;
   if (kind === "bold") {
     polys.push(
       buildBoldBar(
@@ -2354,7 +2391,9 @@ export function buildBondPrimitives(
   }
   if (kind === "wedge" || kind === "hashedWedge") {
     const baseAtP1 = wedgeBaseAtom(bond, deg) === bond.a1;
-    const baseHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
+    // (a ring in perspective's bond toward the viewer as broad as its bold
+    // front edge, which it runs into)
+    const baseHalf = bond.display === "wedge" && bond.stereo !== "up" && bond.stereo !== "down" ? boldHalf : broadHalf;
     // The narrow end is a bond's width, matching the join caps at atoms.
     const tipHalf = pxToWorld(lwPx * 0.5, zoom);
     const wideO = baseAtP1 ? p1o : p2o;
@@ -2568,7 +2607,7 @@ export function buildBondPrimitives(
         buildWedgeTriangle(
           baseAtP1 ? p1 : p2,
           baseAtP1 ? p2 : p1,
-          toWorld(opts.wedgeWidthPx * 0.5, zoom, units),
+          boldHalf,
           pxToWorld(lwPx * 0.5, zoom),
           neighboursAt(baseIdx, tipIdx),
           round,
@@ -2789,6 +2828,14 @@ export function buildAllPrimitives(
       }
     }
     let sgn: number | undefined = plus === minus ? undefined : plus > minus ? 1 : -1;
+    // A double bond into an atom it runs straight through - an allene's,
+    // a ketene's or a carbodiimide's middle - has its lines either side of
+    // the line they make, as the next one does: not one to a side, which
+    // reads as a bend.
+    const straightOn = (end: number, others: number[], along: Vec2) =>
+      others.length === 1 &&
+      vdot(vnorm({ x: atoms[others[0]].x - atoms[end].x, y: atoms[others[0]].y - atoms[end].y }), along) > Math.cos((2 * Math.PI) / 180);
+    if (straightOn(b.a1, neigh1, vscale(dir, -1)) || straightOn(b.a2, neigh2, dir)) sgn = undefined;
     if (sgn != null) {
       // A bond leaning in along the double bond, close beside where the
       // second line would run, leaves no room for it. Only one leaning along
@@ -3052,6 +3099,9 @@ export function buildAllPrimitives(
     freeEnds.push(...(r.ends ?? []), ...behind.ends);
     bends.push(...(r.bends ?? []));
   }
+  // a ring in perspective: where its bold edges and wedges meet, the outer
+  // corner filled to a point
+  polys.push(...perspectiveCorners(atoms, bonds, opts, zoom, deg, rWorld));
   // Every end and corner the joins at atoms have not already seen to:
   // rounded all, or squared all. Two lines of neighbouring double bonds run
   // on to the same point, but a point is all they share, so the corner they
@@ -3076,6 +3126,68 @@ export function buildAllPrimitives(
   return { lines, polys, circles, fills, reach };
 }
 
+/** A ring's bond in perspective: bold, or a wedge toward the viewer (display, not stereo). */
+function inPerspective(b: Bond): boolean {
+  return b.display === "bold" || (b.display === "wedge" && b.stereo !== "up" && b.stereo !== "down");
+}
+
+/**
+ * Where a ring in perspective's bold edge meets a wedge broad at the same
+ * atom - or another bold edge - each cut square: the notch between their
+ * outer edges filled to the point where those edges meet (a mitre, as a
+ * pen drawing them as one stroke would), or across, where they meet too far
+ * out.
+ */
+function perspectiveCorners(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, zoom: number, deg: Map<number, number>, lineHalf: number): Poly[] {
+  const units = opts.units ?? "px";
+  const half =
+    (opts.boldWidthPx != null ? toWorld(opts.boldWidthPx, zoom, units) : (toWorld(opts.wedgeWidthPx, zoom, units) * 2) / 3) / 2;
+  const out: Poly[] = [];
+  const broadAt = new Map<number, Bond[]>();
+  for (const b of bonds) {
+    if (!inPerspective(b)) continue;
+    const ends = b.display === "bold" ? [b.a1, b.a2] : [wedgeBaseAtom(b, deg)];
+    for (const e of ends) broadAt.set(e, [...(broadAt.get(e) ?? []), b]);
+  }
+  for (const [at, here] of broadAt) {
+    if (here.length < 2) continue;
+    const v = { x: atoms[at].x, y: atoms[at].y };
+    // each shape's way out of the atom, and the line of its edge on a side
+    const shapes = here.map((b) => {
+      const far = b.a1 === at ? b.a2 : b.a1;
+      const u = vnorm(vsub({ x: atoms[far].x, y: atoms[far].y }, v));
+      const edge = (n: Vec2) => {
+        const corner = vadd(v, vscale(n, half));
+        if (b.display === "bold") return { corner, along: vscale(u, -1) };
+        const tip = vadd({ x: atoms[far].x, y: atoms[far].y }, vscale(n, lineHalf));
+        return { corner, along: vnorm(vsub(corner, tip)) };
+      };
+      return { u, edge };
+    });
+    for (let i = 0; i < shapes.length; i++) {
+      for (let k = i + 1; k < shapes.length; k++) {
+        const [p, q] = [shapes[i], shapes[k]];
+        // the outer side of each: away from the other
+        const np = vperp(p.u);
+        const nq = vperp(q.u);
+        const sp = vdot(np, q.u) < 0 ? np : vscale(np, -1);
+        const sq = vdot(nq, p.u) < 0 ? nq : vscale(nq, -1);
+        const a = p.edge(sp);
+        const c = q.edge(sq);
+        const den = vcross(a.along, c.along);
+        let mitre: Vec2 | null = null;
+        if (Math.abs(den) > 1e-9) {
+          const t = vcross(vsub(c.corner, a.corner), c.along) / den;
+          const m = vadd(a.corner, vscale(a.along, t));
+          if (t >= 0 && vlen(vsub(m, v)) <= half * 4) mitre = m;
+        }
+        out.push({ points: mitre ? [v, a.corner, mitre, c.corner] : [v, a.corner, c.corner] });
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * A bond's lines, broken where the bond passes behind another - both drawn
  * in perspective, their atoms' `z` saying which is nearer where they cross.
@@ -3091,14 +3203,16 @@ function brokenBehind(
 ): { lines: LineSeg[]; ends: Vec2[] } {
   const a = atoms[bond.a1];
   const c = atoms[bond.a2];
-  if (a?.z == null || c?.z == null) return { lines, ends: [] };
+  // (a bond to a pi system's centre goes into its ring, not over or under
+  // its edges: neither is broken for the other)
+  if (a?.z == null || c?.z == null || bond.endpoints?.length) return { lines, ends: [] };
   const gap = halfWidth * 5;
   // where the bond crosses the ones in front of it, as fractions along it
   const cuts: number[] = [];
   const p = { x: a.x, y: a.y };
   const d = { x: c.x - a.x, y: c.y - a.y };
   for (const o of bonds) {
-    if (o === bond) continue;
+    if (o === bond || o.endpoints?.length) continue;
     if (o.a1 === bond.a1 || o.a1 === bond.a2 || o.a2 === bond.a1 || o.a2 === bond.a2) continue;
     const e = atoms[o.a1];
     const f = atoms[o.a2];
@@ -3593,7 +3707,7 @@ export function layoutMolecule(
   zoom: number
 ): Layout {
   const bonds = unspecifiedDoubles(drawn, given);
-  const atoms = chargesAsDrawn(drawn, bonds);
+  const atoms = cumulatedShown(chargesAsDrawn(drawn, bonds), bonds);
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
   const labels = buildTextLabels(atoms, opts, bonds);
   // what is said about bonds, atoms and whole structures (IUPAC GR-11)

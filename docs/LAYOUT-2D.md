@@ -334,6 +334,15 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   and they lie between, to one side. A metal with one ring has it above,
   the rest spread below as a stool's legs. A metal and its rings are laid
   out together, as one system.
+- **A ring bound through two C=C of its own** - cod on Ni, Rh, Ir - is the
+  tub it is: its two C=C parallel, a little apart, facing the metal, which
+  lies beyond their middle; what runs between them on each side arching
+  away from the metal. Seen from in front and a little above (the near C=C
+  below and to the side of the far one), its near edges bold and the bonds
+  toward them wedges, as for a ring face-on; stood with its C=C upright,
+  the metal beside them. A second such ring goes to the metal's other
+  side; the metal's other ligands opposite a lone one. Both C=C are cis,
+  as they are; drawn as one ring with the metal, one came out trans.
 - **Ligands round a metal** with no ring go evenly round it - two in a
   line, four in a cross - and the bulkiest go furthest apart: two bulky
   ligands trans to each other, the small ones (Cl, H, CO) between them. A
