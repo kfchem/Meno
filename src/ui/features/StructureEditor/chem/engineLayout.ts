@@ -159,6 +159,11 @@ export function relayoutFrom(model: Model, part: Model, job: LayoutJob, laid: La
     ...(laid.depth[i] != null ? { z: laid.depth[i]! * k } : {}),
     ...(laid.solid[i] && input.atoms[i].tetra ? { stereoCentre: true } : {}),
   }));
+  // each star at its pi system's centre, as a written-out label's: cod's
+  // C=C, as well as a ring
+  input.atoms.forEach((a, i) => {
+    if (a.pi?.length) atoms[i] = { ...atoms[i], x: mid(a.pi.map((j) => atoms[j].x)), y: mid(a.pi.map((j) => atoms[j].y)) };
+  });
   // the H the engine draws: a centre's own where it had one
   const spare = new Map([...job.folded].map(([c, hs]) => [c, [...hs]]));
   const hydrogenOf = new Map<number, number | { added: number }>();

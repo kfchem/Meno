@@ -48,7 +48,7 @@ describe("a reagent's label written out on the canvas", () => {
   });
 
   it("is drawn as Clean-up draws it: a complex cleaned up after it is written out does not move", () => {
-    for (const label of ["Cp2Fe", "Cp2ZrCl2", "PdCl2(dppf)", "Cp*RuCl(PPh3)2", "PdCl2(PPh3)2", "Grubbs II"]) {
+    for (const label of ["Cp2Fe", "Cp2ZrCl2", "PdCl2(dppf)", "Cp*RuCl(PPh3)2", "PdCl2(PPh3)2", "Grubbs II", "Ni(cod)2", "[Rh(cod)2]BF4", "[Ir(cod)Cl]2"]) {
       const doc = { ...emptyStructureDocument(), model: alone(label), nextId: 100 };
       const out = expandAbbreviation(doc, 1);
       const model = out.model;
