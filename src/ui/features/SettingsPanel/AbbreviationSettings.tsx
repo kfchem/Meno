@@ -53,6 +53,9 @@ export default function AbbreviationSettings() {
         placeholder="Find a label, name or SMILES"
         aria-label="Find a label"
         autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
         className="h-8 w-80 max-w-full rounded-md border border-gh-line bg-white px-2 text-sm"
       />
 
