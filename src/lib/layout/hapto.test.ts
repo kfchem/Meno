@@ -181,6 +181,30 @@ describe("a ring bound to a metal through two of its C=C (cod)", () => {
   });
 });
 
+describe("two metals bridged by two atoms", () => {
+  it("lie level, their bridges above and below between them, each one's ligands outside", () => {
+    for (const label of ["[Ir(cod)Cl]2", "[RhCl(cod)]2", "[RuCl2(p-cymene)]2", "[Cp*RhCl2]2"]) {
+      const s = laid(label);
+      const metals = s.atoms.flatMap((a, i) => (["Ir", "Rh", "Ru"].includes(a.el) ? [i] : []));
+      expect(metals, label).toHaveLength(2);
+      const [m1, m2] = metals.sort((p, q) => s.atoms[p].x - s.atoms[q].x);
+      expect(s.atoms[m1].y, label).toBeCloseTo(s.atoms[m2].y, 6);
+      // the bridging atoms: one above the line through the metals, one below, between them
+      const bound = (a: number) => s.bonds.filter((b) => b.a1 === a || b.a2 === a).map((b) => (b.a1 === a ? b.a2 : b.a1));
+      const bridges = s.atoms.flatMap((_, i) => (bound(i).includes(m1) && bound(i).includes(m2) ? [i] : []));
+      expect(bridges, label).toHaveLength(2);
+      const ys = bridges.map((b) => s.atoms[b].y - s.atoms[m1].y).sort((p, q) => p - q);
+      expect(ys[0] < 0 && ys[1] > 0, label).toBe(true);
+      for (const b of bridges) expect(s.atoms[b].x > s.atoms[m1].x && s.atoms[b].x < s.atoms[m2].x, label).toBe(true);
+      // what else each metal carries on its own side
+      const middle = (s.atoms[m1].x + s.atoms[m2].x) / 2;
+      for (const [m, side] of [[m1, -1], [m2, 1]] as const) {
+        for (const l of bound(m).filter((a) => !bridges.includes(a))) expect(Math.sign(s.atoms[l].x - middle), label).toBe(side);
+      }
+    }
+  });
+});
+
 describe("a structure with no metal", () => {
   it("has nothing drawn bold, and no depth outside a cage", () => {
     const out = layout2D({

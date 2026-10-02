@@ -377,10 +377,12 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   };
   // (a bond to a drawn H is drawn short, by choice: it is left out; a
   // metal's to a ligand is drawn long, and measured against that - but in a
-  // chelate's ring, which is drawn regular - section 7)
+  // chelate's ring, which is drawn regular; not in a ring through two
+  // metals, their bridges', drawn with a metal's bonds - section 7)
   const isH = (a: number) => g.elements?.[a] === "H";
   const rings = (g.rings as number[][] | undefined) ?? smallestRings(n, edges);
-  const ringBond = new Set(rings.flatMap((r) => r.map((a, i) => pair(a, r[(i + 1) % r.length]))));
+  const metalsIn = (r: readonly number[]) => r.filter((a) => isMetal(g.elements?.[a] ?? "")).length;
+  const ringBond = new Set(rings.filter((r) => metalsIn(r) < 2).flatMap((r) => r.map((a, i) => pair(a, r[(i + 1) % r.length]))));
   // (nor a metal's bond to a pi system's star, which is the ring's own distance)
   const toMetal = (a: number, b: number) =>
     isMetal(g.elements?.[a] ?? "") !== isMetal(g.elements?.[b] ?? "") &&

@@ -533,8 +533,11 @@ function token(t: string, names: Names): Item | null {
  * ligand's donors are bound to the metals in turn, and a bridging halide or
  * group to each of them. A part in brackets is made as many times as its
  * count; what follows the brackets is its counter-anions, each leaving a
- * positive charge on the part's metal. `local` names ligands of the
- * formula's own (a reagent's).
+ * positive charge on the part's metal. A part of one metal and a halide or
+ * group made twice, with no counter-anion - [Ir(cod)Cl]2, [RuCl2(p-cymene)]2,
+ * [Pd(allyl)Cl]2 - is the dimer bridged by them: each copy's first halide
+ * (or group) bound to the other's metal as well. `local` names ligands of
+ * the formula's own (a reagent's).
  */
 export function complexStructure(
   label: string,
@@ -576,6 +579,8 @@ export function complexStructure(
     else bonds.push({ a1: at, a2: metal, order: 1, coordination: true });
   };
 
+  // each part's first halide or group bound by one bond, by its first metal
+  const firstX = new Map<number, number>();
   /** One part, its metals first: the index of its first metal, or -1. Its words go to `parts` once. */
   const build = (unit: Item[], named: boolean): number => {
     const named0 = parts.length;
@@ -611,6 +616,7 @@ export function complexStructure(
               : groupOf(it.label)!;
             const at = add(s);
             bind(metal, s.attach[0] + at, true);
+            if (!firstX.has(metals[0])) firstX.set(metals[0], s.attach[0] + at);
             // bridging: to each of the others too, as a donor
             if (it.bridging) for (const other of metals) if (other !== metal) bind(other, s.attach[0] + at, false);
           }
@@ -635,13 +641,26 @@ export function complexStructure(
   const firsts: number[] = [];
   for (const u of units.length ? units : [{ kind: "unit" as const, items: loose, n: 1 }]) {
     const at = parts.length;
+    const made: number[] = [];
     for (let k = 0; k < u.n; k++) {
       const first = build(u.items, k === 0);
       if (first < 0) return null;
-      firsts.push(first);
+      made.push(first);
     }
-    // a part made twice: 2 × (its words)
-    if (u.n > 1) parts.splice(at, parts.length - at, `${u.n} × (${parts.slice(at).join(", ")})`);
+    firsts.push(...made);
+    // a dimer of one metal each, a halide or group on it and no
+    // counter-anion: bridged by those, each copy's first to the other's metal
+    const oneMetal = u.items.filter((it) => it.kind === "metal").reduce((n, it) => n + it.n, 0) === 1;
+    const bridged = u.n === 2 && oneMetal && !counters.length && made.every((m) => firstX.has(m));
+    if (bridged) {
+      bind(made[1], firstX.get(made[0])!, false);
+      bind(made[0], firstX.get(made[1])!, false);
+    }
+    // a part made twice: 2 × (its words), and what bridges them
+    if (u.n > 1) {
+      const x = u.items.find((it): it is Extract<Item, { kind: "x" }> => it.kind === "x");
+      parts.splice(at, parts.length - at, `${u.n} × (${parts.slice(at).join(", ")})${bridged && x ? ` bridged by ${x.label}` : ""}`);
+    }
   }
   let turn = 0;
   for (const c of counters) {

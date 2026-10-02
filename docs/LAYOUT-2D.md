@@ -353,6 +353,15 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   the metal beside them. A second such ring goes to the metal's other
   side; the metal's other ligands opposite a lone one. Both C=C are cis,
   as they are; drawn as one ring with the metal, one came out trans.
+- **Two metals bridged by two atoms** - [Rh(cod)Cl]2's chlorides,
+  [Rh(cod)OMe]2's methoxides - are their four-membered ring seen a little
+  from above: the metals level, left and right, the bridging atoms above
+  and below between them, a metal's bond from each, the lower nearer.
+  Each metal's own ligands go outside it, the second's the first's turned
+  half round: a tub on each, mirrored; a ring bound face-on above and to
+  the outside, a metal's bond off so that the metal's label stays clear of
+  it, its other ligands below (the second metal's the other way round, as
+  [RuCl2(p-cymene)]2 is drawn). The metals and their rings are one system.
 - **Ligands round a metal** with no ring go evenly round it - two in a
   line, four in a cross - and the bulkiest go furthest apart: two bulky
   ligands trans to each other, the small ones (Cl, H, CO) between them. A

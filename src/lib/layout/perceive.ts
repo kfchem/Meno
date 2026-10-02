@@ -115,8 +115,19 @@ export type DieneRing = {
   system: number;
 };
 
-/** A metal and the rings bound face-on to it - or by two C=C each - drawn as one system. */
-export type MetalUnit = { metal: number; eta: EtaRing[]; dienes: DieneRing[]; system: number };
+/**
+ * A metal and the rings bound face-on to it - or by two C=C each - drawn as
+ * one system. Or two metals bridged by two atoms ([Rh(cod)Cl]2's chlorides),
+ * their four-membered ring and each one's rings: `metal` the first, `pair`
+ * the second and the bridging atoms.
+ */
+export type MetalUnit = {
+  metal: number;
+  eta: EtaRing[];
+  dienes: DieneRing[];
+  system: number;
+  pair?: { metal: number; bridges: [number, number] };
+};
 
 export const key = (a: number, b: number): string => (a < b ? `${a},${b}` : `${b},${a}`);
 
@@ -198,8 +209,30 @@ export function perceive(input: LayoutInput): Molecule {
     dienes.push({ ...d, atoms: systems[system].atoms, system });
   }
   // and a metal in no ring with its rings bound face-on, or by two C=C:
-  // one system
+  // one system; two metals bridged by two atoms, a ring of the four and
+  // nothing else, the same with each one's rings
   const units: MetalUnit[] = [];
+  systems.forEach((sys, i) => {
+    if (sys.rings.length !== 1 || sys.atoms.length !== 4) return;
+    const r = rings[sys.rings[0]];
+    const metal = (a: number) => isMetal(input.atoms[a].el);
+    const k = metal(r[0]) ? 0 : 1;
+    if (!metal(r[k]) || !metal(r[k + 2]) || metal(r[k + 1]) || metal(r[(k + 3) % 4])) return;
+    const [m1, m2] = [r[k], r[k + 2]];
+    const own = eta.filter((e) => e.metal === m1 || e.metal === m2);
+    const tubs = dienes.filter((d) => d.metal === m1 || d.metal === m2);
+    const parts = [...own, ...tubs];
+    const merged = { atoms: [...r, ...parts.flatMap((e) => e.atoms)], rings: [...sys.rings, ...parts.flatMap((e) => systems[e.system].rings)] };
+    const index = systems.length;
+    systems.push(merged);
+    systems[i] = { atoms: [], rings: [] };
+    for (const e of parts) {
+      systems[e.system] = { atoms: [], rings: [] };
+      e.system = index;
+    }
+    for (const a of merged.atoms) systemOf[a] = index;
+    units.push({ metal: m1, eta: own, dienes: tubs, system: index, pair: { metal: m2, bridges: [r[k + 1], r[(k + 3) % 4]] } });
+  });
   for (let m = 0; m < n; m++) {
     const own = eta.filter((e) => e.metal === m);
     const tubs = dienes.filter((d) => d.metal === m);

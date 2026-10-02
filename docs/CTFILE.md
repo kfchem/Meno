@@ -187,7 +187,12 @@ has several metals - Pd2(dba)3 - the ligands are shared among them in
 turn: which bridge them, a formula does not say, unless it marks one with
 μ (IUPAC's mark for a bridging ligand): a bridging ligand's donors are
 bound to the metals in turn - Karstedt's Pt2(dvtms)2(μ-dvtms) - and a
-bridging halide or group to each of them. A complex written out is V3000,
+bridging halide or group to each of them. A part of one metal with a
+halide or a group on it, in brackets and made twice with no counter-anion
+- [Ir(cod)Cl]2, [RhCl(cod)]2, [RuCl2(p-cymene)]2, [Pd(allyl)Cl]2,
+[Rh(cod)OMe]2 - is the dimer they bridge, as such dimers are: each part's
+first halide (or group) is bound to the other part's metal as well. A
+complex written out is V3000,
 its coordination bonds needing it. Expanded on the canvas it is laid out
 by Meno's engine, which is not yet made for coordination compounds: the
 drawing of a large complex is crowded.

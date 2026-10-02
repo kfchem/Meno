@@ -27,7 +27,7 @@ import { misshapen, placeRingSystem, regularize, ringSystemVariants } from "./ri
 import { bridgeAcross } from "./bridge";
 import { flatCost, isCage, projectCage, type CageView } from "./cage";
 import { axisWedge, placeStereo, type Stereo, type Tetrahedral } from "./stereo";
-import { etaSpins, placeEta, placeUnit, unitVariants } from "./hapto";
+import { etaSpins, PAIR_DEPTH, placeEta, placeUnit, unitVariants } from "./hapto";
 import type { Point } from "./geometry";
 
 export type { LayoutInput } from "./perceive";
@@ -324,6 +324,16 @@ export function layout2D(input: LayoutInput): Layout2D {
     for (const a of d.atoms) depth[a] = lifts.get(a) ?? 0;
     depth[d.metal] ??= 0;
   }
+  // two metals' bridges: their ring seen a little from above, the lower
+  // bridge the nearer (placePair)
+  for (const u of mol.units) {
+    if (!u.pair) continue;
+    depth[u.metal] ??= 0;
+    depth[u.pair.metal] ??= 0;
+    const [p, q] = u.pair.bridges;
+    const lower = y[p] < y[q] ? p : q;
+    for (const b of [p, q]) depth[b] = b === lower ? PAIR_DEPTH : -PAIR_DEPTH;
+  }
   // a ring in perspective - bound face-on, or turned on its bond - drawn as
   // Haworth drew rings: a bond with both its atoms near, bold; one running
   // from the far half to the near one, a wedge toward the viewer, narrow at
@@ -368,10 +378,24 @@ export function layout2D(input: LayoutInput): Layout2D {
  * such ring is above its metal: a half-sandwich's legs below; a sandwich -
  * bent or not - with its rings one above the other (section 7). One with a
  * tub (cod) turned so that its C=C stand upright, the metal beside them, as
- * the tub was seen.
+ * the tub was seen. Two metals bridged by two atoms: the line through them
+ * level, the first on the left.
  */
 function standUp(mol: Molecule, piece: number[], pos: Grown): void {
   const here = new Set(piece);
+  const pair = mol.units.find((u) => u.pair && here.has(u.metal));
+  if (pair) {
+    const m = pos.get(pair.metal)!;
+    const o = pos.get(pair.pair!.metal)!;
+    const turn = -Math.atan2(o.y - m.y, o.x - m.x);
+    const c = Math.cos(turn);
+    const sn = Math.sin(turn);
+    for (const a of piece) {
+      const p = sub(pos.get(a)!, m);
+      pos.set(a, { x: m.x + p.x * c - p.y * sn, y: m.y + p.x * sn + p.y * c });
+    }
+    return;
+  }
   const e = mol.eta.find((r) => here.has(r.star) && r.metal >= 0);
   if (!e) {
     const d = mol.dienes.find((r) => here.has(r.metal));

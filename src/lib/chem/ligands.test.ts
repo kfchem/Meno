@@ -149,7 +149,19 @@ describe("complexes' formulas", () => {
     expect(formula(pd2)).toBe("C51H42O3Pd2");
     expect(pd2.bonds.filter((b) => b.endpoints)).toHaveLength(3);
     expect(formula(of("[Ir(cod)Cl]2"))).toBe("C16H24Cl2Ir2");
-    expect(abbreviationOf("[Ir(cod)Cl]2")?.name).toBe("2 × (iridium, 1,5-cyclooctadiene, Cl)");
+    expect(abbreviationOf("[Ir(cod)Cl]2")?.name).toBe("2 × (iridium, 1,5-cyclooctadiene, Cl) bridged by Cl");
+    // the dimer bridged by its chlorides: each Cl bound to both iridiums
+    const ir2 = of("[Ir(cod)Cl]2");
+    for (const cl of ir2.atoms.flatMap((a, i) => (a.el === "Cl" ? [i] : []))) {
+      expect(ir2.bonds.filter((b) => b.a1 === cl || b.a2 === cl)).toHaveLength(2);
+    }
+    // two chlorides on each ruthenium, one of them bridging
+    const ru2 = of("[RuCl2(p-cymene)]2");
+    expect(formula(ru2)).toBe("C20H28Cl4Ru2");
+    const bridging = ru2.atoms.flatMap((a, i) => (a.el === "Cl" && ru2.bonds.filter((b) => b.a1 === i || b.a2 === i).length === 2 ? [i] : []));
+    expect(bridging).toHaveLength(2);
+    // a counter-anion, or no halide, and nothing bridges
+    expect(of("[Rh(cod)2]BF4").bonds.filter((b) => b.coordination && b.endpoints == null)).toHaveLength(0);
     expect(formula(of("Ni(cod)2"))).toBe("C16H24Ni");
     // Cp- on Zr: Zr(2+), the whole neutral
     const zr = of("Cp2ZrCl2");
