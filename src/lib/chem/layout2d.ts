@@ -1870,7 +1870,19 @@ function specialLabel(a: Atom, fromRight: boolean): { runs: TextRun[]; anchor: n
   // outward: on the right of its bond, the label starts at the bond)
   const ringFirst = namesRingFirst(a.el);
   const units = labelUnits(fromRight && !ringFirst ? reversedLabel(a.el) : a.el);
-  if (units.length < 2) return { runs: labelRuns(a.el), anchor: 0 };
+  if (units.length < 2) {
+    const runs = labelRuns(a.el);
+    // one unit read outward from a bond coming in from the right - TMS on
+    // a carbon to its right - is set before the bond, its last letter on
+    // the atom
+    const last = runs.map((r) => !r.sub && !r.sup && !r.mark).lastIndexOf(true);
+    if (!fromRight || last < 0 || [...runs[last].text].length + last < 2) return { runs, anchor: 0 };
+    const letters = [...runs[last].text];
+    const end = letters.pop()!;
+    const split = [...(letters.length ? [{ ...runs[last], text: letters.join("") }] : []), { ...runs[last], text: end }];
+    const out = [...runs.slice(0, last), ...split, ...runs.slice(last + 1)];
+    return { runs: out, anchor: last + split.length - 1 };
+  }
   // the unit at the bond as runs of its own, so that it sits on the atom:
   // a formula's ring by its C6
   const ring = ringFirst ? units.lastIndexOf("C6") : -1;

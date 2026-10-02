@@ -102,6 +102,18 @@ describe("a label written", () => {
     expect(r.runs![r.anchorRun!].text).toBe("O");
   });
 
+  it("sets a name of one unit before a bond coming in from the right, its last letter on the atom", () => {
+    const left = two("TMS", "left");
+    const [l] = buildTextLabels(left.atoms, opts(), left.bonds);
+    expect(l.text).toBe("TMS");
+    expect(l.runs![l.anchorRun!].text).toBe("TMS");
+    const right = two("TMS", "right");
+    const [r] = buildTextLabels(right.atoms, opts(), right.bonds);
+    expect(r.text).toBe("TMS");
+    expect(r.runs!.map((x) => x.text)).toEqual(["TM", "S"]);
+    expect(r.runs![r.anchorRun!].text).toBe("S");
+  });
+
   it("reads a ring's substituents named first as written, whichever side its bond is on", () => {
     // on the right of its bond: from the bond, the ring's name last
     const left = two("2,6-diMeBz", "left");
