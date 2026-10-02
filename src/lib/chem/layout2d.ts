@@ -1855,9 +1855,9 @@ export function buildTextLabels(
   const straightRight = new Set<number>();
   // each bond out of each atom, as a direction and a length
   const ways = new Map<number, { dir: Vec2; len: number; order: number }[]>();
-  const note = (i: number, j: number, order: number) => {
+  const note = (i: number, j: number, order: number, valence = order) => {
     bonded.add(i);
-    orderSum.set(i, (orderSum.get(i) ?? 0) + order);
+    orderSum.set(i, (orderSum.get(i) ?? 0) + valence);
     const from = atoms[i];
     const to = atoms[j];
     if (!from || !to) return;
@@ -1873,9 +1873,10 @@ export function buildTextLabels(
   for (const b of bonds) {
     // a dative bond lends a pair rather than sharing one: it takes no
     // hydrogen from either end, so H3N->BH3 keeps all six
-    const order = valenceOrder({ ...b, dative: bondKind(b) === "dative" });
-    note(b.a1, b.a2, order);
-    note(b.a2, b.a1, order);
+    const kind = { ...b, dative: bondKind(b) === "dative" };
+    const order = valenceOrder(kind);
+    note(b.a1, b.a2, order, valenceOrder(kind, atoms[b.a1]?.el));
+    note(b.a2, b.a1, order, valenceOrder(kind, atoms[b.a2]?.el));
   }
 
   const hapticCentres = new Set<number>();

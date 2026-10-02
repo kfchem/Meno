@@ -20,11 +20,15 @@ describe("the ligands", () => {
     IPr: "C27H36N2", IMes: "C21H24N2", SIPr: "C27H38N2", SIMes: "C21H26N2",
     cod: "C8H12", nbd: "C7H8", dba: "C17H14O", "p-cymene": "C10H14", "Cp*": "C10H15", Cp: "C5H5",
     acac: "C5H7O2", THF: "C4H8O", H2O: "H2O", CO: "CO",
+    SEGPHOS: "C38H28O4P2", "DTBM-SEGPHOS": "C74H100O8P2", DPEN: "C14H16N2", DACH: "C6H14N2",
+    // (bound as anions: TsDPEN by its sulfonamide's N, salen by both its O)
+    TsDPEN: "C21H21N2O2S", salen: "C16H14N2O2",
+    allyl: "C3H5", dvtms: "C8H18OSi2", "=CHPh": "C7H6", "=CH2": "CH2",
   };
 
   it("are each the molecule their names give, with as many donors as they bind by", () => {
     expect(Object.keys(formulas).sort()).toEqual(LIGANDS.map((l) => l.label).sort());
-    const donors: Record<string, number> = { dppm: 2, dppe: 2, dppp: 2, dppb: 2, dppf: 2, BINAP: 2, Xantphos: 2, DPEphos: 2, bpy: 2, dtbpy: 2, phen: 2, TMEDA: 2, en: 2, cod: 2, nbd: 2, acac: 2 };
+    const donors: Record<string, number> = { dppm: 2, dppe: 2, dppp: 2, dppb: 2, dppf: 2, BINAP: 2, Xantphos: 2, DPEphos: 2, bpy: 2, dtbpy: 2, phen: 2, TMEDA: 2, en: 2, cod: 2, nbd: 2, acac: 2, SEGPHOS: 2, "DTBM-SEGPHOS": 2, DPEN: 2, TsDPEN: 2, DACH: 2, salen: 4, dvtms: 2 };
     for (const l of LIGANDS) {
       const s = ligandStructure(l);
       expect(formula(s), l.label).toBe(formulas[l.label]);

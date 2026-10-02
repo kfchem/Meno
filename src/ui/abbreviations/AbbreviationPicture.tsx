@@ -17,7 +17,8 @@ function modelOf(s: GroupStructure): Model {
       a: b.a1 + 1,
       b: b.a2 + 1,
       order: b.order,
-      stereo: "none" as const,
+      stereo: b.stereo ?? ("none" as const),
+      ...(b.stereoOrient ? { stereoOrient: b.stereoOrient } : {}),
       ...(b.coordination ? { coordination: true } : {}),
       ...(b.endpoints ? { endpoints: b.endpoints.map((e) => e + 1), attach: "all" as const } : {}),
     })),
@@ -27,9 +28,9 @@ function modelOf(s: GroupStructure): Model {
 /**
  * What an abbreviation stands for, drawn by Meno in the application's
  * drawing style - from its SMILES, a "*" where it is attached, or as a
- * structure made for it (a ligand bound to M) - or nothing, for SMILES
- * that does not read. `scale` enlarges the picture from the style's own
- * size.
+ * structure made for it (a ligand bound to M; a reagent, its stereocentres
+ * wedged) - or nothing, for SMILES that does not read. `scale` enlarges
+ * the picture from the style's own size.
  */
 export default function AbbreviationPicture({
   smiles,

@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ABBREVIATIONS, abbreviationOf, abbreviationStructure, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
 import { LIGANDS, ligandPicture, structureFormula, type GroupStructure } from "../../../lib/chem/ligands";
+import { shownAs } from "../../../lib/chem/enantiomers";
+import { REAGENT_USES, REAGENTS, type Reagent } from "../../../lib/chem/reagents";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import AbbreviationForm from "../../abbreviations/AbbreviationForm";
 import AbbreviationPicture from "../../abbreviations/AbbreviationPicture";
@@ -8,7 +10,8 @@ import AbbreviationPicture from "../../abbreviations/AbbreviationPicture";
 /**
  * Abbreviations in Settings: the user's own - added, changed and taken away
  * here, or saved from a canvas - and Meno's, each drawn as what it stands
- * for, with the rules labels are put together by.
+ * for, with the rules labels are put together by: groups, reagents,
+ * ligands and complexes.
  */
 export default function AbbreviationSettings() {
   const mine = useAppSettings((s) => s.abbreviations);
@@ -32,6 +35,18 @@ export default function AbbreviationSettings() {
       })),
     [],
   );
+  // each reagent as the molecule it is: drawn - a chiral one as the
+  // enantiomer its SMILES is - or, a metal's catalyst or reagent, its formula
+  const reagents = useMemo(
+    () =>
+      REAGENTS.map((r) => {
+        const as = shownAs(r.enantiomers);
+        const structure = abbreviationStructure(as ? `${as}-${r.label}` : r.label)!;
+        return { r, as, structure, formula: structureFormula(structure) };
+      }),
+    [],
+  );
+  const reagentMatches = (r: Reagent) => matches({ ...r, smiles: r.smiles ?? r.complex ?? "" });
 
   return (
     <div className="space-y-8">
@@ -127,6 +142,20 @@ export default function AbbreviationSettings() {
             The <i>t</i> of <i>t</i>-Bu, the <i>s</i> of <i>s</i>-Bu and <i>o</i>-, <i>m</i>-, <i>p</i>- are set in
             italics, as IUPAC prefers; iPr and iBu upright.
           </li>
+          <li>
+            A simple formula, as the molecule it is: one atom and as many groups as its valence (Et3N, i-Pr2NEt,
+            MeMgBr, Bu3SnH, CH2Cl2, MeOH, Ac2O, (Boc)2O), or two groups or atoms joined (n-BuLi, TMSCl, TBSOTf, HCl).
+            Sodium and potassium are bound as ions, lithium so but to carbon (NaOMe, LiCl; n-BuLi has its C-Li bond).
+            A label with a bond left free (OMe, NMe2, CH2Br) stays the group it is.
+          </li>
+          <li>An adduct of known parts, a middle dot between them, each counted: BF3·OEt2, CeCl3·7H2O, EDC·HCl.</li>
+          <li>A Buchwald precatalyst, by its phosphine and generation: XPhos Pd G2, SPhos Pd G3, RuPhos Pd G4.</li>
+          <li>
+            One enantiomer of a chiral reagent or ligand, its descriptor before its label: (S,S)-DPEN, (R)-CBS,
+            L-proline, (1S)-CSA, (R,R)-Jacobsen&apos;s catalyst. Without one, no configuration is said, and none is
+            drawn. An axially chiral one&apos;s, (S)-BINAP, is read but shown on no atom: SMILES and MOL files have
+            no way to say it.
+          </li>
         </ul>
       </section>
 
@@ -156,6 +185,44 @@ export default function AbbreviationSettings() {
         {shown.length === 0 && <p className="mt-3 text-sm text-gh-gray">Nothing matches.</p>}
       </section>
 
+      <section aria-labelledby="reagents-heading">
+        <h3 id="reagents-heading" className="text-sm font-semibold text-gh-black">
+          Reagents
+        </h3>
+        <p className="mt-1 text-xs text-gh-gray max-w-2xl">
+          Reagents, catalysts and solvents, each the whole molecule it is - a salt as its ions, a chiral one with its
+          stereocentres - so that what a scheme uses is a structure, written out and saved as one. A metal&apos;s
+          complex is made from its formula, as complexes are. How metal catalysts and organometallic reagents are
+          drawn is still being worked on: they are listed here by their formulas.
+        </p>
+        {REAGENT_USES.map(({ use, title }) => {
+          const these = reagents.filter(({ r }) => r.use === use && reagentMatches(r));
+          if (!these.length) return null;
+          return (
+            <div key={use} className="mt-4">
+              <h4 className="text-xs font-semibold text-gh-black">{title}</h4>
+              <div className="mt-2 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
+                {these.map(({ r, as, structure, formula }) =>
+                  r.use === "catalyst" || r.use === "organometallic" ? (
+                    <article key={r.label} className="min-w-0 overflow-hidden rounded-lg border border-gh-line bg-white px-3 py-2">
+                      <div className="text-base font-semibold text-gh-black">{r.label}</div>
+                      <div className="text-xs text-gh-black">{r.name}</div>
+                      {r.also?.length ? <div className="text-xs text-gh-gray">also {r.also.join(", ")}</div> : null}
+                      <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{r.complex ?? r.smiles}</code>
+                      <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{formula}</code>
+                    </article>
+                  ) : (
+                    <Entry key={r.label} a={{ ...r, smiles: r.smiles ?? "" }} structure={structure}>
+                      {as && <Descriptors as={as} mirror={r.enantiomers!.mirror[0]} />}
+                    </Entry>
+                  ),
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </section>
+
       <section aria-labelledby="ligands-heading">
         <h3 id="ligands-heading" className="text-sm font-semibold text-gh-black">
           Ligands
@@ -169,9 +236,14 @@ export default function AbbreviationSettings() {
         <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
           {ligands
             .filter(({ l }) => matches(l))
-            .map(({ l, structure }) => (
-              <Entry key={l.label} a={l} structure={structure} />
-            ))}
+            .map(({ l, structure }) => {
+              const as = shownAs(l.enantiomers);
+              return (
+                <Entry key={l.label} a={l} structure={structure}>
+                  {as && <Descriptors as={as} mirror={l.enantiomers!.mirror[0]} />}
+                </Entry>
+              );
+            })}
         </div>
       </section>
 
@@ -182,8 +254,10 @@ export default function AbbreviationSettings() {
         <p className="mt-1 text-xs text-gh-gray max-w-2xl">
           A complex&apos;s formula is read as the structure it stands for: its metals, its ligands - in parentheses
           or not - halides, hydrides and groups bound by one bond (OAc, OTf), a part in brackets made as often as
-          its count, and the counter-anions after it (BF4, PF6, SbF6, ClO4, BArF). Where a part has several metals,
-          its ligands are shared among them in turn: which bridge them, a formula does not say. For example:
+          its count, and the counter-anions after it (BF4, PF6, SbF6, ClO4, BArF). A ligand may have its
+          descriptor, in brackets: RuCl[(S,S)-TsDPEN](p-cymene). Where a part has several metals, its ligands are
+          shared among them in turn: which bridge them, a formula does not say unless it marks one with μ - a
+          bridging ligand&apos;s donors go to the metals in turn, a bridging halide to each. For example:
         </p>
         <ul className="mt-3 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(18rem,1fr))]">
           {complexes.map(({ label, name, formula }) => (
@@ -200,7 +274,30 @@ export default function AbbreviationSettings() {
 }
 
 /** Complexes' formulas shown as examples. */
-const COMPLEXES = ["Pd(PPh3)4", "PdCl2(dppf)", "Pd2(dba)3", "Pd(OAc)2", "[Ir(cod)Cl]2", "[Rh(cod)2]BF4", "Cp2ZrCl2", "Ni(cod)2"];
+const COMPLEXES = [
+  "Pd(PPh3)4",
+  "PdCl2(dppf)",
+  "Pd2(dba)3",
+  "Pd(OAc)2",
+  "[Pd(allyl)Cl]2",
+  "[Ir(cod)Cl]2",
+  "[Rh(cod)2]BF4",
+  "Cp2ZrCl2",
+  "Ni(cod)2",
+  "RuCl2[(S)-BINAP][(S,S)-DPEN]",
+  "RuCl[(S,S)-TsDPEN](p-cymene)",
+  "Pt2(dvtms)2(μ-dvtms)",
+];
+
+/** Which enantiomer a chiral one is drawn as, and how the other is named. */
+function Descriptors({ as, mirror }: { as: string; mirror?: string }) {
+  return (
+    <div className="text-xs text-gh-gray">
+      drawn as {as}; written {as}- or {mirror ?? "its mirror image's descriptor"}- before the label, without one it has no
+      configuration
+    </div>
+  );
+}
 
 /** One abbreviation: what it stands for, drawn, and its label, names and SMILES. */
 function Entry({

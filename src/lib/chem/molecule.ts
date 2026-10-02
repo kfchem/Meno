@@ -22,9 +22,27 @@ export type AtomList = { not: boolean; symbols: string[] };
  * its bonds out of the group leave from, in order.
  */
 export type AbbreviationStructure = {
-  atoms: (Omit<AtomChem, "abbrev"> & { x: number; y: number })[];
-  bonds: (BondChem & { a1: number; a2: number; order: 1 | 2 | 3; stereo?: "up" | "down" | "wavy" | "either" | "none" })[];
+  /**
+   * Its atoms, where they are - and, laid out in perspective (a cage), how
+   * near the viewer each is (`z`) and whether a stereocentre's configuration
+   * is shown by that drawing, with no wedge (`stereoCentre`), as Clean-up
+   * draws them.
+   */
+  atoms: (Omit<AtomChem, "abbrev"> & { x: number; y: number; z?: number; stereoCentre?: boolean })[];
+  bonds: (BondChem & {
+    a1: number;
+    a2: number;
+    order: 1 | 2 | 3;
+    stereo?: "up" | "down" | "wavy" | "either" | "none";
+    /** Which end of a wedge is narrow, as a drawn bond's `stereoOrient` says. */
+    stereoOrient?: "principle" | "reverse";
+  })[];
   attach: number[];
+  /**
+   * For each atom it is attached by: whether that atom lends its pair (a
+   * ligand's neutral donor): the bond out to it, a coordination bond.
+   */
+  lends?: boolean[];
   /**
    * Which way its first bond out went, from the labelled atom, with the
    * atoms where they are: so that it can be turned to where that bond goes
@@ -157,10 +175,14 @@ export function bondChem(b: BondChem): BondChem {
 
 /**
  * How much of an atom's valence a bond takes: its order - none for a dative
- * bond, which lends a pair, nor for a coordination or a hydrogen bond.
+ * bond, which lends a pair, nor for a coordination or a hydrogen bond. But
+ * a carbon at either end of a dative or a coordination bond is the one
+ * that lends it - a carbene's, an NHC's, CO's - and the pair it lends is
+ * two of its valence: it carries no H for it.
  */
-export function valenceOrder(b: BondChem & { order: number; dative?: boolean }): number {
-  return b.dative || b.coordination || b.hydrogen ? 0 : b.order;
+export function valenceOrder(b: BondChem & { order: number; dative?: boolean }, el?: string): number {
+  if (b.dative || b.coordination) return el === "C" ? 2 : 0;
+  return b.hydrogen ? 0 : b.order;
 }
 
 /** An atom as a file gives it: where it is, in the file's own units. */

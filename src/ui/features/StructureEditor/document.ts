@@ -342,8 +342,18 @@ export function expandAbbreviation(doc: StructureDocument, id: number): Structur
   const ids = s.atoms.map((_, k) => (k === head ? id : nextId++));
   const placed = s.atoms.map((p) => ({ x: a.x + p.x * cos - p.y * sin, y: a.y + p.x * sin + p.y * cos }));
   const atomOf = (k: number): Atom => {
-    const { x: _x, y: _y, ...chem } = s.atoms[k];
-    return { id: ids[k], x: placed[k].x, y: placed[k].y, r: a.r, el: chem.el, ...chemistry(chem) };
+    const { x: _x, y: _y, z, stereoCentre, ...chem } = s.atoms[k];
+    return {
+      id: ids[k],
+      x: placed[k].x,
+      y: placed[k].y,
+      r: a.r,
+      el: chem.el,
+      ...chemistry(chem),
+      // (in perspective, as Clean-up draws a cage)
+      ...(z != null ? { z } : {}),
+      ...(stereoCentre ? { stereoCentre: true } : {}),
+    };
   };
   const nextAtoms = atoms.map((x) => (x.id === id ? atomOf(head) : x));
   s.atoms.forEach((_, k) => {
@@ -356,9 +366,11 @@ export function expandAbbreviation(doc: StructureDocument, id: number): Structur
     const at = s.attach[k] ?? head;
     const to = ids[at];
     const moved = b.a === id ? { ...b, a: to } : { ...b, b: to };
-    // to a pi system's star: a haptic bond, to all its atoms
+    // to a pi system's star: a haptic bond, to all its atoms; to a donor
+    // that lends its pair, a coordination bond (drawn as it was)
     const pi = s.haptic?.find((h) => h.star === at);
-    return pi ? { ...moved, endpoints: pi.atoms.map((e) => ids[e]), attach: "all" as const, coordination: true } : moved;
+    if (pi) return { ...moved, endpoints: pi.atoms.map((e) => ids[e]), attach: "all" as const, coordination: true };
+    return s.lends?.[k] && !moved.dative ? { ...moved, coordination: true } : moved;
   });
   for (const b of s.bonds) {
     nextBonds.push({
@@ -367,6 +379,7 @@ export function expandAbbreviation(doc: StructureDocument, id: number): Structur
       b: ids[b.a2],
       order: b.order,
       stereo: b.stereo ?? "none",
+      ...(b.stereoOrient ? { stereoOrient: b.stereoOrient } : {}),
       ...bondChem(b),
       ...(b.endpoints ? { endpoints: b.endpoints.map((e) => ids[e]) } : {}),
     });

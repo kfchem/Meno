@@ -44,12 +44,12 @@ export function orientFor(
 /** The H an atom carries and the drawing does not show: by its valence, for an element; none for a label. */
 export function undrawnHydrogens(model: Model): Map<number, number> {
   const sum = new Map<number, number>();
+  const el = new Map(model.atoms.map((a) => [a.id, a.el]));
   for (const b of model.bonds) {
-    // (a dative bond lends a pair, and takes no H from either end; nor
-    // does a coordination or a hydrogen bond)
-    const order = valenceOrder(b);
-    sum.set(b.a, (sum.get(b.a) ?? 0) + order);
-    sum.set(b.b, (sum.get(b.b) ?? 0) + order);
+    // (a dative bond lends a pair, and takes no H from either end - but a
+    // carbon lending it; nor does a coordination or a hydrogen bond)
+    sum.set(b.a, (sum.get(b.a) ?? 0) + valenceOrder(b, el.get(b.a)));
+    sum.set(b.b, (sum.get(b.b) ?? 0) + valenceOrder(b, el.get(b.b)));
   }
   return new Map(
     model.atoms.map((a) => [
