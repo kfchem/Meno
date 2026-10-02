@@ -198,6 +198,8 @@ Status: **done** (merged), **PR** (open), or blank.
 | A double-click draw is two or three undo steps, not one | PR #26 |
 | Wavy bonds notched at every joint (audit H3) | PR #31 |
 | A carbon with no bonds is not drawn at all (ACS writes CH4) | PR #37 |
+| A lone water drawn OH2: an atom with no bonds is written as its formula is, hydrogens first for groups 16 and 17 (H2O, H2S, HCl, H3O+) and after the symbol for the rest (NH3, CH4) | PR |
+| An RXN file's structures run into its arrow: spaced by what is drawn, labels included - half a bond clear of the arrow, a bond between two structures on a side - and placed by the middle of what is drawn, not by the atoms' centroid | PR |
 
 ### 2. Drawing style as data, and one way of drawing
 

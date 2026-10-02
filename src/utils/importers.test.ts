@@ -6,6 +6,9 @@ import {
   buildEditorModelFromRXN,
   moleculesToEditorModel,
 } from "./importers";
+import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
+import { layoutMolecule } from "../lib/chem/layout2d";
+import { layoutOptionsFor, MENO } from "../lib/chem/style";
 import sampleSdf from "../samples/cholesterol.sdf?raw";
 import sampleRxn from "../samples/diels-alder.rxn?raw";
 import sampleRxn2 from "../samples/esterification.rxn?raw";
@@ -76,6 +79,43 @@ describe("readMoleculesFromText", () => {
   });
 });
 
+/** A V2000 block: atoms as [x, y, element], bonds as [from, to, order], 1-based. */
+function molBlock(name: string, atoms: [number, number, string][], bonds: [number, number, number][]): string[] {
+  const n = (v: number) => v.toFixed(4).padStart(10);
+  return [
+    name,
+    "  Meno",
+    "",
+    `${String(atoms.length).padStart(3)}${String(bonds.length).padStart(3)}  0  0  0  0  0  0  0  0999 V2000`,
+    ...atoms.map(([x, y, el]) => `${n(x)}${n(y)}${n(0)} ${el.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0`),
+    ...bonds.map(([a, b, o]) => `${String(a).padStart(3)}${String(b).padStart(3)}${String(o).padStart(3)}  0`),
+    "M  END",
+  ];
+}
+
+// Acetic acid and ethanol to ethyl acetate and water: each reactant ends in
+// an OH on its right, the side the arrow is on.
+const c = 1.299;
+const esterification = [
+  "$RXN",
+  "Fischer esterification",
+  "  Meno",
+  "",
+  "  2  2",
+  "$MOL",
+  ...molBlock("acetic acid", [[0, 0, "C"], [c, 0.75, "C"], [c, 2.25, "O"], [2 * c, 0, "O"]], [[1, 2, 1], [2, 3, 2], [2, 4, 1]]),
+  "$MOL",
+  ...molBlock("ethanol", [[0, 0, "C"], [c, 0.75, "C"], [2 * c, 0, "O"]], [[1, 2, 1], [2, 3, 1]]),
+  "$MOL",
+  ...molBlock(
+    "ethyl acetate",
+    [[0, 0, "C"], [c, 0.75, "C"], [c, 2.25, "O"], [2 * c, 0, "O"], [3 * c, 0.75, "C"], [4 * c, 0, "C"]],
+    [[1, 2, 1], [2, 3, 2], [2, 4, 1], [4, 5, 1], [5, 6, 1]],
+  ),
+  "$MOL",
+  ...molBlock("water", [[0, 0, "O"]], []),
+].join("\n");
+
 describe("parseRXNGroups", () => {
   it("splits the RXN samples by their counts line", () => {
     const g1 = parseRXNGroups(sampleRxn);
@@ -108,6 +148,33 @@ describe("parseRXNGroups", () => {
     ].join("\n");
     const g = parseRXNGroups(rxn);
     expect([g.reactants.length, g.products.length]).toEqual([2, 1]);
+  });
+
+  it("keeps the arrow and each structure clear of one another, labels and all", () => {
+    const { model, arrow } = buildEditorModelFromRXN(esterification);
+    expect(arrow).not.toBeNull();
+    const L = NOMINAL_BOND_LENGTH;
+    // each structure's atoms, as the RXN listed them, and how far it reaches as drawn
+    const sizes = [4, 3, 6, 1];
+    const drawn = sizes.map((size, k) => {
+      const from = sizes.slice(0, k).reduce((s, v) => s + v, 0);
+      const atoms = model.atoms.slice(from, from + size);
+      const ids = new Set(atoms.map((a) => a.id));
+      const index = new Map(atoms.map((a, i) => [a.id, i]));
+      const bonds = model.bonds
+        .filter((b) => ids.has(b.a) && ids.has(b.b))
+        .map((b) => ({ a1: index.get(b.a)!, a2: index.get(b.b)!, order: b.order }));
+      const opts = layoutOptionsFor(MENO, L, { units: "world" });
+      return layoutMolecule(atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el })), bonds, opts, 50).bounds;
+    });
+    const [acid, ethanol, ester, water] = drawn;
+    // ethanol's OH, the last thing before the arrow, half a bond clear of it
+    expect(arrow!.x1 - ethanol.max.x).toBeGreaterThan(L / 2 - 1e-6);
+    // and the product after it the same
+    expect(ester.min.x - arrow!.x2).toBeGreaterThan(L / 2 - 1e-6);
+    // a bond between two structures on one side, for a "+"
+    expect(ethanol.min.x - acid.max.x).toBeGreaterThan(L - 1e-6);
+    expect(water.min.x - ester.max.x).toBeGreaterThan(L - 1e-6);
   });
 
   it("lays out reactants left of the arrow and products right of it", () => {
