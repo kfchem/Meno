@@ -4,6 +4,7 @@ import {
   bondChem,
   chemistry,
   type AbbreviationStructure,
+  type SgroupMark,
   type AtomChem,
   type BondChem,
   type ParsedAtom,
@@ -233,20 +234,38 @@ export function buildEditorModelFromRXN(text: string): RXNLayout {
       // Align each cluster's centroid to baselineY (do not use bbox center)
       const offsetY = baselineY - c.centroid.y;
       const base = idCounter;
+      // (by id: an abbreviation's atoms are gone from among them)
+      const ids = new Map<number, number>();
+      for (const a of c.model.atoms) ids.set(a.id, idCounter++);
+      const groups = new Map<number, number>();
+      const groupId = (g: number) => {
+        if (!groups.has(g)) groups.set(g, idCounter++);
+        return groups.get(g)!;
+      };
       for (const a of c.model.atoms) {
         placedAtoms.push({
           ...a,
-          id: idCounter++,
+          id: ids.get(a.id)!,
           x: a.x + offsetX,
           y: a.y + offsetY,
+          ...(a.sgroups
+            ? {
+                sgroups: a.sgroups.map((g) => ({
+                  ...g,
+                  id: groupId(g.id),
+                  ...(g.parent != null ? { parent: groupId(g.parent) } : {}),
+                })),
+              }
+            : {}),
         });
       }
       for (const b of c.model.bonds) {
         placedBonds.push({
           ...b,
           id: idCounter++,
-          a: base + (b.a - 1),
-          b: base + (b.b - 1),
+          a: ids.get(b.a)!,
+          b: ids.get(b.b)!,
+          ...(b.endpoints ? { endpoints: b.endpoints.map((e) => ids.get(e)!).filter((e) => e != null) } : {}),
         });
       }
       if (targetArr) {
@@ -349,6 +368,68 @@ function drawnBox(model: EditorModel): { minX: number; maxX: number } {
   const opts = layoutOptionsFor(MENO, NOMINAL_BOND_LENGTH, { units: "world" });
   const { bounds } = layoutMolecule(atoms, bonds, opts, 50);
   return { minX: bounds.min.x, maxX: bounds.max.x };
+}
+
+/**
+ * What else a file says of its atoms and bonds as groups, put on them: each
+ * Sgroup but a contracted abbreviation as a mark on its atoms (`sgroups`),
+ * given an id from `nextId` on; each haptic bond's endpoints as atom ids.
+ * `idOf` and `bondIdOf` are the editor's ids for the file's atom and bond
+ * `i`. The next id free.
+ */
+function markSgroups(
+  atoms: EditorAtom[],
+  bonds: EditorBond[],
+  m: ParsedMol,
+  idOf: (i: number) => number,
+  bondIdOf: (i: number) => number,
+  nextId: number,
+): number {
+  const ct = m.ct;
+  if (!ct) return nextId;
+  const present = new Set(atoms.map((a) => a.id));
+  ct.bonds.forEach((b, i) => {
+    if (!b.endpoints?.length) return;
+    const k = bonds.findIndex((x) => x.id === bondIdOf(i));
+    if (k < 0) return;
+    const ends = b.endpoints.map(idOf).filter((id) => present.has(id));
+    bonds[k] = { ...bonds[k], endpoints: ends, attach: b.attach ?? "all" };
+  });
+  const ids = new Map<number, number>();
+  const kept = ct.sgroups.filter((g) => !(g.type === "SUP" && !g.expanded));
+  for (const g of kept) ids.set(g.index, nextId++);
+  for (const g of kept) {
+    const id = ids.get(g.index)!;
+    const patoms = new Set(g.patoms ?? []);
+    for (const i of g.atoms) {
+      const k = atoms.findIndex((a) => a.id === idOf(i));
+      if (k < 0) continue;
+      const mark: SgroupMark = {
+        id,
+        type: g.type,
+        ...(g.label ? { label: g.label } : {}),
+        ...(g.subtype ? { subtype: g.subtype } : {}),
+        ...(g.connect ? { connect: g.connect } : {}),
+        ...(g.bracketStyle ? { bracketStyle: g.bracketStyle } : {}),
+        ...(g.multiplier ? { multiplier: g.multiplier } : {}),
+        ...(g.type === "MUL" && patoms.has(i) ? { paradigm: true } : {}),
+        ...(g.componentNumber ? { componentNumber: g.componentNumber } : {}),
+        ...(g.parent != null && ids.has(g.parent) ? { parent: ids.get(g.parent) } : {}),
+        ...(g.field
+          ? {
+              field: {
+                name: g.field.name,
+                data: g.field.data,
+                ...(g.field.units ? { units: g.field.units } : {}),
+                ...(g.field.type ? { type: g.field.type } : {}),
+              },
+            }
+          : {}),
+      };
+      atoms[k] = { ...atoms[k], sgroups: [...(atoms[k].sgroups ?? []), mark] };
+    }
+  }
+  return nextId;
 }
 
 /**
@@ -478,6 +559,7 @@ export function convertMolToEditorModel(m: ParsedMol, scale: number) {
     ...bondOf(m, i, orders, reversed),
   }));
   contractAbbreviations(atoms, bonds, m, (i) => i + 1);
+  markSgroups(atoms, bonds, m, (i) => i + 1, (i) => bondIdBase + i + 1, bondIdBase + m.bonds.length + 1);
   // centroid
   let cx = 0,
     cy = 0;
@@ -550,6 +632,7 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
     const mine = atoms.splice(from);
     const theirBonds = bonds.splice(bonds.length - m.bonds.length);
     contractAbbreviations(mine, theirBonds, m, (i) => base + i);
+    idCounter = markSgroups(mine, theirBonds, m, (i) => base + i, (i) => base + m.atoms.length + i, idCounter);
     atoms.push(...mine);
     bonds.push(...theirBonds);
   }

@@ -66,6 +66,8 @@ export type AtomChem = {
   exactChange?: boolean;
   /** Its enhanced stereo group, as a stereocentre (V3000's STE collections). */
   stereoGroup?: StereoGroup;
+  /** The Sgroups it is in. */
+  sgroups?: SgroupMark[];
 };
 
 /**
@@ -91,6 +93,39 @@ export type BondChem = {
   reactingCentre?: number;
   /** The enhanced stereo group of a double bond or an axis (V3000's STEB collections). */
   stereoGroup?: StereoGroup;
+  /**
+   * A bond from one atom to several (V3000's ENDPTS), by atom id: to all of
+   * them - a haptic bond to a pi system, its other end a star atom at the
+   * system's centre - or to any one of them (a variable attachment).
+   */
+  endpoints?: number[];
+  attach?: "all" | "any";
+};
+
+/**
+ * An Sgroup an atom is in, as each of its atoms carries it - the same on
+ * each - so that it goes where they go: its type (CTfile Formats: SRU,
+ * COP, MON, MER, CRO, MOD, GRA, COM, MIX, FOR, ANY, GEN, DAT; MUL and SUP
+ * shown expanded) and what the file said of it. Its brackets are worked out
+ * from where its atoms are.
+ */
+export type SgroupMark = {
+  /** Unique in the document: from the ids atoms and bonds are given. */
+  id: number;
+  type: string;
+  /** A polymer's subscript (SRU's n), a multiple group's multiplier, an abbreviation's label. */
+  label?: string;
+  subtype?: string;
+  connect?: string;
+  bracketStyle?: "bracket" | "paren";
+  multiplier?: number;
+  /** For a multiple group: this atom is of its paradigmatic repeating unit. */
+  paradigm?: boolean;
+  componentNumber?: number;
+  /** The group it is within, by id. */
+  parent?: number;
+  /** A data Sgroup's field and data. */
+  field?: { name: string; data: string[]; units?: string; type?: string };
 };
 
 /**
@@ -109,6 +144,7 @@ export function bondChem(b: BondChem): BondChem {
     ...(b.coordination ? { coordination: true } : {}),
     ...(b.reactingCentre ? { reactingCentre: b.reactingCentre } : {}),
     ...(b.stereoGroup ? { stereoGroup: b.stereoGroup } : {}),
+    ...(b.endpoints?.length ? { endpoints: b.endpoints, attach: b.attach ?? "all" } : {}),
   };
 }
 
@@ -202,5 +238,6 @@ export function chemistry(a: AtomChem): Omit<AtomChem, "el"> {
     ...(a.invRet ? { invRet: a.invRet } : {}),
     ...(a.exactChange ? { exactChange: true } : {}),
     ...(a.stereoGroup ? { stereoGroup: a.stereoGroup } : {}),
+    ...(a.sgroups?.length ? { sgroups: a.sgroups } : {}),
   };
 }
