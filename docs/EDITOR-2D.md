@@ -442,8 +442,8 @@ lipids each have their own way of being drawn, which it should know.
        drawn: its label would not say it.
 
      It is one undo step with the layout. The dictionary's pictures of
-     reagents and complexes follow the same rules; a group's or a ligand's
-     own picture is drawn out.
+     reagents, complexes and counter-anions (BArF's CF3) follow the same
+     rules; a group's or a ligand's own picture is drawn out.
 
 Its code is Meno's own: nothing taken from other depiction code, nothing
 traced from reference drawings.

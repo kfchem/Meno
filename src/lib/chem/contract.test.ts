@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { picturedStructure } from "./abbreviationPlace";
 import { abbreviationOf, abbreviationStructure } from "./abbreviations";
-import { ligandPicture, namedLigand } from "./ligands";
+import { counterIonStructure, ligandPicture, namedLigand } from "./ligands";
 import { contractGraph, contractionTrials, contractions, type ContractGraph } from "./contract";
 import { kekuleOrders } from "./kekulize";
 import { readSmiles } from "./smiles";
@@ -165,5 +165,12 @@ describe("the dictionary's pictures", () => {
         .atoms.map((a) => a.el)
         .filter((el) => el === "Ph" || el === "PPh2"),
     ).toEqual([]);
+  });
+
+  it("write a counter-anion's CF3 by formula, as everywhere", () => {
+    const placed = picturedStructure(counterIonStructure("BArF")!, 1);
+    expect(placed.atoms.filter((a) => a.el === "CF3")).toHaveLength(8);
+    expect(placed.atoms.find((a) => a.el === "B")?.charge).toBe(-1);
+    expect(placed.atoms.some((a) => a.el === "F")).toBe(false);
   });
 });
