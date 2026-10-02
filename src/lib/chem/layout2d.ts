@@ -804,13 +804,57 @@ function vperp(a: Vec2): Vec2 {
  * along the bond, not to the nearest letter - so a bond meeting the flat side
  * of an N at a slant stops as far out as the N's corner reaches, while one
  * meeting an O's round side comes in closer.
+ *
+ * The letter on the atom is measured whole: the bond leaves from within it.
+ * Of the letters beside it only what lies in the bond's path counts - within
+ * `band`, how far the bond's ink reaches either side of its line along `n`,
+ * and the margin: one the bond passes clear of (the H set below an N whose
+ * two bonds leave it downward at a slant) does not stop it.
  */
-function labelClearance(hulls: Vec2[][], d: Vec2, margin: number): number {
+function labelClearance(
+  hulls: Vec2[][],
+  d: Vec2,
+  margin: number,
+  band: { n: Vec2; lo: number; hi: number },
+): number {
+  const lo = band.lo - margin;
+  const hi = band.hi + margin;
   let reach = -Infinity;
+  // (each hull is convex and in order round: its part in the band is cut by
+  // the band's edges, and reaches furthest at a corner of it or where an edge
+  // crosses the band's)
   for (const hull of hulls) {
-    for (const p of hull) reach = Math.max(reach, vdot(p, d));
+    if (aroundOrigin(hull)) {
+      for (const p of hull) reach = Math.max(reach, vdot(p, d));
+      continue;
+    }
+    hull.forEach((p, i) => {
+      const q = hull[(i + 1) % hull.length];
+      const sp = vdot(p, band.n);
+      const sq = vdot(q, band.n);
+      if (sp >= lo && sp <= hi) reach = Math.max(reach, vdot(p, d));
+      for (const edge of [lo, hi]) {
+        if ((sp - edge) * (sq - edge) >= 0) continue;
+        const t = (edge - sp) / (sq - sp);
+        reach = Math.max(reach, vdot(p, d) + t * (vdot(q, d) - vdot(p, d)));
+      }
+    });
   }
   return reach === -Infinity ? 0 : Math.max(0, reach + margin);
+}
+/** Whether a convex outline, in order round, has the origin within it. */
+function aroundOrigin(hull: readonly Vec2[]): boolean {
+  if (hull.length < 3) return false;
+  let sign = 0;
+  for (let i = 0; i < hull.length; i++) {
+    const p = hull[i];
+    const q = hull[(i + 1) % hull.length];
+    const turn = Math.sign(vcross(p, q));
+    if (!turn) continue;
+    if (sign && turn !== sign) return false;
+    sign = turn;
+  }
+  return sign !== 0;
 }
 function buildTripleLines(
   p1: Vec2,
@@ -2211,8 +2255,11 @@ export function buildBondPrimitives(
   const dir0 = vsub(p2o, p1o);
   const L0 = vlen(dir0);
   const dir = L0 > 1e-9 ? vscale(dir0, 1 / L0) : { x: 1, y: 0 };
-  /** Where a bond stops, leaving the atom along `towards`. */
-  const labelReach = (idx: number, at: Atom, towards: Vec2) => {
+  // how far the bond's ink reaches either side of its line at each end
+  const across = bondReach(bond, opts, zoom, deg, doubleSides);
+  const n = vperp(dir);
+  /** Where a bond stops, leaving the atom along `towards`, its ink from `lo` to `hi` along `n`. */
+  const labelReach = (idx: number, at: Atom, towards: Vec2, lo: number, hi: number) => {
     if (!hasLabel(at)) return 0;
     const el = at.el;
     const hulls =
@@ -2222,12 +2269,12 @@ export function buildBondPrimitives(
         fontWorld,
         labelSetOf(opts),
       );
-    return labelClearance(hulls, towards, margin);
+    return labelClearance(hulls, towards, margin, { n, lo, hi });
   };
   // Labels at both ends may not take more than nine tenths of the bond
   // between them; if they would, each gives up its share.
-  let trimA = labelReach(bond.a1, a, dir);
-  let trimB = labelReach(bond.a2, c, vscale(dir, -1));
+  let trimA = labelReach(bond.a1, a, dir, -across.right1, across.left1);
+  let trimB = labelReach(bond.a2, c, vscale(dir, -1), -across.right2, across.left2);
   const room = L0 * (opts.labelShareMax ?? 0.9);
   if (trimA + trimB > room) {
     const k = room / (trimA + trimB);
