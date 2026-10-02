@@ -61,22 +61,22 @@ export default function AbbreviationForm({
       <div className="grid grid-cols-2 gap-3">
         <label className="block text-xs text-gh-gray" htmlFor={`${id}-label`}>
           Label
-          <input id={`${id}-label`} className={field} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Npe" autoFocus spellCheck={false} />
+          <input id={`${id}-label`} className={field} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Npe" autoFocus spellCheck={false} autoCorrect="off" autoCapitalize="off" />
           {problem(labelWrong)}
         </label>
         <label className="block text-xs text-gh-gray" htmlFor={`${id}-also`}>
           Also written
-          <input id={`${id}-also`} className={field} value={also} onChange={(e) => setAlso(e.target.value)} placeholder="e.g. NPE" spellCheck={false} />
+          <input id={`${id}-also`} className={field} value={also} onChange={(e) => setAlso(e.target.value)} placeholder="e.g. NPE" spellCheck={false} autoCorrect="off" autoCapitalize="off" />
           {problem(alsoWrong)}
         </label>
       </div>
       <label className="block text-xs text-gh-gray" htmlFor={`${id}-name`}>
         Name
-        <input id={`${id}-name`} className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 2-(4-nitrophenyl)ethyl" spellCheck={false} />
+        <input id={`${id}-name`} className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 2-(4-nitrophenyl)ethyl" spellCheck={false} autoCorrect="off" autoCapitalize="off" />
       </label>
       <label className="block text-xs text-gh-gray" htmlFor={`${id}-smiles`}>
         Structure, as SMILES: a * where it is attached
-        <input id={`${id}-smiles`} className={`${field} font-mono`} value={smiles} onChange={(e) => setSmiles(e.target.value)} placeholder="e.g. *CCc1ccc([N+](=O)[O-])cc1" spellCheck={false} />
+        <input id={`${id}-smiles`} className={`${field} font-mono`} value={smiles} onChange={(e) => setSmiles(e.target.value)} placeholder="e.g. *CCc1ccc([N+](=O)[O-])cc1" spellCheck={false} autoCorrect="off" autoCapitalize="off" />
         {problem(smilesWrong)}
       </label>
       {smiles.trim() && !smilesWrong && (
