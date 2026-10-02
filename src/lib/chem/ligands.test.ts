@@ -159,6 +159,19 @@ describe("complexes' formulas", () => {
     expect(formula(rh)).toBe("C16H24BF4Rh");
     expect(rh.atoms.find((a) => a.el === "Rh")!.charge).toBe(1);
     expect(charge(rh)).toBe(0);
+    // counter-anions read by rule, named as written; BArF, which no rule reads, by its name
+    const counters: Record<string, string> = {
+      "[Cu(MeCN)4]PF6": "C8H12CuF6N4P", "[Rh(cod)2]SbF6": "C16H24F6RhSb", "[Cu(MeCN)4]ClO4": "C8H12ClCuN4O4",
+      "[Rh(cod)2]AsF6": "C16H24AsF6Rh", "[Rh(cod)2]BPh4": "C40H44BRh", "[Rh(cod)2]BArF": "C48H36BF24Rh",
+    };
+    for (const [label, f] of Object.entries(counters)) {
+      expect(formula(of(label)), label).toBe(f);
+      expect(charge(of(label)), label).toBe(0);
+    }
+    expect(abbreviationOf("[Cu(MeCN)4]PF6")?.name).toBe("copper, 4 acetonitrile, PF6⁻");
+    const clo4 = of("[Cu(MeCN)4]ClO4");
+    const cl = clo4.atoms.findIndex((a) => a.el === "Cl");
+    expect(clo4.bonds.filter((b) => b.a1 === cl || b.a2 === cl).map((b) => b.order).sort()).toEqual([1, 2, 2, 2]);
   });
 
   it("are no complex where any part is not known, or there is nothing but metal", () => {

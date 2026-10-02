@@ -18,18 +18,16 @@ describe("the reagents", () => {
   const formulas: Record<string, string> = {
     DMP: "C13H13IO8", IBX: "C7H5IO4", PIDA: "C10H11IO4", PIFA: "C10H5F6IO4", TEMPO: "C9H18NO", AZADO: "C9H14NO",
     PCC: "C5H6ClCrNO3", PDC: "C10H12Cr2N2O7", TPAP: "C12H28NO4Ru", NMO: "C5H11NO2", mCPBA: "C7H5ClO3", DDQ: "C8Cl2N2O2",
-    Oxone: "H3K5O18S4", OsO4: "O4Os", KMnO4: "KMnO4", NaIO4: "INaO4", NaClO2: "ClNaO2", MnO2: "MnO2",
-    SeO2: "O2Se", CrO3: "CrO3", CAN: "CeH8N8O18", "Pb(OAc)4": "C8H12O8Pb", "SO3·py": "C5H5NO3S", DMDO: "C3H6O2",
+    Oxone: "H3K5O18S4", OsO4: "O4Os", KMnO4: "KMnO4", MnO2: "MnO2",
+    SeO2: "O2Se", CrO3: "CrO3", CAN: "CeH8N8O18", LTA: "C8H12O8Pb", "SO3·py": "C5H5NO3S", DMDO: "C3H6O2",
     TBHP: "C4H10O2", H2O2: "H2O2", O3: "O3", "Davis oxaziridine": "C13H11NO3S",
-    NaBH4: "BH4Na", LiBH4: "BH4Li", LiAlH4: "AlH4Li", NaBH3CN: "CH3BNNa", "NaBH(OAc)3": "C6H10BNaO6",
-    "LiAlH(Ot-Bu)3": "C12H28AlLiO3", DIBAL: "C8H19Al", "Red-Al": "C6H16AlNaO4", "L-Selectride": "C12H28BLi",
+    LAH: "AlH4Li", STAB: "C6H10BNaO6", DIBAL: "C8H19Al", "Red-Al": "C6H16AlNaO4", "L-Selectride": "C12H28BLi",
     "K-Selectride": "C12H28BK", "Super-Hydride": "C6H16BLi", "9-BBN": "C8H15B", HBcat: "C6H5BO2",
     B2pin2: "C12H24B2O4", TTMSS: "C9H28Si4", HEH: "C13H19NO4",
     DBU: "C9H16N2", DBN: "C7H12N2", TBD: "C7H13N3", DMAP: "C7H10N2", DIPEA: "C8H19N", TEA: "C6H15N", DABCO: "C6H12N2",
     NMM: "C5H11NO", "2,6-lutidine": "C7H9N", collidine: "C8H11N", "Proton-Sponge": "C14H18N2", TMG: "C5H13N3",
     imidazole: "C3H4N2", LDA: "C6H14LiN", LiHMDS: "C6H18LiNSi2", NaHMDS: "C6H18NNaSi2", KHMDS: "C6H18KNSi2",
-    LiTMP: "C9H18LiN", K2CO3: "CK2O3", Cs2CO3: "CCs2O3",
-    Na2CO3: "CNa2O3", NaHCO3: "CHNaO3", K3PO4: "K3O4P",
+    LiTMP: "C9H18LiN",
     TFA: "C2HF3O2", PTSA: "C7H8O3S", CSA: "C10H16O4S", PPTS: "C12H13NO3S", H2SO4: "H2O4S",
     DCC: "C13H22N2", DIC: "C7H14N2", EDC: "C8H17N3", HATU: "C10H15F6N6OP",
     HBTU: "C11H16F6N5OP", TBTU: "C11H16BF4N5O", COMU: "C12H19F6N4O4P", PyBOP: "C18H28F6N6OP2", BOP: "C12H22F6N6OP2",
@@ -38,7 +36,7 @@ describe("the reagents", () => {
     DIAD: "C8H14N2O4",
     NBS: "C4H4BrNO2", NCS: "C4H4ClNO2", NIS: "C4H4INO2", DBDMH: "C5H6Br2N2O2", TCCA: "C3Cl3N3O3",
     Selectfluor: "C7H14B2ClF9N2", NFSI: "C12H10FNO4S2", DAST: "C4H10F3NS", "Deoxo-Fluor": "C6H14F3NO2S",
-    "Togni I": "C10H10F3IO", "Togni II": "C8H4F3IO2", "Ruppert–Prakash reagent": "C4H9F3Si", CF3SO2Na: "CF3NaO2S", SOCl2: "Cl2OS",
+    "Togni I": "C10H10F3IO", "Togni II": "C8H4F3IO2", "Ruppert–Prakash reagent": "C4H9F3Si", "Langlois reagent": "CF3NaO2S", SOCl2: "Cl2OS",
     POCl3: "Cl3OP", PCl5: "Cl5P", "(COCl)2": "C2Cl2O2",
     TFAA: "C4F6O3",
     "Comins' reagent": "C7H3ClF6N2O4S2", HMDS: "C6H19NSi2", "Meerwein's salt": "C3H9BF4O", "Eschenmoser's salt": "C3H8IN",
@@ -185,7 +183,7 @@ describe("simple formulas, read by rule", () => {
       // (once in the dictionary, now read so)
       Ac2O: "C4H6O3", Boc2O: "C10H18O5", Tf2O: "C2F6O5S2", PhNTf2: "C8H5F6NO4S2", TfOH: "CHF3O3S", TsOH: "C7H8O3S",
       HOBt: "C6H5N3O", HOAt: "C5H4N4O", HBpin: "C6H13BO2", EtOAc: "C4H8O2", "KOt-Bu": "C4H9KO", NaH: "HNa",
-      NaOCl: "ClNaO", Et3N: "C6H15N", TMSCF3: "C4H9F3Si",
+      NaOCl: "ClNaO", Et3N: "C6H15N", TMSCF3: "C4H9F3Si", "Pb(OAc)4": "C8H12O8Pb",
     };
     for (const [label, f] of Object.entries(cases)) {
       expect(abbreviationOf(label)?.kind, label).toBe("reagent");
@@ -204,6 +202,29 @@ describe("simple formulas, read by rule", () => {
     expect(ions("NaN3").filter((x) => x === "N-")).toHaveLength(2);
     expect(ions("n-BuLi")).toEqual([]);
     expect(of("n-BuLi").bonds.some((b) => of("n-BuLi").atoms[b.a2].el === "Li" || of("n-BuLi").atoms[b.a1].el === "Li")).toBe(true);
+  });
+
+  it("are salts: alkali metals, and the anion the rest makes, as charged as they are many", () => {
+    const cases: Record<string, string> = {
+      // (once in the dictionary, now read so)
+      NaBH4: "BH4Na", LiBH4: "BH4Li", LiAlH4: "AlH4Li", NaBH3CN: "CH3BNNa", "NaBH(OAc)3": "C6H10BNaO6",
+      "LiAlH(Ot-Bu)3": "C12H28AlLiO3", LiBHEt3: "C6H16BLi", NaIO4: "INaO4", NaClO2: "ClNaO2", K2CO3: "CK2O3",
+      Cs2CO3: "CCs2O3", Na2CO3: "CNa2O3", NaHCO3: "CHNaO3", K3PO4: "K3O4P", CF3SO2Na: "CF3NaO2S",
+      // and their like
+      NaBF4: "BF4Na", KPF6: "F6KP", LiClO4: "ClLiO4", NaBPh4: "C24H20BNa", Na2SO4: "Na2O4S", NaH2PO4: "H2NaO4P",
+    };
+    for (const [label, f] of Object.entries(cases)) {
+      expect(abbreviationOf(label)?.kind, label).toBe("reagent");
+      expect(formula(label), label).toBe(f);
+      expect(charge(of(label)), label).toBe(0);
+    }
+    const ions = (label: string) => of(label).atoms.filter((a) => a.charge).map((a) => `${a.el}${a.charge! > 0 ? "+" : "-"}`).sort();
+    expect(ions("NaBH4")).toEqual(["B-", "Na+"]);
+    expect(ions("K2CO3")).toEqual(["K+", "K+", "O-", "O-"]);
+    // an acid's hydrogens on its oxygens; a borate's on its boron
+    const hOn = (label: string, el: string) => of(label).atoms.filter((a) => a.el === el).reduce((n, a) => n + (a.hs ?? 0), 0);
+    expect(hOn("NaHCO3", "O")).toBe(1);
+    expect(hOn("NaBH(OAc)3", "B")).toBe(1);
   });
 
   it("are none where a valence is left free: those are groups", () => {

@@ -1,3 +1,4 @@
+import { anionOf, partsOf, VALENCE, type Part } from "./formula";
 import { structureFormula, type GroupStructure, type StructureBond } from "./ligands";
 import type { SmilesAtom } from "./smiles";
 
@@ -17,60 +18,14 @@ import type { SmilesAtom } from "./smiles";
  * but carbon: NaOMe is Na⁺ and MeO⁻, and n-BuLi has its C-Li bond. A label
  * with a free valence (OMe, NMe2, CH2Br) makes no molecule, and is no such
  * formula: it stays the group it is.
+ *
+ * Or it is a salt: alkali metals, each a cation, and what is left an anion
+ * of as many charges, as ./formula reads one - NaBH4, LiAlH4, NaBH(OAc)3,
+ * NaIO4, NaClO2, K2CO3, NaHCO3, K3PO4.
  */
 
-/** The valences the elements of such a formula have. */
-const VALENCE: Record<string, number> = {
-  H: 1, Li: 1, Na: 1, K: 1, Rb: 1, Cs: 1, F: 1, Cl: 1, Br: 1, I: 1,
-  Be: 2, Mg: 2, Ca: 2, Sr: 2, Ba: 2, O: 2, S: 2, Se: 2, Te: 2,
-  B: 3, Al: 3, Ga: 3, In: 3, N: 3, P: 3, As: 3, Sb: 3, Bi: 3,
-  C: 4, Si: 4, Ge: 4, Sn: 4, Pb: 4,
-};
 /** Bound as ions: these always, lithium to anything but carbon. */
 const IONIC = new Set(["Na", "K", "Rb", "Cs"]);
-
-type Part = { kind: "element"; el: string } | { kind: "group"; label: string; s: GroupStructure };
-
-/**
- * A formula's parts, each as often as its count, or null where it is not
- * read through into groups (`labels`, longest first) and the elements
- * above. A hyphen between two parts is read past (Fmoc-OSu).
- */
-function partsOf(text: string, labels: readonly string[], groupOf: (label: string) => GroupStructure | null): Part[] | null {
-  const out: Part[] = [];
-  let i = 0;
-  while (i < text.length) {
-    if (text[i] === "-" && out.length && i + 1 < text.length) {
-      i++;
-      continue;
-    }
-    let found: Part[] | null = null;
-    if (text[i] === "(") {
-      const j = text.indexOf(")", i);
-      const inner = j > i ? partsOf(text.slice(i + 1, j), labels, groupOf) : null;
-      if (!inner) return null;
-      found = inner;
-      i = j + 1;
-    } else {
-      const group = labels.find((l) => text.startsWith(l, i));
-      const el = [text.slice(i, i + 2), text[i]].find((e) => e in VALENCE && text.startsWith(e, i));
-      if (group && group.length >= (el?.length ?? 0)) {
-        const s = groupOf(group);
-        if (!s || s.attach.length !== 1) return null;
-        found = [{ kind: "group", label: group, s }];
-        i += group.length;
-      } else if (el) {
-        found = [{ kind: "element", el }];
-        i += el.length;
-      } else return null;
-    }
-    const count = /^\d+/.exec(text.slice(i));
-    const n = count ? Number(count[0]) : 1;
-    if (count) i += count[0].length;
-    for (let k = 0; k < n; k++) out.push(...found);
-  }
-  return out;
-}
 
 /**
  * A simple formula as the molecule it is, and its molecular formula as its
@@ -82,8 +37,13 @@ export function condensedStructure(
   labels: readonly string[],
   groupOf: (label: string) => GroupStructure | null,
 ): (GroupStructure & { name: string }) | null {
-  const parts = partsOf(label, labels, groupOf);
+  const parts = partsOf(label, (text, i) => labels.find((l) => text.startsWith(l, i)), groupOf);
   if (!parts || parts.length < 2) return null;
+  return moleculeOf(parts) ?? saltOf(parts);
+}
+
+/** Parts as one molecule: a centre and its valence's parts, or two univalent parts. */
+function moleculeOf(parts: Part[]): (GroupStructure & { name: string }) | null {
   const valence = (p: Part) => (p.kind === "element" ? VALENCE[p.el] : 1);
   const centres = parts.filter((p) => valence(p) > 1);
   const others = parts.filter((p) => valence(p) === 1);
@@ -123,6 +83,18 @@ export function condensedStructure(
       atoms[other].charge = (atoms[other].charge ?? 0) - 1;
     } else bonds.push({ a1: at, a2: to, order: 1 });
   }
+  const s: GroupStructure = { atoms, bonds, attach: [] };
+  return { ...s, name: structureFormula(s) };
+}
+
+/** Parts as a salt: its alkali metals, and the anion the rest makes. */
+function saltOf(parts: Part[]): (GroupStructure & { name: string }) | null {
+  const isMetal = (p: Part): p is Extract<Part, { kind: "element" }> => p.kind === "element" && (IONIC.has(p.el) || p.el === "Li");
+  const metals = parts.filter(isMetal);
+  const ion = metals.length ? anionOf(parts.filter((p) => !isMetal(p)), metals.length) : null;
+  if (!ion) return null;
+  const atoms: SmilesAtom[] = [...metals.map((p) => ({ el: p.el, hs: 0, charge: 1 })), ...ion.atoms];
+  const bonds = ion.bonds.map((b) => ({ ...b, a1: b.a1 + metals.length, a2: b.a2 + metals.length }));
   const s: GroupStructure = { atoms, bonds, attach: [] };
   return { ...s, name: structureFormula(s) };
 }
