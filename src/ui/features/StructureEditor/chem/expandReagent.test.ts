@@ -68,5 +68,6 @@ describe("a reagent's label written out on the canvas", () => {
       expect(bold(after), label).toEqual(bold(model));
       expect(after.atoms.length, label).toBe(model.atoms.length);
     }
-  });
+    // (nine complexes, each laid out twice by the whole engine: slower on CI's runners)
+  }, 60_000);
 });

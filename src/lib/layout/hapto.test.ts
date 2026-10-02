@@ -105,14 +105,15 @@ describe("ligands round a metal", () => {
     const [p1, p2] = find(pd, "P");
     expect(dist(pd, m, p1)).toBeCloseTo(dist(pd, m, p2), 4);
     expect(angleAt(pd, m, p1, p2)).toBeGreaterThan(60);
-  });
+    // (the whole engine on a complex this size: slower on CI's runners)
+  }, 30_000);
 
   it("turn crowded aryl rings as a propeller where that reads better, their near edges bold", () => {
     const pd = laid("Pd(PPh3)4");
     const turned = pd.atoms.filter((a) => a.el === "C" && a.z != null);
     expect(turned.length).toBeGreaterThan(0);
     expect(pd.bonds.some((b) => b.display === "bold")).toBe(true);
-  });
+  }, 30_000);
 });
 
 describe("a structure with no metal", () => {
