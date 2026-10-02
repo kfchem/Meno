@@ -48,17 +48,17 @@ const GROUPS: Abbreviation[] = [
   { label: "Ac", smiles: "*C(C)=O", name: "acetyl", free: true },
   { label: "Ph", also: ["C6H5"], smiles: "*c1ccccc1", name: "phenyl", free: true },
   { label: "Ms", smiles: "*S(=O)(=O)C", name: "methanesulfonyl (mesyl)", free: true },
-  { label: "Ts", also: ["p-Ts"], smiles: "*S(=O)(=O)c1ccc(C)cc1", name: "4-toluenesulfonyl (tosyl)", free: true },
+  { label: "Ts", also: ["p-Ts", "Tos"], smiles: "*S(=O)(=O)c1ccc(C)cc1", name: "4-toluenesulfonyl (tosyl)", free: true },
   // (IUPAC: only where it is bonded to a metal - and so never behind O, S or NH here)
   { label: "Cp", smiles: "*C1C=CC=C1", name: "cyclopentadienyl", free: true },
-  { label: "Bn", smiles: "*Cc1ccccc1", name: "benzyl" },
+  { label: "Bn", also: ["Bzl"], smiles: "*Cc1ccccc1", name: "benzyl" },
   // (IUPAC discourages Bz, once used for benzyl too; it is benzoyl here)
   { label: "Bz", smiles: "*C(=O)c1ccccc1", name: "benzoyl" },
-  { label: "Piv", smiles: "*C(=O)C(C)(C)C", name: "pivaloyl" },
+  { label: "Piv", also: ["Pv"], smiles: "*C(=O)C(C)(C)C", name: "pivaloyl" },
   { label: "Boc", smiles: "*C(=O)OC(C)(C)C", name: "tert-butoxycarbonyl" },
   { label: "Cbz", also: ["Z"], smiles: "*C(=O)OCc1ccccc1", name: "benzyloxycarbonyl" },
   { label: "Fmoc", smiles: "*C(=O)OCC1c2ccccc2-c2ccccc21", name: "9-fluorenylmethoxycarbonyl" },
-  { label: "Alloc", smiles: "*C(=O)OCC=C", name: "allyloxycarbonyl" },
+  { label: "Alloc", also: ["Aloc"], smiles: "*C(=O)OCC=C", name: "allyloxycarbonyl" },
   { label: "Troc", smiles: "*C(=O)OCC(Cl)(Cl)Cl", name: "2,2,2-trichloroethoxycarbonyl" },
   { label: "Teoc", smiles: "*C(=O)OCC[Si](C)(C)C", name: "2-(trimethylsilyl)ethoxycarbonyl" },
   { label: "Tf", smiles: "*S(=O)(=O)C(F)(F)F", name: "trifluoromethanesulfonyl (triflyl)" },
@@ -68,7 +68,7 @@ const GROUPS: Abbreviation[] = [
   { label: "TBS", also: ["TBDMS"], smiles: "*[Si](C)(C)C(C)(C)C", name: "tert-butyldimethylsilyl" },
   { label: "TIPS", smiles: "*[Si](C(C)C)(C(C)C)C(C)C", name: "triisopropylsilyl" },
   { label: "TBDPS", smiles: "*[Si](c1ccccc1)(c1ccccc1)C(C)(C)C", name: "tert-butyldiphenylsilyl" },
-  { label: "PMB", also: ["MPM"], smiles: "*Cc1ccc(OC)cc1", name: "4-methoxybenzyl" },
+  { label: "PMB", also: ["MPM", "Mob"], smiles: "*Cc1ccc(OC)cc1", name: "4-methoxybenzyl" },
   { label: "MOM", smiles: "*COC", name: "methoxymethyl" },
   { label: "MEM", smiles: "*COCCOC", name: "(2-methoxyethoxy)methyl" },
   { label: "SEM", smiles: "*COCC[Si](C)(C)C", name: "[2-(trimethylsilyl)ethoxy]methyl" },
@@ -78,6 +78,73 @@ const GROUPS: Abbreviation[] = [
   { label: "Mes", smiles: "*c1c(C)cc(C)cc1C", name: "2,4,6-trimethylphenyl (mesityl)" },
   { label: "Tol", also: ["p-Tol"], smiles: "*c1ccc(C)cc1", name: "4-methylphenyl (p-tolyl)" },
   { label: "Bpin", smiles: "*B1OC(C)(C)C(C)(C)O1", name: "pinacolatoboryl" },
+
+  // --- in peptide synthesis -------------------------------------------------
+  { label: "Pbf", smiles: "*S(=O)(=O)c1c(C)c(C)c2OC(C)(C)Cc2c1C", name: "2,2,4,6,7-pentamethyl-2,3-dihydrobenzofuran-5-sulfonyl" },
+  { label: "Pmc", smiles: "*S(=O)(=O)c1c(C)c(C)c2OC(C)(C)CCc2c1C", name: "2,2,5,7,8-pentamethylchroman-6-sulfonyl" },
+  { label: "Mtr", smiles: "*S(=O)(=O)c1c(C)c(C)c(OC)cc1C", name: "4-methoxy-2,3,6-trimethylbenzenesulfonyl" },
+  { label: "Mts", smiles: "*S(=O)(=O)c1c(C)cc(C)cc1C", name: "mesitylenesulfonyl" },
+  { label: "Mtt", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(C)cc1", name: "4-methyltrityl" },
+  { label: "Mmt", also: ["MMTr"], smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1", name: "4-methoxytrityl" },
+  { label: "DMTr", also: ["DMT"], smiles: "*C(c1ccccc1)(c1ccc(OC)cc1)c1ccc(OC)cc1", name: "4,4'-dimethoxytrityl" },
+  { label: "Clt", also: ["2-ClTrt"], smiles: "*C(c1ccccc1)(c1ccccc1)c1ccccc1Cl", name: "2-chlorotrityl" },
+  { label: "Dde", smiles: "*C(C)=C1C(=O)CC(C)(C)CC1=O", name: "1-(4,4-dimethyl-2,6-dioxocyclohexylidene)ethyl" },
+  { label: "ivDde", smiles: "*C(CC(C)C)=C1C(=O)CC(C)(C)CC1=O", name: "1-(4,4-dimethyl-2,6-dioxocyclohexylidene)-3-methylbutyl" },
+  { label: "Dmab", smiles: "*Cc1ccc(NC(CC(C)C)=C2C(=O)CC(C)(C)CC2=O)cc1", name: "4-{N-[1-(4,4-dimethyl-2,6-dioxocyclohexylidene)-3-methylbutyl]amino}benzyl" },
+  { label: "Acm", smiles: "*CNC(C)=O", name: "acetamidomethyl" },
+  { label: "Xan", smiles: "*C1c2ccccc2Oc2ccccc21", name: "9H-xanthen-9-yl" },
+  { label: "Dmb", smiles: "*Cc1ccc(OC)cc1OC", name: "2,4-dimethoxybenzyl" },
+  { label: "Hmb", smiles: "*Cc1ccc(OC)cc1O", name: "2-hydroxy-4-methoxybenzyl" },
+  { label: "Tmob", smiles: "*Cc1c(OC)cc(OC)cc1OC", name: "2,4,6-trimethoxybenzyl" },
+  { label: "Meb", smiles: "*Cc1ccc(C)cc1", name: "4-methylbenzyl" },
+  { label: "Bom", also: ["BOM"], smiles: "*COCc1ccccc1", name: "benzyloxymethyl" },
+  { label: "Dnp", smiles: "*c1ccc([N+](=O)[O-])cc1[N+](=O)[O-]", name: "2,4-dinitrophenyl" },
+  { label: "Npys", smiles: "*Sc1ncccc1[N+](=O)[O-]", name: "3-nitro-2-pyridinesulfenyl" },
+  { label: "Nps", smiles: "*Sc1ccccc1[N+](=O)[O-]", name: "2-nitrophenylsulfenyl" },
+  { label: "Moz", also: ["MeOZ"], smiles: "*C(=O)OCc1ccc(OC)cc1", name: "4-methoxybenzyloxycarbonyl" },
+  { label: "2-Cl-Z", also: ["Cl-Z", "ClZ"], smiles: "*C(=O)OCc1ccccc1Cl", name: "2-chlorobenzyloxycarbonyl" },
+  { label: "2-Br-Z", also: ["Br-Z", "BrZ"], smiles: "*C(=O)OCc1ccccc1Br", name: "2-bromobenzyloxycarbonyl" },
+  { label: "Bpoc", smiles: "*C(=O)OC(C)(C)c1ccc(-c2ccccc2)cc1", name: "2-(4-biphenylyl)-2-propoxycarbonyl" },
+  { label: "Ddz", smiles: "*C(=O)OC(C)(C)c1cc(OC)cc(OC)c1", name: "2-(3,5-dimethoxyphenyl)-2-propoxycarbonyl" },
+  { label: "Nsc", smiles: "*C(=O)OCCS(=O)(=O)c1ccc([N+](=O)[O-])cc1", name: "2-(4-nitrophenylsulfonyl)ethoxycarbonyl" },
+  { label: "Msc", smiles: "*C(=O)OCCS(C)(=O)=O", name: "2-(methylsulfonyl)ethoxycarbonyl" },
+  { label: "Fm", smiles: "*CC1c2ccccc2-c2ccccc21", name: "9-fluorenylmethyl" },
+  { label: "Pac", smiles: "*CC(=O)c1ccccc1", name: "phenacyl" },
+  { label: "Tfa", smiles: "*C(=O)C(F)(F)F", name: "trifluoroacetyl" },
+  // the active esters' leaving groups, written behind O: OSu, OPfp, OBt, OAt
+  { label: "Su", smiles: "*N1C(=O)CCC1=O", name: "succinimidyl" },
+  { label: "Pfp", also: ["C6F5"], smiles: "*c1c(F)c(F)c(F)c(F)c1F", name: "pentafluorophenyl" },
+  // (in Kekulé form: the triazole's ring, given aromatic, is not kekulized the way it is bonded)
+  { label: "Bt", smiles: "*N1N=NC2=C1C=CC=C2", name: "benzotriazol-1-yl" },
+  { label: "At", smiles: "*N1N=NC2=C1N=CC=C2", name: "7-azabenzotriazol-1-yl" },
+
+  // --- other protecting groups ---------------------------------------------
+  { label: "NAP", smiles: "*Cc1ccc2ccccc2c1", name: "2-naphthylmethyl" },
+  { label: "DMPM", smiles: "*Cc1ccc(OC)c(OC)c1", name: "3,4-dimethoxybenzyl" },
+  { label: "PMP", smiles: "*c1ccc(OC)cc1", name: "4-methoxyphenyl" },
+  { label: "MTM", smiles: "*CSC", name: "methylthiomethyl" },
+  { label: "POM", smiles: "*COC(=O)C(C)(C)C", name: "pivaloyloxymethyl" },
+  { label: "EE", smiles: "*C(C)OCC", name: "1-ethoxyethyl" },
+  { label: "Lev", smiles: "*C(=O)CCC(C)=O", name: "levulinoyl" },
+  { label: "DEIPS", smiles: "*[Si](CC)(CC)C(C)C", name: "diethylisopropylsilyl" },
+  { label: "TDS", smiles: "*[Si](C)(C)C(C)(C)C(C)C", name: "thexyldimethylsilyl" },
+  { label: "Bs", smiles: "*S(=O)(=O)c1ccc(Br)cc1", name: "4-bromobenzenesulfonyl (brosyl)" },
+  { label: "p-Ns", smiles: "*S(=O)(=O)c1ccc([N+](=O)[O-])cc1", name: "4-nitrobenzenesulfonyl" },
+  { label: "Ses", smiles: "*S(=O)(=O)CC[Si](C)(C)C", name: "2-(trimethylsilyl)ethanesulfonyl" },
+  { label: "Tces", smiles: "*S(=O)(=O)OCC(Cl)(Cl)Cl", name: "2,2,2-trichloroethoxysulfonyl" },
+
+  // --- substituents ---------------------------------------------------------
+  { label: "All", also: ["allyl"], smiles: "*CC=C", name: "allyl" },
+  { label: "Vin", also: ["vinyl"], smiles: "*C=C", name: "vinyl" },
+  { label: "Pent", also: ["n-Pent"], smiles: "*CCCCC", name: "pentyl" },
+  { label: "Hex", also: ["n-Hex"], smiles: "*CCCCCC", name: "hexyl" },
+  { label: "Hept", also: ["n-Hept"], smiles: "*CCCCCCC", name: "heptyl" },
+  { label: "Oct", also: ["n-Oct"], smiles: "*CCCCCCCC", name: "octyl" },
+  { label: "Ad", smiles: "*C12CC3CC(CC(C3)C1)C2", name: "1-adamantyl" },
+  { label: "Dipp", smiles: "*c1c(C(C)C)cccc1C(C)C", name: "2,6-diisopropylphenyl" },
+  { label: "Tipp", also: ["Trip"], smiles: "*c1c(C(C)C)cc(C(C)C)cc1C(C)C", name: "2,4,6-triisopropylphenyl" },
+  { label: "1-Naph", smiles: "*c1cccc2ccccc12", name: "1-naphthyl" },
+  { label: "2-Naph", smiles: "*c1ccc2ccccc2c1", name: "2-naphthyl" },
 ];
 
 /** Contracted labels written out letter by letter, and some that are not O, S or NH and a group. */
@@ -94,7 +161,7 @@ const CONTRACTED: Abbreviation[] = [
   { label: "NMe2", smiles: "*N(C)C", name: "dimethylamino" },
   { label: "NEt2", smiles: "*N(CC)CC", name: "diethylamino" },
   { label: "NHNH2", smiles: "*NN", name: "hydrazinyl" },
-  { label: "C6F5", smiles: "*c1c(F)c(F)c(F)c(F)c1F", name: "pentafluorophenyl" },
+  { label: "NPhth", smiles: "*N1C(=O)c2ccccc2C1=O", name: "phthalimido" },
 ];
 
 /** The dictionary: groups, then contracted labels. */
@@ -290,7 +357,7 @@ const ELEMENTS = new Set(elements.map((e) => e.symbol));
 let UNITS: string[] = [];
 /** The units labels are read into: the groups', the user's own among them. */
 function setUnits(): void {
-  UNITS = [...new Set([...[...GROUPS, ...custom.values()].flatMap((g) => [g.label, ...(g.also ?? [])]), "pin"])]
+  UNITS = [...new Set([...[...GROUPS, ...custom.values()].flatMap((g) => [g.label, ...(g.also ?? [])]), "pin", "Phth"])]
     // (Bpin is B and pin, and so on the left pinB)
     .filter((u) => u.length > 1 && u !== "Bpin")
     .sort((x, y) => y.length - x.length);

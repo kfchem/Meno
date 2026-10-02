@@ -122,10 +122,14 @@ taken from the file's coordinates.
 own list, compiled from what chemists commonly write, not taken from any
 program's table: IUPAC's Table II (GR-2.2) - Me, Et, Pr, iPr, Bu, iBu,
 s-Bu, t-Bu, Ac, Ph, Ms, Ts, Cp, marked as free to use - the protecting
-groups and substituents of everyday use, and contracted labels such as
-CO2H, NO2, NMe2 and C6F5. Each has its structure, in SMILES
+groups and substituents of everyday use and the less common ones too
+(peptide synthesis's Pbf, Pmc, Mtr, Mtt, Mmt, Dde, ivDde, Acm, Xan, Dmb;
+NAP, POM, EE, Lev, Ses and their like), the leaving groups of active
+esters (Su, Pfp, Bt, At: OSu, OPfp), and contracted labels such as CO2H,
+NO2, NMe2 and NPhth. Each one's formula, worked out from its structure, is
+checked against its name in the tests. Each has its structure, in SMILES
 (`src/lib/chem/smiles.ts` reads it), and may have other names (TBDMS for
-TBS, p-Ts for Ts, C6H5 for Ph).
+TBS, p-Ts and Tos for Ts, Bzl for Bn, C6H5 for Ph, C6F5 for Pfp).
 
 What is put together from them is read by rule, not listed:
 

@@ -13,6 +13,7 @@ import {
 } from "./abbreviations";
 import { substitutedAryl } from "./substitutedAryl";
 import { writeSmiles } from "./smiles";
+import { implicitHydrogens } from "./molecule";
 import { readSmiles } from "./smiles";
 
 describe("SMILES, read", () => {
@@ -137,43 +138,148 @@ describe("the abbreviations", () => {
   });
 });
 
+/** A group's formula, in Hill order, its hydrogens by valence (the bond it is attached by counted). */
+function formulaOf(label: string): string {
+  const s = abbreviationStructure(label)!;
+  const sums = s.atoms.map(() => 0);
+  for (const b of s.bonds) {
+    sums[b.a1] += b.order;
+    sums[b.a2] += b.order;
+  }
+  sums[s.attach] += 1;
+  const count = new Map<string, number>();
+  const add = (el: string, n: number) => n && count.set(el, (count.get(el) ?? 0) + n);
+  s.atoms.forEach((a, i) => {
+    add(a.el, 1);
+    add("H", a.hs ?? implicitHydrogens(a.el, sums[i], a.charge ?? 0));
+  });
+  const order = ["C", "H", ...[...count.keys()].filter((e) => e !== "C" && e !== "H").sort()];
+  return order.filter((e) => count.has(e)).map((e) => `${e}${count.get(e)! > 1 ? count.get(e) : ""}`).join("");
+}
+
+describe("the groups' structures", () => {
+  // each as the substituent it is, worked out by hand from its name
+  const formulas: Record<string, string> = {
+    Pbf: "C13H17O3S",
+    Pmc: "C14H19O3S",
+    Mtr: "C10H13O3S",
+    Mts: "C9H11O2S",
+    Mtt: "C20H17",
+    Mmt: "C20H17O",
+    DMTr: "C21H19O2",
+    Clt: "C19H14Cl",
+    Dde: "C10H13O2",
+    ivDde: "C13H19O2",
+    Dmab: "C20H26NO2",
+    Acm: "C3H6NO",
+    Xan: "C13H9O",
+    Dmb: "C9H11O2",
+    Hmb: "C8H9O2",
+    Tmob: "C10H13O3",
+    Meb: "C8H9",
+    Bom: "C8H9O",
+    Dnp: "C6H3N2O4",
+    Npys: "C5H3N2O2S",
+    Nps: "C6H4NO2S",
+    Moz: "C9H9O3",
+    "2-Cl-Z": "C8H6ClO2",
+    "2-Br-Z": "C8H6BrO2",
+    Bpoc: "C16H15O2",
+    Ddz: "C12H15O4",
+    Nsc: "C9H8NO6S",
+    Msc: "C4H7O4S",
+    Fm: "C14H11",
+    Pac: "C8H7O",
+    Tfa: "C2F3O",
+    Su: "C4H4NO2",
+    Pfp: "C6F5",
+    Bt: "C6H4N3",
+    At: "C5H3N4",
+    NAP: "C11H9",
+    DMPM: "C9H11O2",
+    PMP: "C7H7O",
+    MTM: "C2H5S",
+    POM: "C6H11O2",
+    EE: "C4H9O",
+    Lev: "C5H7O2",
+    DEIPS: "C7H17Si",
+    TDS: "C8H19Si",
+    Bs: "C6H4BrO2S",
+    "p-Ns": "C6H4NO4S",
+    Ses: "C5H13O2SSi",
+    Tces: "C2H2Cl3O3S",
+    All: "C3H5",
+    Vin: "C2H3",
+    Hex: "C6H13",
+    Oct: "C8H17",
+    Ad: "C10H15",
+    Dipp: "C12H17",
+    Tipp: "C15H23",
+    "1-Naph": "C10H7",
+    "2-Naph": "C10H7",
+    NPhth: "C8H4NO2",
+    // and some of the first
+    Boc: "C5H9O2",
+    Fmoc: "C15H11O2",
+    TBDPS: "C16H19Si",
+    Ts: "C7H7O2S",
+    Bpin: "C6H12BO2",
+  };
+
+  it("have the formulas their names give them", () => {
+    for (const [label, formula] of Object.entries(formulas)) expect(formulaOf(label), label).toBe(formula);
+  });
+
+  it("are written behind O as active esters, and found by their peptide names", () => {
+    expect(formulaOf("OSu")).toBe("C4H4NO3");
+    expect(formulaOf("OPfp")).toBe("C6F5O");
+    expect(formulaOf("OBt")).toBe("C6H4N3O");
+    expect(abbreviationOf("Bzl")?.label).toBe("Bn");
+    expect(abbreviationOf("Tos")?.label).toBe("Ts");
+    expect(abbreviationOf("Aloc")?.label).toBe("Alloc");
+    expect(abbreviationOf("StBu")?.name).toBe("tert-butylsulfanyl");
+    expect(reversedLabel("NPhth")).toBe("PhthN");
+  });
+});
+
 describe("abbreviations of the user's own", () => {
-  const mmt = { label: "Mmt", also: ["MMTr"], name: "4-methoxytrityl", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1" };
+  const npe = { label: "Npe", also: ["NPE"], name: "2-(4-nitrophenyl)ethyl", smiles: "*CCc1ccc([N+](=O)[O-])cc1" };
 
   it("are known as Meno's are, by any of their names, and put together by rule", () => {
     try {
-      setCustomAbbreviations([mmt]);
-      expect(abbreviationOf("MMTr")?.label).toBe("Mmt");
-      expect(abbreviationStructure("Mmt")!.atoms).toHaveLength(21);
-      expect(abbreviationOf("OMmt")?.smiles).toBe("*OC(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1");
-      expect(abbreviationOf("CO2Mmt")?.name).toBe("4-methoxytrityloxycarbonyl");
-      // read as one unit: on the left of a bond, MmtO
-      expect(reversedLabel("OMmt")).toBe("MmtO");
+      setCustomAbbreviations([npe]);
+      expect(abbreviationOf("NPE")?.label).toBe("Npe");
+      expect(abbreviationStructure("Npe")!.atoms).toHaveLength(11);
+      expect(abbreviationOf("ONpe")?.smiles).toBe("*OCCc1ccc([N+](=O)[O-])cc1");
+      expect(abbreviationOf("CO2Npe")?.name).toBe("2-(4-nitrophenyl)ethoxycarbonyl");
+      // read as one unit: on the left of a bond, NpeO
+      expect(reversedLabel("ONpe")).toBe("NpeO");
     } finally {
       setCustomAbbreviations([]);
     }
-    expect(abbreviationOf("Mmt")).toBeUndefined();
+    expect(abbreviationOf("Npe")).toBeUndefined();
   });
 
   it("are not written as an element, nor as a label that already means something", () => {
-    expect(labelProblem("Mmt")).toBeNull();
+    expect(labelProblem("Npe")).toBeNull();
+    expect(labelProblem("Mmt")).toMatch(/already means 4-methoxytrityl/);
     expect(labelProblem("Ar")).toMatch(/element/);
     expect(labelProblem("Boc")).toMatch(/already means tert-butoxycarbonyl/);
     expect(labelProblem("OTBS")).toMatch(/already means/);
     expect(labelProblem("2,6-diMeBz")).toMatch(/starts with a letter/);
     expect(labelProblem("two words")).toMatch(/no spaces/);
     try {
-      setCustomAbbreviations([mmt]);
-      expect(labelProblem("MMTr")).toMatch(/one of yours/);
+      setCustomAbbreviations([npe]);
+      expect(labelProblem("NPE")).toMatch(/one of yours/);
       // the one being changed keeps its names
-      expect(labelProblem("MMTr", mmt)).toBeNull();
+      expect(labelProblem("NPE", npe)).toBeNull();
     } finally {
       setCustomAbbreviations([]);
     }
   });
 
   it("are given a structure with one * bonded to the atom they are attached by", () => {
-    expect(structureProblem(mmt.smiles)).toBeNull();
+    expect(structureProblem(npe.smiles)).toBeNull();
     expect(structureProblem("CC")).toMatch(/one "\*"/);
     expect(structureProblem("*C*")).toMatch(/one "\*"/);
     expect(structureProblem("C(*)(*)")).toMatch(/one "\*"/);
