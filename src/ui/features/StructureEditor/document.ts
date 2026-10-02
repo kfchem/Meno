@@ -7,7 +7,9 @@
  * edit buffer, fit requests. Those belong to the view (see store/).
  */
 import { createDocument, type DocumentStore } from "../../../lib/doc";
-import type { AtomChem } from "../../../lib/chem/molecule";
+import { bondChem, chemistry, type AtomChem } from "../../../lib/chem/molecule";
+import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
+import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
 import type { Arrow, Atom, Bond, Model } from "./store/types";
@@ -311,6 +313,50 @@ export function relayout(doc: StructureDocument, change: Relayout): StructureDoc
  * An atom's chemistry set anew - its element or label, charge, radical and
  * isotope, each left off where it has none - leaving where it is alone.
  */
+/**
+ * An abbreviation drawn out as the atoms it stands for - as the file gave
+ * them, turned to where its bond goes now, or the dictionary's, laid out
+ * on from that bond - the labelled atom become the one it is attached by,
+ * its bonds out leaving from the atoms they did. One undo step.
+ */
+export function expandAbbreviation(doc: StructureDocument, id: number): StructureDocument {
+  const atoms = doc.model.atoms;
+  const a = atoms.find((x) => x.id === id);
+  if (!a) return doc;
+  const touching = doc.model.bonds.filter((b) => b.a === id || b.b === id);
+  const out = touching[0] ? atoms.find((x) => x.id === (touching[0].a === id ? touching[0].b : touching[0].a)) : undefined;
+  const now = out ? { x: out.x - a.x, y: out.y - a.y } : null;
+  const s = a.abbrev ?? placedAbbreviation(a.el, now, NOMINAL_BOND_LENGTH);
+  if (!s || !s.atoms.length) return doc;
+  // a file's: turned by as much as its bond out has turned since
+  const turn = a.abbrev && s.toward && now ? Math.atan2(now.y, now.x) - Math.atan2(s.toward.y, s.toward.x) : 0;
+  const cos = Math.cos(turn);
+  const sin = Math.sin(turn);
+  const head = s.attach[0] ?? 0;
+  let nextId = doc.nextId;
+  const ids = s.atoms.map((_, k) => (k === head ? id : nextId++));
+  const placed = s.atoms.map((p) => ({ x: a.x + p.x * cos - p.y * sin, y: a.y + p.x * sin + p.y * cos }));
+  const atomOf = (k: number): Atom => {
+    const { x: _x, y: _y, ...chem } = s.atoms[k];
+    return { id: ids[k], x: placed[k].x, y: placed[k].y, r: a.r, el: chem.el, ...chemistry(chem) };
+  };
+  const nextAtoms = atoms.map((x) => (x.id === id ? atomOf(head) : x));
+  s.atoms.forEach((_, k) => {
+    if (k !== head) nextAtoms.push(atomOf(k));
+  });
+  const order = new Map(touching.map((b, k) => [b.id, k]));
+  const nextBonds = doc.model.bonds.map((b) => {
+    const k = order.get(b.id);
+    if (k == null) return b;
+    const to = ids[s.attach[k] ?? head];
+    return b.a === id ? { ...b, a: to } : { ...b, b: to };
+  });
+  for (const b of s.bonds) {
+    nextBonds.push({ id: nextId++, a: ids[b.a1], b: ids[b.a2], order: b.order, stereo: b.stereo ?? "none", ...bondChem(b) });
+  }
+  return { ...doc, nextId, model: { atoms: nextAtoms, bonds: nextBonds } };
+}
+
 export function setAtomChemistry(
   doc: StructureDocument,
   id: number,
@@ -320,21 +366,25 @@ export function setAtomChemistry(
   const index = atoms.findIndex((a) => a.id === id);
   if (index < 0) return doc;
   const was = atoms[index];
+  // (all of what it is: what is given is the atom it is made - a new label
+  // leaves no abbreviation, list or Rgroup of the old one behind)
   const same =
     was.el === chem.el &&
-    (was.charge ?? 0) === (chem.charge ?? 0) &&
-    was.radical === chem.radical &&
-    was.isotope === chem.isotope;
+    JSON.stringify(chemistry(was)) === JSON.stringify(chemistry(chem));
   if (same) return doc;
-  const { charge: _q, radical: _r, isotope: _i, ...rest } = was;
+  const {
+    charge: _q,
+    radical: _r,
+    isotope: _i,
+    rgroups: _g,
+    list: _l,
+    valence: _v,
+    hCount: _h,
+    abbrev: _a,
+    ...rest
+  } = was;
   const next = atoms.slice();
-  next[index] = {
-    ...rest,
-    el: chem.el,
-    ...(chem.charge ? { charge: chem.charge } : {}),
-    ...(chem.radical ? { radical: chem.radical } : {}),
-    ...(chem.isotope ? { isotope: chem.isotope } : {}),
-  };
+  next[index] = { ...rest, el: chem.el, ...chemistry(chem) };
   return { ...doc, model: { atoms: next, bonds: doc.model.bonds } };
 }
 

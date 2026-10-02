@@ -54,7 +54,12 @@ export function undrawnHydrogens(model: Model): Map<number, number> {
   return new Map(
     model.atoms.map((a) => [
       a.id,
-      isElementSymbol(a.el) ? implicitHydrogens(a.el, sum.get(a.id) ?? 0, a.charge ?? 0, a.radical) : 0,
+      !isElementSymbol(a.el)
+        ? 0
+        : a.valence != null
+          ? // (a valence a file sets: what the bonds leave of it)
+            Math.max(0, a.valence - (sum.get(a.id) ?? 0))
+          : implicitHydrogens(a.el, sum.get(a.id) ?? 0, a.charge ?? 0, a.radical),
     ]),
   );
 }

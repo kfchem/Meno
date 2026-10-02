@@ -1,4 +1,5 @@
 import { writeMolfile, type WriterModel } from "../chem/molWriter";
+import { abbreviationOf } from "../chem/abbreviations";
 import { elements } from "../../utils/atomUtils";
 
 const SYMBOLS = new Set(elements.map((e) => e.symbol));
@@ -18,8 +19,11 @@ export function isElementSymbol(label: string): boolean {
 export function chemMolblock(model: WriterModel): string {
   return writeMolfile(
     {
+      // (an abbreviation is written out, as the dictionary or the file has it)
       atoms: model.atoms.map((a) =>
-        isElementSymbol(a.el) ? a : { ...a, el: "*" },
+        isElementSymbol(a.el) || a.abbrev || abbreviationOf(a.el)
+          ? a
+          : { ...a, el: "*", list: undefined, rgroups: undefined },
       ),
       bonds: model.bonds.map((b) => (b.query ? { ...b, query: undefined } : b)),
     },

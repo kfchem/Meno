@@ -3,6 +3,8 @@ import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
 import { ringSidesOf } from "./aromaticSides";
 import { chargeText, implicitHydrogens, valenceOrder, type AtomChem, type BondChem } from "./molecule";
+import { labelRuns, labelUnits, reversedLabel } from "./abbreviations";
+import { elements } from "../../utils/atomUtils";
 
 export { implicitHydrogens };
 
@@ -165,7 +167,18 @@ export type BondPrimitives = {
  * is drawn rather than set in type, where a superscript would go: a charge
  * of one in its circle (its `text` the sign), a radical's dot or dots.
  */
-export type TextRun = { text: string; sub?: boolean; sup?: boolean; mark?: "charge" | "radical" };
+export type TextRun = {
+  text: string;
+  sub?: boolean;
+  sup?: boolean;
+  mark?: "charge" | "radical";
+  /**
+   * A superscript that is part of the label itself - an Rgroup's number -
+   * which bonds stop short of as of the rest, where a charge is moved clear
+   * of them instead.
+   */
+  part?: boolean;
+};
 
 /**
  * How a label is set, as fractions of its font size (ACS 1996): its baseline
@@ -534,7 +547,7 @@ export function labelHulls(
   for (const [k, run] of placeLabel(t, fontSize, set).entries()) {
     // (its charge and a radical's dots, which a bond is kept clear of by
     // where they are put, not by stopping short of them)
-    if (!tail && k > anchor && (runs[k]?.sup || runs[k]?.mark)) continue;
+    if (!tail && k > anchor && (runs[k]?.sup || runs[k]?.mark) && !runs[k]?.part) continue;
     let pen = run.x - t.x;
     if (run.mark) {
       const { c, r } = markCircle(run);
@@ -1646,15 +1659,48 @@ function buildWavySegments(
  * its charge sits beside it.
  */
 export function showsLabel(
-  a: Pick<Atom, "el" | "charge" | "radical" | "isotope">,
+  a: Pick<Atom, "el" | "charge" | "radical" | "isotope" | "valence">,
   opts: Pick<LayoutOptions, "showCarbonLabels" | "showChargedCarbons">,
 ): boolean {
   return (
     opts.showCarbonLabels ||
     a.el !== "C" ||
     !!a.isotope ||
+    // (a carbon of other than four bonds' valence says so: its hydrogens with it)
+    (a.valence != null && a.valence !== 4) ||
     (!!opts.showChargedCarbons && (!!a.charge || !!a.radical))
   );
+}
+
+const ELEMENT_SYMBOLS = new Set(elements.map((e) => e.symbol));
+
+/**
+ * How an atom that is not an element is labelled, or nothing for one that
+ * is: an Rgroup R with its numbers set superscript (IUPAC GR-9.1: R¹, not
+ * R₁); an atom list in brackets (GR-9.1); any other label - an
+ * abbreviation, a class such as Ar, a reserved atom type such as A or Q -
+ * with its counts subscript, read outward from its bond where that comes in
+ * from the right (GR-2.3: TBSO). `anchor` is the run that sits on the atom.
+ */
+function specialLabel(a: Atom, fromRight: boolean): { runs: TextRun[]; anchor: number } | null {
+  if (a.el === "R#" || (a.rgroups?.length && !ELEMENT_SYMBOLS.has(a.el))) {
+    const n = a.rgroups?.join(",") ?? "";
+    return { runs: n ? [{ text: "R" }, { text: n, sup: true, part: true }] : [{ text: "R" }], anchor: 0 };
+  }
+  if (a.list) {
+    const text = `${a.list.not ? "NOT " : ""}[${a.list.symbols.join(",")}]`;
+    return { runs: [{ text }], anchor: 0 };
+  }
+  if (ELEMENT_SYMBOLS.has(a.el)) return null;
+  const units = labelUnits(fromRight ? reversedLabel(a.el) : a.el);
+  if (units.length < 2) return { runs: labelRuns(a.el), anchor: 0 };
+  // the unit at the bond as runs of its own, so that it sits on the atom
+  const at = fromRight ? units.length - 1 : 0;
+  const before = labelRuns(units.slice(0, at).join(""));
+  const own = labelRuns(units[at]);
+  const after = labelRuns(units.slice(at + 1).join(""));
+  const runs = [...(at > 0 ? before : []), ...own, ...(at < units.length - 1 ? after : [])];
+  return { runs, anchor: at > 0 ? before.length : 0 };
 }
 
 /**
@@ -1850,10 +1896,32 @@ export function buildTextLabels(
       if (tail.length) out.push(besideVertex(a, ways.get(i) ?? [], tail, opts));
       continue;
     }
+    // A label that is not an element: an Rgroup, an atom list, an
+    // abbreviation or any text, written as such, with no hydrogens of its own
+    const towardAll = away.get(i) ?? { x: 0, y: 0 };
+    const fromRight =
+      (ways.get(i)?.length ?? 0) === 1 && towardAll.x > Math.hypot(towardAll.x, towardAll.y) * band;
+    const special = specialLabel(a, fromRight);
+    if (special) {
+      const runs = [...head, ...special.runs, ...tail];
+      push({
+        x: a.x,
+        y: a.y,
+        text: runs.map((r) => r.text).join(""),
+        fontPx: opts.fontPx,
+        runs,
+        anchorRun: head.length + special.anchor,
+        atom: i,
+      });
+      continue;
+    }
     const h =
       opts.showImplicitHydrogens === false
         ? 0
-        : implicitHydrogens(a.el, orderSum.get(i) ?? 0, a.charge ?? 0, a.radical);
+        : a.valence != null
+          ? // (a valence the file sets: what the bonds leave of it)
+            Math.max(0, a.valence - (orderSum.get(i) ?? 0))
+          : implicitHydrogens(a.el, orderSum.get(i) ?? 0, a.charge ?? 0, a.radical);
     const centreSymbol =
       straightLeft.has(i) && straightRight.has(i) ? { centreSymbol: true } : {};
     if (h <= 0) {

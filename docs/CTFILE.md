@@ -10,7 +10,8 @@ Configuration* (2006, ST-) - and Meno's own conventions, written down here,
 where they do not. No other program's code or output is a reference for any
 of it.
 
-This is being built in steps; each says here what it adds.
+This is being built in steps; each says here what it adds. So far: the
+reader; bonds besides plain ones; atoms that are not elements.
 
 ## Reading
 
@@ -60,10 +61,43 @@ Not read: V3000 3D blocks and templates (SCSR), RDfiles and XDfiles.
 Neither a hydrogen bond nor a coordination bond takes a hydrogen from the
 atoms at its ends, as a dative bond does not: an ammine stays NH3.
 
+### Atoms that are not elements
+
+| What | How | Why |
+|---|---|---|
+| An Rgroup (R# with M  RGP / RGROUPS) | R with its number superscript: R¹, R¹,². Typed as R1. | GR-9.1: a superscript number; a subscript is not acceptable, being read as a count. |
+| An atom list (L with M  ALS, or V3000's [..]) | The list in brackets, [N,O]; NOT [N,O] for a NOT list. | GR-9.1: a list in a label is enclosed in brackets. |
+| An alias (A line) | The atom is drawn as - and taken to be - its alias. | |
+| A contracted abbreviation (SUP not expanded, or the old G line) | One atom, labelled, where the group's first attachment is, holding the atoms and bonds it stands for (`abbrev`); its bonds out leave from it. *Expand abbreviation*, in its menu, draws them out, turned with its bond. | |
+| An expanded abbreviation | Its atoms. | |
+| Any other label - an abbreviation, a class (Nu, Alk), a reserved type (A, Q, X, M, R, *) | Its counts subscript (CO2Me), a sign at its end its charge; read outward from its bond when that comes in from the right: TBSO, MeO2C, BocHN, F3C. No hydrogens of its own. | GR-2.3. |
+| A valence the file sets (V2000's vvv, V3000's VAL) | Hydrogens counted to it; a carbon of other than four shows its label, CH2. | |
+| A query hydrogen count | Kept, and written back; not drawn. | |
+
+**The abbreviations Meno knows** (`src/lib/chem/abbreviations.ts`) are its
+own list, compiled from what chemists commonly write, not taken from any
+program's table: IUPAC's Table II (GR-2.2) - Me, Et, Pr, iPr, Bu, iBu,
+s-Bu, t-Bu, Ac, Ph, Ms, Ts, Cp, marked as free to use - the protecting
+groups and substituents of everyday use, contracted labels such as CO2H,
+NO2 and NMe2, and each group behind O, S or NH and as an ester (OTBS, SPh,
+NHBoc, CO2Me). Each has its structure, in SMILES (`src/lib/chem/smiles.ts`
+reads it). A label it knows can be expanded, is counted and written out
+whole, and is what RDKit is asked about; one it does not know is text.
+Ar is argon's symbol as well as aryl's (GR-9.2): typed, it is argon.
+
 A bond that came from a file as one of these becomes an ordinary bond once
 its order or stereo is changed in the editor.
 
 ## Writing
+
+An abbreviation is written out - the atoms a file gave it, or the
+dictionary's, laid out by Meno's own engine on from its bond - with an
+abbreviation Sgroup labelling them, so that it reads back contracted. A
+label the dictionary does not know is a star atom with an alias (V2000), or
+an abbreviation Sgroup of its one star atom (V3000, which has no alias). An
+Rgroup, an atom list, a valence and a query hydrogen count go in their
+fields. V3000 lines longer than 80 characters are continued, as the format
+has it.
 
 MOL files are written V2000 where that can say everything, and V3000
 where it cannot: a coordination or hydrogen bond (V2000's types stop at 8),

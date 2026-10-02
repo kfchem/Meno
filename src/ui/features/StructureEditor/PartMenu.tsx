@@ -59,6 +59,7 @@ export default function PartMenu({
   onCharge,
   onRadical,
   radical,
+  onExpand,
   onArrowStyle,
   clipboard,
   onClose,
@@ -76,6 +77,8 @@ export default function PartMenu({
   /** An atom's unpaired electron given or taken away; `radical`, whether it has one. */
   onRadical: () => void;
   radical: boolean;
+  /** An abbreviation's atoms drawn out; unset, where the atom is none. */
+  onExpand?: () => void;
   /** A reaction arrow's own line and head, in a panel beside the canvas. */
   onArrowStyle: () => void;
   clipboard: MenuClipboard;
@@ -151,6 +154,7 @@ export default function PartMenu({
                 { name: "Charge one up", keys: "+", run: () => onCharge(1) },
                 { name: "Charge one down", keys: "\u2212", run: () => onCharge(-1) },
                 { name: radical ? "No unpaired electron" : "Unpaired electron", keys: "", run: onRadical },
+                ...(onExpand ? [{ name: "Expand abbreviation", keys: "", run: onExpand }] : []),
               ]
             : []),
           { name: "Select this structure", keys: "", run: onSelectStructure },

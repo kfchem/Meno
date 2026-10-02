@@ -38,6 +38,13 @@ import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuTarget } from "./PartMenu";
+import { abbreviationOf } from "../../../lib/chem/abbreviations";
+import { isElementSymbol } from "../../../lib/rdkit/molblock";
+
+/** Whether an atom is an abbreviation that can be drawn out: a file's, or one the dictionary knows. */
+function expandable(a: { el: string; abbrev?: unknown } | undefined): boolean {
+  return !!a && !isElementSymbol(a.el) && (!!a.abbrev || !!abbreviationOf(a.el));
+}
 import { useClipboardActions } from "./clipboardActions";
 import {
   chargeStep,
@@ -550,6 +557,11 @@ function StructureCanvasContent({
             if (menu.kind === "atom" && menu.id != null) radicalAtom(menu.id);
           }}
           radical={!!model.atoms.find((a) => a.id === menu.id)?.radical}
+          onExpand={
+            menu.kind === "atom" && menu.id != null && expandable(model.atoms.find((a) => a.id === menu.id))
+              ? () => store.getState().expandAbbreviation(menu.id!)
+              : undefined
+          }
           clipboard={{
             onCut: () => void clip.cut(),
             onCopy: () => void clip.copy(),

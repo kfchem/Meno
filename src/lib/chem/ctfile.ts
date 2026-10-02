@@ -12,10 +12,9 @@
  * positions.
  */
 import { elements } from "../../utils/atomUtils";
-import type { Radical } from "./molecule";
+import type { AtomList, Radical } from "./molecule";
 
-/** An atom list: the atom is one of `symbols`, or with `not`, none of them. */
-export type AtomList = { not: boolean; symbols: string[] };
+export type { AtomList };
 
 export type CtAtom = {
   x: number;

@@ -1,6 +1,13 @@
 import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
 import { kekuleOrders } from "../lib/chem/kekulize";
-import { bondChem, chemistry, type AtomChem, type BondChem, type ParsedAtom } from "../lib/chem/molecule";
+import {
+  bondChem,
+  chemistry,
+  type AbbreviationStructure,
+  type AtomChem,
+  type BondChem,
+  type ParsedAtom,
+} from "../lib/chem/molecule";
 import {
   layoutMolecule,
   type Atom as LayoutAtom,
@@ -14,6 +21,7 @@ import {
   type Molecule as ParsedMol,
 } from "./structureParsers";
 import { readRxnfile } from "../lib/chem/ctfile";
+import { elements } from "./atomUtils";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), and where it is. */
 export type EditorAtom = AtomChem & {
@@ -343,6 +351,72 @@ function drawnBox(model: EditorModel): { minX: number; maxX: number } {
 }
 
 /**
+ * A file's contracted abbreviations - its abbreviation Sgroups not shown
+ * expanded - each made one atom labelled with the abbreviation, where its
+ * first attachment point is, holding the atoms and bonds it stands for
+ * (`abbrev`), the bonds out of the group leaving from it. `idOf` is the
+ * editor's id for the file's atom `i`.
+ */
+function contractAbbreviations(
+  atoms: EditorAtom[],
+  bonds: EditorBond[],
+  m: ParsedMol,
+  idOf: (i: number) => number,
+): void {
+  const ct = m.ct;
+  if (!ct) return;
+  for (const g of ct.sgroups) {
+    if (g.type !== "SUP" || g.expanded || !g.atoms.length) continue;
+    const inside = new Set(g.atoms);
+    // its bonds out: as the file lists them, or as they are
+    const crossing = (g.bonds.length ? g.bonds : ct.bonds.map((_, i) => i)).filter((i) => {
+      const b = ct.bonds[i];
+      return !!b && inside.has(b.a1) !== inside.has(b.a2);
+    });
+    const ends = [
+      ...new Set([
+        ...(g.attachments ?? []).map((sap) => sap.atom).filter((a) => inside.has(a)),
+        ...crossing.map((i) => (inside.has(ct.bonds[i].a1) ? ct.bonds[i].a1 : ct.bonds[i].a2)),
+      ]),
+    ];
+    const head = atoms.find((a) => a.id === idOf(ends[0] ?? g.atoms[0]));
+    if (!head) continue;
+    const ids = new Map(g.atoms.map((a, k) => [idOf(a), k]));
+    const structure: AbbreviationStructure = {
+      atoms: g.atoms.map((a) => {
+        const at = atoms.find((x) => x.id === idOf(a))!;
+        return { el: at.el, ...chemistry(at), x: at.x - head.x, y: at.y - head.y };
+      }),
+      bonds: [],
+      attach: ends.map((a) => g.atoms.indexOf(a)),
+    };
+    // which way its first bond out goes, to turn it by when it is expanded
+    const out = crossing[0] != null ? ct.bonds[crossing[0]] : undefined;
+    const outside = out ? atoms.find((x) => x.id === idOf(inside.has(out.a1) ? out.a2 : out.a1)) : undefined;
+    if (outside) structure.toward = { x: outside.x - head.x, y: outside.y - head.y };
+    for (let k = bonds.length - 1; k >= 0; k--) {
+      const b = bonds[k];
+      const ia = ids.get(b.a);
+      const ib = ids.get(b.b);
+      if (ia != null && ib != null) {
+        // inside: into the structure, out of the drawing
+        structure.bonds.unshift({ a1: ia, a2: ib, order: b.order, stereo: b.stereo ?? "none", ...bondChem(b) });
+        bonds.splice(k, 1);
+      } else if (ia != null) {
+        bonds[k] = { ...b, a: head.id };
+      } else if (ib != null) {
+        bonds[k] = { ...b, b: head.id };
+      }
+    }
+    for (let k = atoms.length - 1; k >= 0; k--) {
+      if (ids.has(atoms[k].id) && atoms[k].id !== head.id) atoms.splice(k, 1);
+    }
+    const at = atoms.indexOf(head);
+    atoms[at] = { id: head.id, x: head.x, y: head.y, r: head.r, el: g.label || "?", abbrev: structure };
+  }
+}
+
+/**
  * A file's bond `i` as the editor holds it, but for its id and atoms: its
  * order - an aromatic ring's Kekulé one (`orders`) - its stereo, and what
  * else the file says it is.
@@ -387,6 +461,7 @@ export function convertMolToEditorModel(m: ParsedMol, scale: number) {
     b: b.a2 + 1,
     ...bondOf(m, i, orders, reversed),
   }));
+  contractAbbreviations(atoms, bonds, m, (i) => i + 1);
   // centroid
   let cx = 0,
     cy = 0;
@@ -455,6 +530,12 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
         ...bondOf(m, i, orders, reversed),
       });
     });
+    const from = atoms.length - m.atoms.length;
+    const mine = atoms.splice(from);
+    const theirBonds = bonds.splice(bonds.length - m.bonds.length);
+    contractAbbreviations(mine, theirBonds, m, (i) => base + i);
+    atoms.push(...mine);
+    bonds.push(...theirBonds);
   }
   // centroid after scaling
   let cx = 0,
@@ -478,12 +559,19 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
  */
 // normalizeEditorModel: removed (not used)
 
+/**
+ * An element's symbol as it is written (CL as Cl); anything else - a label,
+ * R#, an alias - as the file has it.
+ */
 function normalizeEl(el: string): string {
   if (!el) return "C";
   const s = String(el).trim();
   if (!s) return "C";
-  return s[0].toUpperCase() + s.slice(1).toLowerCase();
+  const symbol = s[0].toUpperCase() + s.slice(1).toLowerCase();
+  return ELEMENT_SYMBOLS.has(symbol) ? symbol : s;
 }
+
+const ELEMENT_SYMBOLS = new Set(elements.map((e) => e.symbol));
 
 /**
  * Which wedges a file draws with their narrow end on the atom with fewer

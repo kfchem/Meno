@@ -301,6 +301,10 @@ export const createModelSlice = (
     doc.edit("delete arrow", (d) => ops.removeArrow(d, id));
   },
 
+  expandAbbreviation: (id: number) => {
+    doc.edit("expand abbreviation", (d) => ops.expandAbbreviation(d, id));
+  },
+
   setArrowLook: (id: number, look: ArrowLook, coalesceKey?: string) => {
     doc.edit("arrow style", (d) => ops.setArrowLook(d, id, look), { coalesceKey });
   },
