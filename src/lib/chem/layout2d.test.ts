@@ -18,6 +18,7 @@ import {
   type LineSeg,
   type Vec2,
   wedgeNarrowAtom,
+  cumulatedShown,
 } from "./layout2d";
 import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "./acs";
 import { advanceEm, inkHullEm } from "./arial";
@@ -1463,6 +1464,60 @@ describe("a single bond on the end of a double bond", () => {
         }
       }
     }
+  });
+});
+
+describe("a ring's bonds in perspective", () => {
+  it("meet square where a bold edge and a wedge broad there do, their outer corner filled to a point", () => {
+    const L = NOMINAL_BOND_LENGTH;
+    // a front edge 0-1, bold, and a wedge 2-0 toward it, broad at 0
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: L, y: 0, el: "C" },
+      { id: 3, x: -0.5 * L, y: 0.8 * L, el: "C" },
+    ];
+    const deg = new Map([[0, 2], [1, 1], [2, 1]]);
+    const wedge: Bond = { a1: 2, a2: 0, order: 1, display: "wedge" };
+    // (narrow at 2: as stereoOrient puts it)
+    const narrow = wedgeNarrowAtom({ ...wedge, stereoOrient: "principle" }, deg);
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1, display: "bold" },
+      narrow === 2 ? wedge : { ...wedge, stereoOrient: "reverse" },
+    ];
+    const { polys } = buildAllPrimitives(atoms, bonds, opts(), 40);
+    // the corner: four points, the first the atom itself, the third out past both shapes
+    const corner = polys.find((p) => p.points.length === 4 && Math.hypot(p.points[0].x, p.points[0].y) < 1e-9);
+    expect(corner).toBeDefined();
+    const [, , tip] = corner!.points;
+    expect(tip.y).toBeLessThan(0);
+    expect(tip.x).toBeLessThan(0);
+  });
+});
+
+describe("a carbon between two double bonds", () => {
+  it("has its symbol drawn, and both double bonds their lines either side of the line they make", () => {
+    const L = NOMINAL_BOND_LENGTH;
+    const ZOOM = 40;
+    // R-N=C=N-R, straight through the C
+    const atoms: Atom[] = [
+      { id: 1, x: -2 * L, y: 0.6 * L, el: "C" },
+      { id: 2, x: -L, y: 0, el: "N" },
+      { id: 3, x: 0, y: 0, el: "C" },
+      { id: 4, x: L, y: 0, el: "N" },
+      { id: 5, x: 2 * L, y: -0.6 * L, el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 1, a2: 2, order: 2 },
+      { a1: 2, a2: 3, order: 2 },
+      { a1: 3, a2: 4, order: 1 },
+    ];
+    expect(cumulatedShown(atoms, bonds).map((a) => !!a.shown)).toEqual([false, false, true, false, false]);
+    const layout = layoutMolecule(atoms, bonds, opts(), ZOOM);
+    expect(layout.texts.some((t) => t.text === "C")).toBe(true);
+    // (no second line off to one side: each pair straddles the axis, y = 0)
+    const level = layout.lines.filter((l) => Math.abs(l.y1 - l.y2) < 1e-9 && Math.abs(l.y1) > 1e-9);
+    expect(level.some((l) => l.y1 > 0) && level.some((l) => l.y1 < 0)).toBe(true);
   });
 });
 
