@@ -170,5 +170,6 @@ describe("complexes' formulas", () => {
     expect(text).toMatch(/V3000/);
     expect(text).toMatch(/M {2}V30 COUNTS 77 88 1 0 0/);
     expect(text).toMatch(/SUP 0 ATOMS=\(77 /);
-  });
+    // (Pd(PPh3)4 laid out by the whole engine: a second here, several on CI's runners)
+  }, 30_000);
 });
