@@ -149,7 +149,34 @@ describe("complexes' formulas", () => {
     expect(formula(pd2)).toBe("C51H42O3Pd2");
     expect(pd2.bonds.filter((b) => b.endpoints)).toHaveLength(3);
     expect(formula(of("[Ir(cod)Cl]2"))).toBe("C16H24Cl2Ir2");
-    expect(abbreviationOf("[Ir(cod)Cl]2")?.name).toBe("2 × (iridium, 1,5-cyclooctadiene, Cl)");
+    expect(abbreviationOf("[Ir(cod)Cl]2")?.name).toBe("2 × (iridium, 1,5-cyclooctadiene, Cl) bridged by Cl");
+    // the dimer bridged by its chlorides: each Cl bound to both iridiums
+    const ir2 = of("[Ir(cod)Cl]2");
+    for (const cl of ir2.atoms.flatMap((a, i) => (a.el === "Cl" ? [i] : []))) {
+      expect(ir2.bonds.filter((b) => b.a1 === cl || b.a2 === cl)).toHaveLength(2);
+    }
+    // two chlorides on each ruthenium, one of them bridging
+    const ru2 = of("[RuCl2(p-cymene)]2");
+    expect(formula(ru2)).toBe("C20H28Cl4Ru2");
+    const bridging = ru2.atoms.flatMap((a, i) => (a.el === "Cl" && ru2.bonds.filter((b) => b.a1 === i || b.a2 === i).length === 2 ? [i] : []));
+    expect(bridging).toHaveLength(2);
+    // a hydride hexamer: the octahedral cluster, its metals in contact
+    // along its twelve edges, each hydride bridging one of them
+    const cu6 = of("[CuH(PPh3)]6");
+    expect(formula(cu6)).toBe("C108H96Cu6P6");
+    expect(abbreviationOf("[CuH(PPh3)]6")?.name).toBe("6 × (copper, H, triphenylphosphine), an octahedron bridged by H");
+    const cus = cu6.atoms.flatMap((a, i) => (a.el === "Cu" ? [i] : []));
+    const contacts = cu6.bonds.filter((b) => cus.includes(b.a1) && cus.includes(b.a2));
+    expect(contacts).toHaveLength(12);
+    for (const cu of cus) expect(contacts.filter((b) => b.a1 === cu || b.a2 === cu)).toHaveLength(4);
+    const hydrides = cu6.atoms.flatMap((a, i) => (a.el === "H" ? [i] : []));
+    expect(hydrides).toHaveLength(6);
+    for (const h of hydrides) expect(cu6.bonds.filter((b) => (b.a1 === h || b.a2 === h) && cus.includes(b.a1 === h ? b.a2 : b.a1))).toHaveLength(2);
+    // (and no two of them on one edge)
+    const edges = hydrides.map((h) => cu6.bonds.filter((b) => b.a1 === h || b.a2 === h).map((b) => (b.a1 === h ? b.a2 : b.a1)).sort().join());
+    expect(new Set(edges).size).toBe(6);
+    // a counter-anion, or no halide, and nothing bridges
+    expect(of("[Rh(cod)2]BF4").bonds.filter((b) => b.coordination && b.endpoints == null)).toHaveLength(0);
     expect(formula(of("Ni(cod)2"))).toBe("C16H24Ni");
     // Cp- on Zr: Zr(2+), the whole neutral
     const zr = of("Cp2ZrCl2");

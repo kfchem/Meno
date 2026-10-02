@@ -136,6 +136,12 @@ What is put together from them is read by rule, not listed:
 - a group or contracted label behind O, S or NH - OTBS, SPh, NHBoc, OCF3 -
   but Cp, which Table II allows only bonded to a metal;
 - an ester, CO2 and a group - CO2Me, CO2t-Bu;
+- an atom with as many of one group as fill its valence but the bond out -
+  PPh2, PCy2, AsPh2, NBn2, NBoc2, BEt2, SiPh3, SnBu3 (B, N, P and As take
+  two, Si, Ge and Sn three); three on P (PPh3, PCy3) is the ligand;
+- an atom and two or more halogens on it, its H after it - CBr3, CHF2,
+  CF2Cl, SF5, SiCl3, BCl2 - where the bond out, the H and the halogens
+  make a valence the atom has (PCl3 and SiCl4 are molecules);
 - a substituted aryl group (`src/lib/chem/substitutedAryl.ts`): positions,
   a multiplying prefix (di, tri, tetra, penta) and a substituent before Ph,
   Bz (benzoyl) or Bn - 2,6-diMeBz, 4-MeO-3-NO2Ph, p-ClBn - or before the
@@ -187,7 +193,18 @@ has several metals - Pd2(dba)3 - the ligands are shared among them in
 turn: which bridge them, a formula does not say, unless it marks one with
 μ (IUPAC's mark for a bridging ligand): a bridging ligand's donors are
 bound to the metals in turn - Karstedt's Pt2(dvtms)2(μ-dvtms) - and a
-bridging halide or group to each of them. A complex written out is V3000,
+bridging halide or group to each of them. A part of one metal with a
+halide or a group on it, in brackets and made twice with no counter-anion
+- [Ir(cod)Cl]2, [RhCl(cod)]2, [RuCl2(p-cymene)]2, [Pd(allyl)Cl]2,
+[Rh(cod)OMe]2 - is the dimer they bridge, as such dimers are: each part's
+first halide (or group) is bound to the other part's metal as well. One
+with a hydride on it, made six times - [CuH(PPh3)]6, Stryker's reagent -
+is the octahedral cluster such hydrides make: the metals its corners, in
+contact along its twelve edges (drawn dashed), each part's hydride
+bridging an edge from its metal (μ2-H): the edges of two opposite faces,
+as neutron diffraction places them (Bennett et al., Inorg. Chem. 2014,
+53, 2963, Figure 1). A
+complex written out is V3000,
 its coordination bonds needing it. Expanded on the canvas it is laid out
 by Meno's engine, which is not yet made for coordination compounds: the
 drawing of a large complex is crowded.

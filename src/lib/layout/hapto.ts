@@ -13,6 +13,7 @@
  */
 import { add, angleOf, centroid, dir, rotate, sub, type Point } from "./geometry";
 import { METAL_BOND, type DieneRing, type EtaRing, type MetalUnit, type Molecule } from "./perceive";
+import { placeCluster } from "./cluster";
 import { placeRingSystem } from "./ringSystem";
 
 /**
@@ -197,6 +198,8 @@ export function unitVariants(mol: Molecule, unit: MetalUnit): number {
  * `variant` gives each ring's spin, the first ring's fastest.
  */
 export function placeUnit(mol: Molecule, unit: MetalUnit, variant = 0): EtaLayout {
+  if (unit.pair) return placePair(mol, unit, variant);
+  if (unit.cluster) return placeCluster(mol, unit);
   if (unit.dienes.length && !unit.eta.length) return placeTubs(mol, unit);
   const m = unit.metal;
   const stars = new Set(unit.eta.map((e) => e.star));
@@ -356,5 +359,79 @@ function placeTubs(mol: Molecule, unit: MetalUnit): EtaLayout {
       : others.map((_, i) => (i % 2 ? -1 : 1) * (Math.PI / 2));
   const hints = new Map<number, Map<number, Point>>();
   if (k) hints.set(m, new Map(others.map((l, i) => [l, dir(angles[i])])));
+  return { pos, hints, lift };
+}
+
+// --- two metals bridged by two atoms --------------------------------------------
+
+/** How far above and below the line through the metals their bridging atoms are, in bond lengths: the ring seen a little from above. */
+const PAIR_RISE = 0.6;
+/**
+ * And how much nearer the lower bridging atom is than the metals, the upper
+ * as much further: the ring a square of a metal's bonds, so tilted.
+ */
+export const PAIR_DEPTH = Math.sqrt(Math.max(0, (METAL_BOND * METAL_BOND) / 2 - PAIR_RISE * PAIR_RISE));
+/** How far a ring bound face-on to one of them is from its metal: a metal's bond, clear of the metal's label, which reads on toward it. */
+const PAIR_TO_RING = METAL_BOND;
+
+/**
+ * Two metals bridged by two atoms - [Rh(cod)Cl]2, [RuCl2(p-cymene)]2,
+ * [Pd(allyl)Cl]2 - as they are drawn: their four-membered ring level, the
+ * metals left and right, the bridging atoms above and below the line
+ * through them; each metal's own ligands outside, the second's the first's
+ * turned half round - a tub on each, mirrored, as Ni(cod)2's are. A ring
+ * bound face-on to the first metal goes above it and to the left, its other
+ * ligands below and to the left; the second's the other way round.
+ * `variant` gives each ring's spin, the first ring's fastest.
+ */
+function placePair(mol: Molecule, unit: MetalUnit, variant: number): EtaLayout {
+  const pair = unit.pair!;
+  const metals = [unit.metal, pair.metal];
+  const half = Math.sqrt(METAL_BOND * METAL_BOND - PAIR_RISE * PAIR_RISE);
+  const pos = new Map<number, Point>([
+    [metals[0], { x: -half, y: 0 }],
+    [metals[1], { x: half, y: 0 }],
+    [pair.bridges[0], { x: 0, y: PAIR_RISE }],
+    [pair.bridges[1], { x: 0, y: -PAIR_RISE }],
+  ]);
+  const lift = new Map<number, number>([...pos.keys()].map((a) => [a, 0]));
+  const hints = new Map<number, Map<number, Point>>();
+  const inUnit = new Set([...pos.keys(), ...unit.eta.flatMap((e) => e.atoms), ...unit.dienes.flatMap((d) => d.atoms)]);
+  let v = variant;
+  metals.forEach((m, k) => {
+    const at = pos.get(m)!;
+    // the second metal's side the first's turned half round
+    const turned = (angle: number) => (k ? angle + Math.PI : angle);
+    const tubs = unit.dienes.filter((d) => d.metal === m);
+    tubs.forEach((d) => {
+      const laid = placeTub(d);
+      for (const [a, p] of laid.pos) if (a !== m) pos.set(a, { x: at.x + (k ? -p.x : p.x), y: at.y + p.y });
+      for (const [a, l] of laid.lift) if (a !== m) lift.set(a, l);
+    });
+    const rings = unit.eta.filter((e) => e.metal === m);
+    rings.forEach((e, j) => {
+      const spins = etaSpins(mol, e);
+      const laid = placeEta(mol, e, v % spins);
+      v = Math.floor(v / spins);
+      // its centre a bond out, above and to the outside; its own +y back toward the metal
+      const out = turned((3 * Math.PI) / 4 + j * (Math.PI / 2));
+      const centre = add(at, rotate({ x: PAIR_TO_RING, y: 0 }, out));
+      const place = (p: Point) => add(centre, rotate(p, out + Math.PI / 2));
+      for (const [a, p] of laid.pos) pos.set(a, place(p));
+      for (const [a, l] of laid.lift) lift.set(a, l);
+      for (const [a, h] of laid.hints) {
+        const moved = new Map([...h].filter(([b]) => b !== m).map(([b, p]) => [b, place(p)]));
+        if (moved.size) hints.set(a, moved);
+      }
+    });
+    // its other ligands outside: below a ring, or round the outside
+    const others = mol.neighbours[m].filter((l) => !inUnit.has(l));
+    if (!others.length) return;
+    const n = others.length;
+    const from = rings.length ? (5 * Math.PI) / 4 : Math.PI;
+    const step = Math.PI / 4;
+    const angles = others.map((_, i) => turned(from + (i - (rings.length ? 0 : (n - 1) / 2)) * step));
+    hints.set(m, new Map(others.map((l, i) => [l, add(at, dir(angles[i]))])));
+  });
   return { pos, hints, lift };
 }

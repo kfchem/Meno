@@ -18,8 +18,9 @@ skeleton and its stereochemistry at once, and read it the way everything
 else on the page is read: left to right. Four aims follow, in order of
 priority - a later one never buys itself at the cost of an earlier one:
 
-1. **Nothing hidden.** No atom on another, no bond through an atom or
-   across another bond, no label crowding a label - an OH's H as much as
+1. **Nothing hidden.** No atom on another - nor, in a complex, inside a
+   small ring not its own (a Cl inside a cyclohexyl) - no bond through an
+   atom or across another bond, no label crowding a label - an OH's H as much as
    its O, with a space between labels side by side - and no bond between
    two labels covered by their letters (a Pd and an NH a bond apart at a
    slant, the d reaching along it to the N).
@@ -117,7 +118,14 @@ they hang from.
   third bridge rising from both bridgeheads. A bond passing behind another
   is drawn broken there. Bonds out of the ring follow it - an equatorial
   bond parallel to the ring bonds but one, an axial one upright - and what
-  hangs from the cage hangs from its front where it can.
+  hangs from the cage hangs from its front where it can. A
+  bicyclo[3.3.1] cage - two six-membered rings sharing three atoms, 9-BBN,
+  bispidine - is drawn as 9-BBN always is, its two chairs stood on end
+  back to back: the one-atom bridge on top, what it carries straight up
+  from it (9-BBN's B-H, a ketone's O); the bridgeheads under it, the front
+  one the lower; each three-atom bridge a chair's lower half to one side,
+  its middle atom the foot. Seen from above it would have that bridge
+  between the rings, hemmed in.
 - **Chains**: zigzag, each turn the other way from the last. A trans double
   bond carries the zigzag on; a cis one is a step in it - the chain read as
   the straight chain it would be without it, taking up again, two bonds
@@ -165,11 +173,11 @@ lie level either way round - the drawing takes the one that reads best
   right of it. Phenanthrene's third ring goes up and to the right; a
   steroid's A and B rings form the row, with C and D above and to the right
   - the way steroids are always drawn.
-- **A biaryl drawn anti**: a ring system hung from a ring's atom by a
+- **A biaryl hung anti**: a ring system hung from a ring's atom by a
   bond, where both have something beside the bond, is hung the way round
   that puts the heavier of each on opposite sides - BINOL's two OH, BINAP's
-  two PPh2 - as chemists draw them; grown the other way, BINAP's phenyls
-  fell on its other naphthalene.
+  two PPh2: grown the other way, BINAP's phenyls fell on its other
+  naphthalene.
 - **A benzene ring at the left of its ring system**, where reading
   begins: indole, quinoline and coumarin with their benzene rings on the
   left, estradiol's aromatic A ring, griseofulvin's, reserpine's indole at
@@ -257,6 +265,21 @@ an OH, an SH - or the same is done to what it runs into, a C=O's O or a
 small branch (taxol's benzoate, clear of its C1 OH). The H is never moved
 under the symbol to make room, and no move that crosses bonds is taken.
 Nothing else is moved for it: the drawing is set first, its H's last.
+
+A name - a label that is not an element's symbol: OTBS, NHBz, PPh3, as
+Clean-up writes groups by name - takes the room its letters take
+(`src/lib/layout/names.ts`). Its first unit sits on its atom and the rest
+follows, read outward from its bond: leftward from a bond coming in from
+the right (TBSO, IUPAC GR-2.3), rightward otherwise; a name of one unit
+(TMS, Ph) so is set before such a bond, its last letter on the atom. On a bond within 35
+degrees of upright it may be read either way, and is read the way with
+more room - a chemist writes taxol's C4 acetate OAc or AcO under the ring
+as there is space - the usual way where both have as much; the drawing
+reads it as the layout reckoned it. Its letters running into an atom, a
+bond or another name count as labels crowding: lightly while the parts
+are set, so that the way a molecule is turned comes first, and in full
+last, when room is made for them as for an H, by the same small moves
+(wider turns of a name's own bond).
 
 ## 6. Stereochemistry that reads
 
@@ -346,6 +369,33 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   the metal beside them. A second such ring goes to the metal's other
   side; the metal's other ligands opposite a lone one. Both C=C are cis,
   as they are; drawn as one ring with the metal, one came out trans.
+- **Two metals bridged by two atoms** - [Rh(cod)Cl]2's chlorides,
+  [Rh(cod)OMe]2's methoxides; or a transition metal and a main-group one,
+  the Tebbe reagent's Ti and Al, the transition metal first - are their
+  four-membered ring seen a little
+  from above: the metals level, left and right, the bridging atoms above
+  and below between them, a metal's bond from each, the lower nearer.
+  Each metal's own ligands go outside it, the second's the first's turned
+  half round: a tub on each, mirrored; a ring bound face-on above and to
+  the outside, a metal's bond off so that the metal's label stays clear of
+  it, its other ligands below (the second metal's the other way round, as
+  [RuCl2(p-cymene)]2 is drawn). The metals and their rings are one system.
+- **Six metals in contact as an octahedron** - Stryker's reagent's Cu6,
+  each metal in contact with four others, atoms bridging its edges - are
+  the solid they are (`src/lib/layout/cluster.ts`): the octahedron, its
+  edges long enough that the metals' labels and those of the atoms
+  bridging them stand clear, each bridging atom just outside its edge,
+  each metal's other ligands straight out from the middle. It is seen
+  from the side that hides least: no label on another or on an edge, the
+  ligands clear of it and of each other, no two metals stacked nor an
+  edge seen end on, the fewest edges crossing - a face seen straight on,
+  or the solid from the side with a threefold axis upright, where that
+  does as well. Stryker's reagent, its hydrides on the edges of two
+  opposite faces, comes out as its neutron structure is shown: a corner
+  up and its opposite down, the four between them two by two, each
+  hydride beside the edge it bridges, each PPh3 straight out. Its atoms
+  keep their depths, as a cage's do; its metals' contacts are drawn
+  dashed, as they are written.
 - **Ligands round a metal** with no ring go evenly round it - two in a
   line, four in a cross - and the bulkiest go furthest apart: two bulky
   ligands trans to each other, the small ones (Cl, H, CO) between them. A
@@ -387,7 +437,8 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
    section 4, its free choices tried the other way and its parts
    untangled (section 5).
 5. Last, turn a macrolide's sugars to their face and make room for the
-   H's of labels, each by a small local move (sections 4 and 5); and turn
+   H's of labels and the letters of names, each by a small local move
+   (sections 4 and 5); and turn
    aryl rings crowded round an atom as a propeller (section 7).
 6. Set the pieces of a salt or a mixture side by side, the largest first,
    with a bond and a half of paper between one's ink and the next's: a

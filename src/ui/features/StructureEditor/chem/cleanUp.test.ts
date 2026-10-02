@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { readStereo, sameConfiguration, wedgesForFlat } from "../../../../lib/layout/drawn";
 import { layout2D, type LayoutInput } from "../../../../lib/layout/engine";
+import { layoutMetrics } from "../../../../lib/layout/metrics";
 import cages from "../../../../lib/layout/testdata/cages.json";
-import { createStructureDocument } from "../document";
+import { kekuleOrders } from "../../../../lib/chem/kekulize";
+import { readSmiles } from "../../../../lib/chem/smiles";
+import { createStructureDocument, emptyStructureDocument, expandAbbreviation } from "../document";
 import { connectStoreToDocument, createEditorStore } from "../store";
 import type { Bond, Model } from "../store/types";
 import { cleanUp, fragmentOf, fragmentsHolding, fragmentsOf, laidOut, partOf } from "./cleanUp";
@@ -214,5 +217,79 @@ describe("cleanUp", () => {
     const { store } = canvas(propane);
     await cleanUp(store);
     expect(store.getState().model.bonds.every((b) => b.stereo !== "up")).toBe(true);
+  });
+
+  it("writes taxol's esters and amide by name, their letters clear of everything", async () => {
+    const read = readSmiles(
+      "CC1=C2[C@H](C(=O)[C@@]3([C@H](C[C@@H]4[C@]([C@H]3[C@@H]([C@@](C2(C)C)(C[C@@H]1OC(=O)[C@@H]([C@H](C5=CC=CC=C5)NC(=O)C6=CC=CC=C6)O)O)OC(=O)C7=CC=CC=C7)(CO4)OC(=O)C)O)C)OC(=O)C",
+    );
+    const orders = kekuleOrders(read.atoms, read.bonds);
+    const drawn = flatDrawing({
+      atoms: read.atoms.map((a) => ({ el: a.el, ...(a.hs != null ? { hs: a.hs } : {}), ...(a.tetra ? { tetra: a.tetra } : {}) })),
+      bonds: read.bonds.map((b, i) => ({ a: b.a1, b: b.a2, order: orders[i] })),
+    });
+    const { store } = canvas(drawn);
+    await cleanUp(store);
+    const m = store.getState().model;
+    expect(m.atoms.filter((a) => !/^[A-Z][a-z]?$/.test(a.el)).map((a) => a.el).sort()).toEqual(["NHBz", "OAc", "OAc", "OBz"]);
+    const index = new Map(m.atoms.map((a, i) => [a.id, i]));
+    const crowding = (nameRoom: number) =>
+      layoutMetrics({
+        x: m.atoms.map((a) => a.x),
+        y: m.atoms.map((a) => -a.y),
+        edges: m.bonds.map((b) => [index.get(b.a)!, index.get(b.b)!] as [number, number]),
+        elements: m.atoms.map((a) => a.el),
+        labelled: m.atoms.map((a) => a.el !== "C"),
+        nameRoom,
+      }).crowdedLabels;
+    expect(crowding(1) - crowding(0)).toBe(0);
+  });
+
+  it("cleans up Stryker's reagent just drawn out, and writes its phosphines by name the next time", async () => {
+    const model = expandAbbreviation(
+      { ...emptyStructureDocument(), model: { atoms: [{ id: 1, x: 0, y: 0, r: 0.9, el: "Stryker's reagent" }], bonds: [] }, nextId: 10 },
+      1,
+    ).model;
+    // (as a file has it: its metals' contacts plain bonds)
+    const plain: Model = { atoms: model.atoms, bonds: model.bonds.map(({ display: _d, ...b }) => b) };
+    const { doc, store } = canvas(plain);
+    // drawn out just now
+    doc.edit("expand abbreviation", (d) => ({ ...d, expanded: plain.atoms.map((a) => a.id) }));
+    await cleanUp(store);
+    const drawn = store.getState().model;
+    expect(drawn.atoms.filter((a) => a.el === "PPh3")).toHaveLength(0);
+    const cus = new Set(drawn.atoms.filter((a) => a.el === "Cu").map((a) => a.id));
+    expect(drawn.bonds.filter((b) => cus.has(b.a) && cus.has(b.b) && b.display === "dashed")).toHaveLength(12);
+    await cleanUp(store);
+    expect(store.getState().model.atoms.filter((a) => a.el === "PPh3")).toHaveLength(6);
+  }, 20000);
+
+  it("writes a protecting group by name, in the same step, and leaves one just drawn out drawn", async () => {
+    // tert-butyldimethylsilyl ethyl ether, drawn atom by atom
+    const read = readSmiles("CCO[Si](C)(C)C(C)(C)C");
+    const orders = kekuleOrders(read.atoms, read.bonds);
+    const drawn = flatDrawing({
+      atoms: read.atoms.map((a) => ({ el: a.el })),
+      bonds: read.bonds.map((b, i) => ({ a: b.a1, b: b.a2, order: orders[i] })),
+    });
+    const { doc, store } = canvas(drawn);
+    const labels = () => store.getState().model.atoms.filter((a) => !/^[A-Z][a-z]?$/.test(a.el)).map((a) => a.el);
+    await cleanUp(store);
+    expect(labels()).toEqual(["OTBS"]);
+    expect(store.getState().model.atoms).toHaveLength(3);
+    expect(doc.history().undoDepth).toBe(1);
+    // drawn out, and cleaned up straight after: left drawn out, and laid out
+    const label = store.getState().model.atoms.find((a) => a.el === "OTBS")!;
+    store.getState().expandAbbreviation(label.id);
+    expect(store.getState().justExpanded().size).toBe(8);
+    await cleanUp(store);
+    expect(labels()).toEqual([]);
+    expect(store.getState().justExpanded().size).toBe(0);
+    // and by the next Clean-up, written by name again
+    await cleanUp(store);
+    expect(labels()).toEqual(["OTBS"]);
+    // undone, the label's atoms are back
+    doc.undo();
+    expect(labels()).toEqual([]);
   });
 });

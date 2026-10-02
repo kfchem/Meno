@@ -33,6 +33,19 @@ export type StructureBond = SmilesBond & {
 };
 
 /**
+ * Six metals as an octahedron, by their places 0 to 5 round it seen down
+ * one of its threefold axes - 0, 2 and 4 the near face, 1, 3 and 5 the far
+ * one: its twelve edges, each a pair of places. Opposite corners (0 and 3,
+ * 1 and 4, 2 and 5) are joined by none.
+ */
+export const OCTAHEDRON_EDGES: readonly (readonly [number, number])[] = [
+  [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0],
+  [0, 2], [2, 4], [4, 0],
+  [1, 3], [3, 5], [5, 1],
+];
+
+
+/**
  * What a label stands for, as atoms and bonds (Kekulé): where it is attached
  * (`attach`: an atom, or the star at the centre of a pi system bound through
  * all its atoms - `haptic` says which), and its stars' pi systems. A group
@@ -533,8 +546,11 @@ function token(t: string, names: Names): Item | null {
  * ligand's donors are bound to the metals in turn, and a bridging halide or
  * group to each of them. A part in brackets is made as many times as its
  * count; what follows the brackets is its counter-anions, each leaving a
- * positive charge on the part's metal. `local` names ligands of the
- * formula's own (a reagent's).
+ * positive charge on the part's metal. A part of one metal and a halide or
+ * group made twice, with no counter-anion - [Ir(cod)Cl]2, [RuCl2(p-cymene)]2,
+ * [Pd(allyl)Cl]2 - is the dimer bridged by them: each copy's first halide
+ * (or group) bound to the other's metal as well. `local` names ligands of
+ * the formula's own (a reagent's).
  */
 export function complexStructure(
   label: string,
@@ -576,6 +592,8 @@ export function complexStructure(
     else bonds.push({ a1: at, a2: metal, order: 1, coordination: true });
   };
 
+  // each part's first halide or group bound by one bond, by its first metal
+  const firstX = new Map<number, number>();
   /** One part, its metals first: the index of its first metal, or -1. Its words go to `parts` once. */
   const build = (unit: Item[], named: boolean): number => {
     const named0 = parts.length;
@@ -611,6 +629,7 @@ export function complexStructure(
               : groupOf(it.label)!;
             const at = add(s);
             bind(metal, s.attach[0] + at, true);
+            if (!firstX.has(metals[0])) firstX.set(metals[0], s.attach[0] + at);
             // bridging: to each of the others too, as a donor
             if (it.bridging) for (const other of metals) if (other !== metal) bind(other, s.attach[0] + at, false);
           }
@@ -635,13 +654,40 @@ export function complexStructure(
   const firsts: number[] = [];
   for (const u of units.length ? units : [{ kind: "unit" as const, items: loose, n: 1 }]) {
     const at = parts.length;
+    const made: number[] = [];
     for (let k = 0; k < u.n; k++) {
       const first = build(u.items, k === 0);
       if (first < 0) return null;
-      firsts.push(first);
+      made.push(first);
     }
-    // a part made twice: 2 × (its words)
-    if (u.n > 1) parts.splice(at, parts.length - at, `${u.n} × (${parts.slice(at).join(", ")})`);
+    firsts.push(...made);
+    // a dimer of one metal each, a halide or group on it and no
+    // counter-anion: bridged by those, each copy's first to the other's metal
+    const oneMetal = u.items.filter((it) => it.kind === "metal").reduce((n, it) => n + it.n, 0) === 1;
+    const bridged = u.n === 2 && oneMetal && !counters.length && made.every((m) => firstX.has(m));
+    if (bridged) {
+      bind(made[1], firstX.get(made[0])!, false);
+      bind(made[0], firstX.get(made[1])!, false);
+    }
+    // a hexamer of one metal each, a hydride on it and no counter-anion -
+    // [CuH(PPh3)]6, Stryker's reagent - the octahedral cluster such
+    // hydrides make: the metals its corners, in contact along its edges,
+    // each copy's hydride bridging an edge of the face its metal is on,
+    // from its metal to the next on that face (μ2-H): the edges of two
+    // opposite faces, as neutron diffraction places them (Bennett et al.,
+    // Inorg. Chem. 2014, 53, 2963, Figure 1)
+    const cluster =
+      u.n === 6 && oneMetal && !counters.length && made.every((m) => firstX.has(m) && atoms[firstX.get(m)!].el === "H");
+    if (cluster) {
+      for (const [p, q] of OCTAHEDRON_EDGES) bonds.push({ a1: made[p], a2: made[q], order: 1 });
+      made.forEach((m, k) => bind(made[(k + 2) % 6], firstX.get(m)!, false));
+    }
+    // a part made twice: 2 × (its words), and what bridges them
+    if (u.n > 1) {
+      const x = u.items.find((it): it is Extract<Item, { kind: "x" }> => it.kind === "x");
+      const how = cluster ? ", an octahedron bridged by H" : bridged && x ? ` bridged by ${x.label}` : "";
+      parts.splice(at, parts.length - at, `${u.n} × (${parts.slice(at).join(", ")})${how}`);
+    }
   }
   let turn = 0;
   for (const c of counters) {

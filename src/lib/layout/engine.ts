@@ -22,12 +22,13 @@ import {
 } from "./assemble";
 import { angleOf, dist, mirror, segmentsCross, sub } from "./geometry";
 import { hydrogenRunsInto, hydrogenSpot, layoutMetrics } from "./metrics";
+import { atomDepth, boxesDepth, isName, namesLaid, segmentMeetsBox } from "./names";
 import { orderOf, perceive, type LayoutInput, type Molecule } from "./perceive";
 import { misshapen, placeRingSystem, regularize, ringSystemVariants } from "./ringSystem";
 import { bridgeAcross } from "./bridge";
 import { flatCost, isCage, projectCage, type CageView } from "./cage";
 import { axisWedge, placeStereo, type Stereo, type Tetrahedral } from "./stereo";
-import { etaSpins, placeEta, placeUnit, unitVariants } from "./hapto";
+import { etaSpins, PAIR_DEPTH, placeEta, placeUnit, unitVariants } from "./hapto";
 import type { Point } from "./geometry";
 
 export type { LayoutInput } from "./perceive";
@@ -56,6 +57,8 @@ export type Layout2D = {
    * the viewer, drawn as wedges: [its narrow, far end; its broad, near one].
    */
   toward: [number, number][];
+  /** The bonds between a cluster's metals - contacts, as they are written - drawn dashed. */
+  dashed: [number, number][];
 } & Stereo;
 
 export function layout2D(input: LayoutInput): Layout2D {
@@ -104,7 +107,12 @@ export function layout2D(input: LayoutInput): Layout2D {
   });
   // what is measured as drawn in perspective: a cage, and a ring bound
   // face-on (foreshortened, not misshapen)
-  const faceOn = new Set([...mol.eta.flatMap((e) => e.atoms), ...mol.dienes.flatMap((d) => d.atoms)]);
+  const faceOn = new Set([
+    ...mol.eta.flatMap((e) => e.atoms),
+    ...mol.dienes.flatMap((d) => d.atoms),
+    // (and a cluster, a solid)
+    ...mol.units.flatMap((u) => (u.cluster ? [...u.cluster.metals, ...u.cluster.bridges] : [])),
+  ]);
   const measured = solid.map((s, a) => s || faceOn.has(a));
   // what a frame grows from: in a mirrored one, each cage seen from its
   // other side
@@ -185,9 +193,9 @@ export function layout2D(input: LayoutInput): Layout2D {
   const pieces = [...mol.pieces].sort((p, q) => q.length - p.length);
   for (const piece of pieces) {
     // (a macrolide's sugars turned to their face, and room made for the
-    // H's of labels, last: by turning a sugar over on its link, and by
-    // moving bonds a little - an H on a label counting then as much as a
-    // label on a label)
+    // H's of labels and the letters of names, last: by turning a sugar
+    // over on its link, and by moving bonds a little - an H on a label
+    // counting then as much as a label on a label)
     const score = scorer(mol, piece, depth, measured, 0, false);
     const scoreH = scorer(mol, piece, depth, measured, 1);
     const here = new Set(piece);
@@ -324,6 +332,21 @@ export function layout2D(input: LayoutInput): Layout2D {
     for (const a of d.atoms) depth[a] = lifts.get(a) ?? 0;
     depth[d.metal] ??= 0;
   }
+  // a cluster, as near as it was seen (placeCluster)
+  for (const u of mol.units) {
+    if (!u.cluster) continue;
+    for (const a of [...u.cluster.metals, ...u.cluster.bridges]) depth[a] = lifts.get(a) ?? 0;
+  }
+  // two metals' bridges: their ring seen a little from above, the lower
+  // bridge the nearer (placePair)
+  for (const u of mol.units) {
+    if (!u.pair) continue;
+    depth[u.metal] ??= 0;
+    depth[u.pair.metal] ??= 0;
+    const [p, q] = u.pair.bridges;
+    const lower = y[p] < y[q] ? p : q;
+    for (const b of [p, q]) depth[b] = b === lower ? PAIR_DEPTH : -PAIR_DEPTH;
+  }
   // a ring in perspective - bound face-on, or turned on its bond - drawn as
   // Haworth drew rings: a bond with both its atoms near, bold; one running
   // from the far half to the near one, a wedge toward the viewer, narrow at
@@ -360,7 +383,14 @@ export function layout2D(input: LayoutInput): Layout2D {
     const w = axisWedge(mol, final, axis);
     if (w) stereo.wedges.push(w);
   }
-  return { x, y, depth, solid, bold, toward, ...stereo };
+  // a cluster's metals in contact, dashed
+  const dashed: [number, number][] = [];
+  for (const u of mol.units) {
+    if (!u.cluster) continue;
+    const ms = u.cluster.metals;
+    for (const a of ms) for (const b of mol.neighbours[a]) if (a < b && ms.includes(b)) dashed.push([a, b]);
+  }
+  return { x, y, depth, solid, bold, toward, dashed, ...stereo };
 }
 
 /**
@@ -368,10 +398,44 @@ export function layout2D(input: LayoutInput): Layout2D {
  * such ring is above its metal: a half-sandwich's legs below; a sandwich -
  * bent or not - with its rings one above the other (section 7). One with a
  * tub (cod) turned so that its C=C stand upright, the metal beside them, as
- * the tub was seen.
+ * the tub was seen. Two metals bridged by two atoms: the line through them
+ * level, the first on the left.
  */
 function standUp(mol: Molecule, piece: number[], pos: Grown): void {
   const here = new Set(piece);
+  // a cluster upright, as it was seen
+  const cluster = mol.units.find((u) => u.cluster && here.has(u.metal));
+  if (cluster) {
+    const mid = (ms: number[]) => {
+      const ps = ms.map((m) => pos.get(m)!);
+      return { x: ps.reduce((t, p) => t + p.x, 0) / ps.length, y: ps.reduce((t, p) => t + p.y, 0) / ps.length };
+    };
+    const c = mid(cluster.cluster!.metals);
+    const up = cluster.cluster!.up;
+    const from = up?.from.length ? mid(up.from) : c;
+    const t = up?.to.length ? mid(up.to) : pos.get(cluster.metal)!;
+    const turn = Math.PI / 2 - Math.atan2(t.y - from.y, t.x - from.x);
+    const cs = Math.cos(turn);
+    const sn = Math.sin(turn);
+    for (const a of piece) {
+      const p = sub(pos.get(a)!, c);
+      pos.set(a, { x: c.x + p.x * cs - p.y * sn, y: c.y + p.x * sn + p.y * cs });
+    }
+    return;
+  }
+  const pair = mol.units.find((u) => u.pair && here.has(u.metal));
+  if (pair) {
+    const m = pos.get(pair.metal)!;
+    const o = pos.get(pair.pair!.metal)!;
+    const turn = -Math.atan2(o.y - m.y, o.x - m.x);
+    const c = Math.cos(turn);
+    const sn = Math.sin(turn);
+    for (const a of piece) {
+      const p = sub(pos.get(a)!, m);
+      pos.set(a, { x: m.x + p.x * c - p.y * sn, y: m.y + p.x * sn + p.y * c });
+    }
+    return;
+  }
   const e = mol.eta.find((r) => here.has(r.star) && r.metal >= 0);
   if (!e) {
     const d = mol.dienes.find((r) => here.has(r.metal));
@@ -710,7 +774,10 @@ function rejoin(
   return { pos, score: current };
 }
 
-/** Atoms in the way of each other: on top of one another, on a bond, or at the ends of crossing bonds. */
+/** What a name's letters running into something count for while a layout sets its parts (metrics' `nameRoom`). */
+const NAME_ROOM_FIRST = 0.3;
+
+/** Atoms in the way of each other: on top of one another, on a bond, at the ends of crossing bonds, or under a name's letters. */
 function clashing(mol: Molecule, piece: number[], pos: Grown): Set<number> {
   const out = new Set<number>();
   const bonds = [...mol.bondIndex.keys()]
@@ -743,6 +810,10 @@ function clashing(mol: Molecule, piece: number[], pos: Grown): Set<number> {
         out.add(a).add(b).add(c).add(d);
       }
     }
+  }
+  for (const [a, hits] of namesInTheWay(mol, piece, pos)) {
+    out.add(a);
+    hits.forEach((b) => out.add(b));
   }
   return out;
 }
@@ -944,12 +1015,53 @@ export function untangle(
 }
 
 /**
+ * What each name's letters (OTBS, NHBz) run into, as the metrics count it:
+ * an atom under them, or beside them with less than a space between, a
+ * bond through them, another name's letters.
+ */
+function namesInTheWay(mol: Molecule, piece: number[], p: Grown): Map<number, number[]> {
+  // (most drawings have none)
+  if (!piece.some((a) => isName(mol.el[a]))) return new Map();
+  const index = new Map(piece.map((a, i) => [a, i]));
+  const edges = [...mol.bondIndex.keys()]
+    .map((k) => k.split(",").map(Number) as [number, number])
+    .filter(([a, b]) => index.has(a) && index.has(b));
+  const named = namesLaid(
+    {
+      x: piece.map((a) => p.get(a)!.x),
+      y: piece.map((a) => p.get(a)!.y),
+      edges: edges.map(([a, b]) => [index.get(a)!, index.get(b)!] as const),
+      elements: piece.map((a) => mol.el[a]),
+    },
+    1,
+  );
+  const out = new Map<number, number[]>();
+  for (const [i, { box }] of named) {
+    const a = piece[i];
+    const hits: number[] = [];
+    for (const b of piece) {
+      if (b === a || mol.neighbours[a].includes(b)) continue;
+      const other = named.get(index.get(b)!);
+      const deep = other ? boxesDepth(box, other.box, 1) : atomDepth(box, p.get(b)!, mol.el[b] !== "C" && mol.el[b] !== "*", 1);
+      if (deep > 0) hits.push(b);
+    }
+    for (const [b, c] of edges) {
+      if (b === a || c === a) continue;
+      if (segmentMeetsBox(p.get(b)!, p.get(c)!, box)) hits.push(b, c);
+    }
+    if (hits.length) out.set(a, [...new Set(hits)]);
+  }
+  return out;
+}
+
+/**
  * A label's H that runs into another label, an atom or a bond: the bond to
  * its atom turned a little, or drawn a little longer or shorter (an OH, an
  * SH), or the same done to what it runs into - a C=O's O, a small branch -
  * until the H has room beside its symbol. The drawing writes OH or HO as the bond has
- * it; the H is never moved under the symbol to make room. A move that
- * crosses bonds is not taken.
+ * it; the H is never moved under the symbol to make room. A name's letters
+ * (OTBS, NHBz) are given room the same way. A move that crosses bonds is
+ * not taken.
  */
 export function roomForHydrogens(
   mol: Molecule,
@@ -1003,13 +1115,16 @@ export function roomForHydrogens(
       }
       if (hits.length) out.set(a, [...new Set(hits)]);
     }
+    // and each name's letters, likewise
+    for (const [a, hits] of namesInTheWay(mol, piece, p)) out.set(a, [...new Set([...(out.get(a) ?? []), ...hits])]);
     return out;
   };
-  // the small moves of an atom, or of a branch hung from a bond
-  const nudges = (side: number[], from: number, to: number): ((p: Grown) => void)[] => {
+  // the small moves of an atom, or of a branch hung from a bond - larger
+  // for a name, whose letters reach further
+  const nudges = (side: number[], from: number, to: number, wide = false): ((p: Grown) => void)[] => {
     const out: ((p: Grown) => void)[] = [];
     if (fixed(side)) return out;
-    for (const t of [0, 10, -10, 20, -20, 30, -30]) {
+    for (const t of [0, 10, -10, 20, -20, 30, -30, ...(wide ? [45, -45, 60, -60] : [])]) {
       for (const by of [0, -0.15, 0.15, 0.3, 0.45]) {
         if (!t && !by) continue;
         out.push((p) => {
@@ -1027,8 +1142,9 @@ export function roomForHydrogens(
     let better = false;
     for (const [a, hits] of now) {
       const moves: ((p: Grown) => void)[] = [];
-      // its own bond, where it ends there (an OH, an SH, an NH2)
-      if (mol.neighbours[a].length === 1 && mol.systemOf[a] < 0) moves.push(...nudges([a], mol.neighbours[a][0], a));
+      // its own bond, where it ends there (an OH, an SH, an NH2, an OTBS)
+      const named = isName(mol.el[a]);
+      if (mol.neighbours[a].length === 1 && mol.systemOf[a] < 0) moves.push(...nudges([a], mol.neighbours[a][0], a, named));
       // or what it runs into: an end atom (a C=O's O), or a small branch
       // out of the rest at it
       for (const o of hits) {
@@ -1037,7 +1153,7 @@ export function roomForHydrogens(
           const side = sideAtoms(mol, p, o);
           // (not one that carries the H's own atom along with it)
           if (side.length > 12 || side.includes(a)) continue;
-          moves.push(...nudges(side, p, o));
+          moves.push(...nudges(side, p, o, named && side.length === 1));
         }
       }
       let found: Grown | null = null;
@@ -1216,6 +1332,10 @@ export function scorer(
       depth: depths,
       tetra,
       hydrogenRoom,
+      // (names' letters counted lightly while the parts are set - the way
+      // a molecule is turned comes first - and made room for last, with
+      // the H's)
+      ...(hydrogenRoom === 0 ? { nameRoom: NAME_ROOM_FIRST } : {}),
       sugarFaces,
     }).score;
 }

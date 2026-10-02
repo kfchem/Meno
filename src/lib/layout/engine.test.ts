@@ -186,6 +186,32 @@ describe("layout2D", () => {
     expect([0, 3].some((h) => Math.abs(x[6] - x[h]) < 1e-6)).toBe(true);
   });
 
+  it("draws a bicyclo[3.3.1] cage as 9-BBN is drawn: two chairs stood on end, its one-atom bridge on top", () => {
+    // the one-atom bridge 0, the bridgeheads 1 and 5, the bridges 2-3-4 and 8-7-6
+    const twin = carbons(9, [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [1, 8], [8, 7], [7, 6], [6, 5]]);
+    const { x, y, depth } = layout2D(twin);
+    expect(Math.max(...y)).toBeCloseTo(y[0], 6);
+    // the bridgeheads under it, the nearer one the lower
+    const [near, far] = depth[1]! > depth[5]! ? [1, 5] : [5, 1];
+    expect(y[near]).toBeLessThan(y[far]);
+    expect(y[far]).toBeLessThan(y[0]);
+    // the bridges either side, each a chair's foot the lowest of the drawing
+    expect(Math.sign(x[3] - x[0])).toBe(-Math.sign(x[7] - x[0]));
+    expect(Math.min(y[3], y[7])).toBeCloseTo(Math.min(...y), 6);
+    // nothing on anything; the one bond passing behind another drawn broken
+    const m = layoutMetrics({ x, y, edges: twin.bonds.map(({ a, b }) => [a, b] as const), depth });
+    expect(m.overlaps).toBe(0);
+  });
+
+  it("hangs what the one-atom bridge of a bicyclo[3.3.1] cage carries straight up from it", () => {
+    // bicyclo[3.3.1]nonan-9-one
+    const ketone = carbons(10, [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [1, 8], [8, 7], [7, 6], [6, 5], [0, 9, 2]]);
+    const input: LayoutInput = { ...ketone, atoms: ketone.atoms.map((a, i) => (i === 9 ? { el: "O" } : a)) };
+    const { x, y } = layout2D(input);
+    expect(y[9]).toBeGreaterThan(y[0] + 0.9);
+    expect(Math.abs(x[9] - x[0])).toBeLessThan(1e-6);
+  });
+
   it("draws a cage as the solid it is, not its mirror image", () => {
     // camphor: C1 (0) with its methyl (8), the ketone at C2 (1), C4 (3) the
     // other bridgehead, C7 (6) with its two methyls - and each hand of it
@@ -213,6 +239,30 @@ describe("layout2D", () => {
       const to = atoms.map((a) => [x[a] - mid((b) => x[b]), y[a] - mid((b) => y[b]), depth[a]! - mid((b) => depth[b]!)]);
       const cross = (u: number, v: number) => from.reduce((s, p, i) => s + p[u] * to[i][v], 0);
       const M = [0, 1, 2].map((u) => [0, 1, 2].map((v) => cross(u, v)));
+      const det =
+        M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) -
+        M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+        M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+      expect(det).toBeGreaterThan(0);
+    }
+  });
+
+  it("draws a bicyclo[3.3.1] cage as the solid it is, not its mirror image", () => {
+    // 2-methylbicyclo[3.3.1]nonane, each hand of it: the methyl (9) on 2
+    for (const volume of [1, -1] as const) {
+      const skeleton = carbons(10, [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [1, 8], [8, 7], [7, 6], [6, 5], [2, 9]]);
+      const input: LayoutInput = {
+        ...skeleton,
+        atoms: skeleton.atoms.map((a, i) => (i === 2 ? { el: "C", tetra: { neighbours: [1, 3, 9, -1], volume } } : a)),
+      };
+      const mol = perceive(input);
+      const solid = solidOf(mol, mol.systems[0]);
+      const { x, y, depth } = layout2D(input);
+      const atoms = mol.systems[0].atoms;
+      const mid = (f: (a: number) => number) => atoms.reduce((s, a) => s + f(a), 0) / atoms.length;
+      const from = atoms.map((a) => [0, 1, 2].map((k) => solid.get(a)![k] - mid((b) => solid.get(b)![k])));
+      const to = atoms.map((a) => [x[a] - mid((b) => x[b]), y[a] - mid((b) => y[b]), depth[a]! - mid((b) => depth[b]!)]);
+      const M = [0, 1, 2].map((u) => [0, 1, 2].map((v) => from.reduce((s, p, i) => s + p[u] * to[i][v], 0)));
       const det =
         M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) -
         M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +

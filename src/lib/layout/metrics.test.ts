@@ -247,6 +247,47 @@ describe("how a drawing sits", () => {
     expect(at(2)).toBeGreaterThan(0);
   });
 
+  it("counts an atom of something else inside a small ring drawn flat, in a complex, as an overlap", () => {
+    // a cyclohexyl (0-5) on a palladium (6) with a chlorine (7) on it:
+    // outside, then dropped inside the ring
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    const at = (cx: number, cy: number, metal = "Pd") =>
+      layoutMetrics({
+        x: [...h.x, 3, cx],
+        y: [...h.y, 0, cy],
+        edges: [...h.edges, [0, 6], [6, 7]] as [number, number][],
+        elements: ["C", "C", "C", "C", "C", "C", metal, "Cl"],
+        labelled: [false, false, false, false, false, false, true, true],
+      }).overlaps;
+    expect(at(4, 0)).toBe(0);
+    expect(at(0, 0)).toBe(1);
+    // (not in a molecule with no metal, which is drawn well without it)
+    expect(at(0, 0, "Si")).toBe(0);
+  });
+
+  it("counts a name's letters running into an atom, read outward from a bond coming in from the right", () => {
+    // OTBS (0) on a carbon (1), and a carbon (2) 1.2 bonds from it on the
+    // side its letters run to, or the other side
+    const crowding = (from: number, other: number, nameRoom?: number) =>
+      layoutMetrics({
+        x: [0, from, other],
+        y: [0, -0.8, 0],
+        edges: [[0, 1]],
+        elements: ["OTBS", "C", "C"],
+        labelled: [true, false, false],
+        hydrogens: [0, 0, 0],
+        ...(nameRoom != null ? { nameRoom } : {}),
+      }).crowdedLabels;
+    // its bond from the left: OTBS, rightward
+    expect(crowding(-0.6, 1.2)).toBe(1);
+    expect(crowding(-0.6, -1.2)).toBe(0);
+    // from the right: TBSO, leftward
+    expect(crowding(0.6, -1.2)).toBe(1);
+    expect(crowding(0.6, 1.2)).toBe(0);
+    // (not counted while a layout sets its parts)
+    expect(crowding(-0.6, 1.2, 0)).toBe(0);
+  });
+
   it("adds up its parts to the score", () => {
     const m = layoutMetrics(turned(zigzag(8), 20));
     const sum = Object.values(scoreParts(m)).reduce((a, b) => a + b, 0);

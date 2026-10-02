@@ -280,6 +280,10 @@ export function projectCage(mol: Molecule, sys: RingSystem): CageView {
   // mirror image: the one whose stereocentres are as given is taken
   if (handedness(mol, atoms, index, X) < 0) X = X.map(([x, y, z]) => [x, y, -z] as Vec3);
 
+  // a bicyclo[3.3.1] cage as 9-BBN is drawn: its two chairs stood on end
+  const twin = twinChairs(mol, sys, X, index, bonds);
+  if (twin) return twin;
+
   // the way it is drawn in textbooks, where it has a six-membered ring to
   // draw that on
   const drawn = textbook(mol, sys, X, index, bonds);
@@ -614,6 +618,109 @@ function textbook(
     return { pos, depth, hints: f.hints, cost: f.cost };
   };
   return { ...view(found[0]), other: found[1] ? view(found[1]) : undefined };
+}
+
+/**
+ * A bicyclo[3.3.1] cage - two six-membered rings sharing three atoms -
+ * where each atom goes, as 9-BBN is drawn: its two chairs stood on end,
+ * back to back. The one-atom bridge is their shared top; the bridgeheads
+ * are under it, the front one the lower and a little to the left of the
+ * back one, so that the bonds up to the top stay apart; each three-atom
+ * bridge is a chair's lower half to one side, its middle atom the foot.
+ * A bond toward the viewer comes out longer, as in a perspective drawing.
+ * One side's bridge is given, from the front bridgehead round to the back
+ * one; the other side's is its mirror image. How near each is (`z`): the
+ * front bridgehead and the atom next to it on each side a bond's breadth
+ * nearer than the top and the feet, the back ones as much further.
+ */
+const TWIN = {
+  top: { x: 0, y: 1.2, z: 0 },
+  back: { x: 0.16, y: 0.45, z: -0.8 },
+  front: { x: -0.12, y: -0.1, z: 0.8 },
+  side: [
+    { x: 0.88, y: -0.35, z: 0.8 },
+    { x: 1.08, y: -1.25, z: 0 },
+    { x: 0.98, y: 0.2, z: -0.8 },
+  ],
+};
+
+/**
+ * A bicyclo[3.3.1] cage - 9-BBN, bicyclo[3.3.1]nonan-9-one, bispidine -
+ * drawn by TWIN, its one-atom bridge on top, where what hangs from that
+ * has room: seen with either bridgehead in front, the way round that is
+ * the solid and not its mirror image, the other kept for a frame set down
+ * mirrored. Null for any other system.
+ */
+function twinChairs(
+  mol: Molecule,
+  sys: RingSystem,
+  X: Vec3[],
+  index: Map<number, number>,
+  bonds: [number, number][],
+): CageView | null {
+  if (sys.rings.length !== 2) return null;
+  const [r1, r2] = sys.rings.map((i) => mol.rings[i]);
+  if (r1.length !== 6 || r2.length !== 6) return null;
+  const shared = r1.filter((a) => r2.includes(a));
+  const ends = shared.filter((a) => mol.neighbours[a].filter((b) => shared.includes(b)).length === 1);
+  const top = shared.find((a) => !ends.includes(a));
+  if (shared.length !== 3 || ends.length !== 2 || top == null) return null;
+  // each three-atom bridge, from the first bridgehead round to the second
+  const bridge = (r: number[]) => {
+    const i = r.indexOf(ends[0]);
+    const step = r[(i + 1) % 6] === top ? -1 : 1;
+    return [1, 2, 3].map((k) => r[(i + step * k + 6) % 6]);
+  };
+  const bridges = [bridge(r1), bridge(r2)];
+  const at = (a: number) => X[index.get(a)!];
+  const atoms = sys.atoms;
+  const views: Omit<CageView, "other">[] = [];
+  for (const f of [0, 1]) {
+    const front = ends[f];
+    const back = ends[1 - f];
+    for (const right of [0, 1]) {
+      const place = new Map<number, Point & { z: number }>([
+        [top, TWIN.top],
+        [front, TWIN.front],
+        [back, TWIN.back],
+      ]);
+      bridges.forEach((b, k) => {
+        const run = f === 0 ? b : [...b].reverse();
+        const sign = k === right ? 1 : -1;
+        run.forEach((a, j) => place.set(a, { ...TWIN.side[j], x: sign * TWIN.side[j].x }));
+      });
+      // the page's axes in the solid, and toward the viewer: the front
+      // bridgehead nearer, or this is the mirror image
+      const fit = affineFit(atoms.map(at), atoms.map((a) => place.get(a)!));
+      const lx: Vec3 = [fit.x[0], fit.x[1], fit.x[2]];
+      const ly: Vec3 = [fit.y[0], fit.y[1], fit.y[2]];
+      const view = normalise(crossV(lx, ly));
+      if (dotV(subV(at(front), at(back)), view) <= 0) continue;
+      const sx = normalise(lx);
+      const sy = normalise(ly);
+      const pos = new Map(atoms.map((a) => [a, { x: place.get(a)!.x, y: place.get(a)!.y }] as [number, Point]));
+      const depth = new Map(atoms.map((a) => [a, place.get(a)!.z] as [number, number]));
+      // the bonds out, as the solid has them seen this way; the top's
+      // straight up, out of the cage
+      const hints = new Map<number, Map<number, Point>>();
+      atoms.forEach((a, i) => {
+        const out = mol.neighbours[a].filter((b) => !index.has(b));
+        if (!out.length) return;
+        const dirs = outward(mol, a, i, X, index, out);
+        const m = new Map<number, Point>();
+        out.forEach((b, k) => {
+          let d = { x: dotV(dirs[k], sx), y: dotV(dirs[k], sy) };
+          if (a === top) d = out.length === 1 ? { x: 0, y: 1 } : { x: k ? 0.5 : -0.5, y: 0.87 };
+          const l = Math.hypot(d.x, d.y) || 1;
+          m.set(b, { x: pos.get(a)!.x + d.x / l, y: pos.get(a)!.y + d.y / l });
+        });
+        hints.set(a, m);
+      });
+      views.push({ pos, depth, hints, cost: viewCost(atoms.map((a) => pos.get(a)!), bonds, 0.45, 0.2, atoms.map((a) => depth.get(a)!)) });
+    }
+  }
+  if (!views.length) return null;
+  return { ...views[0], other: views[1] };
 }
 
 /**

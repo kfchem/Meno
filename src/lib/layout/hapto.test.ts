@@ -108,9 +108,20 @@ describe("a ring bound face-on to a metal", () => {
     const [star] = find(ru, "*");
     expect(ru.atoms[star].y).toBeGreaterThan(ru.atoms[m].y);
     for (const leg of [...find(ru, "P"), ...find(ru, "Cl")]) expect(ru.atoms[leg].y).toBeLessThan(ru.atoms[m].y + 1e-6);
-    // what hangs from the ring lies in its plane: Cp*'s methyls foreshortened with it
-    const methyls = ru.bonds.filter((b) => ru.atoms[b.a1].el === "C" && ru.atoms[b.a2].el === "C" && ru.atoms[b.a2].z != null && !ru.haptic![0].atoms.includes(b.a2));
-    expect(methyls.length).toBeGreaterThan(0);
+    // what hangs from the ring points out from it: each of Cp*'s methyls
+    // away from the star
+    const ring = ru.haptic![0].atoms;
+    const c = at(ru, star);
+    const methyls = ru.bonds.flatMap((b) => {
+      const [r, m] = ring.includes(b.a1) ? [b.a1, b.a2] : [b.a2, b.a1];
+      return ring.includes(r) && !ring.includes(m) && ru.atoms[m].el === "C" ? [[r, m]] : [];
+    });
+    expect(methyls).toHaveLength(5);
+    for (const [r, m] of methyls) {
+      const u = { x: ru.atoms[r].x - c.x, y: ru.atoms[r].y - c.y };
+      const v = { x: ru.atoms[m].x - ru.atoms[r].x, y: ru.atoms[m].y - ru.atoms[r].y };
+      expect(u.x * v.x + u.y * v.y).toBeGreaterThan(0);
+    }
   });
 
   it("is drawn alone face-on to a star where the ligand is a label's picture", () => {
@@ -181,6 +192,30 @@ describe("a ring bound to a metal through two of its C=C (cod)", () => {
   });
 });
 
+describe("two metals bridged by two atoms", () => {
+  it("lie level, their bridges above and below between them, each one's ligands outside", () => {
+    for (const label of ["[Ir(cod)Cl]2", "[RhCl(cod)]2", "[RuCl2(p-cymene)]2", "[Cp*RhCl2]2"]) {
+      const s = laid(label);
+      const metals = s.atoms.flatMap((a, i) => (["Ir", "Rh", "Ru"].includes(a.el) ? [i] : []));
+      expect(metals, label).toHaveLength(2);
+      const [m1, m2] = metals.sort((p, q) => s.atoms[p].x - s.atoms[q].x);
+      expect(s.atoms[m1].y, label).toBeCloseTo(s.atoms[m2].y, 6);
+      // the bridging atoms: one above the line through the metals, one below, between them
+      const bound = (a: number) => s.bonds.filter((b) => b.a1 === a || b.a2 === a).map((b) => (b.a1 === a ? b.a2 : b.a1));
+      const bridges = s.atoms.flatMap((_, i) => (bound(i).includes(m1) && bound(i).includes(m2) ? [i] : []));
+      expect(bridges, label).toHaveLength(2);
+      const ys = bridges.map((b) => s.atoms[b].y - s.atoms[m1].y).sort((p, q) => p - q);
+      expect(ys[0] < 0 && ys[1] > 0, label).toBe(true);
+      for (const b of bridges) expect(s.atoms[b].x > s.atoms[m1].x && s.atoms[b].x < s.atoms[m2].x, label).toBe(true);
+      // what else each metal carries on its own side
+      const middle = (s.atoms[m1].x + s.atoms[m2].x) / 2;
+      for (const [m, side] of [[m1, -1], [m2, 1]] as const) {
+        for (const l of bound(m).filter((a) => !bridges.includes(a))) expect(Math.sign(s.atoms[l].x - middle), label).toBe(side);
+      }
+    }
+  });
+});
+
 describe("a structure with no metal", () => {
   it("has nothing drawn bold, and no depth outside a cage", () => {
     const out = layout2D({
@@ -198,3 +233,19 @@ describe("a structure with no metal", () => {
     expect(out.depth.every((d) => d == null)).toBe(true);
   });
 });
+
+describe("a transition metal bridged to a main-group metal", () => {
+  it("draws the Tebbe reagent as its four-membered ring: Cp2Ti on the left, its rings apart, AlMe2 on the right", () => {
+    const s = laid("Tebbe reagent");
+    const [ti] = find(s, "Ti");
+    const [al] = find(s, "Al");
+    expect(at(s, ti).x).toBeLessThan(at(s, al).x);
+    expect(Math.abs(at(s, ti).y - at(s, al).y)).toBeLessThan(0.05);
+    // the two rings' centres well apart, both on titanium's side
+    const stars = find(s, "*");
+    expect(stars).toHaveLength(2);
+    expect(dist(s, stars[0], stars[1])).toBeGreaterThan(1.2);
+    for (const c of stars) expect(at(s, c).x).toBeLessThan(at(s, ti).x);
+  });
+});
+

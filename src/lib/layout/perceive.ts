@@ -115,8 +115,23 @@ export type DieneRing = {
   system: number;
 };
 
-/** A metal and the rings bound face-on to it - or by two C=C each - drawn as one system. */
-export type MetalUnit = { metal: number; eta: EtaRing[]; dienes: DieneRing[]; system: number };
+/**
+ * A metal and the rings bound face-on to it - or by two C=C each - drawn as
+ * one system. Or two metals bridged by two atoms ([Rh(cod)Cl]2's chlorides),
+ * their four-membered ring and each one's rings: `metal` the first, `pair`
+ * the second and the bridging atoms. Or six metals in contact as an
+ * octahedron (Stryker's reagent's Cu6), `cluster` its corners - `metal`
+ * the first - and the atoms bridging its edges.
+ */
+export type MetalUnit = {
+  metal: number;
+  eta: EtaRing[];
+  dienes: DieneRing[];
+  system: number;
+  pair?: { metal: number; bridges: [number, number] };
+  /** (`up`: which way is up as the cluster is seen, from the metals below its middle to those above - set when it is laid out) */
+  cluster?: { metals: number[]; bridges: number[]; up?: { from: number[]; to: number[] } };
+};
 
 export const key = (a: number, b: number): string => (a < b ? `${a},${b}` : `${b},${a}`);
 
@@ -198,8 +213,46 @@ export function perceive(input: LayoutInput): Molecule {
     dienes.push({ ...d, atoms: systems[system].atoms, system });
   }
   // and a metal in no ring with its rings bound face-on, or by two C=C:
-  // one system
+  // one system; two metals bridged by two atoms, a ring of the four and
+  // nothing else, the same with each one's rings
   const units: MetalUnit[] = [];
+  systems.forEach((sys, i) => {
+    if (sys.rings.length !== 1 || sys.atoms.length !== 4) return;
+    const r = rings[sys.rings[0]];
+    // (a main-group metal bridged to one - the Tebbe reagent's aluminium -
+    // as much as a second of them)
+    const metal = (a: number) => isMetal(input.atoms[a].el) || BRIDGED_TO.has(input.atoms[a].el);
+    const k = metal(r[0]) && metal(r[2]) ? 0 : 1;
+    if (!metal(r[k]) || !metal(r[k + 2]) || metal(r[k + 1]) || metal(r[(k + 3) % 4])) return;
+    if (!isMetal(input.atoms[r[k]].el) && !isMetal(input.atoms[r[k + 2]].el)) return;
+    // (the transition metal first)
+    const [m1, m2] = isMetal(input.atoms[r[k]].el) ? [r[k], r[k + 2]] : [r[k + 2], r[k]];
+    const own = eta.filter((e) => e.metal === m1 || e.metal === m2);
+    const tubs = dienes.filter((d) => d.metal === m1 || d.metal === m2);
+    const parts = [...own, ...tubs];
+    const merged = { atoms: [...r, ...parts.flatMap((e) => e.atoms)], rings: [...sys.rings, ...parts.flatMap((e) => systems[e.system].rings)] };
+    const index = systems.length;
+    systems.push(merged);
+    systems[i] = { atoms: [], rings: [] };
+    for (const e of parts) {
+      systems[e.system] = { atoms: [], rings: [] };
+      e.system = index;
+    }
+    for (const a of merged.atoms) systemOf[a] = index;
+    units.push({ metal: m1, eta: own, dienes: tubs, system: index, pair: { metal: m2, bridges: [r[k + 1], r[(k + 3) % 4]] } });
+  });
+  // six metals each in contact with four of the others - an octahedron -
+  // and atoms each bridging two of them, nothing else in their system
+  systems.forEach((sys, i) => {
+    const metals = sys.atoms.filter((a) => isMetal(input.atoms[a].el));
+    if (metals.length !== 6) return;
+    const inSys = new Set(sys.atoms);
+    const corners = metals.every((m) => neighbours[m].filter((b) => metals.includes(b)).length === 4);
+    const bridges = sys.atoms.filter((a) => !metals.includes(a));
+    const bridging = bridges.every((b) => neighbours[b].filter((x) => inSys.has(x)).every((x) => metals.includes(x)));
+    if (!corners || !bridging) return;
+    units.push({ metal: metals[0], eta: [], dienes: [], system: i, cluster: { metals, bridges } });
+  });
   for (let m = 0; m < n; m++) {
     const own = eta.filter((e) => e.metal === m);
     const tubs = dienes.filter((d) => d.metal === m);
@@ -294,6 +347,9 @@ export const METAL_BOND = 1.4;
 const METALS = new Set(
   "Sc Ti V Cr Mn Fe Co Ni Cu Zn Y Zr Nb Mo Tc Ru Rh Pd Ag Cd Hf Ta W Re Os Ir Pt Au Hg La Ce Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split(" "),
 );
+
+/** Main-group metals bridged to a transition metal by two atoms as a second one is (Cp2Ti(μ-Cl)(μ-CH2)AlMe2). */
+const BRIDGED_TO = new Set(["Li", "Na", "K", "Mg", "Ca", "Zn", "Al", "Ga", "In"]);
 
 /** Whether an atom is a metal's: one ligands are drawn round (docs/LAYOUT-2D.md, section 7). */
 export function isMetal(el: string): boolean {

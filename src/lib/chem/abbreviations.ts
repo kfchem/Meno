@@ -37,6 +37,13 @@ export type Abbreviation = {
   /** In IUPAC's Table II: may be used without explanation. */
   free?: boolean;
   /**
+   * Put on to protect a site, or to make it leave or react, and taken off
+   * again - a protecting group, an activating or leaving group (TBS, Boc,
+   * Ts, Tf, Bpin, OSu): written by its name by Clean-up wherever it does
+   * that work, as chemists write it (./contract).
+   */
+  role?: "protecting";
+  /**
    * A ligand (./ligands), a complex's formula, or a whole molecule - a
    * reagent (./reagents), or a simple formula read by rule (./condensed) -
    * rather than a group: its structure is made, not read from `smiles`.
@@ -44,8 +51,13 @@ export type Abbreviation = {
   kind?: "ligand" | "complex" | "reagent";
 };
 
+/** These groups, each a protecting, activating or leaving group (`role`). */
+function protecting(groups: Abbreviation[]): Abbreviation[] {
+  return groups.map((g) => ({ ...g, role: "protecting" as const }));
+}
+
 /** Groups attached by one bond. */
-const GROUPS: Abbreviation[] = [
+export const GROUPS: Abbreviation[] = [
   { label: "Me", smiles: "*C", name: "methyl", free: true },
   { label: "Et", smiles: "*CC", name: "ethyl", free: true },
   { label: "Pr", also: ["n-Pr", "nPr"], smiles: "*CCC", name: "propyl", free: true },
@@ -56,39 +68,40 @@ const GROUPS: Abbreviation[] = [
   { label: "t-Bu", also: ["tBu", "tert-Bu"], smiles: "*C(C)(C)C", name: "tert-butyl", free: true },
   { label: "Ac", smiles: "*C(C)=O", name: "acetyl", free: true },
   { label: "Ph", also: ["C6H5"], smiles: "*c1ccccc1", name: "phenyl", free: true },
-  { label: "Ms", smiles: "*S(=O)(=O)C", name: "methanesulfonyl (mesyl)", free: true },
-  { label: "Ts", also: ["p-Ts", "Tos"], smiles: "*S(=O)(=O)c1ccc(C)cc1", name: "4-toluenesulfonyl (tosyl)", free: true },
+  { label: "Ms", smiles: "*S(=O)(=O)C", name: "methanesulfonyl (mesyl)", free: true, role: "protecting" },
+  { label: "Ts", also: ["p-Ts", "Tos"], smiles: "*S(=O)(=O)c1ccc(C)cc1", name: "4-toluenesulfonyl (tosyl)", free: true, role: "protecting" },
   // (IUPAC: only where it is bonded to a metal - and so never behind O, S or NH here)
   { label: "Cp", smiles: "*C1C=CC=C1", name: "cyclopentadienyl", free: true },
   { label: "Bn", also: ["Bzl"], smiles: "*Cc1ccccc1", name: "benzyl" },
   // (IUPAC discourages Bz, once used for benzyl too; it is benzoyl here)
   { label: "Bz", smiles: "*C(=O)c1ccccc1", name: "benzoyl" },
   { label: "Piv", also: ["Pv"], smiles: "*C(=O)C(C)(C)C", name: "pivaloyl" },
-  { label: "Boc", smiles: "*C(=O)OC(C)(C)C", name: "tert-butoxycarbonyl" },
-  { label: "Cbz", also: ["Z"], smiles: "*C(=O)OCc1ccccc1", name: "benzyloxycarbonyl" },
-  { label: "Fmoc", smiles: "*C(=O)OCC1c2ccccc2-c2ccccc21", name: "9-fluorenylmethoxycarbonyl" },
-  { label: "Alloc", also: ["Aloc"], smiles: "*C(=O)OCC=C", name: "allyloxycarbonyl" },
-  { label: "Troc", smiles: "*C(=O)OCC(Cl)(Cl)Cl", name: "2,2,2-trichloroethoxycarbonyl" },
-  { label: "Teoc", smiles: "*C(=O)OCC[Si](C)(C)C", name: "2-(trimethylsilyl)ethoxycarbonyl" },
-  { label: "Tf", smiles: "*S(=O)(=O)C(F)(F)F", name: "trifluoromethanesulfonyl (triflyl)" },
-  { label: "Ns", smiles: "*S(=O)(=O)c1ccccc1[N+](=O)[O-]", name: "2-nitrobenzenesulfonyl (nosyl)" },
-  { label: "TMS", smiles: "*[Si](C)(C)C", name: "trimethylsilyl" },
-  { label: "TES", smiles: "*[Si](CC)(CC)CC", name: "triethylsilyl" },
-  { label: "TBS", also: ["TBDMS"], smiles: "*[Si](C)(C)C(C)(C)C", name: "tert-butyldimethylsilyl" },
-  { label: "TIPS", smiles: "*[Si](C(C)C)(C(C)C)C(C)C", name: "triisopropylsilyl" },
-  { label: "TBDPS", smiles: "*[Si](c1ccccc1)(c1ccccc1)C(C)(C)C", name: "tert-butyldiphenylsilyl" },
-  { label: "PMB", also: ["MPM", "Mob"], smiles: "*Cc1ccc(OC)cc1", name: "4-methoxybenzyl" },
-  { label: "MOM", smiles: "*COC", name: "methoxymethyl" },
-  { label: "MEM", smiles: "*COCCOC", name: "(2-methoxyethoxy)methyl" },
-  { label: "SEM", smiles: "*COCC[Si](C)(C)C", name: "[2-(trimethylsilyl)ethoxy]methyl" },
-  { label: "THP", smiles: "*C1CCCCO1", name: "tetrahydropyran-2-yl" },
-  { label: "Tr", also: ["Trt"], smiles: "*C(c1ccccc1)(c1ccccc1)c1ccccc1", name: "triphenylmethyl (trityl)" },
+  { label: "Boc", smiles: "*C(=O)OC(C)(C)C", name: "tert-butoxycarbonyl", role: "protecting" },
+  { label: "Cbz", also: ["Z"], smiles: "*C(=O)OCc1ccccc1", name: "benzyloxycarbonyl", role: "protecting" },
+  { label: "Fmoc", smiles: "*C(=O)OCC1c2ccccc2-c2ccccc21", name: "9-fluorenylmethoxycarbonyl", role: "protecting" },
+  { label: "Alloc", also: ["Aloc"], smiles: "*C(=O)OCC=C", name: "allyloxycarbonyl", role: "protecting" },
+  { label: "Troc", smiles: "*C(=O)OCC(Cl)(Cl)Cl", name: "2,2,2-trichloroethoxycarbonyl", role: "protecting" },
+  { label: "Teoc", smiles: "*C(=O)OCC[Si](C)(C)C", name: "2-(trimethylsilyl)ethoxycarbonyl", role: "protecting" },
+  { label: "Tf", smiles: "*S(=O)(=O)C(F)(F)F", name: "trifluoromethanesulfonyl (triflyl)", role: "protecting" },
+  { label: "Ns", smiles: "*S(=O)(=O)c1ccccc1[N+](=O)[O-]", name: "2-nitrobenzenesulfonyl (nosyl)", role: "protecting" },
+  { label: "TMS", smiles: "*[Si](C)(C)C", name: "trimethylsilyl", role: "protecting" },
+  { label: "TES", smiles: "*[Si](CC)(CC)CC", name: "triethylsilyl", role: "protecting" },
+  { label: "TBS", also: ["TBDMS"], smiles: "*[Si](C)(C)C(C)(C)C", name: "tert-butyldimethylsilyl", role: "protecting" },
+  { label: "TIPS", smiles: "*[Si](C(C)C)(C(C)C)C(C)C", name: "triisopropylsilyl", role: "protecting" },
+  { label: "TBDPS", smiles: "*[Si](c1ccccc1)(c1ccccc1)C(C)(C)C", name: "tert-butyldiphenylsilyl", role: "protecting" },
+  { label: "PMB", also: ["MPM", "Mob"], smiles: "*Cc1ccc(OC)cc1", name: "4-methoxybenzyl", role: "protecting" },
+  { label: "MOM", smiles: "*COC", name: "methoxymethyl", role: "protecting" },
+  { label: "MEM", smiles: "*COCCOC", name: "(2-methoxyethoxy)methyl", role: "protecting" },
+  { label: "SEM", smiles: "*COCC[Si](C)(C)C", name: "[2-(trimethylsilyl)ethoxy]methyl", role: "protecting" },
+  { label: "THP", smiles: "*C1CCCCO1", name: "tetrahydropyran-2-yl", role: "protecting" },
+  { label: "Tr", also: ["Trt"], smiles: "*C(c1ccccc1)(c1ccccc1)c1ccccc1", name: "triphenylmethyl (trityl)", role: "protecting" },
   { label: "Cy", smiles: "*C1CCCCC1", name: "cyclohexyl" },
   { label: "Mes", smiles: "*c1c(C)cc(C)cc1C", name: "2,4,6-trimethylphenyl (mesityl)" },
   { label: "Tol", also: ["p-Tol"], smiles: "*c1ccc(C)cc1", name: "4-methylphenyl (p-tolyl)" },
-  { label: "Bpin", smiles: "*B1OC(C)(C)C(C)(C)O1", name: "pinacolatoboryl" },
+  { label: "Bpin", smiles: "*B1OC(C)(C)C(C)(C)O1", name: "pinacolatoboryl", role: "protecting" },
 
   // --- in peptide synthesis -------------------------------------------------
+  ...protecting([
   { label: "Pbf", smiles: "*S(=O)(=O)c1c(C)c(C)c2OC(C)(C)Cc2c1C", name: "2,2,4,6,7-pentamethyl-2,3-dihydrobenzofuran-5-sulfonyl" },
   { label: "Pmc", smiles: "*S(=O)(=O)c1c(C)c(C)c2OC(C)(C)CCc2c1C", name: "2,2,5,7,8-pentamethylchroman-6-sulfonyl" },
   { label: "Mtr", smiles: "*S(=O)(=O)c1c(C)c(C)c(OC)cc1C", name: "4-methoxy-2,3,6-trimethylbenzenesulfonyl" },
@@ -126,8 +139,10 @@ const GROUPS: Abbreviation[] = [
   // (in Kekulé form: the triazole's ring, given aromatic, is not kekulized the way it is bonded)
   { label: "Bt", smiles: "*N1N=NC2=C1C=CC=C2", name: "benzotriazol-1-yl" },
   { label: "At", smiles: "*N1N=NC2=C1N=CC=C2", name: "7-azabenzotriazol-1-yl" },
+  ]),
 
   // --- other protecting groups ---------------------------------------------
+  ...protecting([
   { label: "NAP", smiles: "*Cc1ccc2ccccc2c1", name: "2-naphthylmethyl" },
   { label: "DMPM", smiles: "*Cc1ccc(OC)c(OC)c1", name: "3,4-dimethoxybenzyl" },
   { label: "PMP", smiles: "*c1ccc(OC)cc1", name: "4-methoxyphenyl" },
@@ -141,6 +156,7 @@ const GROUPS: Abbreviation[] = [
   { label: "p-Ns", smiles: "*S(=O)(=O)c1ccc([N+](=O)[O-])cc1", name: "4-nitrobenzenesulfonyl" },
   { label: "Ses", smiles: "*S(=O)(=O)CC[Si](C)(C)C", name: "2-(trimethylsilyl)ethanesulfonyl" },
   { label: "Tces", smiles: "*S(=O)(=O)OCC(Cl)(Cl)Cl", name: "2,2,2-trichloroethoxysulfonyl" },
+  ]),
 
   // --- substituents ---------------------------------------------------------
   { label: "All", also: ["allyl"], smiles: "*CC=C", name: "allyl" },
@@ -295,10 +311,96 @@ function moleculeOf(label: string): GroupStructure | null {
   return s && { ...s, attach: [] };
 }
 
-/** A group put together by rule - a substituted aryl group, a group behind O, S or NH, an ester - or none. */
+/**
+ * Atoms that take as many of one group as fill their valence but the bond
+ * out (PPh2, PCy2, NBn2): each one's valence, and the word its group's name
+ * ends in.
+ */
+const CARRIERS: Record<string, { valence: number; word: string }> = {
+  B: { valence: 3, word: "boranyl" },
+  N: { valence: 3, word: "amino" },
+  P: { valence: 3, word: "phosphanyl" },
+  As: { valence: 3, word: "arsanyl" },
+  Si: { valence: 4, word: "silyl" },
+  Ge: { valence: 4, word: "germyl" },
+  Sn: { valence: 4, word: "stannyl" },
+};
+
+/**
+ * Atoms that carry halogens as a group, by the valence each is read at -
+ * its bond out, its H and its halogens - and what the group is called after
+ * it: CF3 trifluoromethyl, SiCl3 trichlorosilyl, SF5 pentafluoro-λ6-sulfanyl.
+ */
+const HALIDED: Record<string, Record<number, string>> = {
+  C: { 4: "methyl" },
+  Si: { 4: "silyl" },
+  Ge: { 4: "germyl" },
+  Sn: { 4: "stannyl" },
+  B: { 3: "boranyl" },
+  N: { 3: "amino" },
+  P: { 3: "phosphanyl", 5: "λ5-phosphanyl" },
+  S: { 4: "λ4-sulfanyl", 6: "λ6-sulfanyl" },
+  Se: { 4: "λ4-selanyl", 6: "λ6-selanyl" },
+  I: { 3: "λ3-iodanyl", 5: "λ5-iodanyl" },
+};
+const HALO_WORD: Record<string, string> = { F: "fluoro", Cl: "chloro", Br: "bromo", I: "iodo" };
+const TIMES = ["", "", "di", "tri", "tetra", "penta", "hexa", "hepta"];
+
+/**
+ * An atom and the halogens on it, two or more - CF3, CHF2, CF2Cl, SF5,
+ * SiCl3 - its H after it, then each halogen and its count; or none, where
+ * the bond out, the H and the halogens make no valence the atom has (PCl3
+ * and SiCl4 are molecules).
+ */
+function halidedGroupOf(label: string): Abbreviation | undefined {
+  const m = /^([A-Z][a-z]?)(?:H(\d*))?((?:(?:F|Cl|Br|I)\d*)+)$/.exec(label);
+  const parents = m && HALIDED[m[1]];
+  if (!m || !parents) return undefined;
+  const hs = m[2] == null ? 0 : m[2] === "" ? 1 : Number(m[2]);
+  const counts = new Map<string, number>();
+  for (const [, x, n] of m[3].matchAll(/(F|Cl|Br|I)(\d*)/g)) counts.set(x, (counts.get(x) ?? 0) + (n ? Number(n) : 1));
+  const halogens = [...counts.values()].reduce((t, n) => t + n, 0);
+  const parent = parents[1 + hs + halogens];
+  if (halogens < 2 || !parent || [...counts.values()].some((n) => n >= TIMES.length)) return undefined;
+  const smiles = `*[${m[1]}${hs ? `H${hs > 1 ? hs : ""}` : ""}]` + [...counts].map(([x, n]) => `(${x})`.repeat(n)).join("");
+  // (the halogens' prefixes in the order of their names, multiplied)
+  const prefix = [...counts]
+    .sort(([a], [b]) => HALO_WORD[a].localeCompare(HALO_WORD[b]))
+    .map(([x, n]) => TIMES[n] + HALO_WORD[x])
+    .join("");
+  return { label, smiles, name: parent.startsWith("λ") ? `${prefix}-${parent}` : prefix + parent };
+}
+
+/** An atom and as many of one group as fill its valence but its bond out - PPh2, PCy2, NBn2 - or none. */
+function carriedGroupOf(label: string): Abbreviation | undefined {
+  const m = /^([A-Z][a-z]?)(.+?)([2-3])$/.exec(label);
+  const carrier = m && CARRIERS[m[1]];
+  if (!m || !carrier || carrier.valence - 1 !== Number(m[3])) return undefined;
+  const g = BY_LABEL.get(m[2]) ?? custom.get(m[2]);
+  if (!g || g.kind || !g.smiles.startsWith("*") || g.label === "Cp" || CONTRACTED.includes(g)) return undefined;
+  const n = Number(m[3]);
+  const name = g.name.replace(/ \(.*\)$/, "");
+  // (di- and tri- before a plain name, di-tert-butyl; bis() and tris() round any other)
+  const times = /^[a-z]+$/.test(name)
+    ? (n === 2 ? "di" : "tri") + name
+    : /^(tert|sec)-(butyl|pentyl)$/.test(name)
+      ? (n === 2 ? "di-" : "tri-") + name
+      : `${n === 2 ? "bis" : "tris"}(${name})`;
+  return {
+    label: m[1] + g.label + m[3],
+    smiles: `*[${m[1]}]` + `(${g.smiles.slice(1)})`.repeat(n),
+    name: times + carrier.word,
+  };
+}
+
+/** A group put together by rule - a substituted aryl group, a group behind O, S or NH, an ester, an atom and the groups or halogens on it - or none. */
 function composedGroupOf(label: string): Abbreviation | undefined {
   const aryl = substitutedAryl(label);
   if (aryl) return { label, smiles: aryl.smiles, name: aryl.name };
+  const carried = carriedGroupOf(label);
+  if (carried) return carried;
+  const halided = halidedGroupOf(label);
+  if (halided) return halided;
   for (const c of COMPOSED) {
     if (!label.startsWith(c.prefix) || label.length === c.prefix.length) continue;
     const rest = label.slice(c.prefix.length);

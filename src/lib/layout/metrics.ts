@@ -7,6 +7,7 @@
  * so the scale it was drawn at does not matter.
  */
 import { drawnVolume } from "./geometry";
+import { atomDepth, boxesDepth, namesLaid, segmentMeetsBox } from "./names";
 import { isMetal, METAL_BOND } from "./perceive";
 import { smallestRings, type Edge } from "./rings";
 
@@ -57,6 +58,12 @@ export type Geometry = {
    * as much as labels on each other.
    */
   hydrogenRoom?: number;
+  /**
+   * What a name's letters running into something count for (OTBS over an
+   * atom), in crowdings: one unless given. A layout sets its parts first,
+   * counting them lightly, and makes room for them last, with its H's.
+   */
+  nameRoom?: number;
   /**
    * Whether a sugar hung on a macrolide counts as seen from the wrong face
    * (it does unless this is false): a layout sets the aglycone first, not
@@ -377,10 +384,12 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   };
   // (a bond to a drawn H is drawn short, by choice: it is left out; a
   // metal's to a ligand is drawn long, and measured against that - but in a
-  // chelate's ring, which is drawn regular - section 7)
+  // chelate's ring, which is drawn regular; not in a ring through two
+  // metals, their bridges', drawn with a metal's bonds - section 7)
   const isH = (a: number) => g.elements?.[a] === "H";
   const rings = (g.rings as number[][] | undefined) ?? smallestRings(n, edges);
-  const ringBond = new Set(rings.flatMap((r) => r.map((a, i) => pair(a, r[(i + 1) % r.length]))));
+  const metalsIn = (r: readonly number[]) => r.filter((a) => isMetal(g.elements?.[a] ?? "")).length;
+  const ringBond = new Set(rings.filter((r) => metalsIn(r) < 2).flatMap((r) => r.map((a, i) => pair(a, r[(i + 1) % r.length]))));
   // (nor a metal's bond to a pi system's star, which is the ring's own distance)
   const toMetal = (a: number, b: number) =>
     isMetal(g.elements?.[a] ?? "") !== isMetal(g.elements?.[b] ?? "") &&
@@ -569,6 +578,30 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         labelInk(g.elements[p], g.hydrogens?.[p] ?? 0, ways(p), d) +
         labelInk(g.elements[q], g.hydrogens?.[q] ?? 0, ways(q), { x: -d.x, y: -d.y });
       if (len - covered * L < 0.05 * L) crowdedLabels++;
+    }
+  }
+  // and a label that is a name (OTBS, NHBz, PPh3), its letters clear of
+  // every other atom, bond and name, with a space's paper beside another
+  // label (NHBz O reads as one word): for each it runs into, one crowding
+  // - for an atom or a name, as much of one as it is in, up to a third of
+  // a bond deep, so that a little clear of it is a little better
+  const nameRoom = g.nameRoom ?? 1;
+  if (g.labelled && g.elements && nameRoom > 0) {
+    const named = [...namesLaid({ x, y, edges, elements: g.elements }, L)];
+    for (const [i, [a, { box }]] of named.entries()) {
+      for (let b = 0; b < n; b++) {
+        if (b === a || bonded.has(pair(a, b)) || named.some(([o]) => o === b)) continue;
+        const deep = atomDepth(box, { x: x[b], y: y[b] }, g.labelled[b] && g.elements[b] !== "*", L);
+        if (deep > 0) crowdedLabels += nameRoom * Math.min(1, deep / (0.3 * L));
+      }
+      for (const [p, q] of edges) {
+        if (p === a || q === a) continue;
+        if (segmentMeetsBox({ x: x[p], y: y[p] }, { x: x[q], y: y[q] }, box)) crowdedLabels += nameRoom;
+      }
+      for (const [, o] of named.slice(i + 1)) {
+        const deep = boxesDepth(box, o.box, L);
+        if (deep > 0) crowdedLabels += nameRoom * Math.min(1, deep / (0.3 * L));
+      }
     }
   }
 
@@ -1347,6 +1380,34 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       if (dx * dx + dy * dy >= 0.25 * L * L) continue;
       if (bonded.has(pair(a, b)) || solid2(a, b)) continue;
       overlaps++;
+    }
+  }
+  // and in a complex, where crowded ligands meet round their metal, an atom
+  // of something else inside a ring of six or fewer drawn flat: hidden in it
+  // as much as on an atom (a Cl inside a cyclohexyl). (Not inside a larger
+  // ring, where a substituent may be drawn - taxol's
+  // eight-membered one; nor a bridge of the ring's own system, which may
+  // run across it - artemisinin's; nor what hangs from a ring in
+  // perspective, set by it - Cp*'s methyls; nor a stereocentre's drawn H,
+  // set by its own rule.)
+  const complex = (g.elements ?? []).some((e) => isMetal(e));
+  for (const r of complex ? small.filter((q) => q.length <= 6) : []) {
+    const xs = r.map((a) => x[a]);
+    const ys = r.map((a) => y[a]);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const own = systemOf.get(r[0]);
+    for (let p = 0; p < n; p++) {
+      if (systemOf.get(p) === own || isH(p) || x[p] <= minX || x[p] >= maxX || y[p] <= minY || y[p] >= maxY) continue;
+      if (persp && (persp[p] || neighbours[p].some((q) => persp[q]))) continue;
+      let inside = false;
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const [xi, yi, xj, yj] = [x[r[i]], y[r[i]], x[r[j]], y[r[j]]];
+        if (yi > y[p] !== yj > y[p] && x[p] < ((xj - xi) * (y[p] - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+      if (inside) overlaps++;
     }
   }
 
