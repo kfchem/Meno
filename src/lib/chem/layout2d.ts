@@ -48,7 +48,14 @@ export type Bond = BondChem & {
 };
 export type Vec2 = { x: number; y: number };
 
-export type BondDisplay = "plain" | "bold" | "hashed" | "dashed";
+/**
+ * How a bond is drawn where it says nothing of stereochemistry. "wedge" is
+ * a ring's bond in perspective running toward the viewer, narrow at its far
+ * end (as a stereo wedge is narrow at its centre: `stereoOrient`); on a
+ * double bond it, or "bold", takes the place of the line the second one is
+ * drawn beside.
+ */
+export type BondDisplay = "plain" | "bold" | "hashed" | "dashed" | "wedge";
 
 /**
  * How a bond is actually drawn: stereo first, then a single bond's display,
@@ -68,6 +75,7 @@ export function bondKind(
   if (b.display === "bold" || b.display === "hashed" || b.display === "dashed") {
     return b.display;
   }
+  if (b.display === "wedge") return "wedge";
   return b.dative ? "dative" : "lines";
 }
 
@@ -2344,7 +2352,7 @@ export function buildBondPrimitives(
       ends: hasLabel(a) && trimA > 0 ? [p1] : [],
     };
   }
-  if (bond.stereo === "up" || bond.stereo === "down") {
+  if (kind === "wedge" || kind === "hashedWedge") {
     const baseAtP1 = wedgeBaseAtom(bond, deg) === bond.a1;
     const baseHalf = toWorld(opts.wedgeWidthPx * 0.5, zoom, units);
     // The narrow end is a bond's width, matching the join caps at atoms.
@@ -2355,7 +2363,7 @@ export function buildBondPrimitives(
     const trimNarrow = baseAtP1 ? trimB : trimA;
     const bp1 = baseAtP1 ? p1 : p2;
     const bp2 = baseAtP1 ? p2 : p1;
-    if (bond.stereo === "up") {
+    if (kind === "wedge") {
       // Directions of the bonds continuing from the wide end, to cut it along
       // them. A labelled atom is left out: the bond stops short of the label,
       // so there is no join to make.
@@ -2547,16 +2555,35 @@ export function buildBondPrimitives(
       others(bond.a2),
       off * 2,
     );
-    lines.push(
-      { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx },
-      {
-        x1: ps1b.at.x,
-        y1: ps1b.at.y,
-        x2: ps2b.at.x,
-        y2: ps2b.at.y,
-        widthPx: lwPx,
-      },
-    );
+    // a ring's bond in perspective: its own line bold, or a wedge toward
+    // the viewer, the second line beside it as ever
+    if (bond.display === "bold") {
+      polys.push(
+        buildBoldBar(p1, p2, boldHalf, lineHalf, neighboursAt(bond.a1, bond.a2), neighboursAt(bond.a2, bond.a1), round, cutRuleOf(opts)),
+      );
+    } else if (bond.display === "wedge") {
+      const baseAtP1 = wedgeBaseAtom(bond, deg) === bond.a1;
+      const [baseIdx, tipIdx] = baseAtP1 ? [bond.a1, bond.a2] : [bond.a2, bond.a1];
+      polys.push(
+        buildWedgeTriangle(
+          baseAtP1 ? p1 : p2,
+          baseAtP1 ? p2 : p1,
+          toWorld(opts.wedgeWidthPx * 0.5, zoom, units),
+          pxToWorld(lwPx * 0.5, zoom),
+          neighboursAt(baseIdx, tipIdx),
+          round,
+          hasLabel(atoms[tipIdx]) && (baseAtP1 ? trimB : trimA) > 0,
+          cutRuleOf(opts),
+        ),
+      );
+    } else lines.push({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx });
+    lines.push({
+      x1: ps1b.at.x,
+      y1: ps1b.at.y,
+      x2: ps2b.at.x,
+      y2: ps2b.at.y,
+      widthPx: lwPx,
+    });
     const meets: Meet[] = [];
     const ends: Vec2[] = [...labelEnds];
     const along = vnorm(vsub(ps2b.at, ps1b.at));
@@ -2669,7 +2696,7 @@ export function joinsAtAtoms(
   // that only bulges out of the wedge.
   const wedgeEnds = new Set<number>();
   for (const b of bonds) {
-    if (b.stereo === "up") wedgeEnds.add(wedgeBaseAtom(b, deg));
+    if (bondKind(b) === "wedge" || (b.order === 2 && b.display === "wedge")) wedgeEnds.add(wedgeBaseAtom(b, deg));
   }
   const caps = new Set<number>();
   const mitres = new Map<number, Vec2[]>();

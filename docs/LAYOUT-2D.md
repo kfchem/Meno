@@ -295,11 +295,22 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   η⁶-benzene, p-cymene - is seen as it is: the metal on its axis, a bond
   from its centre, the ring seen from a little above its plane (about 24
   degrees), so that it is drawn as deep as 0.4 of its width - a flattened
-  polygon. Its lower half on the page is nearer, its edges there bold. What
-  hangs from it lies in its plane, pointing out from its centre and
-  foreshortened as the ring is (Cp*'s methyls). The ring may be spun about
-  its axis: where its first substituent points - to either side, or away
-  from the metal - is tried each way, and the one that reads best kept.
+  polygon. Its lower half on the page is nearer - whichever side of it the
+  metal is, and with no metal at all (a ligand's picture) - each atom as
+  near as it is across the ring's axis. What hangs from it lies in its
+  plane, pointing out from its centre and foreshortened as the ring is
+  (Cp*'s methyls). The ring may be spun about its axis: where its first
+  substituent points - to either side, or away from the metal - is tried
+  each way, and the one that reads best kept; a ring with nothing hanging
+  from it, seen with a corner nearest, is spun half a step to have an edge
+  there instead.
+- **Drawn as Haworth drew rings.** A ring in perspective - bound face-on,
+  or a phenyl turned on its bond (below) - has a bond with both its atoms
+  near drawn bold (the edge in front), a bond running from its far half
+  toward the near one drawn as a wedge, broad at the near end, and the
+  rest plain. These say nothing of configuration: they are how the bond
+  is displayed (`display`: "bold", "wedge"), and on a double bond the bold
+  bar or the wedge is the line its second line is drawn beside.
 - **Its circle.** Such a ring is drawn with a circle - an ellipse, in
   perspective - for its pi system, not as a diene (Cp is never drawn with
   two double bonds). A charge its carbons carry is the circle's and is not
@@ -327,9 +338,9 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
 - **Aryl rings crowded round one atom** - PPh₃'s phenyls on a crowded
   metal - are each turned on their bond out of the page, all the same way
   round (a propeller), and so seen in perspective: foreshortened across
-  the bond, the near half of each ring bold. Done only where it reads
-  better by the benchmark's measures, at 45, 60 or 70 degrees, whichever
-  reads best.
+  the bond, its near edges bold and the bonds toward them wedges. Done
+  only where it reads better by the benchmark's measures, at 45, 60 or 70
+  degrees, whichever reads best.
 - **Clean-up draws a complex as writing out its label does**: the same
   engine, given the same structure - a haptic bond's star with its pi
   system - and each star put afterwards at the centre of its system's

@@ -211,6 +211,9 @@ now kept by a rule in `LAYOUT-2D.md`:
     edges bold; a Cp with its circle, never as a diene;
   - PPh3 crowded round a metal drawn with its phenyls flattened, their
     near edges bold, so that it looks three-dimensional;
+  - (2026-10-02) the bold on the near side - it was on the far side of a
+    lone Cp - and the bonds running toward the viewer drawn as wedges,
+    not one bond bold alone; the phenyls alike;
   - by rules, not templates, and without losing anything on the organic
     molecules;
   - Clean-up drawing a complex as writing out its label does.

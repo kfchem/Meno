@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { placedAbbreviation } from "../chem/abbreviationPlace";
+import { placedAbbreviation, placedStructure } from "../chem/abbreviationPlace";
+import { wedgeNarrowAtom } from "../chem/layout2d";
+import { LIGANDS, ligandPicture } from "../chem/ligands";
 import { layout2D } from "./engine";
 import { FORESHORTEN, metalSlots } from "./hapto";
 import { METAL_BOND } from "./perceive";
@@ -8,6 +10,11 @@ type Placed = NonNullable<ReturnType<typeof placedAbbreviation>>;
 const laid = (label: string): Placed => placedAbbreviation(label, null, 1)!;
 const find = (s: Placed, el: string) => s.atoms.flatMap((a, i) => (a.el === el ? [i] : []));
 const at = (s: Placed, i: number) => ({ x: s.atoms[i].x, y: s.atoms[i].y });
+const degrees = (s: Placed) => {
+  const m = new Map<number, number>();
+  for (const b of s.bonds) for (const e of [b.a1, b.a2]) m.set(e, (m.get(e) ?? 0) + 1);
+  return m;
+};
 const dist = (s: Placed, i: number, j: number) => Math.hypot(s.atoms[i].x - s.atoms[j].x, s.atoms[i].y - s.atoms[j].y);
 const angleAt = (s: Placed, centre: number, i: number, j: number) => {
   const u = { x: s.atoms[i].x - s.atoms[centre].x, y: s.atoms[i].y - s.atoms[centre].y };
@@ -26,7 +33,7 @@ describe("a metal's slots", () => {
 });
 
 describe("a ring bound face-on to a metal", () => {
-  it("is foreshortened across its metal's axis, its centre a bond from the metal, its lower half near and bold", () => {
+  it("is foreshortened across its metal's axis, its centre a bond from the metal, its lower half near: an edge in front bold, the bonds toward it wedges", () => {
     const fc = laid("Cp2Fe");
     const [fe] = find(fc, "Fe");
     const stars = find(fc, "*");
@@ -49,9 +56,37 @@ describe("a ring bound face-on to a metal", () => {
         const z = fc.atoms[i].z!;
         if (Math.abs(fc.atoms[i].y - centre) > 1e-6) expect(Math.sign(z)).toBe(fc.atoms[i].y < centre ? 1 : -1);
       }
-      const bold = fc.bonds.filter((b) => b.display === "bold" && h.atoms.includes(b.a1) && h.atoms.includes(b.a2));
-      expect(bold.length).toBeGreaterThanOrEqual(2);
-      for (const b of bold) expect(fc.atoms[b.a1].z! + fc.atoms[b.a2].z!).toBeGreaterThan(0);
+      // as Haworth drew rings: an edge in front (a bare ring is spun to have
+      // one), bold; the two bonds running toward it, wedges broad there
+      const own = (b: Placed["bonds"][number]) => h.atoms.includes(b.a1) && h.atoms.includes(b.a2);
+      const bold = fc.bonds.filter((b) => b.display === "bold" && own(b));
+      expect(bold).toHaveLength(1);
+      for (const b of bold) {
+        expect(fc.atoms[b.a1].z!).toBeGreaterThan(0);
+        expect(fc.atoms[b.a2].z!).toBeGreaterThan(0);
+      }
+      const wedges = fc.bonds.filter((b) => b.display === "wedge" && own(b));
+      expect(wedges).toHaveLength(2);
+      for (const b of wedges) {
+        const narrow = wedgeNarrowAtom({ ...b, stereoOrient: b.stereoOrient ?? "principle" }, degrees(fc));
+        const broad = narrow === b.a1 ? b.a2 : b.a1;
+        expect(fc.atoms[narrow].z!).toBeLessThanOrEqual(1e-6);
+        expect(fc.atoms[broad].z!).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("is seen from above on its own too: a ligand's picture has its near half at the foot of the page", () => {
+    for (const label of ["Cp", "Cp*", "dppf"]) {
+      const l = LIGANDS.find((x) => x.label === label)!;
+      const s = placedStructure(ligandPicture(l), null, 1);
+      for (const b of s.bonds.filter((x) => x.display === "bold")) {
+        const ring = s.haptic!.find((h) => h.atoms.includes(b.a1))!;
+        const centre = ring.atoms.reduce((t, i) => t + s.atoms[i].y, 0) / ring.atoms.length;
+        // (+y up the page)
+        expect((s.atoms[b.a1].y + s.atoms[b.a2].y) / 2, label).toBeLessThan(centre);
+      }
+      expect(s.bonds.some((x) => x.display === "bold"), label).toBe(true);
     }
   });
 
@@ -108,11 +143,12 @@ describe("ligands round a metal", () => {
     // (the whole engine on a complex this size: slower on CI's runners)
   }, 30_000);
 
-  it("turn crowded aryl rings as a propeller where that reads better, their near edges bold", () => {
+  it("turn crowded aryl rings as a propeller where that reads better, their near edges bold, the bonds toward them wedges", () => {
     const pd = laid("Pd(PPh3)4");
     const turned = pd.atoms.filter((a) => a.el === "C" && a.z != null);
     expect(turned.length).toBeGreaterThan(0);
     expect(pd.bonds.some((b) => b.display === "bold")).toBe(true);
+    expect(pd.bonds.some((b) => b.display === "wedge")).toBe(true);
   }, 30_000);
 });
 

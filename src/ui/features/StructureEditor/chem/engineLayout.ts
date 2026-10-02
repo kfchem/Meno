@@ -203,14 +203,23 @@ export function relayoutFrom(model: Model, part: Model, job: LayoutJob, laid: La
     if (bond) wedgeOn.set(bond.id, { stereo: w.stereo, narrow: from });
   }
   // a ring in perspective (face-on to a metal, or turned on its bond): its
-  // near edges bold, the rest of it plain
-  const boldOnes = new Set(laid.bold.map(([u, v]) => [ids[u], ids[v]].sort((p, q) => p - q).join(",")));
-  const display = (b: Bond): Pick<Bond, "display"> | null => {
+  // near edges bold, a bond toward the viewer a wedge narrow at its far
+  // end, the rest of it plain
+  const pairKey = (p: number, q: number) => (p < q ? `${p},${q}` : `${q},${p}`);
+  const boldOnes = new Set(laid.bold.map(([u, v]) => pairKey(ids[u], ids[v])));
+  const farEnd = new Map(laid.toward.map(([u, v]) => [pairKey(ids[u], ids[v]), ids[u]]));
+  const display = (b: Bond): Pick<Bond, "display" | "stereoOrient"> | null => {
     const u = indexOf.get(b.a);
     const v = indexOf.get(b.b);
     if (u == null || v == null || laid.depth[u] == null || laid.depth[v] == null || b.endpoints?.length) return null;
-    const want = boldOnes.has([b.a, b.b].sort((p, q) => p - q).join(",")) ? "bold" : undefined;
-    return want === b.display || (!want && b.display !== "bold") ? null : { display: want };
+    const key = pairKey(b.a, b.b);
+    const far = farEnd.get(key);
+    if (far != null) {
+      const stereoOrient = orientFor(b, far, degree);
+      return b.display === "wedge" && b.stereoOrient === stereoOrient ? null : { display: "wedge", stereoOrient };
+    }
+    const want = boldOnes.has(key) ? "bold" : undefined;
+    return want === b.display || (!want && b.display !== "bold" && b.display !== "wedge") ? null : { display: want };
   };
   const bonds: Relayout["bonds"] = model.bonds.flatMap((b): Relayout["bonds"] => {
     if (!inPart.has(b.a) || !inPart.has(b.b) || gone.has(b.a) || gone.has(b.b)) return [];

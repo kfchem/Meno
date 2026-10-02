@@ -47,9 +47,15 @@ export type Layout2D = {
   solid: boolean[];
   /**
    * The bonds drawn bold, by their atoms: the near edges of a ring seen in
-   * perspective - one bound face-on to a metal (section 7).
+   * perspective - one bound face-on to a metal, or turned on its bond
+   * (section 7).
    */
   bold: [number, number][];
+  /**
+   * The bonds of a ring in perspective that run from its far half toward
+   * the viewer, drawn as wedges: [its narrow, far end; its broad, near one].
+   */
+  toward: [number, number][];
 } & Stereo;
 
 export function layout2D(input: LayoutInput): Layout2D {
@@ -270,36 +276,79 @@ export function layout2D(input: LayoutInput): Layout2D {
     if (Math.sign(before) !== Math.sign(after)) for (const a of sys.atoms) depth[a] = -depth[a]!;
   });
   // a ring bound face-on, seen from a little above: the half of it lower on
-  // the page nearer, its edges there bold; its star and metal in its plane
-  const bold: [number, number][] = [];
+  // the page nearer - each atom as near as it is across the ring's axis
+  // (its lift), that way round on the page; its star and metal in its
+  // plane. A ring with nothing hanging from it, seen with a corner
+  // nearest, is spun half a step to have an edge there instead, as
+  // Haworth drew rings.
   for (const e of mol.eta) {
-    // (+y is up the page, as the drawing is: toward the metal is down the
-    // page where the metal is lower)
-    const toward = e.metal >= 0 ? y[e.metal] - y[e.star] : -1;
-    const down = Math.abs(toward) < 1e-6 ? 1 : -Math.sign(toward);
-    const atoms = e.atoms;
-    for (const a of atoms) depth[a] = (lifts.get(a) ?? 0) * down;
+    const own = new Set(e.atoms.filter((a) => a !== e.star));
+    const s = { x: x[e.star], y: y[e.star] };
+    // the page's way for a lift: how its atoms lie off its star against their lifts
+    let vx = 0;
+    let vy = 0;
+    let ll = 0;
+    for (const a of own) {
+      const l = lifts.get(a) ?? 0;
+      vx += l * (x[a] - s.x);
+      vy += l * (y[a] - s.y);
+      ll += l * l;
+    }
+    if (ll < 1e-12) continue;
+    const v = { x: vx / ll, y: vy / ll };
+    // (+y is up the page: a lift is nearer where it goes down it)
+    const down = Math.abs(v.y) < 1e-6 * Math.hypot(v.x, v.y) ? 1 : -Math.sign(v.y);
+    const bare = e.ring.length === own.size && e.ring.every((a) => mol.neighbours[a].every((b) => own.has(b) || b === e.star));
+    if (bare) {
+      const u = { x: -v.y / Math.hypot(v.x, v.y), y: v.x / Math.hypot(v.x, v.y) };
+      // in its plane: along its axis's square, and across
+      const flat = e.ring.map((a) => ({ a, w: (x[a] - s.x) * u.x + (y[a] - s.y) * u.y, l: lifts.get(a) ?? 0 }));
+      const front = Math.atan2(down, 0);
+      const corner = flat.some(({ w, l }) => Math.abs(Math.atan2(Math.sin(Math.atan2(l, w) - front), Math.cos(Math.atan2(l, w) - front))) < 1e-3);
+      if (corner) {
+        const t = Math.PI / e.ring.length;
+        for (const { a, w, l } of flat) {
+          const w2 = w * Math.cos(t) - l * Math.sin(t);
+          const l2 = w * Math.sin(t) + l * Math.cos(t);
+          x[a] = s.x + u.x * w2 + v.x * l2;
+          y[a] = s.y + u.y * w2 + v.y * l2;
+          lifts.set(a, l2);
+        }
+      }
+    }
+    for (const a of e.atoms) depth[a] = (lifts.get(a) ?? 0) * down;
     if (e.metal >= 0) depth[e.metal] ??= 0;
-    const here = new Set(atoms);
+  }
+  // a ring in perspective - bound face-on, or turned on its bond - drawn as
+  // Haworth drew rings: a bond with both its atoms near, bold; one running
+  // from the far half to the near one, a wedge toward the viewer, narrow at
+  // its far end; the rest plain
+  const bold: [number, number][] = [];
+  const toward: [number, number][] = [];
+  const near = (a: number) => depth[a]! > 1e-6;
+  const perspective = (a: number, b: number) => {
+    if (near(a) && near(b)) bold.push([a, b]);
+    else if (near(a) !== near(b)) toward.push(near(a) ? [b, a] : [a, b]);
+  };
+  for (const e of mol.eta) {
+    const here = new Set(e.atoms);
     for (const [k] of mol.bondIndex) {
       const [a, b] = k.split(",").map(Number);
-      if (!here.has(a) || !here.has(b) || a === e.star || b === e.star) continue;
-      if (depth[a]! + depth[b]! > 1e-6) bold.push([a, b]);
+      if (here.has(a) && here.has(b) && a !== e.star && b !== e.star) perspective(a, b);
     }
   }
-  // and a ring turned on its bond: its ring bonds on its near half bold
   for (const side of turned) {
     const here = new Set(side);
     for (const k of mol.ringBonds) {
       const [a, b] = k.split(",").map(Number);
-      if (here.has(a) && here.has(b) && depth[a]! + depth[b]! > 1e-6) bold.push([a, b]);
+      if (here.has(a) && here.has(b)) perspective(a, b);
     }
   }
   // a stereocentre in a cage drawn in perspective shows itself there
   const tetra = new Map<number, Tetrahedral>();
   input.atoms.forEach((a, i) => a.tetra && !solid[i] && tetra.set(i, a.tetra));
   const final = new Map(x.map((v, i) => [i, { x: v, y: y[i] }]));
-  return { x, y, depth, solid, bold, ...placeStereo(mol, final, tetra) };
+  return { x, y, depth, solid, bold, toward, ...placeStereo(mol, final, tetra) };
 }
 
 /**

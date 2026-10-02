@@ -106,6 +106,14 @@ export function placedStructure(given: GroupStructure, neighbour: P | null, bond
     const usual = wedgeNarrowAtom({ a1: b.a1, a2: b.a2, order: b.order, stereoOrient: "principle" }, degree);
     if (usual !== w.from) b.stereoOrient = "reverse";
   }
+  // and a ring's bond toward the viewer, a wedge narrow at its far end
+  for (const [far, nearer] of laid.toward) {
+    const b = bonds.find((x) => (x.a1 === far && x.a2 === nearer) || (x.a1 === nearer && x.a2 === far));
+    if (!b) continue;
+    b.display = "wedge";
+    const usual = wedgeNarrowAtom({ a1: b.a1, a2: b.a2, order: b.order, stereoOrient: "principle" }, degree);
+    if (usual !== far) b.stereoOrient = "reverse";
+  }
 
   const into = { x: laid.x[head] - laid.x[from], y: laid.y[head] - laid.y[from] };
   // attached through a pi system: its centre as far again from the bond's

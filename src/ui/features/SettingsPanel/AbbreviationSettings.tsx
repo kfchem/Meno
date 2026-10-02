@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ABBREVIATIONS, abbreviationStructure, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
 import { COUNTER_IONS, LIGAND_FAMILIES, ligandPicture, structureFormula, type GroupStructure, type Ligand } from "../../../lib/chem/ligands";
 import { shownAs } from "../../../lib/chem/enantiomers";
@@ -25,11 +25,6 @@ export default function AbbreviationSettings() {
   };
   const groups = ABBREVIATIONS.filter(matches);
   const reagentMatches = (r: Reagent) => matches({ ...r, smiles: r.smiles ?? r.complex ?? "" });
-  // a metal's catalyst or reagent: its formula, until the engine draws complexes
-  const formulas = useMemo(
-    () => new Map(REAGENTS.filter(drawnAsFormula).map((r) => [r.label, structureFormula(abbreviationStructure(r.label)!)])),
-    [],
-  );
   const precatalysts = PRECATALYST_GENERATIONS.map(({ generation, name }) => {
     const label = `XPhos Pd ${generation}`;
     return { generation, name, label };
@@ -148,18 +143,9 @@ export default function AbbreviationSettings() {
               <div key={use} className="mt-3">
                 <h4 className="text-xs font-semibold text-gh-black">{title}</h4>
                 <div className="mt-2 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
-                  {these.map((r) =>
-                    drawnAsFormula(r) ? (
-                      <article key={r.label} className="min-w-0 overflow-hidden rounded-lg border border-gh-line bg-white px-3 py-2">
-                        <div className="text-base font-semibold text-gh-black">{r.label}</div>
-                        <div className="text-xs text-gh-black">{r.name}</div>
-                        {r.also?.length ? <div className="text-xs text-gh-gray">also {r.also.join(", ")}</div> : null}
-                        <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{formulas.get(r.label)}</code>
-                      </article>
-                    ) : (
-                      <ReagentEntry key={r.label} r={r} />
-                    ),
-                  )}
+                  {these.map((r) => (
+                    <ReagentEntry key={r.label} r={r} />
+                  ))}
                 </div>
               </div>
             );
@@ -214,9 +200,6 @@ export default function AbbreviationSettings() {
   );
 }
 
-/** A metal's catalyst or organometallic reagent, shown by its formula. */
-const drawnAsFormula = (r: Reagent) => r.use === "catalyst" || r.use === "organometallic";
-
 /** A heading and its entries. */
 function Listed({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -227,12 +210,16 @@ function Listed({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** A reagent as the molecule it is - a chiral one as the enantiomer its SMILES is, with its descriptors. */
+/**
+ * A reagent as the molecule it is - a chiral one as the enantiomer its
+ * SMILES is, with its descriptors; a metal's complex drawn from its formula,
+ * which is shown with its name.
+ */
 function ReagentEntry({ r }: { r: Reagent }) {
   const as = shownAs(r.enantiomers);
   return (
     <Entry
-      a={{ ...r, smiles: r.smiles ?? "" }}
+      a={{ ...r, smiles: r.smiles ?? r.complex ?? "" }}
       of={() => abbreviationStructure(as ? `${as}-${r.label}` : r.label)!}
       keep={`reagent:${r.label}`}
     >

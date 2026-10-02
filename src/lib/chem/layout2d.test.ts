@@ -17,6 +17,7 @@ import {
   type LayoutOptions,
   type LineSeg,
   type Vec2,
+  wedgeNarrowAtom,
 } from "./layout2d";
 import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "./acs";
 import { advanceEm, inkHullEm } from "./arial";
@@ -1253,6 +1254,38 @@ describe("bold, hashed, dashed and dative bonds", () => {
     expect(bondKind(one({ dative: true }))).toBe("dative");
     expect(bondKind({ ...one({ display: "dashed" }), order: 2 })).toBe("lines");
     expect(bondKind(one({ display: "plain" }))).toBe("lines");
+  });
+
+  it("draws a ring's bond toward the viewer as a wedge, narrow where stereoOrient says, saying no configuration", () => {
+    expect(bondKind(one({ display: "wedge" }))).toBe("wedge");
+    const { lines, polys } = buildBondPrimitives(pair, one({ display: "wedge" }), opts(), ZOOM, deg);
+    expect(lines).toHaveLength(0);
+    expect(polys).toHaveLength(1);
+    const widthAt = (x: number) => {
+      const near = polys[0].points.filter((p) => Math.abs(p.x - x) < 1e-6).map((p) => p.y);
+      return near.length ? Math.max(...near) - Math.min(...near) : 0;
+    };
+    const narrowAtA1 = wedgeNarrowAtom(one({ display: "wedge" }), deg) === 0;
+    expect(widthAt(narrowAtA1 ? 0 : L) < widthAt(narrowAtA1 ? L : 0)).toBe(true);
+  });
+
+  it("keeps a double bond's second line where its own is bold or a wedge, in a ring in perspective", () => {
+    // a hexagon, its first bond a double one: the second line inside it
+    const hex: Atom[] = Array.from({ length: 6 }, (_, i) => ({
+      id: i + 1,
+      x: L * Math.cos((Math.PI / 3) * i),
+      y: L * Math.sin((Math.PI / 3) * i),
+      el: "C",
+    }));
+    for (const display of ["bold", "wedge"] as const) {
+      const ring: Bond[] = hex.map((_, i) => ({ a1: i, a2: (i + 1) % 6, order: i === 0 ? 2 : 1, ...(i === 0 ? { display } : {}) }));
+      const plain = buildAllPrimitives(hex, ring.map((b) => ({ ...b, display: undefined })), opts(), ZOOM);
+      const shown = buildAllPrimitives(hex, ring, opts(), ZOOM);
+      // its own line a shape (bigger than any cap at a join), its second line a line as before
+      expect(shown.lines.length, display).toBe(plain.lines.length - 1);
+      const biggest = (ps: { points: Vec2[] }[]) => Math.max(0, ...ps.map((p) => polyArea(p.points)));
+      expect(biggest(shown.polys), display).toBeGreaterThan(biggest(plain.polys) * 4);
+    }
   });
 
   it("draws a bold bond as a bar the bold width across, square where nothing carries on", () => {

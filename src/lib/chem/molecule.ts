@@ -36,8 +36,8 @@ export type AbbreviationStructure = {
     stereo?: "up" | "down" | "wavy" | "either" | "none";
     /** Which end of a wedge is narrow, as a drawn bond's `stereoOrient` says. */
     stereoOrient?: "principle" | "reverse";
-    /** Drawn bold: a near edge of a ring in perspective. */
-    display?: "bold";
+    /** A ring's bond in perspective: a near edge, bold; one toward the viewer, a wedge (narrow as `stereoOrient` says). */
+    display?: "bold" | "wedge";
   })[];
   attach: number[];
   /**
