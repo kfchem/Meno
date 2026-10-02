@@ -173,11 +173,13 @@ PdCl2(dppf), Pd2(dba)3, Pd(OAc)2, Cp2ZrCl2, [Ir(cod)Cl]2, [Rh(cod)2]BF4,
 Mo(CO)6 - from its metals (the d block and the lanthanides), its ligands in
 parentheses or not, halides, hydrides and groups bound by one bond (OAc,
 OTf, Me), a part in brackets made as many times as its count, and the
-counter-anions after it (BF4, PF6, SbF6, ClO4, BArF), each leaving a
-positive charge on the part's metal. A ligand written as an anion (Cp⁻,
-Cp*⁻) leaves its charge on the metal, so that the whole is as charged as
-the formula says. A ligand in brackets may have its descriptor:
-RuCl[(S,S)-TsDPEN](p-cymene), RuCl2[(S)-BINAP][(S,S)-DPEN]. Where one part
+counter-anions after it, each leaving a positive charge on the part's
+metal: read by rule as a salt's anion is (BF4, PF6, SbF6, AsF6, BPh4,
+ClO4; see below), or BArF, which names its aryl groups by no formula, from
+a list. A ligand written as an anion (Cp⁻, Cp*⁻) leaves its charge on the
+metal, so that the whole is as charged as the formula says. A ligand in
+brackets may have its descriptor: RuCl[(S,S)-TsDPEN](p-cymene),
+RuCl2[(S)-BINAP][(S,S)-DPEN]. Where one part
 has several metals - Pd2(dba)3 - the ligands are shared among them in
 turn: which bridge them, a formula does not say, unless it marks one with
 μ (IUPAC's mark for a bridging ligand): a bridging ligand's donors are
@@ -191,8 +193,8 @@ drawing of a large complex is crowded.
 solvents written over reaction arrows are known by their labels, each the
 whole molecule it is, so that a scheme's conditions are structures too:
 oxidants (DMP, IBX, PIDA, TEMPO, PCC, TPAP, NMO, mCPBA, DDQ, Oxone, OsO4
-...), reductants (NaBH4, LiAlH4, DIBAL, L-Selectride, 9-BBN, B2pin2 ...),
-bases (DBU, DMAP, DIPEA, TEA, LDA, LiHMDS, K2CO3 ...), acids (TFA, PTSA,
+...), reductants (LAH, STAB, DIBAL, L-Selectride, 9-BBN, B2pin2 ...),
+bases (DBU, DMAP, DIPEA, TEA, LDA, LiHMDS ...), acids (TFA, PTSA,
 CSA, PPTS), coupling reagents (DCC, EDC, HATU, COMU, PyBOP, T3P, DPPA, DEAD
 ...), halogenating and fluorinating ones (NBS, Selectfluor, NFSI, DAST,
 Togni I and II ...), electrophiles (TFAA, Comins' reagent, Meerwein's salt
@@ -213,10 +215,12 @@ Hoveyda-Grubbs or Hoveyda–Grubbs). A reagent's name is one unit of a label,
 its digits not counts (T3P, 9-BBN); a formula's are (NaBH4, B2pin2).
 
 The list holds only what no rule reads: Ac2O, Boc2O, Tf2O, TfOH, TsOH,
-HOBt, KOt-Bu, NaH and EtOAc are read by rule (below), not listed - and the
-tests check that no name in it is read by rule as the same molecule.
+HOBt, KOt-Bu, NaH, EtOAc, NaBH4, LiAlH4, NaIO4 and K2CO3 are read by rule
+(below), not listed - and the tests check that no name in it is read by
+rule as the same molecule.
 Settings › Abbreviations shows every entry of it, Meno's groups and
-ligands, the counter-anions, and Buchwald's precatalysts by generation.
+ligands, the counter-anion no rule reads (BArF), and Buchwald's
+precatalysts by generation.
 
 Read by rule, besides, as whole molecules:
 
@@ -228,6 +232,18 @@ Read by rule, besides, as whole molecules:
   potassium are bound as ions, lithium so but to carbon: NaOMe is Na⁺ and
   MeO⁻, NaN3 Na⁺ and azide, n-BuLi keeps its C-Li bond. A label with a bond
   left free (OMe, NMe2, CH2Br) is no such formula, and stays a group;
+- a salt (`src/lib/chem/formula.ts`): alkali metals, and the rest an anion
+  of as many charges - NaBH4, LiAlH4, NaBH(OAc)3, NaBF4, NaIO4, NaClO2,
+  CF3SO2Na, K2CO3, NaHCO3, K3PO4. An anion has one centre, and round it
+  oxygens, hydrogens and parts bound by one bond. With no oxygen, it is an
+  ate anion: a centre with no lone pair left at a valence of its own takes
+  one part more and the charge (BF4⁻, PF6⁻, SbF6⁻, BPh4⁻, BH4⁻, AlH4⁻).
+  With oxygens, they are bound by double bonds but one for each charge,
+  which carries it, and one for each hydrogen, which is theirs (ClO4⁻,
+  IO4⁻, CO3²⁻, HCO3⁻) - as many bonds as a valence of the centre's own:
+  below the second row P(V), S(IV) and S(VI), Cl(I) to Cl(VII) too, and in
+  it no more than four bonds (no NO3⁻ so). A group in parentheses is one
+  part, as counted: NaBH(OAc)3, and Pb(OAc)4 as a molecule;
 - an adduct of known parts, a middle dot between them, each counted:
   BF3·OEt2, CeCl3·7H2O, EDC·HCl;
 - a Buchwald precatalyst named by its phosphine and generation - XPhos Pd

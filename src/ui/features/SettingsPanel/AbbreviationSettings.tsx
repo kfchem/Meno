@@ -162,6 +162,12 @@ export default function AbbreviationSettings() {
             Sodium and potassium are bound as ions, lithium so but to carbon (NaOMe, LiCl; n-BuLi has its C-Li bond).
             A label with a bond left free (OMe, NMe2, CH2Br) stays the group it is.
           </li>
+          <li>
+            A salt: alkali metals, and the rest an anion of as many charges (NaBH4, LiAlH4, NaBH(OAc)3, NaIO4,
+            K2CO3, NaHCO3). With no oxygen, a centre with no lone pair left takes one part more and the charge (BF4⁻,
+            PF6⁻, SbF6⁻, BH4⁻); with oxygens, they are bound by double bonds but one for each charge and one for each
+            hydrogen (ClO4⁻, IO4⁻, CO3²⁻, HCO3⁻), as many bonds as a valence of the centre&apos;s own.
+          </li>
           <li>An adduct of known parts, a middle dot between them, each counted: BF3·OEt2, CeCl3·7H2O, EDC·HCl.</li>
           <li>A Buchwald precatalyst, by its phosphine and generation: XPhos Pd G2, SPhos Pd G3 (listed below).</li>
           <li>
@@ -289,7 +295,8 @@ export default function AbbreviationSettings() {
         <p className="mt-1 text-xs text-gh-gray max-w-2xl">
           A complex&apos;s formula is read as the structure it stands for: its metals, its ligands - in parentheses
           or not - halides, hydrides and groups bound by one bond (OAc, OTf), a part in brackets made as often as
-          its count, and the counter-anions after it (BF4, PF6, SbF6, ClO4, BArF). A ligand may have its
+          its count, and the counter-anions after it - read by rule, as a salt&apos;s anion is (BF4, PF6, SbF6, ClO4),
+          or listed below (BArF). A ligand may have its
           descriptor, in brackets: RuCl[(S,S)-TsDPEN](p-cymene). Where a part has several metals, its ligands are
           shared among them in turn: which bridge them, a formula does not say unless it marks one with μ - a
           bridging ligand&apos;s donors go to the metals in turn, a bridging halide to each. For example:

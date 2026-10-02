@@ -1,4 +1,5 @@
 import { shownAs, splitDescriptor, withConfiguration, type Enantiomers } from "./enantiomers";
+import { anionOf, longestGroup, partsOf } from "./formula";
 import { kekuleOrders } from "./kekulize";
 import { implicitHydrogens, valenceOrder } from "./molecule";
 import { readSmiles, type SmilesAtom, type SmilesBond } from "./smiles";
@@ -327,23 +328,40 @@ const METALS = new Set(
 );
 const NAME = new Map(elements.map((e) => [e.symbol, e.name]));
 
-/** A complex's counter-anions, written after its brackets: [Rh(cod)2]BF4. */
+/**
+ * A complex's counter-anions, written after its brackets, that no rule
+ * reads: BArF names its aryl groups by no formula. BF4, PF6, SbF6, ClO4
+ * and their like are read by rule (`counterIon`).
+ */
 export const COUNTER_IONS: Record<string, { smiles: string; name: string }> = {
-  BF4: { smiles: "F[B-](F)(F)F", name: "tetrafluoroborate" },
-  PF6: { smiles: "F[P-](F)(F)(F)(F)F", name: "hexafluorophosphate" },
-  SbF6: { smiles: "F[Sb-](F)(F)(F)(F)F", name: "hexafluoroantimonate" },
-  ClO4: { smiles: "[O-][Cl](=O)(=O)=O", name: "perchlorate" },
   BArF: {
     smiles: "[B-](c1cc(C(F)(F)F)cc(C(F)(F)F)c1)(c1cc(C(F)(F)F)cc(C(F)(F)F)c1)(c1cc(C(F)(F)F)cc(C(F)(F)F)c1)c1cc(C(F)(F)F)cc(C(F)(F)F)c1",
     name: "tetrakis[3,5-bis(trifluoromethyl)phenyl]borate",
   },
 };
 
+/**
+ * A counter-anion written after a complex's brackets, of one charge: one
+ * of COUNTER_IONS, or one ./formula reads - BF4, PF6, SbF6, AsF6, BPh4,
+ * ClO4 - named as it is written. Null for any other text.
+ */
+function counterIon(t: string, groupOf: (label: string) => GroupStructure | null): { ion: GroupStructure; name: string } | null {
+  if (Object.prototype.hasOwnProperty.call(COUNTER_IONS, t)) {
+    const read = readSmiles(COUNTER_IONS[t].smiles);
+    const orders = kekuleOrders(read.atoms, read.bonds);
+    const atoms = read.atoms.map(({ aromatic: _a, ...a }) => a);
+    return { ion: { atoms, bonds: read.bonds.map((b, i) => ({ ...b, order: orders[i] })), attach: [] }, name: COUNTER_IONS[t].name };
+  }
+  const parts = partsOf(t, longestGroup(groupOf), groupOf);
+  const ion = parts && anionOf(parts, 1);
+  return ion ? { ion, name: `${t}⁻` } : null;
+}
+
 type Item =
   | { kind: "metal"; el: string; n: number }
   | { kind: "ligand"; ligand: Ligand; descriptor: string | null; n: number; bridging?: boolean }
   | { kind: "x"; label: string; n: number; bridging?: boolean }
-  | { kind: "counter"; ion: string; n: number }
+  | { kind: "counter"; ion: GroupStructure; name: string; n: number }
   | { kind: "unit"; items: Item[]; n: number };
 
 /** The index of the bracket that closes the one opened at `i`, or -1. */
@@ -359,7 +377,7 @@ function closing(text: string, i: number): number {
 }
 
 /** What a complex's formula may name: groups bound by one bond (OAc, OTf, Me), and ligands of its own. */
-type Names = { isGroup: (label: string) => boolean; local: Readonly<Record<string, Ligand>> };
+type Names = { groupOf: (label: string) => GroupStructure | null; local: Readonly<Record<string, Ligand>> };
 
 /**
  * What a complex's formula is made of, in order, or null where any of it
@@ -415,13 +433,14 @@ function token(t: string, names: Names): Item | null {
     return bridge && (bridge.kind === "ligand" || bridge.kind === "x") ? { ...bridge, bridging: true } : null;
   }
   if (METALS.has(t)) return { kind: "metal", el: t, n: 1 };
-  if (t in COUNTER_IONS) return { kind: "counter", ion: t, n: 1 };
   const own = Object.prototype.hasOwnProperty.call(names.local, t) ? names.local[t] : undefined;
   // (a formula's own ligand as its SMILES has it: whose configuration it is, the reagent says)
   if (own) return { kind: "ligand", ligand: { ...own, enantiomers: own.enantiomers ?? { as: [], mirror: [], plain: true } }, descriptor: null, n: 1 };
   const ligand = namedLigand(t, true);
   if (ligand) return { kind: "ligand", ...ligand, n: 1 };
-  if (["F", "Cl", "Br", "I", "H"].includes(t) || names.isGroup(t)) return { kind: "x", label: t, n: 1 };
+  if (["F", "Cl", "Br", "I", "H"].includes(t) || names.groupOf(t)) return { kind: "x", label: t, n: 1 };
+  const counter = counterIon(t, names.groupOf);
+  if (counter) return { kind: "counter", ...counter, n: 1 };
   return null;
 }
 
@@ -447,7 +466,7 @@ export function complexStructure(
   groupOf: (label: string) => GroupStructure | null,
   local: Readonly<Record<string, Ligand>> = {},
 ): (GroupStructure & { name: string }) | null {
-  const items = itemsOf(label, { isGroup: (t) => !!groupOf(t), local });
+  const items = itemsOf(label, { groupOf, local });
   if (!items) return null;
   const atoms: SmilesAtom[] = [];
   const bonds: StructureBond[] = [];
@@ -547,15 +566,12 @@ export function complexStructure(
   }
   let turn = 0;
   for (const c of counters) {
-    const ion = COUNTER_IONS[c.ion];
     for (let k = 0; k < c.n; k++) {
-      const read = readSmiles(ion.smiles);
-      const orders = kekuleOrders(read.atoms, read.bonds);
-      add({ atoms: read.atoms.map(({ aromatic: _a, ...a }) => a), bonds: read.bonds.map((b, i) => ({ ...b, order: orders[i] })), attach: [] });
+      add(c.ion);
       const metal = firsts[turn++ % firsts.length];
       atoms[metal].charge = (atoms[metal].charge ?? 0) + 1;
     }
-    parts.push(`${c.n > 1 ? `${c.n} ` : ""}${ion.name}`);
+    parts.push(`${c.n > 1 ? `${c.n} ` : ""}${c.name}`);
   }
   return { atoms, bonds, attach: [], ...(haptic.length ? { haptic } : {}), name: parts.join(", ") };
 }
