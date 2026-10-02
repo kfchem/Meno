@@ -384,12 +384,15 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   bridging them stand clear, each bridging atom just outside its edge,
   each metal's other ligands straight out from the middle. It is seen
   from the side that hides least: no label on another or on an edge, the
-  ligands clear of it and of each other, the fewest edges crossing - a
-  face seen straight on where that does as well. Stryker's reagent, its
-  hydrides round its side, is seen down the axis its two clear faces
-  share: a hexagon, a corner up, each hydride outside an edge of it, each
-  PPh3 straight out. Its atoms keep their depths, as a cage's do; its
-  metals' contacts are drawn dashed, as they are written.
+  ligands clear of it and of each other, no two metals stacked nor an
+  edge seen end on, the fewest edges crossing - a face seen straight on,
+  or the solid from the side with a threefold axis upright, where that
+  does as well. Stryker's reagent, its hydrides on the edges of two
+  opposite faces, comes out as its neutron structure is shown: a corner
+  up and its opposite down, the four between them two by two, each
+  hydride beside the edge it bridges, each PPh3 straight out. Its atoms
+  keep their depths, as a cage's do; its metals' contacts are drawn
+  dashed, as they are written.
 - **Ligands round a metal** with no ring go evenly round it - two in a
   line, four in a cross - and the bulkiest go furthest apart: two bulky
   ligands trans to each other, the small ones (Cl, H, CO) between them. A

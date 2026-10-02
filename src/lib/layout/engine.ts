@@ -403,13 +403,18 @@ export function layout2D(input: LayoutInput): Layout2D {
  */
 function standUp(mol: Molecule, piece: number[], pos: Grown): void {
   const here = new Set(piece);
-  // a cluster with its first corner straight up from its middle
+  // a cluster upright, as it was seen
   const cluster = mol.units.find((u) => u.cluster && here.has(u.metal));
   if (cluster) {
-    const ms = cluster.cluster!.metals.map((m) => pos.get(m)!);
-    const c = { x: ms.reduce((t, p) => t + p.x, 0) / ms.length, y: ms.reduce((t, p) => t + p.y, 0) / ms.length };
-    const t = pos.get(cluster.metal)!;
-    const turn = Math.PI / 2 - Math.atan2(t.y - c.y, t.x - c.x);
+    const mid = (ms: number[]) => {
+      const ps = ms.map((m) => pos.get(m)!);
+      return { x: ps.reduce((t, p) => t + p.x, 0) / ps.length, y: ps.reduce((t, p) => t + p.y, 0) / ps.length };
+    };
+    const c = mid(cluster.cluster!.metals);
+    const up = cluster.cluster!.up;
+    const from = up?.from.length ? mid(up.from) : c;
+    const t = up?.to.length ? mid(up.to) : pos.get(cluster.metal)!;
+    const turn = Math.PI / 2 - Math.atan2(t.y - from.y, t.x - from.x);
     const cs = Math.cos(turn);
     const sn = Math.sin(turn);
     for (const a of piece) {

@@ -198,9 +198,9 @@ first halide (or group) is bound to the other part's metal as well. One
 with a hydride on it, made six times - [CuH(PPh3)]6, Stryker's reagent -
 is the octahedral cluster such hydrides make: the metals its corners, in
 contact along its twelve edges (drawn dashed), each part's hydride
-bridging an edge from its metal to the next part's (μ2-H, as neutron
-diffraction places them: Bennett et al., Inorg. Chem. 2014, 53, 2963),
-the six edges round the octahedron's side. A
+bridging an edge from its metal (μ2-H): the edges of two opposite faces,
+as neutron diffraction places them (Bennett et al., Inorg. Chem. 2014,
+53, 2963, Figure 1). A
 complex written out is V3000,
 its coordination bonds needing it. Expanded on the canvas it is laid out
 by Meno's engine, which is not yet made for coordination compounds: the

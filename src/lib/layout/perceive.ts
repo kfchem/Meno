@@ -129,7 +129,8 @@ export type MetalUnit = {
   dienes: DieneRing[];
   system: number;
   pair?: { metal: number; bridges: [number, number] };
-  cluster?: { metals: number[]; bridges: number[] };
+  /** (`up`: which way is up as the cluster is seen, from the metals below its middle to those above - set when it is laid out) */
+  cluster?: { metals: number[]; bridges: number[]; up?: { from: number[]; to: number[] } };
 };
 
 export const key = (a: number, b: number): string => (a < b ? `${a},${b}` : `${b},${a}`);

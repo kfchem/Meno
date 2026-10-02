@@ -15,9 +15,9 @@ type Vec3 = [number, number, number];
  * How long an edge is, in bond lengths: long enough that its two metals'
  * labels, and the label of an atom bridging it, stand clear of each other.
  */
-const EDGE = 2.4;
+const EDGE = 2.8;
 /** How far an atom bridging an edge stands out from the edge's middle, away from the cluster's. */
-const BRIDGE_OUT = 0.7;
+const BRIDGE_OUT = 1.0;
 
 const norm = (v: Vec3): Vec3 => {
   const l = Math.hypot(...v) || 1;
@@ -61,6 +61,40 @@ function faceViews(corners: Vec3[], mol: Molecule, metals: number[]): { toViewer
         const sy = norm([up[0] - kk * c[0], up[1] - kk * c[1], up[2] - kk * c[2]]);
         const sx: Vec3 = [sy[1] * c[2] - sy[2] * c[1], sy[2] * c[0] - sy[0] * c[2], sy[0] * c[1] - sy[1] * c[0]];
         out.push({ toViewer: c, sx, sy });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The octahedron seen from the side, one of its threefold axes upright -
+ * its two faces there top and bottom, the six edges between them a zigzag
+ * - from a little above, turned about that axis.
+ */
+function sideViews(corners: Vec3[], mol: Molecule, metals: number[]): { toViewer: Vec3; sx: Vec3; sy: Vec3 }[] {
+  const out: { toViewer: Vec3; sx: Vec3; sy: Vec3 }[] = [];
+  for (let i = 0; i < 6; i++) {
+    for (let j = i + 1; j < 6; j++) {
+      for (let k = j + 1; k < 6; k++) {
+        const t = [i, j, k];
+        if (!t.every((p) => t.every((q) => p === q || mol.neighbours[metals[p]].includes(metals[q])))) continue;
+        const axis = norm([0, 1, 2].map((d) => (corners[i][d] + corners[j][d] + corners[k][d]) / 3) as Vec3);
+        const helper: Vec3 = Math.abs(axis[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+        const h0 = helper[0] * axis[0] + helper[1] * axis[1] + helper[2] * axis[2];
+        const p1 = norm([helper[0] - h0 * axis[0], helper[1] - h0 * axis[1], helper[2] - h0 * axis[2]]);
+        const p2: Vec3 = [axis[1] * p1[2] - axis[2] * p1[1], axis[2] * p1[0] - axis[0] * p1[2], axis[0] * p1[1] - axis[1] * p1[0]];
+        for (let az = 0; az < 120; az += 5) {
+          for (const elDeg of [10, 15, 20, 25, 30, 35]) {
+            const a = (az * Math.PI) / 180;
+            const e = (elDeg * Math.PI) / 180;
+            const v = norm([0, 1, 2].map((d) => Math.cos(e) * (Math.cos(a) * p1[d] + Math.sin(a) * p2[d]) + Math.sin(e) * axis[d]) as Vec3);
+            const k2 = axis[0] * v[0] + axis[1] * v[1] + axis[2] * v[2];
+            const sy = norm([axis[0] - k2 * v[0], axis[1] - k2 * v[1], axis[2] - k2 * v[2]]);
+            const sx: Vec3 = [sy[1] * v[2] - sy[2] * v[1], sy[2] * v[0] - sy[0] * v[2], sy[0] * v[1] - sy[1] * v[0]];
+            out.push({ toViewer: v, sx, sy });
+          }
+        }
       }
     }
   }
@@ -141,8 +175,10 @@ export function placeCluster(mol: Molecule, unit: MetalUnit): EtaLayout {
   // crossing (fewer still where one is not plainly behind the other)
   const labelled = (a: number) => mol.el[a] !== "C";
   let best: { view: ReturnType<typeof views>[number]; cost: number } | null = null;
-  // (a face seen straight on first: as well as any other, it is the one kept)
-  const tried = [...faceViews(metals.map((m) => solid.get(m)!), mol, metals), ...views(400)];
+  // (a face seen straight on first, then from the side with its axis
+  // upright: as well as any other, it is the one kept)
+  const corners = metals.map((m) => solid.get(m)!);
+  const tried = [...faceViews(corners, mol, metals), ...sideViews(corners, mol, metals), ...views(400)];
   for (const view of tried) {
     const at = new Map(atoms.map((x) => [x, seen(solid.get(x)!, view)]));
     const ends = ligands.map((l) => ({ ...l, at: seen(l.end, view).at }));
@@ -151,8 +187,10 @@ export function placeCluster(mol: Molecule, unit: MetalUnit): EtaLayout {
       const a = at.get(atoms[i])!;
       for (let j = i + 1; j < atoms.length; j++) {
         const b = at.get(atoms[j])!;
-        // (labels a label's width apart; bonded, a short bond's)
-        const room = touches(atoms[i], atoms[j]) ? 0.7 : labelled(atoms[i]) && labelled(atoms[j]) ? 1 : 0.6;
+        // (labels a label's width apart - two metals so even in contact; a
+        // bridging atom bonded to a metal, a short bond's)
+        const metals2 = metals.includes(atoms[i]) && metals.includes(atoms[j]);
+        const room = touches(atoms[i], atoms[j]) && !metals2 ? 0.7 : labelled(atoms[i]) && labelled(atoms[j]) ? 1 : 0.6;
         const d = Math.hypot(a.at.x - b.at.x, a.at.y - b.at.y);
         if (d < room) cost += 10 * (1 + (room - d));
       }
@@ -160,6 +198,11 @@ export function placeCluster(mol: Molecule, unit: MetalUnit): EtaLayout {
         if (p === atoms[i] || q === atoms[i]) continue;
         if (toSegment(a.at, at.get(p)!.at, at.get(q)!.at) < 0.4) cost += 5;
       }
+    }
+    // no edge between metals seen all but end on
+    for (const [a, b] of edges) {
+      if (!metals.includes(a) || !metals.includes(b)) continue;
+      if (Math.hypot(at.get(a)!.at.x - at.get(b)!.at.x, at.get(a)!.at.y - at.get(b)!.at.y) < 0.55 * EDGE) cost += 5;
     }
     for (let i = 0; i < edges.length; i++) {
       for (let j = i + 1; j < edges.length; j++) {
@@ -197,6 +240,11 @@ export function placeCluster(mol: Molecule, unit: MetalUnit): EtaLayout {
     pos.set(x, v.at);
     lift.set(x, v.depth);
   }
+  // which way is up, as seen: from the metals below the middle to those above
+  unit.cluster!.up = {
+    from: metals.filter((m) => pos.get(m)!.y < -1e-6),
+    to: metals.filter((m) => pos.get(m)!.y > 1e-6),
+  };
   const hints = new Map<number, Map<number, Point>>();
   for (const l of ligands) {
     const from = pos.get(l.metal)!;
