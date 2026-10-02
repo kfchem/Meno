@@ -25,6 +25,74 @@ export type Tetrahedral = {
   volume: 1 | -1;
 };
 
+/**
+ * An axis of chirality: the single bond between `atoms`, each end with two
+ * other neighbours (a biaryl's - BINAP's C1-C1'), and how the two `refs`,
+ * one bonded to each end, are turned about it: the sign of the torsion
+ * refs[0]-atoms[0]-atoms[1]-refs[1] (IUPAC's: + where, looking along the
+ * axis, the near one turns clockwise onto the far one). Drawn flat, it is
+ * shown by a wedge on a bond out of an end of it, narrow there, to the
+ * neighbour that stands out of the page, the other end's neighbours in it -
+ * as an atropisomer's wedge is read.
+ */
+export type Axial = { atoms: readonly [number, number]; refs: readonly [number, number]; sense: 1 | -1 };
+
+/** The sign of the torsion p-q-r-s, IUPAC's: + where, looking from q to r, p turns clockwise onto s. */
+export function torsionSense(p: readonly number[], q: readonly number[], r: readonly number[], s: readonly number[]): 1 | -1 | 0 {
+  const b1 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+  const b2 = [r[0] - q[0], r[1] - q[1], r[2] - q[2]];
+  const b3 = [s[0] - r[0], s[1] - r[1], s[2] - r[2]];
+  const c = [b2[1] * b3[2] - b2[2] * b3[1], b2[2] * b3[0] - b2[0] * b3[2], b2[0] * b3[1] - b2[1] * b3[0]];
+  const v = b1[0] * c[0] + b1[1] * c[1] + b1[2] * c[2];
+  return Math.abs(v) < 1e-9 ? 0 : v > 0 ? 1 : -1;
+}
+
+/**
+ * How an axis drawn flat - `pos` - turns, where `lifted`, a neighbour of
+ * its first end, stands `up` (+1) or down (-1) out of the page and the
+ * rest are in it: its sense, as `Axial` has it, or 0.
+ */
+export function drawnAxisSense(
+  pos: (a: number) => Point,
+  axis: Omit<Axial, "sense">,
+  lifted: number,
+  up: 1 | -1,
+): 1 | -1 | 0 {
+  const [i, j] = axis.atoms;
+  const [a, b] = axis.refs;
+  // (the end's other neighbour stands the other way: the ring turned about the axis)
+  const z = lifted === a ? up : -up;
+  const at = (k: number, depth = 0) => [pos(k).x, pos(k).y, depth];
+  return torsionSense(at(a, z), at(i), at(j), at(b));
+}
+
+/**
+ * The wedge that shows an axis drawn flat: out of an end, narrow there, on
+ * a single bond to one of the end's two other neighbours (in a Kekulé ring,
+ * the one that is not a double bond, which no wedge can be put on) - a
+ * wedge where that neighbour standing out of the page gives the sense the
+ * axis has, at its first end or else at its second, and else hashes. None
+ * where the drawing cannot show it (an end in line with the axis).
+ */
+export function axisWedge(mol: Molecule, pos: Map<number, Point>, axis: Axial): Wedge | null {
+  const at = (k: number) => pos.get(k)!;
+  const [i, j] = axis.atoms;
+  const [a, b] = axis.refs;
+  // (seen from the other end, an axis turns the same way)
+  const ends = [axis, { atoms: [j, i] as const, refs: [b, a] as const, sense: axis.sense }];
+  const single = (end: number, other: number) =>
+    mol.neighbours[end].filter((n) => n !== other && mol.bonds[mol.bondIndex.get(key(end, n))!].order === 1);
+  for (const up of [1, -1] as const) {
+    for (const end of ends) {
+      const [e, o] = end.atoms;
+      for (const c of single(e, o)) {
+        if (drawnAxisSense(at, end, c, up) === axis.sense) return { from: e, to: c, stereo: up === 1 ? "up" : "down" };
+      }
+    }
+  }
+  return null;
+}
+
 export type Wedge = {
   /** The stereocentre: the narrow end. */
   from: number;

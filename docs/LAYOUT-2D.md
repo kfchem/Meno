@@ -281,6 +281,13 @@ Nothing else is moved for it: the drawing is set first, its H's last.
   bridgehead often has them so), read from the angles two of them and the
   wedge would say one thing and the other two the opposite
   (`drawnVolume`). With three drawn and the H left out, the angles are read.
+- An axis of chirality - a biaryl's bond, BINAP's C1-C1' - is shown by
+  one wedge out of an end of it, narrow there, on the single bond to the
+  neighbour that stands out of the page for the sense the axis has (or on
+  hashes, behind it), both rings drawn flat: the only wedge that goes on a
+  ring bond, as it must (`axisWedge`). Read back, a wedge narrow at an atom
+  with three groups at the end of a single bond in no ring (a ring through
+  a metal aside) is such an axis's (`readStereo`).
 - A cage drawn in perspective shows its stereochemistry by the drawing
   itself, with no wedges; what it shows is read back from the solid the
   cage is drawn from, fitted to where its atoms are and how deep, and the

@@ -1,3 +1,4 @@
+import type { Axial } from "../layout/stereo";
 import type { SmilesAtom } from "./smiles";
 
 /**
@@ -5,8 +6,8 @@ import type { SmilesAtom } from "./smiles";
  * a ligand's own label - (S,S)-DPEN, (R)-CBS, (1S)-CSA, L-proline - and what
  * it says of the structure: the configuration its SMILES has, or that
  * configuration's mirror image. For one whose chirality is axial (BINAP,
- * SEGPHOS), the descriptor is read and says nothing of its atoms: SMILES
- * has no way to say it.
+ * SEGPHOS), which SMILES has no way to say, the configuration is its axis's
+ * (`Axial`, given with the structure): as given, or turned the other way.
  */
 export type Enantiomers = {
   /** The descriptors of the configuration its SMILES has: (S,S), L. */
@@ -18,17 +19,17 @@ export type Enantiomers = {
    * made from D-fructose); else it says none, and the structure has none.
    */
   plain?: boolean;
-  /** Its chirality is axial: read, and not shown on its atoms. */
+  /** Its chirality is axial: its configuration is its axis's, not its atoms'. */
   axial?: boolean;
 };
 
 /**
  * The descriptor a chiral one is shown with where it stands for itself (a
- * list, a picture): the one its SMILES's configuration has - none for an
- * axial one, whose descriptor shows on no atom, or one named as itself.
+ * list, a picture): the one its SMILES's configuration (or its axis as
+ * given) has - none for one named as itself.
  */
 export function shownAs(e: Enantiomers | undefined): string | null {
-  return e && !e.axial && !e.plain && e.as.length ? e.as[0] : null;
+  return e && !e.plain && e.as.length ? e.as[0] : null;
 }
 
 /** A descriptor before a label: (R)-, (S,S)-, (1S,2S)-, (+)-, (−)-, (±)-, D-, L-. */
@@ -65,4 +66,17 @@ export function withConfiguration(
   if (!as && !mirror) return null;
   if (e.axial || as) return [...atoms];
   return atoms.map((a) => (a.tetra ? { ...a, tetra: { ...a.tetra, volume: (-a.tetra.volume) as 1 | -1 } } : a));
+}
+
+/**
+ * A structure's axes of chirality with the configuration a descriptor says,
+ * as `withConfiguration` its atoms': as given, turned the other way, or -
+ * with none (where the label alone says none) and with (±) - none at all.
+ */
+export function axesWith(axes: readonly Axial[] | undefined, e: Enantiomers | undefined, descriptor: string | null): Axial[] | undefined {
+  if (!axes?.length) return undefined;
+  if (descriptor == null) return e?.plain ? [...axes] : undefined;
+  if (!e || descriptor === "(±)") return undefined;
+  const mirror = e.mirror.map(plainDescriptor).includes(descriptor);
+  return axes.map((ax) => (mirror ? { ...ax, sense: (-ax.sense) as 1 | -1 } : ax));
 }

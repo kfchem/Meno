@@ -14,10 +14,14 @@
  *   way - from one side of a chair to the other - and the configuration
  *   turns with it.
  * - A double bond's groups are on the side they are drawn on.
+ * - An axis of chirality - a single bond in no ring, each end with two
+ *   other neighbours (a biaryl's) - shows how it turns by a wedge out of an
+ *   end, narrow there: that neighbour out of the page (or behind it, on
+ *   hashes), the other end's neighbours in it.
  */
 import { freeCorners, solidOf } from "./cage";
-import { key, perceive, type CisTrans } from "./perceive";
-import { drawnVolume, placeStereo, type Stereo, type Tetrahedral } from "./stereo";
+import { isMetal, key, perceive, type CisTrans } from "./perceive";
+import { drawnAxisSense, drawnVolume, placeStereo, type Axial, type Stereo, type Tetrahedral } from "./stereo";
 
 export type DrawnAtom = {
   x: number;
@@ -49,6 +53,8 @@ export type DrawnStereo = {
   tetra: Map<number, Tetrahedral>;
   /** By bond index. */
   cisTrans: Map<number, CisTrans>;
+  /** Each axis's refs the lower-numbered neighbour at each end. */
+  axes: Axial[];
 };
 
 type V3 = [number, number, number];
@@ -130,7 +136,27 @@ export function readStereo(
     cisTrans.set(i, { refs: [ra, rb], cis: sa === sb });
   });
 
-  return { tetra, cisTrans };
+  const axes: Axial[] = [];
+  bonds.forEach((bond) => {
+    if (bond.order !== 1 || bondOf.get(key(bond.a, bond.b)) !== bond) return;
+    const ends: [number, number][] = [
+      [bond.a, bond.b],
+      [bond.b, bond.a],
+    ];
+    for (const [i, j] of ends) {
+      const near = neighbours[i].filter((n) => n !== j);
+      const far = neighbours[j].filter((n) => n !== i);
+      if (near.length !== 2 || far.length !== 2 || atoms[i].hs || atoms[j].hs || tetra.has(i)) continue;
+      const lifted = near.find((n) => lift(i, n) !== 0);
+      if (lifted == null || inRing(neighbours, i, j, (k) => isMetal(atoms[k].el ?? "C"))) continue;
+      const refs: [number, number] = [Math.min(...near), Math.min(...far)];
+      const sense = drawnAxisSense((k) => atoms[k], { atoms: [i, j], refs }, lifted, lift(i, lifted) as 1 | -1);
+      if (sense) axes.push({ atoms: [i, j], refs, sense });
+      return;
+    }
+  });
+
+  return { tetra, cisTrans, axes };
 }
 
 /**
@@ -322,4 +348,24 @@ export function sameConfiguration(
     if (len) swaps += len - 1;
   }
   return (swaps % 2 === 0) === (p.volume === q.volume);
+}
+
+/**
+ * Whether the bond i-j is in a ring: j reached from i some other way - not
+ * through a metal (BINAP's axis in its chelate's ring is still an axis).
+ */
+function inRing(neighbours: readonly number[][], i: number, j: number, metal: (k: number) => boolean): boolean {
+  const seen = new Set([i]);
+  const todo = neighbours[i].filter((n) => n !== j && !metal(n));
+  for (const n of todo) seen.add(n);
+  while (todo.length) {
+    const u = todo.pop()!;
+    if (u === j) return true;
+    for (const v of neighbours[u]) {
+      if (seen.has(v) || metal(v)) continue;
+      seen.add(v);
+      todo.push(v);
+    }
+  }
+  return false;
 }

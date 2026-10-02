@@ -141,9 +141,11 @@ describe("configurations", () => {
     expect(centres(of("D-proline"))).toEqual(centres(of("L-proline")).map((v) => -v));
     // a reagent named as one enantiomer has it without a descriptor
     expect(centres(of("Shi's catalyst"))).toHaveLength(3);
-    // an axial one's descriptor is read, and shows on no atom
+    // an axial one's descriptor is its axis's, not its atoms': turned one way or the other
     expect(formula("(S)-BINAP")).toBe("C44H32P2");
     expect(centres(of("(S)-BINAP"))).toEqual([]);
+    expect(of("(S)-BINAP").axes!.map((a) => a.sense)).toEqual(of("(R)-BINAP").axes!.map((a) => -a.sense));
+    expect(of("BINAP").axes).toBeUndefined();
     // a descriptor that names no enantiomer of it
     for (const no of ["(S)-DMP", "(R)-DPEN", "(R,R)-Shi's catalyst", "L-PPh3"]) expect(abbreviationOf(no), no).toBeUndefined();
     // a reagent's own ligand keeps its configuration, mirrored with the reagent

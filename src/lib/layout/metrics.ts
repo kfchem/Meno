@@ -435,9 +435,12 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       ringBonds.add(pair(a, b));
     });
   }
+  // (a centre's wedge: an axis of chirality's - BINAP's, on a ring bond as
+  // it must be, neither end with four groups - is not counted)
+  const groupsAt = (a: number) => neighbours[a].length + (g.hydrogens?.[a] ?? 0);
   const ringWedges = (g.wedged ?? []).filter((e) => {
     const [a, b] = edges[e] ?? [];
-    return a != null && ringBonds.has(pair(a, b));
+    return a != null && ringBonds.has(pair(a, b)) && (groupsAt(a) >= 4 || groupsAt(b) >= 4);
   }).length;
 
   let crowdedLabels = 0;
