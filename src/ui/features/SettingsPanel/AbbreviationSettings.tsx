@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ABBREVIATIONS, abbreviationStructure, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
+import { ABBREVIATIONS, abbreviationStructure, labelRuns, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
 import { COUNTER_IONS, LIGAND_FAMILIES, ligandPicture, structureFormula, type GroupStructure, type Ligand } from "../../../lib/chem/ligands";
 import { shownAs } from "../../../lib/chem/enantiomers";
 import { PRECATALYST_GENERATIONS, REAGENT_USES, REAGENTS, type Reagent } from "../../../lib/chem/reagents";
@@ -270,7 +270,9 @@ function Entry({
       />
       <div className="space-y-0.5 px-3 py-2">
         <div className="flex items-baseline gap-2">
-          <span className="text-base font-semibold text-gh-black">{a.label}</span>
+          <span className="text-base font-semibold text-gh-black">
+            <LabelText label={a.label} />
+          </span>
           {a.free && (
             <span
               title="In IUPAC's Table II: may be used without explanation"
@@ -281,10 +283,31 @@ function Entry({
           )}
         </div>
         {a.name && <div className="text-xs text-gh-black">{a.name}</div>}
-        {a.also?.length ? <div className="text-xs text-gh-gray">also {a.also.join(", ")}</div> : null}
+        {a.also?.length ? (
+          <div className="text-xs text-gh-gray">
+            also{" "}
+            {a.also.map((x, i) => (
+              <span key={x}>
+                {i ? ", " : ""}
+                <LabelText label={x} />
+              </span>
+            ))}
+          </div>
+        ) : null}
         {a.smiles && <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{a.smiles}</code>}
         {children}
       </div>
     </article>
+  );
+}
+
+/** A label set as a drawing sets it: its counts below the line (PPh₃), a descriptor's R and S and a t- in italics. */
+function LabelText({ label }: { label: string }) {
+  return (
+    <>
+      {labelRuns(label).map((r, i) =>
+        r.sub ? <sub key={i}>{r.text}</sub> : r.sup ? <sup key={i}>{r.text}</sup> : r.italic ? <i key={i}>{r.text}</i> : <span key={i}>{r.text}</span>,
+      )}
+    </>
   );
 }
