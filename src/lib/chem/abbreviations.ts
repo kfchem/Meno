@@ -18,7 +18,9 @@
  */
 import { readSmiles, type Smiles } from "./smiles";
 import { substitutedAryl } from "./substitutedAryl";
-import { complexStructure, LIGAND_UNITS, ligandOf, ligandStructure, type GroupStructure } from "./ligands";
+import { condensedStructure } from "./condensed";
+import { complexStructure, LIGAND_UNITS, ligandStructure, namedLigand, type GroupStructure } from "./ligands";
+import { precatalystStructure, REAGENT_UNITS, reagentOf, reagentStructure } from "./reagents";
 import { kekuleOrders } from "./kekulize";
 import type { TextRun } from "./layout2d";
 import { elements } from "../../utils/atomUtils";
@@ -34,8 +36,12 @@ export type Abbreviation = {
   name: string;
   /** In IUPAC's Table II: may be used without explanation. */
   free?: boolean;
-  /** A ligand (./ligands), or a complex's formula, rather than a group: its structure is made, not read from `smiles`. */
-  kind?: "ligand" | "complex";
+  /**
+   * A ligand (./ligands), a complex's formula, or a whole molecule - a
+   * reagent (./reagents), or a simple formula read by rule (./condensed) -
+   * rather than a group: its structure is made, not read from `smiles`.
+   */
+  kind?: "ligand" | "complex" | "reagent";
 };
 
 /** Groups attached by one bond. */
@@ -211,16 +217,73 @@ function composedName(group: string, word: string): string {
 
 /**
  * A label put together by rule (OTBS, NHBoc, CO2Me, 2,6-diMeBz) - or a
- * ligand (PPh3, dppf) or a complex's formula (Pd(PPh3)4) - or none.
+ * ligand (PPh3, dppf, (S,S)-DPEN), a reagent (DMP, (R)-CBS), a complex's
+ * formula (Pd(PPh3)4) or a simple formula (Et3N, BF3·OEt2) - or none.
  */
 function composedOf(label: string): Abbreviation | undefined {
-  const ligand = ligandOf(label);
-  if (ligand) return { label: ligand.label, ...(ligand.also ? { also: ligand.also } : {}), name: ligand.name, smiles: ligand.smiles, kind: "ligand" };
+  const ligand = namedLigand(label);
+  if (ligand) {
+    const { ligand: l, descriptor } = ligand;
+    const d = descriptor ? `${descriptor}-` : "";
+    return { label: d + l.label, ...(l.also ? { also: l.also.map((x) => d + x) } : {}), name: d + l.name, smiles: l.smiles, kind: "ligand" };
+  }
+  const reagent = reagentOf(label);
+  if (reagent) {
+    const { reagent: r, descriptor } = reagent;
+    const d = descriptor ? `${descriptor}-` : "";
+    return { label: d + r.label, ...(r.also ? { also: r.also.map((x) => d + x) } : {}), name: d + r.name, smiles: r.smiles ?? "", kind: "reagent" };
+  }
   const group = composedGroupOf(label);
   if (group) return group;
   const complex = complexStructure(label, groupStructure);
   if (complex) return { label, name: complex.name, smiles: "", kind: "complex" };
+  const made = madeStructure(label);
+  if (made) return { label, name: made.name, smiles: "", kind: "reagent" };
   return undefined;
+}
+
+/** A whole molecule a label stands for: one of the reagents, or one made by rule (`byRule`). */
+function madeStructure(label: string): (GroupStructure & { name: string }) | null {
+  return reagentStructure(label, groupStructure) ?? byRule(label);
+}
+
+/**
+ * A whole molecule a label stands for by rule alone - what the reagent
+ * dictionary need not hold: a Buchwald precatalyst (XPhos Pd G3,
+ * ./reagents), an adduct of known parts joined by a middle dot (BF3·OEt2,
+ * CeCl3·7H2O, each part counted), or a simple formula (./condensed). Null
+ * for any other label.
+ */
+export function byRule(label: string): (GroupStructure & { name: string }) | null {
+  const precatalyst = precatalystStructure(label, groupStructure);
+  if (precatalyst) return precatalyst;
+  const pieces = label.split(/[·•∙]/);
+  if (pieces.length > 1) {
+    const atoms: GroupStructure["atoms"] = [];
+    const bonds: GroupStructure["bonds"] = [];
+    const names: string[] = [];
+    for (const piece of pieces) {
+      const m = /^(\d*)(.+)$/.exec(piece.trim());
+      const s = m && moleculeOf(m[2]);
+      if (!m || !s) return null;
+      for (let k = 0; k < (m[1] ? Number(m[1]) : 1); k++) {
+        const at = atoms.length;
+        atoms.push(...s.atoms.map((a) => (a.tetra ? { ...a, tetra: { ...a.tetra, neighbours: a.tetra.neighbours.map((n) => (n < 0 ? n : n + at)) } } : { ...a })));
+        bonds.push(...s.bonds.map((b) => ({ ...b, a1: b.a1 + at, a2: b.a2 + at, ...(b.endpoints ? { endpoints: b.endpoints.map((e) => e + at) } : {}) })));
+      }
+      names.push(`${m[1] ? `${m[1]} ` : ""}${abbreviationOf(m[2])?.name ?? m[2]}`);
+    }
+    return { atoms, bonds, attach: [], name: names.join(" · ") };
+  }
+  return condensedStructure(label, groupLabels(), groupStructure);
+}
+
+/** What a label stands for as a whole molecule - a ligand on its own, a complex, a reagent - or null for a group. */
+function moleculeOf(label: string): GroupStructure | null {
+  const a = abbreviationOf(label);
+  if (!a?.kind) return null;
+  const s = abbreviationStructure(label);
+  return s && { ...s, attach: [] };
 }
 
 /** A group put together by rule - a substituted aryl group, a group behind O, S or NH, an ester - or none. */
@@ -272,6 +335,7 @@ export function setCustomAbbreviations(list: readonly CustomAbbreviation[]): voi
     for (const l of [a.label, ...(a.also ?? [])]) if (!BY_LABEL.has(l) && !custom.has(l)) custom.set(l, a);
   }
   COMPOSED_SEEN.clear();
+  GROUP_LABELS_SORTED = null;
   setUnits();
 }
 
@@ -344,8 +408,18 @@ export function abbreviationStructure(label: string): GroupStructure | null {
   if (a.kind === "ligand") {
     // a label bonded to a metal as drawn: neutral, as the drawing is (only a
     // complex's formula balances a Cp*- against its metal)
-    const { anionic: _anionic, ...s } = ligandStructure(ligandOf(a.label)!);
-    return { ...s, atoms: s.atoms.map(({ charge: _charge, ...atom }) => atom) };
+    const named = namedLigand(label.trim()) ?? namedLigand(a.label)!;
+    const { anionic, double, ...s } = ligandStructure(named.ligand, named.descriptor);
+    // (a neutral donor lends its pair: the bond to it, a coordination bond)
+    const pi = new Set((s.haptic ?? []).map((h) => h.star));
+    const lends = s.attach.map((at, k) => !anionic[k] && !double[k] && !pi.has(at));
+    return { ...s, atoms: s.atoms.map(({ charge: _charge, ...atom }) => atom), ...(lends.some(Boolean) ? { lends } : {}) };
+  }
+  if (a.kind === "reagent") {
+    const made = madeStructure(label.trim());
+    if (!made) return null;
+    const { name: _name, ...s } = made;
+    return s;
   }
   if (a.kind === "complex") {
     const c = complexStructure(label.trim(), groupStructure);
@@ -354,6 +428,13 @@ export function abbreviationStructure(label: string): GroupStructure | null {
     return s;
   }
   return smilesGroup(a.smiles);
+}
+
+let GROUP_LABELS_SORTED: string[] | null = null;
+/** The labels of the groups (and the user's own), longest first: what a simple formula is read into. */
+function groupLabels(): string[] {
+  GROUP_LABELS_SORTED ??= [...new Set([...BY_LABEL.keys(), ...custom.keys()])].sort((x, y) => y.length - x.length);
+  return GROUP_LABELS_SORTED;
 }
 
 /** A group bound by one bond (OAc, OTf, Me) - inside a complex's formula - or null. */
@@ -398,7 +479,7 @@ const ELEMENTS = new Set(elements.map((e) => e.symbol));
 let UNITS: string[] = [];
 /** The units labels are read into: the groups', the user's own among them. */
 function setUnits(): void {
-  UNITS = [...new Set([...[...GROUPS, ...custom.values()].flatMap((g) => [g.label, ...(g.also ?? [])]), ...LIGAND_UNITS, "pin", "Phth"])]
+  UNITS = [...new Set([...[...GROUPS, ...custom.values()].flatMap((g) => [g.label, ...(g.also ?? [])]), ...LIGAND_UNITS, ...REAGENT_UNITS, "pin", "Phth"])]
     // (Bpin is B and pin, and so on the left pinB)
     .filter((u) => u.length > 1 && u !== "Bpin")
     .sort((x, y) => y.length - x.length);
@@ -463,16 +544,22 @@ export function reversedLabel(text: string): string {
  */
 const ITALIC_PREFIX = /^(sec|tert|[nistomp])$/;
 
-/** Which of a label's units are such a prefix: on its own, before a hyphen. */
+/** A stereodescriptor before a label, whose R and S are set in italics: (S,S)-DPEN, (1S)-CSA. */
+const DESCRIPTOR_UNIT = /^\((\d*[RS](?:,\d*[RS])*)\)$/;
+
+/**
+ * Which of a label's units are such a prefix, or a stereodescriptor: on
+ * its own, before a hyphen.
+ */
 export function italicUnits(units: readonly string[]): boolean[] {
-  return units.map((u, k) => ITALIC_PREFIX.test(u) && (units[k + 1] ?? "").startsWith("-"));
+  return units.map((u, k) => (ITALIC_PREFIX.test(u) || DESCRIPTOR_UNIT.test(u)) && (units[k + 1] ?? "").startsWith("-"));
 }
 
 /**
  * A label's runs for the drawing: the counts after an element, a group or a
  * parenthesis set as subscripts (CO2Me, CH(CH3)2), a prefix such as the t
- * of t-Bu in italics, and a sign at its end as a superscript charge (NMe3+:
- * the 3 is the methyls' count).
+ * of t-Bu and a stereodescriptor's R and S in italics, and a sign at its
+ * end as a superscript charge (NMe3+: the 3 is the methyls' count).
  */
 export function labelRuns(text: string): TextRun[] {
   const charge = /[+−-]$/.exec(text);
@@ -483,6 +570,8 @@ export function labelRuns(text: string): TextRun[] {
   return runs;
 }
 
+const REAGENT_NAMES = new Set(REAGENT_UNITS);
+
 /** The runs `units` are set in, those `italic` marks in italics. */
 export function unitRuns(units: readonly string[], italic: readonly boolean[] = []): TextRun[] {
   const runs: TextRun[] = [];
@@ -492,6 +581,14 @@ export function unitRuns(units: readonly string[], italic: readonly boolean[] = 
     else runs.push({ text: t, ...(sub ? { sub: true } : {}), ...(it ? { italic: true } : {}) });
   };
   units.forEach((unit, k) => {
+    // a stereodescriptor: its R and S in italics, its locants and commas not
+    const descriptor = italic[k] ? DESCRIPTOR_UNIT.exec(unit) : null;
+    if (descriptor) {
+      push("(");
+      for (const ch of descriptor[1]) push(ch, false, ch === "R" || ch === "S");
+      push(")");
+      return;
+    }
     if (italic[k]) return push(unit, false, true);
     const group = /^\((.*)\)(\d*)$/.exec(unit);
     if (group) {
@@ -502,6 +599,8 @@ export function unitRuns(units: readonly string[], italic: readonly boolean[] = 
       if (group[2]) push(group[2], true);
       return;
     }
+    // a reagent's name: its digits are no counts (T3P, XPhos Pd G3)
+    if (REAGENT_NAMES.has(unit)) return push(unit);
     // a group's own prefix: the t of t-Bu, the p of p-Ts
     const prefixed = /^(sec|tert|[nistomp])(-.+)$/.exec(unit);
     if (prefixed) {

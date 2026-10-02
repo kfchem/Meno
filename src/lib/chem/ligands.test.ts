@@ -13,18 +13,24 @@ describe("the ligands", () => {
     PPh3: "C18H15P", PCy3: "C18H33P", "P(t-Bu)3": "C12H27P", "P(o-Tol)3": "C21H21P", PMe3: "C3H9P", PEt3: "C6H15P",
     PBu3: "C12H27P", "P(OPh)3": "C18H15O3P", "P(OMe)3": "C3H9O3P", TFP: "C12H9O3P", AsPh3: "C18H15As",
     XPhos: "C33H49P", SPhos: "C26H35O2P", RuPhos: "C30H43O2P", BrettPhos: "C35H53O2P", tBuXPhos: "C29H45P",
-    DavePhos: "C26H36NP", JohnPhos: "C20H27P",
+    DavePhos: "C26H36NP", JohnPhos: "C20H27P", CyJohnPhos: "C24H31P", MePhos: "C25H33P", tBuMePhos: "C21H29P",
+    tBuDavePhos: "C22H32NP", PhDavePhos: "C26H24NP", CPhos: "C28H41N2P", tBuBrettPhos: "C31H49O2P", AdBrettPhos: "C43H61O2P",
+    RockPhos: "C31H49OP", Me4tBuXPhos: "C33H53P", EPhos: "C36H55OP", GPhos: "C35H53O2P", sSPhos: "C26H34NaO5PS",
     dppm: "C25H22P2", dppe: "C26H24P2", dppp: "C27H26P2", dppb: "C28H28P2", dppf: "C34H28FeP2", BINAP: "C44H32P2",
     Xantphos: "C39H32OP2", DPEphos: "C36H28OP2",
     bpy: "C10H8N2", dtbpy: "C18H24N2", phen: "C12H8N2", py: "C5H5N", TMEDA: "C6H16N2", en: "C2H8N2", MeCN: "C2H3N", NH3: "H3N",
     IPr: "C27H36N2", IMes: "C21H24N2", SIPr: "C27H38N2", SIMes: "C21H26N2",
     cod: "C8H12", nbd: "C7H8", dba: "C17H14O", "p-cymene": "C10H14", "Cp*": "C10H15", Cp: "C5H5",
     acac: "C5H7O2", THF: "C4H8O", H2O: "H2O", CO: "CO",
+    SEGPHOS: "C38H28O4P2", "DTBM-SEGPHOS": "C74H100O8P2", DPEN: "C14H16N2", DACH: "C6H14N2",
+    // (bound as anions: TsDPEN by its sulfonamide's N, salen by both its O)
+    TsDPEN: "C21H21N2O2S", salen: "C16H14N2O2",
+    allyl: "C3H5", dvtms: "C8H18OSi2", "=CHPh": "C7H6", "=CH2": "CH2",
   };
 
   it("are each the molecule their names give, with as many donors as they bind by", () => {
     expect(Object.keys(formulas).sort()).toEqual(LIGANDS.map((l) => l.label).sort());
-    const donors: Record<string, number> = { dppm: 2, dppe: 2, dppp: 2, dppb: 2, dppf: 2, BINAP: 2, Xantphos: 2, DPEphos: 2, bpy: 2, dtbpy: 2, phen: 2, TMEDA: 2, en: 2, cod: 2, nbd: 2, acac: 2 };
+    const donors: Record<string, number> = { dppm: 2, dppe: 2, dppp: 2, dppb: 2, dppf: 2, BINAP: 2, Xantphos: 2, DPEphos: 2, bpy: 2, dtbpy: 2, phen: 2, TMEDA: 2, en: 2, cod: 2, nbd: 2, acac: 2, SEGPHOS: 2, "DTBM-SEGPHOS": 2, DPEN: 2, TsDPEN: 2, DACH: 2, salen: 4, dvtms: 2 };
     for (const l of LIGANDS) {
       const s = ligandStructure(l);
       expect(formula(s), l.label).toBe(formulas[l.label]);
@@ -155,6 +161,19 @@ describe("complexes' formulas", () => {
     expect(formula(rh)).toBe("C16H24BF4Rh");
     expect(rh.atoms.find((a) => a.el === "Rh")!.charge).toBe(1);
     expect(charge(rh)).toBe(0);
+    // counter-anions read by rule, named as written; BArF, which no rule reads, by its name
+    const counters: Record<string, string> = {
+      "[Cu(MeCN)4]PF6": "C8H12CuF6N4P", "[Rh(cod)2]SbF6": "C16H24F6RhSb", "[Cu(MeCN)4]ClO4": "C8H12ClCuN4O4",
+      "[Rh(cod)2]AsF6": "C16H24AsF6Rh", "[Rh(cod)2]BPh4": "C40H44BRh", "[Rh(cod)2]BArF": "C48H36BF24Rh",
+    };
+    for (const [label, f] of Object.entries(counters)) {
+      expect(formula(of(label)), label).toBe(f);
+      expect(charge(of(label)), label).toBe(0);
+    }
+    expect(abbreviationOf("[Cu(MeCN)4]PF6")?.name).toBe("copper, 4 acetonitrile, PF6⁻");
+    const clo4 = of("[Cu(MeCN)4]ClO4");
+    const cl = clo4.atoms.findIndex((a) => a.el === "Cl");
+    expect(clo4.bonds.filter((b) => b.a1 === cl || b.a2 === cl).map((b) => b.order).sort()).toEqual([1, 2, 2, 2]);
   });
 
   it("are no complex where any part is not known, or there is nothing but metal", () => {

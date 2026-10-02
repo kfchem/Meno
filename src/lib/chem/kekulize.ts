@@ -10,16 +10,18 @@
  * without anything outside TypeScript, so a file opens the same before the
  * chemistry backend is available as after.
  *
- * Charges are not read yet, so a charged aromatic atom (pyridinium,
- * cyclopentadienide) is judged as if it were neutral. Where no assignment
- * satisfies every atom, as many carbons as possible still get their double
- * bond and the rest stay single.
+ * Where the atoms say their hydrogens and charges, as SMILES's brackets do,
+ * those decide too: an N that carries its H ([nH]) takes no double bond,
+ * and a charged one may with a third bond (an N-alkylpyridinium's [n+], a
+ * pyrylium's [o+]); without them, a charged aromatic atom is judged as if
+ * it were neutral. Where no assignment satisfies every atom, as many
+ * carbons as possible still get their double bond and the rest stay single.
  */
 
 /** MDL bond type 4: aromatic. */
 export const AROMATIC_BOND = 4;
 
-export type KekuleAtom = { el: string };
+export type KekuleAtom = { el: string; hs?: number; charge?: number };
 export type KekuleBond = { a1: number; a2: number; order: number };
 
 type Role = "needs" | "may" | "never";
@@ -50,10 +52,20 @@ export function kekuleOrders(
   const role = (i: number): Role => {
     if (hasMultiple[i]) return "never"; // already has its double bond, e.g. a pyridone's C=O
     const el = canonical(atoms[i]?.el ?? "");
-    if (el === "C") return "needs";
-    // Two connections: pyridine-like, or a pyrrole-type N-H whose H the file
-    // leaves implicit. The ring decides which.
-    if ((el === "N" || el === "P") && degree[i] === 2) return "may";
+    const charge = atoms[i]?.charge ?? 0;
+    const hs = atoms[i]?.hs;
+    // (a charged carbon, a tropylium's or a cyclopentadienide's: as the ring needs)
+    if (el === "C") return charge ? "may" : "needs";
+    if (el === "N" || el === "P") {
+      // a pyrrole-type N-H that says so takes none
+      if (degree[i] === 2 && charge <= 0 && hs != null && hs > 0) return "never";
+      // two connections: pyridine-like, or a pyrrole-type N-H whose H the
+      // file leaves implicit; the ring decides which. Three, as a cation: a
+      // pyridinium's
+      if (degree[i] === 2 || (degree[i] === 3 && charge > 0)) return "may";
+    }
+    // a pyrylium's or a thiopyrylium's
+    if ((el === "O" || el === "S") && degree[i] === 2 && charge > 0) return "may";
     return "never";
   };
   const roles = atoms.map((_, i) => role(i));

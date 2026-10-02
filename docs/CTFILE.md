@@ -151,33 +151,138 @@ transition-metal chemistry are known by their labels, each the molecule it
 is, in SMILES, its donor atoms marked by atom class ([P:1], [P:2] for a
 chelating diphosphine; several atoms of one class for a pi system bound
 through all of them): phosphines, arsines and phosphites (PPh3, PCy3,
-P(t-Bu)3, P(o-Tol)3, TFP, AsPh3 ...), the biaryl phosphines (XPhos, SPhos,
-RuPhos, BrettPhos, tBuXPhos, DavePhos, JohnPhos), chelating diphosphines
-(dppm to dppb, dppf, BINAP, Xantphos, DPEphos), N donors (bpy, dtbpy,
-phen, py, TMEDA, en, MeCN), N-heterocyclic carbenes (IPr, IMes, SIPr,
-SIMes), pi ligands (cod, nbd, dba, p-cymene, Cp*), acac and THF; and, in a
-complex's formula only, CO, H2O, NH3 and Cp (η⁵). A label bonded to a
+P(t-Bu)3, P(o-Tol)3, TFP, AsPh3 ...), Buchwald's biaryl phosphines
+(XPhos, SPhos, RuPhos, BrettPhos, tBuXPhos, DavePhos, JohnPhos, and the
+less common CyJohnPhos, MePhos, tBuMePhos, tBuDavePhos, PhDavePhos, CPhos,
+tBuBrettPhos, AdBrettPhos, RockPhos, Me4tBuXPhos, EPhos, GPhos, sSPhos),
+chelating diphosphines
+(dppm to dppb, dppf, BINAP, SEGPHOS, DTBM-SEGPHOS, Xantphos, DPEphos), N
+donors (bpy, dtbpy, phen, py, TMEDA, en, MeCN), chiral diamines (DPEN,
+TsDPEN, DACH), salen, N-heterocyclic carbenes (IPr, IMes, SIPr, SIMes), pi
+ligands (cod, nbd, dba, p-cymene, Cp*, dvtms), acac and THF; and, in a
+complex's formula only, CO, H2O, NH3, Cp (η⁵), allyl (η³) and the
+alkylidenes =CHPh and =CH2, bound by a double bond. A label bonded to a
 metal binds it as the ligand does when it is expanded or written out: a
-neutral donor by a coordination bond from it, an anionic one (acac's O) by
-a bond, a pi system by a haptic bond to the star at its centre. Each
-ligand's formula, and that each of its ring bonds is in a ring of five or
-six (cod's of eight), is checked in the tests.
+neutral donor by a coordination bond from it (drawn, as before, as a plain
+line), an anionic one (acac's O, TsDPEN's sulfonamide N) by a bond, a pi
+system by a haptic bond to the star at its centre. A chiral ligand is
+given as one enantiomer, and named as one by its descriptor:
+(S,S)-DPEN, (R,R)-DPEN (see *Configurations* below). Each ligand's formula,
+and that each of its ring bonds is in a ring of five or six (cod's of
+eight), is checked in the tests.
 
 A complex's formula is read as the structure it stands for - Pd(PPh3)4,
 PdCl2(dppf), Pd2(dba)3, Pd(OAc)2, Cp2ZrCl2, [Ir(cod)Cl]2, [Rh(cod)2]BF4,
 Mo(CO)6 - from its metals (the d block and the lanthanides), its ligands in
 parentheses or not, halides, hydrides and groups bound by one bond (OAc,
 OTf, Me), a part in brackets made as many times as its count, and the
-counter-anions after it (BF4, PF6, SbF6, ClO4, BArF), each leaving a
-positive charge on the part's metal. A ligand written as an anion (Cp⁻,
-Cp*⁻) leaves its charge on the metal, so that the whole is as charged as
-the formula says. Where one part has several metals - Pd2(dba)3 - the
-ligands are shared among them in turn: which bridge them, a formula does
-not say. A complex written out is V3000, its coordination bonds needing it.
-Expanded on the canvas it is laid out by Meno's engine, which is not made
-for coordination compounds: the drawing of a large complex is crowded.
+counter-anions after it, each leaving a positive charge on the part's
+metal: read by rule as a salt's anion is (BF4, PF6, SbF6, AsF6, BPh4,
+ClO4; see below), or BArF, which names its aryl groups by no formula, from
+a list. A ligand written as an anion (Cp⁻, Cp*⁻) leaves its charge on the
+metal, so that the whole is as charged as the formula says. A ligand in
+brackets may have its descriptor: RuCl[(S,S)-TsDPEN](p-cymene),
+RuCl2[(S)-BINAP][(S,S)-DPEN]. Where one part
+has several metals - Pd2(dba)3 - the ligands are shared among them in
+turn: which bridge them, a formula does not say, unless it marks one with
+μ (IUPAC's mark for a bridging ligand): a bridging ligand's donors are
+bound to the metals in turn - Karstedt's Pt2(dvtms)2(μ-dvtms) - and a
+bridging halide or group to each of them. A complex written out is V3000,
+its coordination bonds needing it. Expanded on the canvas it is laid out
+by Meno's engine, which is not yet made for coordination compounds: the
+drawing of a large complex is crowded.
 
-**Abbreviations of the user's own** are kept in Settings › Abbreviations
+**Reagents** (`src/lib/chem/reagents.ts`). The reagents, catalysts and
+solvents written over reaction arrows are known by their labels, each the
+whole molecule it is, so that a scheme's conditions are structures too:
+oxidants (DMP, IBX, PIDA, TEMPO, PCC, TPAP, NMO, mCPBA, DDQ, Oxone, OsO4
+...), reductants (LAH, STAB, DIBAL, L-Selectride, 9-BBN, B2pin2 ...),
+bases (DBU, DMAP, DIPEA, TEA, LDA, LiHMDS ...), acids (TFA, PTSA,
+CSA, PPTS), coupling reagents (DCC, EDC, HATU, COMU, PyBOP, T3P, DPPA, DEAD
+...), halogenating and fluorinating ones (NBS, Selectfluor, NFSI, DAST,
+Togni I and II ...), electrophiles (TFAA, Comins' reagent, Meerwein's salt
+...), organometallic reagents and metal catalysts (Tebbe, Petasis,
+Schwartz, Stryker; Grubbs I to III, Hoveyda–Grubbs I and II, Schrock,
+Wilkinson, Crabtree, PEPPSI-IPr, Jacobsen, Karstedt and Krische's
+π-allyliridium C,O-benzoate), organocatalysts and chiral reagents (proline,
+MacMillan's, Hayashi–Jørgensen, CBS, Shi's ketone), solvents (DMF, DMSO,
+NMP, DCM, dioxane, toluene ...) and named reagents (Burgess, Martin's
+sulfurane, Lawesson's, Bestmann–Ohira, TBAF). Each is written in SMILES - a
+salt as its ions after dots - or, a metal's complex, as its formula, read
+as complexes are, from Meno's ligands and any of its own (Hoveyda's
+chelating benzylidene; Krische's 3-nitrobenzoate, as the catalyst is sold,
+bound by its carboxylate and the ortho carbon away from the nitro group).
+The tests check each one's formula against its name. Its labels may be
+written with an apostrophe or a dash either way (Comins' or Comins’,
+Hoveyda-Grubbs or Hoveyda–Grubbs). A reagent's name is one unit of a label,
+its digits not counts (T3P, 9-BBN); a formula's are (NaBH4, B2pin2).
+
+The list holds only what no rule reads: Ac2O, Boc2O, Tf2O, TfOH, TsOH,
+HOBt, KOt-Bu, NaH, EtOAc, NaBH4, LiAlH4, NaIO4 and K2CO3 are read by rule
+(below), not listed - and the tests check that no name in it is read by
+rule as the same molecule.
+Settings › Dictionary shows every entry of it, Meno's groups and
+ligands (by family, the Buchwald ligands one of them), the counter-anion
+no rule reads (BArF), and Buchwald's precatalysts by generation - what
+each label is, drawn as it comes into view; how labels are read is
+documented here, not there.
+
+Read by rule, besides, as whole molecules:
+
+- a simple formula (`src/lib/chem/condensed.ts`): read into groups and
+  elements with their counts, it is a molecule where one atom of valence
+  two or more has as many groups and univalent atoms as its valence - Et3N,
+  i-Pr2NEt, MeMgBr, Bu3SnH, CH2Cl2, MeOH, Ac2O, (Boc)2O - or two univalent
+  parts are joined - n-BuLi, TMSCl, TBSOTf, Fmoc-OSu, HCl. Sodium and
+  potassium are bound as ions, lithium so but to carbon: NaOMe is Na⁺ and
+  MeO⁻, NaN3 Na⁺ and azide, n-BuLi keeps its C-Li bond. A label with a bond
+  left free (OMe, NMe2, CH2Br) is no such formula, and stays a group;
+- a salt (`src/lib/chem/formula.ts`): alkali metals, and the rest an anion
+  of as many charges - NaBH4, LiAlH4, NaBH(OAc)3, NaBF4, NaIO4, NaClO2,
+  CF3SO2Na, K2CO3, NaHCO3, K3PO4. An anion has one centre, and round it
+  oxygens, hydrogens and parts bound by one bond. With no oxygen, it is an
+  ate anion: a centre with no lone pair left at a valence of its own takes
+  one part more and the charge (BF4⁻, PF6⁻, SbF6⁻, BPh4⁻, BH4⁻, AlH4⁻).
+  With oxygens, they are bound by double bonds but one for each charge,
+  which carries it, and one for each hydrogen, which is theirs (ClO4⁻,
+  IO4⁻, CO3²⁻, HCO3⁻) - as many bonds as a valence of the centre's own:
+  below the second row P(V), S(IV) and S(VI), Cl(I) to Cl(VII) too, and in
+  it no more than four bonds (no NO3⁻ so). A group in parentheses is one
+  part, as counted: NaBH(OAc)3, and Pb(OAc)4 as a molecule;
+- an adduct of known parts, a middle dot between them, each counted:
+  BF3·OEt2, CeCl3·7H2O, EDC·HCl;
+- a Buchwald precatalyst named by its phosphine and generation - XPhos Pd
+  G2, SPhos-Pd-G3, RuPhos Pd G4 - as its palladacycle: the phosphine, a
+  2-aminobiphenyl's carbon and nitrogen, and a chloride (G2) or a mesylate
+  (G3; G4's amine N-methylated).
+
+**Configurations.** A stereocentre in SMILES, @ or @@, is read as the
+configuration Meno's layout engine takes (`readSmiles`: its neighbours in
+OpenSMILES's order, put in the engine's, the H last). A chiral reagent or
+ligand is given as one enantiomer, with the descriptors that name it and
+its mirror image: (S,S)-DPEN and (R,R)-DPEN, (1S)-CSA, L- and D-proline,
+(R)- and (S)-CBS, (R,R)- and (S,S)-Jacobsen's catalyst. Its label alone
+says no configuration, and none is drawn - unless its name is of one
+enantiomer (Shi's ketone, made from D-fructose); (±) says none too. An
+axially chiral one's descriptor - (S)-BINAP, (R)-SEGPHOS, and so (R)-Krische's
+catalyst - is read, and shown on no atom: neither SMILES nor a MOL file has
+a way to say it. Written out, a stereocentre is drawn as Clean-up draws it,
+by the same engine: a wedge on a bond out of its rings, its narrow end at
+the centre, an H drawn where it has no other way, or - in a cage - the
+perspective drawing itself; Clean-up reads the configuration back from it
+as the one given (tested). A cage's, shown by its perspective with no
+wedge, is not yet written to a MOL file, as with any cage Clean-up draws.
+
+**Hydrogens drawn as said.** Where a structure says an atom has more H
+than its valence leaves - Bu3SnH's tin, a metal's hydride, LiAlH4's
+aluminium - the rest are drawn as atoms; where fewer, it is a radical if
+one short (TEMPO's oxygen), and else keeps the valence it has. A carbon at
+either end of a coordination or a dative bond is the one lending its pair -
+an NHC's or a carbene's, CO's - and the pair is two of its valence, so it
+carries no H for it (`molecule.valenceOrder`); any other atom's lent pair
+takes none, as before.
+
+**Abbreviations of the user's own** are kept in Settings › Dictionary
 (`settings.json`): a label, other ways of writing it, a name, and the
 structure as SMILES with a "*" where it is attached, drawn as it is typed.
 A group on a canvas can be saved as one too: selected, *Save as

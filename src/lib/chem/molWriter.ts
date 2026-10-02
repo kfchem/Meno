@@ -161,6 +161,8 @@ function prepared(model: WriterModel): { model: WriterModel; sups: Sup[]; aliase
       else b.b = to;
       const pi = structure.haptic?.find((h) => h.star === at);
       if (pi) Object.assign(b, { endpoints: pi.atoms.map((e) => ids[e]), attach: "all", coordination: true });
+      // (a donor that lends its pair: a coordination bond)
+      else if (structure.lends?.[k] && !b.dative) Object.assign(b, { coordination: true });
     });
     sups.push({ label: a.el, atoms: [a.id, ...ids.filter((id) => id !== a.id)] });
   }

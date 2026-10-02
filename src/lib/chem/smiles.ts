@@ -3,9 +3,10 @@
  * of the organic subset and in brackets (isotope, hydrogens, charge),
  * aromatic atoms, branches, ring closures and bond symbols, and "*" for an
  * atom of any kind - enough for the groups Meno's abbreviations stand for
- * (./abbreviations), written by hand. Stereo marks are read past and not
- * kept. An atom class is kept: a ligand's (./ligands) marks the atoms
- * that bind a metal.
+ * (./abbreviations), written by hand. A tetrahedral centre's @ or @@ is
+ * kept, as the configuration Meno's layout engine takes; other stereo
+ * marks are read past. An atom class is kept: a ligand's (./ligands) marks
+ * the atoms that bind a metal.
  */
 
 export type SmilesAtom = {
@@ -17,7 +18,15 @@ export type SmilesAtom = {
   aromatic?: boolean;
   /** Its atom class ([P:1]): which of a ligand's donors it is. */
   cls?: number;
+  /** Its configuration, where it is a tetrahedral centre ([C@H], [C@@]). */
+  tetra?: Configuration;
 };
+/**
+ * A tetrahedral centre's configuration, as Meno's layout engine takes it
+ * (lib/layout/stereo): its neighbours by index, -1 for its H, last, and the
+ * sign of the volume the first three span, seen from the centre.
+ */
+export type Configuration = { neighbours: number[]; volume: 1 | -1 };
 /** A bond by atom index; order 4 is aromatic. */
 export type SmilesBond = { a1: number; a2: number; order: number };
 export type Smiles = { atoms: SmilesAtom[]; bonds: SmilesBond[] };
@@ -31,14 +40,23 @@ export function readSmiles(text: string): Smiles {
   const atoms: SmilesAtom[] = [];
   const bonds: SmilesBond[] = [];
   const stack: number[] = [];
-  const rings = new Map<number, { atom: number; order: number | null }>();
+  const rings = new Map<number, { atom: number; order: number | null; slot: number }>();
+  // each atom's neighbours in the order OpenSMILES reads a centre's by: the
+  // atom before it, its own H, its ring closures as their digits come, then
+  // the atoms after it; and the centres, @ or @@
+  const around: number[][] = [];
+  const chiral = new Map<number, string>();
   let prev = -1;
   let pending: number | null = null;
   let i = 0;
-  const connect = (a: number) => {
+  const connect = (a: number, mark = "") => {
+    around[a] = prev >= 0 ? [prev] : [];
+    if (mark) chiral.set(a, mark);
+    if (atoms[a].hs === 1) around[a].push(-1);
     if (prev >= 0) {
       const both = atoms[prev].aromatic && atoms[a].aromatic;
       bonds.push({ a1: prev, a2: a, order: pending ?? (both ? 4 : 1) });
+      around[prev].push(a);
     }
     pending = null;
     prev = a;
@@ -73,9 +91,11 @@ export function readSmiles(text: string): Smiles {
       if (open) {
         const both = atoms[open.atom].aromatic && atoms[prev].aromatic;
         bonds.push({ a1: open.atom, a2: prev, order: pending ?? open.order ?? (both ? 4 : 1) });
+        around[open.atom][open.slot] = prev;
+        around[prev].push(open.atom);
         rings.delete(n);
       } else {
-        rings.set(n, { atom: prev, order: pending });
+        rings.set(n, { atom: prev, order: pending, slot: around[prev].push(-2) - 1 });
       }
       pending = null;
       continue;
@@ -89,8 +109,9 @@ export function readSmiles(text: string): Smiles {
     if (c === "[") {
       const end = text.indexOf("]", i);
       if (end < 0) throw new Error(`Unclosed bracket at ${i} in ${text}`);
-      atoms.push(bracketAtom(text.slice(i + 1, end)));
-      connect(atoms.length - 1);
+      const { atom, mark } = bracketAtom(text.slice(i + 1, end));
+      atoms.push(atom);
+      connect(atoms.length - 1, mark);
       i = end + 1;
       continue;
     }
@@ -110,14 +131,32 @@ export function readSmiles(text: string): Smiles {
     throw new Error(`Cannot read "${c}" at ${i} in ${text}`);
   }
   if (rings.size) throw new Error(`Unclosed ring in ${text}`);
+  for (const [at, mark] of chiral) {
+    const tetra = configuration(around[at], mark);
+    if (tetra) atoms[at].tetra = tetra;
+  }
   return { atoms, bonds };
 }
 
+/**
+ * A centre's configuration from its neighbours in SMILES order and its
+ * mark: @, looking from the first, the other three go round anticlockwise;
+ * @@, clockwise. Put in the engine's terms - its H last, the sign turned
+ * for every place it moves - or none, for a centre without four.
+ */
+function configuration(neighbours: readonly number[], mark: string): Configuration | undefined {
+  if (neighbours.length !== 4 || (mark !== "@" && mark !== "@@")) return undefined;
+  const h = neighbours.indexOf(-1);
+  const moves = h < 0 ? 0 : 3 - h;
+  const sign = (mark === "@" ? 1 : -1) * (moves % 2 ? -1 : 1);
+  return { neighbours: h < 0 ? [...neighbours] : [...neighbours.filter((n) => n !== -1), -1], volume: sign as 1 | -1 };
+}
+
 /** What is inside a bracket: [isotope] symbol [chirality] [H count] [charge] [:class]. */
-function bracketAtom(body: string): SmilesAtom {
+function bracketAtom(body: string): { atom: SmilesAtom; mark: string } {
   const m = /^(\d+)?(\*|[A-Z][a-z]?|[a-z][a-z]?)(@*)(H\d*)?([+-]\d*|\+\+|--)?(?::(\d+))?$/.exec(body);
   if (!m) throw new Error(`Cannot read [${body}]`);
-  const [, iso, sym, , h, q, cls] = m;
+  const [, iso, sym, mark, h, q, cls] = m;
   const aromatic = /^[a-z]/.test(sym);
   const atom: SmilesAtom = { el: aromatic ? sym[0].toUpperCase() + sym.slice(1) : sym };
   if (aromatic) atom.aromatic = true;
@@ -128,7 +167,7 @@ function bracketAtom(body: string): SmilesAtom {
     const sign = q[0] === "+" ? 1 : -1;
     atom.charge = q === "++" || q === "--" ? 2 * sign : sign * (q.length > 1 ? Number.parseInt(q.slice(1), 10) : 1);
   }
-  return atom;
+  return { atom, mark };
 }
 
 // --- writing -----------------------------------------------------------------

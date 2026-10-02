@@ -114,6 +114,20 @@ describe("buildTextLabels", () => {
     expect(at(150, 270).text).toBe("NH");
   });
 
+  it("writes them on the side further from every bond where three spread evenly, a hair either way", () => {
+    const L = NOMINAL_BOND_LENGTH;
+    const v = (deg: number) => ({ x: L * Math.cos((deg * Math.PI) / 180), y: L * Math.sin((deg * Math.PI) / 180) });
+    const at = (...degs: number[]) => {
+      const atoms: Atom[] = [{ id: 1, x: 0, y: 0, el: "B", charge: -1 }, ...degs.map((d, k) => ({ id: k + 2, ...v(d), el: "O" }))];
+      const [bh] = buildTextLabels(atoms, opts(), degs.map((_, k) => ({ a1: 0, a2: k + 1, order: 1 })));
+      return bh.stack;
+    };
+    // a borate's BH, one bond straight down: the H above, clear of it
+    for (const e of [0, 1e-9, -1e-9]) expect(at(30 + e, 150 - e, 270 + e)).toBe("above");
+    // and one straight up: below
+    for (const e of [0, 1e-9, -1e-9]) expect(at(90 + e, 210 - e, 330 + e)).toBe("below");
+  });
+
   it("writes a carbon with no bonds as CH4, and a bonded one not at all", () => {
     const atoms: Atom[] = [
       { id: 1, x: 0, y: 0, el: "C" },
@@ -1126,6 +1140,31 @@ describe("how far a bond stops short of a label", () => {
     // an O is round and an N square: side on the two are nearly as wide,
     // but at 45 degrees the O's curve leaves more room
     expect(at("O", 45)).toBeLessThan(at("N", 45));
+  });
+
+  it("stops a bond for the letters in its path, not an H set below beside it", () => {
+    const o = opts();
+    // an N+ with three bonds and an H, which goes below (the bonds rise
+    // furthest): the two bonds leaving it downward at a slant pass it clear
+    const v = (deg: number) => ({ x: L * Math.cos((deg * Math.PI) / 180), y: L * Math.sin((deg * Math.PI) / 180) });
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "N", charge: 1 },
+      { id: 2, ...v(90), el: "C" },
+      { id: 3, ...v(210), el: "C" },
+      { id: 4, ...v(330), el: "C" },
+    ];
+    const bonds: Bond[] = [1, 2, 3].map((k) => ({ a1: 0, a2: k, order: 1 }));
+    expect(buildTextLabels(atoms, o, bonds)[0].stack).toBe("below");
+    // where the bond at 330 degrees starts, with the H and without it
+    const start = (over: Partial<LayoutOptions>) => {
+      const { lines } = buildAllPrimitives(atoms, bonds, opts(over), ZOOM);
+      const line = lines.find((l) => {
+        const mid = Math.atan2((l.y1 + l.y2) / 2, (l.x1 + l.x2) / 2);
+        return Math.abs(mid + Math.PI / 6) < 0.05;
+      })!;
+      return Math.min(Math.hypot(line.x1, line.y1), Math.hypot(line.x2, line.y2));
+    };
+    expect(start({})).toBeCloseTo(start({ showImplicitHydrogens: false }), 9);
   });
 });
 
