@@ -200,6 +200,46 @@ describe("how a drawing sits", () => {
     expect(onIt.crowdedLabels).toBeGreaterThan(clear.crowdedLabels);
   });
 
+  it("counts a bond between two labels that their letters all but cover", () => {
+    // Pd-NH, the N a bond off at 30 degrees: the d reaches along the bond
+    // nearly to the N; straight down, the two clear each other
+    const at = (nx: number, ny: number) =>
+      layoutMetrics({
+        x: [-1, 0, nx, nx],
+        y: [0, 0, ny, ny + 1],
+        edges: [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+        ],
+        elements: ["C", "Pd", "N", "C"],
+        hydrogens: [3, 0, 1, 3],
+        labelled: [false, true, true, false],
+        hydrogenRoom: 0,
+      }).crowdedLabels;
+    expect(at(Math.cos(Math.PI / 6), Math.sin(Math.PI / 6))).toBe(1);
+    expect(at(0, -1)).toBe(0);
+  });
+
+  it("counts an H's count that runs into a label below it", () => {
+    // an NH2 between two bonds rising either side, its H under it and the 2
+    // after that, an O a little further down
+    const at = (hs: number) =>
+      layoutMetrics({
+        x: [0, -0.866, 0.866, 0.1],
+        y: [0, 0.5, 0.5, -1.22],
+        edges: [
+          [0, 1],
+          [0, 2],
+        ],
+        elements: ["N", "C", "C", "O"],
+        hydrogens: [hs, 3, 3, 0],
+        labelled: [true, false, false, true],
+      }).crowdedLabels;
+    expect(at(1)).toBe(0);
+    expect(at(2)).toBeGreaterThan(0);
+  });
+
   it("adds up its parts to the score", () => {
     const m = layoutMetrics(turned(zigzag(8), 20));
     const sum = Object.values(scoreParts(m)).reduce((a, b) => a + b, 0);

@@ -20,7 +20,9 @@ priority - a later one never buys itself at the cost of an earlier one:
 
 1. **Nothing hidden.** No atom on another, no bond through an atom or
    across another bond, no label crowding a label - an OH's H as much as
-   its O, with a space between labels side by side.
+   its O, with a space between labels side by side - and no bond between
+   two labels covered by their letters (a Pd and an NH a bond apart at a
+   slant, the d reaching along it to the N).
 2. **Every part in its standard shape.** One bond length; rings as regular
    polygons; chains as zigzags; the bonds round an atom evenly spread.
 3. **Square to the page.** Bonds on a lattice, as far as the skeleton
@@ -243,7 +245,8 @@ much else a crossing would clear.
 And last, room for the H of every label: the drawing writes it beside the
 symbol on the side the bonds leave free (OH, or HO where they leave to the
 right; under or over the symbol only between bonds on both sides, as in a
-chain's NH). Where it would run into another label, an atom or a bond, the
+chain's NH). Where it - or its count, NH2's 2 after it and set lower -
+would run into another label, an atom or a bond, the
 bond to the atom is turned a little or drawn a little longer or shorter -
 an OH, an SH - or the same is done to what it runs into, a C=O's O or a
 small branch (taxol's benzoate, clear of its C1 OH). The H is never moved
