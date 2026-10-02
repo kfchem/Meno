@@ -91,9 +91,10 @@ export type LayoutMetrics = {
   ringWedges: number;
   /**
    * Labelled atoms, not bonded, so close their labels crowd (under 0.8 of a
-   * bond); and a quarter for a label's H - beside its symbol, or under or over
+   * bond); a quarter for a label's H - beside its symbol, or under or over
    * it between bonds on both sides, as the drawing sets it - that runs into
-   * another label, an atom or a bond.
+   * another label, an atom or a bond; and a bond between two labels that
+   * their letters all but cover.
    */
   crowdedLabels: number;
   /**
@@ -269,6 +270,67 @@ export function hydrogenSpot(ways: readonly { x: number; y: number }[]): { x: nu
   const sy = ways.reduce((sum, w) => sum + w.y, 0);
   if (ways.some((w) => w.x < -band) && ways.some((w) => w.x > band)) return { x: 0, y: sy >= 0 ? -0.6 : 0.6 };
   return { x: sx > Math.hypot(sx, sy) * band ? -0.5 : 0.5, y: 0 };
+}
+
+/**
+ * How far a label's ink reaches along `d` from its atom, in bond lengths, of
+ * what lies in the path of a bond leaving that way: its symbol's first letter
+ * centred on the atom, half a bond high, the rest after it, and its H where
+ * the drawing sets it (hydrogenSpot), as inkReach reckons them. A charged
+ * carbon, a bare vertex, reaches nowhere.
+ */
+function labelInk(el: string, hs: number, ways: readonly { x: number; y: number }[], d: { x: number; y: number }): number {
+  const symbol = el === "C" ? 0 : el.length;
+  if (!symbol) return 0;
+  const boxes = [{ x0: -0.25, x1: 0.25 + 0.4 * (symbol - 1), y0: -0.25, y1: 0.25 }];
+  if (hs > 0) {
+    const h = ways.length ? hydrogenSpot(ways) : { x: 0.5, y: 0 };
+    const count = hs > 1 ? 0.3 : 0;
+    boxes.push(
+      h.x < 0
+        ? { x0: h.x - 0.2 - count, x1: h.x + 0.2, y0: -0.25, y1: 0.25 }
+        : { x0: h.x - 0.2, x1: h.x + 0.2 + count, y0: h.y - 0.25, y1: h.y + 0.25 },
+    );
+  }
+  // (the band a line and a little paper either side of it take)
+  const band = 0.1;
+  const n = { x: -d.y, y: d.x };
+  let reach = 0;
+  for (const b of boxes) {
+    const corners = [
+      { x: b.x0, y: b.y0 },
+      { x: b.x1, y: b.y0 },
+      { x: b.x1, y: b.y1 },
+      { x: b.x0, y: b.y1 },
+    ];
+    corners.forEach((c, i) => {
+      const e = corners[(i + 1) % 4];
+      const sc = c.x * n.x + c.y * n.y;
+      const se = e.x * n.x + e.y * n.y;
+      const along = (t: number) => (c.x + t * (e.x - c.x)) * d.x + (c.y + t * (e.y - c.y)) * d.y;
+      if (Math.abs(sc) <= band) reach = Math.max(reach, along(0));
+      for (const edge of [-band, band]) {
+        if ((sc - edge) * (se - edge) < 0) reach = Math.max(reach, along((edge - sc) / (se - sc)));
+      }
+    });
+  }
+  return reach;
+}
+
+/**
+ * Whether an atom `d` off a label's H (in bond lengths, y up) is where the
+ * H's ink runs into it - its own ink, a label's (`labelled`) or a bare
+ * vertex's: an H's ink is 0.4 of a bond across and half a bond high, an O's
+ * a little more; side by side they want a space between them, or OH O reads
+ * as one word, one over the other a sliver of paper. Its count (`count`),
+ * written after it and set lower, reaches as far again to the right and a
+ * little further down (NH2's 2 above an O under it).
+ */
+export function hydrogenRunsInto(d: { x: number; y: number }, labelled: boolean, count: boolean): boolean {
+  const [w, t] = labelled ? [0.65, 0.58] : [0.33, 0.33];
+  const right = count ? w + 0.3 : w;
+  const down = count ? t + 0.1 : t;
+  return d.x > -w && d.x < right && d.y > -down && d.y < t;
 }
 
 function segmentsCross(
@@ -456,7 +518,8 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
   // (untangle), but never buys that with a bond crossing another.
   const hydrogenRoom = g.hydrogenRoom ?? 0.25;
   if (g.labelled && g.hydrogens && hydrogenRoom > 0) {
-    const spots: { a: number; x: number; y: number }[] = [];
+    // (its count after it where it follows its symbol, or is under or over it)
+    const spots: { a: number; x: number; y: number; count: boolean }[] = [];
     for (let a = 0; a < n; a++) {
       if (!g.labelled[a] || !(g.hydrogens[a] > 0) || g.elements?.[a] === "C" || !neighbours[a].length) continue;
       const h = hydrogenSpot(
@@ -465,17 +528,13 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
           return { x: (x[b] - x[a]) / d, y: (y[b] - y[a]) / d };
         }),
       );
-      spots.push({ a, x: x[a] + h.x * L, y: y[a] + h.y * L });
+      spots.push({ a, x: x[a] + h.x * L, y: y[a] + h.y * L, count: g.hydrogens[a] > 1 && h.x >= 0 });
     }
     for (const [i, h] of spots.entries()) {
       let crowded = false;
       for (let b = 0; b < n && !crowded; b++) {
         if (b === h.a) continue;
-        // (an H's ink is 0.4 of a bond across and half a bond high, an O's
-        // a little more; side by side they want a space between them, or
-        // OH O reads as one word, one over the other a sliver of paper)
-        const [w, t] = g.labelled[b] ? [0.65, 0.58] : [0.33, 0.33];
-        if (Math.abs(h.x - x[b]) < w * L && Math.abs(h.y - y[b]) < t * L) crowded = true;
+        if (hydrogenRunsInto({ x: (x[b] - h.x) / L, y: (y[b] - h.y) / L }, g.labelled[b], h.count)) crowded = true;
       }
       for (const o of spots.slice(i + 1)) {
         if (Math.abs(h.x - o.x) < 0.6 * L && Math.abs(h.y - o.y) < 0.55 * L) crowded = true;
@@ -486,6 +545,27 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         if (pointToSegment(h.x, h.y, x[p], y[p], x[q], y[q]) < 0.3 * L) crowded = true;
       }
       if (crowded) crowdedLabels += hydrogenRoom;
+    }
+  }
+  // and a bond between two labels that their letters all but cover - Pd and
+  // NH2 a bond apart at a slant, the d reaching along it to the N: each
+  // label's ink as the engine reckons it (inkReach), what of it lies in the
+  // bond's path; one crowding where under a twentieth of the bond shows
+  if (g.labelled && g.elements) {
+    const ways = (a: number) =>
+      neighbours[a].map((b) => {
+        const d = Math.hypot(x[b] - x[a], y[b] - y[a]) || 1;
+        return { x: (x[b] - x[a]) / d, y: (y[b] - y[a]) / d };
+      });
+    for (const [p, q] of edges) {
+      if (!g.labelled[p] || !g.labelled[q]) continue;
+      const len = Math.hypot(x[q] - x[p], y[q] - y[p]);
+      if (len < 1e-9) continue;
+      const d = { x: (x[q] - x[p]) / len, y: (y[q] - y[p]) / len };
+      const covered =
+        labelInk(g.elements[p], g.hydrogens?.[p] ?? 0, ways(p), d) +
+        labelInk(g.elements[q], g.hydrogens?.[q] ?? 0, ways(q), { x: -d.x, y: -d.y });
+      if (len - covered * L < 0.05 * L) crowdedLabels++;
     }
   }
 

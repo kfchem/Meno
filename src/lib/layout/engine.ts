@@ -21,7 +21,7 @@ import {
   type Grown,
 } from "./assemble";
 import { angleOf, dist, mirror, segmentsCross, sub } from "./geometry";
-import { hydrogenSpot, layoutMetrics } from "./metrics";
+import { hydrogenRunsInto, hydrogenSpot, layoutMetrics } from "./metrics";
 import { orderOf, perceive, type LayoutInput, type Molecule } from "./perceive";
 import { misshapen, placeRingSystem, regularize, ringSystemVariants } from "./ringSystem";
 import { bridgeAcross } from "./bridge";
@@ -981,12 +981,11 @@ export function roomForHydrogens(
         }),
       );
       const h = { x: at.x + off.x, y: at.y + off.y };
+      const count = mol.hs[a] > 1 && off.x >= 0;
       const hits: number[] = [];
       for (const b of piece) {
         if (b === a) continue;
-        const q = p.get(b)!;
-        const [w, t] = mol.el[b] !== "C" ? [0.65, 0.58] : [0.33, 0.33];
-        if (Math.abs(h.x - q.x) < w && Math.abs(h.y - q.y) < t) hits.push(b);
+        if (hydrogenRunsInto(sub(p.get(b)!, h), mol.el[b] !== "C", count)) hits.push(b);
       }
       for (const [b, c] of bonds) {
         if (b === a || c === a) continue;
