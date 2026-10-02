@@ -219,10 +219,14 @@ export function perceive(input: LayoutInput): Molecule {
   systems.forEach((sys, i) => {
     if (sys.rings.length !== 1 || sys.atoms.length !== 4) return;
     const r = rings[sys.rings[0]];
-    const metal = (a: number) => isMetal(input.atoms[a].el);
-    const k = metal(r[0]) ? 0 : 1;
+    // (a main-group metal bridged to one - the Tebbe reagent's aluminium -
+    // as much as a second of them)
+    const metal = (a: number) => isMetal(input.atoms[a].el) || BRIDGED_TO.has(input.atoms[a].el);
+    const k = metal(r[0]) && metal(r[2]) ? 0 : 1;
     if (!metal(r[k]) || !metal(r[k + 2]) || metal(r[k + 1]) || metal(r[(k + 3) % 4])) return;
-    const [m1, m2] = [r[k], r[k + 2]];
+    if (!isMetal(input.atoms[r[k]].el) && !isMetal(input.atoms[r[k + 2]].el)) return;
+    // (the transition metal first)
+    const [m1, m2] = isMetal(input.atoms[r[k]].el) ? [r[k], r[k + 2]] : [r[k + 2], r[k]];
     const own = eta.filter((e) => e.metal === m1 || e.metal === m2);
     const tubs = dienes.filter((d) => d.metal === m1 || d.metal === m2);
     const parts = [...own, ...tubs];
@@ -343,6 +347,9 @@ export const METAL_BOND = 1.4;
 const METALS = new Set(
   "Sc Ti V Cr Mn Fe Co Ni Cu Zn Y Zr Nb Mo Tc Ru Rh Pd Ag Cd Hf Ta W Re Os Ir Pt Au Hg La Ce Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split(" "),
 );
+
+/** Main-group metals bridged to a transition metal by two atoms as a second one is (Cp2Ti(μ-Cl)(μ-CH2)AlMe2). */
+const BRIDGED_TO = new Set(["Li", "Na", "K", "Mg", "Ca", "Zn", "Al", "Ga", "In"]);
 
 /** Whether an atom is a metal's: one ligands are drawn round (docs/LAYOUT-2D.md, section 7). */
 export function isMetal(el: string): boolean {

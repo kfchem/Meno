@@ -233,3 +233,19 @@ describe("a structure with no metal", () => {
     expect(out.depth.every((d) => d == null)).toBe(true);
   });
 });
+
+describe("a transition metal bridged to a main-group metal", () => {
+  it("draws the Tebbe reagent as its four-membered ring: Cp2Ti on the left, its rings apart, AlMe2 on the right", () => {
+    const s = laid("Tebbe reagent");
+    const [ti] = find(s, "Ti");
+    const [al] = find(s, "Al");
+    expect(at(s, ti).x).toBeLessThan(at(s, al).x);
+    expect(Math.abs(at(s, ti).y - at(s, al).y)).toBeLessThan(0.05);
+    // the two rings' centres well apart, both on titanium's side
+    const stars = find(s, "*");
+    expect(stars).toHaveLength(2);
+    expect(dist(s, stars[0], stars[1])).toBeGreaterThan(1.2);
+    for (const c of stars) expect(at(s, c).x).toBeLessThan(at(s, ti).x);
+  });
+});
+

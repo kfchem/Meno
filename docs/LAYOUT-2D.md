@@ -270,7 +270,8 @@ A name - a label that is not an element's symbol: OTBS, NHBz, PPh3, as
 Clean-up writes groups by name - takes the room its letters take
 (`src/lib/layout/names.ts`). Its first unit sits on its atom and the rest
 follows, read outward from its bond: leftward from a bond coming in from
-the right (TBSO, IUPAC GR-2.3), rightward otherwise. On a bond within 35
+the right (TBSO, IUPAC GR-2.3), rightward otherwise; a name of one unit
+(TMS, Ph) so is set before such a bond, its last letter on the atom. On a bond within 35
 degrees of upright it may be read either way, and is read the way with
 more room - a chemist writes taxol's C4 acetate OAc or AcO under the ring
 as there is space - the usual way where both have as much; the drawing
@@ -369,7 +370,9 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
   side; the metal's other ligands opposite a lone one. Both C=C are cis,
   as they are; drawn as one ring with the metal, one came out trans.
 - **Two metals bridged by two atoms** - [Rh(cod)Cl]2's chlorides,
-  [Rh(cod)OMe]2's methoxides - are their four-membered ring seen a little
+  [Rh(cod)OMe]2's methoxides; or a transition metal and a main-group one,
+  the Tebbe reagent's Ti and Al, the transition metal first - are their
+  four-membered ring seen a little
   from above: the metals level, left and right, the bridging atoms above
   and below between them, a metal's bond from each, the lower nearer.
   Each metal's own ligands go outside it, the second's the first's turned
