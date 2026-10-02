@@ -266,6 +266,20 @@ small branch (taxol's benzoate, clear of its C1 OH). The H is never moved
 under the symbol to make room, and no move that crosses bonds is taken.
 Nothing else is moved for it: the drawing is set first, its H's last.
 
+A name - a label that is not an element's symbol: OTBS, NHBz, PPh3, as
+Clean-up writes groups by name - takes the room its letters take
+(`src/lib/layout/names.ts`). Its first unit sits on its atom and the rest
+follows, read outward from its bond: leftward from a bond coming in from
+the right (TBSO, IUPAC GR-2.3), rightward otherwise. On a bond within 35
+degrees of upright it may be read either way, and is read the way with
+more room - a chemist writes taxol's C4 acetate OAc or AcO under the ring
+as there is space - the usual way where both have as much; the drawing
+reads it as the layout reckoned it. Its letters running into an atom, a
+bond or another name count as labels crowding: lightly while the parts
+are set, so that the way a molecule is turned comes first, and in full
+last, when room is made for them as for an H, by the same small moves
+(wider turns of a name's own bond).
+
 ## 6. Stereochemistry that reads
 
 - Wedges and hashes on bonds out of rings, never on ring bonds, their
@@ -404,7 +418,8 @@ make of the molecule (`hapto.ts`, `assemble.ts`).
    section 4, its free choices tried the other way and its parts
    untangled (section 5).
 5. Last, turn a macrolide's sugars to their face and make room for the
-   H's of labels, each by a small local move (sections 4 and 5); and turn
+   H's of labels and the letters of names, each by a small local move
+   (sections 4 and 5); and turn
    aryl rings crowded round an atom as a propeller (section 7).
 6. Set the pieces of a salt or a mixture side by side, the largest first,
    with a bond and a half of paper between one's ink and the next's: a

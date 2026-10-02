@@ -13,6 +13,7 @@ import {
 } from "./molecule";
 import { italicUnits, labelRuns, labelUnits, namesRingFirst, reversedLabel, unitRuns } from "./abbreviations";
 import { elements } from "../../utils/atomUtils";
+import { namesLaid } from "../layout/names";
 
 export { implicitHydrogens };
 
@@ -2042,6 +2043,23 @@ export function buildTextLabels(
     if (!b.endpoints?.length) continue;
     for (const e of [b.a1, b.a2]) if (atoms[e]?.el === "*") hapticCentres.add(e);
   }
+  // which way each name runs, as the layout reckons it (lib/layout/names):
+  // read outward from its bond, or, on a bond near upright, the way with
+  // more room
+  const lengths = bonds
+    .filter((b) => atoms[b.a1] && atoms[b.a2])
+    .map((b) => Math.hypot(atoms[b.a1].x - atoms[b.a2].x, atoms[b.a1].y - atoms[b.a2].y))
+    .filter((d) => d > 1e-9)
+    .sort((p, q) => p - q);
+  const names = namesLaid(
+    {
+      x: atoms.map((a) => a.x),
+      y: atoms.map((a) => a.y),
+      edges: bonds.filter((b) => atoms[b.a1] && atoms[b.a2]).map((b) => [b.a1, b.a2] as const),
+      elements: atoms.map((a) => a.el),
+    },
+    lengths.length ? lengths[lengths.length >> 1] : 1,
+  );
   const out: TextItem[] = [];
   for (let i = 0; i < atoms.length; i++) {
     const a = atoms[i];
@@ -2089,7 +2107,7 @@ export function buildTextLabels(
     // abbreviation or any text, written as such, with no hydrogens of its own
     const towardAll = away.get(i) ?? { x: 0, y: 0 };
     const fromRight =
-      (ways.get(i)?.length ?? 0) === 1 && towardAll.x > Math.hypot(towardAll.x, towardAll.y) * band;
+      names.get(i)?.left ?? ((ways.get(i)?.length ?? 0) === 1 && towardAll.x > Math.hypot(towardAll.x, towardAll.y) * band);
     const special = specialLabel(a, fromRight);
     if (special) {
       const runs = [...head, ...special.runs, ...tail];

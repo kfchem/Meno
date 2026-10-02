@@ -7,6 +7,7 @@
  * so the scale it was drawn at does not matter.
  */
 import { drawnVolume } from "./geometry";
+import { atomDepth, boxesDepth, namesLaid, segmentMeetsBox } from "./names";
 import { isMetal, METAL_BOND } from "./perceive";
 import { smallestRings, type Edge } from "./rings";
 
@@ -57,6 +58,12 @@ export type Geometry = {
    * as much as labels on each other.
    */
   hydrogenRoom?: number;
+  /**
+   * What a name's letters running into something count for (OTBS over an
+   * atom), in crowdings: one unless given. A layout sets its parts first,
+   * counting them lightly, and makes room for them last, with its H's.
+   */
+  nameRoom?: number;
   /**
    * Whether a sugar hung on a macrolide counts as seen from the wrong face
    * (it does unless this is false): a layout sets the aglycone first, not
@@ -571,6 +578,30 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
         labelInk(g.elements[p], g.hydrogens?.[p] ?? 0, ways(p), d) +
         labelInk(g.elements[q], g.hydrogens?.[q] ?? 0, ways(q), { x: -d.x, y: -d.y });
       if (len - covered * L < 0.05 * L) crowdedLabels++;
+    }
+  }
+  // and a label that is a name (OTBS, NHBz, PPh3), its letters clear of
+  // every other atom, bond and name, with a space's paper beside another
+  // label (NHBz O reads as one word): for each it runs into, one crowding
+  // - for an atom or a name, as much of one as it is in, up to a third of
+  // a bond deep, so that a little clear of it is a little better
+  const nameRoom = g.nameRoom ?? 1;
+  if (g.labelled && g.elements && nameRoom > 0) {
+    const named = [...namesLaid({ x, y, edges, elements: g.elements }, L)];
+    for (const [i, [a, { box }]] of named.entries()) {
+      for (let b = 0; b < n; b++) {
+        if (b === a || bonded.has(pair(a, b)) || named.some(([o]) => o === b)) continue;
+        const deep = atomDepth(box, { x: x[b], y: y[b] }, g.labelled[b] && g.elements[b] !== "*", L);
+        if (deep > 0) crowdedLabels += nameRoom * Math.min(1, deep / (0.3 * L));
+      }
+      for (const [p, q] of edges) {
+        if (p === a || q === a) continue;
+        if (segmentMeetsBox({ x: x[p], y: y[p] }, { x: x[q], y: y[q] }, box)) crowdedLabels += nameRoom;
+      }
+      for (const [, o] of named.slice(i + 1)) {
+        const deep = boxesDepth(box, o.box, L);
+        if (deep > 0) crowdedLabels += nameRoom * Math.min(1, deep / (0.3 * L));
+      }
     }
   }
 

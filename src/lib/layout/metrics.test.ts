@@ -265,6 +265,29 @@ describe("how a drawing sits", () => {
     expect(at(0, 0, "Si")).toBe(0);
   });
 
+  it("counts a name's letters running into an atom, read outward from a bond coming in from the right", () => {
+    // OTBS (0) on a carbon (1), and a carbon (2) 1.2 bonds from it on the
+    // side its letters run to, or the other side
+    const crowding = (from: number, other: number, nameRoom?: number) =>
+      layoutMetrics({
+        x: [0, from, other],
+        y: [0, -0.8, 0],
+        edges: [[0, 1]],
+        elements: ["OTBS", "C", "C"],
+        labelled: [true, false, false],
+        hydrogens: [0, 0, 0],
+        ...(nameRoom != null ? { nameRoom } : {}),
+      }).crowdedLabels;
+    // its bond from the left: OTBS, rightward
+    expect(crowding(-0.6, 1.2)).toBe(1);
+    expect(crowding(-0.6, -1.2)).toBe(0);
+    // from the right: TBSO, leftward
+    expect(crowding(0.6, -1.2)).toBe(1);
+    expect(crowding(0.6, 1.2)).toBe(0);
+    // (not counted while a layout sets its parts)
+    expect(crowding(-0.6, 1.2, 0)).toBe(0);
+  });
+
   it("adds up its parts to the score", () => {
     const m = layoutMetrics(turned(zigzag(8), 20));
     const sum = Object.values(scoreParts(m)).reduce((a, b) => a + b, 0);
