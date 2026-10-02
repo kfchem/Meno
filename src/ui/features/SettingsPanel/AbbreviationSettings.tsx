@@ -189,7 +189,7 @@ export default function AbbreviationSettings() {
                 <div className="text-base font-semibold text-gh-black">L Pd {generation}</div>
                 <div className="text-xs text-gh-black">{name}, L any of the Buchwald ligands</div>
                 <div className="text-xs text-gh-gray">
-                  {label}: <code className="font-mono text-[0.7rem]">{structureFormula(abbreviationStructure(label)!)}</code>
+                  {label}: <LabelText label={structureFormula(abbreviationStructure(label)!)} />
                 </div>
               </div>
             </article>
@@ -290,17 +290,7 @@ function Entry({
           )}
         </div>
         {a.name && <div className="text-xs text-gh-black">{a.name}</div>}
-        {a.also?.length ? (
-          <div className="text-xs text-gh-gray">
-            also{" "}
-            {a.also.map((x, i) => (
-              <span key={x}>
-                {i ? ", " : ""}
-                <LabelText label={x} />
-              </span>
-            ))}
-          </div>
-        ) : null}
+        <AlsoNames names={a.also} />
         {a.smiles && <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{a.smiles}</code>}
         {children}
       </div>
@@ -308,7 +298,23 @@ function Entry({
   );
 }
 
-/** A label set as a drawing sets it: its counts below the line (PPh₃), a descriptor's R and S and a t- in italics. */
+/** A label's other names, each set as a label. */
+function AlsoNames({ names }: { names?: string[] }) {
+  if (!names?.length) return null;
+  return (
+    <div className="text-xs text-gh-gray">
+      also{" "}
+      {names.map((x, i) => (
+        <span key={x}>
+          {i ? ", " : ""}
+          <LabelText label={x} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** A label - or a formula - set as a drawing sets it: its counts below the line (PPh₃, C₄₅H₅₉ClNPPd), a descriptor's R and S and a t- in italics. */
 function LabelText({ label }: { label: string }) {
   return (
     <>
