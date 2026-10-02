@@ -98,8 +98,11 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0, transition: { duration: 0.15 } }}
               exit={{ opacity: 0, y: 20, transition: { duration: 0.3 } }}
+              // Chosen or not, a tab changes at once: its curved corners
+              // are drawn beside it and come and go at once, and a tab that
+              // faded its colours in left them a fifth of a second ahead.
               className={clsx(
-                "relative rounded-t-lg w-48 h-8.5 text-xs transition-colors duration-200 flex justify-between items-top0 min-w-8",
+                "relative rounded-t-lg w-48 h-8.5 text-xs flex justify-between items-top0 min-w-8",
                 selected
                   ? "bg-white text-gh-black border border-gh-line border-b-transparent"
                   : "bg-gh-base text-gh-gray border border-transparent"
