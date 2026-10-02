@@ -477,3 +477,17 @@ export function precatalystStructure(
   const made = complexStructure(GENERATIONS[m[2]], groupOf, { ...AMINOBIPHENYL, L: ligand });
   return made && { ...made, name: `${ligand.label} Pd ${m[2]} (${made.name})` };
 }
+
+/**
+ * A generation of Buchwald's precatalysts drawn as itself: its palladacycle,
+ * the phosphine an atom L - whichever one names it (XPhos Pd G3). For the
+ * dictionary's list of them; null for no generation.
+ */
+export function precatalystPicture(generation: string, groupOf: (label: string) => GroupStructure | null): GroupStructure | null {
+  if (!GENERATIONS[generation]) return null;
+  const made = complexStructure(GENERATIONS[generation], groupOf, { ...AMINOBIPHENYL, L: { label: "L", smiles: "[P:1]", name: "the phosphine" } });
+  if (!made) return null;
+  // (the stand-in phosphine's P, the only P there is, labelled L)
+  const { name: _name, ...s } = made;
+  return { ...s, atoms: s.atoms.map((a) => (a.el === "P" ? { el: "L", hs: 0 } : a)) };
+}
