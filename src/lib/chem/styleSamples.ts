@@ -1,5 +1,6 @@
 import { createSVG, layoutMolecule, type Atom, type Bond } from "./layout2d";
 import { layoutOptionsFor, type DrawingStyle } from "./style";
+import { arrowMeasures, arrowOutline } from "./reactionArrow";
 
 /**
  * What the drawing-style settings show a style on: a small molecule with
@@ -116,4 +117,29 @@ export function sampleSvg(
   const pxPerBond = style.bondLengthPt * PX_PER_PT * magnification;
   const layout = layoutMolecule(sample.atoms, sample.bonds, opts, pxPerBond);
   return createSVG(layout, opts);
+}
+
+/**
+ * A reaction arrow two bonds long as SVG in `style`, `magnification` times
+ * the size it would have on the page.
+ */
+export function arrowSampleSvg(style: DrawingStyle, magnification = 1): string {
+  const L = style.bondLengthPt * PX_PER_PT * magnification;
+  const m = arrowMeasures(style, L);
+  const len = 2 * L;
+  const pad = 6;
+  const t = m.thickness / 2;
+  const half = Math.max(m.headWidth / 2, t);
+  const outline = arrowOutline({ x: 0, y: 0 }, { x: len, y: 0 }, m);
+  const n = (v: number) => +v.toFixed(3);
+  const d =
+    outline.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(-p.y)}`).join(" ") + " Z";
+  const x = n(-t - pad);
+  const y = n(-half - pad);
+  const w = n(len + t + 2 * pad);
+  const h = n(2 * (half + pad));
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}" width="${w}" height="${h}">` +
+    `<path d="${d}" fill="${style.bondColor}"/></svg>`
+  );
 }

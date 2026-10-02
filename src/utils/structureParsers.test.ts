@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { parseSDF, parseXYZ } from "./structureParsers";
-import sampleXyz from "../assets/KEF20633_b_296.xyz?raw";
+import sampleXyz from "../samples/cholesterol.xyz?raw";
 
 describe("parseXYZ", () => {
-  it("parses the bundled sample and infers bonds", () => {
+  it("parses the sample and infers bonds", () => {
     const frames = parseXYZ(sampleXyz);
     expect(frames).toHaveLength(1);
-    expect(frames[0].atoms).toHaveLength(76);
+    expect(frames[0].atoms).toHaveLength(74);
     expect(frames[0].bonds.length).toBeGreaterThan(0);
   });
 
