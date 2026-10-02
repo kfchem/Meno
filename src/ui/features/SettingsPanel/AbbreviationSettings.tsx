@@ -227,7 +227,8 @@ function ReagentEntry({ r }: { r: Reagent }) {
   const as = shownAs(r.enantiomers);
   return (
     <Entry
-      a={{ ...r, smiles: r.smiles ?? r.complex ?? "" }}
+      a={{ ...r, smiles: r.smiles ?? "" }}
+      formula={r.complex}
       of={() => abbreviationStructure(as ? `${as}-${r.label}` : r.label)!}
       keep={`reagent:${r.label}`}
     >
@@ -260,11 +261,14 @@ function Entry({
   a,
   of,
   keep,
+  formula,
   children,
 }: {
   a: CustomAbbreviation & { free?: boolean };
   of?: () => GroupStructure;
   keep?: string;
+  /** A metal complex's formula, shown in place of SMILES. */
+  formula?: string;
   children?: ReactNode;
 }) {
   return (
@@ -291,6 +295,11 @@ function Entry({
         </div>
         {a.name && <div className="text-xs text-gh-black">{a.name}</div>}
         <AlsoNames names={a.also} />
+        {formula && (
+          <div className="text-xs text-gh-gray">
+            <LabelText label={formula} />
+          </div>
+        )}
         {a.smiles && <code className="block break-all font-mono text-[0.7rem] text-gh-gray">{a.smiles}</code>}
         {children}
       </div>
