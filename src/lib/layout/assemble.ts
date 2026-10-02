@@ -11,6 +11,7 @@ import {
   centroid,
   cross,
   dir,
+  dist,
   mirror,
   rotate,
   splitOutside,
@@ -19,7 +20,8 @@ import {
   wrap,
   type Point,
 } from "./geometry";
-import { key, orderOf, type Molecule } from "./perceive";
+import { metalSlots } from "./hapto";
+import { isMetal, key, METAL_BOND, orderOf, type Molecule } from "./perceive";
 import { MACROCYCLE } from "./ringSystem";
 
 /** How the frame is set: turned by a multiple of 60 degrees, and mirrored or not. */
@@ -44,7 +46,7 @@ export function sidesOf(mol: Molecule): Map<string, number> {
       const todo = [to];
       while (todo.length) {
         const u = todo.pop()!;
-        for (const v of mol.neighbours[u]) {
+        for (const v of mol.linked[u]) {
           if (!seen.has(v)) {
             seen.add(v);
             todo.push(v);
@@ -107,6 +109,9 @@ export function grow(
 ): Grown {
   const pos: Grown = new Map();
   const queue: number[] = [];
+  // a ring's atom bound face-on: what hangs from it lies in the ring's plane,
+  // foreshortened as the ring is - where its hint puts it, not a bond off
+  const faceOn = new Set(mol.eta.flatMap((e) => e.atoms));
   // how each ring system's own frame was set down: to carry its hints over
   const transforms = new Map<number, (p: Point) => Point>();
   const setFrame = (p: Point): Point => {
@@ -114,8 +119,24 @@ export function grow(
     return rotate(q, frame.turn);
   };
 
-  const root = rootSystem(mol, piece);
-  if (root >= 0) {
+  // a complex is grown from its metal, its ligands round it as the metal's
+  // slots have them (section 7) - the most-bonded metal, where there are
+  // several - where no ring runs through the metal (a chelate through a
+  // ferrocene, dppf's, is closed at the metal instead)
+  const open = (m: number) =>
+    mol.neighbours[m].every((l) => !sideAtoms(mol, m, l).some((v) => v !== l && mol.neighbours[m].includes(v)));
+  const centre = piece
+    .filter((a) => isMetal(mol.el[a]) && mol.systemOf[a] < 0 && mol.neighbours[a].length >= 2 && open(a))
+    .sort((p, q) => mol.neighbours[q].length - mol.neighbours[p].length || p - q)[0];
+  const root = centre == null ? rootSystem(mol, piece) : -1;
+  if (centre != null) {
+    pos.set(centre, { x: 0, y: 0 });
+    const weight = (l: number) => sides.get(`${centre}>${l}`) ?? 1;
+    const [first, ...rest] = [...mol.neighbours[centre]].sort((p, q) => weight(q) - weight(p) || p - q);
+    const placed: [number, number][] = [[first, setFrameAngle(frame, 0)], ...atMetal(mol, sides, centre, first, setFrameAngle(frame, 0), rest)];
+    for (const [child, t] of placed) placeChild(mol, pos, local, queue, centre, child, t, transforms, hints, upright);
+    queue.push(centre);
+  } else if (root >= 0) {
     const L = local.get(root)!;
     const c = centroid([...L.values()]);
     // a cage drawn in perspective stays upright, as it was drawn
@@ -182,11 +203,40 @@ export function grow(
       if (s < 0 || !upright.has(s) || !back || byHint.some(([h]) => h === c)) continue;
       byHint.push([c, angleOf(sub(local.get(s)!.get(c)!, back))]);
     }
-    const rest = children.filter((c) => !byHint.some(([h]) => h === c));
+    // a metal bonded to another atom placed already - a chelate closing
+    // through it (dppf's P and P on Pd): at the apex over the two, its bonds
+    // as long as a square angle there asks, a bond at least, on the side
+    // away from what is placed
+    const closing: [number, number][] = [];
+    for (const c of children) {
+      const other = mol.neighbours[c].find((v) => v !== a && pos.has(v));
+      if (!isMetal(mol.el[c]) || mol.systemOf[c] >= 0 || other == null || byHint.some(([h]) => h === c)) continue;
+      const p2 = pos.get(other)!;
+      const mid = { x: (at.x + p2.x) / 2, y: (at.y + p2.y) / 2 };
+      const half = dist(at, p2) / 2;
+      const height = half >= Math.SQRT1_2 ? half : Math.sqrt(Math.max(0, 1 - half * half));
+      const across = rotate(sub(p2, at), Math.PI / 2);
+      const unit = { x: across.x / (2 * half || 1), y: across.y / (2 * half || 1) };
+      const rest = [...pos.values()];
+      const centre = centroid(rest);
+      const toward = (p: Point) => (p.x - centre.x) * unit.x + (p.y - centre.y) * unit.y;
+      const sign = toward(add(mid, unit)) >= toward(add(mid, { x: -unit.x, y: -unit.y })) ? 1 : -1;
+      const apex = { x: mid.x + sign * unit.x * height, y: mid.y + sign * unit.y * height };
+      pos.set(c, apex);
+      queue.push(c);
+      closing.push([c, angleOf(sub(apex, at))]);
+    }
+    const rest = children.filter((c) => !byHint.some(([h]) => h === c) && !closing.some(([h]) => h === c));
     const assigned = rest.length
-      ? assign(mol, pos, sides, a, placed, [...taken, ...byHint.map(([, t]) => t)], rest)
+      ? assign(mol, pos, sides, a, placed, [...taken, ...byHint.map(([, t]) => t), ...closing.map(([, t]) => t)], rest)
       : [];
     for (const [child, t] of [...byHint, ...assigned]) {
+      const h = faceOn.has(a) && mol.systemOf[child] < 0 && T ? hinted?.get(child) : undefined;
+      if (h) {
+        pos.set(child, T!(h));
+        queue.push(child);
+        continue;
+      }
       placeChild(mol, pos, local, queue, a, child, t, transforms, hints, upright);
     }
   }
@@ -261,6 +311,10 @@ function assign(
   const weight = (c: number) => sides.get(`${a}>${c}`) ?? 1;
   const byWeight = [...children].sort((p, q) => weight(q) - weight(p) || p - q);
 
+  if (isMetal(mol.el[a]) && mol.systemOf[a] < 0 && placed.length === 1) {
+    return atMetal(mol, sides, a, placed[0], taken[0], children);
+  }
+
   if (mol.systemOf[a] >= 0 || placed.length !== 1) {
     // a ring atom: the room outside the rings split evenly, the heaviest
     // branch nearest straight out
@@ -278,6 +332,15 @@ function assign(
   const parent = placed[0];
   const p = taken[0];
   const deg = k + 1;
+  // a donor bonded to a metal (a phosphine's P): what it carries spread
+  // away from the metal, as a tripod's legs - 75 degrees apart, the
+  // heaviest straight out - clear of the metal's other ligands
+  if (isMetal(mol.el[parent]) && k >= 2) {
+    const legs = Array.from({ length: k }, (_, i) => p + Math.PI + (i - (k - 1) / 2) * ((5 * Math.PI) / 12));
+    const mid = p + Math.PI;
+    const byCentre = [...legs].sort((u, v) => Math.abs(wrap(u - mid)) - Math.abs(wrap(v - mid)));
+    return byWeight.map((c, i) => [c, byCentre[i]]);
+  }
   const orders = mol.neighbours[a].map((v) => orderOf(mol, a, v));
   // (and the O of a P-O-P, so that a run of crosses is one line)
   const straight =
@@ -386,6 +449,78 @@ function assign(
 }
 
 /**
+ * Which way each child of a metal goes, the bond in from `parent` fixed:
+ * the metal's slots (`metalSlots`) turned to put that bond in one of its
+ * kind, rings to rings, and the rest given the others so that the bulkiest
+ * are furthest apart - two bulky ligands trans to each other, the small
+ * ones (Cl, H, CO) between.
+ */
+function atMetal(
+  mol: Molecule,
+  sides: Map<string, number>,
+  a: number,
+  parent: number,
+  p: number,
+  children: number[],
+): [number, number][] {
+  const etaSystem = new Map(mol.eta.map((e) => [e.star, mol.systems[e.system].atoms.length]));
+  const isRing = (l: number) => etaSystem.has(l);
+  // (a ring's bulk is its system's; another ligand's, what lies beyond it)
+  const weight = (l: number) => etaSystem.get(l) ?? sides.get(`${a}>${l}`) ?? 1;
+  const all = [parent, ...children];
+  const slots = metalSlots(all.filter(isRing).length, all.filter((l) => !isRing(l)).length);
+  let best: { cost: number; out: [number, number][] } | null = null;
+  for (const [j, s] of slots.entries()) {
+    if (s.ring !== isRing(parent)) continue;
+    const turn = p - s.angle;
+    const free = slots.filter((_, i) => i !== j).map((t) => ({ ...t, angle: t.angle + turn }));
+    for (const out of placements(children, free, isRing)) {
+      const placedAt: [number, number][] = [[parent, p], ...out];
+      // bulky pairs near each other cost the most
+      let cost = 0;
+      for (let u = 0; u < placedAt.length; u++) {
+        for (let v = u + 1; v < placedAt.length; v++) {
+          cost += weight(placedAt[u][0]) * weight(placedAt[v][0]) * Math.cos(placedAt[u][1] - placedAt[v][1]);
+        }
+      }
+      if (!best || cost < best.cost - 1e-9) best = { cost, out };
+    }
+  }
+  return best?.out ?? children.map((c, i) => [c, p + ((i + 1) * 2 * Math.PI) / (children.length + 1)]);
+}
+
+/** Each way of giving `children` the free slots, a ring's to a ring (all of them, for up to six; else in order). */
+function placements(
+  children: number[],
+  free: { angle: number; ring: boolean }[],
+  isRing: (l: number) => boolean,
+): [number, number][][] {
+  if (children.length > 6) {
+    const left = [...free];
+    return [
+      children.map((c) => {
+        const i = Math.max(0, left.findIndex((s) => s.ring === isRing(c)));
+        return [c, left.splice(i, 1)[0]?.angle ?? 0] as [number, number];
+      }),
+    ];
+  }
+  const out: [number, number][][] = [];
+  const go = (i: number, used: boolean[], acc: [number, number][]) => {
+    if (i === children.length) return void out.push([...acc]);
+    free.forEach((s, j) => {
+      if (used[j] || s.ring !== isRing(children[i])) return;
+      used[j] = true;
+      acc.push([children[i], s.angle]);
+      go(i + 1, used, acc);
+      acc.pop();
+      used[j] = false;
+    });
+  };
+  go(0, free.map(() => false), []);
+  return out;
+}
+
+/**
  * A phosphorus or sulfur with four bonds, in no ring - a phosphate, a
  * sulfonyl: drawn as a cross, square to the page.
  */
@@ -478,7 +613,9 @@ function placeChild(
   hints: Map<number, Map<number, Point>>,
   upright: ReadonlySet<number> = new Set(),
 ): void {
-  const at = add(pos.get(a)!, dir(t));
+  // (a metal's bond to a ligand drawn longer, as it is: room for the ligands)
+  const length = isMetal(mol.el[a]) !== isMetal(mol.el[child]) && mol.el[a] !== "*" && mol.el[child] !== "*" ? METAL_BOND : 1;
+  const at = add(pos.get(a)!, { x: Math.cos(t) * length, y: Math.sin(t) * length });
   const s = mol.systemOf[child];
   if (s < 0) {
     pos.set(child, at);
@@ -534,7 +671,7 @@ export function flip(mol: Molecule, pos: Grown, a: number, b: number, sides: Map
   const todo = [to];
   while (todo.length) {
     const u = todo.pop()!;
-    for (const v of mol.neighbours[u]) {
+    for (const v of mol.linked[u]) {
       if (seen.has(v)) continue;
       seen.add(v);
       todo.push(v);
@@ -548,7 +685,7 @@ export function sideAtoms(mol: Molecule, from: number, to: number): number[] {
   const seen = new Set([from, to]);
   const out = [to];
   for (let h = 0; h < out.length; h++) {
-    for (const v of mol.neighbours[out[h]]) {
+    for (const v of mol.linked[out[h]]) {
       if (!seen.has(v)) {
         seen.add(v);
         out.push(v);

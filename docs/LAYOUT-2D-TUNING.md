@@ -16,6 +16,7 @@ decided. Read both before changing anything.
 | `ringSystem.ts` | each ring system laid out on its own: fused and spiro rings, a ring's shape before its bond lengths, macrocycles fitted to a shape (`macrocycleFit`: heavy groups outside, a macrolide's lactone at the lower left), rings of rings, chains through a hub ring |
 | `macrocycle.ts` | the shapes a macrocycle can take on the lattice |
 | `cage.ts`, `bridge.ts` | a cage drawn as the solid it is (a chair or boat seen from above); a bridge drawn across a flat ring |
+| `hapto.ts` | a ring bound face-on to a metal (η⁵-Cp, η⁶-arene), in perspective; a metal with its rings as one system; a metal's slots (section 7) |
 | `assemble.ts` | the structure grown out from its root system in one frame: each bond's direction, zigzags, a cis double bond as a step, a phosphate as a cross, an amino acid's backbone |
 | `engine.ts` | `layout2D`: the steps below, and the local search (`improve`, `rejoin`, `untangle`, `faceSugars`, `roomForHydrogens`, `squareUp`) |
 | `stereo.ts` | wedges and hashes, and the H's drawn to carry them |
@@ -205,6 +206,14 @@ now kept by a rule in `LAYOUT-2D.md`:
 - **Labels**: no H is ever hidden. The layout makes room by moving bonds
   a little, never by writing the H under its symbol, and the drawing code
   is not changed for it.
+- **Metals** (section 7):
+  - dppf's and Cp's rings drawn flattened, in perspective, their near
+    edges bold; a Cp with its circle, never as a diene;
+  - PPh3 crowded round a metal drawn with its phenyls flattened, their
+    near edges bold, so that it looks three-dimensional;
+  - by rules, not templates, and without losing anything on the organic
+    molecules;
+  - Clean-up drawing a complex as writing out its label does.
 
 Licences: a reference image (Wikipedia, IUPAC) is linked, never copied or
 traced into the repository, and no code is taken from RDKit, CoordGen or

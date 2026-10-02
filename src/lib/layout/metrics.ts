@@ -7,6 +7,7 @@
  * so the scale it was drawn at does not matter.
  */
 import { drawnVolume } from "./geometry";
+import { isMetal, METAL_BOND } from "./perceive";
 import { smallestRings, type Edge } from "./rings";
 
 export type Geometry = {
@@ -312,18 +313,27 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
     if (za == null || zb == null || zc == null || zd == null) return false;
     return Math.abs((za + zb) / 2 - (zc + zd) / 2) > 0.25;
   };
-  // (a bond to a drawn H is drawn short, by choice: it is left out)
+  // (a bond to a drawn H is drawn short, by choice: it is left out; a
+  // metal's to a ligand is drawn long, and measured against that - but in a
+  // chelate's ring, which is drawn regular - section 7)
   const isH = (a: number) => g.elements?.[a] === "H";
+  const rings = (g.rings as number[][] | undefined) ?? smallestRings(n, edges);
+  const ringBond = new Set(rings.flatMap((r) => r.map((a, i) => pair(a, r[(i + 1) % r.length]))));
+  // (nor a metal's bond to a pi system's star, which is the ring's own distance)
+  const toMetal = (a: number, b: number) =>
+    isMetal(g.elements?.[a] ?? "") !== isMetal(g.elements?.[b] ?? "") &&
+    g.elements?.[a] !== "*" &&
+    g.elements?.[b] !== "*" &&
+    !ringBond.has(pair(a, b));
   const lengths = edges
     .filter(([a, b]) => !isH(a) && !isH(b) && !solid(a, b))
-    .map(([a, b]) => Math.hypot(x[a] - x[b], y[a] - y[b]));
+    .map(([a, b]) => Math.hypot(x[a] - x[b], y[a] - y[b]) / (toMetal(a, b) ? METAL_BOND : 1));
   const L = median(lengths);
   const mean = lengths.reduce((s, v) => s + v, 0) / Math.max(lengths.length, 1);
   const bondSpread = lengths.length
     ? Math.sqrt(lengths.reduce((s, v) => s + (v - mean) ** 2, 0) / lengths.length) / mean
     : 0;
 
-  const rings = (g.rings as number[][] | undefined) ?? smallestRings(n, edges);
   const inRing = new Set(rings.flat());
   // ring systems: rings sharing atoms
   const systemOf = new Map<number, number>();
