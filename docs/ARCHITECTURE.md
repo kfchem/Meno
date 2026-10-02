@@ -26,7 +26,8 @@ src/
   App.tsx                 tab reducer wiring, TopBar + Deck
   lib/core/               tab state: types.ts (TabKind, State, Action), state.ts (reducer)
   lib/chem/               layout2d.ts (2D depiction primitives), style.ts / styleFields.ts (drawing style),
-                          labelFonts.ts (label typefaces, letter by letter)
+                          labelFonts.ts (label typefaces, letter by letter), ctfile.ts (molfiles,
+                          SDfiles and Rxnfiles read as CTfile Formats has them: docs/CTFILE.md)
   lib/net/                network.ts: the network's record, consent, offline mode
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad

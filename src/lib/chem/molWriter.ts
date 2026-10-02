@@ -1,15 +1,15 @@
 import { NOMINAL_BOND_LENGTH } from "./acs";
 import { wedgeNarrowAtom } from "./layout2d";
-import type { AtomChem } from "./molecule";
+import type { AtomChem, BondChem } from "./molecule";
 
 /** An atom to write: what it is (./molecule), and where, in the editor's world units. */
 export type WriterAtom = AtomChem & { id: number; x: number; y: number };
 /** A bond to write, between two atoms by id, as the editor holds it. */
-export type WriterBond = {
+export type WriterBond = BondChem & {
   a: number;
   b: number;
   order: 1 | 2 | 3;
-  stereo?: "up" | "down" | "wavy" | "none";
+  stereo?: "up" | "down" | "wavy" | "either" | "none";
   stereoOrient?: "principle" | "reverse";
   dative?: boolean;
 };
@@ -18,15 +18,28 @@ export type WriterModel = { atoms: WriterAtom[]; bonds: WriterBond[] };
 /** How long a MOL file's bonds are, in ångström: the usual 1.5. */
 export const MOL_BOND_LENGTH = 1.5;
 
-/** MOL's bond type for a coordination (dative) bond. */
+/** MOL's bond type for a coordination (dative) bond, and for a hydrogen bond. */
 const COORDINATION_BOND = 9;
+const HYDROGEN_BOND = 10;
+/** A query bond's type ("CTfile Formats", the bond block). */
+const QUERY_TYPE = { "single-or-double": 5, "single-or-aromatic": 6, "double-or-aromatic": 7, any: 8 } as const;
 
 type Row = {
   first: number;
   second: number;
   type: number;
-  stereo: "up" | "down" | "wavy" | "none";
+  stereo: "up" | "down" | "wavy" | "either" | "none";
+  /** V3000's DISP: a coordination bond drawn as a plain line. */
+  coord?: boolean;
 };
+
+/** A bond's CTfile type. */
+function bondType(b: WriterBond): number {
+  if (b.hydrogen) return HYDROGEN_BOND;
+  if (b.query) return QUERY_TYPE[b.query];
+  if ((b.dative || b.coordination) && b.order === 1) return COORDINATION_BOND;
+  return b.order;
+}
 
 /**
  * The bonds as a MOL file lists them: 1-based atoms, the first of a wedge its
@@ -58,8 +71,15 @@ function rows(model: WriterModel, index: Map<number, number>): Row[] {
       first = (deg.get(i) ?? 0) >= (deg.get(j) ?? 0) ? i : j;
     }
     const second = first === i ? j : i;
-    const type = b.dative && b.order === 1 ? COORDINATION_BOND : b.order;
-    out.push({ first: first + 1, second: second + 1, type, stereo });
+    // ("either" is a double bond's alone: cis or trans not known)
+    const either = stereo === "either" && b.order === 2 && !b.query;
+    out.push({
+      first: first + 1,
+      second: second + 1,
+      type: bondType(b),
+      stereo: stereo === "either" && !either ? "none" : stereo,
+      ...(b.coordination && !b.dative ? { coord: true } : {}),
+    });
   }
   return out;
 }
@@ -102,7 +122,8 @@ function writeV2000(model: WriterModel, title: string): string {
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const scale = MOL_BOND_LENGTH / NOMINAL_BOND_LENGTH;
   const bonds = rows(model, index);
-  const code = { up: 1, down: 6, wavy: 4, none: 0 } as const;
+  // (a double bond's 3: cis or trans, either)
+  const code = { up: 1, down: 6, wavy: 4, either: 3, none: 0 } as const;
   const lines = [
     title,
     PROGRAM_LINE,
@@ -128,7 +149,7 @@ function writeV3000(model: WriterModel, title: string): string {
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const scale = MOL_BOND_LENGTH / NOMINAL_BOND_LENGTH;
   const bonds = rows(model, index);
-  const cfg = { up: 1, down: 3, wavy: 2, none: 0 } as const;
+  const cfg = { up: 1, down: 3, wavy: 2, either: 2, none: 0 } as const;
   const num = (v: number) => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(4);
   const lines = [
     title,
@@ -152,7 +173,9 @@ function writeV3000(model: WriterModel, title: string): string {
     bonds.forEach((b, i) => {
       const c = cfg[b.stereo];
       lines.push(
-        `M  V30 ${i + 1} ${b.type} ${b.first} ${b.second}` + (c ? ` CFG=${c}` : ""),
+        `M  V30 ${i + 1} ${b.type} ${b.first} ${b.second}` +
+          (c ? ` CFG=${c}` : "") +
+          (b.coord ? " DISP=COORD" : ""),
       );
     });
     lines.push("M  V30 END BOND");
@@ -163,8 +186,8 @@ function writeV3000(model: WriterModel, title: string): string {
 
 /**
  * The structure as a MOL file. V2000 wherever it can say everything - which
- * it cannot for a dative bond, or past 999 atoms or bonds - and V3000 where
- * it cannot, unless one is asked for.
+ * it cannot for a dative, coordination or hydrogen bond, or past 999 atoms
+ * or bonds - and V3000 where it cannot, unless one is asked for.
  *
  * Coordinates are scaled so the editor's nominal bond comes out at 1.5 Å;
  * hydrogens are left implicit, as the drawing has them.
@@ -175,10 +198,12 @@ export function writeMolfile(
 ): string {
   const title = (options.title ?? "").replace(/[\r\n]+/g, " ").slice(0, 80);
   const version = options.version ?? "auto";
+  // (V2000's bond types stop at 8: a coordination or a hydrogen bond, and
+  // whether the one is drawn as a plain line, are V3000's)
   const needsV3000 =
     model.atoms.length > 999 ||
     model.bonds.length > 999 ||
-    model.bonds.some((b) => b.dative && b.order === 1);
+    model.bonds.some((b) => ((b.dative || b.coordination) && b.order === 1) || b.hydrogen);
   return version === "V3000" || (version === "auto" && needsV3000)
     ? writeV3000(model, title)
     : writeV2000(model, title);

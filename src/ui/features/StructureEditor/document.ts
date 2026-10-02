@@ -352,6 +352,15 @@ export function updateBond(
     (key) => bond[key] === merged[key],
   );
   if (unchanged) return doc;
+  // A bond whose order or stereo is changed is the bond it is made: what
+  // a file said it was besides - a query, a hydrogen or a coordination
+  // bond, a double bond of either configuration - goes with the change.
+  if ("order" in patch || "stereo" in patch) {
+    for (const key of ["query", "hydrogen", "coordination"] as const) {
+      if (!(key in patch)) delete merged[key];
+    }
+    if (merged.order !== 2 && merged.stereo === "either") merged.stereo = "none";
+  }
   const next = bonds.slice();
   next[index] = merged;
   return { ...doc, model: { atoms: doc.model.atoms, bonds: next } };

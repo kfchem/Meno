@@ -12,7 +12,8 @@ export function isElementSymbol(label: string): boolean {
  * The structure as RDKit is asked about it: a V3000 MOL block, with every
  * label that is not an element - an abbreviation, an R group, any text - as
  * an atom RDKit knows nothing about ("*"), which it neither counts bonds on
- * nor gives hydrogens.
+ * nor gives hydrogens; and a query bond as the bond it is drawn as, since
+ * what is asked about is a structure, not a search.
  */
 export function chemMolblock(model: WriterModel): string {
   return writeMolfile(
@@ -20,7 +21,7 @@ export function chemMolblock(model: WriterModel): string {
       atoms: model.atoms.map((a) =>
         isElementSymbol(a.el) ? a : { ...a, el: "*" },
       ),
-      bonds: model.bonds,
+      bonds: model.bonds.map((b) => (b.query ? { ...b, query: undefined } : b)),
     },
     { version: "V3000" },
   );

@@ -10,7 +10,7 @@
  * (and H) that say it.
  */
 import { wedgeNarrowAtom } from "../../../../lib/chem/layout2d";
-import { implicitHydrogens } from "../../../../lib/chem/molecule";
+import { implicitHydrogens, valenceOrder } from "../../../../lib/chem/molecule";
 import type { WriterModel } from "../../../../lib/chem/molWriter";
 import { wedgesForFlat, type DrawnAtom, type DrawnBond } from "../../../../lib/layout/drawn";
 import { isElementSymbol } from "../../../../lib/rdkit/molblock";
@@ -45,8 +45,9 @@ export function orientFor(
 export function undrawnHydrogens(model: Model): Map<number, number> {
   const sum = new Map<number, number>();
   for (const b of model.bonds) {
-    // (a dative bond lends a pair, and takes no H from either end)
-    const order = b.dative ? 0 : b.order;
+    // (a dative bond lends a pair, and takes no H from either end; nor
+    // does a coordination or a hydrogen bond)
+    const order = valenceOrder(b);
     sum.set(b.a, (sum.get(b.a) ?? 0) + order);
     sum.set(b.b, (sum.get(b.b) ?? 0) + order);
   }

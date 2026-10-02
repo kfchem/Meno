@@ -157,3 +157,85 @@ describe("charges, radicals and isotopes", () => {
     });
   }
 });
+
+describe("bonds besides plain ones, through a file and back", () => {
+  const atoms = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i + 1, x: i * L, y: 0, el: "C" }));
+  // a V2000 block: a double bond of either configuration, the four query bonds
+  const v2000 = [
+    "",
+    "  Meno",
+    "",
+    "  6  5  0  0  0  0  0  0  0  0999 V2000",
+    ...Array.from({ length: 6 }, (_, i) => `${(i * 1.5).toFixed(4).padStart(10)}    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0`),
+    "  1  2  2  3  0  0  0",
+    "  2  3  5  0  0  0  0",
+    "  3  4  6  0  0  0  0",
+    "  4  5  7  0  0  0  0",
+    "  5  6  8  0  0  0  0",
+    "M  END",
+  ].join("\n");
+
+  it("reads them into the editor's bonds", () => {
+    const { model } = moleculesToEditorModel(readMoleculesFromText(v2000, "mol"));
+    expect(model.bonds.map((b) => [b.order, b.stereo, b.query])).toEqual([
+      [2, "either", undefined],
+      [1, "none", "single-or-double"],
+      [1, "none", "single-or-aromatic"],
+      [2, "none", "double-or-aromatic"],
+      [1, "none", "any"],
+    ]);
+  });
+
+  it("writes them as they were read", () => {
+    const { model } = moleculesToEditorModel(readMoleculesFromText(v2000, "mol"));
+    const out = writeMolfile(model);
+    const bondLines = out.split("\n").slice(10, 15).map((l) => [l.slice(6, 9).trim(), l.slice(9, 12).trim()]);
+    expect(bondLines).toEqual([
+      ["2", "3"],
+      ["5", "0"],
+      ["6", "0"],
+      ["7", "0"],
+      ["8", "0"],
+    ]);
+  });
+
+  it("reads and writes a hydrogen bond and a coordination bond shown plainly, in V3000", () => {
+    const v3000 = [
+      "",
+      "  Meno",
+      "",
+      "  0  0  0     0  0            999 V3000",
+      "M  V30 BEGIN CTAB",
+      "M  V30 COUNTS 4 2 0 0 0",
+      "M  V30 BEGIN ATOM",
+      "M  V30 1 O 0 0 0 0",
+      "M  V30 2 O 1.5 0 0 0",
+      "M  V30 3 Cu 3 0 0 0",
+      "M  V30 4 N 4.5 0 0 0",
+      "M  V30 END ATOM",
+      "M  V30 BEGIN BOND",
+      "M  V30 1 10 1 2",
+      "M  V30 2 9 3 4 DISP=COORD",
+      "M  V30 END BOND",
+      "M  V30 END CTAB",
+      "M  END",
+    ].join("\n");
+    const { model } = moleculesToEditorModel(readMoleculesFromText(v3000, "mol"));
+    expect(model.bonds.map((b) => [b.hydrogen, b.coordination, b.dative])).toEqual([
+      [true, undefined, undefined],
+      [undefined, true, undefined],
+    ]);
+    const out = writeMolfile(model);
+    expect(out).toContain("V3000");
+    expect(out).toMatch(/M {2}V30 1 10 1 2\n/);
+    expect(out).toMatch(/M {2}V30 2 9 \d \d DISP=COORD\n/);
+  });
+
+  it("writes a double bond of either configuration as V3000's CFG=2", () => {
+    const out = writeMolfile(
+      { atoms: atoms(2), bonds: [{ a: 1, b: 2, order: 2, stereo: "either" }] },
+      { version: "V3000" },
+    );
+    expect(out).toMatch(/M {2}V30 1 2 1 2 CFG=2\n/);
+  });
+});

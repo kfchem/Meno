@@ -3,6 +3,7 @@ import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
 import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
+import type { BondChem } from "../../../../lib/chem/molecule";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
 export type Atom = EditorAtom & {
@@ -18,12 +19,13 @@ export type Atom = EditorAtom & {
    */
   stereoCentre?: boolean;
 };
-export type Bond = {
+export type Bond = BondChem & {
   id: number;
   a: number;
   b: number;
   order: 1 | 2 | 3;
-  stereo?: "up" | "down" | "wavy" | "none";
+  /** A single bond's wedge, hash or wave; a double bond's "either": cis or trans not known. */
+  stereo?: "up" | "down" | "wavy" | "either" | "none";
   doubleMode?: "auto" | "center" | "left" | "right";
   stereoOrient?: "principle" | "reverse";
   /** How a single bond with no stereo is drawn; plain when unset. */

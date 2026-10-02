@@ -1,3 +1,5 @@
+import type { CtMolecule } from "./ctfile";
+
 /**
  * What an atom is, chemically - the one place it is said, for every kind of
  * molecule the app handles: a file's as parsed, the editor's, the one the
@@ -21,12 +23,53 @@ export type AtomChem = {
   isotope?: number;
 };
 
+/**
+ * A query bond (CTfile bond types 5 to 8): one that stands for either of
+ * two kinds, or any. It is drawn as the first of them, labelled.
+ */
+export type BondQuery = "single-or-double" | "single-or-aromatic" | "double-or-aromatic" | "any";
+
+/**
+ * What a bond is besides its order, where it is not a plain covalent bond:
+ * a query, a hydrogen bond (drawn dotted, IUPAC GR-1.8), or a coordination
+ * bond drawn as a plain line (GR-1.7) rather than as a dative arrow.
+ */
+export type BondChem = {
+  query?: BondQuery;
+  hydrogen?: boolean;
+  coordination?: boolean;
+};
+
+/** What a bond is besides its order, where it is: to hand on with it, as `chemistry` an atom's. */
+export function bondChem(b: BondChem): BondChem {
+  return {
+    ...(b.query ? { query: b.query } : {}),
+    ...(b.hydrogen ? { hydrogen: true } : {}),
+    ...(b.coordination ? { coordination: true } : {}),
+  };
+}
+
+/**
+ * How much of an atom's valence a bond takes: its order - none for a dative
+ * bond, which lends a pair, nor for a coordination or a hydrogen bond.
+ */
+export function valenceOrder(b: BondChem & { order: number; dative?: boolean }): number {
+  return b.dative || b.coordination || b.hydrogen ? 0 : b.order;
+}
+
 /** An atom as a file gives it: where it is, in the file's own units. */
 export type ParsedAtom = AtomChem & { x: number; y: number; z: number };
-/** A bond as a file gives it, between atoms by index; `stereoCode` is MOL's. */
+/**
+ * A bond as a file gives it, between atoms by index: its CTfile bond type
+ * (1 to 10) as `order`, and its stereo as V2000 codes - a single bond's 1
+ * up, 4 either, 6 down; a double bond's 3, cis or trans not known.
+ */
 export type ParsedBond = { a1: number; a2: number; order: number; stereoCode?: number };
-/** A molecule as a file gives it. */
-export type Molecule = { atoms: ParsedAtom[]; bonds: ParsedBond[] };
+/**
+ * A molecule as a file gives it. A CTfile's carries all the file said
+ * besides (lib/chem/ctfile), its atoms and bonds in the same order.
+ */
+export type Molecule = { atoms: ParsedAtom[]; bonds: ParsedBond[]; ct?: CtMolecule };
 
 /**
  * Valences used to work out how many hydrogens an atom carries, for the

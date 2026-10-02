@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { processFileContent } from "./io";
+import { editorModelOf, processFileContent } from "./io";
 import sampleSdf from "../../../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../../../samples/esterification.rxn?raw";
 
@@ -37,5 +37,26 @@ describe("processFileContent", () => {
     await expect(processFileContent("", "hello")).rejects.toThrow(
       "No molecules found in the file.",
     );
+  });
+});
+
+describe("editorModelOf", () => {
+  it("keeps what a bond is besides its order", () => {
+    const model = editorModelOf({
+      atoms: [
+        { id: 1, x: 0, y: 0, el: "O" },
+        { id: 2, x: 1, y: 0, el: "O" },
+      ],
+      bonds: [
+        { id: 3, a: 1, b: 2, order: 1, hydrogen: true },
+        { id: 4, a: 1, b: 2, order: 1, coordination: true },
+        { id: 5, a: 1, b: 2, order: 2, query: "double-or-aromatic", stereo: "either" },
+      ],
+    });
+    expect(model.bonds.map((b) => [b.hydrogen, b.coordination, b.query, b.stereo])).toEqual([
+      [true, undefined, undefined, "none"],
+      [undefined, true, undefined, "none"],
+      [undefined, undefined, "double-or-aromatic", "either"],
+    ]);
   });
 });

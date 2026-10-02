@@ -1,6 +1,6 @@
 import { NOMINAL_BOND_LENGTH } from "../lib/chem/acs";
 import { kekuleOrders } from "../lib/chem/kekulize";
-import { chemistry, type AtomChem, type ParsedAtom } from "../lib/chem/molecule";
+import { bondChem, chemistry, type AtomChem, type BondChem, type ParsedAtom } from "../lib/chem/molecule";
 import {
   layoutMolecule,
   type Atom as LayoutAtom,
@@ -8,10 +8,12 @@ import {
 } from "../lib/chem/layout2d";
 import { layoutOptionsFor, MENO } from "../lib/chem/style";
 import {
+  fromCtfile,
   parseSDF,
   parseXYZ,
   type Molecule as ParsedMol,
 } from "./structureParsers";
+import { readRxnfile } from "../lib/chem/ctfile";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), and where it is. */
 export type EditorAtom = AtomChem & {
@@ -20,12 +22,17 @@ export type EditorAtom = AtomChem & {
   y: number;
   r: number;
 };
-export type EditorBond = {
+export type EditorBond = BondChem & {
   id: number;
   a: number;
   b: number;
   order: 1 | 2 | 3;
-  stereo?: "up" | "down" | "wavy" | "none";
+  /**
+   * A single bond's wedge, hashed wedge or wavy line; a double bond's
+   * "either": cis or trans, not known (drawn as IUPAC ST-4.4 has it, with a
+   * wavy bond beside it).
+   */
+  stereo?: "up" | "down" | "wavy" | "either" | "none";
   /**
    * Set when the file puts a wedge's narrow end where the drawing would not
    * by itself - at the atom with fewer bonds.
@@ -43,6 +50,14 @@ function chemistryOf(a: ParsedAtom): AtomChem {
 
 /** MOL's bond type for a coordination (dative) bond. */
 const COORDINATION_BOND = 9;
+const HYDROGEN_BOND = 10;
+/** The query bond types, 5 to 8. */
+const QUERY_OF: Record<number, EditorBond["query"]> = {
+  5: "single-or-double",
+  6: "single-or-aromatic",
+  7: "double-or-aromatic",
+  8: "any",
+};
 
 const normalizeNewlines = (s: string) => s.replace(/\r\n?/g, "\n");
 
@@ -129,81 +144,14 @@ export type RXNLayout = {
  * This is more robust than a flat split when we need to layout reaction components.
  */
 export function parseRXNGroups(text: string): RXNGroups {
-  const src = normalizeNewlines(text);
-  // Find header area after $RXN and before first $MOL
-  const headerMatch = src.match(/\$RXN[\s\S]*?(?=\$MOL)/i);
-  let reactCount = 0;
-  let prodCount = 0;
-  let agentCount = 0;
-  if (headerMatch) {
-    const header = headerMatch[0];
-    const lines = header.split("\n").map((l) => l.trim());
-    // CTfile RXN header: $RXN, name, program line, comment, then the counts
-    // line ("rrrppp[aaa]"). Read it at its fixed position first, so a
-    // reaction name such as "step 1 of 2" is never mistaken for the counts.
-    const fixed = (lines[4] ?? "").match(/^(\d+)\s+(\d+)(?:\s+(\d+))?$/);
-    // Otherwise look for a counts-like line containing at least two integers
-    const candidates = fixed ? [lines[4]] : lines;
-    for (const l of candidates) {
-      const nums = l.match(/(-?\d+)/g);
-      if (nums && nums.length >= 2) {
-        reactCount = parseInt(nums[0], 10) || 0;
-        prodCount = parseInt(nums[1], 10) || 0;
-        if (nums.length >= 3) agentCount = parseInt(nums[2], 10) || 0;
-        break;
-      }
-    }
-  }
-
-  // Split on $MOL tokens; include trailing content in each part
-  const parts = src.split(/(^\s*\$MOL\s*$)/gim).filter(Boolean);
-  // parts will contain alternating separators and blocks; rebuild blocks that start with $MOL
-  const molBlocks: string[] = [];
-  for (let i = 0; i < parts.length; i++) {
-    if (/^\s*\$MOL\s*$/i.test(parts[i])) {
-      // next chunk is the actual block (if present)
-      const next = parts[i + 1] ?? "";
-      molBlocks.push(next);
-      i++; // skip next
-    }
-  }
-
-  const all: ParsedMol[] = [];
-  for (const b of molBlocks) {
-    const blk = b.trim();
-    if (!blk) continue;
-    try {
-      const mm = parseSDF(blk);
-      if (mm && mm.length > 0) all.push(mm[0]);
-    } catch {
-      // ignore
-    }
-  }
-
-  // Partition by counts, if available; otherwise heuristically split half/half
-  const reactants: ParsedMol[] = [];
-  const products: ParsedMol[] = [];
-  const agents: ParsedMol[] = [];
-  let idx = 0;
-  if (reactCount + prodCount + agentCount > 0) {
-    for (let i = 0; i < reactCount && idx < all.length; i++, idx++)
-      reactants.push(all[idx]);
-    for (let i = 0; i < agentCount && idx < all.length; i++, idx++)
-      agents.push(all[idx]);
-    for (let i = 0; i < prodCount && idx < all.length; i++, idx++)
-      products.push(all[idx]);
-    // any remaining treat as products
-    while (idx < all.length) products.push(all[idx++]);
-  } else {
-    // fallback: if only a few blocks, assume first half reactants, last half products
-    const half = Math.ceil(all.length / 2);
-    for (let i = 0; i < all.length; i++) {
-      if (i < half) reactants.push(all[i]);
-      else products.push(all[i]);
-    }
-  }
-
-  return { reactants, products, agents };
+  // V2000 or V3000; its molecules in the file's order - reactants,
+  // products, then reagents ("CTfile Formats", the Rxnfile chapters)
+  const r = readRxnfile(normalizeNewlines(text));
+  return {
+    reactants: r.reactants.map(fromCtfile),
+    products: r.products.map(fromCtfile),
+    agents: r.reagents.map(fromCtfile),
+  };
 }
 
 /**
@@ -386,11 +334,39 @@ function drawnBox(model: EditorModel): { minX: number; maxX: number } {
       order: b.order,
       stereo: b.stereo ?? "none",
       ...(b.dative ? { dative: true } : {}),
+      ...bondChem(b),
     });
   }
   const opts = layoutOptionsFor(MENO, NOMINAL_BOND_LENGTH, { units: "world" });
   const { bounds } = layoutMolecule(atoms, bonds, opts, 50);
   return { minX: bounds.min.x, maxX: bounds.max.x };
+}
+
+/**
+ * A file's bond `i` as the editor holds it, but for its id and atoms: its
+ * order - an aromatic ring's Kekulé one (`orders`) - its stereo, and what
+ * else the file says it is.
+ */
+function bondOf(
+  m: ParsedMol,
+  i: number,
+  orders: (1 | 2 | 3)[],
+  reversed: boolean[],
+): Omit<EditorBond, "id" | "a" | "b"> {
+  const b = m.bonds[i];
+  const query = QUERY_OF[b.order];
+  // A coordination bond is a dative arrow unless the file says to show it
+  // plainly (V3000 DISP=COORD); a hydrogen bond is drawn dotted.
+  const coord = b.order === COORDINATION_BOND && m.ct?.bonds[i]?.display === "COORD";
+  return {
+    // (a "double or aromatic" query is drawn double, the others single)
+    order: query === "double-or-aromatic" ? 2 : orders[i],
+    stereo: mapStereo(b),
+    ...(reversed[i] ? { stereoOrient: "reverse" as const } : {}),
+    ...(b.order === COORDINATION_BOND ? (coord ? { coordination: true } : { dative: true }) : {}),
+    ...(b.order === HYDROGEN_BOND ? { hydrogen: true } : {}),
+    ...(query ? { query } : {}),
+  };
 }
 
 export function convertMolToEditorModel(m: ParsedMol, scale: number) {
@@ -409,10 +385,7 @@ export function convertMolToEditorModel(m: ParsedMol, scale: number) {
     id: bondIdBase + i + 1,
     a: b.a1 + 1,
     b: b.a2 + 1,
-    order: orders[i],
-    stereo: mapStereo(b as any),
-    ...(reversed[i] ? { stereoOrient: "reverse" as const } : {}),
-    ...(b.order === COORDINATION_BOND ? { dative: true } : {}),
+    ...bondOf(m, i, orders, reversed),
   }));
   // centroid
   let cx = 0,
@@ -479,10 +452,7 @@ export function moleculesToEditorModel(mols: ParsedMol[]): {
         id: idCounter++,
         a: a1,
         b: a2,
-        order: orders[i],
-        stereo: mapStereo(b as any),
-        ...(reversed[i] ? { stereoOrient: "reverse" as const } : {}),
-        ...(b.order === COORDINATION_BOND ? { dative: true } : {}),
+        ...bondOf(m, i, orders, reversed),
       });
     });
   }
@@ -536,11 +506,14 @@ function wedgesNarrowAtFewerBonds(
 }
 
 function mapStereo(
-  b: { stereoCode?: number } | undefined
+  b: { order: number; stereoCode?: number } | undefined
 ): EditorBond["stereo"] {
   const code = b?.stereoCode;
   if (code == null || !Number.isFinite(code)) return "none";
-  // MDL codes: 0 none, 1 up, 6 down, 3/4 either (wavy)
+  // A double bond's 3 is cis or trans, not known - the double bond's own
+  // property, not a wavy line in its place. A single bond's: 1 up, 6 down,
+  // 4 either.
+  if (b?.order === 2) return code === 3 ? "either" : "none";
   if (code === 1) return "up";
   if (code === 6) return "down";
   if (code === 3 || code === 4) return "wavy";

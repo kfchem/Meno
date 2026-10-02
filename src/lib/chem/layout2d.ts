@@ -2,7 +2,7 @@ import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
 import { ringSidesOf } from "./aromaticSides";
-import { chargeText, implicitHydrogens, type AtomChem } from "./molecule";
+import { chargeText, implicitHydrogens, valenceOrder, type AtomChem, type BondChem } from "./molecule";
 
 export { implicitHydrogens };
 
@@ -18,11 +18,12 @@ export type Atom = AtomChem & {
    */
   z?: number;
 };
-export type Bond = {
+export type Bond = BondChem & {
   a1: number;
   a2: number;
   order: 1 | 2 | 3;
-  stereo?: "up" | "down" | "wavy" | "none";
+  /** A single bond's wedge, hash or wave; a double bond's "either": cis or trans not known. */
+  stereo?: "up" | "down" | "wavy" | "either" | "none";
   // Double-bond offset layout modes
   doubleMode?: "auto" | "center" | "left" | "right";
   // Wedge orientation principle vs. reverse principle
@@ -45,7 +46,9 @@ export type BondDisplay = "plain" | "bold" | "hashed" | "dashed";
  */
 export function bondKind(
   b: Bond,
-): "wedge" | "hashedWedge" | "wavy" | "bold" | "hashed" | "dashed" | "dative" | "lines" {
+): "wedge" | "hashedWedge" | "wavy" | "bold" | "hashed" | "dashed" | "dotted" | "dative" | "lines" {
+  // A hydrogen bond is a partial bond, dotted (IUPAC GR-1.8)
+  if (b.hydrogen) return "dotted";
   if (b.stereo === "up") return "wedge";
   if (b.stereo === "down") return "hashedWedge";
   if (b.stereo === "wavy") return "wavy";
@@ -1801,7 +1804,7 @@ export function buildTextLabels(
   for (const b of bonds) {
     // a dative bond lends a pair rather than sharing one: it takes no
     // hydrogen from either end, so H3N->BH3 keeps all six
-    const order = bondKind(b) === "dative" ? 0 : (b.order ?? 1);
+    const order = valenceOrder({ ...b, dative: bondKind(b) === "dative" });
     note(b.a1, b.a2, order);
     note(b.a2, b.a1, order);
   }
@@ -2112,6 +2115,13 @@ export function buildBondPrimitives(
     lines.push(...hashes.lines);
     polys.push(...hashes.polys);
     return { lines, polys, ends: hashes.ends };
+  }
+  if (kind === "dotted") {
+    // round dots, whatever the ends: a line's width and a half across, three
+    // line widths clear of each other (IUPAC GR-1.3: 2 to 4), at least three
+    const lw = pxToWorld(lwPx, zoom);
+    polys.push(...buildDots(p1, p2, lw * 0.75, lw * 3));
+    return { lines, polys, ends: [] };
   }
   if (kind === "dashed") {
     const spacing = toWorld(opts.hashSpacingPx, zoom, units);
@@ -2453,7 +2463,8 @@ export function joinsAtAtoms(
       kind === "wedge" ||
       kind === "hashedWedge" ||
       kind === "bold" ||
-      kind === "hashed"
+      kind === "hashed" ||
+      kind === "dotted"
     ) {
       continue;
     }
@@ -2901,14 +2912,151 @@ function brokenBehind(
   return { lines: out, ends };
 }
 
+/**
+ * A hydrogen bond's dots between `p` and `q`: `r` across, `gap` clear of
+ * each other, spread evenly, never fewer than three.
+ */
+export function buildDots(p: Vec2, q: Vec2, r: number, gap: number): Poly[] {
+  const d = vsub(q, p);
+  const len = vlen(d);
+  if (len < 1e-9 || r <= 0) return [];
+  const n = Math.max(3, Math.round(len / (2 * r + gap)));
+  const out: Poly[] = [];
+  for (let k = 0; k < n; k++) {
+    const c = vadd(p, vscale(d, (k + 0.5) / n));
+    const points: Vec2[] = [];
+    for (let j = 0; j < 12; j++) {
+      const t = (j / 12) * Math.PI * 2;
+      points.push({ x: c.x + r * Math.cos(t), y: c.y + r * Math.sin(t) });
+    }
+    out.push({ points });
+  }
+  return out;
+}
+
+/**
+ * The bonds as they are drawn where a double bond's configuration is not
+ * known: the double bond as it is, and a wavy bond beside it on a single
+ * substituent - as IUPAC's ST-4.4 prefers, rather than a crossed double bond,
+ * which it does not accept. Never on a bond to another stereocentre; on both
+ * substituents of an end that has two, where no end has one; and none where
+ * the drawing shows no configuration anyway - a substituent straight on, or
+ * an end with none. The same bonds, in the same order: only how they look.
+ */
+export function unspecifiedDoubles(atoms: Atom[], bonds: Bond[]): Bond[] {
+  if (!bonds.some((b) => b.order === 2 && b.stereo === "either")) return bonds;
+  const deg = degreeMap(bonds);
+  // a stereocentre: where a wedge or a hashed wedge starts
+  const centres = new Set<number>();
+  for (const b of bonds) {
+    if (b.stereo === "up" || b.stereo === "down") centres.add(wedgeNarrowAtom(b, deg));
+  }
+  const out = bonds.map((b) => (b.order === 2 && b.stereo === "either" ? { ...b, stereo: "none" as const } : b));
+  const plain = (b: Bond) =>
+    b.order === 1 &&
+    (b.stereo ?? "none") === "none" &&
+    !b.dative &&
+    !b.hydrogen &&
+    !b.coordination &&
+    !b.query &&
+    (b.display ?? "plain") === "plain";
+  bonds.forEach((d, i) => {
+    if (d.order !== 2 || d.stereo !== "either") return;
+    const ends = [
+      [d.a1, d.a2],
+      [d.a2, d.a1],
+    ].map(([end, other]) => {
+      const subs: number[] = [];
+      bonds.forEach((b, k) => {
+        if (k !== i && (b.a1 === end || b.a2 === end)) subs.push(k);
+      });
+      const far = (k: number) => (bonds[k].a1 === end ? bonds[k].a2 : bonds[k].a1);
+      // straight on from the double bond: within ten degrees of it
+      const straight =
+        subs.length === 1 &&
+        (() => {
+          const u = vsub({ x: atoms[end].x, y: atoms[end].y }, { x: atoms[other].x, y: atoms[other].y });
+          const w = vsub({ x: atoms[far(subs[0])].x, y: atoms[far(subs[0])].y }, { x: atoms[end].x, y: atoms[end].y });
+          const lu = vlen(u);
+          const lw = vlen(w);
+          return lu > 1e-9 && lw > 1e-9 && vdot(u, w) / (lu * lw) > Math.cos((10 * Math.PI) / 180);
+        })();
+      const free = (k: number) => plain(bonds[k]) && !centres.has(far(k));
+      return { subs, straight, free };
+    });
+    if (ends.some((e) => e.subs.length === 0 || e.straight)) return;
+    const single = ends.find((e) => e.subs.length === 1 && e.free(e.subs[0]));
+    const both = ends.find((e) => e.subs.length === 2 && e.subs.every(e.free));
+    for (const k of single ? single.subs : (both?.subs ?? [])) out[k] = { ...out[k], stereo: "wavy" };
+  });
+  return out;
+}
+
+/** How a query bond is labelled: the two kinds it stands for, or any. */
+const QUERY_LABEL = {
+  "single-or-double": "S/D",
+  "single-or-aromatic": "S/A",
+  "double-or-aromatic": "D/A",
+  any: "Any",
+} as const;
+
+/** An annotation's size against an atom label's: set smaller, so it reads as one (IUPAC GR-11). */
+const ANNOTATION_SIZE = 0.8;
+
+/**
+ * A query bond's label, beside its middle on whichever side has the more
+ * room - the farther from the atoms around it and from the labels already
+ * set - and small, as an annotation of the bond rather than a label of an
+ * atom (IUPAC GR-11.1, GR-11.2).
+ */
+function queryLabels(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, zoom: number): TextItem[] {
+  const out: TextItem[] = [];
+  const fontPx = opts.fontPx * ANNOTATION_SIZE;
+  const size = toWorld(fontPx, zoom, opts.units) * labelSetOf(opts).subscriptSize;
+  const taken: Vec2[] = [];
+  for (const b of bonds) {
+    if (!b.query) continue;
+    const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
+    const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
+    const len = vlen(vsub(q, p));
+    if (len < 1e-9) continue;
+    const n = vperp(vscale(vsub(q, p), 1 / len));
+    const mid = vscale(vadd(p, q), 0.5);
+    const spread = b.order === 2 ? toWorld(opts.doubleOffsetPx, zoom, opts.units) : 0;
+    const text = QUERY_LABEL[b.query];
+    // (half the text's width, roughly, and its height, clear of the line)
+    const off = spread + size * (0.6 + 0.3 * text.length * 0.6);
+    const room = (c: Vec2) => {
+      let near = Infinity;
+      for (const a of atoms) near = Math.min(near, vlen(vsub({ x: a.x, y: a.y }, c)));
+      for (const t of taken) near = Math.min(near, vlen(vsub(t, c)) * 0.75);
+      return near;
+    };
+    const sides = [1, -1].map((k) => vadd(mid, vscale(n, off * k)));
+    const at = room(sides[0]) >= room(sides[1]) - 1e-9 ? sides[0] : sides[1];
+    taken.push(at);
+    out.push({
+      x: at.x,
+      y: at.y,
+      text,
+      fontPx,
+      runs: [{ text, sup: true }],
+      anchorRun: 0,
+      beside: true,
+    });
+  }
+  return out;
+}
+
 export function layoutMolecule(
   atoms: Atom[],
-  bonds: Bond[],
+  given: Bond[],
   opts: LayoutOptions,
   zoom: number
 ): Layout {
+  const bonds = unspecifiedDoubles(atoms, given);
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
-  const texts = buildTextLabels(atoms, opts, bonds);
+  const texts = [...buildTextLabels(atoms, opts, bonds), ...queryLabels(atoms, bonds, opts, zoom)];
   // the labels' marks - a charge's circle, a radical's dots - drawn as the
   // rest of the drawing is
   const units = opts.units ?? "px";
