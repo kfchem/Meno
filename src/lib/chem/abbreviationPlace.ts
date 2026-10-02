@@ -51,6 +51,7 @@ export function placedStructure(given: GroupStructure, neighbour: P | null, bond
       ...s.bonds.map((b) => ({ a: b.a1, b: b.a2, order: b.coordination ? 1 : b.order })),
       ...(s.attach.length ? [{ a: from, b: head, order: 1 }] : []),
     ],
+    ...(s.axes?.length ? { axes: s.axes } : {}),
   });
   // each star at its pi system's centre
   for (const [star, ring] of stars) {

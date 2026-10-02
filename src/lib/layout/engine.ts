@@ -26,7 +26,7 @@ import { orderOf, perceive, type LayoutInput, type Molecule } from "./perceive";
 import { misshapen, placeRingSystem, regularize, ringSystemVariants } from "./ringSystem";
 import { bridgeAcross } from "./bridge";
 import { flatCost, isCage, projectCage, type CageView } from "./cage";
-import { placeStereo, type Stereo, type Tetrahedral } from "./stereo";
+import { axisWedge, placeStereo, type Stereo, type Tetrahedral } from "./stereo";
 import { etaSpins, placeEta, placeUnit, unitVariants } from "./hapto";
 import type { Point } from "./geometry";
 
@@ -354,7 +354,13 @@ export function layout2D(input: LayoutInput): Layout2D {
   const tetra = new Map<number, Tetrahedral>();
   input.atoms.forEach((a, i) => a.tetra && !solid[i] && tetra.set(i, a.tetra));
   const final = new Map(x.map((v, i) => [i, { x: v, y: y[i] }]));
-  return { x, y, depth, solid, bold, toward, ...placeStereo(mol, final, tetra) };
+  // and an axis of chirality, by a wedge at an end of it
+  const stereo = placeStereo(mol, final, tetra);
+  for (const axis of input.axes ?? []) {
+    const w = axisWedge(mol, final, axis);
+    if (w) stereo.wedges.push(w);
+  }
+  return { x, y, depth, solid, bold, toward, ...stereo };
 }
 
 /**
@@ -781,7 +787,11 @@ function propellers(
         const s = mol.systemOf[c];
         if (s < 0 || s === mol.systemOf[x] || faceOn.has(c) || orderOf(mol, x, c) !== 1) return false;
         if (!mol.ringsOf[c].some((r) => isAryl(mol, mol.rings[r]))) return false;
-        return !sideAtoms(mol, x, c).some((v) => v !== c && mol.neighbours[x].includes(v));
+        // (a blade hangs from x, it is not what x hangs from: BINAP's
+        // naphthalene, beyond its P, is the rest of the molecule)
+        const side = sideAtoms(mol, x, c);
+        if (side.length * 2 >= piece.length) return false;
+        return !side.some((v) => v !== c && mol.neighbours[x].includes(v));
       });
       return { x, rings };
     })

@@ -563,6 +563,32 @@ describe("layout2D", () => {
   });
 });
 
+describe("a biaryl with something beside its bond on each ring", () => {
+  it("hangs its second ring the way that puts them on opposite sides: BINAP's two PPh2 anti, no ring over another", async () => {
+    // BINAP from SMILES, as a structure pasted in is drawn (../chem)
+    const { drawnSmiles } = await import("../chem/abbreviationPlace");
+    const d = drawnSmiles("P(c3ccccc3)(c3ccccc3)c1ccc2ccccc2c1-c1c(P(c3ccccc3)c3ccccc3)ccc2ccccc12", 1)!;
+    const index = new Map(d.atoms.map((a, i) => [a.id, i]));
+    const x = d.atoms.map((a) => a.x);
+    const y = d.atoms.map((a) => a.y);
+    const input: LayoutInput = {
+      atoms: d.atoms.map((a) => ({ el: a.el })),
+      bonds: d.bonds.map((b) => ({ a: index.get(b.a)!, b: index.get(b.b)!, order: b.order })),
+    };
+    // two rings sharing no atom further apart than fused ones (sqrt 3)
+    const centres = perceive(input).rings.map((r) => ({ r, x: r.reduce((t, a) => t + x[a], 0) / r.length, y: r.reduce((t, a) => t + y[a], 0) / r.length }));
+    for (const p of centres) {
+      for (const q of centres) {
+        if (p === q || p.r.some((a) => q.r.includes(a))) continue;
+        expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeGreaterThan(1.6);
+      }
+    }
+    // C1-C1' (22-23): P (0) and P' (25) either side of it
+    const side = (p: number) => Math.sign((x[23] - x[22]) * (y[p] - y[22]) - (y[23] - y[22]) * (x[p] - x[22]));
+    expect(side(0)).toBe(-side(25));
+  }, 30_000);
+});
+
 describe("an atom its bonds run straight through", () => {
   it("is drawn straight, between two double bonds or by a triple one - as the middle a piece is grown from, too", () => {
     const angleAt = (input: LayoutInput, c: number) => {

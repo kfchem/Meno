@@ -1,5 +1,5 @@
 import type { Enantiomers } from "./enantiomers";
-import { splitDescriptor, withConfiguration } from "./enantiomers";
+import { axesWith, splitDescriptor, withConfiguration } from "./enantiomers";
 import { kekuleOrders } from "./kekulize";
 import { complexStructure, LIGANDS, type GroupStructure, type Ligand, type StructureBond } from "./ligands";
 import { readSmiles } from "./smiles";
@@ -68,7 +68,7 @@ export type Reagent = {
   formula?: boolean;
 };
 
-/** An axially chiral one's: (R) and (S), read and not shown. */
+/** An axially chiral one's: (R) and (S), its axis's - a ligand's own descriptor, in its formula, (R). */
 const AXIAL: Enantiomers = { as: ["(R)", "(Ra)"], mirror: ["(S)", "(Sa)"], axial: true };
 const BF4 = "F[B-](F)(F)F";
 const PF6 = "F[P-](F)(F)(F)(F)F";
@@ -284,7 +284,7 @@ export const REAGENTS: Reagent[] = [
     use: "catalyst",
     // as it is sold: its 3-nitrobenzoate bound by its carboxylate and the
     // carbon ortho to that away from the nitro group (para to it)
-    complex: "Ir(allyl)(SEGPHOS)(benzoate)",
+    complex: "Ir(allyl)[(R)-SEGPHOS](benzoate)",
     ligands: {
       benzoate: { label: "benzoate", smiles: "[O:2]C(=O)c9cc([N+](=O)[O-])cc[c:1]9", anionic: [1, 2], name: "3-nitrobenzoate (C,O)" },
     },
@@ -438,7 +438,10 @@ export function reagentStructure(
     if (!made) return null;
     const atoms = withConfiguration(made.atoms, r.enantiomers, descriptor);
     if (!atoms) return null;
-    return { ...made, atoms, attach: [], name: `${descriptor ? `${descriptor}-` : ""}${r.name}` };
+    // (its axes as its own descriptor says: Krische's catalyst's SEGPHOS)
+    const { axes: _axes, ...rest } = made;
+    const axes = axesWith(made.axes, r.enantiomers, descriptor);
+    return { ...rest, atoms, attach: [], ...(axes ? { axes } : {}), name: `${descriptor ? `${descriptor}-` : ""}${r.name}` };
   }
   return null;
 }

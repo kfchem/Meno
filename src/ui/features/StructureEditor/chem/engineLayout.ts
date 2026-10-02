@@ -37,7 +37,7 @@ export type LayoutJob = {
  */
 export function layoutJob(part: Model): LayoutJob {
   const drawing = drawingOf(part);
-  const { tetra, cisTrans } = readStereo(drawing.atoms, drawing.bonds);
+  const { tetra, cisTrans, axes } = readStereo(drawing.atoms, drawing.bonds);
   const bondsOf = new Map<number, number[]>();
   drawing.bonds.forEach((b, k) => {
     bondsOf.set(b.a, [...(bondsOf.get(b.a) ?? []), k]);
@@ -49,7 +49,8 @@ export function layoutJob(part: Model): LayoutJob {
   // it would be lost, so it is not laid out.
   for (const b of drawing.bonds) {
     const c = b.wedge?.narrow;
-    if (c == null || tetra.has(c)) continue;
+    // (an axis of chirality's end: its wedge says how the axis turns)
+    if (c == null || tetra.has(c) || axes.some((ax) => ax.atoms[0] === c)) continue;
     if ((bondsOf.get(c)?.length ?? 0) >= 3 && drawing.atoms[c].hs <= 1) {
       throw new Error(
         `the wedges at ${part.atoms[c].el} do not say its configuration in a way Clean-up can keep ` +
@@ -112,6 +113,15 @@ export function layoutJob(part: Model): LayoutJob {
           : undefined;
       return [{ a: at.get(b.a)!, b: at.get(b.b)!, order: b.order, ...(stereo ? { stereo } : {}) }];
     }),
+    ...(axes.length
+      ? {
+          axes: axes.map((ax) => ({
+            atoms: [at.get(ax.atoms[0])!, at.get(ax.atoms[1])!] as const,
+            refs: [at.get(ax.refs[0])!, at.get(ax.refs[1])!] as const,
+            sense: ax.sense,
+          })),
+        }
+      : {}),
   };
   return { input, ids: kept.map((i) => part.atoms[i].id), folded };
 }
@@ -251,18 +261,20 @@ function saysTheSame(part: Model, change: Relayout): boolean {
     // (read against the other group on an end, the reading turns)
     if (!e || (e.cis !== d.cis) !== ((e.refs[0] !== d.refs[0]) !== (e.refs[1] !== d.refs[1]))) return false;
   }
+  for (const [key, sense] of before.axes) if (now.axes.get(key) !== sense) return false;
   return true;
 }
 
 /**
  * The stereochemistry `m` shows, by atom id: an H drawn on its own on a
- * centre counted as the centre's H (-1), and each double bond's groups
- * given from its lower id's end first.
+ * centre counted as the centre's H (-1), each double bond's groups given
+ * from its lower id's end first, and each axis's sense taken against the
+ * lowest-id neighbour at each end.
  */
 function stereoOf(m: Model) {
   const d = drawingOf(m);
   const ids = m.atoms.map((a) => a.id);
-  const { tetra, cisTrans } = readStereo(d.atoms, d.bonds);
+  const { tetra, cisTrans, axes: drawnAxes } = readStereo(d.atoms, d.bonds);
   const degree = degrees(m.bonds);
   const asId = (n: number) => (n === -1 || (m.atoms[n].el === "H" && degree.get(ids[n]) === 1) ? -1 : ids[n]);
   const centres = new Map<number, Tetrahedral>(
@@ -275,7 +287,16 @@ function stereoOf(m: Model) {
     const refs: [number, number] = a < z ? [ids[ct.refs[0]], ids[ct.refs[1]]] : [ids[ct.refs[1]], ids[ct.refs[0]]];
     doubles.set(a < z ? `${a},${z}` : `${z},${a}`, { refs, cis: ct.cis });
   }
-  return { centres, doubles };
+  const others = (x: number, not: number) => d.bonds.flatMap((b) => (b.a === x && b.b !== not ? [b.b] : b.b === x && b.a !== not ? [b.a] : []));
+  const lowest = (x: number, not: number) => others(x, not).reduce((p, q) => (ids[p] < ids[q] ? p : q));
+  const axes = new Map<string, number>();
+  for (const ax of drawnAxes) {
+    const [i, j] = ax.atoms;
+    // (against the other neighbour at an end, the sense turns)
+    const sense = ax.sense * (ax.refs[0] === lowest(i, j) ? 1 : -1) * (ax.refs[1] === lowest(j, i) ? 1 : -1);
+    axes.set(ids[i] < ids[j] ? `${ids[i]},${ids[j]}` : `${ids[j]},${ids[i]}`, sense);
+  }
+  return { centres, doubles, axes };
 }
 
 /** The first id no atom or bond of `model` has. */

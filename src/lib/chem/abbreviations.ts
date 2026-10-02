@@ -267,6 +267,7 @@ export function byRule(label: string): (GroupStructure & { name: string }) | nul
     const atoms: GroupStructure["atoms"] = [];
     const bonds: GroupStructure["bonds"] = [];
     const names: string[] = [];
+    const axes: NonNullable<GroupStructure["axes"]> = [];
     for (const piece of pieces) {
       const m = /^(\d*)(.+)$/.exec(piece.trim());
       const s = m && moleculeOf(m[2]);
@@ -275,10 +276,13 @@ export function byRule(label: string): (GroupStructure & { name: string }) | nul
         const at = atoms.length;
         atoms.push(...s.atoms.map((a) => (a.tetra ? { ...a, tetra: { ...a.tetra, neighbours: a.tetra.neighbours.map((n) => (n < 0 ? n : n + at)) } } : { ...a })));
         bonds.push(...s.bonds.map((b) => ({ ...b, a1: b.a1 + at, a2: b.a2 + at, ...(b.endpoints ? { endpoints: b.endpoints.map((e) => e + at) } : {}) })));
+        for (const ax of s.axes ?? []) {
+          axes.push({ atoms: [ax.atoms[0] + at, ax.atoms[1] + at], refs: [ax.refs[0] + at, ax.refs[1] + at], sense: ax.sense });
+        }
       }
       names.push(`${m[1] ? `${m[1]} ` : ""}${abbreviationOf(m[2])?.name ?? m[2]}`);
     }
-    return { atoms, bonds, attach: [], name: names.join(" · ") };
+    return { atoms, bonds, attach: [], ...(axes.length ? { axes } : {}), name: names.join(" · ") };
   }
   return condensedStructure(label, groupLabels(), groupStructure);
 }

@@ -76,8 +76,12 @@ describe("what a chemist sees in a macrocycle, wedges and labels", () => {
     const x = [...h.x, h.x[0] + 1];
     const y = [...h.y, h.y[0]];
     const edges = [...h.edges, [0, 6] as [number, number]];
-    const m = layoutMetrics({ x, y, edges, wedged: [0, 6] });
+    // (atom 0 a centre: its H, with its three bonds)
+    const hydrogens = [1, 2, 2, 2, 2, 2, 3];
+    const m = layoutMetrics({ x, y, edges, wedged: [0, 6], hydrogens });
     expect(m.ringWedges).toBe(1);
+    // an axis of chirality's wedge, on a ring bond as it must be: neither end a centre
+    expect(layoutMetrics({ x, y, edges, wedged: [0], hydrogens: [0, 1, 2, 2, 2, 2, 3] }).ringWedges).toBe(0);
     const labels = layoutMetrics({
       x: [0, 0.6],
       y: [0, 0],

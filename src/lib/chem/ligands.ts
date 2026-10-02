@@ -1,4 +1,5 @@
-import { shownAs, splitDescriptor, withConfiguration, type Enantiomers } from "./enantiomers";
+import type { Axial } from "../layout/stereo";
+import { axesWith, shownAs, splitDescriptor, withConfiguration, type Enantiomers } from "./enantiomers";
 import { anionOf, longestGroup, partsOf } from "./formula";
 import { kekuleOrders } from "./kekulize";
 import { implicitHydrogens, valenceOrder } from "./molecule";
@@ -44,6 +45,8 @@ export type GroupStructure = {
   haptic?: { star: number; atoms: number[] }[];
   /** For each atom it is attached by: whether that atom lends its pair - a neutral donor's - the bond to it a coordination bond. */
   lends?: boolean[];
+  /** Its axes of chirality, with the configuration it has (BINAP's, a descriptor before it said). */
+  axes?: Axial[];
 };
 
 export type Ligand = {
@@ -58,6 +61,12 @@ export type Ligand = {
   double?: number[];
   /** Its enantiomers, for a chiral one: the descriptors read before its label. */
   enantiomers?: Enantiomers;
+  /**
+   * An axially chiral one's axis, by its SMILES's atoms, as the enantiomer
+   * `enantiomers.as` names has it: its refs the carbons bearing its P (the
+   * neighbours CIP ranks first), turned - (R) - as M is.
+   */
+  axis?: Axial;
   /** A metal inside the ligand and the pi systems bound to it - dppf's iron: [metal class, ring class]. */
   inner?: [number, number][];
   /** Written as a formula, PPh3 or MeCN, not as a name: read into its elements when a label is written. */
@@ -76,7 +85,7 @@ const DTBM = "c9cc(C(C)(C)C)c(OC)c(C(C)(C)C)c9";
 const AD = "C78CC6CC(CC(C6)C7)C8";
 /** The 2,4,6-triisopropylphenyl of XPhos and its kin. */
 const TRIP = "c1c(C(C)C)cc(C(C)C)cc1C(C)C";
-/** An axially chiral ligand's: (R) and (S), read and not shown. */
+/** An axially chiral ligand's: (R) and (S), its axis's (`Ligand.axis`). */
 const AXIAL: Enantiomers = { as: ["(R)", "(Ra)"], mirror: ["(S)", "(Sa)"], axial: true };
 
 // --- Meno's ligands, by family ----------------------------------------------
@@ -146,18 +155,23 @@ const DIPHOSPHINES: Ligand[] = [
     smiles: `[P:1](${PH})(${PH})c1ccc2ccccc2c1-c1c([P:2](${PH})${PH})ccc2ccccc12`,
     name: "2,2'-bis(diphenylphosphino)-1,1'-binaphthyl",
     enantiomers: AXIAL,
+    // (C1-C1', turned from C2 to C2')
+    axis: { atoms: [22, 23], refs: [13, 24], sense: -1 },
   },
   {
     label: "SEGPHOS",
     smiles: `[P:1](${PH})(${PH})c1ccc2OCOc2c1-c1c([P:2](${PH})${PH})ccc2OCOc12`,
     name: "5,5'-bis(diphenylphosphino)-4,4'-bi-1,3-benzodioxole",
     enantiomers: AXIAL,
+    // (C4-C4', turned from C5 to C5')
+    axis: { atoms: [21, 22], refs: [13, 23], sense: -1 },
   },
   {
     label: "DTBM-SEGPHOS",
     smiles: `[P:1](${DTBM})(${DTBM})c1ccc2OCOc2c1-c1c([P:2](${DTBM})${DTBM})ccc2OCOc12`,
     name: "5,5'-bis[di(3,5-di-tert-butyl-4-methoxyphenyl)phosphino]-4,4'-bi-1,3-benzodioxole",
     enantiomers: AXIAL,
+    axis: { atoms: [41, 42], refs: [33, 43], sense: -1 },
   },
   { label: "Xantphos", smiles: `CC1(C)c2cccc([P:1](${PH})${PH})c2Oc2c([P:2](${PH})${PH})cccc21`, name: "4,5-bis(diphenylphosphino)-9,9-dimethylxanthene" },
   { label: "DPEphos", smiles: `[P:1](${PH})(${PH})c1ccccc1Oc1ccccc1[P:2](${PH})${PH}`, name: "bis[2-(diphenylphosphino)phenyl] ether" },
@@ -299,6 +313,7 @@ export function ligandStructure(l: Ligand, descriptor: string | null = null): Gr
     descriptor,
   ) ?? read.atoms.map(({ aromatic: _aromatic, cls: _cls, tetra: _tetra, ...a }) => a);
   const bonds: StructureBond[] = read.bonds.map((b, i) => ({ a1: b.a1, a2: b.a2, order: orders[i] }));
+  const axes = axesWith(l.axis ? [l.axis] : undefined, l.enantiomers, descriptor);
   const byClass = new Map<number, number[]>();
   read.atoms.forEach((a, i) => {
     if (a.cls != null) byClass.set(a.cls, [...(byClass.get(a.cls) ?? []), i]);
@@ -327,6 +342,7 @@ export function ligandStructure(l: Ligand, descriptor: string | null = null): Gr
     bonds,
     attach,
     ...(haptic.length ? { haptic } : {}),
+    ...(axes ? { axes } : {}),
     anionic: donors.map((c) => !!l.anionic?.includes(c)),
     double: donors.map((c) => !!l.double?.includes(c)),
   };
@@ -352,7 +368,7 @@ export function ligandPicture(l: Ligand): GroupStructure {
     else if (s.anionic[k]) bonds.push({ a1: star, a2: at, order: 1 });
     else bonds.push({ a1: at, a2: star, order: 1, coordination: true });
   });
-  return { atoms, bonds, attach: [], ...(s.haptic ? { haptic: s.haptic } : {}) };
+  return { atoms, bonds, attach: [], ...(s.haptic ? { haptic: s.haptic } : {}), ...(s.axes ? { axes: s.axes } : {}) };
 }
 
 /**
@@ -530,6 +546,7 @@ export function complexStructure(
   const atoms: SmilesAtom[] = [];
   const bonds: StructureBond[] = [];
   const haptic: { star: number; atoms: number[] }[] = [];
+  const axes: Axial[] = [];
   const parts: string[] = [];
 
   /** Adds `s`'s atoms and bonds; the index its first atom has now. */
@@ -545,6 +562,9 @@ export function complexStructure(
       bonds.push({ ...b, a1: b.a1 + at, a2: b.a2 + at, ...(b.endpoints ? { endpoints: b.endpoints.map((e) => e + at) } : {}) });
     }
     for (const h of s.haptic ?? []) haptic.push({ star: h.star + at, atoms: h.atoms.map((e) => e + at) });
+    for (const ax of s.axes ?? []) {
+      axes.push({ atoms: [ax.atoms[0] + at, ax.atoms[1] + at], refs: [ax.refs[0] + at, ax.refs[1] + at], sense: ax.sense });
+    }
     return at;
   };
   /** `at` bound to the metal: haptically where it is a pi system's star, else as anion, alkylidene or donor. */
@@ -632,5 +652,5 @@ export function complexStructure(
     }
     parts.push(`${c.n > 1 ? `${c.n} ` : ""}${c.name}`);
   }
-  return { atoms, bonds, attach: [], ...(haptic.length ? { haptic } : {}), name: parts.join(", ") };
+  return { atoms, bonds, attach: [], ...(haptic.length ? { haptic } : {}), ...(axes.length ? { axes } : {}), name: parts.join(", ") };
 }

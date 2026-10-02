@@ -18,8 +18,8 @@ const SWITCHES: { key: keyof Settings; name: string; detail: string }[] = [
     key: "stereoLabels",
     name: "Show R and S",
     detail:
-      "R or S beside each stereocentre, and E or Z beside each double bond that is one or " +
-      "the other, as the Cahn-Ingold-Prelog rules give them. The R/S button on a canvas " +
+      "R or S beside each stereocentre, E or Z beside each double bond that is one or " +
+      "the other, and Ra or Sa beside an axis (BINAP's), as the Cahn-Ingold-Prelog rules give them. The R/S button on a canvas " +
       "does the same.",
   },
 ];

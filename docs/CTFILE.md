@@ -264,9 +264,17 @@ its mirror image: (S,S)-DPEN and (R,R)-DPEN, (1S)-CSA, L- and D-proline,
 (R)- and (S)-CBS, (R,R)- and (S,S)-Jacobsen's catalyst. Its label alone
 says no configuration, and none is drawn - unless its name is of one
 enantiomer (Shi's ketone, made from D-fructose); (±) says none too. An
-axially chiral one's descriptor - (S)-BINAP, (R)-SEGPHOS, and so (R)-Krische's
-catalyst - is read, and shown on no atom: neither SMILES nor a MOL file has
-a way to say it. Written out, a stereocentre is drawn as Clean-up draws it,
+axially chiral one - BINAP, SEGPHOS, DTBM-SEGPHOS, and so Krische's
+catalyst and RuCl2[(S)-BINAP][(S,S)-DPEN] - has its axis given with it,
+which SMILES has no way to say: the bond C1-C1' (BINAP's), and the
+P-bearing carbon at each end, CIP's first, turned as (R) is - M, a
+negative torsion between those two. (S) turns it the other way. Written
+out, the axis is drawn by one wedge out of an end of it, narrow there, on
+the single bond to a neighbour that stands out of the page (or hashes,
+behind it), the other ring's in the page, as an atropisomer's wedge is
+read (RDKit reads Meno's (R)-BINAP as M and (S)- as P; checked locally).
+Clean-up reads it back from that wedge and keeps it (`drawn.ts`); a MOL
+file has it as that wedge. Written out, a stereocentre is drawn as Clean-up draws it,
 by the same engine: a wedge on a bond out of its rings, its narrow end at
 the centre, an H drawn where it has no other way, or - in a cage - the
 perspective drawing itself; Clean-up reads the configuration back from it
