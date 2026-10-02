@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { isPinch, wheelReader } from "../../../../lib/input/wheel";
 import { useEditor, useEditorStore } from "../store";
 
@@ -42,7 +43,7 @@ export function PanZoom2D() {
   const vel = useRef(new THREE.Vector2(0, 0));
   const zVel = useRef(0);
   const anchor = useRef({ cx: 0, cy: 0 });
-  // camera is OrthographicCamera in r3f Canvas when orthographic prop is set
+  // (the page camera: PageCamera, its zoom kept as an orthographic camera's)
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       // disable pan during bond extension or on a double-click down
@@ -140,17 +141,17 @@ export function PanZoom2D() {
     // The view zoomed at once by `factor`, keeping the point under the
     // pointer where it is.
     const zoomAt = (factor: number, clientX: number, clientY: number) => {
-      const cam = camera as THREE.OrthographicCamera;
+      const cam = camera as THREE.PerspectiveCamera;
       const rect = dom.getBoundingClientRect();
       const v = new THREE.Vector3(
         ((clientX - rect.left) / rect.width) * 2 - 1,
         -(((clientY - rect.top) / rect.height) * 2 - 1),
         0,
       );
-      const before = v.clone().unproject(cam);
+      const before = pageAt(v.x, v.y, cam);
       cam.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cam.zoom * factor));
       cam.updateProjectionMatrix();
-      const after = v.clone().unproject(cam);
+      const after = pageAt(v.x, v.y, cam);
       pos.current.x += before.x - after.x;
       pos.current.y += before.y - after.y;
       vel.current.set(0, 0);
@@ -277,10 +278,10 @@ export function PanZoom2D() {
       const cx = anchor.current.cx;
       const cy = anchor.current.cy;
       const v = new THREE.Vector3(cx, cy, 0);
-      const before = v.clone().unproject(cam);
+      const before = pageAt(v.x, v.y, cam);
       cam.zoom = next;
       cam.updateProjectionMatrix?.();
-      const after = v.clone().unproject(cam);
+      const after = pageAt(v.x, v.y, cam);
       cam.position.x += before.x - after.x;
       cam.position.y += before.y - after.y;
       pos.current.set(cam.position.x, cam.position.y);

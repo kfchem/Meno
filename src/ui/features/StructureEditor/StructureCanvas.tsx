@@ -71,6 +71,7 @@ import { useOfficeLink } from "./hooks/useOfficeLink";
 import { useDropZone } from "../../../lib/drop";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
+import PageCamera, { PAGE_DISTANCE } from "./components/PageCamera";
 
 function StructureCanvasContent({
   active,
@@ -604,8 +605,10 @@ function StructureCanvasContent({
       )}
       <Canvas
         key={tabId}
-        orthographic
-        camera={{ position: [0, 0, 10], zoom: startZoom }}
+        // The page is seen head-on, in perspective (PageCamera): drawn just
+        // as an orthographic camera draws it, while what stands off it - a
+        // 3D molecule - is seen in depth.
+        camera={{ position: [0, 0, PAGE_DISTANCE], fov: 50, near: 0.1, far: 2000, zoom: startZoom }}
         // Render on demand: interactions, store changes and the animation
         // layers request frames (see PanZoom2D and the preview components)
         // instead of redrawing continuously while nothing changes.
@@ -621,7 +624,6 @@ function StructureCanvasContent({
         }}
         onCreated={onCreated}
       >
-        <ambientLight intensity={0.8} />
         <color attach="background" args={["#ffffff"]} />
         <FitToContent2D trigger={fitNonce} />
         {/* The drawing, laid out once for every layer below to draw from */}
@@ -661,6 +663,7 @@ function StructureCanvasContent({
           <Pluses2D />
         </DrawnLayoutProvider>
         <PanZoom2D />
+        <PageCamera />
       </Canvas>
     </div>
   );

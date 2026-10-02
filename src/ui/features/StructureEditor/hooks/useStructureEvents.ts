@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useEffect, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useEditorStore } from "../store";
@@ -25,7 +26,7 @@ export function useStructureEvents(
   const store = useEditorStore();
 
   // Refs
-  const camRef = useRef<THREE.OrthographicCamera | null>(null);
+  const camRef = useRef<THREE.PerspectiveCamera | null>(null);
   const domRef = useRef<HTMLCanvasElement | null>(null);
   const clickTimerRef = useRef<number | null>(null);
   // The press the next click ends, and whether it has travelled (utils/press)
@@ -50,8 +51,8 @@ export function useStructureEvents(
       -(((clientY - rect.top) / rect.height) * 2 - 1),
       0,
     );
-    v.unproject(camRef.current);
-    return { x: v.x, y: v.y };
+    const p = pageAt(v.x, v.y, camRef.current);
+    return { x: p.x, y: p.y };
   };
 
   // An import is one undo step: the model goes into the document as a whole,
@@ -172,7 +173,7 @@ export function useStructureEvents(
       -(((e.clientY - rect.top) / rect.height) * 2 - 1),
       0,
     );
-    ndc.unproject(camRef.current);
+    ndc.copy(pageAt(ndc.x, ndc.y, camRef.current));
 
     const st = store.getState();
     const atoms = st.model.atoms;

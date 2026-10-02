@@ -106,7 +106,7 @@ export default function ExtendPreview2D() {
     wasFree.current = free;
 
     // the thin line from the atom it leaves to the pointer, behind the bonds
-    const zoom = (camera as THREE.OrthographicCamera).zoom || 1;
+    const zoom = (camera as THREE.PerspectiveCamera).zoom || 1;
     const thickWorld = Math.max(lineWidthWorld, 1 / Math.max(zoom, 1e-6));
     q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), toPtr);
     thin.current.position.set(

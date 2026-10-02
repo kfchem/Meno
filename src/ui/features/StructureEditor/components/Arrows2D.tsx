@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
@@ -39,15 +40,15 @@ export default function Arrows2D() {
       -(((cy - rect.top) / rect.height) * 2 - 1),
       0
     );
-    v.unproject(camera as any);
-    return { x: v.x, y: v.y };
+    const p = pageAt(v.x, v.y, camera);
+    return { x: p.x, y: p.y };
   };
   // the arrow whose end is being drawn out: its handles stay while it is
   const [reshaping, setReshaping] = useState<number | null>(null);
   const handles = useRef<THREE.Group[]>([]);
   // the handles the same size on the screen at any zoom
   useFrame(() => {
-    const k = HANDLE_PX / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6);
+    const k = HANDLE_PX / Math.max((camera as THREE.PerspectiveCamera).zoom, 1e-6);
     for (const h of handles.current) h?.scale.setScalar(k);
   });
 
@@ -154,7 +155,7 @@ export default function Arrows2D() {
                   ref={(g) => {
                     if (g) handles.current.push(g);
                   }}
-                  position={[at.x, at.y, 0.6]}
+                  position={[at.x, at.y, 0.006]}
                   onPointerDown={(e) => startReshape(a.id, end, e)}
                 >
                   {/* (what a press takes, wider than what is seen) */}

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useEffect, useMemo, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
@@ -53,8 +54,8 @@ export function Atoms2D() {
       -(((cy - rect.top) / rect.height) * 2 - 1),
       0
     );
-    v.unproject(camera as any);
-    return { x: v.x, y: v.y };
+    const p = pageAt(v.x, v.y, camera);
+    return { x: p.x, y: p.y };
   };
   const lastDown = useRef<{
     t: number;

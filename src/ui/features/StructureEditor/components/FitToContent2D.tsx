@@ -27,7 +27,7 @@ export default function FitToContent2D({
   // the canvas opened at, and the view stays.
   const lastTriggerRef = useRef(trigger);
   useEffect(() => {
-    const cam = camera as THREE.OrthographicCamera;
+    const cam = camera as THREE.PerspectiveCamera;
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
     if (trigger === lastTriggerRef.current) return;

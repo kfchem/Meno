@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
@@ -48,8 +49,8 @@ export default function Selection2D() {
   const toWorld = (cx: number, cy: number) => {
     const rect = gl.domElement.getBoundingClientRect();
     const v = new THREE.Vector3(((cx - rect.left) / rect.width) * 2 - 1, -(((cy - rect.top) / rect.height) * 2 - 1), 0);
-    v.unproject(camera);
-    return { x: v.x, y: v.y };
+    const p = pageAt(v.x, v.y, camera);
+    return { x: p.x, y: p.y };
   };
 
   // --- a box or a lasso ----------------------------------------------------
@@ -181,7 +182,7 @@ export default function Selection2D() {
 
   // the handle the same size on the screen at any zoom
   useFrame(() => {
-    if (handle.current) handle.current.scale.setScalar(HANDLE_PX / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6));
+    if (handle.current) handle.current.scale.setScalar(HANDLE_PX / Math.max((camera as THREE.PerspectiveCamera).zoom, 1e-6));
   });
 
   // --- shading -------------------------------------------------------------
@@ -203,7 +204,7 @@ export default function Selection2D() {
           ]
         : boxSelect.points;
     const line = new THREE.LineLoop(
-      new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(p.x, p.y, 0.5))),
+      new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(p.x, p.y, 0.005))),
       new THREE.LineBasicMaterial({ color: COLORS.highlight, depthTest: false, toneMapped: false }),
     );
     line.renderOrder = 40;
@@ -217,7 +218,7 @@ export default function Selection2D() {
         toneMapped: false,
       }),
     );
-    fill.position.z = 0.49;
+    fill.position.z = 0.004;
     fill.renderOrder = 39;
     return { line, fill };
   }, [boxSelect]);
@@ -261,7 +262,7 @@ export default function Selection2D() {
       {handleAt && (
         <group
           ref={handle}
-          position={[handleAt.x, handleAt.y, 0.6]}
+          position={[handleAt.x, handleAt.y, 0.006]}
           onPointerDown={(e) => {
             if ((e.nativeEvent?.button ?? 0) !== 0) return;
             e.stopPropagation();
