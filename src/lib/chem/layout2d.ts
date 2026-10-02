@@ -2054,8 +2054,13 @@ export function buildTextLabels(
     const toward = away.get(i) ?? { x: 0, y: 0 };
     // Bonds leaving on both sides leave no side for the hydrogens: ACS 1996
     // sets them on a line of their own, below the symbol when the bonds rise
-    // and above it when they fall.
+    // and above it when they fall - on the side further from every bond, so
+    // that three bonds evenly spread, one of them straight down (a borate's
+    // BH), keep the line clear of it; where neither is, as the bonds lean.
     if (leftward.has(i) && rightward.has(i)) {
+      const rise = Math.max(...(ways.get(i) ?? []).map((w) => w.dir.y));
+      const fall = Math.max(...(ways.get(i) ?? []).map((w) => -w.dir.y));
+      const stack = rise < fall - 1e-6 ? "above" : fall < rise - 1e-6 ? "below" : toward.y >= 0 ? "below" : "above";
       const runs = [...head, { text: a.el }, ...tail, ...hydrogens];
       push({
         x: a.x,
@@ -2064,7 +2069,7 @@ export function buildTextLabels(
         fontPx: opts.fontPx,
         runs,
         anchorRun: head.length,
-        stack: toward.y >= 0 ? "below" : "above",
+        stack,
         ...centreSymbol,
         atom: i,
       });
