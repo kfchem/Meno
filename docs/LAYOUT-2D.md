@@ -18,8 +18,9 @@ skeleton and its stereochemistry at once, and read it the way everything
 else on the page is read: left to right. Four aims follow, in order of
 priority - a later one never buys itself at the cost of an earlier one:
 
-1. **Nothing hidden.** No atom on another, no bond through an atom or
-   across another bond, no label crowding a label - an OH's H as much as
+1. **Nothing hidden.** No atom on another - nor, in a complex, inside a
+   small ring not its own (a Cl inside a cyclohexyl) - no bond through an
+   atom or across another bond, no label crowding a label - an OH's H as much as
    its O, with a space between labels side by side - and no bond between
    two labels covered by their letters (a Pd and an NH a bond apart at a
    slant, the d reaching along it to the N).
@@ -172,11 +173,11 @@ lie level either way round - the drawing takes the one that reads best
   right of it. Phenanthrene's third ring goes up and to the right; a
   steroid's A and B rings form the row, with C and D above and to the right
   - the way steroids are always drawn.
-- **A biaryl drawn anti**: a ring system hung from a ring's atom by a
+- **A biaryl hung anti**: a ring system hung from a ring's atom by a
   bond, where both have something beside the bond, is hung the way round
   that puts the heavier of each on opposite sides - BINOL's two OH, BINAP's
-  two PPh2 - as chemists draw them; grown the other way, BINAP's phenyls
-  fell on its other naphthalene.
+  two PPh2: grown the other way, BINAP's phenyls fell on its other
+  naphthalene.
 - **A benzene ring at the left of its ring system**, where reading
   begins: indole, quinoline and coumarin with their benzene rings on the
   left, estradiol's aromatic A ring, griseofulvin's, reserpine's indole at

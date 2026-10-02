@@ -108,9 +108,20 @@ describe("a ring bound face-on to a metal", () => {
     const [star] = find(ru, "*");
     expect(ru.atoms[star].y).toBeGreaterThan(ru.atoms[m].y);
     for (const leg of [...find(ru, "P"), ...find(ru, "Cl")]) expect(ru.atoms[leg].y).toBeLessThan(ru.atoms[m].y + 1e-6);
-    // what hangs from the ring lies in its plane: Cp*'s methyls foreshortened with it
-    const methyls = ru.bonds.filter((b) => ru.atoms[b.a1].el === "C" && ru.atoms[b.a2].el === "C" && ru.atoms[b.a2].z != null && !ru.haptic![0].atoms.includes(b.a2));
-    expect(methyls.length).toBeGreaterThan(0);
+    // what hangs from the ring points out from it: each of Cp*'s methyls
+    // away from the star
+    const ring = ru.haptic![0].atoms;
+    const c = at(ru, star);
+    const methyls = ru.bonds.flatMap((b) => {
+      const [r, m] = ring.includes(b.a1) ? [b.a1, b.a2] : [b.a2, b.a1];
+      return ring.includes(r) && !ring.includes(m) && ru.atoms[m].el === "C" ? [[r, m]] : [];
+    });
+    expect(methyls).toHaveLength(5);
+    for (const [r, m] of methyls) {
+      const u = { x: ru.atoms[r].x - c.x, y: ru.atoms[r].y - c.y };
+      const v = { x: ru.atoms[m].x - ru.atoms[r].x, y: ru.atoms[m].y - ru.atoms[r].y };
+      expect(u.x * v.x + u.y * v.y).toBeGreaterThan(0);
+    }
   });
 
   it("is drawn alone face-on to a star where the ligand is a label's picture", () => {

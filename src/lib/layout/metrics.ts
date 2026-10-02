@@ -1351,6 +1351,34 @@ export function layoutMetrics(g: Geometry): LayoutMetrics {
       overlaps++;
     }
   }
+  // and in a complex, where crowded ligands meet round their metal, an atom
+  // of something else inside a ring of six or fewer drawn flat: hidden in it
+  // as much as on an atom (a Cl inside a cyclohexyl). (Not inside a larger
+  // ring, where a substituent may be drawn - taxol's
+  // eight-membered one; nor a bridge of the ring's own system, which may
+  // run across it - artemisinin's; nor what hangs from a ring in
+  // perspective, set by it - Cp*'s methyls; nor a stereocentre's drawn H,
+  // set by its own rule.)
+  const complex = (g.elements ?? []).some((e) => isMetal(e));
+  for (const r of complex ? small.filter((q) => q.length <= 6) : []) {
+    const xs = r.map((a) => x[a]);
+    const ys = r.map((a) => y[a]);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const own = systemOf.get(r[0]);
+    for (let p = 0; p < n; p++) {
+      if (systemOf.get(p) === own || isH(p) || x[p] <= minX || x[p] >= maxX || y[p] <= minY || y[p] >= maxY) continue;
+      if (persp && (persp[p] || neighbours[p].some((q) => persp[q]))) continue;
+      let inside = false;
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const [xi, yi, xj, yj] = [x[r[i]], y[r[i]], x[r[j]], y[r[j]]];
+        if (yi > y[p] !== yj > y[p] && x[p] < ((xj - xi) * (y[p] - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+      if (inside) overlaps++;
+    }
+  }
 
   // (each bond's box, to pass over pairs far apart without more ado)
   const E = edges.length;

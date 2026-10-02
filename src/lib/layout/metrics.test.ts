@@ -247,6 +247,24 @@ describe("how a drawing sits", () => {
     expect(at(2)).toBeGreaterThan(0);
   });
 
+  it("counts an atom of something else inside a small ring drawn flat, in a complex, as an overlap", () => {
+    // a cyclohexyl (0-5) on a palladium (6) with a chlorine (7) on it:
+    // outside, then dropped inside the ring
+    const h = polygon(6, 0, 0, Math.PI / 2);
+    const at = (cx: number, cy: number, metal = "Pd") =>
+      layoutMetrics({
+        x: [...h.x, 3, cx],
+        y: [...h.y, 0, cy],
+        edges: [...h.edges, [0, 6], [6, 7]] as [number, number][],
+        elements: ["C", "C", "C", "C", "C", "C", metal, "Cl"],
+        labelled: [false, false, false, false, false, false, true, true],
+      }).overlaps;
+    expect(at(4, 0)).toBe(0);
+    expect(at(0, 0)).toBe(1);
+    // (not in a molecule with no metal, which is drawn well without it)
+    expect(at(0, 0, "Si")).toBe(0);
+  });
+
   it("adds up its parts to the score", () => {
     const m = layoutMetrics(turned(zigzag(8), 20));
     const sum = Object.values(scoreParts(m)).reduce((a, b) => a + b, 0);
