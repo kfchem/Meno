@@ -1566,6 +1566,7 @@ function buildWedgeTriangle(
   round = false,
   tipAtLabel = false,
   rule: CutRule = ACS_CUT_RULE,
+  squareBase = false,
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
   // Keep a taper even when the minimum line width would otherwise make the
@@ -1590,7 +1591,8 @@ function buildWedgeTriangle(
     rule,
   );
   const points = [...base.points, tipR, tipL];
-  const soften = [...base.soften, true, true];
+  // (a base another shape in perspective meets is kept square: see buildBoldBar)
+  const soften = [...base.soften.map((v) => v && !squareBase), true, true];
   return {
     points: round ? roundPolyCorners(points, tipHalf, soften) : points,
   };
@@ -1600,7 +1602,10 @@ function buildWedgeTriangle(
  * A bold bond, as ACS 1996 draws it: a bar `half` either side of the line,
  * each end a broad end cut along the bonds continuing from its atom, as a
  * wedge's wide end is. Round ends round its free corners by half its width,
- * so an end that meets nothing is a half circle.
+ * so an end that meets nothing is a half circle - but for one another of a
+ * ring in perspective's shapes is broad at (`square1`, `square2`): that end
+ * stays square, the outer corner between the two filled after
+ * (perspectiveCorners).
  */
 function buildBoldBar(
   p1: Vec2,
@@ -1611,6 +1616,8 @@ function buildBoldBar(
   neighbours2: Neighbour[],
   round: boolean,
   rule: CutRule = ACS_CUT_RULE,
+  square1 = false,
+  square2 = false,
 ): Poly {
   const dir = vnorm(vsub(p2, p1));
   const n = vscale(vperp(dir), half);
@@ -1620,7 +1627,7 @@ function buildBoldBar(
   const back = vscale(dir, -1);
   const end2 = broadEnd(p2, back, half, neighbours2, vsub(mid, n), vadd(mid, n), lineHalf, rule);
   const points = [...end1.points, ...end2.points];
-  const soften = [...end1.soften, ...end2.soften];
+  const soften = [...end1.soften.map((v) => v && !square1), ...end2.soften.map((v) => v && !square2)];
   return {
     points: round ? roundPolyCorners(points, half, soften) : points,
   };
@@ -2345,6 +2352,11 @@ export function buildBondPrimitives(
     return out;
   };
   const kind = bondKind(bond);
+  // an end of a ring in perspective's shape where another is broad too: kept
+  // square, the outer corner between them filled after (perspectiveCorners)
+  const metInPerspective = (at: number) =>
+    inPerspective(bond) &&
+    (adjBonds?.get(at) ?? []).some((b) => b !== bond && inPerspective(b) && (b.display === "bold" || wedgeBaseAtom(b, deg) === at));
   // how far the first hash sits from a bare atom the hashes start at
   const firstGap = toWorld(opts.hashFirstGapPx ?? opts.hashSpacingPx, zoom, units);
   if (kind === "bold") {
@@ -2358,6 +2370,8 @@ export function buildBondPrimitives(
         neighboursAt(bond.a2, bond.a1),
         round,
         cutRuleOf(opts),
+        metInPerspective(bond.a1),
+        metInPerspective(bond.a2),
       ),
     );
     return { lines, polys };
@@ -2465,6 +2479,7 @@ export function buildBondPrimitives(
         round,
         hasLabel(atoms[tipIdx]) && trimNarrow > 0,
         cutRuleOf(opts),
+        metInPerspective(baseIdx),
       );
       polys.push(tri);
       return { lines, polys };
@@ -2645,7 +2660,18 @@ export function buildBondPrimitives(
     // the viewer, the second line beside it as ever
     if (bond.display === "bold") {
       polys.push(
-        buildBoldBar(p1, p2, boldHalf, lineHalf, neighboursAt(bond.a1, bond.a2), neighboursAt(bond.a2, bond.a1), round, cutRuleOf(opts)),
+        buildBoldBar(
+          p1,
+          p2,
+          boldHalf,
+          lineHalf,
+          neighboursAt(bond.a1, bond.a2),
+          neighboursAt(bond.a2, bond.a1),
+          round,
+          cutRuleOf(opts),
+          metInPerspective(bond.a1),
+          metInPerspective(bond.a2),
+        ),
       );
     } else if (bond.display === "wedge") {
       const baseAtP1 = wedgeBaseAtom(bond, deg) === bond.a1;
@@ -2660,6 +2686,7 @@ export function buildBondPrimitives(
           round,
           hasLabel(atoms[tipIdx]) && (baseAtP1 ? trimB : trimA) > 0,
           cutRuleOf(opts),
+          metInPerspective(baseIdx),
         ),
       );
     } else lines.push({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, widthPx: lwPx });
@@ -3226,7 +3253,9 @@ function perspectiveCorners(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, z
         if (Math.abs(den) > 1e-9) {
           const t = vcross(vsub(c.corner, a.corner), c.along) / den;
           const m = vadd(a.corner, vscale(a.along, t));
-          if (t >= 0 && vlen(vsub(m, v)) <= half * 4) mitre = m;
+          // (no further out than twice its half width: a corner sharper than
+          // 60 degrees, the tub of a cod's, is cut across instead)
+          if (t >= 0 && vlen(vsub(m, v)) <= half * 2) mitre = m;
         }
         out.push({ points: mitre ? [v, a.corner, mitre, c.corner] : [v, a.corner, c.corner] });
       }

@@ -1517,6 +1517,39 @@ describe("a ring's bonds in perspective", () => {
     expect(tip.y).toBeLessThan(0);
     expect(tip.x).toBeLessThan(0);
   });
+
+  // two bold edges meeting at atom 0, the second at `deg` degrees from the first
+  const twoEdges = (deg: number) => {
+    const L = NOMINAL_BOND_LENGTH;
+    const t = (deg * Math.PI) / 180;
+    const atoms: Atom[] = [
+      { id: 1, x: 0, y: 0, el: "C" },
+      { id: 2, x: L, y: 0, el: "C" },
+      { id: 3, x: L * Math.cos(t), y: L * Math.sin(t), el: "C" },
+    ];
+    const bonds: Bond[] = [
+      { a1: 0, a2: 1, order: 1, display: "bold" },
+      { a1: 0, a2: 2, order: 1, display: "bold" },
+    ];
+    return buildAllPrimitives(atoms, bonds, opts({ joinStyle: "round" }), 40).polys;
+  };
+
+  it("keeps a bold edge's end square where another meets it, round ends or not", () => {
+    const polys = twoEdges(100);
+    // the first edge's outer corner at the atom, below it - away from the
+    // second - as the corner filled between them has it
+    const corner = polys.find((p) => p.points.length === 4 && Math.hypot(p.points[0].x, p.points[0].y) < 1e-9)!;
+    const outer = corner.points.find((q) => Math.abs(q.x) < 1e-9 && q.y < 0)!;
+    // and the first edge's bar has it too, not rounded off
+    const bar = polys.find((p) => p !== corner && p.points.some((q) => q.x > 0.9 * NOMINAL_BOND_LENGTH))!;
+    expect(bar.points.some((q) => Math.hypot(q.x - outer.x, q.y - outer.y) < 1e-9)).toBe(true);
+  });
+
+  it("cuts a corner sharper than 60 degrees across, not out to a far point", () => {
+    const corner = (deg: number) => twoEdges(deg).find((p) => Math.hypot(p.points[0].x, p.points[0].y) < 1e-9 && p.points.length <= 4)!;
+    expect(corner(100).points).toHaveLength(4);
+    expect(corner(45).points).toHaveLength(3);
+  });
 });
 
 describe("a carbon between two double bonds", () => {
