@@ -313,7 +313,82 @@ export type PlacedRun = {
   y: number;
   size: number;
 };
-export type Circle = { c: Vec2; r: number; key?: string };
+/**
+ * A ring's circle: round, or - a ring seen in perspective - an ellipse,
+ * `r` its long half-axis along `angle` and `squash` its short one's share
+ * of that.
+ */
+export type Circle = { c: Vec2; r: number; key?: string; squash?: number; angle?: number };
+
+/** The points round a circle or an ellipse, `n` of them, closed. */
+export function circlePoints(c: Circle, n = 64): Vec2[] {
+  const out: Vec2[] = [];
+  const cos = Math.cos(c.angle ?? 0);
+  const sin = Math.sin(c.angle ?? 0);
+  for (let k = 0; k <= n; k++) {
+    const t = (k / n) * Math.PI * 2;
+    const u = Math.cos(t) * c.r;
+    const v = Math.sin(t) * c.r * (c.squash ?? 1);
+    out.push({ x: c.c.x + u * cos - v * sin, y: c.c.y + u * sin + v * cos });
+  }
+  return out;
+}
+
+/**
+ * The rings bound face-on to a metal through all their atoms - Cp, an
+ * arene, at a haptic bond's end - each as its atoms' indices, where they
+ * make a ring by bonds of their own.
+ */
+export function hapticRings(atoms: readonly Atom[], bonds: readonly Bond[]): number[][] {
+  const indexOf = new Map(atoms.map((a, i) => [a.id, i]));
+  const out: number[][] = [];
+  for (const b of bonds) {
+    if ((b.endpoints?.length ?? 0) < 3 || b.attach === "any") continue;
+    const ring = b.endpoints!.map((id) => indexOf.get(id)).filter((i): i is number => i != null);
+    const inside = new Set(ring);
+    const own = bonds.filter((e) => !e.endpoints?.length && inside.has(e.a1) && inside.has(e.a2));
+    const degree = new Map<number, number>();
+    for (const e of own) for (const i of [e.a1, e.a2]) degree.set(i, (degree.get(i) ?? 0) + 1);
+    if (ring.length === inside.size && own.length === ring.length && ring.every((i) => degree.get(i) === 2)) {
+      if (!out.some((r) => r.length === ring.length && r.every((i) => inside.has(i)))) out.push(ring);
+    }
+  }
+  return out;
+}
+
+/**
+ * The atoms as the drawing shows their charges: a ring bound face-on to a
+ * metal is drawn with its circle (`buildAllPrimitives`), and a charge its
+ * carbons carry - a cyclopentadienide's - is the circle's, not drawn; the
+ * metal it is bound to is shown with that much less, so that ferrocene,
+ * Fe²⁺ and two Cp⁻ as written, is drawn as it is written by chemists, with
+ * none. So is an unpaired electron of the ring's (Cp* as a neutral ligand),
+ * or of any pi system bound so (an η³-allyl's).
+ */
+function chargesAsDrawn(atoms: Atom[], bonds: readonly Bond[]): Atom[] {
+  const rings = hapticRings(atoms, bonds);
+  const indexOf = new Map(atoms.map((a, i) => [a.id, i]));
+  // (an unpaired electron of any pi system bound so - an allyl's - is its
+  // bond's, not drawn)
+  const pi = new Set(bonds.flatMap((b) => (b.attach === "any" ? [] : (b.endpoints ?? []).map((id) => indexOf.get(id)!))));
+  if (!rings.length && ![...pi].some((i) => atoms[i]?.radical && atoms[i].el === "C")) return atoms;
+  const out = atoms.map((a, i) => (pi.has(i) && a.el === "C" && a.radical ? { ...a, radical: undefined } : { ...a }));
+  for (const b of bonds) {
+    const ring = rings.find((r) => r.length === b.endpoints?.length && b.endpoints.every((id) => r.includes(indexOf.get(id)!)));
+    if (!ring) continue;
+    const metal = atoms[b.a1]?.el === "*" ? b.a2 : b.a1;
+    let moved = 0;
+    for (const i of ring) {
+      if (out[i].el !== "C") continue;
+      if (out[i].radical) out[i].radical = undefined;
+      if (!out[i].charge) continue;
+      moved += out[i].charge!;
+      out[i].charge = 0;
+    }
+    if (moved && out[metal]) out[metal].charge = (out[metal].charge ?? 0) + moved;
+  }
+  return out;
+}
 
 export type Layout = {
   lines: LineSeg[];
@@ -2783,6 +2858,38 @@ export function buildAllPrimitives(
   }
   // optional aromatic circle detection (6-cycle with >=3 double bonds)
   const aromaticEdges = new Set<string>();
+  // and a ring bound face-on to a metal through all its atoms, always: its
+  // pi system the circle's - an ellipse where it is seen in perspective -
+  // not double bonds (Cp, an arene), the circle fitted to its atoms
+  for (const ring of hapticRings(atoms, bonds)) {
+    const pts = ring.map((i) => atoms[i]);
+    const c = { x: pts.reduce((t, p) => t + p.x, 0) / pts.length, y: pts.reduce((t, p) => t + p.y, 0) / pts.length };
+    let xx = 0;
+    let yy = 0;
+    let xy = 0;
+    for (const p of pts) {
+      xx += (p.x - c.x) ** 2;
+      yy += (p.y - c.y) ** 2;
+      xy += (p.x - c.x) * (p.y - c.y);
+    }
+    xx /= pts.length;
+    yy /= pts.length;
+    xy /= pts.length;
+    // (a regular ring's corners spread as an ellipse's points do: its
+    // half-axes the root of twice the spread along each)
+    const mid = (xx + yy) / 2;
+    const span = Math.sqrt(((xx - yy) / 2) ** 2 + xy * xy);
+    const long = Math.sqrt(2 * (mid + span));
+    const short = Math.sqrt(2 * Math.max(0, mid - span));
+    const angle = 0.5 * Math.atan2(2 * xy, xx - yy);
+    circles.push({ c, r: long * (opts.aromaticCircleSize ?? 0.5), squash: long ? short / long : 1, angle });
+    for (const e of bonds) {
+      if (e.endpoints?.length || !ring.includes(e.a1) || !ring.includes(e.a2)) continue;
+      const u = atoms[e.a1].id;
+      const v = atoms[e.a2].id;
+      aromaticEdges.add(u < v ? `${u}-${v}` : `${v}-${u}`);
+    }
+  }
   const enableAll = opts.aromaticCircle === true;
   const enabledSet: Set<string> | null =
     typeof opts.aromaticCircle === "object" &&
@@ -3448,12 +3555,13 @@ function sgroupDrawing(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, zoom: 
 }
 
 export function layoutMolecule(
-  atoms: Atom[],
+  drawn: Atom[],
   given: Bond[],
   opts: LayoutOptions,
   zoom: number
 ): Layout {
-  const bonds = unspecifiedDoubles(atoms, given);
+  const bonds = unspecifiedDoubles(drawn, given);
+  const atoms = chargesAsDrawn(drawn, bonds);
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
   const labels = buildTextLabels(atoms, opts, bonds);
   // what is said about bonds, atoms and whole structures (IUPAC GR-11)
@@ -3596,8 +3704,12 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
     s += `<path d="${toSvgPath(p)}" fill="${stroke}" stroke="none" />`;
   }
   for (const c of layout.circles || []) {
-    s += `<circle cx="${c.c.x}" cy="${-c.c
-      .y}" r="${c.r}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" />`;
+    s +=
+      c.squash != null && c.squash < 1
+        ? `<ellipse cx="${c.c.x}" cy="${-c.c.y}" rx="${c.r}" ry="${c.r * c.squash}"` +
+          ` transform="rotate(${(-(c.angle ?? 0) * 180) / Math.PI} ${c.c.x} ${-c.c.y})"` +
+          ` fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" />`
+        : `<circle cx="${c.c.x}" cy="${-c.c.y}" r="${c.r}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" />`;
   }
   for (const l of layout.lines) {
     const w = toCoord(l.widthPx > 0 ? l.widthPx : 1);

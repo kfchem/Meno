@@ -19,6 +19,7 @@ function modelOf(s: GroupStructure): Model {
       order: b.order,
       stereo: b.stereo ?? ("none" as const),
       ...(b.stereoOrient ? { stereoOrient: b.stereoOrient } : {}),
+      ...(b.display ? { display: b.display } : {}),
       ...(b.coordination ? { coordination: true } : {}),
       ...(b.endpoints ? { endpoints: b.endpoints.map((e) => e + 1), attach: "all" as const } : {}),
     })),
