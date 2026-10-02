@@ -1,5 +1,5 @@
 import { elements } from "./atomUtils";
-import type { Molecule, ParsedAtom, ParsedBond } from "../lib/chem/molecule";
+import type { Molecule, ParsedAtom, ParsedBond, StereoGroup } from "../lib/chem/molecule";
 import { readSDfile, type CtMolecule } from "../lib/chem/ctfile";
 
 // (a file's molecule is the one in lib/chem/molecule; the names it had here)
@@ -13,7 +13,8 @@ export type Bond = ParsedBond;
  * stereo codes - and the whole of what the file said, as `ct`.
  */
 export function fromCtfile(ct: CtMolecule): Molecule {
-  const atoms: Atom[] = ct.atoms.map((a) => ({
+  const groups = stereoGroupsOf(ct);
+  const atoms: Atom[] = ct.atoms.map((a, i) => ({
     x: a.x,
     y: a.y,
     z: a.z,
@@ -27,6 +28,10 @@ export function fromCtfile(ct: CtMolecule): Molecule {
     ...(a.list ? { list: a.list } : {}),
     ...(a.valence != null ? { valence: a.valence } : {}),
     ...(a.hCount != null ? { hCount: a.hCount } : {}),
+    ...(a.map ? { map: a.map } : {}),
+    ...(a.invRet ? { invRet: a.invRet } : {}),
+    ...(a.exactChange ? { exactChange: true } : {}),
+    ...(groups.atoms.get(i) ? { stereoGroup: groups.atoms.get(i) } : {}),
   }));
   const bonds: Bond[] = ct.bonds.map((b) => {
     const code =
@@ -34,6 +39,30 @@ export function fromCtfile(ct: CtMolecule): Molecule {
     return { a1: b.a1, a2: b.a2, order: b.type, ...(code ? { stereoCode: code } : {}) };
   });
   return { atoms, bonds, ct };
+}
+
+/**
+ * Each stereocentre's and stereo bond's enhanced stereo group: as the
+ * file's collections have them (MDLV30/STEABS, STERACn, STERELn and the bond
+ * collections STEBABS, STEBRACn, STEBRELn) - or, with none, the chiral flag
+ * set for all of them: every centre a wedge starts at absolute ("CTfile
+ * Formats", the counts line).
+ */
+export function stereoGroupsOf(ct: CtMolecule): { atoms: Map<number, StereoGroup>; bonds: Map<number, StereoGroup> } {
+  const atoms = new Map<number, StereoGroup>();
+  const bonds = new Map<number, StereoGroup>();
+  for (const c of ct.collections) {
+    const m = /^MDLV30\/STE(B?)(ABS|RAC|REL)(\d*)$/i.exec(c.name);
+    if (!m) continue;
+    const kind = m[2].toUpperCase() === "ABS" ? "abs" : m[2].toUpperCase() === "RAC" ? "and" : "or";
+    const group: StereoGroup = kind === "abs" ? { kind } : { kind, n: Number.parseInt(m[3] || "1", 10) };
+    if (m[1]) for (const b of c.bonds) bonds.set(b, group);
+    else for (const a of c.atoms) atoms.set(a, group);
+  }
+  if (!atoms.size && !bonds.size && ct.chiral) {
+    for (const b of ct.bonds) if (b.stereo === "up" || b.stereo === "down") atoms.set(b.a1, { kind: "abs" });
+  }
+  return { atoms, bonds };
 }
 
 /** An SDfile's (or a molfile's) molecules, V2000 or V3000, as "CTfile Formats" has them. */

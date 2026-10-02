@@ -58,6 +58,14 @@ export type AtomChem = {
   hCount?: number;
   /** What an abbreviation from a file stands for (an abbreviation Sgroup's atoms). */
   abbrev?: AbbreviationStructure;
+  /** [Reaction] its atom-atom mapping number. */
+  map?: number;
+  /** [Reaction] its configuration inverted or retained in the reaction. */
+  invRet?: "invert" | "retain";
+  /** [Reaction] the change on it is exactly as shown. */
+  exactChange?: boolean;
+  /** Its enhanced stereo group, as a stereocentre (V3000's STE collections). */
+  stereoGroup?: StereoGroup;
 };
 
 /**
@@ -75,7 +83,23 @@ export type BondChem = {
   query?: BondQuery;
   hydrogen?: boolean;
   coordination?: boolean;
+  /**
+   * [Reaction] its reacting centre status, as CTfile Formats numbers it:
+   * -1 not a centre, 1 a centre, 2 no change, 4 made or broken, 8 order
+   * changes, 12 both; 5, 9 and 13 the same as 4, 8 and 12.
+   */
+  reactingCentre?: number;
+  /** The enhanced stereo group of a double bond or an axis (V3000's STEB collections). */
+  stereoGroup?: StereoGroup;
 };
+
+/**
+ * An enhanced stereo group (V3000 collections): configurations known
+ * absolutely; a mixture of the configuration drawn and its mirror image
+ * ("and", racemic); or one or the other, not known which ("or", relative).
+ * Groups of a kind are told apart by their number.
+ */
+export type StereoGroup = { kind: "abs" | "and" | "or"; n?: number };
 
 /** What a bond is besides its order, where it is: to hand on with it, as `chemistry` an atom's. */
 export function bondChem(b: BondChem): BondChem {
@@ -83,6 +107,8 @@ export function bondChem(b: BondChem): BondChem {
     ...(b.query ? { query: b.query } : {}),
     ...(b.hydrogen ? { hydrogen: true } : {}),
     ...(b.coordination ? { coordination: true } : {}),
+    ...(b.reactingCentre ? { reactingCentre: b.reactingCentre } : {}),
+    ...(b.stereoGroup ? { stereoGroup: b.stereoGroup } : {}),
   };
 }
 
@@ -172,5 +198,9 @@ export function chemistry(a: AtomChem): Omit<AtomChem, "el"> {
     ...(a.valence != null ? { valence: a.valence } : {}),
     ...(a.hCount != null ? { hCount: a.hCount } : {}),
     ...(a.abbrev ? { abbrev: a.abbrev } : {}),
+    ...(a.map ? { map: a.map } : {}),
+    ...(a.invRet ? { invRet: a.invRet } : {}),
+    ...(a.exactChange ? { exactChange: true } : {}),
+    ...(a.stereoGroup ? { stereoGroup: a.stereoGroup } : {}),
   };
 }

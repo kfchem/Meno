@@ -16,6 +16,7 @@ import {
 import { layoutOptionsFor, MENO } from "../lib/chem/style";
 import {
   fromCtfile,
+  stereoGroupsOf,
   parseSDF,
   parseXYZ,
   type Molecule as ParsedMol,
@@ -416,6 +417,17 @@ function contractAbbreviations(
   }
 }
 
+/** A file's stereo groups, worked out once for all its bonds. */
+const GROUPS = new WeakMap<object, ReturnType<typeof stereoGroupsOf>>();
+function groupsOf(ct: NonNullable<ParsedMol["ct"]>): ReturnType<typeof stereoGroupsOf> {
+  let g = GROUPS.get(ct);
+  if (!g) {
+    g = stereoGroupsOf(ct);
+    GROUPS.set(ct, g);
+  }
+  return g;
+}
+
 /**
  * A file's bond `i` as the editor holds it, but for its id and atoms: its
  * order - an aromatic ring's Kekulé one (`orders`) - its stereo, and what
@@ -432,6 +444,8 @@ function bondOf(
   // A coordination bond is a dative arrow unless the file says to show it
   // plainly (V3000 DISP=COORD); a hydrogen bond is drawn dotted.
   const coord = b.order === COORDINATION_BOND && m.ct?.bonds[i]?.display === "COORD";
+  const centre = m.ct?.bonds[i]?.reactingCentre;
+  const group = m.ct ? groupsOf(m.ct).bonds.get(i) : undefined;
   return {
     // (a "double or aromatic" query is drawn double, the others single)
     order: query === "double-or-aromatic" ? 2 : orders[i],
@@ -440,6 +454,8 @@ function bondOf(
     ...(b.order === COORDINATION_BOND ? (coord ? { coordination: true } : { dative: true }) : {}),
     ...(b.order === HYDROGEN_BOND ? { hydrogen: true } : {}),
     ...(query ? { query } : {}),
+    ...(centre ? { reactingCentre: centre } : {}),
+    ...(group ? { stereoGroup: group } : {}),
   };
 }
 

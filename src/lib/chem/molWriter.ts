@@ -34,6 +34,8 @@ type Row = {
   stereo: "up" | "down" | "wavy" | "either" | "none";
   /** V3000's DISP: a coordination bond drawn as a plain line. */
   coord?: boolean;
+  /** Its reacting centre status. */
+  centre?: number;
 };
 
 /** A bond's CTfile type. */
@@ -82,6 +84,7 @@ function rows(model: WriterModel, index: Map<number, number>): Row[] {
       type: bondType(b),
       stereo: stereo === "either" && !either ? "none" : stereo,
       ...(b.coordination && !b.dative ? { coord: true } : {}),
+      ...(b.reactingCentre ? { centre: b.reactingCentre } : {}),
     });
   }
   return out;
@@ -224,7 +227,46 @@ function atomFields(a: WriterAtom): string {
   // a query hydrogen count is one more than the count; a valence of none, 15
   const hhh = a.hCount != null ? a.hCount + 1 : 0;
   const vvv = a.valence == null ? 0 : a.valence === 0 ? 15 : a.valence;
-  return [0, 0, 0, hhh, 0, vvv, 0, 0, 0, 0, 0, 0].map((v, i) => (i === 0 ? " 0" : i3(v))).join("");
+  // the reaction's: mapping, inversion (1) or retention (2), exact change
+  const nnn = a.invRet === "invert" ? 1 : a.invRet === "retain" ? 2 : 0;
+  return [0, 0, 0, hhh, 0, vvv, 0, 0, 0, a.map ?? 0, nnn, a.exactChange ? 1 : 0]
+    .map((v, i) => (i === 0 ? " 0" : i3(v)))
+    .join("");
+}
+
+/**
+ * The enhanced stereo groups the structure's centres and stereo bonds are
+ * in, as V3000 collections name them: MDLV30/STEABS, STERACn, STERELn, and
+ * the bond collections STEBABS, STEBRACn, STEBRELn.
+ */
+function stereoCollections(model: WriterModel, index: Map<number, number>): string[] {
+  const name = (g: { kind: "abs" | "and" | "or"; n?: number }, bond: boolean) =>
+    `MDLV30/STE${bond ? "B" : ""}${g.kind === "abs" ? "ABS" : g.kind === "and" ? `RAC${g.n ?? 1}` : `REL${g.n ?? 1}`}`;
+  const atoms = new Map<string, number[]>();
+  model.atoms.forEach((a, i) => {
+    if (a.stereoGroup) atoms.set(name(a.stereoGroup, false), [...(atoms.get(name(a.stereoGroup, false)) ?? []), i + 1]);
+  });
+  const bonds = new Map<string, number[]>();
+  let row = 0;
+  for (const b of model.bonds) {
+    if (!index.has(b.a) || !index.has(b.b)) continue;
+    row++;
+    if (b.stereoGroup) bonds.set(name(b.stereoGroup, true), [...(bonds.get(name(b.stereoGroup, true)) ?? []), row]);
+  }
+  return [
+    ...[...atoms].map(([n, list]) => `M  V30 ${n} ATOMS=(${list.length} ${list.join(" ")})`),
+    ...[...bonds].map(([n, list]) => `M  V30 ${n} BONDS=(${list.length} ${list.join(" ")})`),
+  ];
+}
+
+/**
+ * The chiral flag: set where every stereocentre with a group is in an
+ * absolute one - all V2000 can say of enhanced stereo ("CTfile Formats":
+ * with no collections, the flag applies to every centre).
+ */
+function chiralFlag(model: WriterModel): boolean {
+  const groups = [...model.atoms.map((a) => a.stereoGroup), ...model.bonds.map((b) => b.stereoGroup)].filter(Boolean);
+  return groups.length > 0 && groups.every((g) => g!.kind === "abs");
 }
 
 /** The second header line: the program, no date, and that it is 2D. */
@@ -241,14 +283,14 @@ function writeV2000(given: WriterModel, title: string): string {
     title,
     PROGRAM_LINE,
     "",
-    `${i3(model.atoms.length)}${i3(bonds.length)}  0  0  0  0  0  0  0  0999 V2000`,
+    `${i3(model.atoms.length)}${i3(bonds.length)}  0  0${i3(chiralFlag(model) ? 1 : 0)}  0  0  0  0  0999 V2000`,
   ];
   for (const a of model.atoms) {
     lines.push(`${f10(a.x * scale)}${f10(a.y * scale)}${f10(0)} ${symbolOf(a, aliases).padEnd(3)}` + atomFields(a));
   }
   for (const b of bonds) {
     lines.push(
-      `${i3(b.first)}${i3(b.second)}${i3(b.type)}${i3(code[b.stereo])}  0  0  0`,
+      `${i3(b.first)}${i3(b.second)}${i3(b.type)}${i3(code[b.stereo])}  0  0${i3(b.centre ?? 0)}`,
     );
   }
   lines.push(...propertyLines(model, sups, aliases), "M  END");
@@ -287,7 +329,7 @@ function writeV3000(given: WriterModel, title: string): string {
     "",
     "  0  0  0     0  0  0  0  0  0999 V3000",
     "M  V30 BEGIN CTAB",
-    `M  V30 COUNTS ${model.atoms.length} ${bonds.length} ${sups.length} 0 0`,
+    `M  V30 COUNTS ${model.atoms.length} ${bonds.length} ${sups.length} 0 ${chiralFlag(model) ? 1 : 0}`,
     "M  V30 BEGIN ATOM",
   ];
   model.atoms.forEach((a, i) => {
@@ -297,12 +339,14 @@ function writeV3000(given: WriterModel, title: string): string {
       (a.isotope ? ` MASS=${a.isotope}` : "") +
       (a.valence != null ? ` VAL=${a.valence === 0 ? -1 : a.valence}` : "") +
       (a.hCount != null ? ` HCOUNT=${a.hCount === 0 ? -1 : a.hCount}` : "") +
-      (a.rgroups?.length ? ` RGROUPS=(${a.rgroups.length} ${a.rgroups.join(" ")})` : "");
+      (a.rgroups?.length ? ` RGROUPS=(${a.rgroups.length} ${a.rgroups.join(" ")})` : "") +
+      (a.invRet ? ` INVRET=${a.invRet === "invert" ? 1 : 2}` : "") +
+      (a.exactChange ? " EXACHG=1" : "");
     // an atom list's type is the list
     const type = a.list
       ? `${a.list.not ? '"NOT ' : ""}[${a.list.symbols.join(",")}]${a.list.not ? '"' : ""}`
       : symbolOf(a, aliases);
-    lines.push(`M  V30 ${i + 1} ${type} ${num(a.x * scale)} ${num(a.y * scale)} 0 0${props}`);
+    lines.push(`M  V30 ${i + 1} ${type} ${num(a.x * scale)} ${num(a.y * scale)} 0 ${a.map ?? 0}${props}`);
   });
   lines.push("M  V30 END ATOM");
   if (bonds.length > 0) {
@@ -312,7 +356,8 @@ function writeV3000(given: WriterModel, title: string): string {
       lines.push(
         `M  V30 ${i + 1} ${b.type} ${b.first} ${b.second}` +
           (c ? ` CFG=${c}` : "") +
-          (b.coord ? " DISP=COORD" : ""),
+          (b.coord ? " DISP=COORD" : "") +
+          (b.centre ? ` RXCTR=${b.centre}` : ""),
       );
     });
     lines.push("M  V30 END BOND");
@@ -333,6 +378,8 @@ function writeV3000(given: WriterModel, title: string): string {
     });
     lines.push("M  V30 END SGROUP");
   }
+  const collections = stereoCollections(model, index);
+  if (collections.length) lines.push("M  V30 BEGIN COLLECTION", ...collections, "M  V30 END COLLECTION");
   lines.push("M  V30 END CTAB", "M  END");
   return lines.flatMap(fitV3000).join("\n") + "\n";
 }
@@ -356,7 +403,9 @@ export function writeMolfile(
   const needsV3000 =
     model.atoms.length > 999 ||
     model.bonds.length > 999 ||
-    model.bonds.some((b) => ((b.dative || b.coordination) && b.order === 1) || b.hydrogen);
+    model.bonds.some((b) => ((b.dative || b.coordination) && b.order === 1) || b.hydrogen || b.stereoGroup) ||
+    // (V2000 has only the chiral flag: no racemic nor relative groups)
+    model.atoms.some((a) => a.stereoGroup && a.stereoGroup.kind !== "abs");
   return version === "V3000" || (version === "auto" && needsV3000)
     ? writeV3000(model, title)
     : writeV2000(model, title);

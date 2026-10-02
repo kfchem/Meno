@@ -2,7 +2,7 @@ import "./fonts";
 import { ARIAL } from "./arial";
 import { labelFont, type LabelFont } from "./labelFonts";
 import { ringSidesOf } from "./aromaticSides";
-import { chargeText, implicitHydrogens, valenceOrder, type AtomChem, type BondChem } from "./molecule";
+import { chargeText, implicitHydrogens, valenceOrder, type AtomChem, type BondChem, type StereoGroup } from "./molecule";
 import { labelRuns, labelUnits, reversedLabel } from "./abbreviations";
 import { elements } from "../../utils/atomUtils";
 
@@ -1748,9 +1748,11 @@ function besideVertex(
   runs: TextRun[],
   opts: Pick<LayoutOptions, "fontPx">,
   reach?: (dir: Vec2) => number,
+  /** The way it would rather go, in degrees: a charge's 45, above and to the right. */
+  prefer = 45,
 ): TextItem {
   const deg = Math.PI / 180;
-  let best = 45 * deg;
+  let best = prefer * deg;
   let bestScore = -Infinity;
   for (let k = 0; k < 24; k++) {
     const t = k * 15 * deg;
@@ -1759,7 +1761,7 @@ function besideVertex(
       const d = Math.abs(Math.atan2(Math.sin(t - Math.atan2(w.dir.y, w.dir.x)), Math.cos(t - Math.atan2(w.dir.y, w.dir.x))));
       room = Math.min(room, d);
     }
-    const off = Math.abs(Math.atan2(Math.sin(t - 45 * deg), Math.cos(t - 45 * deg)));
+    const off = Math.abs(Math.atan2(Math.sin(t - prefer * deg), Math.cos(t - prefer * deg)));
     const score = Math.min(room, 70 * deg) - 0.15 * off;
     if (score > bestScore + 1e-9) {
       bestScore = score;
@@ -3071,27 +3073,78 @@ const QUERY_LABEL = {
 /** An annotation's size against an atom label's: set smaller, so it reads as one (IUPAC GR-11). */
 const ANNOTATION_SIZE = 0.8;
 
+/** How a reacting centre that is not drawn with strokes is tagged ("CTfile Formats": 1, a centre; 2, no change). */
+const CENTRE_TAG: Record<number, string> = { 1: "rc", 2: "nc" };
+
+/** An enhanced stereo group as a label: abs, and1, or2. */
+const groupText = (g: StereoGroup) => (g.kind === "abs" ? "abs" : `${g.kind}${g.n ?? 1}`);
+
 /**
- * A query bond's label, beside its middle on whichever side has the more
- * room - the farther from the atoms around it and from the labels already
- * set - and small, as an annotation of the bond rather than a label of an
- * atom (IUPAC GR-11.1, GR-11.2).
+ * Which enhanced stereo groups are labelled at their centres: in a
+ * structure (a connected part of the drawing) whose centres are not all of
+ * one group. One that is says so once, beneath it (`structureNotes`), as
+ * IUPAC's ST-6.3 would have it - and an absolute one needs nothing said.
  */
-function queryLabels(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, zoom: number): TextItem[] {
+function centresLabelled(atoms: Atom[], bonds: Bond[]): { atoms: Set<number>; bonds: Set<number>; notes: { atoms: number[]; text: string }[] } {
+  const parts = components(atoms.length, bonds);
+  const out = { atoms: new Set<number>(), bonds: new Set<number>(), notes: [] as { atoms: number[]; text: string }[] };
+  for (const part of parts) {
+    const inPart = new Set(part);
+    const groups = new Set<string>();
+    const ats = part.filter((i) => atoms[i].stereoGroup);
+    const bds = bonds.flatMap((b, k) => (b.stereoGroup && inPart.has(b.a1) ? [k] : []));
+    for (const i of ats) groups.add(groupText(atoms[i].stereoGroup!));
+    for (const k of bds) groups.add(groupText(bonds[k].stereoGroup!));
+    if (!groups.size) continue;
+    const [only] = groups;
+    if (groups.size === 1 && only === "abs") continue;
+    if (groups.size === 1 && !bds.length) {
+      out.notes.push({ atoms: part, text: only.startsWith("and") ? "and enantiomer" : "or enantiomer" });
+      continue;
+    }
+    for (const i of ats) out.atoms.add(i);
+    for (const k of bds) out.bonds.add(k);
+  }
+  return out;
+}
+
+/** The drawing's connected parts, as atom indices. */
+function components(n: number, bonds: Bond[]): number[][] {
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (const b of bonds) parent[find(b.a1)] = find(b.a2);
+  const parts = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) parts.set(find(i), [...(parts.get(find(i)) ?? []), i]);
+  return [...parts.values()];
+}
+
+/**
+ * What is said about a bond beside its middle - a query bond's kind, a
+ * reacting centre's tag, an enhanced stereo group's label - on whichever
+ * side has the more room, the farther from the atoms around it and from
+ * what is already set, small, as an annotation of the bond rather than a
+ * label of an atom (IUPAC GR-11.1, GR-11.2).
+ */
+function bondNotes(atoms: Atom[], bonds: Bond[], groupsAt: Set<number>, opts: LayoutOptions, zoom: number): TextItem[] {
   const out: TextItem[] = [];
   const fontPx = opts.fontPx * ANNOTATION_SIZE;
   const size = toWorld(fontPx, zoom, opts.units) * labelSetOf(opts).subscriptSize;
   const taken: Vec2[] = [];
-  for (const b of bonds) {
-    if (!b.query) continue;
+  bonds.forEach((b, k) => {
+    const parts = [
+      b.query ? QUERY_LABEL[b.query] : "",
+      b.reactingCentre != null ? (CENTRE_TAG[b.reactingCentre] ?? "") : "",
+      groupsAt.has(k) && b.stereoGroup ? groupText(b.stereoGroup) : "",
+    ].filter(Boolean);
+    if (!parts.length) return;
+    const text = parts.join(" ");
     const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
     const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
     const len = vlen(vsub(q, p));
-    if (len < 1e-9) continue;
+    if (len < 1e-9) return;
     const n = vperp(vscale(vsub(q, p), 1 / len));
     const mid = vscale(vadd(p, q), 0.5);
     const spread = b.order === 2 ? toWorld(opts.doubleOffsetPx, zoom, opts.units) : 0;
-    const text = QUERY_LABEL[b.query];
     // (half the text's width, roughly, and its height, clear of the line)
     const off = spread + size * (0.6 + 0.3 * text.length * 0.6);
     const room = (c: Vec2) => {
@@ -3100,20 +3153,148 @@ function queryLabels(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, zoom: nu
       for (const t of taken) near = Math.min(near, vlen(vsub(t, c)) * 0.75);
       return near;
     };
-    const sides = [1, -1].map((k) => vadd(mid, vscale(n, off * k)));
+    const sides = [1, -1].map((s) => vadd(mid, vscale(n, off * s)));
     const at = room(sides[0]) >= room(sides[1]) - 1e-9 ? sides[0] : sides[1];
     taken.push(at);
-    out.push({
-      x: at.x,
-      y: at.y,
-      text,
-      fontPx,
-      runs: [{ text, sup: true }],
-      anchorRun: 0,
-      beside: true,
-    });
+    out.push({ x: at.x, y: at.y, text, fontPx, runs: [{ text, sup: true }], anchorRun: 0, beside: true });
+  });
+  return out;
+}
+
+/**
+ * A reacting centre's strokes across the middle of its bond ("CTfile
+ * Formats" numbers; the marks are Meno's own): one where its order changes,
+ * two where it is made or broken, three where both; a cross where it is not
+ * a centre.
+ */
+function centreStrokes(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, zoom: number): LineSeg[] {
+  const out: LineSeg[] = [];
+  const units = opts.units ?? "px";
+  const lwPx = Math.max(units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx, Math.max(0.5, opts.minLinePx ?? 1));
+  for (const b of bonds) {
+    const c = b.reactingCentre;
+    if (!c) continue;
+    const p = { x: atoms[b.a1].x, y: atoms[b.a1].y };
+    const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
+    const len = vlen(vsub(q, p));
+    if (len < 1e-9) continue;
+    const u = vscale(vsub(q, p), 1 / len);
+    const n = vperp(u);
+    const mid = vscale(vadd(p, q), 0.5);
+    const half = len * 0.09;
+    const line = (a: Vec2, d: Vec2) => {
+      const from = vsub(a, vscale(d, half));
+      const to = vadd(a, vscale(d, half));
+      out.push({ x1: from.x, y1: from.y, x2: to.x, y2: to.y, widthPx: lwPx });
+    };
+    if (c === -1) {
+      const s = Math.SQRT1_2;
+      line(mid, vadd(vscale(u, s), vscale(n, s)));
+      line(mid, vsub(vscale(u, s), vscale(n, s)));
+      continue;
+    }
+    const strokes = (c & 4 ? 2 : 0) + (c & 8 ? 1 : 0);
+    const gap = len * 0.05;
+    for (let k = 0; k < strokes; k++) line(vadd(mid, vscale(u, (k - (strokes - 1) / 2) * gap)), n);
   }
   return out;
+}
+
+/**
+ * What is said about an atom, set small in the most open space beside it:
+ * its atom-atom mapping number, its configuration inverted or retained, the
+ * change on it exact, its enhanced stereo group where that is labelled at
+ * its centre (IUPAC GR-11.1: close to the atom, about half a capital's
+ * height clear of it, smaller than its label).
+ */
+function atomNotes(
+  atoms: Atom[],
+  bonds: Bond[],
+  labels: TextItem[],
+  groupsAt: Set<number>,
+  opts: LayoutOptions,
+  zoom: number,
+): TextItem[] {
+  const out: TextItem[] = [];
+  const fontPx = opts.fontPx * ANNOTATION_SIZE;
+  const font = toWorld(opts.fontPx, zoom, opts.units);
+  const set = labelSetOf(opts);
+  const ways = new Map<number, { dir: Vec2; len: number }[]>();
+  for (const b of bonds) {
+    for (const [i, j] of [
+      [b.a1, b.a2],
+      [b.a2, b.a1],
+    ]) {
+      const d = vsub({ x: atoms[j].x, y: atoms[j].y }, { x: atoms[i].x, y: atoms[i].y });
+      const len = vlen(d);
+      if (len > 1e-9) ways.set(i, [...(ways.get(i) ?? []), { dir: vscale(d, 1 / len), len }]);
+    }
+  }
+  atoms.forEach((a, i) => {
+    const parts = [
+      a.map ? String(a.map) : "",
+      a.invRet === "invert" ? "inv" : a.invRet === "retain" ? "ret" : "",
+      a.exactChange ? "exact" : "",
+      groupsAt.has(i) && a.stereoGroup ? groupText(a.stereoGroup) : "",
+    ].filter(Boolean);
+    if (!parts.length) return;
+    const text = parts.join(" ");
+    const label = labels.find((t) => t.atom === i && !t.beside);
+    const item = besideVertex(a, ways.get(i) ?? [], [{ text, sup: true }], { fontPx }, (dir) => {
+      // clear of its label's letters, or of the bare vertex, by half a capital
+      let far = 0;
+      if (label) {
+        for (const hull of labelHulls(label, font, set, true)) for (const p of hull) far = Math.max(far, p.x * dir.x + p.y * dir.y);
+      }
+      // and of its own letters: half their extent that way
+      const size = font * ANNOTATION_SIZE * set.subscriptSize;
+      const half = Math.abs(dir.x) * size * 0.3 * text.length + Math.abs(dir.y) * size * 0.4;
+      return far + font * 0.25 + half;
+      // (above, where it can: beside a label's right, a small number reads
+      // as a charge's or a count's - GR-11.1)
+    }, 90);
+    out.push(item);
+  });
+  return out;
+}
+
+/**
+ * What is said about a whole structure, beneath it, half a bond and more
+ * clear of it, as large as its labels (IUPAC GR-11.3): an enhanced stereo
+ * group that takes in all its centres, as ST-6.3 would put it - "and
+ * enantiomer", "or enantiomer".
+ */
+function structureNotes(atoms: Atom[], notes: { atoms: number[]; text: string }[], opts: LayoutOptions, zoom: number): TextItem[] {
+  const font = toWorld(opts.fontPx, zoom, opts.units);
+  return notes.map((n) => {
+    const xs = n.atoms.map((i) => atoms[i].x);
+    const ys = n.atoms.map((i) => atoms[i].y);
+    const bond = typicalBond(atoms, n.atoms);
+    return {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: Math.min(...ys) - bond * 0.6 - font,
+      text: n.text,
+      fontPx: opts.fontPx,
+      runs: [{ text: n.text }],
+      anchorRun: 0,
+      beside: true,
+    };
+  });
+}
+
+/** About how long a structure's bonds are: from how far its atoms lie from their nearest. */
+function typicalBond(atoms: Atom[], part: number[]): number {
+  let sum = 0;
+  let n = 0;
+  for (const i of part) {
+    let near = Infinity;
+    for (const j of part) if (j !== i) near = Math.min(near, Math.hypot(atoms[i].x - atoms[j].x, atoms[i].y - atoms[j].y));
+    if (Number.isFinite(near)) {
+      sum += near;
+      n++;
+    }
+  }
+  return n ? sum / n : 1;
 }
 
 export function layoutMolecule(
@@ -3124,7 +3305,16 @@ export function layoutMolecule(
 ): Layout {
   const bonds = unspecifiedDoubles(atoms, given);
   const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
-  const texts = [...buildTextLabels(atoms, opts, bonds), ...queryLabels(atoms, bonds, opts, zoom)];
+  const labels = buildTextLabels(atoms, opts, bonds);
+  // what is said about bonds, atoms and whole structures (IUPAC GR-11)
+  const groups = centresLabelled(atoms, bonds);
+  prim.lines.push(...centreStrokes(atoms, bonds, opts, zoom));
+  const texts = [
+    ...labels,
+    ...bondNotes(atoms, bonds, groups.bonds, opts, zoom),
+    ...atomNotes(atoms, bonds, labels, groups.atoms, opts, zoom),
+    ...structureNotes(atoms, groups.notes, opts, zoom),
+  ];
   // the labels' marks - a charge's circle, a radical's dots - drawn as the
   // rest of the drawing is
   const units = opts.units ?? "px";
