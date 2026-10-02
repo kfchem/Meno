@@ -214,7 +214,7 @@ function drawnAsSaid(s: GroupStructure): GroupStructure & { atoms: Said[]; hs: n
 export function drawnSmiles(
   smiles: string,
   bondLength: number,
-): { atoms: (AtomChem & { id: number; x: number; y: number })[]; bonds: { id: number; a: number; b: number; order: 1 | 2 | 3 }[] } | null {
+): { atoms: (AtomChem & { id: number; x: number; y: number; z?: number })[]; bonds: { id: number; a: number; b: number; order: 1 | 2 | 3 }[] } | null {
   let read: ReturnType<typeof readSmiles>;
   try {
     read = readSmiles(smiles);
@@ -233,6 +233,8 @@ export function drawnSmiles(
       id: i + 1,
       x: laid.x[i] * bondLength,
       y: laid.y[i] * bondLength,
+      // (a cage's depth: a bond passing behind another is drawn broken there)
+      ...(laid.depth[i] != null ? { z: laid.depth[i]! * bondLength } : {}),
       el: a.el,
       ...(a.charge ? { charge: a.charge } : {}),
       ...(a.isotope ? { isotope: a.isotope } : {}),

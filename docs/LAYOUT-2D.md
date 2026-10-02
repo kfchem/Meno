@@ -117,7 +117,14 @@ they hang from.
   third bridge rising from both bridgeheads. A bond passing behind another
   is drawn broken there. Bonds out of the ring follow it - an equatorial
   bond parallel to the ring bonds but one, an axial one upright - and what
-  hangs from the cage hangs from its front where it can.
+  hangs from the cage hangs from its front where it can. A
+  bicyclo[3.3.1] cage - two six-membered rings sharing three atoms, 9-BBN,
+  bispidine - is drawn as 9-BBN always is, its two chairs stood on end
+  back to back: the one-atom bridge on top, what it carries straight up
+  from it (9-BBN's B-H, a ketone's O); the bridgeheads under it, the front
+  one the lower; each three-atom bridge a chair's lower half to one side,
+  its middle atom the foot. Seen from above it would have that bridge
+  between the rings, hemmed in.
 - **Chains**: zigzag, each turn the other way from the last. A trans double
   bond carries the zigzag on; a cis one is a step in it - the chain read as
   the straight chain it would be without it, taking up again, two bonds
