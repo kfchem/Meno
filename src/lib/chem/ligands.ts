@@ -328,7 +328,7 @@ const METALS = new Set(
 const NAME = new Map(elements.map((e) => [e.symbol, e.name]));
 
 /** A complex's counter-anions, written after its brackets: [Rh(cod)2]BF4. */
-const COUNTER_IONS: Record<string, { smiles: string; name: string }> = {
+export const COUNTER_IONS: Record<string, { smiles: string; name: string }> = {
   BF4: { smiles: "F[B-](F)(F)F", name: "tetrafluoroborate" },
   PF6: { smiles: "F[P-](F)(F)(F)(F)F", name: "hexafluorophosphate" },
   SbF6: { smiles: "F[Sb-](F)(F)(F)(F)F", name: "hexafluoroantimonate" },

@@ -191,27 +191,32 @@ drawing of a large complex is crowded.
 solvents written over reaction arrows are known by their labels, each the
 whole molecule it is, so that a scheme's conditions are structures too:
 oxidants (DMP, IBX, PIDA, TEMPO, PCC, TPAP, NMO, mCPBA, DDQ, Oxone, OsO4
-...), reductants (NaBH4, LiAlH4, DIBAL, L-Selectride, 9-BBN, HBpin, B2pin2
-...), bases (DBU, DMAP, DIPEA, TEA, LDA, LiHMDS, KOt-Bu, K2CO3 ...), acids
-(TFA, TfOH, TsOH, CSA, PPTS), coupling reagents (DCC, EDC, HOBt, HATU,
-COMU, PyBOP, T3P, DPPA, DEAD ...), halogenating and fluorinating ones (NBS,
-Selectfluor, NFSI, DAST, Togni I and II ...), electrophiles (Boc2O, Tf2O,
-PhNTf2, Comins' reagent, Meerwein's salt ...), organometallic reagents and
-metal catalysts (Tebbe, Petasis, Schwartz, Stryker; Grubbs I to III,
-Hoveyda–Grubbs I and II, Schrock, Wilkinson, Crabtree, PEPPSI-IPr,
-Jacobsen, Karstedt and Krische's π-allyliridium C,O-benzoate),
-organocatalysts and chiral reagents (proline, MacMillan's, Hayashi–
-Jørgensen, CBS, Shi's ketone), solvents (DMF, DMSO, NMP, DCM, dioxane,
-EtOAc, toluene ...) and named reagents (Burgess, Martin's sulfurane,
-Lawesson's, Bestmann–Ohira, TBAF). Each is written in SMILES - a salt as
-its ions after dots - or, a metal's complex, as its formula, read as
-complexes are, from Meno's ligands and any of its own (Hoveyda's chelating
-benzylidene, Krische's benzoate, bound by its carboxylate and the carbon
-between that and the nitro group). The tests check each one's formula
-against its name. Its labels may be written with an apostrophe or a dash
-either way (Comins' or Comins’, Hoveyda-Grubbs or Hoveyda–Grubbs). A
-reagent's name is one unit of a label, its digits not counts (T3P, 9-BBN);
-a formula's are (NaBH4, B2pin2).
+...), reductants (NaBH4, LiAlH4, DIBAL, L-Selectride, 9-BBN, B2pin2 ...),
+bases (DBU, DMAP, DIPEA, TEA, LDA, LiHMDS, K2CO3 ...), acids (TFA, PTSA,
+CSA, PPTS), coupling reagents (DCC, EDC, HATU, COMU, PyBOP, T3P, DPPA, DEAD
+...), halogenating and fluorinating ones (NBS, Selectfluor, NFSI, DAST,
+Togni I and II ...), electrophiles (TFAA, Comins' reagent, Meerwein's salt
+...), organometallic reagents and metal catalysts (Tebbe, Petasis,
+Schwartz, Stryker; Grubbs I to III, Hoveyda–Grubbs I and II, Schrock,
+Wilkinson, Crabtree, PEPPSI-IPr, Jacobsen, Karstedt and Krische's
+π-allyliridium C,O-benzoate), organocatalysts and chiral reagents (proline,
+MacMillan's, Hayashi–Jørgensen, CBS, Shi's ketone), solvents (DMF, DMSO,
+NMP, DCM, dioxane, toluene ...) and named reagents (Burgess, Martin's
+sulfurane, Lawesson's, Bestmann–Ohira, TBAF). Each is written in SMILES - a
+salt as its ions after dots - or, a metal's complex, as its formula, read
+as complexes are, from Meno's ligands and any of its own (Hoveyda's
+chelating benzylidene; Krische's 3-nitrobenzoate, as the catalyst is sold,
+bound by its carboxylate and the ortho carbon away from the nitro group).
+The tests check each one's formula against its name. Its labels may be
+written with an apostrophe or a dash either way (Comins' or Comins’,
+Hoveyda-Grubbs or Hoveyda–Grubbs). A reagent's name is one unit of a label,
+its digits not counts (T3P, 9-BBN); a formula's are (NaBH4, B2pin2).
+
+The list holds only what no rule reads: Ac2O, Boc2O, Tf2O, TfOH, TsOH,
+HOBt, KOt-Bu, NaH and EtOAc are read by rule (below), not listed - and the
+tests check that no name in it is read by rule as the same molecule.
+Settings › Abbreviations shows every entry of it, Meno's groups and
+ligands, the counter-anions, and Buchwald's precatalysts by generation.
 
 Read by rule, besides, as whole molecules:
 
