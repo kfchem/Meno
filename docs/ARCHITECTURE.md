@@ -105,6 +105,30 @@ Adoption is incremental. The text view and the 2D structure editor are on
 documents; the workflow editor and the 3D viewer still keep their content in
 component state, and it is still lost when their tab closes.
 
+## How things move
+
+Nothing on screen changes at a jump (asked for by the maintainer, for all
+of Meno): a highlight eases in and out, a menu, a card or a mark comes into
+view and goes out of it, and the drawing and the view go where they are
+sent rather than appear there. Short and understated; what belongs together
+moves together, in the same time and the same way.
+
+- **One place** for how long and how: `ui/theme/motion.ts` - `DURATION`
+  (quick 0.12 s for colours and highlights, base 0.16 s for things coming
+  and going, move 0.22 s for the drawing and the view), one easing (CSS's
+  `--ease-meno`), `TAU` for following a moving target, the spring, and
+  motion's `FADE` and `RISE`.
+- **The page's elements**: motion's `AnimatePresence` for what mounts and
+  unmounts (menus, dialogs, notices, cards, panels, tabs); CSS
+  `meno-fade-in` for what comes into view as a class goes on, and
+  `meno-fade-out` with `ui/theme/presence.ts#usePresence` for what has just
+  gone; every button's colours ease (one rule in `App.css`).
+- **The canvas**: each layer eases its own parts in `useFrame` - each
+  part its own way in and out, so one can go while the next comes - and
+  invalidates only while something moves (see *Frame loop*). The drawing
+  itself goes from shape to shape in `DrawnLayout` (`utils/glide.ts`), and
+  a fit goes there through `components/viewGoal.ts`.
+
 ## 2D structure editor (`ui/features/StructureEditor`)
 
 What is left before the editor counts as finished, and in what order, is in
