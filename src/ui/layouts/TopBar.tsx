@@ -52,6 +52,19 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
     document.addEventListener("mousedown", onDoc as any);
     return () => document.removeEventListener("mousedown", onDoc as any);
   }, []);
+  // Escape closes the menu, as a click elsewhere does - and only that: the
+  // tab beneath does not take it as well
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [menuOpen]);
 
   const onSelectMenu = (
     profile: "texteditor" | "pyconsole" | "node" | "structure"
@@ -167,7 +180,11 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
         <div className="relative flex" ref={menuRef}>
           <button
             aria-label="New tab"
-            onClick={add}
+            onClick={() => {
+              // (beside the menu's own button, so not a click elsewhere: it closes the menu itself)
+              setMenuOpen(false);
+              add();
+            }}
             onMouseDown={stop}
             className="h-7 px-2 rounded-l-md border border-gh-line bg-white hover:bg-gray-100"
           >
