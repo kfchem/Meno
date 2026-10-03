@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
 import type { Molecule3D } from "../store/types";
-import { footprint, frameOf, partOfFrame, rowAbout, solidOf, standingHeight, WORLD_PER_ANGSTROM } from "./molecule3d";
+import { partAt, ringsOf, rowAbout, seenOnPage, solidOf, standingHeight, WORLD_PER_ANGSTROM } from "./molecule3d";
 
 /** Two carbons 1.5 Å apart along x, standing at `at`. */
 const ethane = (at = { x: 0, y: 0 }): Molecule3D => ({
@@ -29,36 +29,61 @@ describe("a molecule in 3D as it is drawn", () => {
     expect(standingHeight(s)).toBeCloseTo(s.reach, 9);
   });
 
-  it("covers more of the page than it would lying on it, being nearer the camera", () => {
+  it("is seen larger than it would be lying on the page, being nearer the camera", () => {
     const m = ethane();
     const s = solidOf(m, STYLE_3D);
-    const fp = footprint(m, s, undefined, new THREE.Vector3(0, 0, 60));
+    const seen = seenOnPage(m, s, undefined, new THREE.Vector3(0, 0, 60));
     const k = 60 / (60 - standingHeight(s));
-    expect(fp.maxX).toBeCloseTo(s.reach * k, 6);
-    expect(fp.minX).toBeCloseTo(-s.reach * k, 6);
-    // turned a quarter about y, it is end on: as narrow as one atom
+    expect(seen[1].x).toBeCloseTo(0.75 * WORLD_PER_ANGSTROM * k, 6);
+    expect(seen[1].r).toBeCloseTo(s.radii[1] * k, 6);
+    // turned a quarter about y, it is end on: one atom over the other
     const quarter = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-    const end = footprint(m, s, [quarter.x, quarter.y, quarter.z, quarter.w], new THREE.Vector3(0, 0, 60));
-    expect(end.maxX - end.minX).toBeLessThan(fp.maxX - fp.minX);
+    const end = seenOnPage(m, s, [quarter.x, quarter.y, quarter.z, quarter.w], new THREE.Vector3(0, 0, 60));
+    expect(end[0].x).toBeCloseTo(0, 6);
+    expect(end[1].x).toBeCloseTo(0, 6);
   });
 });
 
-describe("its frame", () => {
-  const frame = { minX: -10, minY: -5, maxX: 10, maxY: 5 };
-  it("turns the molecule within, moves it on the edge, and is nothing outside", () => {
-    const zoom = 10; // (the edge is 7 px either side: 0.7 world units)
-    expect(partOfFrame(frame, 0, 0, zoom)).toBe("body");
-    expect(partOfFrame(frame, 9, 0, zoom)).toBe("body");
-    expect(partOfFrame(frame, 10, 0, zoom)).toBe("edge");
-    expect(partOfFrame(frame, 9.5, 0, zoom)).toBe("edge");
-    expect(partOfFrame(frame, 10.5, 0, zoom)).toBe("edge");
-    expect(partOfFrame(frame, 11, 0, zoom)).toBeNull();
-    expect(partOfFrame(frame, 10.6, 5.6, zoom)).toBeNull();
+/** Benzene's six carbons, flat, 1.4 Å apart, standing at the origin. */
+const benzene = (): Molecule3D => ({
+  id: 2,
+  atoms: Array.from({ length: 6 }, (_, i) => ({
+    el: "C",
+    x: 1.4 * Math.cos((i * Math.PI) / 3),
+    y: 1.4 * Math.sin((i * Math.PI) / 3),
+    z: 0,
+  })),
+  bonds: Array.from({ length: 6 }, (_, i) => ({ a1: i, a2: (i + 1) % 6, order: 1 })),
+  at: { x: 0, y: 0 },
+});
+
+describe("what a point is to a molecule in 3D", () => {
+  const camera = new THREE.Vector3(0, 0, 60);
+  const zoom = 20; // (pixels per world unit: the rim is 9 px wide, 0.45 world units)
+  it("finds its rings", () => {
+    expect(ringsOf(benzene()).map((r) => [...r].sort())).toEqual([[0, 1, 2, 3, 4, 5]]);
+    expect(ringsOf(ethane())).toEqual([]);
   });
-  it("keeps room about the molecule, at least ten pixels", () => {
-    const f = frameOf({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, 1000);
-    expect(f.minX).toBeCloseTo(-0.63, 6);
-    expect(frameOf({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, 1).minX).toBeCloseTo(-10, 6);
+
+  it("turns it on an atom, on a bond, and within a ring", () => {
+    const m = benzene();
+    const s = solidOf(m, STYLE_3D);
+    const seen = seenOnPage(m, s, undefined, camera);
+    const at = (x: number, y: number) => partAt(m, s, undefined, camera, x, y, zoom, STYLE_3D.bondRadius);
+    expect(at(seen[0].x, seen[0].y)).toBe("body");
+    expect(at((seen[0].x + seen[1].x) / 2, (seen[0].y + seen[1].y) / 2)).toBe("body");
+    expect(at(0, 0)).toBe("body");
+  });
+
+  it("moves it on the rim just outside its outline, and is nothing beyond", () => {
+    const m = benzene();
+    const s = solidOf(m, STYLE_3D);
+    const seen = seenOnPage(m, s, undefined, camera);
+    const at = (x: number, y: number) => partAt(m, s, undefined, camera, x, y, zoom, STYLE_3D.bondRadius);
+    const edge = seen[0].x + seen[0].r;
+    expect(at(edge + 2 / zoom, 0)).toBe("body");
+    expect(at(edge + 8 / zoom, 0)).toBe("rim");
+    expect(at(edge + 20 / zoom, 0)).toBeNull();
   });
 });
 

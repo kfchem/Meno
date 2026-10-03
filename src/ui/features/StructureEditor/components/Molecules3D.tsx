@@ -5,16 +5,9 @@ import { COLORS } from "../../../theme/colors";
 import { KEY_LIGHT_FROM, STYLE_3D, atomColour, type Style3D } from "../../../../lib/chem/style3d";
 import { useEditor, useEditorStore } from "../store";
 import type { Molecule3D, Turn3D } from "../store/types";
-import {
-  footprint,
-  frameOf,
-  partOfFrame,
-  solidOf,
-  standingHeight,
-  WORLD_PER_ANGSTROM,
-  type Rect,
-} from "../utils/molecule3d";
+import { partAt, solidOf, standingHeight, WORLD_PER_ANGSTROM, type Solid } from "../utils/molecule3d";
 import { pageAt } from "../utils/page";
+import { PAGE_DISTANCE } from "./PageCamera";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -51,12 +44,16 @@ type Gesture =
       moved: boolean;
     };
 
+/** How a molecule in 3D is lit up: not at all, hovered or turning, or about to be moved or moving. */
+type Highlight = "none" | "on" | "rim";
+
 /**
  * The molecules in 3D standing on the page: drawn, lit, and worked with the
- * pointer. Hovered, a molecule shows its frame: a drag within it turns the
- * molecule about its centre, and it goes on turning a little when let go; a
- * drag on the frame's edge moves it on the page. The page itself never
- * tilts, so a drawing beside it stays as drawn.
+ * pointer. Hovered, a molecule's outline lights up, faintly: a drag on it
+ * turns the molecule about its centre, and let go it turns on a little; a
+ * drag on the rim just outside its outline - which lights up more - moves it
+ * on the page. The page itself never tilts, so a drawing beside it stays as
+ * drawn.
  */
 export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const molecules = useEditor((s) => s.molecules3d);
@@ -65,31 +62,29 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const store = useEditorStore();
   const { camera, gl, invalidate } = useThree();
   const dom = gl.domElement as HTMLCanvasElement;
-  // a turning molecule's frame stays as it was when the turn began
-  const frozen = useRef(new Map<number, Rect>());
   // molecules turning on by themselves: about which axis, how fast (rad/s)
   const spins = useRef(new Map<number, { axis: THREE.Vector3; speed: number }>());
   const gesture = useRef<Gesture | null>(null);
-  const [active, setActive] = useState<Gesture["kind"] | null>(null);
-
-  const frameFor = (m: Molecule3D): Rect =>
-    frozen.current.get(m.id) ??
-    frameOf(footprint(m, solidOf(m, style), store.getState().turns3d[m.id], camera.position), camera.zoom);
+  const [active, setActive] = useState<{ kind: Gesture["kind"]; id: number } | null>(null);
 
   useEffect(() => {
     const pageOf = (e: PointerEvent) => {
       const r = dom.getBoundingClientRect();
       return pageAt(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1), camera);
     };
-    // the molecule whose frame the pointer is in, the last placed on top
-    const hit = (e: PointerEvent): { id: number; part: "body" | "edge" } | null => {
+    // the molecule the pointer is on, or on the rim of: the last placed on
+    // top, and on one rather than on another's rim
+    const hit = (e: PointerEvent): { id: number; part: "body" | "rim" } | null => {
       const p = pageOf(e);
-      const ms = store.getState().molecules3d;
-      for (let i = ms.length - 1; i >= 0; i--) {
-        const part = partOfFrame(frameFor(ms[i]), p.x, p.y, camera.zoom);
-        if (part) return { id: ms[i].id, part };
+      const st = store.getState();
+      let rim: { id: number; part: "rim" } | null = null;
+      for (let i = st.molecules3d.length - 1; i >= 0; i--) {
+        const m = st.molecules3d[i];
+        const part = partAt(m, solidOf(m, style), st.turns3d[m.id], camera.position, p.x, p.y, camera.zoom, style.bondRadius);
+        if (part === "body") return { id: m.id, part };
+        if (part === "rim" && !rim) rim = { id: m.id, part };
       }
-      return null;
+      return rim;
     };
     const turnBy = (id: number, axis: THREE.Vector3, angle: number) => {
       const was = store.getState().turns3d[id];
@@ -145,7 +140,6 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
         dom.setPointerCapture(e.pointerId);
       } catch {}
       if (h.part === "body") {
-        frozen.current.set(m.id, frameFor(m));
         spins.current.delete(m.id);
         gesture.current = {
           kind: "turn",
@@ -170,7 +164,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           moved: false,
         };
       }
-      setActive(gesture.current.kind);
+      setActive({ kind: gesture.current.kind, id: m.id });
     };
 
     const onUp = (e: PointerEvent) => {
@@ -189,7 +183,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
         const speed = g.recent.reduce((a, r) => a + r.angle, 0) / (Math.max(took, 16) / 1000);
         if (g.moved && e.timeStamp - g.t < HELD_MS && speed > STILL) {
           spins.current.set(g.id, { axis: g.axis, speed });
-        } else frozen.current.delete(g.id);
+        }
       }
       swallowClick();
       store.getState().setHovered3d(hit(e));
@@ -212,12 +206,18 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       dom.removeEventListener("pointercancel", onUp);
       dom.removeEventListener("pointerleave", onLeave);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dom, camera, store, style, invalidate]);
 
-  // the pointer says what a drag would do
+  // the pointer says what a drag does
   useEffect(() => {
-    const cursor = active === "turn" ? "grabbing" : active === "move" ? "move" : hovered?.part === "edge" ? "move" : hovered ? "grab" : "";
+    const cursor =
+      active?.kind === "turn"
+        ? "grabbing"
+        : active?.kind === "move" || hovered?.part === "rim"
+          ? "move"
+          : hovered
+            ? "grab"
+            : "";
     dom.style.cursor = cursor;
   }, [dom, hovered, active]);
 
@@ -230,75 +230,111 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       q.premultiply(new THREE.Quaternion().setFromAxisAngle(s.axis, s.speed * dt)).normalize();
       store.getState().setTurn3d(id, [q.x, q.y, q.z, q.w] as Turn3D);
       s.speed *= Math.pow(1 - style.turnDamping, dt * 60);
-      if (s.speed < STILL) {
-        spins.current.delete(id);
-        frozen.current.delete(id);
-      }
+      if (s.speed < STILL) spins.current.delete(id);
     }
     invalidate();
   });
 
   if (!molecules.length) return null;
-  const framed = molecules.find((m) => m.id === (gesture.current?.id ?? hovered?.id));
+  const highlightOf = (id: number): Highlight => {
+    if (active) return active.id === id ? (active.kind === "move" ? "rim" : "on") : "none";
+    if (hovered?.id !== id) return "none";
+    return hovered.part === "rim" ? "rim" : "on";
+  };
   return (
     <group>
       <ambientLight intensity={style.ambientLight} />
       <directionalLight position={KEY_LIGHT_FROM as [number, number, number]} intensity={style.keyLight} />
       {molecules.map((m) => (
-        <Molecule3DView key={m.id} m={m} turn={turns[m.id]} style={style} />
+        <Molecule3DView key={m.id} m={m} turn={turns[m.id]} style={style} highlight={highlightOf(m.id)} />
       ))}
-      {framed && (
-        <Frame
-          frameFor={() => frameFor(framed)}
-          strong={active === "move" || (!active && hovered?.part === "edge")}
-        />
-      )}
     </group>
   );
 }
 
-function Molecule3DView({ m, turn, style }: { m: Molecule3D; turn: Turn3D | undefined; style: Style3D }) {
+/** How wide the outline's light is, in pixels: hovered, and on the rim. */
+const OUTLINE_PX = { on: 1.6, rim: 2.6 } as const;
+/** Its colour: the highlight laid over white - faint, and stronger on the rim. */
+const OUTLINE_COLOUR = {
+  on: new THREE.Color(COLORS.highlight).lerp(new THREE.Color("#ffffff"), 0.68),
+  rim: new THREE.Color(COLORS.highlight).lerp(new THREE.Color("#ffffff"), 0.4),
+} as const;
+/** How much larger the atom under the pointer is drawn, and its spring: the 3D viewer's. */
+const ATOM_SWELL = 1.1;
+const SPRING = { stiffness: 150, damping: 15 };
+
+function Molecule3DView({
+  m,
+  turn,
+  style,
+  highlight,
+}: {
+  m: Molecule3D;
+  turn: Turn3D | undefined;
+  style: Style3D;
+  highlight: Highlight;
+}) {
   const solid = solidOf(m, style);
   const atoms = useRef<THREE.InstancedMesh>(null!);
   const bonds = useRef<THREE.InstancedMesh>(null);
+  const atomHull = useRef<THREE.InstancedMesh>(null!);
+  const bondHull = useRef<THREE.InstancedMesh>(null);
   const [hoverAtom, setHoverAtom] = useState<number | null>(null);
-  const invalidate = useThree((s) => s.invalidate);
+  const { invalidate, camera } = useThree();
   const quaternion = useMemo(() => (turn ? new THREE.Quaternion(...turn) : new THREE.Quaternion()), [turn]);
+  // each atom's swell, sprung: where it is, how fast it goes, where it is going
+  const swell = useRef(new Map<number, { v: number; vel: number; to: number }>());
+  // what the outline was last drawn for
+  const drawn = useRef("");
 
   useLayoutEffect(() => {
-    const mtx = new THREE.Matrix4();
     const col = new THREE.Color();
-    const n = solid.radii.length;
-    for (let i = 0; i < n; i++) {
-      // (an atom under the pointer a little larger, as the 3D viewer had it)
-      const r = solid.radii[i] * (i === hoverAtom ? 1.1 : 1);
-      mtx.makeScale(r, r, r).setPosition(solid.local[3 * i], solid.local[3 * i + 1], solid.local[3 * i + 2]);
-      atoms.current.setMatrixAt(i, mtx);
-      atoms.current.setColorAt(i, col.set(atomColour(m.atoms[i].el)));
-    }
-    atoms.current.instanceMatrix.needsUpdate = true;
+    for (let i = 0; i < solid.radii.length; i++) atoms.current.setColorAt(i, col.set(atomColour(m.atoms[i].el)));
     if (atoms.current.instanceColor) atoms.current.instanceColor.needsUpdate = true;
-    atoms.current.computeBoundingSphere();
-    if (bonds.current) {
-      const a = new THREE.Vector3();
-      const b = new THREE.Vector3();
-      const up = new THREE.Vector3(0, 1, 0);
-      const q = new THREE.Quaternion();
-      const s = new THREE.Vector3();
-      const r = style.bondRadius * WORLD_PER_ANGSTROM;
-      m.bonds.forEach((bond, k) => {
-        a.fromArray(solid.local, 3 * bond.a1);
-        b.fromArray(solid.local, 3 * bond.a2);
-        const len = a.distanceTo(b);
-        q.setFromUnitVectors(up, b.clone().sub(a).normalize());
-        mtx.compose(a.clone().add(b).multiplyScalar(0.5), q, s.set(r, len, r));
-        bonds.current!.setMatrixAt(k, mtx);
-      });
-      bonds.current.instanceMatrix.needsUpdate = true;
-      bonds.current.computeBoundingSphere();
-    }
+    placeAtoms(atoms.current, solid, swell.current, 0);
+    if (bonds.current) placeBonds(bonds.current, m, solid, style.bondRadius * WORLD_PER_ANGSTROM);
+    drawn.current = "";
     invalidate();
-  }, [m, solid, hoverAtom, style, invalidate]);
+  }, [m, solid, style, invalidate]);
+
+  // the atom under the pointer swells, and the one it leaves goes back
+  useEffect(() => {
+    for (const [i, s] of swell.current) s.to = i === hoverAtom ? ATOM_SWELL : 1;
+    if (hoverAtom != null && !swell.current.has(hoverAtom)) swell.current.set(hoverAtom, { v: 1, vel: 0, to: ATOM_SWELL });
+    invalidate();
+  }, [hoverAtom, invalidate]);
+
+  useFrame((_, dt) => {
+    let moving = false;
+    if (swell.current.size) {
+      const step = Math.min(dt, 1 / 30);
+      for (const [i, s] of swell.current) {
+        const force = -SPRING.stiffness * (s.v - s.to) - SPRING.damping * s.vel;
+        s.vel += force * step;
+        s.v += s.vel * step;
+        if (Math.abs(s.v - s.to) < 1e-3 && Math.abs(s.vel) < 1e-3) {
+          s.v = s.to;
+          s.vel = 0;
+          if (s.to === 1) swell.current.delete(i);
+        } else moving = true;
+      }
+      placeAtoms(atoms.current, solid, swell.current, 0);
+    }
+    // the outline, as wide in pixels whatever the zoom
+    if (highlight !== "none") {
+      const depth = PAGE_DISTANCE / Math.max(PAGE_DISTANCE - standingHeight(solid), 1);
+      const w = OUTLINE_PX[highlight] / (camera.zoom * depth);
+      const key = `${highlight},${w}`;
+      if (key !== drawn.current || moving || swell.current.size) {
+        drawn.current = key;
+        placeAtoms(atomHull.current, solid, swell.current, w);
+        if (bondHull.current) placeBonds(bondHull.current, m, solid, style.bondRadius * WORLD_PER_ANGSTROM + w);
+        (atomHull.current.material as THREE.MeshBasicMaterial).color.copy(OUTLINE_COLOUR[highlight]);
+        if (bondHull.current) (bondHull.current.material as THREE.MeshBasicMaterial).color.copy(OUTLINE_COLOUR[highlight]);
+      }
+    }
+    if (moving) invalidate();
+  });
 
   return (
     <group position={[m.at.x, m.at.y, standingHeight(solid)]} quaternion={quaternion}>
@@ -328,61 +364,65 @@ function Molecule3DView({ m, turn, style }: { m: Molecule3D; turn: Turn3D | unde
           />
         </instancedMesh>
       )}
+      {/* The outline: the molecule drawn a little larger, before it and under
+          it - what shows is a thin rim of light round its outline only, none
+          where one part of it passes in front of another. */}
+      <instancedMesh
+        ref={atomHull}
+        args={[undefined, undefined, m.atoms.length]}
+        renderOrder={OVER_PAGE - 1}
+        frustumCulled={false}
+        visible={highlight !== "none"}
+        raycast={() => {}}
+      >
+        <sphereGeometry args={[1, style.ballSegments, style.ballSegments]} />
+        <meshBasicMaterial transparent opacity={1} depthWrite={false} toneMapped={false} />
+      </instancedMesh>
+      {style.atoms === "balls" && m.bonds.length > 0 && (
+        <instancedMesh
+          ref={bondHull}
+          args={[undefined, undefined, m.bonds.length]}
+          renderOrder={OVER_PAGE - 1}
+          frustumCulled={false}
+          visible={highlight !== "none"}
+          raycast={() => {}}
+        >
+          <cylinderGeometry args={[1, 1, 1, style.bondSegments]} />
+          <meshBasicMaterial transparent opacity={1} depthWrite={false} toneMapped={false} />
+        </instancedMesh>
+      )}
     </group>
   );
 }
 
-/** How wide the frame is drawn, and its corners' radius, in pixels. */
-const FRAME_PX = 1.5;
-const FRAME_STRONG_PX = 2.5;
-const CORNER_PX = 10;
+const mtx = new THREE.Matrix4();
 
-function roundedRect(r: Rect, radius: number): THREE.Shape {
-  const s = new THREE.Shape();
-  const k = Math.min(radius, (r.maxX - r.minX) / 2, (r.maxY - r.minY) / 2);
-  s.moveTo(r.minX + k, r.minY);
-  s.lineTo(r.maxX - k, r.minY);
-  s.quadraticCurveTo(r.maxX, r.minY, r.maxX, r.minY + k);
-  s.lineTo(r.maxX, r.maxY - k);
-  s.quadraticCurveTo(r.maxX, r.maxY, r.maxX - k, r.maxY);
-  s.lineTo(r.minX + k, r.maxY);
-  s.quadraticCurveTo(r.minX, r.maxY, r.minX, r.maxY - k);
-  s.lineTo(r.minX, r.minY + k);
-  s.quadraticCurveTo(r.minX, r.minY, r.minX + k, r.minY);
-  return s;
+/** Each atom's ball where it is, swollen as it is, and `extra` larger all round. */
+function placeAtoms(mesh: THREE.InstancedMesh, solid: Solid, swell: Map<number, { v: number }>, extra: number) {
+  for (let i = 0; i < solid.radii.length; i++) {
+    const r = solid.radii[i] * (swell.get(i)?.v ?? 1) + extra;
+    mtx.makeScale(r, r, r).setPosition(solid.local[3 * i], solid.local[3 * i + 1], solid.local[3 * i + 2]);
+    mesh.setMatrixAt(i, mtx);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.computeBoundingSphere();
 }
 
-/** The light frame round the molecule under the pointer, on the page. */
-function Frame({ frameFor, strong }: { frameFor: () => Rect; strong: boolean }) {
-  const mesh = useRef<THREE.Mesh>(null!);
-  const camera = useThree((s) => s.camera);
-  const seen = useRef("");
-  useFrame(() => {
-    const r = frameFor();
-    const zoom = camera.zoom;
-    const key = `${r.minX},${r.minY},${r.maxX},${r.maxY},${zoom},${strong}`;
-    if (key === seen.current) return;
-    seen.current = key;
-    const w = (strong ? FRAME_STRONG_PX : FRAME_PX) / zoom;
-    const corner = CORNER_PX / zoom;
-    const outer = roundedRect({ minX: r.minX - w / 2, minY: r.minY - w / 2, maxX: r.maxX + w / 2, maxY: r.maxY + w / 2 }, corner + w / 2);
-    outer.holes.push(roundedRect({ minX: r.minX + w / 2, minY: r.minY + w / 2, maxX: r.maxX - w / 2, maxY: r.maxY - w / 2 }, Math.max(corner - w / 2, 0)));
-    const old = mesh.current.geometry;
-    mesh.current.geometry = new THREE.ShapeGeometry(outer, 6);
-    old.dispose();
+/** Each bond a cylinder of radius `r` from atom to atom. */
+function placeBonds(mesh: THREE.InstancedMesh, m: Molecule3D, solid: Solid, r: number) {
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0);
+  const q = new THREE.Quaternion();
+  const s = new THREE.Vector3();
+  m.bonds.forEach((bond, k) => {
+    a.fromArray(solid.local, 3 * bond.a1);
+    b.fromArray(solid.local, 3 * bond.a2);
+    const len = a.distanceTo(b);
+    q.setFromUnitVectors(up, b.clone().sub(a).normalize());
+    mtx.compose(a.clone().add(b).multiplyScalar(0.5), q, s.set(r, len, r));
+    mesh.setMatrixAt(k, mtx);
   });
-  useEffect(() => () => mesh.current?.geometry.dispose(), []);
-  return (
-    <mesh ref={mesh} position={[0, 0, 0.003]} renderOrder={43}>
-      <bufferGeometry />
-      <meshBasicMaterial
-        color={COLORS.highlight}
-        transparent
-        opacity={strong ? 0.85 : 0.45}
-        depthTest={false}
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </mesh>
-  );
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.computeBoundingSphere();
 }

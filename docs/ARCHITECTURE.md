@@ -179,8 +179,11 @@ What is left before the editor counts as finished, and in what order, is in
   page its centre stands; how each is turned is the store's (`turns3d`),
   not the document's. A molecule stands as high as it reaches, so no turn
   takes it behind the page, and is drawn instanced, lit, after the page
-  and depth-tested. Hovered, it shows a frame: a drag within turns it
-  (with inertia), a drag on the frame's edge moves it. Its look is a style
+  and depth-tested. Hovered, its outline lights up faintly (the molecule
+  drawn a little larger under itself) and the atom under the pointer
+  swells on a spring: a drag on it - its atoms, bonds or within its rings
+  - turns it (with inertia), a drag on the rim just outside its outline,
+  which lights up more, moves it. Its look is a style
   (`lib/chem/style3d.ts`), the 3D viewer's by default. A 1.5 Å bond is as
   long as a drawn one. See [`WORKSPACE.md`](./WORKSPACE.md).
 

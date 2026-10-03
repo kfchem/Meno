@@ -12,7 +12,7 @@ type SetState = StoreApi<EditorState>["setState"];
  */
 export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, set: SetState) {
   return {
-    setHovered3d: (h: { id: number; part: "body" | "edge" } | null) =>
+    setHovered3d: (h: { id: number; part: "body" | "rim" } | null) =>
       set((prev) =>
         prev.hovered3d?.id === h?.id && prev.hovered3d?.part === h?.part ? prev : { ...prev, hovered3d: h },
       ),

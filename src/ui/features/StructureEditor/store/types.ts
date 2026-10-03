@@ -89,15 +89,15 @@ export type EditorState = {
   boxSelect: { active: boolean; kind: "box" | "lasso"; points: { x: number; y: number }[] };
   hovered: { atomId: number | null; bondId: number | null };
   /**
-   * The molecule in 3D under the pointer, and which part of it: within its
-   * frame (a drag turns it) or on the frame's edge (a drag moves it).
+   * The molecule in 3D under the pointer, and which part of it: on it (a
+   * drag turns it) or on the rim just outside its outline (a drag moves it).
    */
-  hovered3d: { id: number; part: "body" | "edge" } | null;
+  hovered3d: { id: number; part: "body" | "rim" } | null;
   /** The molecules in 3D on the page. */
   molecules3d: Molecule3D[];
   /** How each molecule in 3D is turned, by id; unturned if absent. */
   turns3d: Record<number, Turn3D>;
-  setHovered3d: (h: { id: number; part: "body" | "edge" } | null) => void;
+  setHovered3d: (h: { id: number; part: "body" | "rim" } | null) => void;
   setTurn3d: (id: number, turn: Turn3D) => void;
   /** Moves a molecule in 3D on the page; moves sharing `gesture` are one undo step. */
   moveMolecule3d: (id: number, at: { x: number; y: number }, gesture?: string) => void;

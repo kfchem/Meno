@@ -59,51 +59,113 @@ export function standingHeight(s: Solid): number {
   return s.reach;
 }
 
-export type Rect = { minX: number; minY: number; maxX: number; maxY: number };
+/** An atom or a bond's end as the camera sees it, taken back to the page: where, and how large. */
+type Seen = { x: number; y: number; r: number };
 
-/**
- * The part of the page a molecule covers, as the camera sees it: each atom
- * seen from where the camera stands, taken back to the page.
- */
-export function footprint(m: Molecule3D, s: Solid, turn: Turn3D | undefined, camera: THREE.Vector3): Rect {
+/** Each atom as the camera sees it, taken back to the page. */
+export function seenOnPage(m: Molecule3D, s: Solid, turn: Turn3D | undefined, camera: THREE.Vector3): Seen[] {
   const q = turn ? new THREE.Quaternion(...turn) : new THREE.Quaternion();
   const p = new THREE.Vector3();
   const h = standingHeight(s);
-  const r: Rect = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  const seen: Seen[] = [];
   for (let i = 0; i < s.radii.length; i++) {
     p.set(s.local[3 * i], s.local[3 * i + 1], s.local[3 * i + 2]).applyQuaternion(q);
     const x = m.at.x + p.x, y = m.at.y + p.y, z = h + p.z;
     const k = camera.z / Math.max(camera.z - z, 1e-3);
-    const px = camera.x + (x - camera.x) * k;
-    const py = camera.y + (y - camera.y) * k;
-    const pr = s.radii[i] * k;
-    r.minX = Math.min(r.minX, px - pr);
-    r.maxX = Math.max(r.maxX, px + pr);
-    r.minY = Math.min(r.minY, py - pr);
-    r.maxY = Math.max(r.maxY, py + pr);
+    seen.push({ x: camera.x + (x - camera.x) * k, y: camera.y + (y - camera.y) * k, r: s.radii[i] * k });
   }
-  if (!isFinite(r.minX)) return { minX: m.at.x, minY: m.at.y, maxX: m.at.x, maxY: m.at.y };
-  return r;
+  return seen;
 }
 
-/** The frame round a molecule: its footprint with room about it, at least so many pixels. */
-export function frameOf(fp: Rect, zoom: number): Rect {
-  const pad = Math.max(0.35 * NOMINAL_BOND_LENGTH, 10 / zoom);
-  return { minX: fp.minX - pad, minY: fp.minY - pad, maxX: fp.maxX + pad, maxY: fp.maxY + pad };
+const rings = new WeakMap<Molecule3D, number[][]>();
+
+/**
+ * A molecule's small rings, of up to eight atoms: for each bond, the
+ * shortest way round from one end to the other without it.
+ */
+export function ringsOf(m: Molecule3D): number[][] {
+  const known = rings.get(m);
+  if (known) return known;
+  const near: number[][] = m.atoms.map(() => []);
+  for (const b of m.bonds) {
+    near[b.a1].push(b.a2);
+    near[b.a2].push(b.a1);
+  }
+  const found = new Map<string, number[]>();
+  for (const b of m.bonds) {
+    const from = new Map<number, number>([[b.a1, -1]]);
+    let edge = [b.a1];
+    for (let depth = 0; depth < 7 && !from.has(b.a2); depth++) {
+      const next: number[] = [];
+      for (const a of edge) {
+        for (const c of near[a]) {
+          if (from.has(c) || (a === b.a1 && c === b.a2)) continue;
+          from.set(c, a);
+          next.push(c);
+        }
+      }
+      edge = next;
+    }
+    if (!from.has(b.a2)) continue;
+    const ring: number[] = [];
+    for (let a = b.a2; a !== -1; a = from.get(a)!) ring.push(a);
+    const key = [...ring].sort((x, y) => x - y).join(",");
+    if (!found.has(key)) found.set(key, ring);
+  }
+  const all = [...found.values()];
+  rings.set(m, all);
+  return all;
 }
 
-/** How wide the frame's edge is to the pointer, in pixels: on it, a drag moves the molecule. */
-export const FRAME_EDGE_PX = 7;
+/** How far within the outline a press still turns, in pixels, and how wide the rim beyond it is. */
+export const BODY_PX = 4;
+export const RIM_PX = 9;
 
-/** What a point of the page is to a frame: within it, on its edge, or outside. */
-export function partOfFrame(frame: Rect, x: number, y: number, zoom: number): "body" | "edge" | null {
-  const band = FRAME_EDGE_PX / zoom;
-  // (how far outside the frame the point is; negative within)
-  const dx = Math.max(frame.minX - x, x - frame.maxX);
-  const dy = Math.max(frame.minY - y, y - frame.maxY);
-  const outside = dx > 0 || dy > 0 ? Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) : Math.max(dx, dy);
-  if (Math.abs(outside) <= band) return "edge";
-  return outside < 0 ? "body" : null;
+function toSegment(px: number, py: number, a: Seen, b: Seen): number {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const t = Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / Math.max(dx * dx + dy * dy, 1e-12)));
+  return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy));
+}
+
+function inPolygon(px: number, py: number, pts: Seen[]): boolean {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], b = pts[j];
+    if (a.y > py !== b.y > py && px < ((b.x - a.x) * (py - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * What a point of the page is to a molecule in 3D, as it is seen: on it -
+ * its atoms, its bonds, within its rings, or just outside its outline - where
+ * a drag turns it; on the rim beyond, where a drag moves it; or neither.
+ */
+export function partAt(
+  m: Molecule3D,
+  s: Solid,
+  turn: Turn3D | undefined,
+  camera: THREE.Vector3,
+  x: number,
+  y: number,
+  zoom: number,
+  bondRadius: number,
+): "body" | "rim" | null {
+  const seen = seenOnPage(m, s, turn, camera);
+  // (quickly: nothing near enough to the molecule at all)
+  const reach = (BODY_PX + RIM_PX) / zoom;
+  let d = Infinity;
+  for (const a of seen) d = Math.min(d, Math.hypot(x - a.x, y - a.y) - a.r);
+  if (d > reach + 2 * NOMINAL_BOND_LENGTH) return null;
+  for (const b of m.bonds) {
+    const a1 = seen[b.a1], a2 = seen[b.a2];
+    const r = bondRadius * WORLD_PER_ANGSTROM * ((a1.r / s.radii[b.a1] + a2.r / s.radii[b.a2]) / 2);
+    d = Math.min(d, toSegment(x, y, a1, a2) - r);
+  }
+  if (d > 0 && ringsOf(m).some((ring) => inPolygon(x, y, ring.map((i) => seen[i])))) d = 0;
+  if (d <= BODY_PX / zoom) return "body";
+  if (d <= reach) return "rim";
+  return null;
 }
 
 /** Where molecules in 3D stand when placed in a row about a point, each clear of the next. */
