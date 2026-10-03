@@ -62,7 +62,7 @@ export default function AbbreviationSettings() {
           {editing === null && (
             <button
               onClick={() => setEditing("new")}
-              className="h-8 rounded-md border border-gh-line bg-white px-3 text-sm text-gh-black hover:bg-gh-base"
+              className="h-8 rounded-md border border-gh-line bg-white px-3 text-sm text-gh-black hover:bg-gh-base meno-fade-in"
             >
               Add a label
             </button>
@@ -72,7 +72,7 @@ export default function AbbreviationSettings() {
           A group on a canvas can be added too: select it, and choose <i>Save as abbreviation…</i> from its menu.
         </p>
         {editing === "new" && (
-          <div className="mt-3 rounded-lg border border-gh-line bg-white p-4 max-w-xl">
+          <div className="mt-3 rounded-lg border border-gh-line bg-white p-4 max-w-xl meno-fade-in">
             <AbbreviationForm
               initial={{}}
               saveText="Add"
@@ -85,14 +85,14 @@ export default function AbbreviationSettings() {
           </div>
         )}
         {mine.length === 0 && editing !== "new" && (
-          <p className="mt-3 rounded-lg border border-dashed border-gh-line px-4 py-6 text-center text-sm text-gh-gray">
+          <p className="mt-3 rounded-lg border border-dashed border-gh-line px-4 py-6 text-center text-sm text-gh-gray meno-fade-in">
             None yet.
           </p>
         )}
         <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
           {mine.map((a) =>
             editing === a ? (
-              <div key={a.label} className="col-span-full rounded-lg border border-gh-line bg-white p-4 max-w-xl">
+              <div key={a.label} className="col-span-full rounded-lg border border-gh-line bg-white p-4 max-w-xl meno-fade-in">
                 <AbbreviationForm
                   initial={a}
                   editing={a}

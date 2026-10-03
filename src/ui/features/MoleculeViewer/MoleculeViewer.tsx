@@ -8,6 +8,7 @@ import MotionAtom from "./components/MotionAtom";
 import MotionMeasure from "./components/MotionMeasure";
 import { CalculatorIcon } from "@heroicons/react/24/solid";
 import { AnimatePresence, motion } from "motion/react";
+import { CANVAS_RESIZE } from "../../theme/motion";
 import { v4 as uuidv4 } from "uuid";
 import type { Molecule } from "../../../utils/structureParsers";
 import clsx from "clsx";
@@ -148,6 +149,7 @@ export default function MoleculeViewer({
         className="w-full h-full"
         camera={{ position: [0, 0, 50], fov: 20 }}
         frameloop={paused ? "never" : "always"}
+        resize={CANVAS_RESIZE}
         dpr={[1, 1.75]}
         gl={{ powerPreference: "high-performance" }}
         onCreated={({ gl, invalidate }) => {

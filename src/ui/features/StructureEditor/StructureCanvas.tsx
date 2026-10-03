@@ -35,6 +35,8 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { CANVAS_RESIZE, DURATION, EASE, FADE, RISE } from "../../theme/motion";
 import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
@@ -400,8 +402,11 @@ function StructureCanvasContent({
         }}
       />
       {/* Import error */}
+      <AnimatePresence>
       {alert && (
-        <div
+        <motion.div
+          key="alert"
+          {...RISE}
           role="alert"
           className="absolute top-3 left-1/2 -translate-x-1/2 z-50 max-w-[90%] flex items-start gap-2 rounded-md border border-gh-line bg-white/95 shadow-sm px-3 py-2 text-xs text-gh-black"
         >
@@ -418,15 +423,16 @@ function StructureCanvasContent({
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
       {/* Fit / Open buttons */}
       <div className="absolute left-3 bottom-3 z-50 flex gap-2">
         <button
           aria-label="Fit to content"
           title="Fit to content"
           onClick={() => requestFit()}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
+          className="h-9 w-9 rounded-full transition duration-150 ease-meno border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
         >
           <ArrowsPointingInIcon className="h-5 w-5 text-gh-black" />
         </button>
@@ -437,7 +443,7 @@ function StructureCanvasContent({
             e.stopPropagation();
             openFilePicker();
           }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
+          className="h-9 w-9 rounded-full transition duration-150 ease-meno border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
         >
           <FolderOpenIcon className="h-5 w-5 text-gh-black" />
         </button>
@@ -448,7 +454,7 @@ function StructureCanvasContent({
             e.stopPropagation();
             void (e.shiftKey ? saveAs() : save());
           }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
+          className="h-9 w-9 rounded-full transition duration-150 ease-meno border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
         >
           <ArrowDownTrayIcon className="h-5 w-5 text-gh-black" />
         </button>
@@ -459,7 +465,7 @@ function StructureCanvasContent({
             e.stopPropagation();
             void files.exportSvg();
           }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
+          className="h-9 w-9 rounded-full transition duration-150 ease-meno border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
         >
           <PhotoIcon className="h-5 w-5 text-gh-black" />
         </button>
@@ -476,16 +482,18 @@ function StructureCanvasContent({
             toggleStyle();
           }}
           className={
-            "relative h-9 w-9 rounded-full border shadow-sm flex items-center justify-center " +
+            "relative h-9 w-9 rounded-full transition duration-150 ease-meno border shadow-sm flex items-center justify-center " +
             (styleOpen
               ? "border-accel-base bg-accel-lightbase"
               : "border-gh-line bg-white/90 hover:bg-gray-100")
           }
         >
           <SwatchIcon className="h-5 w-5 text-gh-black" />
-          {ownStyle && (
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-accel-base" />
-          )}
+          <AnimatePresence>
+            {ownStyle && (
+              <motion.span key="own" {...FADE} className="absolute top-1 right-1 h-2 w-2 rounded-full bg-accel-base" />
+            )}
+          </AnimatePresence>
         </button>
         <button
           aria-label="SMILES"
@@ -496,7 +504,7 @@ function StructureCanvasContent({
             setSmilesOpen((v) => !v);
           }}
           className={
-            "h-9 w-9 rounded-full border shadow-sm flex items-center justify-center " +
+            "h-9 w-9 rounded-full transition duration-150 ease-meno border shadow-sm flex items-center justify-center " +
             (smilesOpen
               ? "border-accel-base bg-accel-lightbase"
               : "border-gh-line bg-white/90 hover:bg-gray-100")
@@ -512,7 +520,7 @@ function StructureCanvasContent({
             e.stopPropagation();
             runCleanUp(null);
           }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center disabled:opacity-40 disabled:hover:bg-white/90"
+          className="h-9 w-9 rounded-full transition duration-150 ease-meno border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center disabled:opacity-40 disabled:hover:bg-white/90"
         >
           <SparklesIcon className="h-5 w-5 text-gh-black" />
         </button>
@@ -525,7 +533,7 @@ function StructureCanvasContent({
             toggleStereoLabels();
           }}
           className={
-            "h-9 w-9 rounded-full border shadow-sm flex items-center justify-center text-[11px] font-semibold text-gh-black " +
+            "h-9 w-9 rounded-full transition duration-150 ease-meno border shadow-sm flex items-center justify-center text-[11px] font-semibold text-gh-black " +
             (chemistry.stereoLabels
               ? "border-accel-base bg-accel-lightbase"
               : "border-gh-line bg-white/90 hover:bg-gray-100")
@@ -536,20 +544,30 @@ function StructureCanvasContent({
           </span>
         </button>
       </div>
-      {active &&
-        (chem.state === "setting-up" || chem.state === "starting") && (
-          <div
+      <AnimatePresence>
+        {active && (chem.state === "setting-up" || chem.state === "starting") && (
+          <motion.div
+            key="rdkit"
+            {...RISE}
+            layout
             role="status"
             className="absolute right-3 bottom-3 z-50 rounded-full border border-gh-line bg-white/95 shadow-sm px-3 py-1.5 text-xs text-gh-gray"
           >
-            {chem.state === "setting-up"
-              ? "Setting up RDKit…"
-              : "Starting RDKit…"}
-          </div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span key={chem.state} {...FADE} className="block">
+                {chem.state === "setting-up" ? "Setting up RDKit…" : "Starting RDKit…"}
+              </motion.span>
+            </AnimatePresence>
+          </motion.div>
         )}
-      {smilesOpen && <SmilesPanel onClose={() => setSmilesOpen(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {smilesOpen && <SmilesPanel key="smiles" onClose={() => setSmilesOpen(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
       {menu && (
         <PartMenu
+          key={`${menu.x},${menu.y}`}
           target={menu}
           onClose={closeMenu}
           onDelete={() => {
@@ -602,6 +620,7 @@ function StructureCanvasContent({
           }}
         />
       )}
+      </AnimatePresence>
       <Canvas
         key={tabId}
         orthographic
@@ -610,6 +629,8 @@ function StructureCanvasContent({
         // layers request frames (see PanZoom2D and the preview components)
         // instead of redrawing continuously while nothing changes.
         frameloop={active ? "demand" : "never"}
+        // (following its box as the panel beside it slides)
+        resize={CANVAS_RESIZE}
         dpr={CANVAS_DPR}
         onDoubleClick={handleDoubleClick}
         gl={{
@@ -705,22 +726,33 @@ export default function StructureCanvas({
           openArrowStyle={(id) => setPanel({ arrow: id })}
           openSaveAbbreviation={(ids, smiles) => setPanel({ abbreviation: { ids, smiles } })}
         />
-        {styleOpen && <DocumentStylePanel onClose={() => setPanel(null)} />}
-        {panel && panel !== "style" && "arrow" in panel && (
-          <ArrowStylePanel
-            key={panel.arrow}
-            arrowId={panel.arrow}
-            onClose={() => setPanel(null)}
-          />
-        )}
-        {panel && panel !== "style" && "abbreviation" in panel && (
-          <SaveAbbreviationPanel
-            key={panel.abbreviation.ids.join(",")}
-            ids={panel.abbreviation.ids}
-            smiles={panel.abbreviation.smiles}
-            onClose={() => setPanel(null)}
-          />
-        )}
+        {/* The panel beside the canvas slides open and shut, the canvas giving
+            way as it does; one going as another comes takes as long, so the
+            canvas keeps its width. */}
+        <AnimatePresence initial={false}>
+          {panel && (
+            <motion.div
+              key={panel === "style" ? "style" : "arrow" in panel ? `arrow-${panel.arrow}` : `abbreviation-${panel.abbreviation.ids.join(",")}`}
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "auto", opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: DURATION.move, ease: EASE }}
+              className="shrink-0 h-full overflow-hidden"
+            >
+              {panel === "style" ? (
+                <DocumentStylePanel onClose={() => setPanel(null)} />
+              ) : "arrow" in panel ? (
+                <ArrowStylePanel arrowId={panel.arrow} onClose={() => setPanel(null)} />
+              ) : (
+                <SaveAbbreviationPanel
+                  ids={panel.abbreviation.ids}
+                  smiles={panel.abbreviation.smiles}
+                  onClose={() => setPanel(null)}
+                />
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </EditorProvider>
   );

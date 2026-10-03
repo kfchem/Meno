@@ -76,6 +76,35 @@
   --color-gh-base: rgb(246, 248, 250);
   --color-gh-line: rgb(209, 217, 224);
   --color-gh-gray: rgb(89, 99, 110);
+
+  /* How things move (src/ui/theme/motion.ts): the easing of every transition. */
+  --ease-meno: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Coming into view: a tab's body as the tab is chosen, a settings section,
+   a view taking a tab's place (src/ui/theme/motion.ts, DURATION.quick). */
+@keyframes meno-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.meno-fade-in {
+  animation: meno-fade-in 120ms var(--ease-meno) both;
+}
+/* Going out of view, kept in it while it does (src/ui/theme/presence.ts). */
+@keyframes meno-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.meno-fade-out {
+  animation: meno-fade-out 120ms var(--ease-meno) both;
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -99,6 +128,16 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @layer base {
+  /* Every button's colours ease as it is hovered, pressed or chosen, rather
+     than jump (src/ui/theme/motion.ts). Opacity and movement are left to
+     what animates them. */
+  button,
+  [role="menuitem"],
+  [role="tab"] {
+    transition-property: color, background-color, border-color, box-shadow;
+    transition-duration: 150ms;
+    transition-timing-function: var(--ease-meno);
+  }
   .rf-no-cursor
     :is(
       .react-flow__pane,
