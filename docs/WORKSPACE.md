@@ -181,8 +181,7 @@ Taken on 2026-10-03:
   | Under the pointer | Left drag | Right or middle drag | Wheel, pinch | Click |
   |---|---|---|---|---|
   | A 2D drawing | as today | moves the view | zooms the page | as today |
-  | A 3D molecule | turns it about its centre, with inertia | moves the view | zooms the page | on an atom, chooses it; elsewhere, selects the molecule |
-  | Its rim | moves it on the page | moves the view | zooms the page | selects the molecule |
+  | A 3D molecule | turns it about its centre, with inertia; selected, moves it and all that is selected with it | moves the view | zooms the page | on an atom or a bond, chooses it |
   | Empty page | moves the view | moves the view | zooms the page | chooses nothing |
 
   - **A 3D molecule's reach** follows its shape: its atoms, its bonds and
@@ -192,14 +191,26 @@ Taken on 2026-10-03:
     the pointer swells a little on a spring. No frame: the maintainer
     asked for a highlight along the outline, in a modern way, rather than
     a rectangle round it.
-  - **The rim just outside its outline** moves the molecule on the page,
-    its outline lighting up more as the pointer reaches it.
+  - **Held still, a press selects the molecule** (0.4 s, as in 2D), the
+    selection's outline spreading out from the atom pressed on as it is
+    held; a drag from there moves it. A molecule selected moves when
+    dragged, with all that is selected; one not selected turns. (Agreed
+    on 2026-10-03, in place of a rim outside the outline that moved it:
+    the maintainer expected to select and drag by reflex.)
   - **A structure rising out of its drawing** ends beside it, not on top,
     so that the drawing can still be edited.
   - **A drawing and its 3D structure.** Turning the 3D structure leaves
     the drawing as drawn. Hovering an atom in one lights the same atom in
     the other. *Turn like the drawing* is in the menu.
-  - **Several molecules chosen** turn together, each about its own centre.
+  - **The selection's handle turns molecules in 3D** (agreed 2026-10-03):
+    - selected alone, as one body about their common centre, in 3D - as a
+      drag on one turns it - so that molecules placed together, a complex
+      say, stay as they are to one another. That moves them, so it is one
+      undo step, and the undo puts their turns back too. Afterwards each
+      stands as high as the turn left it, the whole resting on the page;
+    - selected with a drawing, everything in the page's plane, the
+      molecules carried round and turned with it;
+    - with Shift, each molecule about its own centre, the drawing staying.
 - **What a 3D molecule looks like** starts from the 3D viewer's look:
   - atom size and colour, material and light, and the turn's inertia,
     near enough;
@@ -209,18 +220,20 @@ Taken on 2026-10-03:
 Taken while stage 1 was built, on 2026-10-03:
 
 - **Choosing and selecting.**
-  - A click on an atom of a 3D molecule chooses it, or lets it go. Atoms
-    are chosen in order, up to four, as in the old viewer; one in another
-    molecule starts afresh.
-  - A click elsewhere on the molecule, or on its rim, selects the molecule
-    whole. With Ctrl (⌘ on a Mac) it is taken into the selection or out
-    of it.
+  - A click on an atom or a bond of a 3D molecule chooses it, or lets it
+    go. Atoms are chosen in order, up to four, as in the old viewer, and
+    bonds up to three; one in another molecule starts afresh. What is
+    chosen makes a measurement: atoms in the order chosen, or along the
+    bonds - one bond's length, two bonds' angle, three in a row their
+    torsion angle - an atom besides going on from an end it is bonded to.
+  - A long press selects the molecule whole. A click with Ctrl (⌘ on a
+    Mac) takes it into the selection or out of it.
   - A box, a lasso or select all takes 3D molecules by their centres,
     with the drawing.
   - Delete, Cut, Copy and Escape include them. A drag on any of what is
     selected moves all of it, drawing and molecules, as one step.
 - **The right-click menu on a 3D molecule:**
-  - a measurement of its chosen atoms (two, three or four);
+  - a measurement of what is chosen of it (two, three or four atoms);
   - ball and stick or space-filling, for that molecule;
   - reset orientation;
   - cut, copy and delete.

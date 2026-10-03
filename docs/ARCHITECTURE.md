@@ -182,9 +182,13 @@ What is left before the editor counts as finished, and in what order, is in
     stick or space-filling), its measurements, and where on the page its
     centre stands. How each is turned and which frame it shows are the
     store's (`turns3d`, `frames3d`), not the document's, and so are what
-    is selected of them (`sel3d`) and the atoms chosen in one (`chosen3d`).
+    is selected of them (`sel3d`) and the atoms and bonds chosen in one
+    (`chosen3d`). A turn of several as one body moves them, so it is the
+    document's too: `store/turnJournal.ts` keeps the turns with that undo
+    step.
   - How they are drawn: a molecule stands as high as it reaches, so no
-    turn takes it behind the page. It is instanced, lit, drawn after the
+    turn takes it behind the page - or where a turn of several as one body
+    put it (`at.z`). It is instanced, lit, drawn after the
     page and depth-tested; double and triple bonds are two and three
     lines. Another frame, another look, or a place set by an undo is gone
     over to, not jumped to. Its look's defaults are a style
@@ -192,9 +196,11 @@ What is left before the editor counts as finished, and in what order, is in
     as a drawn one.
   - The pointer: hovered, its outline lights up faintly and the atom under
     the pointer swells on a spring. A drag on it - its atoms, bonds or
-    within its rings - turns it, with inertia; a drag on the rim just
-    outside its outline moves it. A click chooses an atom, or selects the
-    molecule; what is selected with it turns or moves with it.
+    within its rings - turns it, with inertia; on one selected, it moves
+    it and all that is selected. A long press selects it, the outline
+    spreading from the atom pressed on; a click chooses an atom or a
+    bond. The selection's handle (`Selection2D`) turns molecules alone as
+    one body in 3D, and with a drawing in its plane.
   - The rest: measurements, made from its menu, are measured afresh in
     whatever frame is shown. Its frames are a chip under it that opens to
     a slider, with each frame's energy as a bar.
