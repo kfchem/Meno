@@ -28,8 +28,6 @@ import {
 import "@xyflow/react/dist/style.css";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { StructureCanvas } from "../StructureEditor";
-import MoleculeViewer from "../MoleculeViewer/MoleculeViewer";
-import { Molecule, parseXYZ } from "../../../utils/structureParsers";
 import testXyz from "../../../samples/cholesterol.xyz?raw";
 
 /**
@@ -99,8 +97,9 @@ function Molecule2D({ id, data }: NodeProps<Molecule2DNode>) {
   );
 }
 
-type Molecule3DNode = Node<{ molecules: Molecule[] | Molecule[][] }>;
+type Molecule3DNode = Node<{ payload: string; filename: string }>;
 
+/** A structure in 3D, on a canvas of its own: the workspace's canvas, as a tab has it. */
 function Molecule3D({ id, data }: NodeProps<Molecule3DNode>) {
   const active = useContext(NodeActiveContext);
   return (
@@ -121,13 +120,14 @@ function Molecule3D({ id, data }: NodeProps<Molecule3DNode>) {
           <span className="text-xs text-gh-gray">3D view</span>
           <span className="text-[10px] text-gh-gray/70">Viewer</span>
         </div>
-        <MoleculeViewer
-          initialMolecules={data.molecules}
-          tabId={id}
-          showAtomIndex={false}
-          paused={!active}
-          className="cursor-default nowheel nopan nodrag"
-        />
+        {/* (its own gestures, not the graph's: no drag, pan or zoom of the graph from it) */}
+        <div
+          className="flex-1 min-h-0 w-full relative cursor-default nowheel nopan nodrag bg-white"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+        >
+          <StructureCanvas tabId={id} active={active} initialFilename={data.filename} initialPayload={data.payload} />
+        </div>
       </div>
     </>
   );
@@ -847,7 +847,9 @@ export default function GraphEditor({
       id: "mol3d",
       type: "molecule3D",
       position: { x: 1680, y: 0 },
-      data: { molecules: parseXYZ(testXyz) },
+      data: { payload: testXyz, filename: "cholesterol.xyz" },
+      // (a concrete size, as the sketch has, so that its canvas fills it)
+      style: { width: 380, height: 320 },
     },
   ];
 

@@ -9,7 +9,6 @@ export type TabMeta = {
 
 export type TabKind =
   | "loader"
-  | "3d"
   | "2d"
   | "text"
   | "settings"
