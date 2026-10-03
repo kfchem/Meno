@@ -51,3 +51,11 @@ export const RISE = {
   exit: { opacity: 0, y: 4, scale: 0.985 },
   transition: { duration: DURATION.base, ease: EASE },
 } as const;
+
+/**
+ * A canvas follows its box frame by frame as the box changes - beside a panel
+ * sliding open, say. (React Three Fiber's own measuring waits for the box to
+ * be still for 50 ms, so the canvas kept its old size all the way and then
+ * jumped.)
+ */
+export const CANVAS_RESIZE = { debounce: 0 } as const;

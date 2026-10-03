@@ -36,7 +36,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { DURATION, EASE, FADE, RISE } from "../../theme/motion";
+import { CANVAS_RESIZE, DURATION, EASE, FADE, RISE } from "../../theme/motion";
 import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
@@ -629,6 +629,8 @@ function StructureCanvasContent({
         // layers request frames (see PanZoom2D and the preview components)
         // instead of redrawing continuously while nothing changes.
         frameloop={active ? "demand" : "never"}
+        // (following its box as the panel beside it slides)
+        resize={CANVAS_RESIZE}
         dpr={CANVAS_DPR}
         onDoubleClick={handleDoubleClick}
         gl={{
