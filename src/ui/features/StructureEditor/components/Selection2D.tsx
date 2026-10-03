@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { pageAt } from "../utils/page";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import { ALPHA, COLORS } from "../../../theme/colors";
@@ -9,7 +9,7 @@ import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
-import { heightOf, lookOf, solidOf, standingHeight, turnedInPlane, turnedTogether, type Turning3D } from "../utils/molecule3d";
+import { lookOf, poseOf, seenBounds, solidOf, standingHeight, turnedInPlane, turnedTogether, type Turning3D } from "../utils/molecule3d";
 import { PAGE_DISTANCE } from "../utils/page";
 import type { Model, Molecule3D, Turn3D } from "../store/types";
 
@@ -44,14 +44,16 @@ const turningOf =
 
 /**
  * How far the selection reaches on the page, the drawing's atoms and the
- * molecules in 3D - each as far as it reaches any way it is turned, as seen
- * from straight above it - and its middle; null with nothing selected.
+ * molecules in 3D - each as it is turned and shown now, seen from straight
+ * above it - and its middle; null with nothing selected.
  */
 function selectionExtent(
   model: Model,
   atoms: ReadonlySet<number>,
   molecules: readonly Molecule3D[],
   sel3d: ReadonlySet<number>,
+  turns: Record<number, Turn3D>,
+  frames: Record<number, number>,
 ): { mid: { x: number; y: number }; top: number } | null {
   const xs: number[] = [];
   const ys: number[] = [];
@@ -62,12 +64,9 @@ function selectionExtent(
   }
   for (const m of molecules) {
     if (!sel3d.has(m.id)) continue;
-    const solid = solidOf(m, STYLE_3D);
-    const look = lookOf(m, STYLE_3D);
-    const k = PAGE_DISTANCE / Math.max(PAGE_DISTANCE - heightOf(m, solid, look), 1);
-    const r = solid.reach[look] * k;
-    xs.push(m.at.x - r, m.at.x + r);
-    ys.push(m.at.y - r, m.at.y + r);
+    const b = seenBounds(poseOf(m, solidOf(m, STYLE_3D), lookOf(m, STYLE_3D), turns[m.id], frames[m.id]), PAGE_DISTANCE);
+    xs.push(b.minX, b.maxX);
+    ys.push(b.minY, b.maxY);
   }
   if (!xs.length) return null;
   // (the drawing alone: its atoms' middle, as ever)
@@ -93,6 +92,10 @@ export default function Selection2D() {
   const { model, sel, boxSelect } = useEditor();
   const sel3d = useEditor((s) => s.sel3d);
   const molecules3d = useEditor((s) => s.molecules3d);
+  const turns3d = useEditor((s) => s.turns3d);
+  const frames3d = useEditor((s) => s.frames3d);
+  // where the handle stood when a turn in 3D took it: it stays there till let go
+  const [held, setHeld] = useState<{ mid: { x: number; y: number }; top: number } | null>(null);
   const store = useEditorStore();
   const { camera, gl, invalidate } = useThree();
   const handle = useRef<THREE.Group>(null!);
@@ -177,7 +180,10 @@ export default function Selection2D() {
   }, [gl, camera, store, invalidate]);
 
   // --- turning -------------------------------------------------------------
-  const extent = useMemo(() => selectionExtent(model, sel.atoms, molecules3d, sel3d), [model, sel.atoms, molecules3d, sel3d]);
+  const extent = useMemo(
+    () => held ?? selectionExtent(model, sel.atoms, molecules3d, sel3d, turns3d, frames3d),
+    [held, model, sel.atoms, molecules3d, sel3d, turns3d, frames3d],
+  );
   const turnable = extent != null && (sel.atoms.size > 1 || sel3d.size > 0);
   const handleAt = turnable ? { x: extent!.mid.x, y: extent!.top + NOMINAL_BOND_LENGTH * HANDLE_ABOVE } : null;
 
@@ -189,7 +195,7 @@ export default function Selection2D() {
       turnInSpace(e, molecules, e.shiftKey);
       return;
     }
-    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d)?.mid;
+    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d)?.mid;
     if (!about) return;
     const from = st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y }));
     const carried = molecules.map(turningOf(st.turns3d));
@@ -248,6 +254,7 @@ export default function Selection2D() {
     const from = molecules.map(turningOf(st.turns3d));
     const gesture = `turn-3d-${performance.now()}`;
     const q = new THREE.Quaternion();
+    setHeld(selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d));
     let last = { x: e.clientX, y: e.clientY };
     let frame: number | null = null;
     st.beginPanHold(e.pointerId);
@@ -281,6 +288,7 @@ export default function Selection2D() {
       }
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp, true);
+      setHeld(null);
       const s = store.getState();
       s.endPanHold(ev.pointerId);
       s.suppressDoubleClick(DOUBLE_CLICK_MS);
