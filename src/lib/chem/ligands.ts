@@ -428,18 +428,23 @@ export const COUNTER_IONS: Record<string, { smiles: string; name: string }> = {
   },
 };
 
+/** One of COUNTER_IONS as the structure it is, its rings Kekulé; null for any other label. */
+export function counterIonStructure(label: string): GroupStructure | null {
+  if (!Object.prototype.hasOwnProperty.call(COUNTER_IONS, label)) return null;
+  const read = readSmiles(COUNTER_IONS[label].smiles);
+  const orders = kekuleOrders(read.atoms, read.bonds);
+  const atoms = read.atoms.map(({ aromatic: _a, ...a }) => a);
+  return { atoms, bonds: read.bonds.map((b, i) => ({ ...b, order: orders[i] })), attach: [] };
+}
+
 /**
  * A counter-anion written after a complex's brackets, of one charge: one
  * of COUNTER_IONS, or one ./formula reads - BF4, PF6, SbF6, AsF6, BPh4,
  * ClO4 - named as it is written. Null for any other text.
  */
 function counterIon(t: string, groupOf: (label: string) => GroupStructure | null): { ion: GroupStructure; name: string } | null {
-  if (Object.prototype.hasOwnProperty.call(COUNTER_IONS, t)) {
-    const read = readSmiles(COUNTER_IONS[t].smiles);
-    const orders = kekuleOrders(read.atoms, read.bonds);
-    const atoms = read.atoms.map(({ aromatic: _a, ...a }) => a);
-    return { ion: { atoms, bonds: read.bonds.map((b, i) => ({ ...b, order: orders[i] })), attach: [] }, name: COUNTER_IONS[t].name };
-  }
+  const listed = counterIonStructure(t);
+  if (listed) return { ion: listed, name: COUNTER_IONS[t].name };
   const parts = partsOf(t, longestGroup(groupOf), groupOf);
   const ion = parts && anionOf(parts, 1);
   return ion ? { ion, name: `${t}⁻` } : null;
