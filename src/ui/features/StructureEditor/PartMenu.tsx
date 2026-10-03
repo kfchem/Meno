@@ -62,6 +62,9 @@ export type MenuMolecule3D = {
   onLook: (look: "balls" | "space") => void;
   /** Turned back to face as its file has it. */
   onResetTurn: () => void;
+  /** It alone, cut or copied. */
+  onCut: () => void;
+  onCopy: () => void;
 };
 
 /**
@@ -176,8 +179,13 @@ export default function PartMenu({
   const items: Item[] =
     target.kind === "measure3d"
       ? [{ name: "Delete measurement", keys: deleteKey, run: onDelete }]
-      : target.kind === "molecule3d" && target.selection !== "here"
-      ? [...molecule, { name: "Delete molecule", keys: keys ? deleteKey : "", run: onDelete, divider: true }]
+      : target.kind === "molecule3d" && target.selection !== "here" && molecule3d
+      ? [
+          ...molecule,
+          { name: "Cut", keys: keys ? shortcut("X") : "", run: molecule3d.onCut, divider: true },
+          { name: "Copy", keys: keys ? shortcut("C") : "", run: molecule3d.onCopy },
+          { name: "Delete molecule", keys: keys ? deleteKey : "", run: onDelete },
+        ]
       : target.kind === "arrow"
       ? [
           { name: "Arrow style…", keys: "", run: onArrowStyle },

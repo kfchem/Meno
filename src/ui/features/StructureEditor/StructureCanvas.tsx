@@ -287,6 +287,8 @@ function StructureCanvasContent({
         onMeasure: () => store.getState().measureChosen3d(),
         onLook: (look) => store.getState().setLook3d(menuMolecule.id, look),
         onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
+        onCut: () => void clip.cut(menuMolecule.id),
+        onCopy: () => void clip.copy(menuMolecule.id),
       }
     : undefined;
   useEffect(() => setMenu(null), [model]); // what it was about may be gone

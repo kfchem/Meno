@@ -6,7 +6,9 @@ import {
   type EditorModel,
 } from "../../../../utils/importers";
 import { bondChem, chemistry, type Molecule } from "../../../../lib/chem/molecule";
-import type { Drawn, Model, Molecule3D } from "../store/types";
+import type { Carried3D, Drawn, Model, Molecule3D } from "../store/types";
+import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { lookOf, rowAbout, solidOf } from "./molecule3d";
 import { energiesOf } from "../../../../lib/calc/readers";
 
 /** Extensions the file pickers offer that have no parser yet. */
@@ -191,5 +193,13 @@ export function drawnOf(result: ProcessedFileResult): Drawn {
         }
       : {}),
     ...(result.pluses?.length ? { pluses: result.pluses.map((p, i) => ({ id: i + 1, ...p })) } : {}),
+    ...(result.molecules3d?.length ? { molecules3d: inRow(result.molecules3d) } : {}),
   };
+}
+
+/** A file's molecules in 3D, standing in a row about the origin, each clear of the next. */
+function inRow(ms: Omit<Molecule3D, "id" | "at">[]): Carried3D[] {
+  const placed = ms.map((m) => ({ ...m, id: 0, at: { x: 0, y: 0 } }));
+  const at = rowAbout({ x: 0, y: 0 }, placed.map((m) => solidOf(m, STYLE_3D).reach[lookOf(m, STYLE_3D)]));
+  return ms.map((m, i) => ({ ...m, at: at[i] }));
 }

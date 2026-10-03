@@ -309,3 +309,31 @@ export function rowAfter(left: number, y: number, reaches: number[]): { x: numbe
   const width = reaches.reduce((w, r) => w + 2 * r, 0) + NOMINAL_BOND_LENGTH * Math.max(0, reaches.length - 1);
   return rowAbout({ x: left + width / 2, y }, reaches);
 }
+
+/**
+ * A molecule in 3D as it is seen, for another program: the frame it shows,
+ * turned as it is, about its centre - placed where it stands on the page,
+ * `placed`, so that several keep their places side by side - in ångströms.
+ */
+export function asSeen(
+  m: Pick<Molecule3D, "atoms" | "frames" | "at">,
+  turn?: Turn3D,
+  frame?: number,
+  placed = false,
+): { el: string; x: number; y: number; z: number; charge?: number; isotope?: number }[] {
+  const n = m.atoms.length;
+  const frames = [m.atoms.flatMap((a) => [a.x, a.y, a.z]), ...(m.frames ?? []).filter((f) => f.length === 3 * n)];
+  const xyz = frames[Math.min(Math.max(0, Math.round(frame ?? 0)), frames.length - 1)];
+  const local = placesOf(xyz, n);
+  const q = turn ? new THREE.Quaternion(...turn) : new THREE.Quaternion();
+  const k = WORLD_PER_ANGSTROM;
+  const v = new THREE.Vector3();
+  return m.atoms.map((a, i) => {
+    v.set(local[3 * i], local[3 * i + 1], local[3 * i + 2]).applyQuaternion(q).divideScalar(k);
+    if (placed) {
+      v.x += m.at.x / k;
+      v.y += m.at.y / k;
+    }
+    return { el: a.el, x: v.x, y: v.y, z: v.z, ...(a.charge ? { charge: a.charge } : {}), ...(a.isotope ? { isotope: a.isotope } : {}) };
+  });
+}

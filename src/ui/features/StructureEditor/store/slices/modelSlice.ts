@@ -269,12 +269,27 @@ export const createModelSlice = (
   },
 
   pasteModel: (next: Drawn) => {
-    if (!next.atoms.length) return;
+    const carried = next.molecules3d ?? [];
+    if (!next.atoms.length && !carried.length) return;
     const start = doc.getState().nextId;
+    const start3d = doc.getState().nextMolecule3dId ?? 1;
     if (!doc.edit("paste", (d) => ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(next)))) return;
+    // the molecules in 3D pasted, numbered from there on in order: selected
+    // with the rest, turned and showing the frame they were copied in
+    const ids = carried.map((_, i) => start3d + i);
+    const turns3d = { ...get().turns3d };
+    const frames3d = { ...get().frames3d };
+    carried.forEach((m, i) => {
+      if (m.turn) turns3d[ids[i]] = m.turn;
+      if (m.frame) frames3d[ids[i]] = m.frame;
+    });
     set((prev: EditorState) => ({
       ...prev,
       sel: added(start, doc.getState().model),
+      sel3d: new Set(ids),
+      chosen3d: null,
+      turns3d,
+      frames3d,
       selAnchor: null,
       hovered: { atomId: null, bondId: null },
     }));
@@ -329,14 +344,17 @@ export const createModelSlice = (
     doc.edit("delete plus", (d) => ops.removePlus(d, id));
   },
 
-  deleteDrawn: (part: Drawn) => {
+  deleteDrawn: (part: Drawn, molecules3d: number[] = []) => {
     const edited = doc.edit("cut", (d) =>
-      ops.deleteDrawn(
-        d,
-        new Set(part.atoms.map((a) => a.id)),
-        new Set(part.bonds.map((b) => b.id)),
-        new Set((part.arrows ?? []).map((a) => a.id)),
-        new Set((part.pluses ?? []).map((p) => p.id)),
+      ops.removeMolecules3d(
+        ops.deleteDrawn(
+          d,
+          new Set(part.atoms.map((a) => a.id)),
+          new Set(part.bonds.map((b) => b.id)),
+          new Set((part.arrows ?? []).map((a) => a.id)),
+          new Set((part.pluses ?? []).map((p) => p.id)),
+        ),
+        molecules3d,
       ),
     );
     if (edited) forgetDeleted(set);

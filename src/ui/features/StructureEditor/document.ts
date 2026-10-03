@@ -650,6 +650,8 @@ export function schemeOf(part: Drawn): ImportedScheme {
   return {
     arrows: (part.arrows ?? []).map(({ id: _id, ...a }) => a),
     pluses: (part.pluses ?? []).map(({ id: _id, ...p }) => p),
+    // (how one was turned, and its frame, are the view's: not the document's)
+    molecules3d: (part.molecules3d ?? []).map(({ turn: _turn, frame: _frame, ...m }) => m),
   };
 }
 

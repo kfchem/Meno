@@ -90,7 +90,12 @@ export type Turn3D = [number, number, number, number];
  * Structures with the arrows and "+" signs drawn among them: what a copy
  * takes, a picture shows and a paste brings.
  */
-export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[] };
+/**
+ * A molecule in 3D as a copy carries it: as the document has it, and how it
+ * was turned and which frame it showed, so that a paste shows it the same.
+ */
+export type Carried3D = Omit<Molecule3D, "id"> & { turn?: Turn3D; frame?: number };
+export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[]; molecules3d?: Carried3D[] };
 
 export type EditorState = {
   model: Model;
@@ -331,7 +336,8 @@ export type EditorState = {
   movePlus: (id: number, x: number, y: number, gesture?: string) => void;
   removePlus: (id: number) => void;
   /** What a cut takes, gone as one undo step: atoms, bonds, arrows and pluses. */
-  deleteDrawn: (part: Drawn) => void;
+  /** What a cut took, gone: the drawn part, and the molecules in 3D by id, in one step. */
+  deleteDrawn: (part: Drawn, molecules3d?: number[]) => void;
   /** An abbreviation drawn out as the atoms it stands for, as one undo step. */
   expandAbbreviation: (id: number) => void;
   /** A group of atoms shown as one atom labelled `label`, holding them, as one undo step. */
