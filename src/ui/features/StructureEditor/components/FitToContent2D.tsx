@@ -65,32 +65,40 @@ export default function FitToContent2D({
     const bounds = atoms.length
       ? layoutMolecule(la, lb, opts, cam.zoom || 1).bounds
       : { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
-    let minX = bounds.min.x;
-    let minY = bounds.min.y;
-    let maxX = bounds.max.x;
-    let maxY = bounds.max.y;
-    // and the molecules in 3D, as each is turned and shown now
+    // and the molecules in 3D, as each is turned and shown now, seen from
+    // where the camera stands: first from straight above each, then - as
+    // one off to the side is seen further out, in perspective - from where
+    // that first fit put the camera
     const { turns3d, frames3d } = store.getState();
-    for (const m of molecules3d) {
-      const pose = poseOf(m, solidOf(m, STYLE_3D), lookOf(m, STYLE_3D), turns3d[m.id], frames3d[m.id]);
-      const b = seenBounds(pose, PAGE_DISTANCE);
-      minX = Math.min(minX, b.minX);
-      maxX = Math.max(maxX, b.maxX);
-      minY = Math.min(minY, b.minY);
-      maxY = Math.max(maxY, b.maxY);
-    }
-    if (!isFinite(minX)) return;
-    const spanX = Math.max(maxX - minX, 1e-3);
-    const spanY = Math.max(maxY - minY, 1e-3);
+    const poses = molecules3d.map((m) =>
+      poseOf(m, solidOf(m, STYLE_3D), lookOf(m, STYLE_3D), turns3d[m.id], frames3d[m.id]),
+    );
     const w = size.width;
     const h = size.height;
     const pad = Math.max(0, Math.min(paddingPx, Math.min(w, h) * 0.45));
-    const zx = (w - 2 * pad) / spanX;
-    const zy = (h - 2 * pad) / spanY;
-    const fit = Math.max(0.01, Math.min(zx, zy, maxFitZoom(style)));
+    const fitFrom = (eye?: { x: number; y: number }) => {
+      let minX = bounds.min.x;
+      let minY = bounds.min.y;
+      let maxX = bounds.max.x;
+      let maxY = bounds.max.y;
+      for (const pose of poses) {
+        const b = seenBounds(pose, PAGE_DISTANCE, eye);
+        minX = Math.min(minX, b.minX);
+        maxX = Math.max(maxX, b.maxX);
+        minY = Math.min(minY, b.minY);
+        maxY = Math.max(maxY, b.maxY);
+      }
+      const zx = (w - 2 * pad) / Math.max(maxX - minX, 1e-3);
+      const zy = (h - 2 * pad) / Math.max(maxY - minY, 1e-3);
+      return { zoom: Math.max(0.01, Math.min(zx, zy, maxFitZoom(style))), cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+    };
+    let seen = fitFrom();
+    if (!isFinite(seen.cx)) return;
+    if (poses.length) seen = fitFrom({ x: seen.cx, y: seen.cy });
+    const fit = seen.zoom;
     const z = first ? Math.min(fit, cam.zoom || fit) : fit;
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
+    const cx = seen.cx;
+    const cy = seen.cy;
     cam.zoom = z;
     cam.updateProjectionMatrix();
     cam.position.set(cx, cy, cam.position.z);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
 import type { Molecule3D } from "../store/types";
-import { atomAt, bondLines, frameOf, partAt, poseOf, ringsOf, rowAbout, seenOnPage, solidOf, standingHeight, WORLD_PER_ANGSTROM } from "./molecule3d";
+import { atomAt, bondLines, frameOf, partAt, poseOf, ringsOf, rowAbout, seenBounds, seenOnPage, solidOf, standingHeight, WORLD_PER_ANGSTROM } from "./molecule3d";
 
 /** Two carbons 1.5 Å apart along x, standing at `at`. */
 const ethane = (at = { x: 0, y: 0 }): Molecule3D => ({
@@ -46,6 +46,16 @@ describe("a molecule in 3D as it is drawn", () => {
     expect(end[1].x).toBeCloseTo(0, 6);
     // and the nearer of the two is the one seen there
     expect(atomAt(poseOf(m, s, "balls", [quarter.x, quarter.y, quarter.z, quarter.w]), new THREE.Vector3(0, 0, 60), 0, 0)).toBe(end[0].z > end[1].z ? 0 : 1);
+  });
+
+  it("reaches further out on the page seen from off to its side, as perspective has it", () => {
+    const m = ethane({ x: 20, y: 0 });
+    const pose = poseOf(m, solidOf(m, STYLE_3D), "balls");
+    const above = seenBounds(pose, 60);
+    const aside = seenBounds(pose, 60, { x: 0, y: 0 });
+    // the same size seen straight on, but out from the eye by its height's share
+    expect(aside.maxX - aside.minX).toBeCloseTo(above.maxX - above.minX, 6);
+    expect((aside.minX + aside.maxX) / 2).toBeCloseTo(20 * (60 / (60 - pose.height)), 4);
   });
 
   it("has its frames, each about its own centre, and reaches as far as any of them", () => {
