@@ -4,7 +4,8 @@
  *
  * - The pointer leads: the chain goes along the honeycomb to the point
  *   nearest it, one bond at a time, each to the next point nearer the
- *   pointer; led back the way it came, it takes its bonds back again. Led
+ *   pointer; led back the way it came - or beside it, near enough - it
+ *   takes its bonds back again, as far as the point it is led back to. Led
  *   round a hexagon of the honeycomb to a point it has been through, it
  *   closes a six-membered ring.
  * - Led round in a loop back to a point of the chain - not straight back
@@ -13,6 +14,8 @@
  *   the bond the loop began along, on the side the loop went round. (Round
  *   a hexagon of the honeycomb, a loop as long as six bonds is that
  *   hexagon.) Led on from there, the ring stays; led back further, it goes.
+ *   A loop is taken as the hand meant it: its tremble does not make it
+ *   longer, and a way out and back that encloses only a sliver is no loop.
  */
 import { cellOf, honeycombFrom, neighboursOf, type Cell, type Honeycomb, type Pt } from "./honeycomb";
 
@@ -39,11 +42,17 @@ export type Chain = {
 
 /** How much nearer the pointer the next point has to be than the one the chain is at, as a part of a bond. */
 const STEP_MARGIN = 0.12;
+/** How much further from the pointer the point the chain came from may be than another, and still be gone back to first. */
+const BACK_MARGIN = 0.25;
 /** How far the pointer has to have gone for another point of the trail, as a part of a bond. */
 const TRAIL_STEP = 0.04;
 /** The least a loop encloses and the least way it goes, in a bond's squares and lengths, to draw a ring. */
 const LOOP_AREA = 0.35;
 const LOOP_LENGTH = 2.3;
+/** How round a loop has to be to draw a ring: 4π times what it encloses over its length squared, 1 for a circle. */
+const LOOP_ROUND = 0.45;
+/** How far apart a loop's points are taken, as a part of a bond: any closer, and the hand's tremble lengthens it. */
+const LOOP_STEP = 0.25;
 /** A loop traced freehand runs a little longer than the ring it means. */
 const LOOP_SLACK = 1.07;
 /** The fewest and most members a loop draws a ring of. */
@@ -69,8 +78,13 @@ export function followChain(c: Chain, pointer: Pt): Chain {
   let trailFrom = c.trailFrom;
   for (let i = 0; i < 64; i++) {
     const head: Cell = cellOf(c.honeycomb, walk[walk.length - 1]);
+    const ways = neighboursOf(c.honeycomb, head);
     let best: Cell | null = null;
-    for (const o of neighboursOf(c.honeycomb, head)) if (!best || dist(o, pointer) < dist(best, pointer)) best = o;
+    for (const o of ways) if (!best || dist(o, pointer) < dist(best, pointer)) best = o;
+    // (back the way it came, rather than off beside it, when the two are
+    // much the same)
+    const came = walk.length >= 2 ? ways.find((o) => o.key === walk[walk.length - 2]) : undefined;
+    if (came && best && dist(came, pointer) <= dist(best, pointer) + BACK_MARGIN * L) best = came;
     if (!best || dist(best, pointer) >= dist(head, pointer) - STEP_MARGIN * L) break;
     if (walk.length >= 2 && best.key === walk[walk.length - 2]) {
       // back the way it came: the bond goes again - and where the pointer
@@ -84,12 +98,14 @@ export function followChain(c: Chain, pointer: Pt): Chain {
     } else {
       // round to a point it has been through: a ring of the honeycomb's -
       // unless the loop the pointer went round is longer or shorter than
-      // that, when the ring is as many members as the loop is long
+      // that, when the ring is as many members as the loop is long; and
+      // back to it without going round at all, the chain is taken back
+      // to it
       const back = walk.lastIndexOf(best.key);
       if (back >= 0 && back < walk.length - 1) {
         const loop = trail.slice(Math.max(stepAt[back], trailFrom));
         const ring = loopRing(back, best, cellOf(c.honeycomb, walk[back + 1]), loop, L);
-        if (ring && ring.points.length + 1 !== walk.length - back) {
+        if (!ring || ring.points.length + 1 !== walk.length - back) {
           walk = walk.slice(0, back + 1);
           stepAt = stepAt.slice(0, back);
           rings = rings.filter((r) => r.at < walk.length);
@@ -123,11 +139,16 @@ export function ringsOf(c: Chain): ChainRing[] {
 /**
  * The ring a loop draws at `at`, the point it came back to, `j`, having
  * gone off along the bond to `s` and round: or none, where the way it went
- * encloses too little room or is too short - a step straight back.
+ * encloses too little room, is too short or is not round - a step straight
+ * back, or out and back beside the way out.
  */
 function loopRing(at: number, j: Pt, s: Pt, loop: Pt[], L: number): ChainRing | null {
-  // (all the way round: the pointer may not be quite back yet)
-  const path = [j, ...loop];
+  // (its points no closer than the hand is steady; and all the way round:
+  // the pointer may not be quite back yet)
+  const path = [j];
+  for (const p of loop) if (dist(p, path[path.length - 1]) >= LOOP_STEP * L) path.push(p);
+  const end = loop[loop.length - 1];
+  if (end && path[path.length - 1] !== end) path.push(end);
   let length = dist(path[path.length - 1], j);
   for (let i = 1; i < path.length; i++) length += dist(path[i - 1], path[i]);
   let area = 0;
@@ -141,7 +162,8 @@ function loopRing(at: number, j: Pt, s: Pt, loop: Pt[], L: number): ChainRing | 
     cx += (p.x + q.x) * cross;
     cy += (p.y + q.y) * cross;
   }
-  if (Math.abs(area / 2) < LOOP_AREA * L * L || length < LOOP_LENGTH * L) return null;
+  const encloses = Math.abs(area / 2);
+  if (encloses < LOOP_AREA * L * L || length < LOOP_LENGTH * L || (4 * Math.PI * encloses) / (length * length) < LOOP_ROUND) return null;
   const centroid = { x: cx / (3 * area), y: cy / (3 * area) };
   const n = Math.min(RING_SIZES[1], Math.max(RING_SIZES[0], Math.round(length / (LOOP_SLACK * L))));
   return { at, points: regularRing(j, s, n, centroid) };

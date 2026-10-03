@@ -62,7 +62,9 @@ and in particular:
       fades with the distance from the chain's end, and folds back into
       the start when it is done (`ChainGuide2D`).
     - Led along it, it lays a bond down a step at a time; led back, it
-      takes them back; led round a hexagon, it closes a six-membered ring;
+      takes them back - led back a little beside the way it came too, as a
+      hand leads it back, as far as the point it is led back to, with no
+      ring for that; led round a hexagon, it closes a six-membered ring;
       onto an atom already there, it joins it.
     - Led round in a loop back to the chain - enclosing room, not straight
       back - it draws a ring there of as many members as the loop is long
@@ -71,7 +73,11 @@ and in particular:
       cyclopentyl, say); back to the atom before it, a ring fused on that
       bond (`utils/chain`). Led on from there, the ring stays; led back
       past it, it goes. Round a hexagon, a loop as long as six bonds is
-      that hexagon; another length wins over it.
+      that hexagon; another length wins over it. A loop is measured as the
+      hand meant it: the way is taken a quarter of a bond at a time, so a
+      tremble does not lengthen it, and a way out and back that encloses
+      only a sliver - less round than a triangle drawn by hand - draws no
+      ring.
 
   The whole stroke is one undo step. (PR #57; chains, agent/gestures)
 - **The mouse alone should be enough**, and it should travel as little as

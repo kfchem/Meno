@@ -39,6 +39,22 @@ describe("a chain traced on its honeycomb", () => {
     expect(ringsOf(back)).toEqual([]);
   });
 
+  it("takes its bonds back when led back a little beside the way it came, and closes no ring for that", () => {
+    // (as led in the app: from a methyl, its bond up and a little right, out
+    // and back again a little lower; the way back as near going on beside
+    // the chain as going back along it)
+    const k = L / 98;
+    const at = (x: number, y: number): Pt => ({ x: (x - 824) * k, y: -(y - 1146) * k });
+    for (const steps of [7, 20, 40]) {
+      const c0 = startChain(at(824, 1146), [at(843, 1050)], L);
+      const out = lead(c0, [at(1324, 1180)], steps);
+      const back = lead(out, [at(1060, 1160)], steps);
+      expect(new Set(back.walk).size).toBe(back.walk.length);
+      expect(out.walk.slice(0, back.walk.length)).toEqual(back.walk);
+      expect(ringsOf(back)).toEqual([]);
+    }
+  });
+
   it("closes a six-membered ring when led round a hexagon of it", () => {
     const c0 = startChain({ x: 0, y: 0 }, [], L);
     // the hexagon above the start: its centre one bond straight up
@@ -62,6 +78,24 @@ describe("a chain traced on its honeycomb", () => {
     expect(rings[0].at).toBe(0);
     // on the loop's side: above the start
     expect(rings[0].points.reduce((y, p) => y + p.y, 0)).toBeGreaterThan(0);
+  });
+
+  it("draws no larger a ring for a loop traced with a trembling hand", () => {
+    const c0 = startChain({ x: 0, y: 0 }, [], L);
+    const rr = (5 * L) / (2 * Math.PI);
+    const centre = { x: 0.2 * rr, y: Math.sqrt(1 - 0.04) * rr };
+    const from = Math.atan2(-centre.y, -centre.x);
+    // each point of the way a little off it, to one side and back
+    const shaky = round(centre, rr, from, -1, 60).flatMap((p) => [{ x: p.x - 0.08 * L, y: p.y }, p]);
+    const rings = ringsOf(endChain(lead(c0, shaky, 1)));
+    expect(rings).toHaveLength(1);
+    expect(rings[0].points.length + 1).toBe(5);
+  });
+
+  it("draws no ring for a way out and back that encloses only a sliver", () => {
+    const out = lead(startChain({ x: 0, y: 0 }, [], L), [{ x: 3 * L, y: 0 }]);
+    const back = endChain(lead(out, [{ x: 3 * L, y: -0.35 * L }, { x: 0.1 * L, y: -0.35 * L }]));
+    expect(ringsOf(back)).toEqual([]);
   });
 
   it("keeps a ring the chain goes on from, and lets it go when led back past it", () => {
