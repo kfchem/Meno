@@ -15,6 +15,7 @@ import { createHoverSlice } from "./slices/hoverSlice";
 import { createInteractionSlice } from "./slices/interactionSlice";
 import { createUiSlice } from "./slices/uiSlice";
 import { createMolecules3dSlice, heldOf } from "./slices/molecules3dSlice";
+import { turnsAcross } from "./turnJournal";
 
 // Re-export types for backward compatibility
 export * from "./types";
@@ -51,10 +52,24 @@ export function connectStoreToDocument(
   store: EditorStore,
   doc: DocumentStore<StructureDocument>,
 ): () => void {
+  let was = doc.getState();
   const sync = () =>
     store.setState((prev) => {
-      const mirrored = mirrorOf(doc.getState());
-      return { ...prev, ...mirrored, ...heldOf(prev, mirrored.molecules3d) };
+      const now = doc.getState();
+      const mirrored = mirrorOf(now);
+      // (a turn of several as one body undone or redone: their turns too)
+      const turns = turnsAcross(doc, was, now);
+      was = now;
+      const held = heldOf(prev, mirrored.molecules3d);
+      if (turns) {
+        const turns3d = { ...(held.turns3d ?? prev.turns3d) };
+        for (const [id, t] of Object.entries(turns)) {
+          if (t) turns3d[Number(id)] = t;
+          else delete turns3d[Number(id)];
+        }
+        held.turns3d = turns3d;
+      }
+      return { ...prev, ...mirrored, ...held };
     });
   sync();
   return doc.subscribe(sync);

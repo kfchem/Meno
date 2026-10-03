@@ -677,17 +677,26 @@ export function addMolecule3d(doc: StructureDocument, m: Omit<Molecule3D, "id">)
   return { ...doc, molecules3d: [...(doc.molecules3d ?? []), { ...m, id }], nextMolecule3dId: id + 1 };
 }
 
-export function moveMolecule3d(doc: StructureDocument, id: number, at: { x: number; y: number }): StructureDocument {
-  return { ...doc, molecules3d: (doc.molecules3d ?? []).map((m) => (m.id === id ? { ...m, at: { x: at.x, y: at.y } } : m)) };
+export function moveMolecule3d(doc: StructureDocument, id: number, at: { x: number; y: number; z?: number }): StructureDocument {
+  return moveMolecules3d(doc, [{ id, at }]);
 }
 
-export function moveMolecules3d(doc: StructureDocument, moves: { id: number; at: { x: number; y: number } }[]): StructureDocument {
+/**
+ * Molecules in 3D moved: each to where `moves` says - and as high above the
+ * page as it says, or as high as it was.
+ */
+export function moveMolecules3d(
+  doc: StructureDocument,
+  moves: { id: number; at: { x: number; y: number; z?: number } }[],
+): StructureDocument {
   const to = new Map(moves.map((m) => [m.id, m.at]));
   return {
     ...doc,
     molecules3d: (doc.molecules3d ?? []).map((m) => {
       const at = to.get(m.id);
-      return at ? { ...m, at: { x: at.x, y: at.y } } : m;
+      if (!at) return m;
+      const z = at.z ?? m.at.z;
+      return { ...m, at: { x: at.x, y: at.y, ...(z != null ? { z } : {}) } };
     }),
   };
 }
@@ -812,7 +821,7 @@ export type MarkPlaces = {
   arrows?: { id: number; x: number; y: number }[];
   pluses?: { id: number; x: number; y: number }[];
   /** Molecules in 3D moved with the rest: where each now stands. */
-  molecules3d?: { id: number; at: { x: number; y: number } }[];
+  molecules3d?: { id: number; at: { x: number; y: number; z?: number } }[];
 };
 
 /** `doc` with the arrows, pluses and molecules in 3D `places` names where it says. */

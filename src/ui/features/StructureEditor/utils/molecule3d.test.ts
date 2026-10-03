@@ -2,7 +2,27 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
 import type { Molecule3D } from "../store/types";
-import { atomAt, bondLines, frameOf, partAt, pictureMarks, poseOf, ringsOf, rowAbout, seenBounds, seenOnPage, solidOf, standingHeight, WORLD_PER_ANGSTROM } from "./molecule3d";
+import {
+  asSeen,
+  atomAt,
+  bondAt,
+  bondLines,
+  chosenPath,
+  frameOf,
+  onMolecule,
+  pictureMarks,
+  poseOf,
+  ringsOf,
+  rowAbout,
+  seenBounds,
+  seenOnPage,
+  solidOf,
+  standingHeight,
+  turnedInPlane,
+  turnedTogether,
+  WORLD_PER_ANGSTROM,
+  type Turning3D,
+} from "./molecule3d";
 import type { SolidMark } from "../../../../lib/chem/layout2d";
 
 /** Two carbons 1.5 Å apart along x, standing at `at`. */
@@ -31,6 +51,11 @@ describe("a molecule in 3D as it is drawn", () => {
     const s = solidOf(ethane(), STYLE_3D);
     expect(standingHeight(s)).toBeCloseTo(s.reach.balls, 9);
     expect(standingHeight(s, "space")).toBeCloseTo(s.reach.space, 9);
+  });
+
+  it("stands as high as a turn of several put it, where one did", () => {
+    const m = ethane({ x: 0, y: 0, z: 7 } as Molecule3D["at"]);
+    expect(poseOf(m, solidOf(m, STYLE_3D), "balls").height).toBe(7);
   });
 
   it("is seen larger than it would be lying on the page, being nearer the camera", () => {
@@ -131,31 +156,117 @@ const benzene = (): Molecule3D => ({
 
 describe("what a point is to a molecule in 3D", () => {
   const camera = new THREE.Vector3(0, 0, 60);
-  const zoom = 20; // (pixels per world unit: the rim is 9 px wide, 0.45 world units)
+  const zoom = 20; // (pixels per world unit)
   it("finds its rings", () => {
     expect(ringsOf(benzene()).map((r) => [...r].sort())).toEqual([[0, 1, 2, 3, 4, 5]]);
     expect(ringsOf(ethane())).toEqual([]);
   });
 
-  it("turns it on an atom, on a bond, and within a ring", () => {
+  it("is on it on an atom, on a bond, and within a ring", () => {
     const m = benzene();
     const pose = poseOf(m, solidOf(m, STYLE_3D), "balls");
     const seen = seenOnPage(pose, camera);
-    const at = (x: number, y: number) => partAt(m, pose, camera, x, y, zoom, STYLE_3D.bondRadius);
-    expect(at(seen[0].x, seen[0].y)).toBe("body");
-    expect(at((seen[0].x + seen[1].x) / 2, (seen[0].y + seen[1].y) / 2)).toBe("body");
-    expect(at(0, 0)).toBe("body");
+    const on = (x: number, y: number) => onMolecule(m, pose, camera, x, y, zoom, STYLE_3D.bondRadius);
+    expect(on(seen[0].x, seen[0].y)).toBe(true);
+    expect(on((seen[0].x + seen[1].x) / 2, (seen[0].y + seen[1].y) / 2)).toBe(true);
+    expect(on(0, 0)).toBe(true);
   });
 
-  it("moves it on the rim just outside its outline, and is nothing beyond", () => {
+  it("is on it a few pixels outside its outline, and not beyond", () => {
     const m = benzene();
     const pose = poseOf(m, solidOf(m, STYLE_3D), "balls");
     const seen = seenOnPage(pose, camera);
-    const at = (x: number, y: number) => partAt(m, pose, camera, x, y, zoom, STYLE_3D.bondRadius);
+    const on = (x: number, y: number) => onMolecule(m, pose, camera, x, y, zoom, STYLE_3D.bondRadius);
     const edge = seen[0].x + seen[0].r;
-    expect(at(edge + 2 / zoom, 0)).toBe("body");
-    expect(at(edge + 8 / zoom, 0)).toBe("rim");
-    expect(at(edge + 20 / zoom, 0)).toBeNull();
+    expect(on(edge + 2 / zoom, 0)).toBe(true);
+    expect(on(edge + 8 / zoom, 0)).toBe(false);
+  });
+
+  it("finds the bond under a point between two atoms, and none on an atom's ball or within the ring", () => {
+    const m = benzene();
+    const pose = poseOf(m, solidOf(m, STYLE_3D), "balls");
+    const seen = seenOnPage(pose, camera);
+    const mid = { x: (seen[0].x + seen[1].x) / 2, y: (seen[0].y + seen[1].y) / 2 };
+    expect(bondAt(m, pose, camera, mid.x, mid.y, STYLE_3D.bondRadius)).toBe(0);
+    expect(atomAt(pose, camera, mid.x, mid.y)).toBeNull();
+    expect(bondAt(m, pose, camera, 0, 0, STYLE_3D.bondRadius)).toBeNull();
+  });
+});
+
+describe("what is chosen in a molecule, measured", () => {
+  // butane's four carbons in a row, bonds 0-1, 1-2, 2-3
+  const butane = { bonds: [0, 1, 2].map((i) => ({ a1: i, a2: i + 1, order: 1 })) };
+  it("is the atoms chosen, two to four, in the order chosen", () => {
+    expect(chosenPath(butane, { atoms: [2, 0], bonds: [] })).toEqual([2, 0]);
+    expect(chosenPath(butane, { atoms: [0], bonds: [] })).toBeNull();
+  });
+
+  it("is a bond's two atoms, two bonds' angle and three bonds' torsion, chosen in any order", () => {
+    expect(chosenPath(butane, { atoms: [], bonds: [1] })).toEqual([1, 2]);
+    expect(chosenPath(butane, { atoms: [], bonds: [1, 0] })).toEqual([0, 1, 2]);
+    expect(chosenPath(butane, { atoms: [], bonds: [2, 0, 1] })).toEqual([0, 1, 2, 3]);
+  });
+
+  it("goes on from a bond to an atom bonded to its end, and is nothing for bonds or atoms apart", () => {
+    expect(chosenPath(butane, { atoms: [3], bonds: [1] })).toEqual([1, 2, 3]);
+    expect(chosenPath(butane, { atoms: [], bonds: [0, 2] })).toBeNull();
+    expect(chosenPath(butane, { atoms: [3], bonds: [0] })).toBeNull();
+  });
+});
+
+describe("molecules turned together, as one body", () => {
+  const q = (x: number, y: number, z: number, angle: number) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(x, y, z).normalize(), angle);
+  const ms: Turning3D[] = [
+    { id: 1, at: { x: -5, y: 0 }, standing: 2 },
+    { id: 2, at: { x: 5, y: 1 }, standing: 3 },
+    { id: 3, at: { x: 0, y: 6 }, standing: 2.5 },
+  ];
+  const where = (t: { at: { x: number; y: number; z?: number } }, standing: number) => new THREE.Vector3(t.at.x, t.at.y, t.at.z ?? standing);
+
+  it("keeps how far each is from each other, and turns each with the whole", () => {
+    const turn = q(1, 2, 0.5, 0.9);
+    const out = turnedTogether(ms, turn);
+    for (let i = 0; i < ms.length; i++) {
+      for (let j = i + 1; j < ms.length; j++) {
+        const before = where(ms[i], ms[i].standing).distanceTo(where(ms[j], ms[j].standing));
+        expect(where(out[i], 0).distanceTo(where(out[j], 0))).toBeCloseTo(before, 9);
+      }
+      expect(new THREE.Quaternion(...out[i].turn).angleTo(turn)).toBeCloseTo(0, 6);
+    }
+  });
+
+  it("rests on the page: the lowest for its reach as high as it stands alone", () => {
+    const out = turnedTogether(ms, q(1, 0, 0, 1.2));
+    const above = out.map((t, i) => t.at.z - ms[i].standing);
+    expect(Math.min(...above)).toBeCloseTo(0, 9);
+    expect(above.every((h) => h >= -1e-9)).toBe(true);
+    // not turned at all, they stand as they did
+    const still = turnedTogether(ms, new THREE.Quaternion());
+    still.forEach((t, i) => expect(t.at).toEqual({ x: ms[i].at.x, y: ms[i].at.y, z: ms[i].standing }));
+  });
+
+  it("turned a half about the upright, swaps sides and faces about", () => {
+    const two: Turning3D[] = [
+      { id: 1, at: { x: -5, y: 0 }, standing: 2 },
+      { id: 2, at: { x: 5, y: 0 }, standing: 2 },
+    ];
+    const out = turnedTogether(two, q(0, 1, 0, Math.PI));
+    expect(out[0].at.x).toBeCloseTo(5, 9);
+    expect(out[1].at.x).toBeCloseTo(-5, 9);
+  });
+
+  it("with a drawing, turns in its plane about its middle, each as high as it was", () => {
+    const out = turnedInPlane([{ id: 1, at: { x: 2, y: 0, z: 4 }, standing: 2 }], { x: 0, y: 0 }, Math.PI / 2);
+    expect(out[0].at.x).toBeCloseTo(0, 9);
+    expect(out[0].at.y).toBeCloseTo(2, 9);
+    expect(out[0].at.z).toBe(4);
+    expect(new THREE.Quaternion(...out[0].turn).angleTo(q(0, 0, 1, Math.PI / 2))).toBeCloseTo(0, 6);
+  });
+
+  it("keeps their heights apart in a file for another program", () => {
+    const a = asSeen({ ...ethane({ x: 0, y: 0, z: 0 } as Molecule3D["at"]) }, undefined, 0, true);
+    const b = asSeen({ ...ethane({ x: 0, y: 0, z: 3 * WORLD_PER_ANGSTROM } as Molecule3D["at"]) }, undefined, 0, true);
+    expect(b[0].z - a[0].z).toBeCloseTo(3, 9);
   });
 });
 

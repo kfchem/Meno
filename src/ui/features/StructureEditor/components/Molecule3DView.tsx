@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
 import type { Look3D, Measure3D, Molecule3D, Turn3D } from "../store/types";
-import { bondLines, frameOf, linesOf, solidOf, WORLD_PER_ANGSTROM, type BondLine } from "../utils/molecule3d";
+import { bondLines, bondReach, frameOf, linesOf, solidOf, WORLD_PER_ANGSTROM, type BondLine } from "../utils/molecule3d";
+import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { kindOf, measureMarks, measureText, measureValue } from "../utils/measure3d";
 import { PAGE_DISTANCE } from "./PageCamera";
 import Frames3D from "./Frames3D";
@@ -18,15 +19,16 @@ export const OVER_PAGE = 100;
 
 /**
  * The outline's light, by how lit the molecule is - 0 not at all, 1 hovered
- * or turning, 2 on the rim or moving: how wide, in pixels, and how much of
- * the highlight it takes. Between them it goes over smoothly. Selected, it
- * has a broad, pale outline as well, the selection's shade.
+ * or turning, 2 moving: how wide, in pixels, and how much of the highlight
+ * it takes. Between them it goes over smoothly. Selected, it has a broad,
+ * pale outline as well, the selection's shade - which, as a press on it is
+ * held, spreads out from the atom pressed on along its bonds.
  */
 const OUTLINE_PX = [0, 1.6, 2.6];
 const OUTLINE_BLUE = [0, 0.32, 0.6];
 const SELECTED_PX = 5;
 const SELECTED_BLUE = 0.27;
-/** A chosen atom's ring: how wide, in pixels, and how much of the highlight it takes. */
+/** A chosen atom's ring, or a chosen bond's sleeve: how wide, in pixels, and how much of the highlight it takes. */
 const CHOSEN_PX = 3.2;
 const CHOSEN_BLUE = 0.75;
 const outlineAt = (level: number, table: number[]) => {
@@ -98,11 +100,14 @@ export type Molecule3DViewProps = {
   look: Look3D;
   frame: number;
   turn: Turn3D | undefined;
-  /** How lit its outline is: 0 not at all, 1 hovered or turning, 2 on the rim or moving. */
+  /** How lit its outline is: 0 not at all, 1 hovered or turning, 2 moving. */
   lit: number;
   selected: boolean;
-  /** Its atoms chosen, by index. */
+  /** Its atoms chosen, by index; and its bonds. */
   chosen: number[];
+  chosenBonds: number[];
+  /** A press held on it, to select it: the atom pressed on, and since when (`performance.now()`). */
+  holding: { from: number; start: number } | null;
   /** Being moved by the pointer: where it stands is where it is put, at once. */
   following: boolean;
   /** Its frames shown in full beside it - hovered or selected - or as a count. */
@@ -122,7 +127,7 @@ export type Molecule3DViewProps = {
  * another look, its place on an undo, its coming and going.
  */
 export default function Molecule3DView(props: Molecule3DViewProps) {
-  const { m, style, look, frame, turn, lit, selected, chosen, following, leaving } = props;
+  const { m, style, look, frame, turn, lit, selected, chosen, chosenBonds, holding, following, leaving } = props;
   const solid = solidOf(m, style);
   const n = m.atoms.length;
   const lineCount = useMemo(() => m.bonds.reduce((k, b) => k + linesOf(b.order), 0), [m.bonds]);
@@ -133,6 +138,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const atomHull = useRef<THREE.InstancedMesh>(null!);
   const bondHull = useRef<THREE.InstancedMesh>(null);
   const chosenHull = useRef<THREE.InstancedMesh>(null!);
+  const chosenSleeves = useRef<THREE.InstancedMesh>(null);
   const pieces = useRef<THREE.InstancedMesh>(null!);
   const fans = useRef<THREE.Mesh>(null!);
   const pill = useRef<THREE.Group>(null!);
@@ -149,6 +155,41 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const fill = useRef(look === "space" ? 1 : 0);
   const swell = useRef(new Map<number, { v: number; vel: number; to: number }>());
   const rings = useRef(new Map<number, { v: number; vel: number; to: number }>());
+  const sleeves = useRef(new Map<number, { v: number; vel: number; to: number }>());
+  // how far the selection's outline has spread, atom by atom, as a press is held
+  const held = useRef(new Float32Array(n));
+  if (held.current.length !== n) held.current = new Float32Array(n);
+  const wasHolding = useRef(false);
+  // each atom's distance from the atom pressed on, in bonds, and the furthest
+  const spread = useMemo(() => {
+    if (!holding) return null;
+    const near: number[][] = m.atoms.map(() => []);
+    for (const b of m.bonds) {
+      near[b.a1].push(b.a2);
+      near[b.a2].push(b.a1);
+    }
+    const level = new Int32Array(n).fill(-1);
+    level[holding.from] = 0;
+    let edge = [holding.from];
+    let deepest = 0;
+    while (edge.length) {
+      const next: number[] = [];
+      for (const a of edge) {
+        for (const o of near[a]) {
+          if (level[o] >= 0) continue;
+          level[o] = level[a] + 1;
+          deepest = level[o];
+          next.push(o);
+        }
+      }
+      edge = next;
+    }
+    // (atoms not bonded to it - a salt's other ion - last)
+    for (let i = 0; i < n; i++) if (level[i] < 0) level[i] = deepest + 1;
+    return { level, deepest: Math.max(...level) };
+  }, [holding, m.atoms, m.bonds, n]);
+  // each bond's lines, by bond
+  const lineBond = useMemo(() => m.bonds.flatMap((b, i) => Array.from({ length: linesOf(b.order) }, () => i)), [m.bonds]);
   const grown = useRef({ v: leaving ? 1 : 0, vel: 0, to: leaving ? 0 : 1 });
   const level = useRef(0);
   const selLevel = useRef(0);
@@ -190,13 +231,21 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     invalidate();
   }, [hoverAtom, invalidate]);
 
-  // chosen atoms are ringed, the ring opening out; let go, it closes
+  // chosen atoms are ringed, the ring opening out, and chosen bonds
+  // sleeved likewise; let go, it closes
   useEffect(() => {
     const on = new Set(chosen);
     for (const [i, r] of rings.current) r.to = on.has(i) ? 1 : 0;
     for (const i of on) if (!rings.current.has(i)) rings.current.set(i, { v: 0, vel: 0, to: 1 });
     invalidate();
   }, [chosen, invalidate]);
+  useEffect(() => {
+    const on = new Set(chosenBonds);
+    for (const [i, r] of sleeves.current) r.to = on.has(i) ? 1 : 0;
+    for (const i of on) if (!sleeves.current.has(i)) sleeves.current.set(i, { v: 0, vel: 0, to: 1 });
+    invalidate();
+  }, [chosenBonds, invalidate]);
+  useEffect(() => invalidate(), [holding, invalidate]);
 
   useEffect(() => invalidate(), [lit, selected, look, frame, turn, invalidate]);
 
@@ -222,7 +271,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       fill.current = f;
       reshaped = moving = true;
     }
-    const height = solid.reach.balls + (solid.reach.space - solid.reach.balls) * fill.current;
+    // (as high as it reaches - or where a turn of several put it)
+    const height = m.at.z ?? solid.reach.balls + (solid.reach.space - solid.reach.balls) * fill.current;
     // where it stands: put back by an undo, it goes there rather than jumps
     const goal = new THREE.Vector3(m.at.x, m.at.y, height);
     // (a drag - its own, or the drawing's it is selected with - it follows at once)
@@ -266,6 +316,41 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         ringing = true;
       }
     }
+    let sleeving = false;
+    for (const [i, r] of sleeves.current) {
+      if (spring(r, step)) sleeving = moving = true;
+      else if (r.to === 0) {
+        sleeves.current.delete(i);
+        sleeving = true;
+      }
+    }
+    // a press held: the selection's outline spreads from the atom pressed
+    // on, nothing showing for the first part of it; done, the molecule is
+    // selected and its outline stays as it is; let go early, it goes
+    const h = held.current;
+    let holdTo = 0;
+    if (holding && spread) {
+      const t = performance.now() - holding.start;
+      const u = Math.min(1, Math.max(0, (t - LONG_PRESS_SHOW_MS) / (LONG_PRESS_MS - LONG_PRESS_SHOW_MS)));
+      for (let i = 0; i < n; i++) h[i] = Math.min(1, Math.max(0, u * (spread.deepest + 1) - spread.level[i]));
+      holdTo = 1;
+      moving = true;
+    } else if (wasHolding.current && selected) {
+      let least = 1;
+      for (let i = 0; i < n; i++) least = Math.min(least, h[i]);
+      selLevel.current = Math.max(selLevel.current, least);
+    }
+    wasHolding.current = !!holding;
+    let holdMost = 0;
+    if (!holding) {
+      for (let i = 0; i < n; i++) {
+        if (h[i] === 0) continue;
+        h[i] = follow(h[i], 0, step, OUTLINE_TAU);
+        moving = true;
+      }
+    }
+    for (let i = 0; i < n; i++) holdMost = Math.max(holdMost, h[i]);
+    const holdShown = holdMost > 0 || holdTo > 0;
     // the outline's light, and the selection's
     const towards = Math.max(0, Math.min(2, lit));
     const nextLevel = follow(level.current, towards, step, OUTLINE_TAU);
@@ -294,14 +379,27 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     const px = 1 / (camera.zoom * depth);
     // the outline
     const outPx = Math.max(outlineAt(level.current, OUTLINE_PX), SELECTED_PX * selLevel.current);
-    const lightOn = outPx > 0.02;
+    const lightOn = outPx > 0.02 || holdShown;
     atomHull.current.visible = lightOn;
     if (bondHull.current) bondHull.current.visible = lightOn && fill.current < 0.98;
-    if (lightOn && (reshaped || relit || dirty.current)) {
+    if (lightOn && (reshaped || relit || dirty.current || holdShown)) {
       const w = outPx * px;
-      placeAtoms(atomHull.current, p, radius, w);
-      if (bondHull.current) placeBonds(bondHull.current, lines ?? bondLines(m, p, bondR), w);
-      const k = 1 - (1 - outlineAt(level.current, OUTLINE_BLUE)) * (1 - SELECTED_BLUE * selLevel.current);
+      const wide = SELECTED_PX * px;
+      placeAtoms(atomHull.current, p, radius, holdShown ? (i) => Math.max(w, wide * h[i]) : w);
+      if (bondHull.current) {
+        const all = lines ?? bondLines(m, p, bondR);
+        placeBonds(
+          bondHull.current,
+          all,
+          holdShown
+            ? (k) => {
+                const b = m.bonds[lineBond[k]];
+                return Math.max(w, wide * Math.min(h[b.a1], h[b.a2]));
+              }
+            : w,
+        );
+      }
+      const k = 1 - (1 - outlineAt(level.current, OUTLINE_BLUE)) * (1 - SELECTED_BLUE * Math.max(selLevel.current, holdMost));
       const colour = blue(k);
       (atomHull.current.material as THREE.MeshBasicMaterial).color.copy(colour);
       if (bondHull.current) (bondHull.current.material as THREE.MeshBasicMaterial).color.copy(colour);
@@ -317,6 +415,21 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       }
       mesh.instanceMatrix.needsUpdate = true;
       mesh.visible = rings.current.size > 0;
+    }
+    // the chosen bonds' sleeves
+    const sleeveMesh = chosenSleeves.current;
+    if (sleeveMesh && (reshaped || sleeving || dirty.current)) {
+      const a = new THREE.Vector3();
+      const b = new THREE.Vector3();
+      m.bonds.forEach((bond, i) => {
+        const v = sleeves.current.get(i)?.v ?? 0;
+        a.set(p[3 * bond.a1], p[3 * bond.a1 + 1], p[3 * bond.a1 + 2]);
+        b.set(p[3 * bond.a2], p[3 * bond.a2 + 1], p[3 * bond.a2 + 2]);
+        placePiece(sleeveMesh, i, a, b, v > 0.001 ? bondReach(bond.order, bondR) + CHOSEN_PX * px * v : 0);
+      });
+      sleeveMesh.instanceMatrix.needsUpdate = true;
+      sleeveMesh.computeBoundingSphere();
+      sleeveMesh.visible = sleeves.current.size > 0 && fill.current < 0.98;
     }
     // the measurements: drawn afresh as the atoms move, fading in and out
     let fading = false;
@@ -472,6 +585,19 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
           <sphereGeometry args={[1, style.ballSegments, style.ballSegments]} />
           <meshBasicMaterial color={blue(CHOSEN_BLUE)} transparent opacity={1} depthWrite={false} toneMapped={false} />
         </instancedMesh>
+        {m.bonds.length > 0 && (
+          <instancedMesh
+            ref={chosenSleeves}
+            args={[undefined, undefined, m.bonds.length]}
+            renderOrder={OVER_PAGE - 1}
+            frustumCulled={false}
+            visible={false}
+            raycast={() => {}}
+          >
+            <cylinderGeometry args={[1, 1, 1, style.bondSegments]} />
+            <meshBasicMaterial color={blue(CHOSEN_BLUE)} transparent opacity={1} depthWrite={false} toneMapped={false} />
+          </instancedMesh>
+        )}
         {/* The measurements: lines and arcs, a faint fan within an angle,
             and each value written beside its marks */}
         <instancedMesh
@@ -555,10 +681,10 @@ const mid = new THREE.Vector3();
 const dir = new THREE.Vector3();
 
 /** Each atom's ball where it is, as large as `radius` says, and `extra` larger all round. */
-function placeAtoms(mesh: THREE.InstancedMesh, places: Float32Array, radius: (i: number) => number, extra: number) {
+function placeAtoms(mesh: THREE.InstancedMesh, places: Float32Array, radius: (i: number) => number, extra: number | ((i: number) => number)) {
   const n = places.length / 3;
   for (let i = 0; i < n; i++) {
-    const r = radius(i) + extra;
+    const r = radius(i) + (typeof extra === "number" ? extra : extra(i));
     mtx.makeScale(r, r, r).setPosition(places[3 * i], places[3 * i + 1], places[3 * i + 2]);
     mesh.setMatrixAt(i, mtx);
   }
@@ -566,9 +692,9 @@ function placeAtoms(mesh: THREE.InstancedMesh, places: Float32Array, radius: (i:
   mesh.computeBoundingSphere();
 }
 
-/** Each bond's lines, cylinders from end to end, `extra` thicker all round. */
-function placeBonds(mesh: THREE.InstancedMesh, lines: BondLine[], extra: number) {
-  lines.forEach((line, k) => placePiece(mesh, k, line.a, line.b, line.r + (line.r > 0 ? extra : 0)));
+/** Each bond's lines, cylinders from end to end, `extra` thicker all round (by line, if it is a function). */
+function placeBonds(mesh: THREE.InstancedMesh, lines: BondLine[], extra: number | ((k: number) => number)) {
+  lines.forEach((line, k) => placePiece(mesh, k, line.a, line.b, line.r + (line.r > 0 ? (typeof extra === "number" ? extra : extra(k)) : 0)));
   mesh.instanceMatrix.needsUpdate = true;
   mesh.computeBoundingSphere();
 }

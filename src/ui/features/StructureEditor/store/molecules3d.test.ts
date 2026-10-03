@@ -26,20 +26,78 @@ function editor() {
   return { doc, state: () => store.getState() };
 }
 
+describe("molecules in 3D turned together, as one body", () => {
+  const half: [number, number, number, number] = [0, 1, 0, 0]; // (a half turn about the upright)
+
+  it("move as the turn takes them, as one undo step, and the undo puts their turns back too", () => {
+    const { doc, state } = editor();
+    state().setTurn3d(1, [0, 0, 0, 1]);
+    state().turnMolecules3d(
+      [
+        { id: 1, at: { x: 6, y: 0, z: 2 }, turn: half },
+        { id: 2, at: { x: 0, y: 0, z: 2 }, turn: half },
+      ],
+      "turn-1",
+    );
+    state().turnMolecules3d(
+      [
+        { id: 1, at: { x: 6, y: 0, z: 2.5 }, turn: half },
+        { id: 2, at: { x: 0, y: 0, z: 2.5 }, turn: half },
+      ],
+      "turn-1",
+    );
+    expect(state().molecules3d.map((m) => m.at)).toEqual([
+      { x: 6, y: 0, z: 2.5 },
+      { x: 0, y: 0, z: 2.5 },
+    ]);
+    expect(state().turns3d).toEqual({ 1: half, 2: half });
+    expect(doc.history().undoLabel).toBe("turn molecules");
+    doc.undo();
+    expect(state().molecules3d.map((m) => m.at)).toEqual([
+      { x: 0, y: 0 },
+      { x: 6, y: 0 },
+    ]);
+    expect(state().turns3d).toEqual({ 1: [0, 0, 0, 1] });
+    doc.redo();
+    expect(state().turns3d).toEqual({ 1: half, 2: half });
+  });
+
+  it("leave the turns alone on an undo of something else", () => {
+    const { doc, state } = editor();
+    state().turnMolecules3d([{ id: 1, at: { x: 1, y: 0, z: 2 }, turn: half }], "turn-1");
+    state().moveMolecules3d([{ id: 2, at: { x: 9, y: 0 } }]);
+    state().setTurn3d(1, [0, 0, 1, 0]);
+    doc.undo();
+    expect(state().turns3d[1]).toEqual([0, 0, 1, 0]);
+    // and a move keeps how high one stands
+    expect(state().molecules3d[0].at).toEqual({ x: 1, y: 0, z: 2 });
+  });
+});
+
 describe("molecules in 3D, chosen and selected", () => {
   it("choose atoms one by one, in order, a fifth or another molecule's starting afresh", () => {
     const { state } = editor();
     for (const a of [0, 1, 2]) state().chooseAtom3d(1, a);
-    expect(state().chosen3d).toEqual({ id: 1, atoms: [0, 1, 2] });
+    expect(state().chosen3d).toEqual({ id: 1, atoms: [0, 1, 2], bonds: [] });
     // chosen again: let go
     state().chooseAtom3d(1, 1);
-    expect(state().chosen3d).toEqual({ id: 1, atoms: [0, 2] });
+    expect(state().chosen3d).toEqual({ id: 1, atoms: [0, 2], bonds: [] });
     state().chooseAtom3d(1, 3);
     state().chooseAtom3d(1, 4);
     state().chooseAtom3d(1, 1);
-    expect(state().chosen3d).toEqual({ id: 1, atoms: [1] });
+    expect(state().chosen3d).toEqual({ id: 1, atoms: [1], bonds: [] });
     state().chooseAtom3d(2, 0);
-    expect(state().chosen3d).toEqual({ id: 2, atoms: [0] });
+    expect(state().chosen3d).toEqual({ id: 2, atoms: [0], bonds: [] });
+  });
+
+  it("choose bonds too, with atoms, and let them go likewise", () => {
+    const { state } = editor();
+    state().chooseBond3d(1, 0);
+    state().chooseAtom3d(1, 2);
+    expect(state().chosen3d).toEqual({ id: 1, atoms: [2], bonds: [0] });
+    state().chooseBond3d(1, 0);
+    state().chooseAtom3d(1, 2);
+    expect(state().chosen3d).toBeNull();
   });
 
   it("measure what is chosen, as one step, and let it go", () => {
@@ -51,6 +109,17 @@ describe("molecules in 3D, chosen and selected", () => {
     expect(state().molecules3d[0].measures).toEqual([{ id: 1, atoms: [1, 0, 2] }]);
     expect(state().chosen3d).toBeNull();
     expect(doc.history().undoLabel).toBe("measure angle");
+  });
+
+  it("measure a bond chosen as its length, and two bonds as the angle between them", () => {
+    const { state } = editor();
+    state().chooseBond3d(1, 1);
+    state().measureChosen3d();
+    expect(state().molecules3d[0].measures).toEqual([{ id: 1, atoms: [0, 2] }]);
+    state().chooseBond3d(1, 0);
+    state().chooseBond3d(1, 1);
+    state().measureChosen3d();
+    expect(state().molecules3d[0].measures?.[1].atoms).toEqual([2, 0, 1]);
   });
 
   it("are selected whole, alone or with others, and all with everything", () => {
@@ -86,7 +155,7 @@ describe("molecules in 3D, chosen and selected", () => {
     state().chooseAtom3d(2, 1);
     state().setTurn3d(2, [0, 0, 0, 1]);
     state().setFrame3d(2, 0);
-    state().setHovered3d({ id: 2, part: "body" });
+    state().setHovered3d({ id: 2 });
     doc.edit("delete", (d) => ({ ...d, molecules3d: d.molecules3d!.filter((m) => m.id !== 2) }));
     expect([...state().sel3d]).toEqual([1]);
     expect(state().chosen3d).toBeNull();

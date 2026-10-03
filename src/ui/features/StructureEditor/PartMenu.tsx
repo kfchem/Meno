@@ -56,7 +56,7 @@ type Item = { name: string; keys: string; run: () => void; divider?: boolean };
 export type MenuMolecule3D = {
   /** How it is drawn: the menu offers the other. */
   look: "balls" | "space";
-  /** How many of its atoms are chosen: two, three or four make a measurement. */
+  /** How many atoms what is chosen of it measures: two, three or four make a measurement. */
   chosen: number;
   onMeasure: () => void;
   onLook: (look: "balls" | "space") => void;

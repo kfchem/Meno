@@ -8,6 +8,10 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
+import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { heightOf, lookOf, solidOf, standingHeight, turnedInPlane, turnedTogether, type Turning3D } from "../utils/molecule3d";
+import { PAGE_DISTANCE } from "../utils/page";
+import type { Model, Molecule3D, Turn3D } from "../store/types";
 
 /** How far above the selection its turning handle stands, as a share of a bond. */
 const HANDLE_ABOVE = 0.75;
@@ -30,6 +34,47 @@ function overWhite(hex: string, alpha: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
+/** A molecule in 3D as a turn takes it, turned as it is now. */
+const turningOf =
+  (turns: Record<number, Turn3D>) =>
+  (m: Molecule3D): Turning3D => {
+    const solid = solidOf(m, STYLE_3D);
+    return { id: m.id, at: m.at, turn: turns[m.id], standing: standingHeight(solid, lookOf(m, STYLE_3D)) };
+  };
+
+/**
+ * How far the selection reaches on the page, the drawing's atoms and the
+ * molecules in 3D - each as far as it reaches any way it is turned, as seen
+ * from straight above it - and its middle; null with nothing selected.
+ */
+function selectionExtent(
+  model: Model,
+  atoms: ReadonlySet<number>,
+  molecules: readonly Molecule3D[],
+  sel3d: ReadonlySet<number>,
+): { mid: { x: number; y: number }; top: number } | null {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const a of model.atoms) {
+    if (!atoms.has(a.id)) continue;
+    xs.push(a.x);
+    ys.push(a.y);
+  }
+  for (const m of molecules) {
+    if (!sel3d.has(m.id)) continue;
+    const solid = solidOf(m, STYLE_3D);
+    const look = lookOf(m, STYLE_3D);
+    const k = PAGE_DISTANCE / Math.max(PAGE_DISTANCE - heightOf(m, solid, look), 1);
+    const r = solid.reach[look] * k;
+    xs.push(m.at.x - r, m.at.x + r);
+    ys.push(m.at.y - r, m.at.y + r);
+  }
+  if (!xs.length) return null;
+  // (the drawing alone: its atoms' middle, as ever)
+  const mid = sel3d.size ? { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 } : middleOf(model, atoms);
+  return mid ? { mid, top: Math.max(...ys) } : null;
+}
+
 /**
  * The selection, drawn and worked:
  *
@@ -38,10 +83,16 @@ function overWhite(hex: string, alpha: number): string {
  *   space with Ctrl (⌘ on a Mac) held, or by a double-click there that
  *   drags; with Alt (Option) held, a lasso rather than a box;
  * - a handle above the selection that turns it about its middle, in steps
- *   of 15 degrees, or freely after a pause.
+ *   of 15 degrees, or freely after a pause. Molecules in 3D selected alone
+ *   it turns as one body, in 3D - as a drag on a molecule turns it - about
+ *   their common centre; selected with the drawing, they are carried round
+ *   in its plane and turned with it. With Shift, each molecule turns about
+ *   its own centre instead, and the drawing stays.
  */
 export default function Selection2D() {
   const { model, sel, boxSelect } = useEditor();
+  const sel3d = useEditor((s) => s.sel3d);
+  const molecules3d = useEditor((s) => s.molecules3d);
   const store = useEditorStore();
   const { camera, gl, invalidate } = useThree();
   const handle = useRef<THREE.Group>(null!);
@@ -126,19 +177,22 @@ export default function Selection2D() {
   }, [gl, camera, store, invalidate]);
 
   // --- turning -------------------------------------------------------------
-  const mid = useMemo(() => middleOf(model, sel.atoms), [model, sel.atoms]);
-  const top = useMemo(() => {
-    const ys = model.atoms.filter((a) => sel.atoms.has(a.id)).map((a) => a.y);
-    return ys.length ? Math.max(...ys) : 0;
-  }, [model, sel.atoms]);
-  const turnable = sel.atoms.size > 1 && mid != null;
-  const handleAt = turnable ? { x: mid!.x, y: top + NOMINAL_BOND_LENGTH * HANDLE_ABOVE } : null;
+  const extent = useMemo(() => selectionExtent(model, sel.atoms, molecules3d, sel3d), [model, sel.atoms, molecules3d, sel3d]);
+  const turnable = extent != null && (sel.atoms.size > 1 || sel3d.size > 0);
+  const handleAt = turnable ? { x: extent!.mid.x, y: extent!.top + NOMINAL_BOND_LENGTH * HANDLE_ABOVE } : null;
 
   const startTurn = (e: PointerEvent) => {
     const st = store.getState();
-    const about = middleOf(st.model, st.sel.atoms);
+    const molecules = st.molecules3d.filter((m) => st.sel3d.has(m.id));
+    // molecules alone, or with Shift: turned in 3D, as a drag on one turns it
+    if (molecules.length && (e.shiftKey || !st.sel.atoms.size)) {
+      turnInSpace(e, molecules, e.shiftKey);
+      return;
+    }
+    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d)?.mid;
     if (!about) return;
     const from = st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y }));
+    const carried = molecules.map(turningOf(st.turns3d));
     const p0 = toWorld(e.clientX, e.clientY);
     const a0 = Math.atan2(p0.y - about.y, p0.x - about.x);
     const gesture = `turn-${performance.now()}`;
@@ -153,7 +207,9 @@ export default function Selection2D() {
       const a = Math.atan2(last.y - about.y, last.x - about.x) - a0;
       const step = (TURN_STEP * Math.PI) / 180;
       const angle = free ? a : Math.round(a / step) * step;
-      store.getState().moveAtoms(turned(from, about, angle), gesture);
+      // (molecules with the drawing: carried round in its plane, and turned with it)
+      if (carried.length) store.getState().turnMolecules3d(turnedInPlane(carried, about, angle), gesture, turned(from, about, angle));
+      else store.getState().moveAtoms(turned(from, about, angle), gesture);
     };
     const onMove = (ev: PointerEvent) => {
       last = toWorld(ev.clientX, ev.clientY);
@@ -176,6 +232,57 @@ export default function Selection2D() {
       const s = store.getState();
       s.endPanHold(ev.pointerId);
       // (and its end is no click on nothing, which would let it go)
+      s.suppressDoubleClick(DOUBLE_CLICK_MS);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, true);
+  };
+
+  /**
+   * Molecules in 3D turned by the handle in space, as a drag on one turns
+   * it: as one body about their common centre - which moves them, and is
+   * one undo step - or, `each`, every one about its own centre.
+   */
+  const turnInSpace = (e: PointerEvent, molecules: Molecule3D[], each: boolean) => {
+    const st = store.getState();
+    const from = molecules.map(turningOf(st.turns3d));
+    const gesture = `turn-3d-${performance.now()}`;
+    const q = new THREE.Quaternion();
+    let last = { x: e.clientX, y: e.clientY };
+    let frame: number | null = null;
+    st.beginPanHold(e.pointerId);
+    st.suppressDoubleClick(DOUBLE_CLICK_MS);
+    const apply = () => {
+      frame = null;
+      const s = store.getState();
+      if (each || from.length === 1) {
+        for (const m of from) {
+          const t = q.clone().multiply(m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion()).normalize();
+          s.setTurn3d(m.id, [t.x, t.y, t.z, t.w]);
+        }
+      } else s.turnMolecules3d(turnedTogether(from, q), gesture);
+      invalidate();
+    };
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - last.x;
+      const dy = ev.clientY - last.y;
+      last = { x: ev.clientX, y: ev.clientY };
+      const len = Math.hypot(dx, dy);
+      if (len === 0) return;
+      // (a drag to the right turns the near side right; down turns it down)
+      const angle = (STYLE_3D.turnPerHalfWidth * len) / Math.max(gl.domElement.clientWidth / 2, 1);
+      q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(dy, dx, 0).normalize(), angle)).normalize();
+      if (frame == null) frame = window.requestAnimationFrame(apply);
+    };
+    const onUp = (ev: PointerEvent) => {
+      if (frame != null) {
+        window.cancelAnimationFrame(frame);
+        apply();
+      }
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp, true);
+      const s = store.getState();
+      s.endPanHold(ev.pointerId);
       s.suppressDoubleClick(DOUBLE_CLICK_MS);
     };
     window.addEventListener("pointermove", onMove);

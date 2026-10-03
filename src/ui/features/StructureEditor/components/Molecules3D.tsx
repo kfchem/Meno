@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { KEY_LIGHT_FROM, STYLE_3D, type Style3D } from "../../../../lib/chem/style3d";
-import { MOV_PX } from "../constants";
+import { LONG_PRESS_MS, MOV_PX } from "../constants";
 import { useEditor, useEditorStore } from "../store";
 import type { Molecule3D, Turn3D } from "../store/types";
-import { atomAt, lookOf, partAt, poseOf, solidOf } from "../utils/molecule3d";
+import { atomAt, bondAt, lookOf, nearestAtom, onMolecule, poseOf, solidOf } from "../utils/molecule3d";
 import { pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
 import Molecule3DView from "./Molecule3DView";
@@ -26,12 +26,21 @@ type Press = {
   /** Where the press began, on the screen. */
   sx: number;
   sy: number;
-  /** The atom pressed on, if any: what a click chooses. */
+  /** The atom pressed on, or else the bond: what a click chooses. */
   atom: number | null;
+  bond: number | null;
+  /** Ctrl (⌘ on a Mac) held: a click takes the molecule into the selection or out of it. */
+  add: boolean;
   moved: boolean;
 };
 
 type Gesture =
+  | (Press & {
+      kind: "press";
+      /** Held still long enough, it selected the molecule. */
+      held: boolean;
+      timer: number | null;
+    })
   | (Press & {
       kind: "turn";
       x: number;
@@ -55,16 +64,21 @@ type Gesture =
       key: string;
     });
 
+/** A press that has travelled: turning a molecule, or moving what is selected. */
+type Going = Exclude<Gesture, { kind: "press" }>;
+
 /**
  * The molecules in 3D standing on the page: drawn, lit, and worked with the
  * pointer.
  * - Hovered, a molecule's outline lights up, faintly. A drag on it turns it
- *   about its centre - and the others selected with it, each about its own -
- *   and let go it turns on a little; a drag on the rim just outside its
- *   outline, which lights up more, moves it and them on the page.
- * - A click on an atom chooses it, for a measurement, or lets it go; a
- *   click elsewhere on the molecule, or on its rim, selects it; with Ctrl
- *   (⌘ on a Mac), it is taken into the selection, or out of it.
+ *   about its centre, and let go it turns on a little.
+ * - Held still (LONG_PRESS_MS), a press selects it, the selection's outline
+ *   spreading out from the atom pressed on as it is held; a drag on a
+ *   molecule selected moves it - and all that is selected with it - on the
+ *   page. The selection's handle turns them (Selection2D).
+ * - A click on an atom or a bond chooses it, for a measurement, or lets it
+ *   go; with Ctrl (⌘ on a Mac), it takes the molecule into the selection,
+ *   or out of it.
  * The page itself never tilts, so a drawing beside it stays as drawn.
  */
 export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
@@ -86,7 +100,9 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   // molecules turning on by themselves: about which axis, how fast (rad/s)
   const spins = useRef(new Map<number, { axis: THREE.Vector3; speed: number }>());
   const gesture = useRef<Gesture | null>(null);
-  const [active, setActive] = useState<{ kind: Gesture["kind"]; group: number[] } | null>(null);
+  const [active, setActive] = useState<{ kind: "turn" | "move"; group: number[] } | null>(null);
+  // a press being held on a molecule: the atom its selection spreads from, and since when
+  const [hold, setHold] = useState<{ id: number; from: number; start: number } | null>(null);
   // molecules taken away, shrinking out of view: as they were, and how they were turned and shown
   const [leaving, setLeaving] = useState<{ m: Molecule3D; turn: Turn3D | undefined; frame: number }[]>([]);
   const before = useRef({ molecules, turns, frames });
@@ -113,19 +129,15 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       const st = store.getState();
       return poseOf(m, solidOf(m, style), lookOf(m, style), st.turns3d[m.id], st.frames3d[m.id]);
     };
-    // the molecule the pointer is on, or on the rim of: the last placed on
-    // top, and on one rather than on another's rim
-    const hit = (e: PointerEvent): { id: number; part: "body" | "rim" } | null => {
+    // the molecule the pointer is on: the last placed, on top
+    const hit = (e: PointerEvent): { id: number } | null => {
       const p = pageOf(e);
       const st = store.getState();
-      let rim: { id: number; part: "rim" } | null = null;
       for (let i = st.molecules3d.length - 1; i >= 0; i--) {
         const m = st.molecules3d[i];
-        const part = partAt(m, poseNow(m), camera.position, p.x, p.y, camera.zoom, style.bondRadius);
-        if (part === "body") return { id: m.id, part };
-        if (part === "rim" && !rim) rim = { id: m.id, part };
+        if (onMolecule(m, poseNow(m), camera.position, p.x, p.y, camera.zoom, style.bondRadius)) return { id: m.id };
       }
-      return rim;
+      return null;
     };
     const turnBy = (id: number, axis: THREE.Vector3, angle: number) => {
       const was = store.getState().turns3d[id];
@@ -167,9 +179,18 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       }
       if (e.pointerId !== g.pointerId) return;
       e.stopPropagation();
-      // (a press that has not travelled is a click's, as yet)
+      // (a press that has not travelled is a click's, or a long press's, as yet)
       if (!g.moved && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) < MOV_PX) return;
       g.moved = true;
+      if (g.kind === "press") {
+        if (g.timer != null) window.clearTimeout(g.timer);
+        setHold(null);
+        // selected - by the press itself, held, or before - it moves; else it turns
+        const next = store.getState().sel3d.has(g.id) ? moveFrom(g, e) : turnFrom(g, e);
+        gesture.current = next;
+        setActive({ kind: next.kind, group: next.group });
+        return;
+      }
       if (g.kind === "turn") {
         const dx = e.clientX - g.x;
         const dy = e.clientY - g.y;
@@ -201,6 +222,38 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       invalidate();
     };
 
+    // a press that travels: on a molecule not selected, it turns it
+    const turnFrom = (g: Press, e: PointerEvent): Going => {
+      spins.current.delete(g.id);
+      return { ...g, group: [g.id], kind: "turn", x: g.sx, y: g.sy, t: e.timeStamp, axis: new THREE.Vector3(0, 1, 0), recent: [] };
+    };
+    // ...and on one selected, it moves it and all that is selected with it -
+    // the drawing selected, and the arrows and pluses among it, too
+    const moveFrom = (g: Press, e: PointerEvent): Going => {
+      const st = store.getState();
+      const group = st.molecules3d.filter((x) => st.sel3d.has(x.id)).map((x) => x.id);
+      const withDrawing = st.sel.atoms.size > 0;
+      const among = withDrawing
+        ? schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses }, st.sel.atoms)
+        : { arrows: [], pluses: [] };
+      for (const id of group) spins.current.delete(id);
+      const r = dom.getBoundingClientRect();
+      const from = pageAt(((g.sx - r.left) / r.width) * 2 - 1, -(((g.sy - r.top) / r.height) * 2 - 1), camera);
+      return {
+        ...g,
+        group,
+        kind: "move",
+        from: { x: from.x, y: from.y },
+        ats: st.molecules3d.filter((x) => group.includes(x.id)).map((x) => ({ id: x.id, at: { ...x.at } })),
+        drawn: {
+          atoms: withDrawing ? st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y })) : [],
+          arrows: among.arrows.map((a) => ({ id: a.id, x: a.x, y: a.y })),
+          pluses: among.pluses.map((x) => ({ id: x.id, x: x.x, y: x.y })),
+        },
+        key: `move-3d-${g.id}-${e.timeStamp}`,
+      };
+    };
+
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0 || gesture.current) return;
       const h = store.getState().hovered3d ?? hit(e);
@@ -212,49 +265,29 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       try {
         dom.setPointerCapture(e.pointerId);
       } catch {}
-      // the others selected with it go with it
-      const group = st.sel3d.has(m.id) ? st.molecules3d.filter((x) => st.sel3d.has(x.id)).map((x) => x.id) : [m.id];
       const p = pageOf(e);
-      const press: Press = {
-        id: m.id,
-        group,
-        pointerId: e.pointerId,
-        sx: e.clientX,
-        sy: e.clientY,
-        atom: h.part === "body" ? atomAt(poseNow(m), camera.position, p.x, p.y) : null,
-        moved: false,
-      };
-      if (h.part === "body") {
-        for (const id of group) spins.current.delete(id);
-        gesture.current = {
-          ...press,
-          kind: "turn",
-          x: e.clientX,
-          y: e.clientY,
-          t: e.timeStamp,
-          axis: new THREE.Vector3(0, 1, 0),
-          recent: [],
-        };
-      } else {
-        // (selected with the drawing: the drawing's selection, and what is among it, too)
-        const withDrawing = st.sel3d.has(m.id) && st.sel.atoms.size > 0;
-        const among = withDrawing
-          ? schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses }, st.sel.atoms)
-          : { arrows: [], pluses: [] };
-        gesture.current = {
-          ...press,
-          kind: "move",
-          from: { x: p.x, y: p.y },
-          ats: st.molecules3d.filter((x) => group.includes(x.id)).map((x) => ({ id: x.id, at: { ...x.at } })),
-          drawn: {
-            atoms: withDrawing ? st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y })) : [],
-            arrows: among.arrows.map((a) => ({ id: a.id, x: a.x, y: a.y })),
-            pluses: among.pluses.map((x) => ({ id: x.id, x: x.x, y: x.y })),
-          },
-          key: `move-3d-${m.id}-${e.timeStamp}`,
-        };
+      const pose = poseNow(m);
+      const atom = atomAt(pose, camera.position, p.x, p.y);
+      const look = lookOf(m, style);
+      const bond = atom == null && look === "balls" ? bondAt(m, pose, camera.position, p.x, p.y, style.bondRadius) : null;
+      const press: Press = { id: m.id, group: [m.id], pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, atom, bond, add: addsToSelection(e), moved: false };
+      // held still, it selects the molecule - spreading out from the atom pressed on
+      const selected = st.sel3d.has(m.id);
+      const timer = selected
+        ? null
+        : window.setTimeout(() => {
+            const g = gesture.current;
+            if (g?.kind !== "press" || g.moved) return;
+            g.held = true;
+            g.timer = null;
+            setHold(null);
+            store.getState().selectMolecules3d([g.id], g.add);
+          }, LONG_PRESS_MS);
+      if (!selected) {
+        const from = atom ?? (bond != null ? m.bonds[bond].a1 : nearestAtom(pose, camera.position, p.x, p.y));
+        setHold({ id: m.id, from, start: performance.now() });
       }
-      setActive({ kind: gesture.current.kind, group });
+      gesture.current = { ...press, kind: "press", held: false, timer };
     };
 
     const onUp = (e: PointerEvent) => {
@@ -266,12 +299,16 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       } catch {}
       gesture.current = null;
       setActive(null);
+      setHold(null);
       const st = store.getState();
-      if (!g.moved) {
-        // a click: an atom chosen, or the molecule selected
-        if (addsToSelection(e)) st.toggleMolecule3dSel(g.id);
-        else if (g.atom != null) st.chooseAtom3d(g.id, g.atom);
-        else st.selectMolecules3d([g.id]);
+      if (g.kind === "press") {
+        if (g.timer != null) window.clearTimeout(g.timer);
+        // a click: the molecule taken into the selection or out, or an atom or a bond chosen
+        if (!g.held) {
+          if (g.add) st.toggleMolecule3dSel(g.id);
+          else if (g.atom != null) st.chooseAtom3d(g.id, g.atom);
+          else if (g.bond != null) st.chooseBond3d(g.id, g.bond);
+        }
       } else if (g.kind === "turn") {
         // let go while still moving, it turns on as fast as it was turning
         // over the last moves, slowing as it goes
@@ -316,18 +353,18 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     [],
   );
 
-  // the pointer says what a drag does
+  // the pointer says what a drag does: a molecule selected moves, another turns
   useEffect(() => {
     const cursor =
       active?.kind === "turn"
         ? "grabbing"
-        : active?.kind === "move" || hovered?.part === "rim"
+        : active?.kind === "move" || (hovered && sel3d.has(hovered.id))
           ? "move"
           : hovered
             ? "grab"
             : "";
     dom.style.cursor = cursor;
-  }, [dom, hovered, active]);
+  }, [dom, hovered, active, sel3d]);
 
   // a molecule let go while turning turns on, slowing to a stop
   useFrame((_, dt) => {
@@ -346,8 +383,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   if (!molecules.length && !leaving.length) return null;
   const litOf = (id: number): number => {
     if (active) return active.group.includes(id) ? (active.kind === "move" ? 2 : 1) : 0;
-    if (hovered?.id !== id) return 0;
-    return hovered.part === "rim" ? 2 : 1;
+    return hovered?.id === id ? 1 : 0;
   };
   return (
     <group>
@@ -364,6 +400,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           lit={litOf(m.id)}
           selected={sel3d.has(m.id)}
           chosen={chosen?.id === m.id ? chosen.atoms : NONE}
+          chosenBonds={chosen?.id === m.id ? chosen.bonds : NONE}
+          holding={hold?.id === m.id ? hold : null}
           following={active?.kind === "move" && active.group.includes(m.id)}
           framesOpen={hovered?.id === m.id || sel3d.has(m.id)}
           onFrame={(f) => store.getState().setFrame3d(m.id, f)}
@@ -381,6 +419,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           lit={0}
           selected={false}
           chosen={NONE}
+          chosenBonds={NONE}
+          holding={null}
           following={false}
           framesOpen={false}
           onFrame={() => {}}

@@ -73,8 +73,13 @@ export type Molecule3D = {
   id: number;
   atoms: ParsedAtom[];
   bonds: ParsedBond[];
-  /** Where on the page its centre stands, in world units. */
-  at: { x: number; y: number };
+  /**
+   * Where on the page its centre stands, in world units; and `z`, how high
+   * above the page - unset, as high as it reaches, so that no turn takes it
+   * behind the page. Molecules turned together as one body have their
+   * heights set, each where the turn put it.
+   */
+  at: { x: number; y: number; z?: number };
   /** The rest of a file's frames (a trajectory, conformers): x, y, z of every atom, frame by frame. */
   frames?: number[][];
   /** Each frame's energy, where its file gives one, in hartrees: the first frame's first. */
@@ -109,11 +114,8 @@ export type EditorState = {
    */
   boxSelect: { active: boolean; kind: "box" | "lasso"; points: { x: number; y: number }[] };
   hovered: { atomId: number | null; bondId: number | null };
-  /**
-   * The molecule in 3D under the pointer, and which part of it: on it (a
-   * drag turns it) or on the rim just outside its outline (a drag moves it).
-   */
-  hovered3d: { id: number; part: "body" | "rim" } | null;
+  /** The molecule in 3D under the pointer: on its atoms, its bonds or within its rings. */
+  hovered3d: { id: number } | null;
   /** The molecules in 3D on the page. */
   molecules3d: Molecule3D[];
   /** How each molecule in 3D is turned, by id; unturned if absent. */
@@ -122,12 +124,15 @@ export type EditorState = {
   frames3d: Record<number, number>;
   /** The molecules in 3D selected, whole, by id: besides `sel`, which is the drawing's. */
   sel3d: Set<number>;
-  /** The atoms chosen in one molecule in 3D, by index, in the order chosen: what a measurement is of. */
-  chosen3d: { id: number; atoms: number[] } | null;
+  /**
+   * The atoms and bonds chosen in one molecule in 3D, by index, each in the
+   * order chosen: what a measurement is of (utils/molecule3d `chosenPath`).
+   */
+  chosen3d: { id: number; atoms: number[]; bonds: number[] } | null;
   /** The measurement under the pointer: its molecule and its own id. */
   hoveredMeasure3d: { id: number; measure: number } | null;
   setHoveredMeasure3d: (h: { id: number; measure: number } | null) => void;
-  setHovered3d: (h: { id: number; part: "body" | "rim" } | null) => void;
+  setHovered3d: (h: { id: number } | null) => void;
   setTurn3d: (id: number, turn: Turn3D) => void;
   /** A molecule in 3D turned back to face as its file has it. */
   resetTurn3d: (id: number) => void;
@@ -141,13 +146,26 @@ export type EditorState = {
    * molecule, or a fifth, starts the choice afresh.
    */
   chooseAtom3d: (id: number, atom: number) => void;
+  /** A bond of a molecule in 3D chosen, or let go if it was; likewise. */
+  chooseBond3d: (id: number, bond: number) => void;
+  /**
+   * Molecules in 3D turned together, as one body: where each now stands is
+   * the document's, one undo step for all that share `gesture`, and how each
+   * is turned the view's - but an undo or a redo of the step puts the turns
+   * back as they were too. The drawing turned with them, if any, likewise.
+   */
+  turnMolecules3d: (
+    moves: { id: number; at: { x: number; y: number; z?: number }; turn: Turn3D }[],
+    gesture: string,
+    drawing?: { id: number; x: number; y: number }[],
+  ) => void;
   /** Moves a molecule in 3D on the page; moves sharing `gesture` are one undo step. */
   moveMolecule3d: (id: number, at: { x: number; y: number }, gesture?: string) => void;
   /** Moves molecules in 3D on the page together; moves sharing `gesture` are one undo step. */
-  moveMolecules3d: (moves: { id: number; at: { x: number; y: number } }[], gesture?: string) => void;
+  moveMolecules3d: (moves: { id: number; at: { x: number; y: number; z?: number } }[], gesture?: string) => void;
   removeMolecule3d: (id: number) => void;
   setLook3d: (id: number, look: Look3D) => void;
-  /** A measurement of the atoms chosen, which are then let go. */
+  /** A measurement of the atoms and bonds chosen, which are then let go. */
   measureChosen3d: () => void;
   removeMeasure3d: (id: number, measure: number) => void;
   /** The reaction arrow under the pointer: its menu is the one a right-click opens. */

@@ -92,6 +92,14 @@ export function standingHeight(s: Solid, look: Look = "balls"): number {
 }
 
 /**
+ * How high above the page a molecule's centre is: where a turn of several as
+ * one body put it, or else as high as it reaches.
+ */
+export function heightOf(m: Pick<Molecule3D, "at">, s: Solid, look: Look = "balls"): number {
+  return m.at.z ?? standingHeight(s, look);
+}
+
+/**
  * A molecule in 3D as it stands: where on the page, how high, how turned,
  * and where its atoms are and how large, about its centre.
  */
@@ -105,7 +113,7 @@ export type Pose = {
 
 /** A molecule as it stands in a frame, in a look, turned as it is. */
 export function poseOf(m: Molecule3D, s: Solid, look: Look, turn?: Turn3D, frame?: number): Pose {
-  return { at: m.at, height: standingHeight(s, look), turn, places: s.frames[frameOf(s, frame)], radii: s.radii[look] };
+  return { at: m.at, height: heightOf(m, s, look), turn, places: s.frames[frameOf(s, frame)], radii: s.radii[look] };
 }
 
 /** An atom or a bond's end as the camera sees it, taken back to the page: where, how large, and how near. */
@@ -231,6 +239,12 @@ export function bondLines(m: Molecule3D, places: Float32Array, r: number): BondL
 const BOND_LINE = 0.62;
 const BOND_GAP = 2.4;
 
+/** How far a bond's lines reach from its axis, a single bond's radius being `r`. */
+export function bondReach(order: number, r: number): number {
+  const n = linesOf(order);
+  return n === 1 ? r : r * ((n === 2 ? BOND_GAP / 2 : BOND_GAP) + BOND_LINE);
+}
+
 const rings = new WeakMap<object, number[][]>();
 
 /**
@@ -271,9 +285,8 @@ export function ringsOf(m: Molecule3D): number[][] {
   return all;
 }
 
-/** How far within the outline a press still turns, in pixels, and how wide the rim beyond it is. */
+/** How far outside its outline a press is still on a molecule, in pixels. */
 export const BODY_PX = 4;
-export const RIM_PX = 9;
 
 function toSegment(px: number, py: number, a: Seen, b: Seen): number {
   const dx = b.x - a.x, dy = b.y - a.y;
@@ -291,11 +304,10 @@ function inPolygon(px: number, py: number, pts: Seen[]): boolean {
 }
 
 /**
- * What a point of the page is to a molecule in 3D, as it is seen: on it -
- * its atoms, its bonds, within its rings, or just outside its outline - where
- * a drag turns it; on the rim beyond, where a drag moves it; or neither.
+ * Whether a point of the page is on a molecule in 3D, as it is seen: on its
+ * atoms, its bonds, within its rings, or just outside its outline.
  */
-export function partAt(
+export function onMolecule(
   m: Molecule3D,
   pose: Pose,
   camera: THREE.Vector3,
@@ -303,22 +315,140 @@ export function partAt(
   y: number,
   zoom: number,
   bondRadius: number,
-): "body" | "rim" | null {
+): boolean {
   const seen = seenOnPage(pose, camera);
   // (quickly: nothing near enough to the molecule at all)
-  const reach = (BODY_PX + RIM_PX) / zoom;
+  const reach = BODY_PX / zoom;
   let d = Infinity;
   for (const a of seen) d = Math.min(d, Math.hypot(x - a.x, y - a.y) - a.r);
-  if (d > reach + 2 * NOMINAL_BOND_LENGTH) return null;
+  if (d > reach + 2 * NOMINAL_BOND_LENGTH) return false;
   for (const b of m.bonds) {
     const a1 = seen[b.a1], a2 = seen[b.a2];
     const r = bondRadius * WORLD_PER_ANGSTROM * ((a1.r / pose.radii[b.a1] + a2.r / pose.radii[b.a2]) / 2);
     d = Math.min(d, toSegment(x, y, a1, a2) - r);
   }
   if (d > 0 && ringsOf(m).some((ring) => inPolygon(x, y, ring.map((i) => seen[i])))) d = 0;
-  if (d <= BODY_PX / zoom) return "body";
-  if (d <= reach) return "rim";
-  return null;
+  return d <= reach;
+}
+
+/**
+ * The bond seen at a point of the page - within its stick, the nearest of
+ * those there - or null; in balls and sticks, where a molecule has sticks.
+ */
+export function bondAt(m: Molecule3D, pose: Pose, camera: THREE.Vector3, x: number, y: number, bondRadius: number): number | null {
+  const seen = seenOnPage(pose, camera);
+  let best: number | null = null;
+  let z = -Infinity;
+  m.bonds.forEach((b, i) => {
+    const a1 = seen[b.a1], a2 = seen[b.a2];
+    const r = bondRadius * WORLD_PER_ANGSTROM * ((a1.r / pose.radii[b.a1] + a2.r / pose.radii[b.a2]) / 2);
+    const mid = (a1.z + a2.z) / 2;
+    if (toSegment(x, y, a1, a2) <= r && mid > z) {
+      best = i;
+      z = mid;
+    }
+  });
+  return best;
+}
+
+/** The atom whose centre is seen nearest a point of the page. */
+export function nearestAtom(pose: Pose, camera: THREE.Vector3, x: number, y: number): number {
+  let best = 0;
+  let far = Infinity;
+  seenOnPage(pose, camera).forEach((a, i) => {
+    const d = Math.hypot(x - a.x, y - a.y);
+    if (d < far) {
+      far = d;
+      best = i;
+    }
+  });
+  return best;
+}
+
+/**
+ * The atoms a measurement of what is chosen in a molecule is of, in order:
+ * atoms alone, as they were chosen; bonds, the way along them - one bond its
+ * two atoms, two meeting at an atom the angle there, three in a row the
+ * torsion angle along them - with an atom chosen besides going on from
+ * either end it is bonded to. Null where they make no measurement.
+ */
+export function chosenPath(m: Pick<Molecule3D, "bonds">, chosen: { atoms: number[]; bonds: number[] }): number[] | null {
+  const { atoms, bonds } = chosen;
+  if (!bonds.length) return atoms.length >= 2 && atoms.length <= 4 ? [...atoms] : null;
+  // the bonds' way, from one end to the other
+  const ends = bonds.map((i) => m.bonds[i]).filter(Boolean).map((b) => [b.a1, b.a2]);
+  if (ends.length !== bonds.length) return null;
+  let path = [...ends[0]];
+  const left = ends.slice(1);
+  while (left.length) {
+    const k = left.findIndex(([a, b]) => a === path[0] || b === path[0] || a === path[path.length - 1] || b === path[path.length - 1]);
+    if (k < 0) return null;
+    const [a, b] = left.splice(k, 1)[0];
+    if (a === path[path.length - 1]) path = [...path, b];
+    else if (b === path[path.length - 1]) path = [...path, a];
+    else if (a === path[0]) path = [b, ...path];
+    else path = [a, ...path];
+  }
+  // an atom besides, bonded to an end, goes on from it
+  const bonded = (p: number, q: number) => m.bonds.some((b) => (b.a1 === p && b.a2 === q) || (b.a1 === q && b.a2 === p));
+  for (const a of atoms) {
+    if (path.includes(a)) continue;
+    if (bonded(a, path[path.length - 1])) path = [...path, a];
+    else if (bonded(a, path[0])) path = [a, ...path];
+    else return null;
+  }
+  return new Set(path).size === path.length && path.length >= 2 && path.length <= 4 ? path : null;
+}
+
+/** A molecule in 3D as a turn takes it: where it stands, how high, how it is turned, and how high it stands alone. */
+export type Turning3D = { id: number; at: { x: number; y: number; z?: number }; turn?: Turn3D; standing: number };
+/** Where a turn leaves a molecule - how high, where it set that - and how it leaves it turned. */
+export type Turned3D = { id: number; at: { x: number; y: number; z?: number }; turn: Turn3D };
+
+const turnOf = (q: THREE.Quaternion): Turn3D => [q.x, q.y, q.z, q.w];
+
+/**
+ * Molecules turned together by `q`, as one body, about their common centre:
+ * each carried round it and turned with it, and the whole then raised or
+ * lowered so that it rests on the page - the lowest of them, for how far it
+ * reaches, as high as it would stand alone, and none behind the page.
+ */
+export function turnedTogether(ms: readonly Turning3D[], q: THREE.Quaternion): (Turned3D & { at: { z: number } })[] {
+  if (!ms.length) return [];
+  const heights = ms.map((m) => m.at.z ?? m.standing);
+  const c = new THREE.Vector3(
+    ms.reduce((a, m) => a + m.at.x, 0) / ms.length,
+    ms.reduce((a, m) => a + m.at.y, 0) / ms.length,
+    heights.reduce((a, h) => a + h, 0) / ms.length,
+  );
+  const placed = ms.map((m, i) => {
+    const r = new THREE.Vector3(m.at.x, m.at.y, heights[i]).sub(c).applyQuaternion(q).add(c);
+    const turn = q.clone().multiply(m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion()).normalize();
+    return { id: m.id, at: { x: r.x, y: r.y, z: r.z }, turn: turnOf(turn) };
+  });
+  const lift = -Math.min(...placed.map((p, i) => p.at.z - ms[i].standing));
+  return placed.map((p) => ({ ...p, at: { ...p.at, z: p.at.z + lift } }));
+}
+
+/**
+ * Molecules turned with a drawing in its plane, by `angle` (radians,
+ * anticlockwise) about `about`: each carried round it and turned with it,
+ * as high as it was.
+ */
+export function turnedInPlane(ms: readonly Turning3D[], about: { x: number; y: number }, angle: number): Turned3D[] {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), angle);
+  return ms.map((m) => {
+    const dx = m.at.x - about.x;
+    const dy = m.at.y - about.y;
+    const turn = q.clone().multiply(m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion()).normalize();
+    return {
+      id: m.id,
+      at: { x: about.x + dx * c - dy * s, y: about.y + dx * s + dy * c, ...(m.at.z != null ? { z: m.at.z } : {}) },
+      turn: turnOf(turn),
+    };
+  });
 }
 
 /** Where molecules in 3D stand when placed in a row about a point, each clear of the next. */
@@ -342,7 +472,8 @@ export function rowAfter(left: number, y: number, reaches: number[]): { x: numbe
 /**
  * A molecule in 3D as it is seen, for another program: the frame it shows,
  * turned as it is, about its centre - placed where it stands on the page,
- * `placed`, so that several keep their places side by side - in ångströms.
+ * `placed`, so that several keep their places side by side, and those turned
+ * together as one body their heights too - in ångströms.
  */
 export function asSeen(
   m: Pick<Molecule3D, "atoms" | "frames" | "at">,
@@ -362,6 +493,7 @@ export function asSeen(
     if (placed) {
       v.x += m.at.x / k;
       v.y += m.at.y / k;
+      v.z += (m.at.z ?? 0) / k;
     }
     return { el: a.el, x: v.x, y: v.y, z: v.z, ...(a.charge ? { charge: a.charge } : {}), ...(a.isotope ? { isotope: a.isotope } : {}) };
   });
@@ -379,7 +511,7 @@ export function pictureMarks(m: Carried3D, style: Style3D): SolidMark[] {
   const solid = solidOf({ ...m, id: 0 } as Molecule3D, style);
   const places = solid.frames[frameOf(solid, m.frame)];
   const radii = solid.radii[look];
-  const height = standingHeight(solid, look);
+  const height = heightOf(m, solid, look);
   const q = m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion();
   const D = PAGE_DISTANCE;
   const seen = (p: THREE.Vector3) => {

@@ -186,7 +186,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
   const index = (v: unknown) => Number.isInteger(v) && (v as number) >= 0 && (v as number) < n;
   const bonds = m.bonds as Partial<Carried3D["bonds"][number]>[];
   if (!bonds.every((b) => index(b.a1) && index(b.a2) && Number.isInteger(b.order))) return null;
-  const at = m.at as Partial<Pt>;
+  const at = m.at as Partial<Pt & { z: number }>;
   if (!isNum(at.x) || !isNum(at.y)) return null;
   // (what does not read is left out, not the molecule)
   const frames = (Array.isArray(m.frames) ? (m.frames as unknown[]) : []).filter(
@@ -200,7 +200,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
   return {
     atoms: atoms as Carried3D["atoms"],
     bonds: bonds as Carried3D["bonds"],
-    at: { x: at.x, y: at.y },
+    at: { x: at.x, y: at.y, ...(isNum(at.z) ? { z: at.z } : {}) },
     ...(frames.length ? { frames } : {}),
     ...(energies ? { energies } : {}),
     ...(m.look === "space" || m.look === "balls" ? { look: m.look } : {}),

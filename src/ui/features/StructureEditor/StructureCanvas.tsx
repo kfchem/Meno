@@ -42,7 +42,7 @@ import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { STYLE_3D } from "../../../lib/chem/style3d";
-import { lookOf } from "./utils/molecule3d";
+import { chosenPath, lookOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
 
@@ -283,7 +283,7 @@ function StructureCanvasContent({
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
         look: lookOf(menuMolecule, STYLE_3D),
-        chosen: chosen3d?.id === menuMolecule.id ? chosen3d.atoms.length : 0,
+        chosen: chosen3d?.id === menuMolecule.id ? (chosenPath(menuMolecule, chosen3d)?.length ?? 0) : 0,
         onMeasure: () => store.getState().measureChosen3d(),
         onLook: (look) => store.getState().setLook3d(menuMolecule.id, look),
         onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
