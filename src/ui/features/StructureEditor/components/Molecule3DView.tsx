@@ -508,7 +508,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
             {/* (the pointer goes through it to the molecule: what it is over
                 is found by its box - Molecules3D - for its menu and the
                 Delete key) */}
-            <Html center zIndexRange={[30, 20]} pointerEvents="none">
+            <Html center zIndexRange={[30, 20]} style={{ pointerEvents: "none" }}>
               <div
                 ref={(el) => {
                   const l = labels.current.get(x.id) ?? { anchor: null, el: null };
@@ -516,7 +516,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
                   labels.current.set(x.id, l);
                 }}
                 data-measure3d={`${m.id}:${x.id}`}
-                className={`px-1.5 rounded-full bg-white/90 border text-[11px] leading-[18px] text-gh-black tabular-nums whitespace-nowrap select-none shadow-sm transition-colors duration-150 ${
+                className={`pointer-events-none px-1.5 rounded-full bg-white/90 border text-[11px] leading-[18px] text-gh-black tabular-nums whitespace-nowrap select-none shadow-sm transition-colors duration-150 ${
                   props.hoveredMeasure === x.id ? "border-[#1e90ff]" : "border-gh-line"
                 }`}
                 style={{ opacity: 0 }}

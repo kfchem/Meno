@@ -1,4 +1,4 @@
-import { useFrame, useThree } from "@react-three/fiber";
+import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
@@ -78,6 +78,11 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const store = useEditorStore();
   const { camera, gl, invalidate } = useThree();
   const dom = gl.domElement as HTMLCanvasElement;
+  // where the measurements' values are put: what the canvas's events are
+  // connected to, as drei's Html has it
+  const connected = useThree((s) => s.events.connected) as HTMLElement | undefined;
+  const valuesHost = useRef<Element | null>(null);
+  valuesHost.current = connected ?? dom.parentElement?.parentElement ?? null;
   // molecules turning on by themselves: about which axis, how fast (rad/s)
   const spins = useRef(new Map<number, { axis: THREE.Vector3; speed: number }>());
   const gesture = useRef<Gesture | null>(null);
@@ -137,7 +142,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
 
     // the measurement whose value the pointer is over: its box, as drawn
     const labelAt = (e: PointerEvent): { id: number; measure: number } | null => {
-      const host = dom.parentElement;
+      const host = valuesHost.current;
       if (!host) return null;
       for (const el of host.querySelectorAll<HTMLElement>("[data-measure3d]")) {
         const r = el.getBoundingClientRect();
@@ -301,6 +306,16 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     };
   }, [dom, camera, store, style, invalidate]);
 
+  // the measurements' values kept clear of one another, once every frame is
+  // drawn (and the values placed where their marks are)
+  useEffect(
+    () =>
+      addAfterEffect(() => {
+        if (valuesHost.current) separateValues(valuesHost.current);
+      }),
+    [],
+  );
+
   // the pointer says what a drag does
   useEffect(() => {
     const cursor =
@@ -378,3 +393,46 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
 }
 
 const NONE: number[] = [];
+
+/** How far apart two values are kept, in pixels, and how many passes it takes to part them. */
+const VALUE_GAP = 2;
+const VALUE_PASSES = 8;
+
+/**
+ * The measurements' values on the canvas `host`, parted where they overlap:
+ * each moved up or down - half the overlap each way, a few passes over - from
+ * where its marks put it. Done afresh from where they are put, so a value
+ * that no longer overlaps goes back.
+ */
+function separateValues(host: Element) {
+  const els = [...host.querySelectorAll<HTMLElement>("[data-measure3d]")].filter((el) => Number(el.style.opacity || 1) > 0.05);
+  if (!els.length) return;
+  const boxes = els.map((el) => {
+    const r = el.getBoundingClientRect();
+    const was = Number(el.dataset.parted ?? 0);
+    return { el, left: r.left, right: r.right, top: r.top - was, bottom: r.bottom - was, dy: 0 };
+  });
+  boxes.sort((a, b) => a.top + a.bottom - (b.top + b.bottom));
+  for (let pass = 0; pass < VALUE_PASSES; pass++) {
+    let moved = false;
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i];
+        const b = boxes[j];
+        if (a.right <= b.left || b.right <= a.left) continue;
+        const over = a.bottom + a.dy + VALUE_GAP - (b.top + b.dy);
+        if (over <= 0 || b.bottom + b.dy + VALUE_GAP <= a.top + a.dy) continue;
+        a.dy -= over / 2;
+        b.dy += over / 2;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  for (const b of boxes) {
+    const dy = Math.round(b.dy * 2) / 2;
+    if (Number(b.el.dataset.parted ?? 0) === dy) continue;
+    b.el.dataset.parted = String(dy);
+    b.el.style.translate = dy ? `0 ${dy}px` : "";
+  }
+}
