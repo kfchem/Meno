@@ -7,7 +7,8 @@ the maintainer on 2026-09-25; judge it, like everything else, against
 
 ## What finished means
 
-Everything up to, and not including, linking a structure to the 3D views.
+Everything up to, and not including, linking a structure to the 3D views
+(which is the workspace's first stage: [WORKSPACE.md](WORKSPACE.md)).
 Within that, the feature set of a capable general-purpose structure editor,
 and in particular:
 
