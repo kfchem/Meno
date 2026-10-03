@@ -75,6 +75,10 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     if (gone.length) setLeaving((l) => [...l, ...gone.map((m) => ({ m, turn: before.current.turns[m.id] }))]);
     before.current = { molecules, turns };
   }, [molecules, turns]);
+  // (one gone or going: drawn again, so the picture shows it)
+  useEffect(() => {
+    invalidate();
+  }, [leaving, invalidate]);
 
   useEffect(() => {
     const pageOf = (e: PointerEvent) => {
@@ -379,9 +383,12 @@ function Molecule3DView({
     if (grown.current.v !== grown.current.to || grown.current.vel !== 0) {
       spring(grown.current, step);
       moving = true;
-      // (gone: shrunk to nothing, it is let go)
+      // (gone: shrunk to nothing, it is let go - hidden at once, and drawn
+      // once more without it, or its last little picture would stay)
       if (leaving && grown.current.v <= 0.02) {
+        group.current.visible = false;
         leaving();
+        invalidate();
         return;
       }
     }
