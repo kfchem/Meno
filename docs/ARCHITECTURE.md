@@ -3,7 +3,8 @@
 This document describes how Meno is put together today (pre-alpha). It is meant
 as a map for contributors: where things live, which layer owns what, and how the
 pieces talk to each other. For open problems and planned work see
-[`AUDIT-2026-09.md`](./AUDIT-2026-09.md).
+[`AUDIT-2026-09.md`](./AUDIT-2026-09.md); for where the 2D canvas goes next -
+a workspace holding 2D and 3D together - see [`WORKSPACE.md`](./WORKSPACE.md).
 
 ## Layers and responsibilities
 

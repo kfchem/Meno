@@ -7,7 +7,8 @@ the maintainer on 2026-09-25; judge it, like everything else, against
 
 ## What finished means
 
-Everything up to, and not including, linking a structure to the 3D views.
+Everything up to, and not including, linking a structure to the 3D views
+(which is the workspace's first stage: [WORKSPACE.md](WORKSPACE.md)).
 Within that, the feature set of a capable general-purpose structure editor,
 and in particular:
 
@@ -442,8 +443,8 @@ lipids each have their own way of being drawn, which it should know.
        drawn: its label would not say it.
 
      It is one undo step with the layout. The dictionary's pictures of
-     reagents and complexes follow the same rules; a group's or a ligand's
-     own picture is drawn out.
+     reagents, complexes and counter-anions (BArF's CF3) follow the same
+     rules; a group's or a ligand's own picture is drawn out.
 
 Its code is Meno's own: nothing taken from other depiction code, nothing
 traced from reference drawings.

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ABBREVIATIONS, abbreviationStructure, labelRuns, precatalystDrawn, type CustomAbbreviation } from "../../../lib/chem/abbreviations";
-import { COUNTER_IONS, LIGAND_FAMILIES, ligandPicture, structureFormula, type GroupStructure, type Ligand } from "../../../lib/chem/ligands";
+import { COUNTER_IONS, counterIonStructure, LIGAND_FAMILIES, ligandPicture, structureFormula, type GroupStructure, type Ligand } from "../../../lib/chem/ligands";
 import { shownAs } from "../../../lib/chem/enantiomers";
 import { PRECATALYST_GENERATIONS, REAGENT_USES, REAGENTS, type Reagent } from "../../../lib/chem/reagents";
 import { useAppSettings } from "../../../lib/settings/appSettings";
@@ -203,7 +203,7 @@ export default function AbbreviationSettings() {
       {ions.length > 0 && (
         <Listed title="Counter-anions">
           {ions.map((ion) => (
-            <Entry key={ion.label} a={ion} keep={`ion:${ion.label}`} />
+            <Entry key={ion.label} a={ion} of={() => counterIonStructure(ion.label)!} keep={`ion:${ion.label}`} />
           ))}
         </Listed>
       )}
