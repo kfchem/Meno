@@ -40,7 +40,9 @@ import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
-import PartMenu, { type MenuTarget } from "./PartMenu";
+import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
+import { STYLE_3D } from "../../../lib/chem/style3d";
+import { lookOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
 
@@ -222,11 +224,17 @@ function StructureCanvasContent({
       const { hovered, sel } = st;
       const kind = hoveredPart();
       const id = kind === "atom" ? hovered.atomId : hovered.bondId;
-      const selected = sel.atoms.size > 0 || sel.bonds.size > 0;
+      const drawingSelected = sel.atoms.size > 0 || sel.bonds.size > 0;
+      const selected = drawingSelected || st.sel3d.size > 0;
       const busy = st.labelEdit.active || st.moveDrag.active || st.extend.active;
       if (isCleanUpKey(e)) {
         e.preventDefault();
-        runCleanUp(selected ? sel.atoms : structureAt(kind, id));
+        runCleanUp(drawingSelected ? sel.atoms : structureAt(kind, id));
+      } else if (isDeleteKey(e) && !busy && st.hoveredMeasure3d) {
+        // a measurement under the pointer, before anything else
+        e.preventDefault();
+        st.removeMeasure3d(st.hoveredMeasure3d.id, st.hoveredMeasure3d.measure);
+        st.setHoveredMeasure3d(null);
       } else if (isDeleteKey(e) && selected) {
         e.preventDefault();
         if (!busy) st.deleteSelection();
@@ -258,7 +266,7 @@ function StructureCanvasContent({
       } else if (isSelectAllKey(e) && !busy) {
         e.preventDefault();
         st.selectAll();
-      } else if (isDeselectKey(e) && selected && !busy && !menu) {
+      } else if (isDeselectKey(e) && (selected || st.chosen3d) && !busy && !menu) {
         // (Esc with the menu open closes the menu only)
         st.clearSel();
       }
@@ -268,6 +276,19 @@ function StructureCanvasContent({
   }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
+  // a molecule in 3D right-clicked: what its menu does to it
+  const molecules3d = useEditor((s) => s.molecules3d);
+  const chosen3d = useEditor((s) => s.chosen3d);
+  const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
+  const menu3d: MenuMolecule3D | undefined = menuMolecule
+    ? {
+        look: lookOf(menuMolecule, STYLE_3D),
+        chosen: chosen3d?.id === menuMolecule.id ? chosen3d.atoms.length : 0,
+        onMeasure: () => store.getState().measureChosen3d(),
+        onLook: (look) => store.getState().setLook3d(menuMolecule.id, look),
+        onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
+      }
+    : undefined;
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
   // A right-drag moves the view, so the menu waits for the button to come
   // up without having travelled. macOS asks for the menu as the button goes
@@ -308,7 +329,7 @@ function StructureCanvasContent({
     // A card's text field keeps the system's own menu - cut, copy, paste.
     if (e.target !== domRef.current) return;
     e.preventDefault(); // no browser menu over the drawing
-    const { hovered, hoveredArrow, arrows, hoveredPlus, pluses } = store.getState();
+    const { hovered, hoveredArrow, arrows, hoveredPlus, pluses, hovered3d, sel3d, hoveredMeasure3d } = store.getState();
     const box = e.currentTarget.getBoundingClientRect();
     const place = {
       at: clientToWorld(e.clientX, e.clientY) ?? pasteTarget(),
@@ -318,6 +339,29 @@ function StructureCanvasContent({
     };
     const kind = hoveredPart();
     const r = rightPress.current;
+    const open = (target: MenuTarget) => {
+      if (r?.down) r.pending = target; // macOS: open on the way up
+      else if (!r?.moved) setMenu(target); // Windows, or a Ctrl-click on a Mac
+    };
+    // over a measurement's value, on a molecule in 3D: its own menu
+    if (hoveredMeasure3d) {
+      open({ kind: "measure3d", id: hoveredMeasure3d.id, measure: hoveredMeasure3d.measure, selection: "none", ...place });
+      return;
+    }
+    // on a molecule in 3D: its own menu, or the selection's when it is in it
+    if (hovered3d) {
+      const { sel } = store.getState();
+      const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
+      const here = sel3d.has(hovered3d.id);
+      open({
+        kind: "molecule3d",
+        id: hovered3d.id,
+        selection: here ? "here" : drawing || sel3d.size ? "elsewhere" : "none",
+        drawing,
+        ...place,
+      });
+      return;
+    }
     // on a reaction arrow, and nothing else: the arrow's menu
     if (!kind && hoveredArrow != null && arrows.some((a) => a.id === hoveredArrow)) {
       const target: MenuTarget = { kind: "arrow", id: hoveredArrow, selection: "none", ...place };
@@ -337,7 +381,8 @@ function StructureCanvasContent({
     // selection's menu; on nothing else, the canvas's (paste, select all)
     const { sel } = store.getState();
     const part = kind && id != null;
-    const selected = sel.atoms.size > 0 || sel.bonds.size > 0;
+    const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
+    const selected = drawing || sel3d.size > 0;
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
@@ -345,6 +390,7 @@ function StructureCanvasContent({
       kind: part ? kind : null,
       id: part ? id : null,
       selection: !selected ? "none" : onSelected || !part ? "here" : "elsewhere",
+      drawing,
       ...place,
     };
     if (r?.down) r.pending = target; // macOS: open on the way up
@@ -559,11 +605,15 @@ function StructureCanvasContent({
           target={menu}
           onClose={closeMenu}
           onDelete={() => {
-            if (menu.kind === "arrow" && menu.id != null) store.getState().removeArrow(menu.id);
-            else if (menu.kind === "plus" && menu.id != null) store.getState().removePlus(menu.id);
-            else if (menu.selection === "here") store.getState().deleteSelection();
+            const st = store.getState();
+            if (menu.kind === "arrow" && menu.id != null) st.removeArrow(menu.id);
+            else if (menu.kind === "plus" && menu.id != null) st.removePlus(menu.id);
+            else if (menu.kind === "measure3d" && menu.id != null && menu.measure != null) st.removeMeasure3d(menu.id, menu.measure);
+            else if (menu.selection === "here") st.deleteSelection();
+            else if (menu.kind === "molecule3d" && menu.id != null) st.removeMolecule3d(menu.id);
             else if (menu.kind && menu.id != null) deletePart(menu.kind, menu.id);
           }}
+          molecule3d={menu3d}
           onArrowStyle={() => {
             if (menu.kind === "arrow" && menu.id != null) openArrowStyle(menu.id);
           }}

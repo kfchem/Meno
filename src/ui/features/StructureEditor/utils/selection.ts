@@ -44,6 +44,22 @@ export function inLasso(model: Model, path: readonly Pt[]): Sel {
 }
 
 /**
+ * The molecules in 3D a box (two corners) or a lasso (three points or more)
+ * takes: those whose centre stands inside it.
+ */
+export function molecules3dIn(molecules: readonly { id: number; at: Pt }[], kind: "box" | "lasso", points: readonly Pt[]): number[] {
+  if (kind === "box") {
+    if (points.length < 2) return [];
+    const [p, q] = points;
+    const [x0, x1] = [Math.min(p.x, q.x), Math.max(p.x, q.x)];
+    const [y0, y1] = [Math.min(p.y, q.y), Math.max(p.y, q.y)];
+    return molecules.filter((m) => m.at.x >= x0 && m.at.x <= x1 && m.at.y >= y0 && m.at.y <= y1).map((m) => m.id);
+  }
+  if (points.length < 3) return [];
+  return molecules.filter((m) => insidePolygon(m.at, points)).map((m) => m.id);
+}
+
+/**
  * The atoms and bonds along the bonds from `from` to `to`, the shortest way
  * (the fewest bonds), both ends included; null where no bonds join them.
  */

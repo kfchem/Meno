@@ -53,10 +53,20 @@ export type Arrow = {
 };
 /** A "+" between two structures of a reaction scheme: where its middle is. */
 export type Plus = { id: number; x: number; y: number };
+/** How a molecule in 3D is drawn: balls and sticks, or space-filling. */
+export type Look3D = "balls" | "space";
+/**
+ * A measurement on a molecule in 3D, between its atoms by index, in the
+ * order they were chosen: two, a distance; three, the angle at the middle
+ * one; four, the torsion angle about the middle two. It is measured afresh
+ * in whatever frame is shown.
+ */
+export type Measure3D = { id: number; atoms: number[] };
 /**
  * A molecule in 3D, standing on the page: its atoms where its file put
- * them, in ångströms, and its bonds by atom index. How it is turned is the
- * view's (`turns3d`), not the document's: a turn changes nothing about it.
+ * them, in ångströms, and its bonds by atom index. How it is turned, and
+ * which frame is shown, are the view's (`turns3d`, `frames3d`), not the
+ * document's: they change nothing about it.
  */
 export type Molecule3D = {
   id: number;
@@ -64,8 +74,13 @@ export type Molecule3D = {
   bonds: ParsedBond[];
   /** Where on the page its centre stands, in world units. */
   at: { x: number; y: number };
-  /** The rest of a file's frames (a trajectory): x, y, z of every atom, frame by frame. */
+  /** The rest of a file's frames (a trajectory, conformers): x, y, z of every atom, frame by frame. */
   frames?: number[][];
+  /** Each frame's energy, where its file gives one, in hartrees: the first frame's first. */
+  energies?: number[];
+  /** Its own look; unset, the 3D style's. */
+  look?: Look3D;
+  measures?: Measure3D[];
   /** The file it came from. */
   name?: string;
 };
@@ -97,11 +112,38 @@ export type EditorState = {
   molecules3d: Molecule3D[];
   /** How each molecule in 3D is turned, by id; unturned if absent. */
   turns3d: Record<number, Turn3D>;
+  /** Which frame each molecule in 3D shows, by id; the first if absent. */
+  frames3d: Record<number, number>;
+  /** The molecules in 3D selected, whole, by id: besides `sel`, which is the drawing's. */
+  sel3d: Set<number>;
+  /** The atoms chosen in one molecule in 3D, by index, in the order chosen: what a measurement is of. */
+  chosen3d: { id: number; atoms: number[] } | null;
+  /** The measurement under the pointer: its molecule and its own id. */
+  hoveredMeasure3d: { id: number; measure: number } | null;
+  setHoveredMeasure3d: (h: { id: number; measure: number } | null) => void;
   setHovered3d: (h: { id: number; part: "body" | "rim" } | null) => void;
   setTurn3d: (id: number, turn: Turn3D) => void;
+  /** A molecule in 3D turned back to face as its file has it. */
+  resetTurn3d: (id: number) => void;
+  setFrame3d: (id: number, frame: number) => void;
+  /** Molecules in 3D selected, alone or (`add`) with what is selected already. */
+  selectMolecules3d: (ids: Iterable<number>, add?: boolean) => void;
+  /** A molecule in 3D taken into the selection, or out of it. */
+  toggleMolecule3dSel: (id: number) => void;
+  /**
+   * An atom of a molecule in 3D chosen, or let go if it was: one in another
+   * molecule, or a fifth, starts the choice afresh.
+   */
+  chooseAtom3d: (id: number, atom: number) => void;
   /** Moves a molecule in 3D on the page; moves sharing `gesture` are one undo step. */
   moveMolecule3d: (id: number, at: { x: number; y: number }, gesture?: string) => void;
+  /** Moves molecules in 3D on the page together; moves sharing `gesture` are one undo step. */
+  moveMolecules3d: (moves: { id: number; at: { x: number; y: number } }[], gesture?: string) => void;
   removeMolecule3d: (id: number) => void;
+  setLook3d: (id: number, look: Look3D) => void;
+  /** A measurement of the atoms chosen, which are then let go. */
+  measureChosen3d: () => void;
+  removeMeasure3d: (id: number, measure: number) => void;
   /** The reaction arrow under the pointer: its menu is the one a right-click opens. */
   hoveredArrow: number | null;
   /** The "+" under the pointer, likewise. */

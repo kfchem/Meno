@@ -11,7 +11,7 @@ import { editorLayoutOptions, layoutBonds, maxFitZoom } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { chemistry } from "../../../../lib/chem/molecule";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
-import { solidOf, standingHeight } from "../utils/molecule3d";
+import { lookOf, solidOf, standingHeight } from "../utils/molecule3d";
 import { PAGE_DISTANCE } from "./PageCamera";
 
 export default function FitToContent2D({
@@ -72,7 +72,8 @@ export default function FitToContent2D({
     // reaches, seen from where its near side stands
     for (const m of molecules3d) {
       const s = solidOf(m, STYLE_3D);
-      const r = s.reach * (PAGE_DISTANCE / (PAGE_DISTANCE - standingHeight(s) - s.reach));
+      const look = lookOf(m, STYLE_3D);
+      const r = s.reach[look] * (PAGE_DISTANCE / (PAGE_DISTANCE - standingHeight(s, look) - s.reach[look]));
       minX = Math.min(minX, m.at.x - r);
       maxX = Math.max(maxX, m.at.x + r);
       minY = Math.min(minY, m.at.y - r);

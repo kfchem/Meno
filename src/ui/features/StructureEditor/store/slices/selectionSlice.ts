@@ -72,16 +72,20 @@ export function createSelectionSlice(set: SetState) {
         return { ...prev, sel: { atoms, bonds }, selAnchor: id };
       }),
 
-    /** Everything on the canvas. */
+    /** Everything on the canvas, the molecules in 3D with it. */
     selectAll: () =>
       set((prev: EditorState) => ({
         ...prev,
         sel: { atoms: new Set(prev.model.atoms.map((a) => a.id)), bonds: new Set(prev.model.bonds.map((b) => b.id)) },
+        sel3d: new Set(prev.molecules3d.map((m) => m.id)),
       })),
 
+    /** Nothing selected, and no atom of a molecule in 3D chosen. */
     clearSel: () =>
       set((prev: EditorState) =>
-        prev.sel.atoms.size || prev.sel.bonds.size ? { ...prev, sel: none(), selAnchor: null } : prev,
+        prev.sel.atoms.size || prev.sel.bonds.size || prev.sel3d.size || prev.chosen3d
+          ? { ...prev, sel: none(), selAnchor: null, sel3d: new Set<number>(), chosen3d: null }
+          : prev,
       ),
 
     setBoxSelect: (box: EditorState["boxSelect"]) => set((prev: EditorState) => ({ ...prev, boxSelect: box })),

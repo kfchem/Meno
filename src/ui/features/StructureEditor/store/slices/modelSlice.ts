@@ -139,14 +139,16 @@ export const createModelSlice = (
   },
 
   deleteSelection: () => {
-    const { sel, model, arrows, pluses } = get();
-    if (!sel.atoms.size && !sel.bonds.size) return;
-    // the arrows and pluses among it go with it, as with a cut
+    const { sel, sel3d, model, arrows, pluses } = get();
+    if (!sel.atoms.size && !sel.bonds.size && !sel3d.size) return;
+    // the arrows and pluses among it go with it, as with a cut; and the
+    // molecules in 3D selected, in the same step
     const among = schemeAmong({ ...model, arrows, pluses }, sel.atoms);
     const ids = (xs: { id: number }[]) => new Set(xs.map((x) => x.id));
-    if (doc.edit("delete selection", (d) => ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses)))) {
-      forgetDeleted(set);
-    }
+    const deleted = doc.edit("delete selection", (d) =>
+      ops.removeMolecules3d(ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses)), sel3d),
+    );
+    if (deleted) forgetDeleted(set);
   },
 
   moveAtom: (id: number, x: number, y: number) => {

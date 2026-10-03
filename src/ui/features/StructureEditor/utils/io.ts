@@ -34,6 +34,30 @@ function saysThreeD(text: string): boolean[] {
     .map((rec) => rec.replace(/^\r?\n/, "").split(/\r?\n/)[1]?.substring(20, 22).toUpperCase() === "3D");
 }
 
+/**
+ * Each frame's energy in an XYZ file, as calculation programs write it on
+ * the frame's comment line - CREST the number alone, xtb after "energy:",
+ * ORCA after "E" - in hartrees. Only where every frame has one, and there
+ * is more than one frame: otherwise none.
+ */
+export function xyzEnergies(text: string): number[] | undefined {
+  const lines = text.replace(/^\s+/, "").split(/\r?\n/);
+  const found: number[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const n = parseInt(lines[i].trim(), 10);
+    if (!Number.isFinite(n) || n <= 0) break;
+    const comment = lines[i + 1] ?? "";
+    const m =
+      comment.match(/(?:^|\s)(?:energy|E)\s*[:=]?\s*(-?\d+\.\d+(?:[eE][-+]?\d+)?)/i) ??
+      comment.match(/^\s*(-?\d+\.\d+(?:[eE][-+]?\d+)?)(?:\s|$)/);
+    if (!m) return undefined;
+    found.push(parseFloat(m[1]));
+    i += 2 + n;
+  }
+  return found.length > 1 ? found : undefined;
+}
+
 /** How far a molecule's atoms spread in depth, in its file's units. */
 function depthOf(m: Molecule): number {
   if (!m.atoms.length) return 0;
@@ -89,6 +113,7 @@ export async function processFileContent(
   // where the file says it is 3D, or its atoms spread in depth.
   if (format === "xyz" && molecules.length && molecules[0].atoms.length) {
     const [first, ...rest] = molecules;
+    const energies = rest.length ? xyzEnergies(content) : undefined;
     return {
       model: { atoms: [], bonds: [] },
       centroid: { x: 0, y: 0 },
@@ -97,6 +122,7 @@ export async function processFileContent(
           atoms: first.atoms,
           bonds: first.bonds,
           ...(rest.length ? { frames: rest.map((f) => f.atoms.flatMap((a) => [a.x, a.y, a.z])) } : {}),
+          ...(energies?.length === molecules.length ? { energies } : {}),
           ...(filename ? { name: filename } : {}),
         },
       ],

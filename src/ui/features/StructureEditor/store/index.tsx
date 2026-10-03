@@ -14,7 +14,7 @@ import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
 import { createInteractionSlice } from "./slices/interactionSlice";
 import { createUiSlice } from "./slices/uiSlice";
-import { createMolecules3dSlice } from "./slices/molecules3dSlice";
+import { createMolecules3dSlice, heldOf } from "./slices/molecules3dSlice";
 
 // Re-export types for backward compatibility
 export * from "./types";
@@ -52,7 +52,10 @@ export function connectStoreToDocument(
   doc: DocumentStore<StructureDocument>,
 ): () => void {
   const sync = () =>
-    store.setState((prev) => ({ ...prev, ...mirrorOf(doc.getState()) }));
+    store.setState((prev) => {
+      const mirrored = mirrorOf(doc.getState());
+      return { ...prev, ...mirrored, ...heldOf(prev, mirrored.molecules3d) };
+    });
   sync();
   return doc.subscribe(sync);
 }
@@ -72,6 +75,10 @@ export function createEditorStore(
     hovered: { atomId: null, bondId: null },
     hovered3d: null,
     turns3d: {},
+    frames3d: {},
+    sel3d: new Set<number>(),
+    chosen3d: null,
+    hoveredMeasure3d: null,
     hoveredArrow: null,
     hoveredPlus: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
@@ -95,7 +102,7 @@ export function createEditorStore(
     ...createHoverSlice(set),
     ...createUiSlice(doc, set, get),
     ...createInteractionSlice(set, get),
-    ...createMolecules3dSlice(doc, set),
+    ...createMolecules3dSlice(doc, set, get),
   }));
 
   return store;

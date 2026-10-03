@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editorModelOf, processFileContent } from "./io";
+import { editorModelOf, processFileContent, xyzEnergies } from "./io";
 import sampleSdf from "../../../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../../../samples/esterification.rxn?raw";
 import sampleXyz from "../../../../samples/cholesterol.xyz?raw";
@@ -89,6 +89,21 @@ describe("files of 3D structures", () => {
     const twoFrames = "2\nfirst\nH 0 0 0\nH 0.74 0 0\n2\nsecond\nH 0 0 0\nH 0.80 0 0\n";
     const t = await processFileContent("h2.xyz", twoFrames);
     expect(t.molecules3d![0].frames).toEqual([[0, 0, 0, 0.8, 0, 0]]);
+  });
+
+  it("keep each frame's energy, as calculation programs write it", async () => {
+    const frame = (comment: string, x: number) => `2\n${comment}\nH 0 0 0\nH ${x} 0 0\n`;
+    // CREST: the number alone
+    const crest = await processFileContent("crest_conformers.xyz", frame("  -1.1700", 0.74) + frame("  -1.1650", 0.8));
+    expect(crest.molecules3d![0].energies).toEqual([-1.17, -1.165]);
+    // xtb, and ORCA
+    expect(xyzEnergies(frame(" energy: -1.17 gnorm: 0.01 xtb: 6.7.1", 0.74) + frame(" energy: -1.16 gnorm: 0.001", 0.8))).toEqual([-1.17, -1.16]);
+    expect(xyzEnergies(frame("Coordinates from ORCA-job input E -1.17", 0.74) + frame("Coordinates from ORCA-job input E -1.18", 0.8))).toEqual([-1.17, -1.18]);
+    // not every frame has one, or there is only the one frame: none
+    expect(xyzEnergies(frame("-1.17", 0.74) + frame("a title", 0.8))).toBeUndefined();
+    expect(xyzEnergies(frame("-1.17", 0.74))).toBeUndefined();
+    const titled = await processFileContent("h2.xyz", frame("first", 0.74) + frame("second", 0.8));
+    expect(titled.molecules3d![0].energies).toBeUndefined();
   });
 
   it("open a molfile that says it is 3D in 3D, even when it is flat", async () => {

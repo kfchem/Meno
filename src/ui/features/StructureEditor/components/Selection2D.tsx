@@ -7,7 +7,7 @@ import { ALPHA, COLORS } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
-import { inBox, inLasso, middleOf, turned } from "../utils/selection";
+import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
 
 /** How far above the selection its turning handle stands, as a share of a bond. */
 const HANDLE_ABOVE = 0.75;
@@ -64,7 +64,7 @@ export default function Selection2D() {
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0 || e.target !== gl.domElement) return;
       const st = store.getState();
-      if (st.hovered.atomId != null || st.hovered.bondId != null || st.labelEdit.active) return;
+      if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || st.labelEdit.active) return;
       const add = addsToSelection(e);
       const second =
         e.timeStamp - lastEmpty.t <= DOUBLE_CLICK_MS && Math.hypot(e.clientX - lastEmpty.x, e.clientY - lastEmpty.y) < 8;
@@ -111,6 +111,8 @@ export default function Selection2D() {
         const atoms = add ? new Set([...s.sel.atoms, ...got.atoms]) : got.atoms;
         const bonds = add ? new Set([...s.sel.bonds, ...got.bonds]) : got.bonds;
         const taken = [...got.atoms];
+        // (the molecules in 3D whose centres it takes, with the drawing)
+        s.selectMolecules3d(molecules3dIn(s.molecules3d, kind, points), add);
         s.setSel({ atoms, bonds }, taken.length ? taken[taken.length - 1] : s.selAnchor);
         // the box's end is no double-click's, and no click on nothing
         s.suppressDoubleClick(DOUBLE_CLICK_MS);

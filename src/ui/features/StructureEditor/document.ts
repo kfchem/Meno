@@ -12,7 +12,7 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Drawn, Model, Molecule3D, Plus } from "./store/types";
+import type { Arrow, Atom, Bond, Drawn, Look3D, Model, Molecule3D, Plus } from "./store/types";
 
 export type StructureDocument = {
   model: Model;
@@ -679,8 +679,61 @@ export function moveMolecule3d(doc: StructureDocument, id: number, at: { x: numb
   return { ...doc, molecules3d: (doc.molecules3d ?? []).map((m) => (m.id === id ? { ...m, at: { x: at.x, y: at.y } } : m)) };
 }
 
+export function moveMolecules3d(doc: StructureDocument, moves: { id: number; at: { x: number; y: number } }[]): StructureDocument {
+  const to = new Map(moves.map((m) => [m.id, m.at]));
+  return {
+    ...doc,
+    molecules3d: (doc.molecules3d ?? []).map((m) => {
+      const at = to.get(m.id);
+      return at ? { ...m, at: { x: at.x, y: at.y } } : m;
+    }),
+  };
+}
+
 export function removeMolecule3d(doc: StructureDocument, id: number): StructureDocument {
-  return { ...doc, molecules3d: (doc.molecules3d ?? []).filter((m) => m.id !== id) };
+  return removeMolecules3d(doc, [id]);
+}
+
+export function removeMolecules3d(doc: StructureDocument, ids: Iterable<number>): StructureDocument {
+  const gone = new Set(ids);
+  const kept = (doc.molecules3d ?? []).filter((m) => !gone.has(m.id));
+  return kept.length === (doc.molecules3d ?? []).length ? doc : { ...doc, molecules3d: kept };
+}
+
+function withMolecule3d(doc: StructureDocument, id: number, change: (m: Molecule3D) => Molecule3D): StructureDocument {
+  const all = doc.molecules3d ?? [];
+  const i = all.findIndex((m) => m.id === id);
+  if (i < 0) return doc;
+  const next = change(all[i]);
+  return next === all[i] ? doc : { ...doc, molecules3d: all.map((m, k) => (k === i ? next : m)) };
+}
+
+/** A molecule in 3D drawn balls and sticks, or space-filling. */
+export function setLook3d(doc: StructureDocument, id: number, look: Look3D): StructureDocument {
+  return withMolecule3d(doc, id, (m) => ((m.look ?? "balls") === look ? m : { ...m, look }));
+}
+
+/**
+ * A measurement of two, three or four of a molecule's atoms, by index -
+ * none, where they are not, or the same atoms are measured already.
+ */
+export function addMeasure3d(doc: StructureDocument, id: number, atoms: number[]): StructureDocument {
+  return withMolecule3d(doc, id, (m) => {
+    const fits = atoms.length >= 2 && atoms.length <= 4 && new Set(atoms).size === atoms.length;
+    if (!fits || atoms.some((a) => !Number.isInteger(a) || a < 0 || a >= m.atoms.length)) return m;
+    const key = (xs: number[]) => (xs[0] <= xs[xs.length - 1] ? xs : [...xs].reverse()).join(",");
+    const measures = m.measures ?? [];
+    if (measures.some((x) => key(x.atoms) === key(atoms))) return m;
+    const next = measures.reduce((n, x) => Math.max(n, x.id + 1), 1);
+    return { ...m, measures: [...measures, { id: next, atoms: [...atoms] }] };
+  });
+}
+
+export function removeMeasure3d(doc: StructureDocument, id: number, measure: number): StructureDocument {
+  return withMolecule3d(doc, id, (m) => {
+    const measures = (m.measures ?? []).filter((x) => x.id !== measure);
+    return measures.length === (m.measures ?? []).length ? m : { ...m, measures };
+  });
 }
 
 export function addArrow(
