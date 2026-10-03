@@ -81,3 +81,33 @@ describe("drawingSvg", () => {
     expect(svg).toContain(">H</text>");
   });
 });
+
+describe("an SD file of a canvas with molecules in 3D", () => {
+  it("holds the drawing, and each molecule in 3D a record of its own in 3D, in the frame it shows", async () => {
+    const { processFileContent } = await import("./utils/io");
+    const water3d = {
+      atoms: [
+        { el: "O", x: 0, y: 0, z: 0.5 },
+        { el: "H", x: 0.76, y: 0.59, z: 0.5 },
+        { el: "H", x: -0.76, y: 0.59, z: 0.5 },
+      ],
+      bonds: [
+        { a1: 0, a2: 1, order: 1 },
+        { a1: 0, a2: 2, order: 1 },
+      ],
+      at: { x: 0, y: 0 },
+      frames: [[0, 0, 1, 0.8, 0.6, 1, -0.8, 0.6, 1]],
+      frame: 1,
+      name: "water.xyz",
+    };
+    const text = structureFileText({ ...model, molecules3d: [water3d] }, "/tmp/both.sdf");
+    expect(text.match(/\$\$\$\$/g)).toHaveLength(2);
+    expect(text).toContain("\nwater\n");
+    const back = await processFileContent("both.sdf", text);
+    expect(back.model.atoms).toHaveLength(2);
+    expect(back.molecules3d).toHaveLength(1);
+    expect(back.molecules3d![0].atoms[1]).toMatchObject({ el: "H", x: 0.8, z: 1 });
+    // molecules in 3D alone: their records alone
+    expect(structureFileText({ atoms: [], bonds: [], molecules3d: [water3d] }, "/tmp/w.sdf").match(/\$\$\$\$/g)).toHaveLength(1);
+  });
+});

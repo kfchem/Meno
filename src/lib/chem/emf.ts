@@ -14,7 +14,16 @@
  * multiple of four, which PowerPoint's reader is strict about.
  */
 import { labelFont } from "./labelFonts";
-import { circlePoints, labelSetOf, placeLabel, type Layout, type LayoutOptions, type Poly } from "./layout2d";
+import {
+  BALL_SHADE,
+  circlePoints,
+  labelSetOf,
+  placeLabel,
+  shadeOf,
+  type Layout,
+  type LayoutOptions,
+  type Poly,
+} from "./layout2d";
 
 /** Logical units to the pixel: coordinates are whole numbers, so they are kept fine. */
 const S = 20;
@@ -434,6 +443,67 @@ export function layoutEmf(
       for (const h of fonts.values()) remove(h);
     }
   }
+  // molecules in 3D, from the back forward: a stick a band, a ball discs
+  // one inside the next, each lighter and nearer the light, as the SVG's
+  // gradient shades it
+  const solids = layout.solids ?? [];
+  if (solids.length) {
+    select(NULL_PEN);
+    const brushes = new Map<number, number>();
+    const fillWith = (color: number) => {
+      let h = brushes.get(color);
+      if (h == null) {
+        h = brush(color);
+        brushes.set(color, h);
+      }
+      select(h);
+    };
+    const filled = (pts: readonly (readonly [number, number])[], color: number) => {
+      w.plus(PLUS.FILL_POLYGON, SOLID, 8 + 8 * pts.length, (v) => {
+        v.setUint32(0, argb(color), true);
+        v.setUint32(4, pts.length, true);
+        plusPoints(v, 8, pts);
+      });
+      fillWith(color);
+      poly(EMR.POLYGON, pts);
+    };
+    for (const m of solids) {
+      if (m.kind === "stick") {
+        const len = Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y);
+        if (len < 1e-9) continue;
+        const nx = (-(m.b.y - m.a.y) / len) * (m.width / 2);
+        const ny = ((m.b.x - m.a.x) / len) * (m.width / 2);
+        filled(
+          points([
+            { x: m.a.x + nx, y: m.a.y + ny },
+            { x: m.b.x + nx, y: m.b.y + ny },
+            { x: m.b.x - nx, y: m.b.y - ny },
+            { x: m.a.x - nx, y: m.a.y - ny },
+          ]),
+          colorRef(m.color),
+        );
+        continue;
+      }
+      for (let k = 0; k < BALL_STEPS; k++) {
+        const u = 1 - k / BALL_STEPS; // (1 at the edge, nearer 0 towards the light)
+        const r = m.r * u;
+        const c = {
+          x: m.c.x + 2 * m.r * BALL_SHADE.focus.x * (1 - u),
+          y: m.c.y + 2 * m.r * BALL_SHADE.focus.y * (1 - u),
+        };
+        const color = colorRef(ballShade(m.color, u));
+        w.plus(PLUS.FILL_ELLIPSE, SOLID, 20, (v) => {
+          v.setUint32(0, argb(color), true);
+          plusBox(v, 4, c, r);
+        });
+        fillWith(color);
+        ellipse(c, r);
+      }
+    }
+    select(NULL_BRUSH);
+    for (const h of brushes.values()) remove(h);
+  }
+
   w.plus(PLUS.END_OF_FILE, 0, 0, () => {});
   w.add(EMR.EOF, 12, (v) => {
     v.setUint32(0, 0, true);
@@ -484,6 +554,27 @@ export function layoutEmf(
     at += r.length;
   }
   return { emf, widthPt: (widthPx * 72) / 96, heightPt: (heightPx * 72) / 96 };
+}
+
+/** How many discs a ball is drawn with. */
+const BALL_STEPS = 12;
+
+/**
+ * A ball's colour `u` of the way from its lit spot (0) to its edge (1): the
+ * SVG gradient's stops - light, its own colour at 0.6, dark - between.
+ */
+function ballShade(color: string, u: number): string {
+  const light = shadeOf(color, BALL_SHADE.light);
+  const dark = shadeOf(color, -BALL_SHADE.dark);
+  return u <= 0.6 ? mixHex(light, color, u / 0.6) : mixHex(color, dark, (u - 0.6) / 0.4);
+}
+
+/** Two colours (#rrggbb) mixed, `t` of the way from the first to the second. */
+function mixHex(a: string, b: string, t: number): string {
+  const n = (h: string) => parseInt(h.replace("#", ""), 16);
+  const x = n(a), y = n(b);
+  const ch = (shift: number) => Math.round(((x >> shift) & 0xff) * (1 - t) + ((y >> shift) & 0xff) * t);
+  return "#" + ((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1);
 }
 
 /** The records of an EMF, as type and body; null if it is not one. */

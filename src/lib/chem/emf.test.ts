@@ -154,3 +154,45 @@ describe("colorRef", () => {
     expect(colorRef(undefined)).toBe(0);
   });
 });
+
+describe("molecules in 3D in an EMF", () => {
+  const water3d = {
+    atoms: [
+      { el: "O", x: 0, y: 0, z: 0 },
+      { el: "H", x: 0.76, y: 0.59, z: 0 },
+      { el: "H", x: -0.76, y: 0.59, z: 0.3 },
+    ],
+    bonds: [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 0, a2: 2, order: 1 },
+    ],
+    at: { x: 6, y: 0 },
+  };
+  const { layout, opts } = drawingLayout({ ...model, molecules3d: [water3d] }, aromatic, ACS_1996);
+  const { emf } = layoutEmf(layout, opts, new TextEncoder().encode("MENO{}"));
+  const records = emfRecords(emf)!;
+  const plus = emfPlusRecords(emf);
+
+  it("takes in the molecule, beside the drawing", () => {
+    expect(layout.solids!.filter((m) => m.kind === "ball")).toHaveLength(3);
+    expect(layout.solids!.filter((m) => m.kind === "stick")).toHaveLength(2);
+    expect(layout.bounds.max.x).toBeGreaterThan(6);
+  });
+
+  it("draws each ball as discs, one inside the next, twice over - EMF+ and GDI - and each stick as a band", () => {
+    const fillsPlus = plus.filter((r) => r.type === 0x400e).length;
+    const ellipses = records.filter((r) => r.type === 42).length;
+    expect(fillsPlus).toBe(3 * 12);
+    expect(ellipses).toBe(fillsPlus);
+    expect(plus.filter((r) => r.type === 0x400c).length).toBeGreaterThanOrEqual(2);
+    // (still read back)
+    expect(emfComments(emf).some((c) => new TextDecoder().decode(c).startsWith("MENO"))).toBe(true);
+    expect(emf.length % 4).toBe(0);
+  });
+
+  it("is only the molecule, where there is no drawing", () => {
+    const alone = drawingLayout({ atoms: [], bonds: [], molecules3d: [water3d] }, aromatic, ACS_1996).layout;
+    expect(Number.isFinite(alone.bounds.min.x) && Number.isFinite(alone.bounds.max.y)).toBe(true);
+    expect(alone.bounds.min.x).toBeGreaterThan(4);
+  });
+});

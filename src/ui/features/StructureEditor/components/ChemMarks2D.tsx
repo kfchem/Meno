@@ -166,7 +166,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
             ]}
             center
             zIndexRange={Z_RANGE}
-            pointerEvents="none"
+            style={{ pointerEvents: "none" }}
           >
             <div
               role="img"
@@ -193,7 +193,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
           position={[m.x, m.y, 0]}
           center
           zIndexRange={Z_RANGE}
-          pointerEvents="none"
+          style={{ pointerEvents: "none" }}
         >
           <StereoMark text={m.text} fontPx={fontPx} />
         </Html>

@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { TabKind } from "../../../lib/core";
 // no direct parsing here; route to StructureEditor
-import { detectFormat, readMoleculesFromText } from "../../../utils/importers";
+import { detectFormat } from "../../../utils/importers";
 
 type Props = {
   onResolve: (next: { kind: TabKind } & Record<string, unknown>) => void;
@@ -44,14 +44,14 @@ export default function OmniLoader({ onResolve }: Props) {
     const ext = (file.name.split(".").pop() || "").toLowerCase();
     const textRaw = await file.text();
 
-    // Prefer MoleculeViewer for XYZ; others continue to StructureEditor as before
-    const fmt = detectFormat(file.name, textRaw);
-    if (fmt === "xyz") {
-      const molecules = readMoleculesFromText(textRaw, "xyz");
-      onResolve({ kind: "3d", molecules, filename: file.name });
+    // A Meno workspace: the canvas, as it was saved
+    if (ext === "meno") {
+      onResolve({ kind: "structure", filename: file.name, payload: textRaw });
       return;
     }
-    // Route other chemical files to StructureEditor
+    // Chemical files open on the canvas: drawings as drawings, 3D
+    // structures - an XYZ file, by its content too - standing in 3D
+    const fmt = detectFormat(file.name, textRaw);
     if (fmt !== null || EXT_3D.has(ext) || EXT_2D.has(ext)) {
       onResolve({ kind: "structure", filename: file.name, payload: textRaw });
       return;
@@ -117,6 +117,7 @@ export default function OmniLoader({ onResolve }: Props) {
           ".ket",
           ".sdf",
           ".xyz",
+          ".meno",
           ".pdb",
           ".txt",
           ".md",

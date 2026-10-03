@@ -795,11 +795,12 @@ function Send-MenoShortcut {
 }
 
 function Get-DialogWindows {
-    # The system's file panel, and the sheets it opens over itself, are
-    # windows of the app's own above the ordinary level. So is a tooltip -
-    # the fit button has one - which is the reason for the size.
+    # The system's file panels, and the sheets they open over themselves, are
+    # windows of the app's own besides its main one: the open panel above the
+    # ordinary level, the save panel on it. So is a tooltip - the fit button
+    # has one - which is the reason for the size.
     return @([MacGui]::Windows() | Where-Object {
-        $_.Pid -eq $script:MenoPid -and $_.Layer -gt 0 -and $_.Width -ge 200 -and $_.Height -ge 100 })
+        $_.Pid -eq $script:MenoPid -and $_.Id -ne $script:Window -and $_.Width -ge 200 -and $_.Height -ge 100 })
 }
 
 function Wait-DialogWindows {
@@ -876,6 +877,52 @@ function Complete-FileDialog {
     Wait-DialogWindows -What "the open panel to close" -Until { param($d) $d.Count -eq 0 } | Out-Null
 }
 
+function Complete-SaveDialog {
+    <#
+      .SYNOPSIS
+      The system's save panel is up: save under this path in it.
+
+      .DESCRIPTION
+      The panel opens with its name chosen in its name field, so the file's
+      name is typed over it. A '/' typed there would go into the name, not
+      open the "Go to the folder" sheet as it does in the open panel, so the
+      sheet is asked for with Command-Shift-G, waited for as the open panel's
+      is, given the folder (over whatever it last held), and gone with
+      Return. Return again saves, and the panel has to go: a name it would
+      not take, or a file already there, brings up a sheet that keeps it.
+    #>
+    param([Parameter(Mandatory)] [string] $Path)
+    if (-not $Path.StartsWith("/")) { throw "the path has to be absolute: '$Path'" }
+    $folder = Split-Path -Parent $Path
+    $name = Split-Path -Leaf $Path
+    $panel = Wait-DialogWindows -What "the save panel" -Until { param($d) $d.Count -ge 1 }
+    $before = $panel.Count
+    Wait-WindowSettled -Id $panel[0].Id -TimeoutMs 3000 -QuietMs 250 | Out-Null
+    Send-MenoShortcut A
+    Send-MenoText -Text $name
+    Start-Sleep -Milliseconds 300
+    $sheet = $null
+    for ($try = 1; $try -le 3 -and -not $sheet; $try++) {
+        Send-MenoShortcut G -Shift
+        try {
+            $sheet = Wait-DialogWindows -What "the 'Go to the folder' sheet" -TimeoutMs 2500 -Until { param($d) $d.Count -gt $before }.GetNewClosure()
+        } catch {
+            if ($try -eq 3) { throw }
+        }
+    }
+    Start-Sleep -Milliseconds 300
+    Send-MenoShortcut A
+    Send-MenoText -Text $folder
+    $new = $sheet | Where-Object { $_.Id -notin $panel.Id } | Select-Object -First 1
+    Start-Sleep -Milliseconds 600
+    Wait-WindowSettled -Id $new.Id -TimeoutMs 4000 -QuietMs 300 | Out-Null
+    Send-MenoKey -Key Enter
+    Wait-DialogWindows -What "the sheet to take the folder" -Until { param($d) $d.Count -le $before }.GetNewClosure() | Out-Null
+    Start-Sleep -Milliseconds 500
+    Send-MenoKey -Key Enter
+    Wait-DialogWindows -What "the save panel to close (a sheet may be asking whether to replace a file)" -Until { param($d) $d.Count -eq 0 } | Out-Null
+}
+
 function Wait-MenoSettled {
     <#
       .SYNOPSIS
@@ -889,7 +936,7 @@ function Wait-MenoSettled {
     return $false
 }
 
-Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
+Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog, Complete-SaveDialog,
     Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
     ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel, Invoke-MenoSwipe,
     Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled

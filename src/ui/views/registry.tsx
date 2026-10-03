@@ -10,7 +10,6 @@ import type { DocumentStore } from "../../lib/doc";
 import PyConsole from "../features/PythonConsole";
 import GraphEditor from "../features/WorkflowEditor";
 import SettingsPanel from "../features/SettingsPanel";
-import MoleculeViewer from "../features/MoleculeViewer";
 
 import type {
   TabId,
@@ -63,19 +62,6 @@ export const viewRegistry: Record<string, ViewEntry> = {
       <OmniLoader onResolve={(next) => replaceContent(next as any)} />
     ),
     create: (label) => create(label, "loader"),
-  },
-  "3d": {
-    kind: "3d",
-    Component: ({ tabId, content, active }) => (
-      <MoleculeViewer
-        tabId={tabId}
-        initialMolecules={(content.data as any)?.molecules ?? []}
-        energies={(content.data as any)?.energies}
-        showAtomIndex={false}
-        paused={!active}
-      />
-    ),
-    create: (label: string) => create(label, "3d", { molecules: [] }),
   },
   "2d": {
     kind: "2d",

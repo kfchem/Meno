@@ -76,7 +76,7 @@ main movement; everything else moves or zooms the same way in both.
 
 | | Mouse | Trackpad | 2D | 3D |
 |---|---|---|---|---|
-| Left drag from empty space | left drag | press and drag | move | turn |
+| Left drag from empty space | left drag | press and drag | move | move (on a molecule in 3D, turns it) |
 | Right or middle drag, anywhere | right or middle drag | two-finger press and drag | move | move |
 | Scroll | the wheel zooms | two fingers move | as the device | as the device |
 | Zoom | the wheel | pinch | zoom | zoom |
@@ -88,11 +88,13 @@ gesture or, in Chromium, with Ctrl held. Measured on the maintainer's Mac,
 a trackpad's first step is 1 or 2 px however fast the stroke, and a
 smoothly scrolling mouse's notch (an MX Master 3S) is 13 px, so 8 px tells
 them apart; a notch zooms at least as far as a plain wheel's 40 px line.
-(PR #55; 3D follows when the views are joined.)
+(PR #55. In the workspace the page never tilts: each molecule in 3D turns by
+itself, under a left drag on it - [WORKSPACE.md](WORKSPACE.md).)
 
 **A click keeps each view's own meaning**: in 2D a click on an atom edits
 its label and a click on a bond changes its kind, as drawing wants; in 3D a
-click on an atom selects it. A right-click, or a press with two fingers,
+click on an atom chooses it, for a measurement, and a click elsewhere on the
+molecule selects it. A right-click, or a press with two fingers,
 opens the menu for what is under the pointer; it waits for the button to
 come up, so a right drag is a move, not a menu.
 

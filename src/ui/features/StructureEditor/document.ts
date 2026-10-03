@@ -12,7 +12,7 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Drawn, Model, Plus } from "./store/types";
+import type { Arrow, Atom, Bond, Drawn, Look3D, Model, Molecule3D, Plus } from "./store/types";
 
 export type StructureDocument = {
   model: Model;
@@ -27,6 +27,9 @@ export type StructureDocument = {
   nextId: number;
   nextArrowId: number;
   nextPlusId: number;
+  /** Molecules in 3D standing on the page, beside what is drawn. */
+  molecules3d?: Molecule3D[];
+  nextMolecule3dId?: number;
   /**
    * The document's own drawing style; unset, it is drawn in the
    * application's. Saving to a MOL or SD file keeps the structure only.
@@ -49,6 +52,8 @@ export function emptyStructureDocument(): StructureDocument {
     nextId: 1,
     nextArrowId: 1,
     nextPlusId: 1,
+    molecules3d: [],
+    nextMolecule3dId: 1,
   };
 }
 
@@ -574,6 +579,8 @@ export function replaceModel(
     nextArrowId: 1,
     pluses: [],
     nextPlusId: 1,
+    molecules3d: [],
+    nextMolecule3dId: 1,
     aromaticEnabled: false,
     aromaticRings: {},
     nextId: Math.max(1, maxId + 1),
@@ -634,6 +641,8 @@ export function appendModel(
 export type ImportedScheme = {
   arrows?: Omit<Arrow, "id">[];
   pluses?: Omit<Plus, "id">[];
+  /** Molecules in 3D a file brings, where they are to stand. */
+  molecules3d?: Omit<Molecule3D, "id">[];
 };
 
 /** The arrows and pluses drawn with a part - a paste, a document's record - as a scheme to add. */
@@ -641,6 +650,8 @@ export function schemeOf(part: Drawn): ImportedScheme {
   return {
     arrows: (part.arrows ?? []).map(({ id: _id, ...a }) => a),
     pluses: (part.pluses ?? []).map(({ id: _id, ...p }) => p),
+    // (how one was turned, and its frame, are the view's: not the document's)
+    molecules3d: (part.molecules3d ?? []).map(({ turn: _turn, frame: _frame, ...m }) => m),
   };
 }
 
@@ -655,7 +666,85 @@ export function withImportedScheme(
     if (a.look) next = setArrowLook(next, next.nextArrowId - 1, a.look);
   }
   for (const p of scheme?.pluses ?? []) next = addPlus(next, p.x, p.y);
+  for (const m of scheme?.molecules3d ?? []) next = addMolecule3d(next, m);
   return next;
+}
+
+// --- molecules in 3D ---------------------------------------------------------
+
+export function addMolecule3d(doc: StructureDocument, m: Omit<Molecule3D, "id">): StructureDocument {
+  const id = doc.nextMolecule3dId ?? 1;
+  return { ...doc, molecules3d: [...(doc.molecules3d ?? []), { ...m, id }], nextMolecule3dId: id + 1 };
+}
+
+export function moveMolecule3d(doc: StructureDocument, id: number, at: { x: number; y: number; z?: number }): StructureDocument {
+  return moveMolecules3d(doc, [{ id, at }]);
+}
+
+/**
+ * Molecules in 3D moved: each to where `moves` says - and as high above the
+ * page as it says, or as high as it was.
+ */
+export function moveMolecules3d(
+  doc: StructureDocument,
+  moves: { id: number; at: { x: number; y: number; z?: number } }[],
+): StructureDocument {
+  const to = new Map(moves.map((m) => [m.id, m.at]));
+  return {
+    ...doc,
+    molecules3d: (doc.molecules3d ?? []).map((m) => {
+      const at = to.get(m.id);
+      if (!at) return m;
+      const z = at.z ?? m.at.z;
+      return { ...m, at: { x: at.x, y: at.y, ...(z != null ? { z } : {}) } };
+    }),
+  };
+}
+
+export function removeMolecule3d(doc: StructureDocument, id: number): StructureDocument {
+  return removeMolecules3d(doc, [id]);
+}
+
+export function removeMolecules3d(doc: StructureDocument, ids: Iterable<number>): StructureDocument {
+  const gone = new Set(ids);
+  const kept = (doc.molecules3d ?? []).filter((m) => !gone.has(m.id));
+  return kept.length === (doc.molecules3d ?? []).length ? doc : { ...doc, molecules3d: kept };
+}
+
+function withMolecule3d(doc: StructureDocument, id: number, change: (m: Molecule3D) => Molecule3D): StructureDocument {
+  const all = doc.molecules3d ?? [];
+  const i = all.findIndex((m) => m.id === id);
+  if (i < 0) return doc;
+  const next = change(all[i]);
+  return next === all[i] ? doc : { ...doc, molecules3d: all.map((m, k) => (k === i ? next : m)) };
+}
+
+/** A molecule in 3D drawn balls and sticks, or space-filling. */
+export function setLook3d(doc: StructureDocument, id: number, look: Look3D): StructureDocument {
+  return withMolecule3d(doc, id, (m) => ((m.look ?? "balls") === look ? m : { ...m, look }));
+}
+
+/**
+ * A measurement of two, three or four of a molecule's atoms, by index -
+ * none, where they are not, or the same atoms are measured already.
+ */
+export function addMeasure3d(doc: StructureDocument, id: number, atoms: number[]): StructureDocument {
+  return withMolecule3d(doc, id, (m) => {
+    const fits = atoms.length >= 2 && atoms.length <= 4 && new Set(atoms).size === atoms.length;
+    if (!fits || atoms.some((a) => !Number.isInteger(a) || a < 0 || a >= m.atoms.length)) return m;
+    const key = (xs: number[]) => (xs[0] <= xs[xs.length - 1] ? xs : [...xs].reverse()).join(",");
+    const measures = m.measures ?? [];
+    if (measures.some((x) => key(x.atoms) === key(atoms))) return m;
+    const next = measures.reduce((n, x) => Math.max(n, x.id + 1), 1);
+    return { ...m, measures: [...measures, { id: next, atoms: [...atoms] }] };
+  });
+}
+
+export function removeMeasure3d(doc: StructureDocument, id: number, measure: number): StructureDocument {
+  return withMolecule3d(doc, id, (m) => {
+    const measures = (m.measures ?? []).filter((x) => x.id !== measure);
+    return measures.length === (m.measures ?? []).length ? m : { ...m, measures };
+  });
 }
 
 export function addArrow(
@@ -731,10 +820,13 @@ export function removePlus(doc: StructureDocument, id: number): StructureDocumen
 export type MarkPlaces = {
   arrows?: { id: number; x: number; y: number }[];
   pluses?: { id: number; x: number; y: number }[];
+  /** Molecules in 3D moved with the rest: where each now stands. */
+  molecules3d?: { id: number; at: { x: number; y: number; z?: number } }[];
 };
 
-/** `doc` with the arrows and pluses `places` names where it says. */
+/** `doc` with the arrows, pluses and molecules in 3D `places` names where it says. */
 export function placeMarks(doc: StructureDocument, places?: MarkPlaces): StructureDocument {
+  if (places?.molecules3d?.length) return placeMarks(moveMolecules3d(doc, places.molecules3d), { ...places, molecules3d: [] });
   if (!places?.arrows?.length && !places?.pluses?.length) return doc;
   const arrowAt = new Map((places.arrows ?? []).map((p) => [p.id, p]));
   const plusAt = new Map((places.pluses ?? []).map((p) => [p.id, p]));

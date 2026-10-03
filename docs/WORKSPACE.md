@@ -37,7 +37,7 @@ hold both.
     model with no notion of separate molecules;
   - atoms carry a depth (`Atom.z`) only for cages Clean-up draws in
     perspective.
-- **The 3D viewer** (`ui/features/MoleculeViewer`):
+- **The 3D viewer** (`ui/features/MoleculeViewer`, retired in stage 1):
   - a perspective camera with trackball controls, redrawn continuously
     while shown;
   - one mesh per atom and per bond, and every bond drawn single;
@@ -78,8 +78,9 @@ built the way the 2D layers are, rather than the viewer moved in as it is.
    - Undo, saving and the clipboard work through it, as they do for the
      2D structure today (`lib/doc`).
    - 3D structures and PDFs do not fit in a molfile, so the workspace is
-     saved in a file of Meno's own (`.meno`): the record the clipboard and
-     Office already carry, extended. MOL, SDF and RXN stay for exchange.
+     saved in a file of Meno's own (`.meno`). It holds what the clipboard's
+     record holds, and the document's own style and how each 3D molecule
+     is turned and shown. MOL, SDF and RXN stay for exchange.
 4. **One canvas, drawn only when needed.**
    - A 3D molecule's turning, with its inertia, requests frames while it
      moves, as panning does.
@@ -99,7 +100,7 @@ built the way the 2D layers are, rather than the viewer moved in as it is.
 | 0. Groundwork | One molecule type (audit A1: bonds are still by id in the editor and by index elsewhere); typed tab data (A2); 3D files keep their z. | - |
 | 1. 3D in the canvas | 3D molecules on the canvas, with everything the 3D viewer does, in the document and saved; the 3D tab retired. | 0, in part |
 | 2. 2D and 3D joined | A drawing to 3D (RDKit's ETKDG and MMFF, the drawn stereochemistry kept); the 3D structure rising out of the drawing where it is, turned to match it, and back; hover and choice shared; a 3D structure drawn as a formula by Meno's engine; conformer sets (overlaid, by energy, Boltzmann weights). | 1 |
-| 3. Calculation output | Geometries, optimisation paths, energies, vibrations (modes animated) and charges read from ORCA, Gaussian, xTB and CREST, attached to their molecule; later orbitals and densities (cube files) as surfaces. | 2 |
+| 3. Calculation output | Geometries, optimisation paths, energies, vibrations (modes animated) and charges read from ORCA, Gaussian, xTB and CREST, attached to their molecule; later orbitals and densities (cube files) as surfaces. Each program's reader a plugin, added and removed online. | 2 |
 | 4. Text and PDF | Notes on the page; a PDF on the page (pdf.js): its pages, its text searched, its figures cut out. | can run beside 3 |
 | 5. Structures from PDFs | Figures read as structures (candidates: MolScribe, DECIMER) in the sidecar, their weights fetched with consent; drawn by Meno's engine, tied to the figure they came from, for the chemist to check and correct. | 4 |
 | 6. Workflows that run | Workflow steps as items on the page, tied to molecules: RDKit conformers, xTB, CREST, and ORCA or Gaussian where installed. Jobs started, stopped and logged by the app. Procedures saved and shared with their results. | 2, 3 |
@@ -135,6 +136,21 @@ built the way the 2D layers are, rather than the viewer moved in as it is.
 Steps 2 to 6 depend on each other, so they go in one pull request, a commit
 for each topic (one pull request per dependent chain).
 
+**Where it stands** (#112): every step is done.
+- 3D layers: instanced, double and triple bonds as two and three lines,
+  light of their own, drawn on demand.
+- In the document: place, look, frames, energies and measurements, undone;
+  the clipboard and the workspace file.
+- Opening: XYZ files, and 3D MOL and SD records, by Open, a drop or a new
+  tab.
+- Working them: as the pointer table has it, with the right-click menu.
+- The old viewer: retired, and the workflow's 3D node is a canvas.
+
+Left for later:
+- pictures of molecules in 3D for Office;
+- values of measurements that overlap each other;
+- energies only from XYZ comment lines, until stage 3's readers.
+
 ## Decisions
 
 Taken on 2026-10-03:
@@ -165,7 +181,7 @@ Taken on 2026-10-03:
   | Under the pointer | Left drag | Right or middle drag | Wheel, pinch | Click |
   |---|---|---|---|---|
   | A 2D drawing | as today | moves the view | zooms the page | as today |
-  | A 3D molecule | turns it about its centre, with inertia | moves the view | zooms the page | chooses an atom |
+  | A 3D molecule | turns it about its centre, with inertia; selected, moves it and all that is selected with it | moves the view | zooms the page | on an atom or a bond, chooses it |
   | Empty page | moves the view | moves the view | zooms the page | chooses nothing |
 
   - **A 3D molecule's reach** follows its shape: its atoms, its bonds and
@@ -175,19 +191,80 @@ Taken on 2026-10-03:
     the pointer swells a little on a spring. No frame: the maintainer
     asked for a highlight along the outline, in a modern way, rather than
     a rectangle round it.
-  - **The rim just outside its outline** moves the molecule on the page,
-    its outline lighting up more as the pointer reaches it.
+  - **Held still, a press selects the molecule** (0.4 s, as in 2D), the
+    selection's outline spreading out from the atom pressed on as it is
+    held; a drag from there moves it. A molecule selected moves when
+    dragged, with all that is selected; one not selected turns. (Agreed
+    on 2026-10-03, in place of a rim outside the outline that moved it:
+    the maintainer expected to select and drag by reflex.)
   - **A structure rising out of its drawing** ends beside it, not on top,
     so that the drawing can still be edited.
   - **A drawing and its 3D structure.** Turning the 3D structure leaves
     the drawing as drawn. Hovering an atom in one lights the same atom in
     the other. *Turn like the drawing* is in the menu.
-  - **Several molecules chosen** turn together, each about its own centre.
+  - **The selection's handle turns molecules in 3D** (agreed 2026-10-03):
+    - selected alone, as one body about their common centre, in 3D - as a
+      drag on one turns it - so that molecules placed together, a complex
+      say, stay as they are to one another. That moves them, so it is one
+      undo step, and the undo puts their turns back too. Afterwards each
+      stands as high as the turn left it, the whole resting on the page;
+    - selected with a drawing, everything in the page's plane, the
+      molecules carried round and turned with it;
+    - with Shift, each molecule about its own centre, the drawing staying.
 - **What a 3D molecule looks like** starts from the 3D viewer's look:
   - atom size and colour, material and light, and the turn's inertia,
     near enough;
   - held as a style, as the 2D drawing's is, so that it can be set the
     same way later.
+
+Taken while stage 1 was built, on 2026-10-03:
+
+- **Choosing and selecting.**
+  - A click on an atom or a bond of a 3D molecule chooses it, or lets it
+    go. Atoms are chosen in order, up to four, as in the old viewer, and
+    bonds up to three; one in another molecule starts afresh. What is
+    chosen makes a measurement: atoms in the order chosen, or along the
+    bonds - one bond's length, two bonds' angle, three in a row their
+    torsion angle - an atom besides going on from an end it is bonded to.
+  - A long press selects the molecule whole. A click with Ctrl (⌘ on a
+    Mac) takes it into the selection or out of it.
+  - A box, a lasso or select all takes 3D molecules by their centres,
+    with the drawing.
+  - Delete, Cut, Copy and Escape include them. A drag on any of what is
+    selected moves all of it, drawing and molecules, as one step.
+- **The right-click menu on a 3D molecule:**
+  - a measurement of what is chosen of it (two, three or four atoms);
+  - ball and stick or space-filling, for that molecule;
+  - reset orientation;
+  - cut, copy and delete.
+- **Measurements** are the document's:
+  - a dashed line for a distance, or an arc and a faint fan for an angle
+    or a torsion angle (IUPAC's sign), with the value beside;
+  - measured afresh in whatever frame is shown;
+  - the pointer goes through a value to the molecule, but the menu and
+    Delete over it are the measurement's.
+- **Frames.**
+  - A molecule with frames has a chip under it: which frame, of how many.
+    Hovered or selected, the chip opens to a slider.
+  - The old viewer's ladder of energies became bars above the slider:
+    each frame as high as it is above the lowest, and the chip says by
+    how much in kcal/mol. One control serves both a trajectory and a
+    conformer set.
+  - Its atoms go over to another frame rather than jump.
+- **What is the view's.** How a molecule is turned and which frame it
+  shows are not undone. They are kept by a copy and by the workspace file,
+  so that what is pasted or opened looks as it did.
+- **Saving.**
+  - `.meno` is JSON (`meno-workspace`, version 1).
+  - An SD file holds each 3D molecule as a record in 3D beside the
+    drawing.
+  - With 3D molecules on the canvas, Save offers only what keeps them: a
+    workspace or an SD file.
+- **Calculation readers** (the maintainer): reading what calculation
+  programs write is to be plugins, added and removed online. Meno itself
+  reads geometry. The one reader so far, energies on an XYZ file's comment
+  lines (CREST, xtb, ORCA), lives apart in `lib/calc`, and what it finds
+  is plain data on the molecule.
 
 ## Risks
 
@@ -201,3 +278,5 @@ Taken on 2026-10-03:
   instanced from the start.
 - **Testing.** The GUI harness sees a WebGL canvas only while its window
   is on screen.
+- **Office.** A copy of 3D molecules alone carries no picture yet, so
+  Word and PowerPoint get nothing to show.

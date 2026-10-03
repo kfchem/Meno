@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useEffect, useMemo, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
@@ -53,8 +54,8 @@ export function Atoms2D() {
       -(((cy - rect.top) / rect.height) * 2 - 1),
       0
     );
-    v.unproject(camera as any);
-    return { x: v.x, y: v.y };
+    const p = pageAt(v.x, v.y, camera);
+    return { x: p.x, y: p.y };
   };
   const lastDown = useRef<{
     t: number;
@@ -282,9 +283,11 @@ export function Atoms2D() {
     const from = model.atoms
       .filter((a) => sel.atoms.has(a.id))
       .map((a) => ({ id: a.id, x: a.x, y: a.y }));
-    // the arrows and pluses among the selection go with it
+    // the arrows and pluses among the selection go with it, and the
+    // molecules in 3D selected with it
     const st = store.getState();
     const among = schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses }, sel.atoms);
+    const solids = st.molecules3d.filter((m) => st.sel3d.has(m.id)).map((m) => ({ id: m.id, at: m.at }));
     const p0 = toWorld(cand.current.sx, cand.current.sy);
     const gesture = `drag-${performance.now()}`;
     let frame: number | null = null;
@@ -294,7 +297,11 @@ export function Atoms2D() {
       const dx = last.x - p0.x;
       const dy = last.y - p0.y;
       const by = (p: { id: number; x: number; y: number }) => ({ id: p.id, x: p.x + dx, y: p.y + dy });
-      moveAtoms(from.map(by), gesture, { arrows: among.arrows.map(by), pluses: among.pluses.map(by) });
+      moveAtoms(from.map(by), gesture, {
+        arrows: among.arrows.map(by),
+        pluses: among.pluses.map(by),
+        molecules3d: solids.map((m) => ({ id: m.id, at: { x: m.at.x + dx, y: m.at.y + dy } })),
+      });
     };
     const onMove = (ev: PointerEvent) => {
       last = toWorld(ev.clientX, ev.clientY);
