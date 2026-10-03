@@ -148,13 +148,42 @@ Taken on 2026-10-03:
   files too.
 - **The workspace has a file of Meno's own**, `.meno`.
 
-Still to decide:
+- **The camera looks at the page head-on, in perspective** (agreed on the
+  spike's pictures). The spike compared the page pixel for pixel with
+  today's orthographic camera:
+  - identical at four zooms, and for taxol 8 pixels out by 1/255;
+  - only the selection shading, which lies 0.04 behind the page, moved,
+    by under a pixel at its edges, so every page layer is to lie on the
+    page and be ordered by drawing order alone.
 
-- **The camera.** Head-on perspective, or orthographic as today, decided
-  on the spike's pictures.
-- **Turning a molecule.** The left drag turns the molecule under the
-  pointer, and on empty page it moves the view. This is proposed, and
-  decided with the camera.
+  The camera stands 60 bond-units from the page and keeps today's zoom:
+  CSS pixels per world unit on the page.
+- **Each 3D molecule turns by itself; the page never tilts.** With a
+  drawing and its 3D structure side by side, turning the view would show
+  the drawing askew. So what is under the pointer decides:
+
+  | Under the pointer | Left drag | Right or middle drag | Wheel, pinch | Click |
+  |---|---|---|---|---|
+  | A 2D drawing | as today | moves the view | zooms the page | as today |
+  | A 3D molecule | turns it about its centre, with inertia | moves the view | zooms the page | chooses an atom |
+  | Empty page | moves the view | moves the view | zooms the page | chooses nothing |
+
+  - **A 3D molecule's reach** is its outline widened a little, not its
+    atoms alone, so a drag between two atoms still turns it. Hovered, it
+    shows a light frame and a turning pointer.
+  - **The frame's edge** moves the molecule on the page, as a window is
+    moved by its title bar.
+  - **A structure rising out of its drawing** ends beside it, not on top,
+    so that the drawing can still be edited.
+  - **A drawing and its 3D structure.** Turning the 3D structure leaves
+    the drawing as drawn. Hovering an atom in one lights the same atom in
+    the other. *Turn like the drawing* is in the menu.
+  - **Several molecules chosen** turn together, each about its own centre.
+- **What a 3D molecule looks like** starts from the 3D viewer's look:
+  - atom size and colour, material and light, and the turn's inertia,
+    near enough;
+  - held as a style, as the 2D drawing's is, so that it can be set the
+    same way later.
 
 ## Risks
 
