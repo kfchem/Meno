@@ -128,6 +128,17 @@ export function readRecord(text: string): Drawn | null {
   } catch {
     return null;
   }
+  const r = data as { format?: unknown; version?: unknown };
+  if (r?.format !== RECORD || r.version !== VERSION) return null;
+  return readDrawn(data);
+}
+
+/**
+ * What is drawn, as Meno's own record and workspace file hold it: atoms and
+ * bonds, arrows, pluses and molecules in 3D. Null where the atoms or bonds
+ * do not read; what else does not read is left out.
+ */
+export function readDrawn(data: unknown): Drawn | null {
   const r = data as {
     format?: unknown;
     version?: unknown;
@@ -137,7 +148,7 @@ export function readRecord(text: string): Drawn | null {
     pluses?: unknown;
     molecules3d?: unknown;
   };
-  if (r?.format !== RECORD || r.version !== VERSION || !Array.isArray(r.atoms) || !Array.isArray(r.bonds)) return null;
+  if (!r || !Array.isArray(r.atoms) || !Array.isArray(r.bonds)) return null;
   const atoms = r.atoms as Partial<Atom>[];
   const bonds = r.bonds as Partial<Bond>[];
   if (!atoms.every((a) => isNum(a.id) && isNum(a.x) && isNum(a.y) && typeof a.el === "string")) return null;

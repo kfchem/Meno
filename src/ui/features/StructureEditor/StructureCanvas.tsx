@@ -446,7 +446,7 @@ function StructureCanvasContent({
         ref={fileInputRef}
         type="file"
         className="hidden"
-        accept={[".mol", ".sdf", ".rxn", ".xyz"].join(",")}
+        accept={[".mol", ".sdf", ".rxn", ".xyz", ".meno"].join(",")}
         onChange={(e) => {
           if (e.target.files) onPickFiles(e.target.files);
           // Allow picking the same file again.

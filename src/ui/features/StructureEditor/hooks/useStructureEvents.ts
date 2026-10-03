@@ -11,13 +11,14 @@ import { editorModelOf, processFileContent, type ProcessedFileResult } from "../
 import { schemeOf, type ImportedScheme } from "../document";
 import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
-import type { Model } from "../store/types";
+import { isWorkspaceFile, readWorkspace } from "../utils/workspace";
+import type { Drawn } from "../store/types";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
 import { lookOf, rowAbout, rowAfter, solidOf } from "../utils/molecule3d";
 import type { DropZone, Dropped } from "../../../../lib/drop";
 
 /** The files a drop opens as structures, beside what is drawn. */
-const STRUCTURE_FILE = /\.(mol|sdf|rxn|xyz)$/i;
+const STRUCTURE_FILE = /\.(mol|sdf|rxn|xyz|meno)$/i;
 import { readRecord } from "../utils/copyPaste";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
@@ -106,11 +107,17 @@ export function useStructureEvents(
       // One import per canvas: this effect runs twice under StrictMode, and
       // importing twice would leave two undo steps for a single file.
       importedInitial.current = true;
-      // A structure from a document (lib/ole): Meno's own record, taken as it is.
-      if (/\.meno$/i.test(initialFilename ?? "")) {
+      // A workspace file, as it was saved; or a structure from a document
+      // (lib/ole): Meno's own record, taken as it is.
+      if (isWorkspaceFile(initialFilename ?? "")) {
+        const ws = readWorkspace(initialPayload);
+        if (ws) {
+          store.getState().openWorkspace(ws, true);
+          return;
+        }
         const record = readRecord(initialPayload);
         if (record) store.getState().openModel(record, schemeOf(record));
-        else reportImportError("initial payload", new Error("The document's structure could not be read."));
+        else reportImportError("initial payload", new Error("The workspace could not be read."));
         return;
       }
       try {
@@ -352,7 +359,7 @@ export function useStructureEvents(
   // What is being dragged is read as it comes over the drawing: by the time
   // it is dropped, Word or PowerPoint may already have taken it back (on a
   // Mac, the drag pasteboard is emptied as the drag ends).
-  const dropReading = useRef<Promise<Model | null> | null>(null);
+  const dropReading = useRef<Promise<Drawn | null> | null>(null);
   // The drawing as a drop zone (lib/drop): it takes files and whatever
   // else is dragged to it, and reads the latter as it comes
   const dropZone: DropZone = {
@@ -382,7 +389,7 @@ export function useStructureEvents(
       // hand over what it drags only once it is dropped)
       const found =
         (reading && (await reading.catch(() => null))) || (await structureInDrop().catch(() => null));
-      if (found?.atoms.length) {
+      if (found?.atoms.length || found?.molecules3d?.length) {
         store.getState().pasteModel(centredAt(found, at));
         setImportError(null);
         return;
@@ -391,6 +398,15 @@ export function useStructureEvents(
     if (!dropped) return;
     const f = dropped;
     const text = await f.text();
+    // a workspace dropped: what it holds, beside what is drawn, selected
+    if (isWorkspaceFile(f.name)) {
+      const ws = readWorkspace(text);
+      if (ws) {
+        store.getState().pasteModel(centredAt(ws.drawn, at));
+        setImportError(null);
+      } else reportImportError("append", new Error("The workspace could not be read."));
+      return;
+    }
     try {
       const result = await processFileContent(f.name, text);
       const dx = at.x - result.centroid.x;
@@ -418,6 +434,15 @@ export function useStructureEvents(
     if (!files || !files.length) return;
     const f = files[0];
     const text = await f.text();
+    // a workspace: everything in it, as it was saved, over what is drawn
+    if (isWorkspaceFile(f.name)) {
+      const ws = readWorkspace(text);
+      if (ws) {
+        store.getState().openWorkspace(ws);
+        setImportError(null);
+      } else reportImportError("replace", new Error("The workspace could not be read."));
+      return;
+    }
     try {
       const result = await processFileContent(f.name, text);
       const shifted = {

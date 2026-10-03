@@ -4,6 +4,7 @@ import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
 import type { BondChem, ParsedAtom, ParsedBond } from "../../../../lib/chem/molecule";
+import type { Workspace } from "../utils/workspace";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
 export type Atom = EditorAtom & {
@@ -321,6 +322,11 @@ export type EditorState = {
   openModel: (next: Model, scheme?: ImportedScheme) => void;
   /** A file opened over the canvas's contents, as one undo step. */
   replaceModel: (next: Model, scheme?: ImportedScheme) => void;
+  /**
+   * A workspace file opened: everything in it, as it was saved - over what
+   * the canvas holds, as one step, or (`start`) as where the document starts.
+   */
+  openWorkspace: (ws: Workspace, start?: boolean) => void;
   /** A file dropped onto the canvas, or a SMILES beside what is drawn: added, selected, as one undo step. */
   appendModel: (next: Model, scheme?: ImportedScheme) => void;
   /** Clears hover, selection and gestures after the structure is replaced. */

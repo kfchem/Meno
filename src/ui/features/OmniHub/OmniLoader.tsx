@@ -44,6 +44,11 @@ export default function OmniLoader({ onResolve }: Props) {
     const ext = (file.name.split(".").pop() || "").toLowerCase();
     const textRaw = await file.text();
 
+    // A Meno workspace: the canvas, as it was saved
+    if (ext === "meno") {
+      onResolve({ kind: "structure", filename: file.name, payload: textRaw });
+      return;
+    }
     // Prefer MoleculeViewer for XYZ; others continue to StructureEditor as before
     const fmt = detectFormat(file.name, textRaw);
     if (fmt === "xyz") {
@@ -117,6 +122,7 @@ export default function OmniLoader({ onResolve }: Props) {
           ".ket",
           ".sdf",
           ".xyz",
+          ".meno",
           ".pdb",
           ".txt",
           ".md",

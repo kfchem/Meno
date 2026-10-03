@@ -7,6 +7,7 @@ import { ARROW_LENGTH_BONDS } from "../../../../../lib/chem/reactionScheme";
 import { EditorState, Bond, Arrow, Model, Drawn } from "../types";
 import { turnedOver } from "../../utils/selection";
 import { schemeAmong } from "../../utils/copyPaste";
+import type { Workspace } from "../../utils/workspace";
 import { StoreApi } from "zustand";
 
 type SetState = StoreApi<EditorState>["setState"];
@@ -241,6 +242,29 @@ export const createModelSlice = (
     get().forgetInteraction();
   },
 
+  openWorkspace: (ws: Workspace, start = false) => {
+    const { drawn } = ws;
+    const opened = (d: StructureDocument) => {
+      const next = ops.withImportedScheme(ops.replaceModel(d, drawn), ops.schemeOf(drawn));
+      return ops.setDocumentStyle(
+        { ...next, aromaticEnabled: ws.aromaticEnabled, aromaticRings: ws.aromaticRings },
+        ws.style,
+      );
+    };
+    if (start) doc.reset(opened(doc.getState()), "open workspace");
+    else doc.edit("open workspace", opened);
+    get().forgetInteraction();
+    // each molecule in 3D turned, and showing the frame, as it was saved -
+    // numbered from the first, in order, as replaceModel left them to be
+    const turns3d: EditorState["turns3d"] = {};
+    const frames3d: EditorState["frames3d"] = {};
+    (drawn.molecules3d ?? []).forEach((m, i) => {
+      if (m.turn) turns3d[i + 1] = m.turn;
+      if (m.frame) frames3d[i + 1] = m.frame;
+    });
+    set((prev: EditorState) => ({ ...prev, turns3d, frames3d }));
+  },
+
   /** A file opened over what the canvas holds: one step, arrow and all. */
   replaceModel: (next: Model, scheme?: ImportedScheme) => {
     doc.edit("open structure", (d) =>
@@ -250,10 +274,17 @@ export const createModelSlice = (
   },
 
   forgetInteraction: () => {
-    // Interaction state does not survive a new structure.
+    // Interaction state does not survive a new structure - nor how the
+    // molecules in 3D were turned, which the new ones' ids would take on.
     set((prev: EditorState) => ({
       ...prev,
       sel: { atoms: new Set(), bonds: new Set() },
+      sel3d: new Set<number>(),
+      chosen3d: null,
+      turns3d: {},
+      frames3d: {},
+      hovered3d: null,
+      hoveredMeasure3d: null,
       hovered: { atomId: null, bondId: null },
       labelEdit: { active: false, atomId: null, value: "", autoCap: true },
       moveDrag: {
