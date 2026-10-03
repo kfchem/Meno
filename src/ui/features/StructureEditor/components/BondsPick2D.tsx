@@ -184,10 +184,10 @@ export default function BondsPick2D() {
     updateBond(b.id, { order: 3 as any, stereo: "none" });
   }
 
+  const { atoms, bonds } = model;
   useEffect(() => {
     const m = inst.current;
     if (!m) return;
-    const { atoms, bonds } = model;
     m.count = bonds.length;
     const thickWorld = PICK_THICKNESS_RATIO * NOMINAL_BOND_LENGTH;
     for (let i = 0; i < bonds.length; i++) {
@@ -208,7 +208,7 @@ export default function BondsPick2D() {
       m.setMatrixAt(i, tmpM);
     }
     commitInstanceMatrices(m);
-  }, [model.atoms, model.bonds, tmpM, tmpQ]);
+  }, [atoms, bonds, tmpM, tmpQ]);
 
   return (
     <instancedMesh

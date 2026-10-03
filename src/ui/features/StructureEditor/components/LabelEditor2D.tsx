@@ -1,5 +1,5 @@
 import { Html } from "@react-three/drei";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
@@ -134,9 +134,11 @@ export default function LabelEditor2D() {
   const style = useDrawingStyle();
   const opts: LayoutOptions = useMemo(() => editorLayoutOptions(style), [style]);
   // Keep last position during fade-out
+  const atomX = atom?.x;
+  const atomY = atom?.y;
   useEffect(() => {
-    if (atom) lastPosRef.current = { x: atom.x, y: atom.y };
-  }, [atom?.x, atom?.y]);
+    if (atomX != null && atomY != null) lastPosRef.current = { x: atomX, y: atomY };
+  }, [atomX, atomY]);
   // Label(Text) uses world-unit font size; on screen it is scaled by zoom
   // Html(transform=false) renders in screen CSS px; to match appearance: px = world * zoom
   const fontSizePx = opts.fontPx * Math.max(zoom, 1e-6);
@@ -147,7 +149,7 @@ export default function LabelEditor2D() {
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D;
   } | null>(null);
-  const measureTextPx = (text: string) => {
+  const measureTextPx = useCallback((text: string) => {
     if (!measRef.current) {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
@@ -159,10 +161,10 @@ export default function LabelEditor2D() {
     const t = text && text.length > 0 ? text : "H"; // Ensure minimum width when empty
     const m = ctx.measureText(t);
     return m.width;
-  };
+  }, [fontSizePx, fontFamily]);
   const textWidthPx = useMemo(
     () => measureTextPx(labelEdit.value),
-    [labelEdit.value, fontSizePx, fontFamily]
+    [labelEdit.value, measureTextPx]
   );
   // First char half width (px) for offsetting left-aligned editor to match single-uppercase position
   const firstCharHalfWidthPx = useMemo(() => {

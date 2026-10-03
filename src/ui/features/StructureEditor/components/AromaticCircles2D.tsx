@@ -65,18 +65,7 @@ export default function AromaticCircles2D() {
     return cs;
   }, [previewLayout]);
 
-  // project world->screen helper
   const { gl } = useThree();
-  const projectToScreen = (p: { x: number; y: number }) => {
-    const v = new THREE.Vector3(p.x, p.y, 0).project(camera as THREE.Camera);
-    const el = gl.domElement as HTMLCanvasElement;
-    const cw = el?.clientWidth || 1;
-    const ch = el?.clientHeight || 1;
-    return {
-      x: ((v.x + 1) / 2) * cw,
-      y: ((-v.y + 1) / 2) * ch,
-    };
-  };
 
   // keep latest hover state in refs to avoid stale closures in DOM handlers
   const hoverCenterRef = useRef<typeof hoverCenter>(null);
@@ -93,27 +82,36 @@ export default function AromaticCircles2D() {
   React.useEffect(() => {
     const el = gl.domElement as HTMLElement;
     if (!el) return;
-    const onMove = (e: PointerEvent) => {
+    // a ring's circle within 40 px of the pointer, the nearest
+    const circleAt = (e: MouseEvent) => {
       const rect = el.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
-      let found: { x: number; y: number; r: number; key?: string } | null =
-        null;
+      const cw = el.clientWidth || 1;
+      const ch = el.clientHeight || 1;
+      let found: { x: number; y: number; r: number; key?: string } | null = null;
       let minD = Infinity;
       for (const c of previewCenters) {
-        const s = projectToScreen(c);
-        const dx = cx - s.x;
-        const dy = cy - s.y;
-        const d = Math.hypot(dx, dy);
+        const v = new THREE.Vector3(c.x, c.y, 0).project(camera as THREE.Camera);
+        const d = Math.hypot(cx - ((v.x + 1) / 2) * cw, cy - ((-v.y + 1) / 2) * ch);
         if (d < 40 && d < minD) {
           found = { x: c.x, y: c.y, r: c.r, key: c.key };
           minD = d;
         }
       }
+      return found;
+    };
+    const dwelt = () => {
+      const hs = hoverStartRef.current;
+      return hs != null && performance.now() - hs >= 500;
+    };
+    const onMove = (e: PointerEvent) => {
+      const found = circleAt(e);
       if (found) {
-        const changed =
-          !hoverCenter ||
-          Math.hypot(hoverCenter.x - found.x, hoverCenter.y - found.y) > 1e-6;
+        // (the hover as it is now, not as it was when these were set up:
+        // a move over the same circle does not start its wait again)
+        const was = hoverCenterRef.current;
+        const changed = !was || Math.hypot(was.x - found.x, was.y - found.y) > 1e-6;
         if (changed) setHoverStart(performance.now());
         setHoverCenter(found);
       } else {
@@ -122,26 +120,9 @@ export default function AromaticCircles2D() {
       }
     };
     const onClick = (e: MouseEvent) => {
-      const rect = el.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
       // recompute hit at click time
-      let found: { x: number; y: number; r: number; key?: string } | null =
-        null;
-      let minD = Infinity;
-      for (const c of previewCenters) {
-        const s = projectToScreen(c);
-        const dx = cx - s.x;
-        const dy = cy - s.y;
-        const d = Math.hypot(dx, dy);
-        if (d < 40 && d < minD) {
-          found = { x: c.x, y: c.y, r: c.r, key: c.key };
-          minD = d;
-        }
-      }
-      const hs = hoverStartRef.current;
-      const dwellOk = hs != null && performance.now() - hs >= 500;
-      if ((pendingToggleRef.current && found) || (found && dwellOk)) {
+      const found = circleAt(e);
+      if ((pendingToggleRef.current && found) || (found && dwelt())) {
         if (found?.key) toggleRing(found.key);
         else toggleAromatic();
         pendingToggleRef.current = false;
@@ -150,25 +131,7 @@ export default function AromaticCircles2D() {
       }
     };
     const onPointerDownCapture = (e: PointerEvent) => {
-      const rect = el.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      let found: { x: number; y: number; r: number; key?: string } | null =
-        null;
-      let minD = Infinity;
-      for (const c of previewCenters) {
-        const s = projectToScreen(c);
-        const dx = cx - s.x;
-        const dy = cy - s.y;
-        const d = Math.hypot(dx, dy);
-        if (d < 40 && d < minD) {
-          found = { x: c.x, y: c.y, r: c.r, key: c.key };
-          minD = d;
-        }
-      }
-      const hs = hoverStartRef.current;
-      const dwellOk = hs != null && performance.now() - hs >= 500;
-      if (found && dwellOk) {
+      if (circleAt(e) && dwelt()) {
         pendingToggleRef.current = true; // mark for click to handle once
         e.stopPropagation();
         e.preventDefault();
@@ -187,7 +150,7 @@ export default function AromaticCircles2D() {
         capture: true,
       } as any);
     };
-  }, [gl, previewCenters, camera]);
+  }, [gl, previewCenters, camera, toggleRing, toggleAromatic]);
 
   return (
     <group>
