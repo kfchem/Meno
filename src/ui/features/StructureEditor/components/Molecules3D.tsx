@@ -66,6 +66,15 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const spins = useRef(new Map<number, { axis: THREE.Vector3; speed: number }>());
   const gesture = useRef<Gesture | null>(null);
   const [active, setActive] = useState<{ kind: Gesture["kind"]; id: number } | null>(null);
+  // molecules taken away, shrinking out of view: as they were, and how they were turned
+  const [leaving, setLeaving] = useState<{ m: Molecule3D; turn: Turn3D | undefined }[]>([]);
+  const before = useRef<{ molecules: Molecule3D[]; turns: Record<number, Turn3D> }>({ molecules, turns });
+  useEffect(() => {
+    const now = new Set(molecules.map((m) => m.id));
+    const gone = before.current.molecules.filter((m) => !now.has(m.id));
+    if (gone.length) setLeaving((l) => [...l, ...gone.map((m) => ({ m, turn: before.current.turns[m.id] }))]);
+    before.current = { molecules, turns };
+  }, [molecules, turns]);
 
   useEffect(() => {
     const pageOf = (e: PointerEvent) => {
@@ -235,7 +244,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     invalidate();
   });
 
-  if (!molecules.length) return null;
+  if (!molecules.length && !leaving.length) return null;
   const highlightOf = (id: number): Highlight => {
     if (active) return active.id === id ? (active.kind === "move" ? "rim" : "on") : "none";
     if (hovered?.id !== id) return "none";
@@ -246,35 +255,82 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       <ambientLight intensity={style.ambientLight} />
       <directionalLight position={KEY_LIGHT_FROM as [number, number, number]} intensity={style.keyLight} />
       {molecules.map((m) => (
-        <Molecule3DView key={m.id} m={m} turn={turns[m.id]} style={style} highlight={highlightOf(m.id)} />
+        <Molecule3DView
+          key={m.id}
+          m={m}
+          turn={turns[m.id]}
+          style={style}
+          highlight={highlightOf(m.id)}
+          following={active?.kind === "move" && active.id === m.id}
+        />
+      ))}
+      {leaving.map(({ m, turn }) => (
+        <Molecule3DView
+          key={`leaving-${m.id}`}
+          m={m}
+          turn={turn}
+          style={style}
+          highlight="none"
+          following={false}
+          leaving={() => setLeaving((l) => l.filter((x) => x.m !== m))}
+        />
       ))}
     </group>
   );
 }
 
-/** How wide the outline's light is, in pixels: hovered, and on the rim. */
-const OUTLINE_PX = { on: 1.6, rim: 2.6 } as const;
-/** Its colour: the highlight laid over white - faint, and stronger on the rim. */
-const OUTLINE_COLOUR = {
-  on: new THREE.Color(COLORS.highlight).lerp(new THREE.Color("#ffffff"), 0.68),
-  rim: new THREE.Color(COLORS.highlight).lerp(new THREE.Color("#ffffff"), 0.4),
-} as const;
+/**
+ * The outline's light, by how lit the molecule is - 0 not at all, 1 hovered
+ * or turning, 2 on the rim or moving: how wide, in pixels, and how much of
+ * the highlight it takes over white. Between them it goes over smoothly.
+ */
+const OUTLINE_PX = [0, 1.6, 2.6];
+const OUTLINE_WHITE = [1, 0.68, 0.4];
+const outlineAt = (level: number, table: number[]) => {
+  const i = Math.min(Math.floor(level), table.length - 2);
+  return table[i] + (table[i + 1] - table[i]) * (level - i);
+};
+const HIGHLIGHT = new THREE.Color(COLORS.highlight);
+const WHITE = new THREE.Color("#ffffff");
+/** How quickly the outline's light, and a molecule put back where it was, follow: their time constants, in seconds. */
+const OUTLINE_TAU = 0.07;
+const PLACE_TAU = 0.08;
 /** How much larger the atom under the pointer is drawn, and its spring: the 3D viewer's. */
 const ATOM_SWELL = 1.1;
 const SPRING = { stiffness: 150, damping: 15 };
+
+/** One step of a spring towards `to`, which says whether it is still moving. */
+function spring(s: { v: number; vel: number; to: number }, dt: number): boolean {
+  const force = -SPRING.stiffness * (s.v - s.to) - SPRING.damping * s.vel;
+  s.vel += force * dt;
+  s.v += s.vel * dt;
+  if (Math.abs(s.v - s.to) < 1e-3 && Math.abs(s.vel) < 1e-3) {
+    s.v = s.to;
+    s.vel = 0;
+    return false;
+  }
+  return true;
+}
 
 function Molecule3DView({
   m,
   turn,
   style,
   highlight,
+  following,
+  leaving,
 }: {
   m: Molecule3D;
   turn: Turn3D | undefined;
   style: Style3D;
   highlight: Highlight;
+  /** Being moved by the pointer: where it stands is where it is put, at once. */
+  following: boolean;
+  /** Taken away: it shrinks out of view, and says when it is gone. */
+  leaving?: () => void;
 }) {
   const solid = solidOf(m, style);
+  const group = useRef<THREE.Group>(null!);
   const atoms = useRef<THREE.InstancedMesh>(null!);
   const bonds = useRef<THREE.InstancedMesh>(null);
   const atomHull = useRef<THREE.InstancedMesh>(null!);
@@ -284,7 +340,11 @@ function Molecule3DView({
   const quaternion = useMemo(() => (turn ? new THREE.Quaternion(...turn) : new THREE.Quaternion()), [turn]);
   // each atom's swell, sprung: where it is, how fast it goes, where it is going
   const swell = useRef(new Map<number, { v: number; vel: number; to: number }>());
-  // what the outline was last drawn for
+  // the molecule coming into view, sprung from nothing - or, taken away, going
+  const grown = useRef({ v: leaving ? 1 : 0, vel: 0, to: leaving ? 0 : 1 });
+  // how lit its outline is (0, 1 or 2, and on the way between), and where it is drawn
+  const level = useRef(0);
+  const shown = useRef<THREE.Vector3 | null>(null);
   const drawn = useRef("");
 
   useLayoutEffect(() => {
@@ -305,39 +365,66 @@ function Molecule3DView({
   }, [hoverAtom, invalidate]);
 
   useFrame((_, dt) => {
+    const step = Math.min(dt, 1 / 30);
     let moving = false;
-    if (swell.current.size) {
-      const step = Math.min(dt, 1 / 30);
-      for (const [i, s] of swell.current) {
-        const force = -SPRING.stiffness * (s.v - s.to) - SPRING.damping * s.vel;
-        s.vel += force * step;
-        s.v += s.vel * step;
-        if (Math.abs(s.v - s.to) < 1e-3 && Math.abs(s.vel) < 1e-3) {
-          s.v = s.to;
-          s.vel = 0;
-          if (s.to === 1) swell.current.delete(i);
-        } else moving = true;
+    // where it stands: put back by an undo, it goes there rather than jumps
+    const goal = new THREE.Vector3(m.at.x, m.at.y, standingHeight(solid));
+    if (!shown.current || following) shown.current = goal.clone();
+    else if (shown.current.distanceToSquared(goal) > 1e-8) {
+      shown.current.lerp(goal, 1 - Math.exp(-step / PLACE_TAU));
+      moving = true;
+    }
+    group.current.position.copy(shown.current);
+    // coming into view from its centre, or going into it
+    if (grown.current.v !== grown.current.to || grown.current.vel !== 0) {
+      spring(grown.current, step);
+      moving = true;
+      // (gone: shrunk to nothing, it is let go)
+      if (leaving && grown.current.v <= 0.02) {
+        leaving();
+        return;
       }
+    }
+    group.current.scale.setScalar(Math.max(grown.current.v, 1e-3));
+    // the atom under the pointer
+    let resize = false;
+    for (const [i, s] of swell.current) {
+      if (spring(s, step)) resize = true;
+      else if (s.to === 1) swell.current.delete(i);
+    }
+    if (resize) {
+      moving = true;
       placeAtoms(atoms.current, solid, swell.current, 0);
     }
-    // the outline, as wide in pixels whatever the zoom
-    if (highlight !== "none") {
+    // the outline's light, going over to what it is to be
+    const target = highlight === "none" ? 0 : highlight === "on" ? 1 : 2;
+    if (level.current !== target) {
+      const next = target + (level.current - target) * Math.exp(-step / OUTLINE_TAU);
+      level.current = Math.abs(next - target) < 2e-3 ? target : next;
+      moving = true;
+    }
+    const lit = level.current > 2e-3;
+    atomHull.current.visible = lit;
+    if (bondHull.current) bondHull.current.visible = lit;
+    if (lit) {
+      // (as wide in pixels whatever the zoom)
       const depth = PAGE_DISTANCE / Math.max(PAGE_DISTANCE - standingHeight(solid), 1);
-      const w = OUTLINE_PX[highlight] / (camera.zoom * depth);
-      const key = `${highlight},${w}`;
-      if (key !== drawn.current || moving || swell.current.size) {
+      const w = outlineAt(level.current, OUTLINE_PX) / (camera.zoom * depth);
+      const key = `${level.current},${w}`;
+      if (key !== drawn.current || resize) {
         drawn.current = key;
         placeAtoms(atomHull.current, solid, swell.current, w);
         if (bondHull.current) placeBonds(bondHull.current, m, solid, style.bondRadius * WORLD_PER_ANGSTROM + w);
-        (atomHull.current.material as THREE.MeshBasicMaterial).color.copy(OUTLINE_COLOUR[highlight]);
-        if (bondHull.current) (bondHull.current.material as THREE.MeshBasicMaterial).color.copy(OUTLINE_COLOUR[highlight]);
+        const colour = HIGHLIGHT.clone().lerp(WHITE, outlineAt(level.current, OUTLINE_WHITE));
+        (atomHull.current.material as THREE.MeshBasicMaterial).color.copy(colour);
+        if (bondHull.current) (bondHull.current.material as THREE.MeshBasicMaterial).color.copy(colour);
       }
     }
     if (moving) invalidate();
   });
 
   return (
-    <group position={[m.at.x, m.at.y, standingHeight(solid)]} quaternion={quaternion}>
+    <group ref={group} quaternion={quaternion}>
       <instancedMesh
         ref={atoms}
         args={[undefined, undefined, m.atoms.length]}
@@ -372,7 +459,7 @@ function Molecule3DView({
         args={[undefined, undefined, m.atoms.length]}
         renderOrder={OVER_PAGE - 1}
         frustumCulled={false}
-        visible={highlight !== "none"}
+        visible={false}
         raycast={() => {}}
       >
         <sphereGeometry args={[1, style.ballSegments, style.ballSegments]} />
@@ -384,7 +471,7 @@ function Molecule3DView({
           args={[undefined, undefined, m.bonds.length]}
           renderOrder={OVER_PAGE - 1}
           frustumCulled={false}
-          visible={highlight !== "none"}
+          visible={false}
           raycast={() => {}}
         >
           <cylinderGeometry args={[1, 1, 1, style.bondSegments]} />
