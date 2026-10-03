@@ -225,7 +225,7 @@ function PresetPicker({
       {asking && (
         <div
           role="alertdialog"
-          className="mt-2 rounded-lg border border-gh-line bg-gh-base px-3 py-2 text-sm flex flex-wrap items-center gap-2"
+          className="mt-2 rounded-lg border border-gh-line bg-gh-base px-3 py-2 text-sm flex flex-wrap items-center gap-2 meno-fade-in"
         >
           <span className="flex-1 min-w-[12rem] text-gh-black">
             {changes === 1 ? "One setting is" : `${changes} settings are`}{" "}
