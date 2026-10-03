@@ -102,6 +102,12 @@ describe("files of 3D structures", () => {
     expect(r.molecules3d).toHaveLength(1);
   });
 
+  it("open an SD file's 3D records in 3D and its flat ones as drawings", async () => {
+    const r = await processFileContent("both.sdf", water("2D", [0, 0, 0]) + "$$$$\n" + water("3D", [0, 0.3, -0.3]) + "$$$$\n");
+    expect(r.model.atoms).toHaveLength(3);
+    expect(r.molecules3d).toHaveLength(1);
+  });
+
   it("leave a flat 2D molfile a drawing", async () => {
     const r = await processFileContent("water.mol", water("2D", [0, 0, 0]));
     expect(r.molecules3d).toBeUndefined();

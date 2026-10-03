@@ -117,3 +117,9 @@ export function rowAbout(at: { x: number; y: number }, reaches: number[]): { x: 
     return c;
   });
 }
+
+/** Where molecules in 3D stand placed in a row to the right of `left`, about the height `y`. */
+export function rowAfter(left: number, y: number, reaches: number[]): { x: number; y: number }[] {
+  const width = reaches.reduce((w, r) => w + 2 * r, 0) + NOMINAL_BOND_LENGTH * Math.max(0, reaches.length - 1);
+  return rowAbout({ x: left + width / 2, y }, reaches);
+}

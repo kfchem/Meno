@@ -13,7 +13,7 @@ import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
 import type { Model } from "../store/types";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
-import { rowAbout, solidOf } from "../utils/molecule3d";
+import { rowAbout, rowAfter, solidOf } from "../utils/molecule3d";
 import type { DropZone, Dropped } from "../../../../lib/drop";
 
 /** The files a drop opens as structures, beside what is drawn. */
@@ -65,14 +65,23 @@ export function useStructureEvents(
   // atoms, and its molecules in 3D standing in a row about `at`: placed in
   // the same edit as its atoms are.
   const importedScheme = (
-    result: Pick<ProcessedFileResult, "arrow" | "pluses" | "molecules3d">,
+    result: Pick<ProcessedFileResult, "arrow" | "pluses" | "molecules3d"> & { model?: ProcessedFileResult["model"] },
     dx: number,
     dy: number,
     at: { x: number; y: number } = { x: 0, y: 0 },
   ): ImportedScheme => {
     const a = result.arrow;
     const solids = (result.molecules3d ?? []).map((m) => ({ ...m, id: 0, at }));
-    const places = rowAbout(at, solids.map((m) => solidOf(m, STYLE_3D).reach));
+    const reaches = solids.map((m) => solidOf(m, STYLE_3D).reach);
+    // (beside a drawing the same file brings, to its right)
+    const drawn = result.model?.atoms ?? [];
+    const places = drawn.length
+      ? rowAfter(
+          Math.max(...drawn.map((a) => a.x)) + dx + 2 * NOMINAL_BOND_LENGTH,
+          drawn.reduce((y, a) => y + a.y, 0) / drawn.length + dy,
+          reaches,
+        )
+      : rowAbout(at, reaches);
     return {
       ...(solids.length ? { molecules3d: solids.map(({ id: _id, ...m }, i) => ({ ...m, at: places[i] })) } : {}),
       arrows: a

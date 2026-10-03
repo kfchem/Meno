@@ -102,17 +102,17 @@ export async function processFileContent(
       ],
     };
   }
-  const threeD = format === "sdf" || format === "mol" ? saysThreeD(content) : [];
-  if (molecules.some((m, i) => m.atoms.length && (threeD[i] || depthOf(m) > 0.1))) {
-    return {
-      model: { atoms: [], bonds: [] },
-      centroid: { x: 0, y: 0 },
-      molecules3d: molecules
-        .filter((m) => m.atoms.length)
-        .map((m) => ({ atoms: m.atoms, bonds: m.bonds, ...(filename ? { name: filename } : {}) })),
-    };
+  // (in a MOL or SD file, each record is a drawing or a molecule in 3D)
+  const said = format === "sdf" || format === "mol" ? saysThreeD(content) : [];
+  const inDepth = (m: Molecule, i: number) => m.atoms.length > 0 && (said[i] || depthOf(m) > 0.1);
+  const molecules3d = molecules
+    .filter(inDepth)
+    .map((m) => ({ atoms: m.atoms, bonds: m.bonds, ...(filename ? { name: filename } : {}) }));
+  const flat = molecules.filter((m, i) => !inDepth(m, i));
+  if (molecules3d.length && !flat.some((m) => m.atoms.length)) {
+    return { model: { atoms: [], bonds: [] }, centroid: { x: 0, y: 0 }, molecules3d };
   }
-  const { model, centroid } = moleculesToEditorModel(molecules);
+  const { model, centroid } = moleculesToEditorModel(flat);
   // The MOL parser returns an empty molecule rather than nothing for
   // unrecognised text, so check atoms, not molecules.
   if (!model.atoms.length) throw noMolecules();
@@ -120,6 +120,7 @@ export async function processFileContent(
   return {
     model,
     centroid,
+    ...(molecules3d.length ? { molecules3d } : {}),
   };
 }
 
