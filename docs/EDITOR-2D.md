@@ -90,6 +90,12 @@ smoothly scrolling mouse's notch (an MX Master 3S) is 13 px, so 8 px tells
 them apart; a notch zooms at least as far as a plain wheel's 40 px line.
 (PR #55; 3D follows when the views are joined.)
 
+A drag that moves the view and is let go while still moving glides on,
+as fast as it was going over its last moments and slowing to a stop; one
+held still before it is let go stays where it was put. (It used to glide on
+by its last move whatever came after - a drag held still went on drifting
+when it was let go.)
+
 **A click keeps each view's own meaning**: in 2D a click on an atom edits
 its label and a click on a bond changes its kind, as drawing wants; in 3D a
 click on an atom selects it. A right-click, or a press with two fingers,
