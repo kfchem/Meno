@@ -3,7 +3,7 @@ import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
 import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
-import type { BondChem } from "../../../../lib/chem/molecule";
+import type { BondChem, ParsedAtom, ParsedBond } from "../../../../lib/chem/molecule";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
 export type Atom = EditorAtom & {
@@ -54,6 +54,24 @@ export type Arrow = {
 /** A "+" between two structures of a reaction scheme: where its middle is. */
 export type Plus = { id: number; x: number; y: number };
 /**
+ * A molecule in 3D, standing on the page: its atoms where its file put
+ * them, in ångströms, and its bonds by atom index. How it is turned is the
+ * view's (`turns3d`), not the document's: a turn changes nothing about it.
+ */
+export type Molecule3D = {
+  id: number;
+  atoms: ParsedAtom[];
+  bonds: ParsedBond[];
+  /** Where on the page its centre stands, in world units. */
+  at: { x: number; y: number };
+  /** The rest of a file's frames (a trajectory): x, y, z of every atom, frame by frame. */
+  frames?: number[][];
+  /** The file it came from. */
+  name?: string;
+};
+/** A turn, as a quaternion's x, y, z and w. */
+export type Turn3D = [number, number, number, number];
+/**
  * Structures with the arrows and "+" signs drawn among them: what a copy
  * takes, a picture shows and a paste brings.
  */
@@ -70,6 +88,20 @@ export type EditorState = {
    */
   boxSelect: { active: boolean; kind: "box" | "lasso"; points: { x: number; y: number }[] };
   hovered: { atomId: number | null; bondId: number | null };
+  /**
+   * The molecule in 3D under the pointer, and which part of it: within its
+   * frame (a drag turns it) or on the frame's edge (a drag moves it).
+   */
+  hovered3d: { id: number; part: "body" | "edge" } | null;
+  /** The molecules in 3D on the page. */
+  molecules3d: Molecule3D[];
+  /** How each molecule in 3D is turned, by id; unturned if absent. */
+  turns3d: Record<number, Turn3D>;
+  setHovered3d: (h: { id: number; part: "body" | "edge" } | null) => void;
+  setTurn3d: (id: number, turn: Turn3D) => void;
+  /** Moves a molecule in 3D on the page; moves sharing `gesture` are one undo step. */
+  moveMolecule3d: (id: number, at: { x: number; y: number }, gesture?: string) => void;
+  removeMolecule3d: (id: number) => void;
   /** The reaction arrow under the pointer: its menu is the one a right-click opens. */
   hoveredArrow: number | null;
   /** The "+" under the pointer, likewise. */

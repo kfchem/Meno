@@ -14,6 +14,7 @@ import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
 import { createInteractionSlice } from "./slices/interactionSlice";
 import { createUiSlice } from "./slices/uiSlice";
+import { createMolecules3dSlice } from "./slices/molecules3dSlice";
 
 // Re-export types for backward compatibility
 export * from "./types";
@@ -35,6 +36,7 @@ function mirrorOf(doc: StructureDocument) {
     nextId: doc.nextId,
     nextArrowId: doc.nextArrowId,
     nextPlusId: doc.nextPlusId ?? 1,
+    molecules3d: doc.molecules3d ?? [],
     docStyle: doc.style,
   };
 }
@@ -68,6 +70,8 @@ export function createEditorStore(
     selAnchor: null,
     boxSelect: { active: false, kind: "box", points: [] },
     hovered: { atomId: null, bondId: null },
+    hovered3d: null,
+    turns3d: {},
     hoveredArrow: null,
     hoveredPlus: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
@@ -91,6 +95,7 @@ export function createEditorStore(
     ...createHoverSlice(set),
     ...createUiSlice(doc, set, get),
     ...createInteractionSlice(set, get),
+    ...createMolecules3dSlice(doc, set),
   }));
 
   return store;

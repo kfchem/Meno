@@ -5,8 +5,8 @@ import {
   buildEditorModelFromRXN,
   type EditorModel,
 } from "../../../../utils/importers";
-import { bondChem, chemistry } from "../../../../lib/chem/molecule";
-import type { Drawn, Model } from "../store/types";
+import { bondChem, chemistry, type Molecule } from "../../../../lib/chem/molecule";
+import type { Drawn, Model, Molecule3D } from "../store/types";
 
 /** Extensions the file pickers offer that have no parser yet. */
 const UNSUPPORTED_EXTENSIONS = new Set(["pdb", "ket"]);
@@ -17,7 +17,29 @@ export type ProcessedFileResult = {
   arrow?: { x1: number; y1: number; x2: number; y2: number };
   /** A reaction's "+" signs: their middles. */
   pluses?: { x: number; y: number }[];
+  /** Molecules in 3D, as a file of 3D structures has them: not yet placed on the page. */
+  molecules3d?: Omit<Molecule3D, "id" | "at">[];
 };
+
+/**
+ * Whether each molfile of a MOL or SD file says it is 3D: its header's
+ * second line, columns 21 and 22 (CTfile Formats).
+ */
+function saysThreeD(text: string): boolean[] {
+  return text
+    .split(/^\$\$\$\$[ \t]*\r?$/m)
+    .filter((rec) => rec.trim())
+    // (each record after the first begins with the line break that ended "$$$$";
+    // a molfile's name line may itself be blank)
+    .map((rec) => rec.replace(/^\r?\n/, "").split(/\r?\n/)[1]?.substring(20, 22).toUpperCase() === "3D");
+}
+
+/** How far a molecule's atoms spread in depth, in its file's units. */
+function depthOf(m: Molecule): number {
+  if (!m.atoms.length) return 0;
+  const zs = m.atoms.map((a) => a.z);
+  return Math.max(...zs) - Math.min(...zs);
+}
 
 /**
  * Process file content and return a standardized result.
@@ -61,6 +83,35 @@ export async function processFileContent(
   // MOL, SDF, XYZ formats: parse molecules and convert to editor model
   // If no format detected, try to parse as MOL anyway (or fail gracefully)
   const molecules = readMoleculesFromText(content, format || "mol");
+
+  // 3D structures stand on the page as they are: an XYZ file's frames are
+  // one molecule's, a MOL or SD file's records each a molecule of its own -
+  // where the file says it is 3D, or its atoms spread in depth.
+  if (format === "xyz" && molecules.length && molecules[0].atoms.length) {
+    const [first, ...rest] = molecules;
+    return {
+      model: { atoms: [], bonds: [] },
+      centroid: { x: 0, y: 0 },
+      molecules3d: [
+        {
+          atoms: first.atoms,
+          bonds: first.bonds,
+          ...(rest.length ? { frames: rest.map((f) => f.atoms.flatMap((a) => [a.x, a.y, a.z])) } : {}),
+          ...(filename ? { name: filename } : {}),
+        },
+      ],
+    };
+  }
+  const threeD = format === "sdf" || format === "mol" ? saysThreeD(content) : [];
+  if (molecules.some((m, i) => m.atoms.length && (threeD[i] || depthOf(m) > 0.1))) {
+    return {
+      model: { atoms: [], bonds: [] },
+      centroid: { x: 0, y: 0 },
+      molecules3d: molecules
+        .filter((m) => m.atoms.length)
+        .map((m) => ({ atoms: m.atoms, bonds: m.bonds, ...(filename ? { name: filename } : {}) })),
+    };
+  }
   const { model, centroid } = moleculesToEditorModel(molecules);
   // The MOL parser returns an empty molecule rather than nothing for
   // unrecognised text, so check atoms, not molecules.

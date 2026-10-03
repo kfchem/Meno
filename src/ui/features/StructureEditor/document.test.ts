@@ -325,3 +325,43 @@ describe("an abbreviation", () => {
     expect(out.model.atoms[1].el).toBe("N");
   });
 });
+
+describe("molecules in 3D on the page", () => {
+  const water = {
+    atoms: [
+      { el: "O", x: 0, y: 0, z: 0 },
+      { el: "H", x: 0.76, y: 0.59, z: 0 },
+      { el: "H", x: -0.76, y: 0.59, z: 0 },
+    ],
+    bonds: [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 0, a2: 2, order: 1 },
+    ],
+  };
+
+  it("come with a file's scheme, each given an id of its own", () => {
+    const d = ops.withImportedScheme(doc(), {
+      molecules3d: [
+        { ...water, at: { x: 0, y: 0 } },
+        { ...water, at: { x: 5, y: 0 } },
+      ],
+    });
+    expect(d.molecules3d!.map((m) => m.id)).toEqual([1, 2]);
+    expect(d.nextMolecule3dId).toBe(3);
+  });
+
+  it("are moved and taken away by id", () => {
+    let d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
+    d = ops.moveMolecule3d(d, 1, { x: 2, y: -1 });
+    expect(d.molecules3d![0].at).toEqual({ x: 2, y: -1 });
+    expect(ops.removeMolecule3d(d, 1).molecules3d).toEqual([]);
+  });
+
+  it("go when a file is opened over them", () => {
+    const d = ops.addMolecule3d(ethane(), { ...water, at: { x: 0, y: 0 } });
+    const next = ops.replaceModel(d, { atoms: [], bonds: [] });
+    expect(next.molecules3d).toEqual([]);
+    expect(next.nextMolecule3dId).toBe(1);
+  });
+});
+

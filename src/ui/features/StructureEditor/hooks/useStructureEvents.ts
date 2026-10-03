@@ -12,6 +12,8 @@ import { schemeOf, type ImportedScheme } from "../document";
 import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
 import type { Model } from "../store/types";
+import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { rowAbout, solidOf } from "../utils/molecule3d";
 import type { DropZone, Dropped } from "../../../../lib/drop";
 
 /** The files a drop opens as structures, beside what is drawn. */
@@ -60,14 +62,19 @@ export function useStructureEvents(
   const toModel = editorModelOf;
 
   // A file's reaction arrow and pluses, moved by (dx, dy) along with its
-  // atoms, and placed in the same edit as they are.
+  // atoms, and its molecules in 3D standing in a row about `at`: placed in
+  // the same edit as its atoms are.
   const importedScheme = (
-    result: Pick<ProcessedFileResult, "arrow" | "pluses">,
+    result: Pick<ProcessedFileResult, "arrow" | "pluses" | "molecules3d">,
     dx: number,
     dy: number,
+    at: { x: number; y: number } = { x: 0, y: 0 },
   ): ImportedScheme => {
     const a = result.arrow;
+    const solids = (result.molecules3d ?? []).map((m) => ({ ...m, id: 0, at }));
+    const places = rowAbout(at, solids.map((m) => solidOf(m, STYLE_3D).reach));
     return {
+      ...(solids.length ? { molecules3d: solids.map(({ id: _id, ...m }, i) => ({ ...m, at: places[i] })) } : {}),
       arrows: a
         ? [
             {
@@ -158,6 +165,8 @@ export function useStructureEvents(
       clickTimerRef.current = null;
     }
     if (!camRef.current || !domRef.current) return;
+    // (twice on a molecule in 3D: nothing drawn on the page under it)
+    if (store.getState().hovered3d) return;
     // (Ctrl or ⌘, or Shift, clicked twice: the selection's, not a bond drawn)
     if (addsToSelection(e) || e.shiftKey) return;
     const stNow = store.getState();
@@ -264,6 +273,12 @@ export function useStructureEvents(
       return;
     }
     pointerRef.current = { x: e.clientX, y: e.clientY };
+    // A molecule in 3D stands over the page: what is drawn under it is not
+    // under the pointer.
+    if (st.hovered3d) {
+      st.clearAtomHover();
+      return;
+    }
     const p = clientToWorld(e.clientX, e.clientY);
     if (!p) return;
     const tol = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
@@ -383,7 +398,7 @@ export function useStructureEvents(
 
       store
         .getState()
-        .appendModel(toModel(shifted), importedScheme(result, dx, dy));
+        .appendModel(toModel(shifted), importedScheme(result, dx, dy, at));
       setImportError(null);
     } catch (err) {
       reportImportError("append", err);
