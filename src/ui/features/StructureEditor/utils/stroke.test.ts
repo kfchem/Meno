@@ -3,6 +3,7 @@ import {
   advanceStroke,
   finishStroke,
   holdStroke,
+  NEW_ATOM,
   startStroke,
   strokeTarget,
 } from "./stroke";
@@ -59,34 +60,37 @@ describe("a bond stroke", () => {
 });
 
 describe("a chain stroke", () => {
-  it("lays down an atom for every bond length the pointer goes, zigzagging", () => {
-    let s = startStroke("chain", 1);
-    // the pointer runs off to the right, four bond lengths
-    for (let x = 0.1; x <= 4; x += 0.1) s = advanceStroke(methyl, s, { x, y: 0 }, L);
+  it("runs on a honeycomb turned to the bond its atom has, and takes back what it is led back over", () => {
+    let s = startStroke("chain", 1, methyl, undefined, L);
+    // off to the right, four bond lengths, a little at a time
+    for (let x = 0.1; x <= 4; x += 0.05) s = advanceStroke(methyl, s, { x, y: 0.1 }, L);
     expect(s.nodes.length).toBeGreaterThanOrEqual(3);
-    // each bond one long, and alternately up and down
     let prev = { x: 0, y: 0 };
-    const ups: number[] = [];
     for (const n of s.nodes) {
       expect(Math.hypot(n.x - prev.x, n.y - prev.y)).toBeCloseTo(1, 6);
-      ups.push(Math.sign(n.y - prev.y));
       prev = n;
     }
-    for (let i = 1; i < ups.length; i++) expect(ups[i]).not.toBe(ups[i - 1]);
+    // every bond 120 degrees from the methyl's
+    const first = s.nodes[0];
+    const methylWay = Math.atan2(methyl.atoms[1].y, methyl.atoms[1].x);
+    const angle = Math.abs(Math.atan2(Math.sin(Math.atan2(first.y, first.x) - methylWay), Math.cos(Math.atan2(first.y, first.x) - methylWay)));
+    expect(angle).toBeCloseTo((2 * Math.PI) / 3, 6);
+    // led back to its start: nothing
+    for (let x = 4; x >= 0.05; x -= 0.05) s = advanceStroke(methyl, s, { x, y: 0.1 }, L);
+    expect(finishStroke(methyl, s, { x: 0.05, y: 0.1 }, L)).toEqual([]);
   });
 
-  it("lays down the bond it is on at a pause, snapped, but not right after the last", () => {
-    const s = startStroke("chain", 1);
-    const held = holdStroke(methyl, s, { x: 0.5, y: 0.6 }, L);
-    expect(held.nodes).toHaveLength(1);
-    expect(Math.hypot(held.nodes[0].x, held.nodes[0].y)).toBeCloseTo(1, 6);
-    // a second pause where it already is adds nothing
-    const again = holdStroke(methyl, held, held.nodes[0], L);
-    expect(again.nodes).toHaveLength(1);
+  it("starts on empty space from a new atom, across at 30 degrees", () => {
+    let s = startStroke("chain", NEW_ATOM, methyl, { x: 10, y: 10 }, L);
+    for (let x = 10.05; x <= 12.2; x += 0.05) s = advanceStroke(methyl, s, { x, y: 10.2 }, L);
+    expect(s.nodes.length).toBeGreaterThanOrEqual(2);
+    expect(Math.atan2(s.nodes[0].y - 10, s.nodes[0].x - 10)).toBeCloseTo(Math.PI / 6, 6);
   });
 
-  it("ends without a bond when released near the last atom", () => {
-    const s = holdStroke(methyl, startStroke("chain", 1), { x: 0.5, y: 0.6 }, L);
-    expect(finishStroke(methyl, s, { x: 0.55, y: 0.85 }, L)).toHaveLength(1);
+  it("goes onto an atom already there where the honeycomb meets it", () => {
+    // the methyl's carbon is a point of the honeycomb: led to it, the walk takes that atom
+    let s = startStroke("chain", 1, methyl, undefined, L);
+    for (let t = 0.05; t <= 1; t += 0.05) s = advanceStroke(methyl, s, { x: -t, y: 0.02 }, L);
+    expect(s.nodes.some((n) => n.atomId === 2)).toBe(true);
   });
 });

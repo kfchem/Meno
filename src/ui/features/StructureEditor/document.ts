@@ -201,17 +201,21 @@ export function addStroke(
     y: number;
     atomId?: number;
     pathIndex?: number;
+    from?: number;
   }[],
 ): StructureDocument {
   if (!doc.model.atoms.some((a) => a.id === baseId)) return doc;
   let d = doc;
   const ids: number[] = [];
+  // (a path index of -1 is the stroke's own start)
+  const idOf = (i: number) => (i === -1 ? baseId : ids[i]);
   let from = baseId;
   for (const node of nodes) {
+    if (node.from != null && idOf(node.from) != null) from = idOf(node.from);
     let to: number;
     if (node.atomId != null) to = node.atomId;
-    else if (node.pathIndex != null && ids[node.pathIndex] != null)
-      to = ids[node.pathIndex];
+    else if (node.pathIndex != null && idOf(node.pathIndex) != null)
+      to = idOf(node.pathIndex);
     else {
       d = addAtom(d, node.x, node.y);
       to = d.nextId - 1;
@@ -221,6 +225,17 @@ export function addStroke(
     from = to;
   }
   return d;
+}
+
+/** A stroke that starts on empty space: a new atom at `start`, and the stroke from it, as one edit. */
+export function addStrokeAt(
+  doc: StructureDocument,
+  start: { x: number; y: number },
+  nodes: Parameters<typeof addStroke>[2],
+): StructureDocument {
+  if (!nodes.length) return doc;
+  const d = addAtom(doc, start.x, start.y);
+  return addStroke(d, d.nextId - 1, nodes);
 }
 
 /**

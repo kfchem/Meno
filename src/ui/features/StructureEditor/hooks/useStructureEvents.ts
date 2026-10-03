@@ -222,33 +222,18 @@ export function useStructureEvents(
         const near = store
           .getState()
           .findAtomNear(nx, ny, NOMINAL_BOND_LENGTH * 0.3, base.id);
-        // One gesture, one undo step: the atom and its bond together.
+        // One gesture, one undo step: the atom and its bond together. (A
+        // third click takes it back, to draw a chain instead.)
         if (near != null) {
           st.connectAtoms(base.id, near, 1);
         } else {
           st.addAtomBonded(base.id, nx, ny, "C", 1);
         }
+        st.noteDoubleClickBond(base.id);
         return;
       }
     }
-
-    const nowMs2 =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    if (stNow.suppressDblClickUntil && nowMs2 < stNow.suppressDblClickUntil)
-      return;
-
-    const half = L * 0.5;
-    const theta = Math.PI / 6;
-    const dx = half * Math.cos(theta);
-    const dy = half * Math.sin(theta);
-    const ax = ndc.x - dx;
-    const ay = ndc.y - dy;
-    const bx = ndc.x + dx;
-    const by = ndc.y + dy;
-    st.addBondedPair({ x: ax, y: ay, el: "C" }, { x: bx, y: by, el: "C" }, 1);
-    try {
-      store.getState().suppressDoubleClick(320);
-    } catch {}
+    // (on empty space, two clicks begin a chain: Selection2D)
   };
 
   const handleWrapperMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
