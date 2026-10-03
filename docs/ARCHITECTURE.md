@@ -121,7 +121,15 @@ What is left before the editor counts as finished, and in what order, is in
   `document.ts`. A gesture is one undo step: extending a bond adds the atom and
   its bond together, an import replaces the model in one go, and repeated moves
   of one atom coalesce.
-- **Rendering**: an orthographic react-three-fiber `<Canvas>`; each visual layer
+- **Rendering**: a react-three-fiber `<Canvas>` whose page is the plane z = 0,
+  seen head-on by a perspective camera (`PageCamera`): it stands 60 world
+  units off and sets its field of view from the canvas height, so that
+  `camera.zoom` means what an orthographic camera's would - CSS pixels per
+  world unit on the page - and the drawing comes out exactly as it would
+  orthographically. What stands off the page is seen in depth. A point of
+  the screen is taken to the page with `utils/page.ts#pageAt`, never by
+  unprojecting alone. Page layers keep to the page (z within a few
+  thousandths) and are ordered by drawing order. Each visual layer
   is its own component in `components/` (`Bonds2D`, `Atoms2D`, `Wedges2D`,
   `Labels2D`, previews, hover overlays, `PanZoom2D`, `FitToContent2D`, …).
   `DrawnLayoutProvider` lays the drawing out once - the model, with an atom
@@ -165,6 +173,16 @@ What is left before the editor counts as finished, and in what order, is in
   the drag/extend previews. A new animated layer that forgets this will appear
   frozen; a layer that invalidates unconditionally brings back the old
   always-on loop.
+
+- **Molecules in 3D** (`Molecules3D`, `utils/molecule3d.ts`): the
+  document's `molecules3d`, each its atoms in ångströms and where on the
+  page its centre stands; how each is turned is the store's (`turns3d`),
+  not the document's. A molecule stands as high as it reaches, so no turn
+  takes it behind the page, and is drawn instanced, lit, after the page
+  and depth-tested. Hovered, it shows a frame: a drag within turns it
+  (with inertia), a drag on the frame's edge moves it. Its look is a style
+  (`lib/chem/style3d.ts`), the 3D viewer's by default. A 1.5 Å bond is as
+  long as a drawn one. See [`WORKSPACE.md`](./WORKSPACE.md).
 
 ## 3D molecule viewer (`ui/features/MoleculeViewer`)
 
