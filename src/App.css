@@ -94,6 +94,18 @@
 .meno-fade-in {
   animation: meno-fade-in 120ms var(--ease-meno) both;
 }
+/* Going out of view, kept in it while it does (src/ui/theme/presence.ts). */
+@keyframes meno-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.meno-fade-out {
+  animation: meno-fade-out 120ms var(--ease-meno) both;
+}
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;

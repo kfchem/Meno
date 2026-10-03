@@ -15,6 +15,8 @@ export type CapJoinLineProps = {
   depthTest?: boolean
   depthWrite?: boolean
   renderOrder?: number
+  /** How far it is in view: coming in or going out (1, the default, is fully). */
+  opacity?: number
 }
 
 export default function CapJoinLine({
@@ -27,6 +29,7 @@ export default function CapJoinLine({
   depthTest = false,
   depthWrite = false,
   renderOrder = 0,
+  opacity = 1,
 }: CapJoinLineProps) {
   const { size } = useThree()
   const geom = React.useMemo(() => new LineGeometry(), [])
@@ -67,6 +70,12 @@ export default function CapJoinLine({
   React.useEffect(() => {
     line.renderOrder = renderOrder
   }, [line, renderOrder])
+
+  React.useEffect(() => {
+    mat.transparent = opacity < 1
+    mat.opacity = opacity
+    mat.needsUpdate = true
+  }, [mat, opacity])
 
   React.useEffect(() => () => {
     geom.dispose()
