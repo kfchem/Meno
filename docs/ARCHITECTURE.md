@@ -191,9 +191,11 @@ What is left before the editor counts as finished, and in what order, is in
     put it (`at.z`). It is instanced, lit, drawn after the
     page and depth-tested; double and triple bonds are two and three
     lines. Another frame, another look, or a place set by an undo is gone
-    over to, not jumped to. Its look's defaults are a style
-    (`lib/chem/style3d.ts`), the old 3D viewer's. A 1.5 Å bond is as long
-    as a drawn one.
+    over to, not jumped to. Its look is a style (`lib/chem/style3d.ts`):
+    presets, the old 3D viewer's first, and a choice of one with changes,
+    kept in the app's settings (`style3d`) and edited in Settings by
+    `StyleEditor/Style3DEditor`; the canvas reads it through
+    `StructureEditor/style3d.ts`. A 1.5 Å bond is as long as a drawn one.
   - The pointer: hovered, its outline lights up faintly and the atom under
     the pointer swells on a spring. A drag on it - its atoms, bonds or
     within its rings - turns it, with inertia; on one selected, it moves

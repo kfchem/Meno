@@ -3,12 +3,14 @@ import clsx from "clsx";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import NetworkSettings from "../../network/NetworkSettings";
 import StyleEditor from "../StyleEditor";
+import Style3DEditor from "../StyleEditor/Style3DEditor";
 import AbbreviationSettings from "./AbbreviationSettings";
 import ChemistrySettings from "./ChemistrySettings";
 import { useSettingsSection, type SettingsSection } from "./section";
 
 const SECTIONS: { id: SettingsSection; name: string }[] = [
   { id: "style", name: "Drawing style" },
+  { id: "style3d", name: "Molecules in 3D" },
   { id: "chemistry", name: "Chemistry" },
   { id: "abbreviations", name: "Dictionary" },
   { id: "network", name: "Network" },
@@ -16,12 +18,15 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
 
 /**
  * The application's settings: the drawing style every structure is drawn
- * in unless its document has its own, what RDKit points out on it, what
- * the labels Meno reads stand for, and what Meno may do on the network.
+ * in unless its document has its own, how molecules in 3D look and turn,
+ * what RDKit points out on a structure, what the labels Meno reads stand
+ * for, and what Meno may do on the network.
  */
 export default function SettingsPanel() {
   const drawingStyle = useAppSettings((s) => s.drawingStyle);
   const setDrawingStyle = useAppSettings((s) => s.setDrawingStyle);
+  const style3d = useAppSettings((s) => s.style3d);
+  const setStyle3d = useAppSettings((s) => s.setStyle3d);
   const error = useAppSettings((s) => s.error);
   const section = useSettingsSection((s) => s.section);
   return (
@@ -71,6 +76,21 @@ export default function SettingsPanel() {
             <StyleEditor
               choice={drawingStyle}
               onChange={(next) => setDrawingStyle(next)}
+            />
+          </section>
+        ) : section === "style3d" ? (
+          <section className="mt-6">
+            <h2 className="text-base font-semibold text-gh-black">
+              Molecules in 3D
+            </h2>
+            <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
+              How molecules in 3D look, on the canvas and in exported pictures,
+              and how they turn under the pointer. Changes are saved as you
+              make them.
+            </p>
+            <Style3DEditor
+              choice={style3d}
+              onChange={(next) => setStyle3d(next)}
             />
           </section>
         ) : section === "chemistry" ? (

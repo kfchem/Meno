@@ -13,7 +13,7 @@ import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
 import { isWorkspaceFile, readWorkspace } from "../utils/workspace";
 import type { Drawn } from "../store/types";
-import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, rowAfter, solidOf } from "../utils/molecule3d";
 import type { DropZone, Dropped } from "../../../../lib/drop";
 
@@ -73,7 +73,8 @@ export function useStructureEvents(
   ): ImportedScheme => {
     const a = result.arrow;
     const solids = (result.molecules3d ?? []).map((m) => ({ ...m, id: 0, at }));
-    const reaches = solids.map((m) => solidOf(m, STYLE_3D).reach[lookOf(m, STYLE_3D)]);
+    const style = currentStyle3D();
+    const reaches = solids.map((m) => solidOf(m, style).reach[lookOf(m, style)]);
     // (beside a drawing the same file brings, to its right)
     const drawn = result.model?.atoms ?? [];
     const places = drawn.length

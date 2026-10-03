@@ -11,6 +11,7 @@ describe("the settings file", () => {
   it("reads back what it wrote", () => {
     const settings = {
       drawingStyle: { preset: "rsc", changes: { ends: "round" as const } },
+      style3d: { preset: "glossy", changes: { bondRadius: 0.15 } },
       network: { offline: true, granted: ["python-env:console"] },
       chemistry: { valenceWarnings: false, stereoLabels: true },
       updates: { asked: true },
@@ -34,6 +35,8 @@ describe("the settings file", () => {
     expect(
       acceptAppSettings({ chemistry: { stereoLabels: "on" } }).chemistry,
     ).toEqual({ valenceWarnings: true, stereoLabels: false });
+    // a file from before molecules in 3D had a look of their own: Meno's
+    expect(acceptAppSettings({ drawingStyle: { preset: "rsc", changes: {} } }).style3d).toEqual(DEFAULT_APP_SETTINGS.style3d);
     // a file from before Meno updated itself: not asked yet
     expect(acceptAppSettings({ updates: { asked: "yes" } }).updates).toEqual({ asked: false });
     // the user's abbreviations: those with a label and a structure that reads

@@ -216,6 +216,17 @@ Taken on 2026-10-03:
     near enough;
   - held as a style, as the 2D drawing's is, so that it can be set the
     same way later.
+  - Since 2026-10-04 it is set in Settings, under Molecules in 3D, as
+    the drawing style is: a preset - Meno (the viewer's look), Glossy or
+    Space-filling - and what was changed from it, each change marked and
+    taken back alone or all at once. The settings are how molecules are
+    drawn unless one has a look of its own, ball size, bond thickness and
+    colour, the surface, the two lights, and how a molecule turns and
+    coasts when let go. A molecule beside them shows the look and can be
+    turned, to try the turning. The canvas, the selection's handle, a fit
+    and the pictures for other programs all take the look from there. A
+    document of its own look, as a drawing can have its own style, is not
+    there yet.
 
 Taken while stage 1 was built, on 2026-10-03:
 

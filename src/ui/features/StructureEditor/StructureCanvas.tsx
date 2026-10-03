@@ -41,7 +41,7 @@ import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
-import { STYLE_3D } from "../../../lib/chem/style3d";
+import { useStyle3D } from "./style3d";
 import { chosenPath, lookOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
@@ -279,10 +279,11 @@ function StructureCanvasContent({
   // a molecule in 3D right-clicked: what its menu does to it
   const molecules3d = useEditor((s) => s.molecules3d);
   const chosen3d = useEditor((s) => s.chosen3d);
+  const style3d = useStyle3D();
   const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
-        look: lookOf(menuMolecule, STYLE_3D),
+        look: lookOf(menuMolecule, style3d),
         chosen: chosen3d?.id === menuMolecule.id ? (chosenPath(menuMolecule, chosen3d)?.length ?? 0) : 0,
         onMeasure: () => store.getState().measureChosen3d(),
         onLook: (look) => store.getState().setLook3d(menuMolecule.id, look),
@@ -720,7 +721,7 @@ function StructureCanvasContent({
           <Pluses2D />
         </DrawnLayoutProvider>
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
-        <Molecules3D />
+        <Molecules3D style={style3d} />
         <PanZoom2D />
         <PageCamera />
       </Canvas>
