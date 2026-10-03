@@ -364,6 +364,13 @@ describe("molecules in 3D on the page", () => {
     expect(next.nextMolecule3dId).toBe(1);
   });
 
+  it("move with the drawing they are selected with, in the same edit", () => {
+    const d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
+    const moved = ops.placeMarks(d, { molecules3d: [{ id: 1, at: { x: 3, y: -2 } }] });
+    expect(moved.molecules3d![0].at).toEqual({ x: 3, y: -2 });
+    expect(ops.placeMarks(d, {})).toBe(d);
+  });
+
   it("move together, and go together", () => {
     let d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
     d = ops.addMolecule3d(d, { ...water, at: { x: 5, y: 0 } });

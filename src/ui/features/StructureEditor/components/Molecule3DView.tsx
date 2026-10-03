@@ -59,6 +59,20 @@ const GAP = 0.11;
 /** The most dashes and arc steps one molecule's measurements are drawn with. */
 const MEASURE_PIECES = 2048;
 
+/**
+ * Whether a pointer button is held down anywhere in the window: what moves
+ * then is being dragged, and is followed at once rather than gone over to.
+ */
+let held = 0;
+if (typeof window !== "undefined") {
+  window.addEventListener("pointerdown", () => (held += 1), true);
+  const up = () => (held = Math.max(0, held - 1));
+  window.addEventListener("pointerup", up, true);
+  window.addEventListener("pointercancel", up, true);
+  window.addEventListener("blur", () => (held = 0));
+}
+const buttonHeld = () => held > 0;
+
 /** One step of a spring towards `to`, which says whether it is still moving. */
 function spring(s: { v: number; vel: number; to: number }, dt: number): boolean {
   const force = -SPRING.stiffness * (s.v - s.to) - SPRING.damping * s.vel;
@@ -211,7 +225,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     const height = solid.reach.balls + (solid.reach.space - solid.reach.balls) * fill.current;
     // where it stands: put back by an undo, it goes there rather than jumps
     const goal = new THREE.Vector3(m.at.x, m.at.y, height);
-    if (!shown.current || following) shown.current = goal.clone();
+    // (a drag - its own, or the drawing's it is selected with - it follows at once)
+    if (!shown.current || following || buttonHeld()) shown.current = goal.clone();
     else if (shown.current.distanceToSquared(goal) > 1e-8) {
       shown.current.lerp(goal, 1 - Math.exp(-step / PLACE_TAU));
       moving = true;

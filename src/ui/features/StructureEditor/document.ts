@@ -811,10 +811,13 @@ export function removePlus(doc: StructureDocument, id: number): StructureDocumen
 export type MarkPlaces = {
   arrows?: { id: number; x: number; y: number }[];
   pluses?: { id: number; x: number; y: number }[];
+  /** Molecules in 3D moved with the rest: where each now stands. */
+  molecules3d?: { id: number; at: { x: number; y: number } }[];
 };
 
-/** `doc` with the arrows and pluses `places` names where it says. */
+/** `doc` with the arrows, pluses and molecules in 3D `places` names where it says. */
 export function placeMarks(doc: StructureDocument, places?: MarkPlaces): StructureDocument {
+  if (places?.molecules3d?.length) return placeMarks(moveMolecules3d(doc, places.molecules3d), { ...places, molecules3d: [] });
   if (!places?.arrows?.length && !places?.pluses?.length) return doc;
   const arrowAt = new Map((places.arrows ?? []).map((p) => [p.id, p]));
   const plusAt = new Map((places.pluses ?? []).map((p) => [p.id, p]));

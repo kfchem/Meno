@@ -8,6 +8,7 @@ import { useEditor, useEditorStore } from "../store";
 import type { Molecule3D, Turn3D } from "../store/types";
 import { atomAt, lookOf, partAt, poseOf, solidOf } from "../utils/molecule3d";
 import { pageAt } from "../utils/page";
+import { schemeAmong } from "../utils/copyPaste";
 import Molecule3DView from "./Molecule3DView";
 
 /** A turn left to itself stops below this speed, in radians a second. */
@@ -45,6 +46,12 @@ type Gesture =
       from: { x: number; y: number };
       /** Where each molecule moved stood when the drag began. */
       ats: { id: number; at: { x: number; y: number } }[];
+      /** The drawing selected with it, and the arrows and pluses among it: where they were. */
+      drawn: {
+        atoms: { id: number; x: number; y: number }[];
+        arrows: { id: number; x: number; y: number }[];
+        pluses: { id: number; x: number; y: number }[];
+      };
       key: string;
     });
 
@@ -175,10 +182,16 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
         const p = pageOf(e);
         const dx = p.x - g.from.x;
         const dy = p.y - g.from.y;
-        store.getState().moveMolecules3d(
-          g.ats.map(({ id, at }) => ({ id, at: { x: at.x + dx, y: at.y + dy } })),
-          g.key,
-        );
+        const by = <T extends { id: number; x: number; y: number }>(t: T) => ({ id: t.id, x: t.x + dx, y: t.y + dy });
+        const solids = g.ats.map(({ id, at }) => ({ id, at: { x: at.x + dx, y: at.y + dy } }));
+        // (the drawing selected with it goes with it, in the same step)
+        if (g.drawn.atoms.length) {
+          store.getState().moveAtoms(g.drawn.atoms.map(by), g.key, {
+            arrows: g.drawn.arrows.map(by),
+            pluses: g.drawn.pluses.map(by),
+            molecules3d: solids,
+          });
+        } else store.getState().moveMolecules3d(solids, g.key);
       }
       invalidate();
     };
@@ -218,11 +231,21 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           recent: [],
         };
       } else {
+        // (selected with the drawing: the drawing's selection, and what is among it, too)
+        const withDrawing = st.sel3d.has(m.id) && st.sel.atoms.size > 0;
+        const among = withDrawing
+          ? schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses }, st.sel.atoms)
+          : { arrows: [], pluses: [] };
         gesture.current = {
           ...press,
           kind: "move",
           from: { x: p.x, y: p.y },
           ats: st.molecules3d.filter((x) => group.includes(x.id)).map((x) => ({ id: x.id, at: { ...x.at } })),
+          drawn: {
+            atoms: withDrawing ? st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y })) : [],
+            arrows: among.arrows.map((a) => ({ id: a.id, x: a.x, y: a.y })),
+            pluses: among.pluses.map((x) => ({ id: x.id, x: x.x, y: x.y })),
+          },
           key: `move-3d-${m.id}-${e.timeStamp}`,
         };
       }
