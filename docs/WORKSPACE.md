@@ -168,11 +168,15 @@ Taken on 2026-10-03:
   | A 3D molecule | turns it about its centre, with inertia | moves the view | zooms the page | chooses an atom |
   | Empty page | moves the view | moves the view | zooms the page | chooses nothing |
 
-  - **A 3D molecule's reach** is its outline widened a little, not its
-    atoms alone, so a drag between two atoms still turns it. Hovered, it
-    shows a light frame and a turning pointer.
-  - **The frame's edge** moves the molecule on the page, as a window is
-    moved by its title bar.
+  - **A 3D molecule's reach** follows its shape: its atoms, its bonds and
+    within its rings, and a few pixels about them, so a drag between two
+    atoms still turns it.
+  - **Hovered, its outline lights up**, very faintly, and the atom under
+    the pointer swells a little on a spring. No frame: the maintainer
+    asked for a highlight along the outline, in a modern way, rather than
+    a rectangle round it.
+  - **The rim just outside its outline** moves the molecule on the page,
+    its outline lighting up more as the pointer reaches it.
   - **A structure rising out of its drawing** ends beside it, not on top,
     so that the drawing can still be edited.
   - **A drawing and its 3D structure.** Turning the 3D structure leaves
