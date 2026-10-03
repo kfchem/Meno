@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
-import { useEditor } from "../store";
+import { useEditor, useEditorStore } from "../store";
 import {
   layoutMolecule,
   type Atom as LAtom,
@@ -11,7 +11,7 @@ import { editorLayoutOptions, layoutBonds, maxFitZoom } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { chemistry } from "../../../../lib/chem/molecule";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
-import { lookOf, solidOf, standingHeight } from "../utils/molecule3d";
+import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
 import { PAGE_DISTANCE } from "./PageCamera";
 
 export default function FitToContent2D({
@@ -23,6 +23,7 @@ export default function FitToContent2D({
 }) {
   const { model, autoFitSuspended } = useEditor();
   const molecules3d = useEditor((s) => s.molecules3d);
+  const store = useEditorStore();
   const style = useDrawingStyle();
   const { camera, size, invalidate } = useThree();
   // Fit only when asked (the trigger): opening, adding or dropping a
@@ -68,16 +69,15 @@ export default function FitToContent2D({
     let minY = bounds.min.y;
     let maxX = bounds.max.x;
     let maxY = bounds.max.y;
-    // and the molecules in 3D, however they are turned: as far as each
-    // reaches, seen from where its near side stands
+    // and the molecules in 3D, as each is turned and shown now
+    const { turns3d, frames3d } = store.getState();
     for (const m of molecules3d) {
-      const s = solidOf(m, STYLE_3D);
-      const look = lookOf(m, STYLE_3D);
-      const r = s.reach[look] * (PAGE_DISTANCE / (PAGE_DISTANCE - standingHeight(s, look) - s.reach[look]));
-      minX = Math.min(minX, m.at.x - r);
-      maxX = Math.max(maxX, m.at.x + r);
-      minY = Math.min(minY, m.at.y - r);
-      maxY = Math.max(maxY, m.at.y + r);
+      const pose = poseOf(m, solidOf(m, STYLE_3D), lookOf(m, STYLE_3D), turns3d[m.id], frames3d[m.id]);
+      const b = seenBounds(pose, PAGE_DISTANCE);
+      minX = Math.min(minX, b.minX);
+      maxX = Math.max(maxX, b.maxX);
+      minY = Math.min(minY, b.minY);
+      maxY = Math.max(maxY, b.maxY);
     }
     if (!isFinite(minX)) return;
     const spanX = Math.max(maxX - minX, 1e-3);
@@ -109,6 +109,7 @@ export default function FitToContent2D({
     paddingPx,
     trigger,
     autoFitSuspended,
+    store,
   ]);
   return null;
 }

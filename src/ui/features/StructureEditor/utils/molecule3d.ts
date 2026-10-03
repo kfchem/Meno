@@ -123,6 +123,26 @@ export function seenOnPage(pose: Pose, camera: THREE.Vector3): Seen[] {
   return seen;
 }
 
+/**
+ * How far a molecule reaches on the page, as it is turned and shown now,
+ * seen from `distance` straight above its centre: what a fit makes room for.
+ */
+export function seenBounds(pose: Pose, distance: number): { minX: number; maxX: number; minY: number; maxY: number } {
+  const q = pose.turn ? new THREE.Quaternion(...pose.turn) : new THREE.Quaternion();
+  const p = new THREE.Vector3();
+  const b = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  for (let i = 0; i < pose.radii.length; i++) {
+    p.set(pose.places[3 * i], pose.places[3 * i + 1], pose.places[3 * i + 2]).applyQuaternion(q);
+    const k = distance / Math.max(distance - (pose.height + p.z), 1e-3);
+    const r = pose.radii[i] * k;
+    b.minX = Math.min(b.minX, pose.at.x + p.x * k - r);
+    b.maxX = Math.max(b.maxX, pose.at.x + p.x * k + r);
+    b.minY = Math.min(b.minY, pose.at.y + p.y * k - r);
+    b.maxY = Math.max(b.maxY, pose.at.y + p.y * k + r);
+  }
+  return b;
+}
+
 /** The atom seen at a point of the page, the nearest of those there; null where there is none. */
 export function atomAt(pose: Pose, camera: THREE.Vector3, x: number, y: number): number | null {
   let best: number | null = null;
