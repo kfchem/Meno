@@ -56,6 +56,8 @@ export function PanZoom2D() {
       const st = store.getState();
       if (st.moveDrag.active) return;
       if (btn === 0 && st.hovered.atomId != null) return;
+      // nor on a molecule in 3D: that turns it, or on its frame's edge moves it
+      if (btn === 0 && st.hovered3d != null) return;
       // Block pan initiation while panHold is active (e.g., dblclick direction gesture)
       if (btn === 0 && panHoldRef.current) return;
       const now =

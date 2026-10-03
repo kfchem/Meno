@@ -72,6 +72,7 @@ import { useDropZone } from "../../../lib/drop";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 import PageCamera, { PAGE_DISTANCE } from "./components/PageCamera";
+import Molecules3D from "./components/Molecules3D";
 
 function StructureCanvasContent({
   active,
@@ -241,6 +242,10 @@ function StructureCanvasContent({
         e.preventDefault();
         st.removePlus(st.hoveredPlus);
         st.setHoveredPlus(null);
+      } else if (isDeleteKey(e) && !busy && st.hovered3d) {
+        // a molecule in 3D under the pointer
+        e.preventDefault();
+        st.removeMolecule3d(st.hovered3d.id);
       } else if (chargeStep(e) && kind === "atom" && id != null) {
         e.preventDefault();
         chargeAtom(id, chargeStep(e) as 1 | -1);
@@ -662,6 +667,8 @@ function StructureCanvasContent({
           <Arrows2D />
           <Pluses2D />
         </DrawnLayoutProvider>
+        {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
+        <Molecules3D />
         <PanZoom2D />
         <PageCamera />
       </Canvas>

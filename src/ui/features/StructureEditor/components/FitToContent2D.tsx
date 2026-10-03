@@ -10,6 +10,9 @@ import {
 import { editorLayoutOptions, layoutBonds, maxFitZoom } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { chemistry } from "../../../../lib/chem/molecule";
+import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { solidOf, standingHeight } from "../utils/molecule3d";
+import { PAGE_DISTANCE } from "./PageCamera";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -19,6 +22,7 @@ export default function FitToContent2D({
   trigger?: number;
 }) {
   const { model, autoFitSuspended } = useEditor();
+  const molecules3d = useEditor((s) => s.molecules3d);
   const style = useDrawingStyle();
   const { camera, size, invalidate } = useThree();
   // Fit only when asked (the trigger): opening, adding or dropping a
@@ -31,7 +35,7 @@ export default function FitToContent2D({
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
     if (trigger === lastTriggerRef.current) return;
-    if (atoms.length === 0) {
+    if (atoms.length === 0 && molecules3d.length === 0) {
       lastTriggerRef.current = trigger;
       return;
     }
@@ -48,11 +52,23 @@ export default function FitToContent2D({
     // the zoom: one pass is enough, and there is no bounds-needs-zoom-needs-
     // bounds to untangle.
     const opts = editorLayoutOptions(style);
-    const bounds = layoutMolecule(la, lb, opts, cam.zoom || 1).bounds;
-    const minX = bounds.min.x;
-    const minY = bounds.min.y;
-    const maxX = bounds.max.x;
-    const maxY = bounds.max.y;
+    const bounds = atoms.length
+      ? layoutMolecule(la, lb, opts, cam.zoom || 1).bounds
+      : { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
+    let minX = bounds.min.x;
+    let minY = bounds.min.y;
+    let maxX = bounds.max.x;
+    let maxY = bounds.max.y;
+    // and the molecules in 3D, however they are turned: as far as each
+    // reaches, seen from where its near side stands
+    for (const m of molecules3d) {
+      const s = solidOf(m, STYLE_3D);
+      const r = s.reach * (PAGE_DISTANCE / (PAGE_DISTANCE - standingHeight(s) - s.reach));
+      minX = Math.min(minX, m.at.x - r);
+      maxX = Math.max(maxX, m.at.x + r);
+      minY = Math.min(minY, m.at.y - r);
+      maxY = Math.max(maxY, m.at.y + r);
+    }
     if (!isFinite(minX)) return;
     const spanX = Math.max(maxX - minX, 1e-3);
     const spanY = Math.max(maxY - minY, 1e-3);
@@ -73,6 +89,7 @@ export default function FitToContent2D({
   }, [
     model.atoms,
     model.bonds,
+    molecules3d,
     style,
     camera,
     size.width,
