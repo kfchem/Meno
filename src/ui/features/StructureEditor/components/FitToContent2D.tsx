@@ -30,11 +30,20 @@ export default function FitToContent2D({
   // first bond on an empty canvas is drawn where it was put, at the zoom
   // the canvas opened at, and the view stays.
   const lastTriggerRef = useRef(trigger);
+  // What a canvas holds as its view first comes up - a file it was opened
+  // with, read before the view was there to ask for a fit - is shown whole:
+  // on its middle, at the zoom the canvas opens at or as far out as it
+  // needs, never further in. (Molecules in 3D stand beside a drawing, where
+  // the opening zoom alone may not reach.)
+  const opened = useRef(false);
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
-    if (trigger === lastTriggerRef.current) return;
+    const first = !opened.current;
+    opened.current = true;
+    if (first && atoms.length === 0 && molecules3d.length === 0) return;
+    if (!first && trigger === lastTriggerRef.current) return;
     if (atoms.length === 0 && molecules3d.length === 0) {
       lastTriggerRef.current = trigger;
       return;
@@ -77,7 +86,8 @@ export default function FitToContent2D({
     const pad = Math.max(0, Math.min(paddingPx, Math.min(w, h) * 0.45));
     const zx = (w - 2 * pad) / spanX;
     const zy = (h - 2 * pad) / spanY;
-    const z = Math.max(0.01, Math.min(zx, zy, maxFitZoom(style)));
+    const fit = Math.max(0.01, Math.min(zx, zy, maxFitZoom(style)));
+    const z = first ? Math.min(fit, cam.zoom || fit) : fit;
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     cam.zoom = z;
