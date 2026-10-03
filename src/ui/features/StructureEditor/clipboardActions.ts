@@ -64,8 +64,9 @@ export function useClipboardActions(
     const p = taken.part;
     try {
       const state = store.getState();
-      // (the structure is copied, pictures or no; a picture is of the drawing)
-      const pictures = !p.atoms.length
+      // (the structure is copied, pictures or no: the drawing's and the
+      // molecules' in 3D, as they are seen)
+      const pictures = !p.atoms.length && !p.molecules3d?.length
         ? []
         : await pictureItems(
             p,

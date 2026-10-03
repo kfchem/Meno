@@ -1,7 +1,9 @@
 import * as THREE from "three";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { atomRadius, type Style3D } from "../../../../lib/chem/style3d";
-import type { Molecule3D, Turn3D } from "../store/types";
+import { atomColour, atomRadius, type Style3D } from "../../../../lib/chem/style3d";
+import type { SolidMark } from "../../../../lib/chem/layout2d";
+import { PAGE_DISTANCE } from "./page";
+import type { Carried3D, Molecule3D, Turn3D } from "../store/types";
 
 /** World units to the ångström: a bond of 1.5 Å as long as a drawn bond. */
 export const WORLD_PER_ANGSTROM = NOMINAL_BOND_LENGTH / 1.5;
@@ -363,4 +365,57 @@ export function asSeen(
     }
     return { el: a.el, x: v.x, y: v.y, z: v.z, ...(a.charge ? { charge: a.charge } : {}), ...(a.isotope ? { isotope: a.isotope } : {}) };
   });
+}
+
+/**
+ * A molecule in 3D as a picture shows it - turned, in the frame and the look
+ * it is shown in, seen from straight above its centre, as the canvas sees
+ * it - as balls and sticks from the back forward, in world units on the
+ * page. A stick is cut back at each end to where its atom's ball covers it,
+ * so that one going back into a ball does not show over it.
+ */
+export function pictureMarks(m: Carried3D, style: Style3D): SolidMark[] {
+  const look = lookOf(m as Molecule3D, style);
+  const solid = solidOf({ ...m, id: 0 } as Molecule3D, style);
+  const places = solid.frames[frameOf(solid, m.frame)];
+  const radii = solid.radii[look];
+  const height = standingHeight(solid, look);
+  const q = m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion();
+  const D = PAGE_DISTANCE;
+  const seen = (p: THREE.Vector3) => {
+    const k = D / Math.max(D - (height + p.z), 1e-3);
+    return { x: m.at.x + p.x * k, y: m.at.y + p.y * k, z: p.z, k };
+  };
+  const at = (i: number) => new THREE.Vector3(places[3 * i], places[3 * i + 1], places[3 * i + 2]).applyQuaternion(q);
+  const balls = m.atoms.map((a, i) => {
+    const s = seen(at(i));
+    return { kind: "ball" as const, c: { x: s.x, y: s.y }, r: radii[i] * s.k, color: atomColour(a.el), z: s.z };
+  });
+  const marks: (SolidMark & { z: number })[] = [...balls];
+  if (look === "balls") {
+    const turned = new Float32Array(places.length);
+    for (let i = 0; i < radii.length; i++) at(i).toArray(turned, 3 * i);
+    for (const line of bondLines({ ...(m as Molecule3D), id: 0 }, turned, style.bondRadius * WORLD_PER_ANGSTROM)) {
+      const a = seen(line.a);
+      const b = seen(line.b);
+      // (which atoms the line runs between: the nearest at each end)
+      const end = (p: { x: number; y: number }) =>
+        balls.reduce((best, ball) => (Math.hypot(ball.c.x - p.x, ball.c.y - p.y) < Math.hypot(best.c.x - p.x, best.c.y - p.y) ? ball : best));
+      const ra = end(a).r;
+      const rb = end(b).r;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len <= (ra + rb) * 0.9) continue;
+      const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+      marks.push({
+        kind: "stick",
+        a: { x: a.x + ux * ra * 0.9, y: a.y + uy * ra * 0.9 },
+        b: { x: b.x - ux * rb * 0.9, y: b.y - uy * rb * 0.9 },
+        width: 2 * line.r * ((a.k + b.k) / 2),
+        color: style.bondColor,
+        // (behind a ball as deep as its middle)
+        z: (a.z + b.z) / 2 - 1e-4,
+      });
+    }
+  }
+  return marks.sort((x, y) => x.z - y.z).map(({ z: _z, ...mark }) => mark as SolidMark);
 }

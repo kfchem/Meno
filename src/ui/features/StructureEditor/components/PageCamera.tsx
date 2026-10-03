@@ -2,8 +2,9 @@ import { useThree } from "@react-three/fiber";
 import { useLayoutEffect } from "react";
 import * as THREE from "three";
 
-/** How far the perspective camera stands from the page, in world units (a bond is 1.8). */
-export const PAGE_DISTANCE = 60;
+import { PAGE_DISTANCE } from "../utils/page";
+
+export { PAGE_DISTANCE };
 
 /**
  * A perspective camera looking straight at the page, made to keep the

@@ -12,6 +12,8 @@ import { editorLayoutOptions, layoutBonds } from "./layoutOptions";
 import { useEditorStore } from "./store";
 import type { Carried3D, Drawn, EditorState } from "./store/types";
 import { carriedOf, isWorkspaceFile, workspaceText } from "./utils/workspace";
+import { pictureMarks } from "./utils/molecule3d";
+import { STYLE_3D } from "../../../lib/chem/style3d";
 import { chemistry } from "../../../lib/chem/molecule";
 import { schemeOutlines } from "../../../lib/chem/reactionScheme";
 
@@ -93,18 +95,41 @@ export function drawingLayout(
     paddingPx: 4,
   });
   const layout = layoutMolecule(atoms, bonds, opts, exportPxPerWorld(style));
+  // (what the drawing reaches so far: nothing, with no atoms)
+  let drawn = model.atoms.length > 0;
+  const take = (xs: number[], ys: number[]) => {
+    const { min, max } = layout.bounds;
+    layout.bounds = {
+      min: { x: Math.min(drawn ? min.x : Infinity, ...xs), y: Math.min(drawn ? min.y : Infinity, ...ys) },
+      max: { x: Math.max(drawn ? max.x : -Infinity, ...xs), y: Math.max(drawn ? max.y : -Infinity, ...ys) },
+    };
+    drawn = true;
+  };
   const outlines = schemeOutlines(model, style, NOMINAL_BOND_LENGTH);
   if (outlines.length) {
     const points = outlines.flat();
-    const xs = points.map((p) => p.x);
-    const ys = points.map((p) => p.y);
-    const { min, max } = layout.bounds;
-    const none = !model.atoms.length;
     layout.polys.push(...outlines.map((o) => ({ points: o })));
-    layout.bounds = {
-      min: { x: Math.min(none ? Infinity : min.x, ...xs), y: Math.min(none ? Infinity : min.y, ...ys) },
-      max: { x: Math.max(none ? -Infinity : max.x, ...xs), y: Math.max(none ? -Infinity : max.y, ...ys) },
-    };
+    take(
+      points.map((p) => p.x),
+      points.map((p) => p.y),
+    );
+  }
+  // and molecules in 3D, as they are seen, over it
+  const solids = (model.molecules3d ?? []).flatMap((m) => pictureMarks(m, STYLE_3D));
+  if (solids.length) {
+    layout.solids = solids;
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const m of solids) {
+      if (m.kind === "ball") {
+        xs.push(m.c.x - m.r, m.c.x + m.r);
+        ys.push(m.c.y - m.r, m.c.y + m.r);
+      } else {
+        xs.push(m.a.x, m.b.x);
+        ys.push(m.a.y, m.b.y);
+      }
+    }
+    take(xs, ys);
   }
   return { layout, opts };
 }
@@ -201,7 +226,8 @@ export function useFileActions() {
         const state = store.getState();
         // The style the canvas is drawn in: the document's own, or the app's.
         const style = styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle);
-        await writeTextFile(path, drawingSvg(drawnOf(state), state, style));
+        // (everything on the canvas, the molecules in 3D as they are seen)
+        await writeTextFile(path, drawingSvg({ ...drawnOf(state), molecules3d: carriedOf(state) }, state, style));
       }),
     [attempt, store],
   );

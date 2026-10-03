@@ -422,12 +422,35 @@ function chargesAsDrawn(atoms: Atom[], bonds: readonly Bond[]): Atom[] {
   return out;
 }
 
+/**
+ * Something of a molecule in 3D as a picture shows it, as seen: a ball,
+ * shaded as if lit from above right, or a stick from end to end. A picture
+ * draws them in the order given, from the back forward, over the drawing.
+ */
+export type SolidMark =
+  | { kind: "ball"; c: Vec2; r: number; color: string }
+  | { kind: "stick"; a: Vec2; b: Vec2; width: number; color: string };
+
+/** A ball's shading: its colour lightened where the light falls, darkened at its edge away from it. */
+export const BALL_SHADE = { light: 0.4, dark: 0.42, focus: { x: 0.18, y: 0.18 } } as const;
+
+/** A colour (#rrggbb) mixed towards white (`t` > 0) or black (`t` < 0), as #rrggbb. */
+export function shadeOf(hex: string, t: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  const n = m ? parseInt(m[1], 16) : 0x808080;
+  const mix = (c: number) => Math.round(t >= 0 ? c + (255 - c) * t : c * (1 + t));
+  const r = mix((n >> 16) & 0xff), g = mix((n >> 8) & 0xff), b = mix(n & 0xff);
+  return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
 export type Layout = {
   lines: LineSeg[];
   polys: Poly[];
   texts: TextItem[];
   circles: Circle[];
   fills: Circle[];
+  /** Molecules in 3D, as seen, from the back forward. */
+  solids?: SolidMark[];
   bounds: { min: Vec2; max: Vec2 };
   /**
    * Pixels per coordinate unit this layout was built for. Sizes the layout
@@ -3972,6 +3995,38 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
   for (const t of layout.texts) {
     s += svgLabel(t, fontSize, set, fill);
   }
+  s += svgSolids(layout.solids ?? []);
   s += `</svg>`;
+  return s;
+}
+
+/**
+ * Molecules in 3D as an SVG draws them: each ball filled with a radial
+ * gradient of its colour, light where the light falls, each stick a line.
+ */
+function svgSolids(marks: SolidMark[]): string {
+  if (!marks.length) return "";
+  const ids = new Map<string, string>();
+  let defs = "";
+  for (const m of marks) {
+    if (m.kind !== "ball" || ids.has(m.color)) continue;
+    const id = `ball${ids.size}`;
+    ids.set(m.color, id);
+    const fx = 0.5 + BALL_SHADE.focus.x;
+    const fy = 0.5 - BALL_SHADE.focus.y;
+    defs +=
+      `<radialGradient id="${id}" cx="0.5" cy="0.5" r="0.5" fx="${fx}" fy="${fy}">` +
+      `<stop offset="0" stop-color="${shadeOf(m.color, BALL_SHADE.light)}"/>` +
+      `<stop offset="0.6" stop-color="${m.color}"/>` +
+      `<stop offset="1" stop-color="${shadeOf(m.color, -BALL_SHADE.dark)}"/>` +
+      `</radialGradient>`;
+  }
+  let s = defs ? `<defs>${defs}</defs>` : "";
+  for (const m of marks) {
+    s +=
+      m.kind === "ball"
+        ? `<circle cx="${m.c.x}" cy="${-m.c.y}" r="${m.r}" fill="url(#${ids.get(m.color)})" stroke="none" />`
+        : `<line x1="${m.a.x}" y1="${-m.a.y}" x2="${m.b.x}" y2="${-m.b.y}" stroke="${m.color}" stroke-width="${m.width}" stroke-linecap="butt" />`;
+  }
   return s;
 }

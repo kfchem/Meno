@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
 import type { Molecule3D } from "../store/types";
-import { atomAt, bondLines, frameOf, partAt, poseOf, ringsOf, rowAbout, seenBounds, seenOnPage, solidOf, standingHeight, WORLD_PER_ANGSTROM } from "./molecule3d";
+import { atomAt, bondLines, frameOf, partAt, pictureMarks, poseOf, ringsOf, rowAbout, seenBounds, seenOnPage, solidOf, standingHeight, WORLD_PER_ANGSTROM } from "./molecule3d";
+import type { SolidMark } from "../../../../lib/chem/layout2d";
 
 /** Two carbons 1.5 Å apart along x, standing at `at`. */
 const ethane = (at = { x: 0, y: 0 }): Molecule3D => ({
@@ -166,5 +167,23 @@ describe("molecules placed in a row", () => {
       { x: expect.closeTo(-1.9, 6), y: 2 },
       { x: expect.closeTo(3.9, 6), y: 2 },
     ]);
+  });
+});
+
+describe("a molecule in 3D in a picture", () => {
+  it("is balls and sticks from the back forward, the sticks cut back to their balls", () => {
+    const m = { ...ethane({ x: 0, y: 0 }), atoms: [{ el: "C", x: 0, y: 0, z: 0 }, { el: "O", x: 1.5, y: 0, z: 1 }] };
+    const marks = pictureMarks(m, STYLE_3D);
+    expect(marks.map((x) => x.kind)).toEqual(["ball", "stick", "ball"]);
+    const [far, stick, near] = marks as [Extract<SolidMark, { kind: "ball" }>, Extract<SolidMark, { kind: "stick" }>, Extract<SolidMark, { kind: "ball" }>];
+    // the nearer is the O, larger as it is nearer
+    expect(near.color).not.toBe(far.color);
+    expect(stick.a.x).toBeGreaterThan(far.c.x);
+    expect(stick.b.x).toBeLessThan(near.c.x);
+  });
+
+  it("is balls alone, space-filling", () => {
+    const marks = pictureMarks({ ...ethane(), look: "space" }, STYLE_3D);
+    expect(marks.every((x) => x.kind === "ball")).toBe(true);
   });
 });
