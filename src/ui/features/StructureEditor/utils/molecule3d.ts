@@ -33,6 +33,52 @@ export function widestWay(angles: readonly number[]): { x: number; y: number } {
   return { x: Math.cos(mid), y: Math.sin(mid) };
 }
 
+/** A label's box on the screen: its middle, and half its width and height. */
+export type LabelBox = { x: number; y: number; hx: number; hy: number };
+
+/** How far apart the ways round a point are that a label is tried in. */
+const LABEL_STEP = Math.PI / 12;
+
+/**
+ * Where a label of half size `half` stands off a point `o` on the screen - an
+ * atom, or a bond's middle - `reach` beyond it, and clear of the balls
+ * (atoms, as circles) and the labels already placed about it where it can be:
+ * the way `preferred` - the widest gap between its bonds - when that is clear,
+ * or else the clear way nearest it, or else the way that covers least.
+ */
+export function labelSpot(
+  o: { x: number; y: number },
+  reach: number,
+  half: { x: number; y: number },
+  preferred: { x: number; y: number },
+  balls: readonly { x: number; y: number; r: number }[],
+  placed: readonly LabelBox[],
+): LabelBox {
+  const start = Math.atan2(preferred.y, preferred.x);
+  let best: { box: LabelBox; covers: number } | null = null;
+  for (let k = 0; k < 24; k++) {
+    // (the preferred way, then a step either side of it, and so on round)
+    const a = start + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * LABEL_STEP;
+    const u = { x: Math.cos(a), y: Math.sin(a) };
+    const edge = Math.min(half.x / Math.max(Math.abs(u.x), 1e-6), half.y / Math.max(Math.abs(u.y), 1e-6));
+    const box = { x: o.x + u.x * (reach + edge), y: o.y + u.y * (reach + edge), hx: half.x, hy: half.y };
+    let covers = 0;
+    for (const b of balls) {
+      const dx = Math.max(Math.abs(b.x - box.x) - box.hx, 0);
+      const dy = Math.max(Math.abs(b.y - box.y) - box.hy, 0);
+      covers += Math.max(0, b.r - Math.hypot(dx, dy));
+    }
+    for (const p of placed) {
+      const ox = box.hx + p.hx - Math.abs(box.x - p.x);
+      const oy = box.hy + p.hy - Math.abs(box.y - p.y);
+      if (ox > 0 && oy > 0) covers += Math.min(ox, oy);
+    }
+    if (covers < 0.5) return box;
+    if (!best || covers < best.covers) best = { box, covers };
+  }
+  return best!.box;
+}
+
 /**
  * How much of a conformer set each conformer is at room temperature (298 K),
  * by Boltzmann: from its energy in hartrees, the shares adding up to one.

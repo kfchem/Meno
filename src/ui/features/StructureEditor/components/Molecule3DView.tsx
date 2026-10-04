@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
 import type { Look3D, Measure3D, Molecule3D, Rising3D, Turn3D } from "../store/types";
-import { bondLines, bondReach, frameOf, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine } from "../utils/molecule3d";
+import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine, type LabelBox } from "../utils/molecule3d";
+import { MARK_MIN_PX } from "../chem/marks";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { kindOf, measureMarks, measureText, measureValue } from "../utils/measure3d";
 import { PAGE_DISTANCE } from "./PageCamera";
@@ -59,13 +60,11 @@ const TURN_FOLLOWED = 0.3;
 const ATOM_SWELL = 1.1;
 /**
  * A stereocentre's label: where it stands before it is first placed, the
- * white round its letters, the room between it and its atom's ball, and the
- * smallest its letters get, however far out the view is.
+ * white round its letters, and the room between it and its atom's ball.
  */
 const STEREO_OFFSET = "translate(0.95em, -0.95em)";
 const STEREO_HALO = "0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff";
 const STEREO_GAP_PX = 2;
-const STEREO_MIN_PX = 11;
 /**
  * A molecule rising out of its drawing, in seconds: its atoms grow out of the
  * drawing's, where they lie on the page, and go over to their places in 3D as
@@ -579,17 +578,20 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     if (reshaped || fading || dirty.current) drawMeasures(p);
     // the stereo labels, on their atom - a double bond's, at its middle - and
     // set off from it on the screen, as the drawing's are: clear of its ball,
-    // the widest way out between its bonds - and the labels already placed
-    // near it - as it is seen now, and as large as the drawing's letters
+    // the widest way out between its bonds as it is seen now - or the
+    // nearest way that keeps clear of the other atoms and of the labels
+    // already placed - and as large as the drawing's letters
     if (stereoMarks.length) {
       const g = Math.max(grown.current.v, 1e-3);
-      const font = Math.max(STEREO_MIN_PX, props.stereoFont.units === "px" ? props.stereoFont.size : props.stereoFont.size / px);
+      const font = Math.max(MARK_MIN_PX, props.stereoFont.units === "px" ? props.stereoFont.size : props.stereoFont.size / px);
       const v = new THREE.Vector3();
       const onScreen = (parent: THREE.Object3D, x: number, y: number, z: number) => {
         parent.localToWorld(v.set(x, y, z)).project(camera);
         return { x: ((v.x + 1) / 2) * size.width, y: ((1 - v.y) / 2) * size.height };
       };
-      const placedLabels: { x: number; y: number }[] = [];
+      const placedLabels: LabelBox[] = [];
+      // (every atom's ball on the screen, once for all the labels)
+      let balls: { x: number; y: number; r: number }[] | null = null;
       for (const mark of stereoMarks) {
         const l = stereoAnchors.current.get(mark.key);
         if (!l?.anchor) continue;
@@ -600,21 +602,19 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         if (!l.el || !parent) continue;
         if (reshaped || dirty.current) l.el.style.opacity = String(risen.current);
         parent.updateWorldMatrix(true, false);
+        if (!balls) {
+          balls = [];
+          for (let i = 0; i < n; i++) balls.push({ ...onScreen(parent, p[3 * i], p[3 * i + 1], p[3 * i + 2]), r: (radius(i) * g) / px });
+        }
         const o = onScreen(parent, at.x, at.y, at.z);
-        const way = widestWay([
-          ...mark.around.map((i) => {
-            const s = onScreen(parent, p[3 * i], p[3 * i + 1], p[3 * i + 2]);
-            return Math.atan2(s.y - o.y, s.x - o.x);
-          }),
-          ...placedLabels.filter((q) => Math.hypot(q.x - o.x, q.y - o.y) < 4 * font).map((q) => Math.atan2(q.y - o.y, q.x - o.x)),
-        ]);
+        const way = widestWay(mark.around.map((i) => Math.atan2(balls![i].y - o.y, balls![i].x - o.x)));
         // (out past the ball - or the bond - by a little more than half the label)
-        const reach = ((mark.atoms.length === 1 ? radius(mark.atoms[0]) : bondR) * g) / px;
+        const reach = ((mark.atoms.length === 1 ? radius(mark.atoms[0]) : bondR) * g) / px + STEREO_GAP_PX;
         const half = { x: font * 0.3 * (mark.text.length + 2), y: font * 0.55 };
-        const edge = Math.min(half.x / Math.max(Math.abs(way.x), 1e-6), half.y / Math.max(Math.abs(way.y), 1e-6));
-        const d = reach + STEREO_GAP_PX + edge;
-        placedLabels.push({ x: o.x + way.x * d, y: o.y + way.y * d });
-        l.el.style.transform = `translate(${(way.x * d).toFixed(1)}px, ${(way.y * d).toFixed(1)}px)`;
+        const others = balls.filter((b, i) => !mark.atoms.includes(i) && Math.hypot(b.x - o.x, b.y - o.y) < reach + 3 * half.x + b.r);
+        const spot = labelSpot(o, reach, half, way, others, placedLabels);
+        placedLabels.push(spot);
+        l.el.style.transform = `translate(${(spot.x - o.x).toFixed(1)}px, ${(spot.y - o.y).toFixed(1)}px)`;
         l.el.style.fontSize = `${font.toFixed(1)}px`;
       }
     }

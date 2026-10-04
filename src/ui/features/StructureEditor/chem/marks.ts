@@ -11,6 +11,8 @@ import type { Model } from "../store/types";
 
 /** A stereodescriptor's letters, against the labels': on the drawing and on a molecule in 3D alike. */
 export const MARK_SCALE = 0.6;
+/** The smallest a mark's letters get, however far out the view is: on both alike. */
+export const MARK_MIN_PX = 9;
 
 export type ValenceProblem = { valence: number; most?: number };
 

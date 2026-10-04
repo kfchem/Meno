@@ -21,6 +21,7 @@ import {
   turnedInPlane,
   turnedTogether,
   WORLD_PER_ANGSTROM,
+  labelSpot,
   populations,
   widestWay,
   type Turning3D,
@@ -319,6 +320,40 @@ describe("widestWay", () => {
 
   it("goes up and to the right with no neighbours", () => {
     near(widestWay([]), Math.SQRT1_2, -Math.SQRT1_2);
+  });
+});
+
+describe("labelSpot", () => {
+  const o = { x: 100, y: 100 };
+  const half = { x: 12, y: 6 };
+  const right = { x: 1, y: 0 };
+
+  it("stands the way preferred, beyond the reach, when nothing is there", () => {
+    expect(labelSpot(o, 10, half, right, [], [])).toEqual({ x: 122, y: 100, hx: 12, hy: 6 });
+  });
+
+  it("goes round to the nearest clear way when an atom is in the way - one in front of it, say", () => {
+    const spot = labelSpot(o, 10, half, right, [{ x: 124, y: 100, r: 8 }], []);
+    const clear = (b: { x: number; y: number; r: number }) =>
+      Math.hypot(Math.max(Math.abs(b.x - spot.x) - spot.hx, 0), Math.max(Math.abs(b.y - spot.y) - spot.hy, 0)) >= b.r;
+    expect(clear({ x: 124, y: 100, r: 8 })).toBe(true);
+    // (still on the preferred side: up or down a little, not round to the left)
+    expect(spot.x).toBeGreaterThan(o.x);
+  });
+
+  it("keeps clear of the labels already placed", () => {
+    const first = labelSpot(o, 10, half, right, [], []);
+    const second = labelSpot({ x: 104, y: 100 }, 10, half, right, [], [first]);
+    const overlap = Math.abs(second.x - first.x) < 24 && Math.abs(second.y - first.y) < 12;
+    expect(overlap).toBe(false);
+  });
+
+  it("takes the way that covers least where none is clear", () => {
+    const ring = Array.from({ length: 24 }, (_, k) => ({ x: 100 + 30 * Math.cos((k * Math.PI) / 12), y: 100 + 30 * Math.sin((k * Math.PI) / 12), r: k === 6 ? 2 : 12 }));
+    const spot = labelSpot(o, 10, half, right, ring, []);
+    // (the small one is straight down, on a screen)
+    expect(spot.y).toBeGreaterThan(o.y);
+    expect(Math.abs(spot.x - o.x)).toBeLessThan(1e-9);
   });
 });
 
