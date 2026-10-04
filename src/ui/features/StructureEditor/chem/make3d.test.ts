@@ -110,11 +110,13 @@ describe("placeRow", () => {
     expect(below.at[0].y).toBeLessThan(0);
   });
 
-  it("counts on a molecule standing up off the page being seen larger, further out", () => {
+  it("counts on a molecule standing up off the page being seen larger, further out, by a camera in perspective", () => {
     const view = { x0: -6, x1: 14, y0: -10, y1: 10 };
-    expect(placeRow([item(6, 1)], drawing, view).at[0].x).toBeGreaterThan(4);
+    expect(placeRow([item(6, 1)], drawing, view, 60).at[0].x).toBeGreaterThan(4);
     // (standing tall, it would be seen past the view's right edge: so it goes elsewhere)
-    expect(placeRow([item(6, 12)], drawing, view).at[0].x).toBeLessThan(4);
+    expect(placeRow([item(6, 12)], drawing, view, 60).at[0].x).toBeLessThan(4);
+    // straight from above (the canvas's camera) it is seen as it is, however tall
+    expect(placeRow([item(6, 12)], drawing, view).at[0].x).toBeGreaterThan(4);
   });
 
   it("says so where it is in view nowhere, and goes to the right", () => {

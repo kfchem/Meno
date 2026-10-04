@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { atomColour, KEY_LIGHT_FROM, type Style3D } from "../../../lib/chem/style3d";
 import { solidsBounds } from "../../../lib/chem/layout2d";
-import { PAGE_DISTANCE } from "./utils/page";
+import { EYE_HEIGHT } from "./utils/page";
 import { bondLines, frameOf, heightOf, lookOf, pictureMarks, solidOf, WORLD_PER_ANGSTROM } from "./utils/molecule3d";
 import type { Carried3D, Molecule3D } from "./store/types";
 
@@ -14,15 +14,24 @@ type Bounds = { min: { x: number; y: number }; max: { x: number; y: number } };
 /**
  * Molecules in 3D drawn as the canvas draws them - lit, in depth, so that
  * where balls run into one another only what is nearer shows - for a
- * picture: each seen from straight above its centre, as a picture lays
- * them out (utils/molecule3d's pictureMarks), on a canvas covering where
- * they all reach on the page, `pxPerWorld` pixels to the page's unit,
- * transparent round them. Null where there are none, or no WebGL to draw
- * them with.
+ * picture: each seen as the canvas sees it, straight from above - or, given
+ * `eyeHeight`, in perspective from that far straight above its centre - as
+ * a picture lays them out (utils/molecule3d's pictureMarks), on a canvas
+ * covering where they all reach on the page, `pxPerWorld` pixels to the
+ * page's unit, transparent round them. Null where there are none, or no
+ * WebGL to draw them with.
  */
-export function rendered3d(ms: readonly Carried3D[], style: Style3D, pxPerWorld: number): { canvas: HTMLCanvasElement; bounds: Bounds } | null {
+export function rendered3d(
+  ms: readonly Carried3D[],
+  style: Style3D,
+  pxPerWorld: number,
+  eyeHeight?: number,
+): { canvas: HTMLCanvasElement; bounds: Bounds } | null {
   if (typeof document === "undefined" || !ms.length) return null;
-  const each = ms.map((m) => ({ m, bounds: solidsBounds(pictureMarks(m, style)) })).filter((e): e is { m: Carried3D; bounds: Bounds } => !!e.bounds);
+  const eyeOver = (m: Carried3D) => (eyeHeight == null ? undefined : { x: m.at.x, y: m.at.y, z: eyeHeight });
+  const each = ms
+    .map((m) => ({ m, bounds: solidsBounds(pictureMarks(m, style, eyeOver(m))) }))
+    .filter((e): e is { m: Carried3D; bounds: Bounds } => !!e.bounds);
   if (!each.length) return null;
   const bounds: Bounds = {
     min: { x: Math.min(...each.map((e) => e.bounds.min.x)), y: Math.min(...each.map((e) => e.bounds.min.y)) },
@@ -56,7 +65,6 @@ export function rendered3d(ms: readonly Carried3D[], style: Style3D, pxPerWorld:
     }
     return mat;
   };
-  const D = PAGE_DISTANCE;
   const up = new THREE.Vector3(0, 1, 0);
   try {
     for (const { m, bounds: b } of each) {
@@ -96,22 +104,38 @@ export function rendered3d(ms: readonly Carried3D[], style: Style3D, pxPerWorld:
         }
       }
       scene.add(group);
-      // seen from straight above its centre, the page D below the eye: the
-      // frustum cut to where it reaches on the page
-      const near = 1;
-      const camera = new THREE.Camera();
-      camera.position.set(0, 0, D);
-      camera.updateMatrixWorld();
-      const k = near / D;
-      camera.projectionMatrix.makePerspective(
-        (b.min.x - m.at.x) * k,
-        (b.max.x - m.at.x) * k,
-        (b.max.y - m.at.y) * k,
-        (b.min.y - m.at.y) * k,
-        near,
-        D * 2,
-      );
-      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      // seen as the canvas sees it - straight from above, or in perspective
+      // from eyeHeight above its centre - the view cut to where it reaches
+      // on the page
+      let camera: THREE.Camera;
+      if (eyeHeight == null) {
+        camera = new THREE.OrthographicCamera(
+          b.min.x - m.at.x,
+          b.max.x - m.at.x,
+          b.max.y - m.at.y,
+          b.min.y - m.at.y,
+          0.1,
+          2 * EYE_HEIGHT,
+        );
+        camera.position.set(0, 0, EYE_HEIGHT);
+        camera.updateMatrixWorld();
+      } else {
+        const near = 1;
+        const D = eyeHeight;
+        camera = new THREE.Camera();
+        camera.position.set(0, 0, D);
+        camera.updateMatrixWorld();
+        const k = near / D;
+        camera.projectionMatrix.makePerspective(
+          (b.min.x - m.at.x) * k,
+          (b.max.x - m.at.x) * k,
+          (b.max.y - m.at.y) * k,
+          (b.min.y - m.at.y) * k,
+          near,
+          D * 2,
+        );
+        camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      }
       renderer.render(scene, camera);
       ctx.drawImage(
         renderer.domElement,

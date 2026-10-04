@@ -31,7 +31,7 @@ export function useStructureEvents(
   const store = useEditorStore();
 
   // Refs
-  const camRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const camRef = useRef<THREE.OrthographicCamera | THREE.PerspectiveCamera | null>(null);
   const domRef = useRef<HTMLCanvasElement | null>(null);
   const clickTimerRef = useRef<number | null>(null);
   // The press the next click ends, and whether it has travelled (utils/press)

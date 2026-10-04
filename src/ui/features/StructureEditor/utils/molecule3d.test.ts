@@ -61,7 +61,25 @@ describe("a molecule in 3D as it is drawn", () => {
     expect(poseOf(m, solidOf(m, STYLE_3D), "balls").height).toBe(7);
   });
 
-  it("is seen larger than it would be lying on the page, being nearer the camera", () => {
+  it("is seen straight from above by an orthographic camera - the canvas's - as large as it is, however high", () => {
+    const m = ethane();
+    const s = solidOf(m, STYLE_3D);
+    const seen = seenOnPage(poseOf(m, s, "balls"));
+    expect(seen[1].x).toBeCloseTo(0.75 * WORLD_PER_ANGSTROM, 6);
+    expect(seen[1].r).toBeCloseTo(s.radii.balls[1], 6);
+    expect(seen[1].z).toBeCloseTo(standingHeight(s), 6);
+    // end on: one atom over the other, and the higher the one seen there
+    const quarter = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+    const turn: [number, number, number, number] = [quarter.x, quarter.y, quarter.z, quarter.w];
+    const end = seenOnPage(poseOf(m, s, "balls", turn));
+    expect(end[0].x).toBeCloseTo(end[1].x, 6);
+    expect(atomAt(poseOf(m, s, "balls", turn), undefined, 0, 0)).toBe(end[0].z > end[1].z ? 0 : 1);
+    // and off to the side, as large and as far out as it is
+    const aside = seenBounds(poseOf(ethane({ x: 20, y: 0 }), s, "balls"));
+    expect((aside.minX + aside.maxX) / 2).toBeCloseTo(20, 6);
+  });
+
+  it("is seen larger than it would be lying on the page, being nearer the camera, in perspective", () => {
     const m = ethane();
     const s = solidOf(m, STYLE_3D);
     const seen = seenOnPage(poseOf(m, s, "balls"), new THREE.Vector3(0, 0, 60));
@@ -80,8 +98,8 @@ describe("a molecule in 3D as it is drawn", () => {
   it("reaches further out on the page seen from off to its side, as perspective has it", () => {
     const m = ethane({ x: 20, y: 0 });
     const pose = poseOf(m, solidOf(m, STYLE_3D), "balls");
-    const above = seenBounds(pose, 60);
-    const aside = seenBounds(pose, 60, { x: 0, y: 0 });
+    const above = seenBounds(pose, { x: 20, y: 0, z: 60 });
+    const aside = seenBounds(pose, { x: 0, y: 0, z: 60 });
     // the same size seen straight on, but out from the eye by its height's share
     expect(aside.maxX - aside.minX).toBeCloseTo(above.maxX - above.minX, 6);
     expect((aside.minX + aside.maxX) / 2).toBeCloseTo(20 * (60 / (60 - pose.height)), 4);

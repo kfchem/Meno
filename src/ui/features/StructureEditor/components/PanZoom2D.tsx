@@ -55,7 +55,8 @@ export function PanZoom2D() {
   const recent = useRef<{ t: number; dx: number; dy: number }[]>([]);
   const zVel = useRef(0);
   const anchor = useRef({ cx: 0, cy: 0 });
-  // (the page camera: PageCamera, its zoom kept as an orthographic camera's)
+  // (the camera's zoom: CSS pixels per world unit on the page, whether it is
+  // orthographic - the canvas's - or in perspective, as PageCamera keeps it)
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       // (the user takes the view: a fit on its way gives way)
@@ -169,7 +170,7 @@ export function PanZoom2D() {
     // The view zoomed at once by `factor`, keeping the point under the
     // pointer where it is.
     const zoomAt = (factor: number, clientX: number, clientY: number) => {
-      const cam = camera as THREE.PerspectiveCamera;
+      const cam = camera as THREE.OrthographicCamera;
       const rect = dom.getBoundingClientRect();
       const v = new THREE.Vector3(
         ((clientX - rect.left) / rect.width) * 2 - 1,

@@ -12,7 +12,7 @@ import { useDrawingStyle } from "../useDrawingStyle";
 import { chemistry } from "../../../../lib/chem/molecule";
 import { currentStyle3D } from "../style3d";
 import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
-import { PAGE_DISTANCE } from "./PageCamera";
+import { eyeOf } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
 
 export default function FitToContent2D({
@@ -42,7 +42,7 @@ export default function FitToContent2D({
   // view starts; after that a fit goes there)
   const fitted = useRef(false);
   useEffect(() => {
-    const cam = camera as THREE.PerspectiveCamera;
+    const cam = camera as THREE.OrthographicCamera;
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
     const first = !opened.current;
@@ -69,10 +69,12 @@ export default function FitToContent2D({
     const bounds = atoms.length
       ? layoutMolecule(la, lb, opts, cam.zoom || 1).bounds
       : { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
-    // and the molecules in 3D, as each is turned and shown now, seen from
-    // where the camera stands: first from straight above each, then - as
-    // one off to the side is seen further out, in perspective - from where
-    // that first fit put the camera
+    // and the molecules in 3D, as each is turned and shown now, as the
+    // camera sees them: straight from above, by an orthographic camera (the
+    // canvas's); in perspective, first from straight above each, then - as
+    // one off to the side is seen further out - from where that first fit
+    // put the camera
+    const eyeHeight = eyeOf(camera)?.z;
     const { turns3d, frames3d } = store.getState();
     const style3d = currentStyle3D();
     const poses = molecules3d.map((m) =>
@@ -81,13 +83,14 @@ export default function FitToContent2D({
     const w = size.width;
     const h = size.height;
     const pad = Math.max(0, Math.min(paddingPx, Math.min(w, h) * 0.45));
-    const fitFrom = (eye?: { x: number; y: number }) => {
+    const fitFrom = (over?: { x: number; y: number }) => {
       let minX = bounds.min.x;
       let minY = bounds.min.y;
       let maxX = bounds.max.x;
       let maxY = bounds.max.y;
       for (const pose of poses) {
-        const b = seenBounds(pose, PAGE_DISTANCE, eye);
+        const from = over ?? pose.at;
+        const b = seenBounds(pose, eyeHeight == null ? undefined : { x: from.x, y: from.y, z: eyeHeight });
         minX = Math.min(minX, b.minX);
         maxX = Math.max(maxX, b.maxX);
         minY = Math.min(minY, b.minY);
@@ -99,7 +102,7 @@ export default function FitToContent2D({
     };
     let seen = fitFrom();
     if (!isFinite(seen.cx)) return;
-    if (poses.length) seen = fitFrom({ x: seen.cx, y: seen.cy });
+    if (poses.length && eyeHeight != null) seen = fitFrom({ x: seen.cx, y: seen.cy });
     const fit = seen.zoom;
     const z = first ? Math.min(fit, cam.zoom || fit) : fit;
     const cx = seen.cx;

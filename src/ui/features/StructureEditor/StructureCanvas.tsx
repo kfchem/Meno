@@ -73,7 +73,7 @@ import { useOfficeLink } from "./hooks/useOfficeLink";
 import { useDropZone } from "../../../lib/drop";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
-import PageCamera, { PAGE_DISTANCE } from "./components/PageCamera";
+import { EYE_HEIGHT, eyeOf } from "./utils/page";
 import Molecules3D from "./components/Molecules3D";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
@@ -215,7 +215,7 @@ function StructureCanvasContent({
           // or, made again, where the one made before stood
           const row = replacing
             ? { at: rowFrom(turned, replacing.at), inView: true }
-            : placeRow(turned, boxOf(block.part), viewBox());
+            : placeRow(turned, boxOf(block.part), viewBox(), camRef.current ? eyeOf(camRef.current)?.z : undefined);
           allInView &&= row.inView;
           ms.forEach((m, i) =>
             made.push({ m: { ...m, at: row.at[i] }, turn: turned[i].turn, from: turned[i].start, flat: turned[i].flat }),
@@ -230,7 +230,7 @@ function StructureCanvasContent({
         setWorking3d(null);
       }
     },
-    [store, viewBox, requestFit],
+    [store, viewBox, requestFit, camRef],
   );
   const make3d = useCallback(
     async (around: Iterable<number>, replacing?: Molecule3D) => {
@@ -793,10 +793,13 @@ function StructureCanvasContent({
       <Remake3D.Provider value={remake3d}>
       <Canvas
         key={tabId}
-        // The page is seen head-on, in perspective (PageCamera): drawn just
-        // as an orthographic camera draws it, while what stands off it - a
-        // 3D molecule - is seen in depth.
-        camera={{ position: [0, 0, PAGE_DISTANCE], fov: 50, near: 0.1, far: 2000, zoom: startZoom }}
+        // The page is seen straight from above, orthographically: the drawing
+        // as ever, and a molecule in 3D as a picture of it shows it, however
+        // high it stands. (A view that is to show depth can have a camera in
+        // perspective instead - PageCamera - and all that sees molecules
+        // follows its eye: utils/page#eyeOf.)
+        orthographic
+        camera={{ position: [0, 0, EYE_HEIGHT], near: 0.1, far: 2 * EYE_HEIGHT, zoom: startZoom }}
         // Render on demand: interactions, store changes and the animation
         // layers request frames (see PanZoom2D and the preview components)
         // instead of redrawing continuously while nothing changes.
@@ -863,7 +866,6 @@ function StructureCanvasContent({
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />
         <PanZoom2D />
-        <PageCamera />
       </Canvas>
       </Remake3D.Provider>
     </div>
