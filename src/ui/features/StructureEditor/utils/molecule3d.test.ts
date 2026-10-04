@@ -328,8 +328,17 @@ describe("labelSpot", () => {
   const half = { x: 12, y: 6 };
   const right = { x: 1, y: 0 };
 
-  it("stands the way preferred, beyond the reach, when nothing is there", () => {
-    expect(labelSpot(o, 10, half, right, [], [])).toEqual({ x: 122, y: 100, hx: 12, hy: 6 });
+  // (how far a box's nearest point is from a point)
+  const gapTo = (p: { x: number; y: number }, b: { x: number; y: number; hx: number; hy: number }) =>
+    Math.hypot(Math.max(Math.abs(p.x - b.x) - b.hx, 0), Math.max(Math.abs(p.y - b.y) - b.hy, 0));
+
+  it("stands the way preferred, its nearest edge the reach away, when nothing is there", () => {
+    const spot = labelSpot(o, 10, half, right, [], []);
+    expect(spot.x).toBeCloseTo(122);
+    expect(spot.y).toBeCloseTo(100);
+    // (on a slant too: its corner no nearer its atom than the reach)
+    const slant = labelSpot(o, 10, half, { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, [], []);
+    expect(gapTo(o, slant)).toBeCloseTo(10);
   });
 
   it("goes round to the nearest clear way when an atom is in the way - one in front of it, say", () => {
@@ -346,6 +355,27 @@ describe("labelSpot", () => {
     const second = labelSpot({ x: 104, y: 100 }, 10, half, right, [], [first]);
     const overlap = Math.abs(second.x - first.x) < 24 && Math.abs(second.y - first.y) < 12;
     expect(overlap).toBe(false);
+  });
+
+  it("goes a little further out, the same way round, when every way at the reach is taken", () => {
+    // (a ring of small atoms just beyond the reach, all the way round)
+    const ring = Array.from({ length: 48 }, (_, k) => ({ x: 100 + 13 * Math.cos((k * Math.PI) / 24), y: 100 + 13 * Math.sin((k * Math.PI) / 24), r: 1.5 }));
+    const spot = labelSpot(o, 10, half, right, ring, []);
+    expect(ring.every((b) => gapTo(b, spot) >= b.r)).toBe(true);
+    expect(spot.x).toBeGreaterThan(o.x);
+  });
+
+  it("would sooner touch two atoms at their edges than hide one", () => {
+    // (one atom right where the label would go, two others touching every other way)
+    const balls = [
+      { x: 122, y: 100, r: 6 },
+      ...Array.from({ length: 23 }, (_, k) => {
+        const a = ((k + 1) * Math.PI) / 12;
+        return { x: 100 + 24 * Math.cos(a), y: 100 + 24 * Math.sin(a), r: 3 };
+      }),
+    ];
+    const spot = labelSpot(o, 10, half, right, balls, []);
+    expect(gapTo({ x: 122, y: 100 }, spot)).toBeGreaterThan(0);
   });
 
   it("takes the way that covers least where none is clear", () => {

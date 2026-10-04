@@ -611,7 +611,9 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         // (out past the ball - or the bond - by a little more than half the label)
         const reach = ((mark.atoms.length === 1 ? radius(mark.atoms[0]) : bondR) * g) / px + STEREO_GAP_PX;
         const half = { x: font * 0.3 * (mark.text.length + 2), y: font * 0.55 };
-        const others = balls.filter((b, i) => !mark.atoms.includes(i) && Math.hypot(b.x - o.x, b.y - o.y) < reach + 3 * half.x + b.r);
+        // (every atom near it but its own - a double bond's two among them)
+        const own = mark.atoms.length === 1 ? mark.atoms[0] : -1;
+        const others = balls.filter((b, i) => i !== own && Math.hypot(b.x - o.x, b.y - o.y) < reach + 4 * half.x + b.r);
         const spot = labelSpot(o, reach, half, way, others, placedLabels);
         placedLabels.push(spot);
         l.el.style.transform = `translate(${(spot.x - o.x).toFixed(1)}px, ${(spot.y - o.y).toFixed(1)}px)`;

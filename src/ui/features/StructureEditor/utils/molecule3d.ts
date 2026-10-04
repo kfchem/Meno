@@ -39,12 +39,27 @@ export type LabelBox = { x: number; y: number; hx: number; hy: number };
 /** How far apart the ways round a point are that a label is tried in. */
 const LABEL_STEP = Math.PI / 12;
 
+/** How far from `o` a box of half size `half` stands, its middle the way `u` (a unit vector), for its nearest point to be `reach` from `o`. */
+function standOff(u: { x: number; y: number }, half: { x: number; y: number }, reach: number): number {
+  const gap = (t: number) => Math.hypot(Math.max(t * Math.abs(u.x) - half.x, 0), Math.max(t * Math.abs(u.y) - half.y, 0));
+  let lo = 0;
+  let hi = 2 * (reach + half.x + half.y);
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (gap(mid) < reach) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
 /**
  * Where a label of half size `half` stands off a point `o` on the screen - an
- * atom, or a bond's middle - `reach` beyond it, and clear of the balls
- * (atoms, as circles) and the labels already placed about it where it can be:
- * the way `preferred` - the widest gap between its bonds - when that is clear,
- * or else the clear way nearest it, or else the way that covers least.
+ * atom, or a bond's middle - its nearest edge `reach` from it, and clear of
+ * the balls (atoms, as circles) and the labels already placed about it
+ * where it can be: the way `preferred` - the widest gap between its bonds -
+ * when that is clear, or else the clear way nearest it; or a little further
+ * out, the same way round; or else where it hides least. A ball hidden
+ * outright counts for more than two touched at their edges.
  */
 export function labelSpot(
   o: { x: number; y: number },
@@ -55,26 +70,31 @@ export function labelSpot(
   placed: readonly LabelBox[],
 ): LabelBox {
   const start = Math.atan2(preferred.y, preferred.x);
-  let best: { box: LabelBox; covers: number } | null = null;
-  for (let k = 0; k < 24; k++) {
-    // (the preferred way, then a step either side of it, and so on round)
-    const a = start + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * LABEL_STEP;
-    const u = { x: Math.cos(a), y: Math.sin(a) };
-    const edge = Math.min(half.x / Math.max(Math.abs(u.x), 1e-6), half.y / Math.max(Math.abs(u.y), 1e-6));
-    const box = { x: o.x + u.x * (reach + edge), y: o.y + u.y * (reach + edge), hx: half.x, hy: half.y };
-    let covers = 0;
-    for (const b of balls) {
-      const dx = Math.max(Math.abs(b.x - box.x) - box.hx, 0);
-      const dy = Math.max(Math.abs(b.y - box.y) - box.hy, 0);
-      covers += Math.max(0, b.r - Math.hypot(dx, dy));
+  let best: { box: LabelBox; hides: number } | null = null;
+  for (const out of [reach, reach + half.y]) {
+    for (let k = 0; k < 24; k++) {
+      // (the preferred way, then a step either side of it, and so on round)
+      const a = start + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * LABEL_STEP;
+      const u = { x: Math.cos(a), y: Math.sin(a) };
+      const t = standOff(u, half, out);
+      const box = { x: o.x + u.x * t, y: o.y + u.y * t, hx: half.x, hy: half.y };
+      let hides = 0;
+      for (const b of balls) {
+        const dx = Math.max(Math.abs(b.x - box.x) - box.hx, 0);
+        const dy = Math.max(Math.abs(b.y - box.y) - box.hy, 0);
+        // (how far into it, against how large it is: as good as all of a
+        // small one hidden counts as much as all of a large one)
+        const depth = Math.min(Math.max(0, b.r - Math.hypot(dx, dy)), 2 * b.r);
+        hides += b.r > 0 ? (depth * depth) / b.r : 0;
+      }
+      for (const p of placed) {
+        const ox = box.hx + p.hx - Math.abs(box.x - p.x);
+        const oy = box.hy + p.hy - Math.abs(box.y - p.y);
+        if (ox > 0 && oy > 0) hides += 2 * Math.min(ox, oy);
+      }
+      if (hides < 0.05) return box;
+      if (!best || hides < best.hides) best = { box, hides };
     }
-    for (const p of placed) {
-      const ox = box.hx + p.hx - Math.abs(box.x - p.x);
-      const oy = box.hy + p.hy - Math.abs(box.y - p.y);
-      if (ox > 0 && oy > 0) covers += Math.min(ox, oy);
-    }
-    if (covers < 0.5) return box;
-    if (!best || covers < best.covers) best = { box, covers };
   }
   return best!.box;
 }
