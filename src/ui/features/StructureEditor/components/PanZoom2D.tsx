@@ -15,6 +15,14 @@ const MAX_ZOOM = 300;
 const PINCH_PER_PX = 0.01;
 /** The least a wheel's step counts for when it zooms, in px: a plain wheel's line. */
 const NOTCH_MIN_PX = 40;
+/**
+ * A drag let go while still moving glides on: as fast as it went over the
+ * last RECENT_MS, slowing by GLIDE_FRICTION a second - unless it was held
+ * still for HELD_MS before the release, when it stays where it is.
+ */
+const RECENT_MS = 64;
+const HELD_MS = 80;
+const GLIDE_FRICTION = 4;
 
 export function PanZoom2D() {
   const { camera, gl, invalidate } = useThree();
@@ -41,7 +49,9 @@ export function PanZoom2D() {
   const pos = useRef(
     new THREE.Vector2((camera as any).position.x, (camera as any).position.y)
   );
+  // how fast the view glides on after a drag, in world units a second; and the drag's latest moves
   const vel = useRef(new THREE.Vector2(0, 0));
+  const recent = useRef<{ t: number; dx: number; dy: number }[]>([]);
   const zVel = useRef(0);
   const anchor = useRef({ cx: 0, cy: 0 });
   // camera is OrthographicCamera in r3f Canvas when orthographic prop is set
@@ -81,6 +91,7 @@ export function PanZoom2D() {
       last.current.x = e.clientX;
       last.current.y = e.clientY;
       vel.current.set(0, 0);
+      recent.current = [];
     };
     const onMove = (e: PointerEvent) => {
       if (extendRef.current) {
@@ -117,13 +128,24 @@ export function PanZoom2D() {
       const dy = (e.clientY - last.current.y) / cz;
       pos.current.x -= dx;
       pos.current.y += dy;
-      vel.current.set(-dx, dy);
+      recent.current = [...recent.current, { t: e.timeStamp, dx: -dx, dy }].filter((r) => e.timeStamp - r.t <= RECENT_MS);
       last.current.x = e.clientX;
       last.current.y = e.clientY;
       invalidate();
     };
     const onUp = (e: PointerEvent) => {
       if (dragging.current) {
+        // let go while moving, it glides on as fast as it was going; held
+        // still first, it stays
+        const moves = recent.current;
+        const latest = moves.length ? moves[moves.length - 1].t : -Infinity;
+        if (e.timeStamp - latest > HELD_MS || moves.length < 2) vel.current.set(0, 0);
+        else {
+          const took = Math.max((latest - moves[0].t) / 1000, 1 / 60);
+          const sum = moves.slice(1).reduce((a, r) => ({ x: a.x + r.dx, y: a.y + r.dy }), { x: 0, y: 0 });
+          vel.current.set(sum.x / took, sum.y / took);
+        }
+        recent.current = [];
         // The view may glide on after the release: what was under the
         // pointer need not be any more. The next move finds what is.
         store.getState().clearAtomHover();
@@ -282,11 +304,11 @@ export function PanZoom2D() {
     }
     // inertial pan
     if (!dragging.current) {
-      const panFriction = Math.exp(-4 * dt);
-      vel.current.multiplyScalar(panFriction);
-      if (vel.current.lengthSq() > 1e-8) {
-        pos.current.add(vel.current);
-      }
+      // (a frame long in coming moves it no further than a short one)
+      const step = Math.min(dt, 1 / 30);
+      vel.current.multiplyScalar(Math.exp(-GLIDE_FRICTION * step));
+      if (vel.current.lengthSq() > 1e-4) pos.current.addScaledVector(vel.current, step);
+      else vel.current.set(0, 0);
     }
     cam.position.x = pos.current.x;
     cam.position.y = pos.current.y;

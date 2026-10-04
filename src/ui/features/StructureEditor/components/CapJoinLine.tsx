@@ -33,7 +33,9 @@ export default function CapJoinLine({
 }: CapJoinLineProps) {
   const { size } = useThree()
   const geom = React.useMemo(() => new LineGeometry(), [])
-  const mat = React.useMemo(() => new LineMaterial({ color: new THREE.Color(color).getHex() }), [])
+  // (made once, in the colour it is first given; a new colour is set on it below)
+  const firstColor = React.useRef(color)
+  const mat = React.useMemo(() => new LineMaterial({ color: new THREE.Color(firstColor.current).getHex() }), [])
   const line = React.useMemo(() => new Line2(geom, mat), [geom, mat])
 
   React.useEffect(() => {
