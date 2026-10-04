@@ -7,6 +7,7 @@ import { ARROW_LENGTH_BONDS } from "../../../../../lib/chem/reactionScheme";
 import { EditorState, Bond, Arrow, Model, Drawn } from "../types";
 import { turnedOver } from "../../utils/selection";
 import { schemeAmong } from "../../utils/copyPaste";
+import { relinked } from "../../utils/drawnLink";
 import type { Workspace } from "../../utils/workspace";
 import { StoreApi } from "zustand";
 
@@ -304,7 +305,11 @@ export const createModelSlice = (
     if (!next.atoms.length && !carried.length) return;
     const start = doc.getState().nextId;
     const start3d = doc.getState().nextMolecule3dId ?? 1;
-    if (!doc.edit("paste", (d) => ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(next)))) return;
+    // (the pasted atoms numbered on from here, in their order: a molecule in
+    // 3D pasted with its drawing is tied to the pasted drawing)
+    const idOf = new Map(next.atoms.map((a, k) => [a.id, start + k]));
+    const tied = { ...next, molecules3d: carried.map((m) => relinked(m, next, (id) => idOf.get(id))) };
+    if (!doc.edit("paste", (d) => ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(tied)))) return;
     // the molecules in 3D pasted, numbered from there on in order: selected
     // with the rest, turned and showing the frame they were copied in
     const ids = carried.map((_, i) => start3d + i);

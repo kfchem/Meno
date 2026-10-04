@@ -34,3 +34,28 @@ export function linkOf(m: Pick<Molecule3D, "drawnFrom" | "drawnAs">, model: Mode
   if (!ids.some((id) => present.has(id))) return "gone";
   return m.drawnAs != null && signatureOf(model, ids) !== m.drawnAs ? "changed" : "live";
 }
+
+/**
+ * A molecule in 3D pasted with its drawing - all of it, or some - tied to
+ * the pasted drawing's atoms, which `idOf` renames: still its drawing's if it
+ * was in what was copied (`part`), or changed if only some of that came;
+ * tied to nothing where none of its drawing came with it.
+ */
+export function relinked<M extends Pick<Molecule3D, "drawnFrom" | "drawnAs">>(
+  m: M,
+  part: Model,
+  idOf: (id: number) => number | undefined,
+): M {
+  if (!m.drawnFrom) return m;
+  const drawnFrom = m.drawnFrom.map((id) => (id == null ? null : (idOf(id) ?? null)));
+  if (!drawnFrom.some((id) => id != null)) {
+    const { drawnFrom: _from, drawnAs: _as, ...rest } = m;
+    return rest as M;
+  }
+  if (linkOf(m, part) !== "live") return { ...m, drawnFrom };
+  const renamed: Model = {
+    atoms: part.atoms.map((a) => ({ ...a, id: idOf(a.id) ?? a.id })),
+    bonds: part.bonds.map((b) => ({ ...b, a: idOf(b.a) ?? b.a, b: idOf(b.b) ?? b.b })),
+  };
+  return { ...m, drawnFrom, drawnAs: signatureOf(renamed, drawnFrom.filter((id): id is number => id != null)) };
+}

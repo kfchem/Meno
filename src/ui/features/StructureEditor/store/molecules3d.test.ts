@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { addMolecule3d, createStructureDocument } from "../document";
 import { molecules3dIn } from "../utils/selection";
-import { linkOf } from "../utils/drawnLink";
+import { linkOf, signatureOf } from "../utils/drawnLink";
 
 const water = {
   atoms: [
@@ -263,6 +263,20 @@ describe("molecules in 3D and their drawings", () => {
     doc.undo();
     expect(state().model.atoms).toEqual([]);
     expect(state().molecules3d[0].drawnFrom).toBeUndefined();
+  });
+
+  it("pasted with their drawing, are tied to the pasted drawing; pasted alone, to none", () => {
+    const { state } = editor();
+    const drawing = { atoms: [{ id: 50, x: 0, y: 0, r: 0.9, el: "O" }], bonds: [] };
+    const made = { ...water, at: { x: 3, y: 0 }, drawnFrom: [50, null, null, null, null], drawnAs: signatureOf(drawing, [50]) };
+    state().pasteModel({ ...drawing, molecules3d: [made] });
+    const pasted = state().molecules3d[2];
+    const atom = state().model.atoms[0];
+    expect(atom.id).not.toBe(50);
+    expect(pasted.drawnFrom).toEqual([atom.id, null, null, null, null]);
+    expect(linkOf(pasted, state().model)).toBe("live");
+    state().pasteModel({ atoms: [], bonds: [], molecules3d: [made] });
+    expect(state().molecules3d[3].drawnFrom).toBeUndefined();
   });
 
   it("show their frames overlaid, or not, as the view has it", () => {
