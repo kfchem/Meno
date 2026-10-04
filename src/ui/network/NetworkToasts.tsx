@@ -1,3 +1,5 @@
+import { AnimatePresence, motion } from "motion/react";
+import { RISE } from "../theme/motion";
 import {
   ArrowDownTrayIcon,
   CheckCircleIcon,
@@ -70,9 +72,10 @@ export default function NetworkToasts({ onOpen }: { onOpen: () => void }) {
     return () => clearInterval(t);
   }, [cards.length]);
 
-  if (cards.length === 0) return null;
   return (
     <div className="absolute right-3 bottom-3 z-[90] flex flex-col gap-2 w-80 pointer-events-none">
+      {/* each card comes in, and goes, softly; the others make room as it does */}
+      <AnimatePresence initial={false}>
       {cards.map(({ key, task, conns }) => {
         const blocked = !task;
         const hosts = [
@@ -92,8 +95,10 @@ export default function NetworkToasts({ onOpen }: { onOpen: () => void }) {
               ? XCircleIcon
               : CheckCircleIcon;
         return (
-          <button
+          <motion.button
             key={key}
+            layout
+            {...RISE}
             role="status"
             onClick={onOpen}
             onContextMenu={(e) => {
@@ -101,7 +106,7 @@ export default function NetworkToasts({ onOpen }: { onOpen: () => void }) {
               setDismissed((d) => new Set(d).add(key));
             }}
             title="Open the network record (right-click to dismiss)"
-            className="pointer-events-auto text-left rounded-lg border border-gh-line bg-white/95 shadow-md px-3 py-2 text-xs text-gh-black hover:bg-white"
+            className="pointer-events-auto text-left rounded-lg border border-gh-line bg-white/95 shadow-md px-3 py-2 text-xs text-gh-black transition-colors duration-150 ease-meno hover:bg-white"
           >
             <div className="flex items-center gap-2">
               <Icon
@@ -143,9 +148,10 @@ export default function NetworkToasts({ onOpen }: { onOpen: () => void }) {
                 </>
               )}
             </div>
-          </button>
+          </motion.button>
         );
       })}
+      </AnimatePresence>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
 import { editorLayoutOptions, layoutBonds, maxFitZoom } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { chemistry } from "../../../../lib/chem/molecule";
+import { setViewGoal } from "./viewGoal";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -26,6 +27,9 @@ export default function FitToContent2D({
   // first bond on an empty canvas is drawn where it was put, at the zoom
   // the canvas opened at, and the view stays.
   const lastTriggerRef = useRef(trigger);
+  // (the first fit, of a canvas that has shown nothing yet, is where its
+  // view starts; after that a fit goes there)
+  const fitted = useRef(false);
   useEffect(() => {
     const cam = camera as THREE.OrthographicCamera;
     if (autoFitSuspended) return; // skip while suspended
@@ -64,9 +68,14 @@ export default function FitToContent2D({
     const z = Math.max(0.01, Math.min(zx, zy, maxFitZoom(style)));
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
-    cam.zoom = z;
-    cam.updateProjectionMatrix();
-    cam.position.set(cx, cy, cam.position.z);
+    if (fitted.current) {
+      setViewGoal(cam, { zoom: z, x: cx, y: cy });
+    } else {
+      cam.zoom = z;
+      cam.updateProjectionMatrix();
+      cam.position.set(cx, cy, cam.position.z);
+      fitted.current = true;
+    }
     invalidate();
     lastTriggerRef.current = trigger;
     // size changes should also refit
