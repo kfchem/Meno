@@ -59,8 +59,8 @@ const create = (label: string, kind: TabKind, data?: unknown): TabInstance => {
 export const viewRegistry: Record<string, ViewEntry> = {
   loader: {
     kind: "loader",
-    Component: ({ replaceContent }) => (
-      <OmniLoader onResolve={(next) => replaceContent(next as any)} />
+    Component: ({ replaceContent, active }) => (
+      <OmniLoader active={active} onResolve={(next) => replaceContent(next as any)} />
     ),
     create: (label) => create(label, "loader"),
   },

@@ -1,10 +1,14 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { TabKind } from "../../../lib/core";
+import { clipboardIntent } from "../../../lib/doc/shortcuts";
+import { canvasFromClipboard } from "./pasted";
 // no direct parsing here; route to StructureEditor
 import { detectFormat, readMoleculesFromText } from "../../../utils/importers";
 
 type Props = {
   onResolve: (next: { kind: TabKind } & Record<string, unknown>) => void;
+  /** Whether the tab is the one shown: only then does it take a paste. */
+  active?: boolean;
 };
 
 const EXT_3D = new Set(["sdf", "xyz", "pdb"]);
@@ -34,9 +38,24 @@ const EXT_TEXT = new Set([
 // const isKet = (s: string) =>
 //   s.trim().startsWith("{") && /"root"|\"nodes\"/.test(s);
 
-export default function OmniLoader({ onResolve }: Props) {
+export default function OmniLoader({ onResolve, active = true }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const onPick = () => inputRef.current?.click();
+
+  // Ctrl/Cmd+V with a structure on the clipboard: the tab becomes a canvas
+  // holding it. With none, the tab stays as it is.
+  const resolve = useRef(onResolve);
+  resolve.current = onResolve;
+  useEffect(() => {
+    if (!active) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (clipboardIntent(e) !== "paste") return;
+      e.preventDefault();
+      void canvasFromClipboard().then((next) => next && resolve.current(next));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active]);
 
   const handleFiles = async (files: FileList) => {
     if (!files.length) return;
@@ -105,7 +124,7 @@ export default function OmniLoader({ onResolve }: Props) {
         >
           Open file
         </button>
-        <div className="text-sm text-gray-600">or drop a file here</div>
+        <div className="text-sm text-gray-600">or drop a file here, or paste a structure</div>
       </div>
       <input
         ref={inputRef}

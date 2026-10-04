@@ -292,8 +292,11 @@ export default function App() {
     // Keep `filename` in the data: views use it (e.g. the 2D editor's
     // `initialFilename`) to pick a parser by extension.
     const filename = nextData.filename as string | undefined;
+    // (the tab's name: the one it is given, else the file's)
+    const label = (nextData.label as string | undefined) ?? filename;
     delete (nextData as any).kind;
-    if (filename) dispatch({ type: "RENAME_TAB", id, label: filename });
+    delete (nextData as any).label;
+    if (label) dispatch({ type: "RENAME_TAB", id, label });
     dispatch({ type: "SET_CONTENT", id, content: { kind: nextKind, data: nextData } });
   };
 
