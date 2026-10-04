@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { colorRef, emfComments, emfPlusRecords, emfRecords, layoutEmf } from "./emf";
 import { drawingLayout } from "../../ui/features/StructureEditor/fileActions";
 import { ACS_1996 } from "./style";
+import { createSVG } from "./layout2d";
 import { NOMINAL_BOND_LENGTH } from "./acs";
 import type { Model } from "../../ui/features/StructureEditor/store/types";
 
@@ -231,6 +232,14 @@ describe("molecules in 3D in an EMF", () => {
     // bottom row (blue) first, as BGRA; then the red, its colour times its alpha
     expect(bits).toEqual([255, 0, 0, 255, 255, 0, 0, 255, 0, 0, 128, 128, 0, 0, 128, 128]);
     expect(emf2.length % 4).toBe(0);
+  });
+
+  it("is an image in the SVG, given one drawn in 3D, in place of the discs - where the image says", () => {
+    const image = { href: "data:image/png;base64,AAAA", bounds: { min: { x: 4, y: -2 }, max: { x: 8, y: 2 } } };
+    const svg = createSVG({ ...layout, solidsImage: image }, opts);
+    expect(svg).toContain('<image href="data:image/png;base64,AAAA" x="4" y="-2" width="4" height="4"');
+    expect(svg).not.toContain("radialGradient");
+    expect(createSVG(layout, opts)).toContain("radialGradient");
   });
 
   it("is only the molecule, where there is no drawing", () => {

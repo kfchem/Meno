@@ -13,6 +13,7 @@ import { useEditorStore } from "./store";
 import type { Carried3D, Drawn, EditorState } from "./store/types";
 import { carriedOf, isWorkspaceFile, workspaceText } from "./utils/workspace";
 import { pictureMarks } from "./utils/molecule3d";
+import { withSolidsImage } from "./render3d";
 import { STYLE_3D } from "../../../lib/chem/style3d";
 import { chemistry } from "../../../lib/chem/molecule";
 import { schemeOutlines } from "../../../lib/chem/reactionScheme";
@@ -134,13 +135,25 @@ export function drawingLayout(
   return { layout, opts };
 }
 
-/** The drawing as SVG (drawingLayout). */
+/**
+ * The drawing as SVG (drawingLayout); its molecules in 3D, `seen`, as an
+ * image drawn as the canvas draws them (./render3d), where there is WebGL
+ * to draw it with.
+ */
 export function drawingSvg(
   model: Drawn,
   aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
   style: DrawingStyle,
+  seen = false,
 ): string {
   const { layout, opts } = drawingLayout(model, aromatic, style);
+  if (seen) {
+    try {
+      withSolidsImage(model.molecules3d ?? [], layout, STYLE_3D);
+    } catch {
+      // (the marks, then)
+    }
+  }
   return createSVG(layout, opts);
 }
 
@@ -227,7 +240,7 @@ export function useFileActions() {
         // The style the canvas is drawn in: the document's own, or the app's.
         const style = styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle);
         // (everything on the canvas, the molecules in 3D as they are seen)
-        await writeTextFile(path, drawingSvg({ ...drawnOf(state), molecules3d: carriedOf(state) }, state, style));
+        await writeTextFile(path, drawingSvg({ ...drawnOf(state), molecules3d: carriedOf(state) }, state, style, true));
       }),
     [attempt, store],
   );

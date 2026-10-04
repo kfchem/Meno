@@ -451,6 +451,13 @@ export type Layout = {
   fills: Circle[];
   /** Molecules in 3D, as seen, from the back forward. */
   solids?: SolidMark[];
+  /**
+   * The same molecules drawn as the canvas draws them, lit and in depth, as
+   * an image (a data URL) and where on the page it goes: a picture shows
+   * that rather than the marks, which as flat discs one over another cannot
+   * show balls running into one another.
+   */
+  solidsImage?: { href: string; bounds: { min: Vec2; max: Vec2 } };
   bounds: { min: Vec2; max: Vec2 };
   /**
    * Pixels per coordinate unit this layout was built for. Sizes the layout
@@ -3995,7 +4002,11 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
   for (const t of layout.texts) {
     s += svgLabel(t, fontSize, set, fill);
   }
-  s += svgSolids(layout.solids ?? []);
+  const img = layout.solidsImage;
+  s += img
+    ? `<image href="${img.href}" x="${img.bounds.min.x}" y="${-img.bounds.max.y}"` +
+      ` width="${img.bounds.max.x - img.bounds.min.x}" height="${img.bounds.max.y - img.bounds.min.y}" preserveAspectRatio="none" />`
+    : svgSolids(layout.solids ?? []);
   s += `</svg>`;
   return s;
 }
@@ -4023,19 +4034,6 @@ export function solidsBounds(marks: readonly SolidMark[]): { min: Vec2; max: Vec
     }
   }
   return { min, max };
-}
-
-/**
- * The molecules in 3D of a layout alone, as an SVG of just where they reach
- * (`bounds`) - what a picture made of vectors draws as one bitmap, shaded as
- * the canvas shades them; null with none.
- */
-export function solidsSVG(layout: Layout, opts: LayoutOptions): { svg: string; bounds: { min: Vec2; max: Vec2 } } | null {
-  const solids = layout.solids ?? [];
-  const bounds = solidsBounds(solids);
-  if (!bounds) return null;
-  const alone: Layout = { lines: [], polys: [], texts: [], circles: [], fills: [], solids, bounds, zoom: layout.zoom, reach: [] };
-  return { svg: createSVG(alone, { ...opts, paddingPx: 0 }), bounds };
 }
 
 function svgSolids(marks: SolidMark[]): string {
