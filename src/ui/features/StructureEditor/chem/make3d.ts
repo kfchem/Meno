@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import type { Style3D } from "../../../../lib/chem/style3d";
-import type { ChemClient, Conformers } from "../../../../lib/rdkit/client";
+import type { ChemClient, Conformers, Like } from "../../../../lib/rdkit/client";
 import { chemMolblock, molIndex } from "../../../../lib/rdkit/molblock";
 import { writeMolfile3d } from "../../../../lib/chem/molWriter";
 import { editorModelOf, processFileContent } from "../utils/io";
@@ -25,8 +25,12 @@ export const CONFORMERS_MS = 5 * 60_000;
 /** The room between a drawing and the molecule in 3D that rises out of it, and between molecules. */
 const GAP = 1.5 * NOMINAL_BOND_LENGTH;
 
-/** A structure as RDKit is asked about it, and which of the drawing's atoms and bonds each of the block's is. */
-export type Block = { molblock: string; atoms: number[]; bonds: number[]; part: Model };
+/**
+ * A structure as RDKit is asked about it, and which of the drawing's atoms
+ * and bonds each of the block's is; made again, where the one made before
+ * has its atoms (`likeOf`).
+ */
+export type Block = { molblock: string; atoms: number[]; bonds: number[]; part: Model; like?: Like };
 
 /** The structures that hold these atoms, each as RDKit is asked about it; a lone atom's none. */
 export function blocksOf(model: Model, atoms: Iterable<number>): Block[] {
@@ -243,7 +247,26 @@ export function rowFrom(items: Turned[], at: { x: number; y: number }): { x: num
 
 /** Each stereoisomer asked for, its conformers made: what `conformers` answers. */
 export async function conformersOf(chem: ChemClient, block: Block, isomers: "one" | "all"): Promise<Conformers[]> {
-  return (await chem.request("conformers", { molblock: block.molblock, isomers }, CONFORMERS_MS)).isomers;
+  const like = block.like ? { like: block.like } : {};
+  return (await chem.request("conformers", { molblock: block.molblock, isomers, ...like }, CONFORMERS_MS)).isomers;
+}
+
+/**
+ * Where a molecule in 3D made before from the drawing has the block's atoms,
+ * by their index in the block: for it to be made again as it was where the
+ * drawing leaves its configuration open.
+ */
+export function likeOf(block: Block, before: Pick<Molecule3D, "atoms" | "drawnFrom">): Like {
+  const index = new Map<number, number>();
+  before.drawnFrom?.forEach((id, i) => {
+    if (id != null) index.set(id, i);
+  });
+  const like: Like = {};
+  block.atoms.forEach((id, k) => {
+    const a = before.atoms[index.get(id) ?? -1];
+    if (a) like[k] = [a.x, a.y, a.z];
+  });
+  return like;
 }
 
 /**

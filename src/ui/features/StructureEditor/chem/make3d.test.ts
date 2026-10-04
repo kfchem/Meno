@@ -3,7 +3,7 @@ import { STYLE_3D } from "../../../../lib/chem/style3d";
 import type { Conformers } from "../../../../lib/rdkit/client";
 import type { Model } from "../store/types";
 import { solidOf } from "../utils/molecule3d";
-import { blocksOf, linkOf, moleculeOf, placeRow, rowFrom, signatureOf, turnedOver, type Box, type Turned } from "./make3d";
+import { blocksOf, likeOf, linkOf, moleculeOf, placeRow, rowFrom, signatureOf, turnedOver, type Box, type Turned } from "./make3d";
 
 /** Ethanol drawn: C1-C2-O3, a bond's length apart. */
 const ethanol: Model = {
@@ -59,6 +59,20 @@ describe("making a drawn structure in 3D", () => {
   it("keeps each centre's label, and which were left open, so that stereoisomers are told apart", () => {
     const iso = { ...answer, cip: { atoms: { "1": "R" }, bonds: {} }, chosen: { atoms: { "1": "R" }, bonds: {} } };
     expect(moleculeOf(iso, blocksOf(ethanol, [11])[0]).stereo).toEqual({ atoms: { 1: "R" }, bonds: {}, chosen: { atoms: [1], bonds: [] } });
+  });
+
+  it("made again, gives RDKit the atoms the one before has where it has them, by their index in the block", () => {
+    const before = moleculeOf(answer, blocksOf(ethanol, [11])[0]);
+    // (the drawing grown by a chlorine on the carbon, which the one before has not)
+    const grown: Model = {
+      atoms: [...ethanol.atoms, { id: 14, x: -1.56, y: 0.9, r: 0.9, el: "Cl" }],
+      bonds: [...ethanol.bonds, { id: 23, a: 11, b: 14, order: 1 }],
+    };
+    const [block] = blocksOf(grown, [11]);
+    const like = likeOf(block, before);
+    expect(Object.keys(like).map(Number).map((k) => block.atoms[k]).sort()).toEqual([11, 12, 13]);
+    expect(like[block.atoms.indexOf(12)]).toEqual([1.3, 0.75, 0.1]);
+    expect(likeOf(block, { atoms: before.atoms })).toEqual({});
   });
 
   it("starts each atom on its drawing's atom - a hydrogen on the atom it is bonded to - and lies over the drawing", () => {

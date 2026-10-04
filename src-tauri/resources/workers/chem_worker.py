@@ -22,6 +22,7 @@ import json
 import sys
 
 from rdkit import Chem, RDLogger, rdBase
+from rdkit.Geometry import Point3D
 from rdkit.Chem import (
     rdCIPLabeler,
     rdDepictor,
@@ -165,10 +166,60 @@ def isomers_of(mol):
     return list(EnumerateStereoisomers(mol, options=options)) or [mol]
 
 
+def kept(mol, like):
+    """`mol` with the stereocentres and double bonds it leaves open given the
+    configuration they have in `like`: coordinates in 3D for some of its
+    atoms, by index - a molecule in 3D made from it before. Only where the
+    atom, or the double bond's two, and every atom bonded to them have
+    coordinates there; the rest are left open."""
+    places = {int(i): p for i, p in (like or {}).items()}
+    atoms, bonds = open_stereo(mol)
+    if not places or not (atoms or bonds):
+        return mol
+    placed = lambda a: a.GetIdx() in places and all(n.GetIdx() in places for n in a.GetNeighbors())
+    probe = Chem.Mol(mol)
+    conf = Chem.Conformer(probe.GetNumAtoms())
+    conf.Set3D(True)
+    for i, p in places.items():
+        if i < probe.GetNumAtoms():
+            conf.SetAtomPosition(i, Point3D(*p))
+    probe.RemoveAllConformers()
+    probe.AddConformer(conf, assignId=True)
+    Chem.AssignStereochemistryFrom3D(probe, replaceExistingTags=True)
+    out = Chem.Mol(mol)
+    turning = (Chem.ChiralType.CHI_TETRAHEDRAL_CW, Chem.ChiralType.CHI_TETRAHEDRAL_CCW)
+    for i in atoms:
+        # (the same atoms, bonded in the same order: the tag means the same)
+        tag = probe.GetAtomWithIdx(i).GetChiralTag()
+        if placed(mol.GetAtomWithIdx(i)) and tag in turning:
+            out.GetAtomWithIdx(i).SetChiralTag(tag)
+    for i in bonds:
+        bond = mol.GetBondWithIdx(i)
+        a, b = bond.GetBeginAtom(), bond.GetEndAtom()
+        if not (placed(a) and placed(b)):
+            continue
+        na = next((n.GetIdx() for n in a.GetNeighbors() if n.GetIdx() != b.GetIdx()), None)
+        nb = next((n.GetIdx() for n in b.GetNeighbors() if n.GetIdx() != a.GetIdx()), None)
+        if na is None or nb is None:
+            continue
+        # (cis where the two neighbours are on the same side of the bond)
+        p = lambda k: conf.GetAtomPosition(k)
+        axis = p(b.GetIdx()) - p(a.GetIdx())
+        u, v = p(na) - p(a.GetIdx()), p(nb) - p(b.GetIdx())
+        side = axis.CrossProduct(u).DotProduct(axis.CrossProduct(v))
+        if abs(side) < 1e-6:
+            continue
+        mine = out.GetBondWithIdx(i)
+        mine.SetStereoAtoms(na, nb)
+        mine.SetStereo(Chem.BondStereo.STEREOCIS if side > 0 else Chem.BondStereo.STEREOTRANS)
+    return out
+
+
 def op_open_stereo(m):
     """What a 3D structure would have to choose: the open stereocentres and
-    double bonds, and how many stereoisomers they make."""
-    mol = read(m["molblock"])
+    double bonds, and how many stereoisomers they make - none of those that
+    `like` (see `kept`) gives a configuration."""
+    mol = kept(read(m["molblock"]), m.get("like"))
     atoms, bonds = open_stereo(mol)
     count = len(isomers_of(mol)) if atoms or bonds else 1
     return {"atoms": atoms, "bonds": bonds, "isomers": count}
@@ -178,6 +229,80 @@ def kekule_order(bond):
     # (aromatic rings as alternating bonds: a 3D structure's bonds are drawn
     # as single, double and triple)
     return {Chem.BondType.SINGLE: 1, Chem.BondType.DOUBLE: 2, Chem.BondType.TRIPLE: 3}.get(bond.GetBondType(), 1)
+
+
+def mirror_of(mol):
+    """A stereoisomer's mirror image, its atoms and bonds as they are - or
+    None when it has stereo that is not known to turn in a mirror (only
+    stereocentres and axes do; double bonds stay as they are)."""
+    m = Chem.Mol(mol)
+    swap = {
+        Chem.ChiralType.CHI_TETRAHEDRAL_CW: Chem.ChiralType.CHI_TETRAHEDRAL_CCW,
+        Chem.ChiralType.CHI_TETRAHEDRAL_CCW: Chem.ChiralType.CHI_TETRAHEDRAL_CW,
+    }
+    for a in m.GetAtoms():
+        tag = a.GetChiralTag()
+        if tag in swap:
+            a.SetChiralTag(swap[tag])
+        elif tag != Chem.ChiralType.CHI_UNSPECIFIED:
+            return None
+    axes = {
+        Chem.BondStereo.STEREOATROPCW: Chem.BondStereo.STEREOATROPCCW,
+        Chem.BondStereo.STEREOATROPCCW: Chem.BondStereo.STEREOATROPCW,
+    }
+    for b in m.GetBonds():
+        if b.GetStereo() in axes:
+            b.SetStereo(axes[b.GetStereo()])
+    return m
+
+
+def smiles_from_3d(mol, frame):
+    """The SMILES a structure's 3D coordinates (its atoms', hydrogens and
+    all, as a flat list) say, stereo and all."""
+    m = Chem.AddHs(mol)
+    conf = Chem.Conformer(m.GetNumAtoms())
+    for i in range(m.GetNumAtoms()):
+        conf.SetAtomPosition(i, Point3D(frame[3 * i], frame[3 * i + 1], frame[3 * i + 2]))
+    m.RemoveAllConformers()
+    m.AddConformer(conf, assignId=True)
+    Chem.AssignStereochemistryFrom3D(m)
+    return smiles_of(m)
+
+
+def smiles_of(mol):
+    """A stereoisomer's SMILES, any hydrogens drawn left out."""
+    return Chem.MolToSmiles(Chem.RemoveHs(mol))
+
+
+def reflected(entry):
+    """Conformers in a mirror: every x turned about the plane x = 0."""
+    return {
+        **entry,
+        "frames": [[-v if k % 3 == 0 else v for k, v in enumerate(f)] for f in entry["frames"]],
+    }
+
+
+def conformers_of(iso, count, made):
+    """A stereoisomer's conformers. Of two enantiomers, the one whose SMILES
+    comes first is made, and the other is its mirror image: the same shapes
+    and energies, whichever is asked for and in whichever request. `made`
+    keeps what has been made, by SMILES, for the rest of the request."""
+    smiles = smiles_of(iso)
+    mirror = mirror_of(iso)
+    twin = smiles_of(mirror) if mirror is not None else smiles
+    if twin >= smiles:
+        if smiles not in made:
+            made[smiles] = conformers(iso, count)
+        return made[smiles]
+    if twin not in made:
+        made[twin] = conformers(mirror, count)
+    entry = reflected(made[twin])
+    # (and if the mirror has not given this one after all, it is made itself)
+    if smiles_from_3d(iso, entry["frames"][0]) != smiles:
+        if smiles not in made:
+            made[smiles] = conformers(iso, count)
+        return made[smiles]
+    return entry
 
 
 def conformers(mol, count=CONFORMERS, seed=0x4D45):
@@ -234,15 +359,18 @@ def op_conformers(m):
     bonds left open, `isomers` says what to make: "one" (the first of its
     stereoisomers) or "all" (each, up to MOST_ISOMERS). Each goes back with
     the CIP label of every stereocentre and double bond (`cip`), and of the
-    ones that were left open (`chosen`), atom by atom and bond by bond."""
-    mol = read(m["molblock"])
-    atoms, bonds = open_stereo(mol)
+    ones that were left open (`chosen`), atom by atom and bond by bond. Those
+    `like` gives a configuration (see `kept`) are made so, and count as
+    chosen."""
+    drawn = read(m["molblock"])
+    atoms, bonds = open_stereo(drawn)
+    mol = kept(drawn, m.get("like"))
     isomers = isomers_of(mol)
     if m.get("isomers", "one") != "all":
         isomers = isomers[:1]
-    made = []
+    made, cache = [], {}
     for iso in isomers:
-        entry = conformers(iso, int(m.get("count", CONFORMERS)))
+        entry = dict(conformers_of(iso, int(m.get("count", CONFORMERS)), cache))
         rdCIPLabeler.AssignCIPLabels(iso)
         entry["cip"] = {
             "atoms": {str(a.GetIdx()): a.GetProp("_CIPCode") for a in iso.GetAtoms() if a.HasProp("_CIPCode")},

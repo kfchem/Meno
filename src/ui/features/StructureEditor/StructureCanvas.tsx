@@ -81,7 +81,7 @@ import Molecules3D from "./components/Molecules3D";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
-import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, linkOf, moleculeOf, openIn, placeRow, rowFrom, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
+import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf, moleculeOf, openIn, placeRow, rowFrom, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
 import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
@@ -229,13 +229,18 @@ function StructureCanvasContent({
   );
   const make3d = useCallback(
     async (around: Iterable<number>, replacing?: Molecule3D) => {
-      const blocks = blocksOf(store.getState().model, around);
+      // (made again: what the drawing leaves open, as the one before has it)
+      const blocks = blocksOf(store.getState().model, around).map((b) =>
+        replacing ? { ...b, like: likeOf(b, replacing) } : b,
+      );
       if (!blocks.length) return;
       setChemError(null);
       try {
         const chem = await chemWorker();
         const open = await Promise.all(
-          blocks.map(async (b) => openIn(b, await chem.request("open_stereo", { molblock: b.molblock }))),
+          blocks.map(async (b) =>
+            openIn(b, await chem.request("open_stereo", { molblock: b.molblock, ...(b.like ? { like: b.like } : {}) })),
+          ),
         );
         // (stereo drawn without a configuration: asked what to make first)
         if (open.some((o) => o.atoms.length || o.bonds.length)) setAsk3d({ blocks, open, replacing });

@@ -15,14 +15,19 @@ export type ChemRequests = {
   from_smiles: { args: { smiles: string }; result: { molblock: string } };
   /** Hydrogens, valence, aromaticity and stereo labels, per atom and bond. */
   analyse: { args: { molblock: string }; result: Analysis };
-  /** The stereocentres and double bonds left open, by index, and how many stereoisomers they make. */
-  open_stereo: { args: { molblock: string }; result: OpenStereo };
+  /**
+   * The stereocentres and double bonds left open, by index, and how many
+   * stereoisomers they make - but for those `like` gives a configuration.
+   */
+  open_stereo: { args: { molblock: string; like?: Like }; result: OpenStereo };
   /**
    * Conformers of a structure, made in 3D (ETKDG, then MMFF94): of the first
-   * of its stereoisomers, or of each, where some of its stereo is left open.
+   * of its stereoisomers, or of each, where some of its stereo is left open
+   * - and `like` does not give it. Of two enantiomers, one is made as the
+   * other's mirror image.
    */
   conformers: {
-    args: { molblock: string; isomers?: "one" | "all"; count?: number };
+    args: { molblock: string; isomers?: "one" | "all"; count?: number; like?: Like };
     result: { isomers: Conformers[] };
   };
   /**
@@ -34,6 +39,13 @@ export type ChemRequests = {
 };
 
 export type OpenStereo = { atoms: number[]; bonds: number[]; isomers: number };
+
+/**
+ * Some of a block's atoms, by index, where a molecule in 3D made from it
+ * before has them: a stereocentre or double bond the block leaves open is
+ * made as it is there, where it and the atoms bonded to it all have a place.
+ */
+export type Like = Record<number, [number, number, number]>;
 
 /**
  * One stereoisomer's conformers: its atoms - those of the block in their

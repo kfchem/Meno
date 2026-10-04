@@ -254,9 +254,12 @@ A drawn structure made in 3D (`StructureEditor/chem/make3d.ts`, stage 2 of
 docs/WORKSPACE.md): `open_stereo` says what its drawing leaves open, which
 Meno asks about first; `conformers` makes each stereoisomer asked for
 (ETKDG, then MMFF94 or UFF, on every core; the same shape twice kept once;
-lowest first, each laid over the first, with every centre's CIP label);
-and the molecule in 3D that comes of it keeps which drawing atom each of
-its atoms is and what the drawing was (`drawnFrom`, `drawnAs`;
+lowest first, each laid over the first, with every centre's CIP label; of
+two enantiomers, the one whose SMILES comes first is made and the other is
+its mirror image). Both take `like`, a molecule in 3D made before from the
+drawing - where it has the block's atoms - so that what the drawing leaves
+open is made as it was (*Make again*). The molecule in 3D that comes of it
+keeps which drawing atom each of its atoms is and what the drawing was (`drawnFrom`, `drawnAs`;
 `utils/drawnLink`), so that hover is shared and a changed drawing is seen.
 `drawing_of` goes the other way: a molecule in 3D's heavy atoms in their
 order, wedged as they are in 3D, its bonds' orders found where a file of
