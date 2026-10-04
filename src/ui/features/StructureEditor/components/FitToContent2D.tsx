@@ -10,7 +10,7 @@ import {
 import { editorLayoutOptions, layoutBonds, maxFitZoom } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { chemistry } from "../../../../lib/chem/molecule";
-import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { currentStyle3D } from "../style3d";
 import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
 import { PAGE_DISTANCE } from "./PageCamera";
 import { setViewGoal } from "./viewGoal";
@@ -74,8 +74,9 @@ export default function FitToContent2D({
     // one off to the side is seen further out, in perspective - from where
     // that first fit put the camera
     const { turns3d, frames3d } = store.getState();
+    const style3d = currentStyle3D();
     const poses = molecules3d.map((m) =>
-      poseOf(m, solidOf(m, STYLE_3D), lookOf(m, STYLE_3D), turns3d[m.id], frames3d[m.id]),
+      poseOf(m, solidOf(m, style3d), lookOf(m, style3d), turns3d[m.id], frames3d[m.id]),
     );
     const w = size.width;
     const h = size.height;

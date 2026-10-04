@@ -13,8 +13,8 @@ import { useEditorStore } from "./store";
 import type { Carried3D, Drawn, EditorState } from "./store/types";
 import { carriedOf, isWorkspaceFile, workspaceText } from "./utils/workspace";
 import { pictureMarks } from "./utils/molecule3d";
+import { currentStyle3D } from "./style3d";
 import { withSolidsImage } from "./render3d";
-import { STYLE_3D } from "../../../lib/chem/style3d";
 import { chemistry } from "../../../lib/chem/molecule";
 import { schemeOutlines } from "../../../lib/chem/reactionScheme";
 
@@ -154,7 +154,7 @@ export function drawingLayout(
     );
   }
   // and molecules in 3D, as they are seen, over it
-  const solids = (model.molecules3d ?? []).flatMap((m) => pictureMarks(m, STYLE_3D));
+  const solids = (model.molecules3d ?? []).flatMap((m) => pictureMarks(m, currentStyle3D()));
   if (solids.length) {
     layout.solids = solids;
     const xs: number[] = [];
@@ -187,7 +187,7 @@ export function drawingSvg(
   const { layout, opts } = drawingLayout(model, aromatic, style);
   if (seen) {
     try {
-      withSolidsImage(model.molecules3d ?? [], layout, STYLE_3D);
+      withSolidsImage(model.molecules3d ?? [], layout, currentStyle3D());
     } catch {
       // (the marks, then)
     }

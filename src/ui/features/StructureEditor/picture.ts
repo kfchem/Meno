@@ -25,7 +25,7 @@ import { dibOf } from "../../../lib/binary/dib";
 import { textOf, withDpi, withText } from "../../../lib/binary/png";
 import { emfComments, layoutEmf, type SolidsPicture } from "../../../lib/chem/emf";
 import { createSVG } from "../../../lib/chem/layout2d";
-import { STYLE_3D } from "../../../lib/chem/style3d";
+import { currentStyle3D } from "./style3d";
 import type { DrawingStyle } from "../../../lib/chem/style";
 import { gvmlImages, gvmlPicture } from "../../../lib/office/gvml";
 import { drawingLayout } from "./fileActions";
@@ -55,7 +55,7 @@ export async function structurePicture(part: Drawn, aromatic: Aromatic, style: D
   // (the layout then draws them so too, for the PNG)
   let solids: SolidsPicture | null = null;
   try {
-    solids = withSolidsImage(part.molecules3d ?? [], layout, STYLE_3D);
+    solids = withSolidsImage(part.molecules3d ?? [], layout, currentStyle3D());
   } catch {
     solids = null;
   }

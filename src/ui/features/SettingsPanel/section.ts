@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type SettingsSection = "style" | "chemistry" | "abbreviations" | "network";
+export type SettingsSection = "style" | "style3d" | "chemistry" | "abbreviations" | "network";
 
 /** Which part of Settings is shown: set from elsewhere to open it at one. */
 export const useSettingsSection = create<{ section: SettingsSection }>(() => ({

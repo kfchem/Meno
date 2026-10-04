@@ -35,8 +35,8 @@ import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
+import { currentStyle3D, useStyle3D } from "./style3d";
 import { offerCommands, type CommandGroup } from "../../layouts/commands";
-import { STYLE_3D } from "../../../lib/chem/style3d";
 import { chosenPath, frameOf, lookOf, solidOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
@@ -210,7 +210,7 @@ function StructureCanvasContent({
         for (const block of blocks) {
           const ms = (await conformersOf(chem, block, isomers)).map((c) => moleculeOf(c, block));
           const model = store.getState().model;
-          const turned = ms.map((m) => turnedOver(m, model, STYLE_3D));
+          const turned = ms.map((m) => turnedOver(m, model, currentStyle3D()));
           // beside the drawing, where they can be seen as the view is now -
           // or, made again, where the one made before stood
           const row = replacing
@@ -279,7 +279,7 @@ function StructureCanvasContent({
       setChemError(null);
       try {
         const { model: formula, link } = await formulaOf(await chemWorker(), mol, st.frames3d[id] ?? 0);
-        const placed = centredAt(formula, formulaPlace(mol, formula, STYLE_3D));
+        const placed = centredAt(formula, formulaPlace(mol, formula, currentStyle3D()));
         store.getState().drawFormula3d(id, placed, link);
         // (beyond the view, the view takes it in)
         const view = viewBox();
@@ -298,7 +298,7 @@ function StructureCanvasContent({
       const st = store.getState();
       const mol = st.molecules3d.find((x) => x.id === id);
       if (!mol?.drawnFrom) return;
-      const solid = solidOf(mol, STYLE_3D);
+      const solid = solidOf(mol, currentStyle3D());
       const places = solid.frames[frameOf(solid, st.frames3d[id])];
       const byId = new Map(st.model.atoms.map((a) => [a.id, a]));
       const from: number[] = [];
@@ -426,11 +426,12 @@ function StructureCanvasContent({
   // a molecule in 3D right-clicked: what its menu does to it
   const molecules3d = useEditor((s) => s.molecules3d);
   const chosen3d = useEditor((s) => s.chosen3d);
+  const style3d = useStyle3D();
   const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
   const menuLink = menuMolecule ? linkOf(menuMolecule, model) : null;
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
-        look: lookOf(menuMolecule, STYLE_3D),
+        look: lookOf(menuMolecule, style3d),
         chosen: chosen3d?.id === menuMolecule.id ? (chosenPath(menuMolecule, chosen3d)?.length ?? 0) : 0,
         onMeasure: () => store.getState().measureChosen3d(),
         onLook: (look) => store.getState().setLook3d(menuMolecule.id, look),
@@ -860,7 +861,7 @@ function StructureCanvasContent({
           <Pluses2D />
         </DrawnLayoutProvider>
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
-        <Molecules3D />
+        <Molecules3D style={style3d} />
         <PanZoom2D />
         <PageCamera />
       </Canvas>

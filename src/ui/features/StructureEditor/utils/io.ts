@@ -7,7 +7,7 @@ import {
 } from "../../../../utils/importers";
 import { bondChem, chemistry, type Molecule } from "../../../../lib/chem/molecule";
 import type { Carried3D, Drawn, Model, Molecule3D } from "../store/types";
-import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, solidOf } from "./molecule3d";
 import { energiesOf } from "../../../../lib/calc/readers";
 
@@ -200,6 +200,7 @@ export function drawnOf(result: ProcessedFileResult): Drawn {
 /** A file's molecules in 3D, standing in a row about the origin, each clear of the next. */
 function inRow(ms: Omit<Molecule3D, "id" | "at">[]): Carried3D[] {
   const placed = ms.map((m) => ({ ...m, id: 0, at: { x: 0, y: 0 } }));
-  const at = rowAbout({ x: 0, y: 0 }, placed.map((m) => solidOf(m, STYLE_3D).reach[lookOf(m, STYLE_3D)]));
+  const style = currentStyle3D();
+  const at = rowAbout({ x: 0, y: 0 }, placed.map((m) => solidOf(m, style).reach[lookOf(m, style)]));
   return ms.map((m, i) => ({ ...m, at: at[i] }));
 }

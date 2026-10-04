@@ -9,7 +9,8 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
-import { STYLE_3D } from "../../../../lib/chem/style3d";
+import type { Style3D } from "../../../../lib/chem/style3d";
+import { currentStyle3D, useStyle3D } from "../style3d";
 import { lookOf, poseOf, seenBounds, solidOf, standingHeight, turnedInPlane, turnedTogether, type Turning3D } from "../utils/molecule3d";
 import { PAGE_DISTANCE } from "../utils/page";
 import type { Model, Molecule3D, Turn3D } from "../store/types";
@@ -26,10 +27,10 @@ const TURN_STEP = 15;
 
 /** A molecule in 3D as a turn takes it, turned as it is now. */
 const turningOf =
-  (turns: Record<number, Turn3D>) =>
+  (turns: Record<number, Turn3D>, style: Style3D) =>
   (m: Molecule3D): Turning3D => {
-    const solid = solidOf(m, STYLE_3D);
-    return { id: m.id, at: m.at, turn: turns[m.id], standing: standingHeight(solid, lookOf(m, STYLE_3D)) };
+    const solid = solidOf(m, style);
+    return { id: m.id, at: m.at, turn: turns[m.id], standing: standingHeight(solid, lookOf(m, style)) };
   };
 
 /**
@@ -44,6 +45,7 @@ function selectionExtent(
   sel3d: ReadonlySet<number>,
   turns: Record<number, Turn3D>,
   frames: Record<number, number>,
+  style: Style3D,
 ): { mid: { x: number; y: number }; top: number } | null {
   const xs: number[] = [];
   const ys: number[] = [];
@@ -54,7 +56,7 @@ function selectionExtent(
   }
   for (const m of molecules) {
     if (!sel3d.has(m.id)) continue;
-    const b = seenBounds(poseOf(m, solidOf(m, STYLE_3D), lookOf(m, STYLE_3D), turns[m.id], frames[m.id]), PAGE_DISTANCE);
+    const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m, style), turns[m.id], frames[m.id]), PAGE_DISTANCE);
     xs.push(b.minX, b.maxX);
     ys.push(b.minY, b.maxY);
   }
@@ -84,6 +86,7 @@ export default function Selection2D() {
   const molecules3d = useEditor((s) => s.molecules3d);
   const turns3d = useEditor((s) => s.turns3d);
   const frames3d = useEditor((s) => s.frames3d);
+  const style3d = useStyle3D();
   // where the handle stood when a turn in 3D took it: it stays there till let go
   const [held, setHeld] = useState<{ mid: { x: number; y: number }; top: number } | null>(null);
   const store = useEditorStore();
@@ -242,8 +245,8 @@ export default function Selection2D() {
     return { ...model, atoms: model.atoms.map((a) => ({ ...a, x: at.get(a.id)?.x ?? a.x, y: at.get(a.id)?.y ?? a.y })) };
   }, [model, drawn.atoms]);
   const extent = useMemo(
-    () => held ?? selectionExtent(shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d),
-    [held, shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d],
+    () => held ?? selectionExtent(shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d),
+    [held, shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d],
   );
   const turnable = extent != null && (sel.atoms.size > 1 || sel3d.size > 0);
   const handleAt = turnable ? { x: extent!.mid.x, y: extent!.top + NOMINAL_BOND_LENGTH * HANDLE_ABOVE } : null;
@@ -256,10 +259,10 @@ export default function Selection2D() {
       turnInSpace(e, molecules, e.shiftKey);
       return;
     }
-    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d)?.mid;
+    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D())?.mid;
     if (!about) return;
     const from = st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y }));
-    const carried = molecules.map(turningOf(st.turns3d));
+    const carried = molecules.map(turningOf(st.turns3d, currentStyle3D()));
     const p0 = toWorld(e.clientX, e.clientY);
     const a0 = Math.atan2(p0.y - about.y, p0.x - about.x);
     const gesture = `turn-${performance.now()}`;
@@ -313,13 +316,13 @@ export default function Selection2D() {
    */
   const turnInSpace = (e: PointerEvent, molecules: Molecule3D[], each: boolean) => {
     const st = store.getState();
-    const from = molecules.map(turningOf(st.turns3d));
+    const from = molecules.map(turningOf(st.turns3d, currentStyle3D()));
     const turnsBefore = Object.fromEntries(molecules.map((m) => [m.id, st.turns3d[m.id]]));
     const inPlace = each || from.length === 1;
     let went = false;
     const gesture = `turn-3d-${performance.now()}`;
     const q = new THREE.Quaternion();
-    setHeld(selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d));
+    setHeld(selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D()));
     let last = { x: e.clientX, y: e.clientY };
     let frame: number | null = null;
     st.beginPanHold(e.pointerId);
@@ -343,7 +346,7 @@ export default function Selection2D() {
       const len = Math.hypot(dx, dy);
       if (len === 0) return;
       // (a drag to the right turns the near side right; down turns it down)
-      const angle = (STYLE_3D.turnPerHalfWidth * len) / Math.max(gl.domElement.clientWidth / 2, 1);
+      const angle = (currentStyle3D().turnPerHalfWidth * len) / Math.max(gl.domElement.clientWidth / 2, 1);
       q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(dy, dx, 0).normalize(), angle)).normalize();
       if (frame == null) frame = window.requestAnimationFrame(apply);
     };

@@ -10,6 +10,7 @@ import {
 import { create } from "zustand";
 import { DEFAULT_STYLE_CHOICE, type StyleChoice } from "../chem/style";
 import { acceptStyleChoice } from "../chem/styleFields";
+import { acceptStyle3dChoice, DEFAULT_STYLE_3D_CHOICE, type Style3DChoice } from "../chem/style3d";
 import { setCustomAbbreviations, structureProblem, type CustomAbbreviation } from "../chem/abbreviations";
 
 /**
@@ -20,6 +21,8 @@ import { setCustomAbbreviations, structureProblem, type CustomAbbreviation } fro
 export type AppSettings = {
   /** The drawing style a structure is drawn in unless its document has its own. */
   drawingStyle: StyleChoice;
+  /** How molecules in 3D look, and how they turn. */
+  style3d: Style3DChoice;
   network: NetworkSettings;
   chemistry: ChemistrySettings;
   updates: UpdateSettings;
@@ -53,6 +56,7 @@ export type NetworkSettings = {
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   drawingStyle: DEFAULT_STYLE_CHOICE,
+  style3d: DEFAULT_STYLE_3D_CHOICE,
   network: { offline: false, granted: [] },
   chemistry: { valenceWarnings: true, stereoLabels: false },
   updates: { asked: false },
@@ -68,6 +72,7 @@ export function acceptAppSettings(raw: unknown): AppSettings {
   const r = raw as Record<string, unknown>;
   return {
     drawingStyle: acceptStyleChoice(r.drawingStyle),
+    style3d: acceptStyle3dChoice(r.style3d),
     network: acceptNetwork(r.network),
     chemistry: acceptChemistry(r.chemistry),
     updates: acceptUpdates(r.updates),
@@ -161,6 +166,7 @@ type SettingsState = AppSettings & {
   /** What went wrong reading or writing the file, if anything. */
   error: string | null;
   setDrawingStyle: (choice: StyleChoice) => void;
+  setStyle3d: (choice: Style3DChoice) => void;
   setNetwork: (network: NetworkSettings) => void;
   setChemistry: (chemistry: ChemistrySettings) => void;
   setUpdates: (updates: UpdateSettings) => void;
@@ -175,9 +181,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, network, chemistry, updates, abbreviations } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, abbreviations } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, network, chemistry, updates, abbreviations }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, abbreviations }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -190,6 +196,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     error: null,
     setDrawingStyle: (drawingStyle) => {
       set({ drawingStyle });
+      scheduleSave();
+    },
+    setStyle3d: (style3d) => {
+      set({ style3d });
       scheduleSave();
     },
     setNetwork: (network) => {
