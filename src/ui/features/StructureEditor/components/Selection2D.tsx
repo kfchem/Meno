@@ -12,7 +12,7 @@ import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/select
 import type { Style3D } from "../../../../lib/chem/style3d";
 import { currentStyle3D, useStyle3D } from "../style3d";
 import { lookOf, poseOf, seenBounds, solidOf, standingHeight, turnedInPlane, turnedTogether, type Turning3D } from "../utils/molecule3d";
-import { PAGE_DISTANCE } from "../utils/page";
+import { eyeOf } from "../utils/page";
 import type { Model, Molecule3D, Turn3D } from "../store/types";
 import { useDrawnLayout } from "./drawnLayoutContext";
 import { TAU, follow } from "../../../theme/motion";
@@ -35,8 +35,9 @@ const turningOf =
 
 /**
  * How far the selection reaches on the page, the drawing's atoms and the
- * molecules in 3D - each as it is turned and shown now, seen from straight
- * above it - and its middle; null with nothing selected.
+ * molecules in 3D - each as it is turned and shown now, seen straight from
+ * above (orthographic), or from `eyeHeight` above it by a camera in
+ * perspective - and its middle; null with nothing selected.
  */
 function selectionExtent(
   model: Model,
@@ -46,6 +47,7 @@ function selectionExtent(
   turns: Record<number, Turn3D>,
   frames: Record<number, number>,
   style: Style3D,
+  eyeHeight?: number,
 ): { mid: { x: number; y: number }; top: number } | null {
   const xs: number[] = [];
   const ys: number[] = [];
@@ -56,7 +58,8 @@ function selectionExtent(
   }
   for (const m of molecules) {
     if (!sel3d.has(m.id)) continue;
-    const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m, style), turns[m.id], frames[m.id]), PAGE_DISTANCE);
+    const pose = poseOf(m, solidOf(m, style), lookOf(m, style), turns[m.id], frames[m.id]);
+    const b = seenBounds(pose, eyeHeight == null ? undefined : { x: m.at.x, y: m.at.y, z: eyeHeight });
     xs.push(b.minX, b.maxX);
     ys.push(b.minY, b.maxY);
   }
@@ -245,8 +248,8 @@ export default function Selection2D() {
     return { ...model, atoms: model.atoms.map((a) => ({ ...a, x: at.get(a.id)?.x ?? a.x, y: at.get(a.id)?.y ?? a.y })) };
   }, [model, drawn.atoms]);
   const extent = useMemo(
-    () => held ?? selectionExtent(shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d),
-    [held, shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d],
+    () => held ?? selectionExtent(shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d, eyeOf(camera)?.z),
+    [held, shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d, camera],
   );
   const turnable = extent != null && (sel.atoms.size > 1 || sel3d.size > 0);
   const handleAt = turnable ? { x: extent!.mid.x, y: extent!.top + NOMINAL_BOND_LENGTH * HANDLE_ABOVE } : null;
@@ -259,7 +262,7 @@ export default function Selection2D() {
       turnInSpace(e, molecules, e.shiftKey);
       return;
     }
-    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D())?.mid;
+    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D(), eyeOf(camera)?.z)?.mid;
     if (!about) return;
     const from = st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y }));
     const carried = molecules.map(turningOf(st.turns3d, currentStyle3D()));
@@ -322,7 +325,7 @@ export default function Selection2D() {
     let went = false;
     const gesture = `turn-3d-${performance.now()}`;
     const q = new THREE.Quaternion();
-    setHeld(selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D()));
+    setHeld(selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D(), eyeOf(camera)?.z));
     let last = { x: e.clientX, y: e.clientY };
     let frame: number | null = null;
     st.beginPanHold(e.pointerId);
@@ -441,7 +444,7 @@ export default function Selection2D() {
     }
     // the handle the same size on the screen at any zoom, growing in and shrinking out
     if (handle.current) {
-      handle.current.scale.setScalar((HANDLE_PX / Math.max((camera as THREE.PerspectiveCamera).zoom, 1e-6)) * (0.6 + 0.4 * h.level));
+      handle.current.scale.setScalar((HANDLE_PX / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6)) * (0.6 + 0.4 * h.level));
       handle.current.traverse((o) => {
         const m = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
         if (m && m.userData.seen) m.opacity = h.level;

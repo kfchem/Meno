@@ -15,7 +15,6 @@ import type { Model, Molecule3D, Turn3D } from "../store/types";
 import { turnOnto } from "../utils/align3d";
 import { signatureOf } from "../utils/drawnLink";
 import { solidOf } from "../utils/molecule3d";
-import { PAGE_DISTANCE } from "../utils/page";
 import { fragmentsHolding, laidOut, partOf } from "./cleanUp";
 
 export { linkOf, signatureOf } from "../utils/drawnLink";
@@ -174,22 +173,30 @@ const inside = (b: Box, view: Box) => b.x0 >= view.x0 && b.x1 <= view.x1 && b.y0
 
 /**
  * How a box on the page is seen when what is in it stands `height` above the
- * page - as high again at its top - by the camera over the view's middle:
+ * page - as high again at its top: as it is, by an orthographic camera (the
+ * canvas's); by one in perspective `eyeHeight` over the view's middle,
  * larger, and further out from the middle.
  */
-function seenAs(b: Box, view: Box, height: number): Box {
+function seenAs(b: Box, view: Box, height: number, eyeHeight?: number): Box {
+  if (eyeHeight == null) return b;
   const cx = (view.x0 + view.x1) / 2;
   const cy = (view.y0 + view.y1) / 2;
-  const k = PAGE_DISTANCE / Math.max(PAGE_DISTANCE - 2 * height, 1);
+  const k = eyeHeight / Math.max(eyeHeight - 2 * height, 1);
   return { x0: cx + (b.x0 - cx) * k, x1: cx + (b.x1 - cx) * k, y0: cy + (b.y0 - cy) * k, y1: cy + (b.y1 - cy) * k };
 }
 
 /**
  * Where molecules in 3D made from a drawing come to rest: in a row beside
  * it - to its right, its left, below it or above it, the first of those
- * where the whole row is in view - and whether it is. In none, to its right.
+ * where the whole row is in view, as the camera sees it (`eyeHeight`, for one
+ * in perspective) - and whether it is. In none, to its right.
  */
-export function placeRow(items: Turned[], drawing: Box, view: Box | null): { at: { x: number; y: number }[]; inView: boolean } {
+export function placeRow(
+  items: Turned[],
+  drawing: Box,
+  view: Box | null,
+  eyeHeight?: number,
+): { at: { x: number; y: number }[]; inView: boolean } {
   const cx = (drawing.x0 + drawing.x1) / 2;
   const cy = (drawing.y0 + drawing.y1) / 2;
   const across = items.reduce((a, t) => a + t.reach.x1 - t.reach.x0, 0) + GAP * Math.max(0, items.length - 1);
@@ -231,7 +238,7 @@ export function placeRow(items: Turned[], drawing: Box, view: Box | null): { at:
   const height = Math.max(...items.map((t) => t.height));
   for (const side of sides) {
     const row = side();
-    if (view && inside(seenAs(row.box, view, height), view)) return { at: row.at, inView: true };
+    if (view && inside(seenAs(row.box, view, height, eyeHeight), view)) return { at: row.at, inView: true };
   }
   return { at: sides[0]().at, inView: !view };
 }

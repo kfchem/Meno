@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { atomColour, atomRadius, type Style3D } from "../../../../lib/chem/style3d";
 import type { SolidMark } from "../../../../lib/chem/layout2d";
-import { PAGE_DISTANCE } from "./page";
+import { seenAt, type Eye } from "./page";
 import type { Carried3D, Molecule3D, Turn3D } from "../store/types";
 
 /** World units to the ångström: a bond of 1.5 Å as long as a drawn bond. */
@@ -219,42 +219,35 @@ export function poseOf(m: Molecule3D, s: Solid, look: Look, turn?: Turn3D, frame
   return { at: m.at, height: heightOf(m, s, look), turn, places: s.frames[frameOf(s, frame)], radii: s.radii[look] };
 }
 
-/** An atom or a bond's end as the camera sees it, taken back to the page: where, how large, and how near. */
+/** An atom or a bond's end as the camera sees it, taken back to the page: where, how large, and how high. */
 type Seen = { x: number; y: number; r: number; z: number };
 
-/** Each atom as the camera sees it, taken back to the page. */
-export function seenOnPage(pose: Pose, camera: THREE.Vector3): Seen[] {
+/**
+ * Each atom as the camera sees it, taken back to the page (`seenAt`):
+ * straight below it, as large as it is, by an orthographic camera - the
+ * canvas's - or, from an `eye` in perspective, out from under it and larger
+ * the nearer it stands.
+ */
+export function seenOnPage(pose: Pose, eye?: Eye): Seen[] {
   const q = pose.turn ? new THREE.Quaternion(...pose.turn) : new THREE.Quaternion();
   const p = new THREE.Vector3();
   const seen: Seen[] = [];
   for (let i = 0; i < pose.radii.length; i++) {
     p.set(pose.places[3 * i], pose.places[3 * i + 1], pose.places[3 * i + 2]).applyQuaternion(q);
-    const x = pose.at.x + p.x, y = pose.at.y + p.y, z = pose.height + p.z;
-    const k = camera.z / Math.max(camera.z - z, 1e-3);
-    seen.push({ x: camera.x + (x - camera.x) * k, y: camera.y + (y - camera.y) * k, r: pose.radii[i] * k, z });
+    const z = pose.height + p.z;
+    const at = seenAt(pose.at.x + p.x, pose.at.y + p.y, z, eye);
+    seen.push({ x: at.x, y: at.y, r: pose.radii[i] * at.k, z });
   }
   return seen;
 }
 
 /**
- * How far a molecule reaches on the page, as it is turned and shown now,
- * seen from `distance` above `eye` - straight above its centre, if none:
- * what a fit makes room for.
+ * How far a molecule reaches on the page, as it is turned and shown now, as
+ * a camera sees it (`seenOnPage`): what a fit makes room for.
  */
-export function seenBounds(
-  pose: Pose,
-  distance: number,
-  eye: { x: number; y: number } = pose.at,
-): { minX: number; maxX: number; minY: number; maxY: number } {
-  const q = pose.turn ? new THREE.Quaternion(...pose.turn) : new THREE.Quaternion();
-  const p = new THREE.Vector3();
+export function seenBounds(pose: Pose, eye?: Eye): { minX: number; maxX: number; minY: number; maxY: number } {
   const b = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
-  for (let i = 0; i < pose.radii.length; i++) {
-    p.set(pose.places[3 * i], pose.places[3 * i + 1], pose.places[3 * i + 2]).applyQuaternion(q);
-    const k = distance / Math.max(distance - (pose.height + p.z), 1e-3);
-    const r = pose.radii[i] * k;
-    const x = eye.x + (pose.at.x + p.x - eye.x) * k;
-    const y = eye.y + (pose.at.y + p.y - eye.y) * k;
+  for (const { x, y, r } of seenOnPage(pose, eye)) {
     b.minX = Math.min(b.minX, x - r);
     b.maxX = Math.max(b.maxX, x + r);
     b.minY = Math.min(b.minY, y - r);
@@ -264,10 +257,10 @@ export function seenBounds(
 }
 
 /** The atom seen at a point of the page, the nearest of those there; null where there is none. */
-export function atomAt(pose: Pose, camera: THREE.Vector3, x: number, y: number): number | null {
+export function atomAt(pose: Pose, eye: Eye | undefined, x: number, y: number): number | null {
   let best: number | null = null;
   let z = -Infinity;
-  seenOnPage(pose, camera).forEach((a, i) => {
+  seenOnPage(pose, eye).forEach((a, i) => {
     if (Math.hypot(x - a.x, y - a.y) <= a.r && a.z > z) {
       best = i;
       z = a.z;
@@ -413,13 +406,13 @@ function inPolygon(px: number, py: number, pts: Seen[]): boolean {
 export function onMolecule(
   m: Molecule3D,
   pose: Pose,
-  camera: THREE.Vector3,
+  eye: Eye | undefined,
   x: number,
   y: number,
   zoom: number,
   bondRadius: number,
 ): boolean {
-  const seen = seenOnPage(pose, camera);
+  const seen = seenOnPage(pose, eye);
   // (quickly: nothing near enough to the molecule at all)
   const reach = BODY_PX / zoom;
   let d = Infinity;
@@ -438,8 +431,8 @@ export function onMolecule(
  * The bond seen at a point of the page - within its stick, the nearest of
  * those there - or null; in balls and sticks, where a molecule has sticks.
  */
-export function bondAt(m: Molecule3D, pose: Pose, camera: THREE.Vector3, x: number, y: number, bondRadius: number): number | null {
-  const seen = seenOnPage(pose, camera);
+export function bondAt(m: Molecule3D, pose: Pose, eye: Eye | undefined, x: number, y: number, bondRadius: number): number | null {
+  const seen = seenOnPage(pose, eye);
   let best: number | null = null;
   let z = -Infinity;
   m.bonds.forEach((b, i) => {
@@ -455,10 +448,10 @@ export function bondAt(m: Molecule3D, pose: Pose, camera: THREE.Vector3, x: numb
 }
 
 /** The atom whose centre is seen nearest a point of the page. */
-export function nearestAtom(pose: Pose, camera: THREE.Vector3, x: number, y: number): number {
+export function nearestAtom(pose: Pose, eye: Eye | undefined, x: number, y: number): number {
   let best = 0;
   let far = Infinity;
-  seenOnPage(pose, camera).forEach((a, i) => {
+  seenOnPage(pose, eye).forEach((a, i) => {
     const d = Math.hypot(x - a.x, y - a.y);
     if (d < far) {
       far = d;
@@ -604,23 +597,19 @@ export function asSeen(
 
 /**
  * A molecule in 3D as a picture shows it - turned, in the frame and the look
- * it is shown in, seen from straight above its centre, as the canvas sees
- * it - as balls and sticks from the back forward, in world units on the
- * page. A stick is cut back at each end to where its atom's ball covers it,
+ * it is shown in, seen as the canvas sees it: straight from above
+ * (orthographic), or from an `eye` in perspective - as balls and sticks
+ * from the back forward, in world units on the page. A stick is cut back at each end to where its atom's ball covers it,
  * so that one going back into a ball does not show over it.
  */
-export function pictureMarks(m: Carried3D, style: Style3D): SolidMark[] {
+export function pictureMarks(m: Carried3D, style: Style3D, eye?: Eye): SolidMark[] {
   const look = lookOf(m as Molecule3D, style);
   const solid = solidOf({ ...m, id: 0 } as Molecule3D, style);
   const places = solid.frames[frameOf(solid, m.frame)];
   const radii = solid.radii[look];
   const height = heightOf(m, solid, look);
   const q = m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion();
-  const D = PAGE_DISTANCE;
-  const seen = (p: THREE.Vector3) => {
-    const k = D / Math.max(D - (height + p.z), 1e-3);
-    return { x: m.at.x + p.x * k, y: m.at.y + p.y * k, z: p.z, k };
-  };
+  const seen = (p: THREE.Vector3) => ({ ...seenAt(m.at.x + p.x, m.at.y + p.y, height + p.z, eye), z: p.z });
   const at = (i: number) => new THREE.Vector3(places[3 * i], places[3 * i + 1], places[3 * i + 2]).applyQuaternion(q);
   const balls = m.atoms.map((a, i) => {
     const s = seen(at(i));

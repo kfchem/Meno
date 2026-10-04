@@ -61,11 +61,10 @@ built the way the 2D layers are, rather than the viewer moved in as it is.
    - A 2D drawing lies on the page; a 3D molecule is an object in the
      space beside it.
    - A drawing can also be a card set in front of the page or behind it.
-   - The camera is to look straight at the page in perspective. Head-on,
-     a plane is drawn exactly as an orthographic camera draws it, so the
-     2D drawing looks as it does today. What has depth - a 3D molecule, a
-     set of molecules at different depths - is seen in true perspective.
-     (To be confirmed by the first spike, below.)
+   - The camera looks straight down at the page. It was to see depth in
+     perspective (stage 1's spike); since 2026-10-05 it is orthographic
+     (see Decisions), and a view that is to show depth can still have a
+     camera in perspective.
 2. **The molecule relates everything.** A structure's 2D drawing, its 3D
    structures, its conformers and the results of its calculations are
    tied by which atom is which (a 2D atom's id, a 3D atom's index).
@@ -178,6 +177,22 @@ Taken on 2026-10-03:
 
   The camera stands 60 bond-units from the page and keeps today's zoom:
   CSS pixels per world unit on the page.
+
+  **Changed on 2026-10-05: the camera is orthographic.** On Windows the
+  maintainer saw a camera standing so far off that it is nearly
+  orthographic, and found it far better to look at. So the canvas's camera
+  is orthographic:
+  - a molecule in 3D is seen as large as it is, however high it stands, at
+    the same scale as the drawing beside it (a 1.5 Å bond as long as a
+    drawn one);
+  - a picture of it for another program is exactly what the canvas shows.
+
+  What goes is the molecule growing as it rises out of the drawing; depth
+  for stage 7 is to be shown by other cues, tried when it is built. The
+  perspective is kept, not deleted: everything that sees molecules follows
+  the camera's eye (`utils/page#eyeOf` - none for an orthographic camera),
+  and `PageCamera` sets up a perspective camera for a view that is to show
+  depth, a workflow's view say.
 - **Each 3D molecule turns by itself; the page never tilts.** With a
   drawing and its 3D structure side by side, turning the view would show
   the drawing askew. So what is under the pointer decides:

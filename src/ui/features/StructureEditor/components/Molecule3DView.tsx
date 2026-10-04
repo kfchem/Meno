@@ -9,7 +9,7 @@ import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf
 import { MARK_MIN_PX } from "../chem/marks";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { kindOf, measureMarks, measureText, measureValue } from "../utils/measure3d";
-import { PAGE_DISTANCE } from "./PageCamera";
+import { eyeOf, FRAME_ORDER, seenAt } from "../utils/page";
 import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
 
@@ -332,6 +332,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
 
   useEffect(() => invalidate(), [lit, selected, look, frame, turn, invalidate]);
 
+  // (before the labels' Html places them, so that they are placed where the
+  // atoms are drawn this frame, not the one before: FRAME_ORDER)
   useFrame((_, dt) => {
     const step = Math.min(dt, 1 / 30);
     let moving = false;
@@ -488,9 +490,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         bonds.current.visible = fill.current < 0.98;
       }
     }
-    // (as wide in pixels whatever the zoom)
-    const depth = PAGE_DISTANCE / Math.max(PAGE_DISTANCE - height, 1);
-    const px = 1 / (camera.zoom * depth);
+    // (as wide in pixels whatever the zoom - and, in perspective, however
+    // high it stands)
+    const eye = eyeOf(camera);
+    const px = 1 / (camera.zoom * seenAt(0, 0, height, eye).k);
     // the outline
     const outPx = Math.max(outlineAt(level.current, OUTLINE_PX), SELECTED_PX * selLevel.current);
     const lightOn = outPx > 0.02 || holdShown;
@@ -625,14 +628,13 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     if (pill.current) {
       // (where its lowest atom is seen, on the page, now: followed gently as it turns)
       const g = Math.max(grown.current.v, 1e-3);
-      const cam = camera.position;
       const at = shown.current;
       const v = new THREE.Vector3();
       let low = Infinity;
       for (let i = 0; i < n; i++) {
         v.set(p[3 * i], p[3 * i + 1], p[3 * i + 2]).applyQuaternion(shownTurn.current!);
-        const k = cam.z / Math.max(cam.z - (at.z + v.z), 1e-3);
-        low = Math.min(low, cam.y + (at.y + v.y - cam.y) * k - radius(i) * k);
+        const seen = seenAt(at.x + v.x, at.y + v.y, at.z + v.z, eye);
+        low = Math.min(low, seen.y - radius(i) * seen.k);
       }
       const below = low - at.y;
       pillAt.current = pillAt.current == null || reshaped ? below : follow(pillAt.current, below, step, PILL_TAU);
@@ -640,7 +642,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       pill.current.position.set(0, pillAt.current / g, -at.z / g);
     }
     if (moving) invalidate();
-  });
+  }, FRAME_ORDER.molecules);
 
   /** The measurements' marks and values, as the atoms are now. */
   const drawMeasures = (p: Float32Array) => {

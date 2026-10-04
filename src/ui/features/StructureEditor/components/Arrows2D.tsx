@@ -65,7 +65,7 @@ export default function Arrows2D() {
       else handleLevel.current.set(a.id, next);
       moving = true;
     }
-    const k = HANDLE_PX / Math.max((camera as THREE.PerspectiveCamera).zoom, 1e-6);
+    const k = HANDLE_PX / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6);
     for (const h of handles.current) {
       if (!h) continue;
       const level = (h.userData.level as number) ?? 1;

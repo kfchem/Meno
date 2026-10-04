@@ -163,13 +163,15 @@ What is left before the editor counts as finished, and in what order, is in
   its bond together, an import replaces the model in one go, and repeated moves
   of one atom coalesce.
 - **Rendering**: a react-three-fiber `<Canvas>` whose page is the plane z = 0,
-  seen head-on by a perspective camera (`PageCamera`): it stands 60 world
-  units off and sets its field of view from the canvas height, so that
-  `camera.zoom` means what an orthographic camera's would - CSS pixels per
-  world unit on the page - and the drawing comes out exactly as it would
-  orthographically. What stands off the page is seen in depth. A point of
-  the screen is taken to the page with `utils/page.ts#pageAt`, never by
-  unprojecting alone. Page layers keep to the page (z within a few
+  seen straight from above by an orthographic camera (since 2026-10-05):
+  `camera.zoom` is CSS pixels per world unit on the page, and a molecule in
+  3D is seen as large as it is, however high it stands. What sees molecules
+  - picking, a fit, the selection's handle, where made molecules come to
+  rest, pictures - follows the camera's eye (`utils/page.ts#eyeOf`, none
+  for an orthographic camera; `seenAt`), so a view that is to show depth
+  can have a perspective camera instead (`PageCamera`, which keeps
+  `camera.zoom`'s meaning on the page). A point of the screen is taken to
+  the page with `utils/page.ts#pageAt`, never by unprojecting alone. Page layers keep to the page (z within a few
   thousandths) and are ordered by drawing order. Each visual layer
   is its own component in `components/` (`Bonds2D`, `Atoms2D`, `Wedges2D`,
   `Labels2D`, previews, hover overlays, `PanZoom2D`, `FitToContent2D`, …).

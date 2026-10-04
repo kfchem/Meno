@@ -10,7 +10,7 @@ import { atomAt, bondAt, lookOf, nearestAtom, onMolecule, poseOf, solidOf } from
 import { Remake3D } from "./remake3d";
 import { linkOf } from "../chem/make3d";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
-import { pageAt } from "../utils/page";
+import { eyeOf, pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
 import Molecule3DView from "./Molecule3DView";
 import { useDrawingStyle } from "../useDrawingStyle";
@@ -156,7 +156,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       const st = store.getState();
       for (let i = st.molecules3d.length - 1; i >= 0; i--) {
         const m = st.molecules3d[i];
-        if (onMolecule(m, poseNow(m), camera.position, p.x, p.y, camera.zoom, style.bondRadius)) return { id: m.id };
+        if (onMolecule(m, poseNow(m), eyeOf(camera), p.x, p.y, camera.zoom, style.bondRadius)) return { id: m.id };
       }
       return null;
     };
@@ -288,9 +288,9 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       } catch {}
       const p = pageOf(e);
       const pose = poseNow(m);
-      const atom = atomAt(pose, camera.position, p.x, p.y);
+      const atom = atomAt(pose, eyeOf(camera), p.x, p.y);
       const look = lookOf(m, style);
-      const bond = atom == null && look === "balls" ? bondAt(m, pose, camera.position, p.x, p.y, style.bondRadius) : null;
+      const bond = atom == null && look === "balls" ? bondAt(m, pose, eyeOf(camera), p.x, p.y, style.bondRadius) : null;
       const press: Press = { id: m.id, group: [m.id], pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, atom, bond, add: addsToSelection(e), moved: false };
       // held still, it selects the molecule - spreading out from the atom pressed on
       const selected = st.sel3d.has(m.id);
@@ -305,7 +305,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
             store.getState().selectMolecules3d([g.id], g.add);
           }, LONG_PRESS_MS);
       if (!selected) {
-        const from = atom ?? (bond != null ? m.bonds[bond].a1 : nearestAtom(pose, camera.position, p.x, p.y));
+        const from = atom ?? (bond != null ? m.bonds[bond].a1 : nearestAtom(pose, eyeOf(camera), p.x, p.y));
         setHold({ id: m.id, from, start: performance.now() });
       }
       gesture.current = { ...press, kind: "press", held: false, timer };
