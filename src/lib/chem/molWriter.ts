@@ -647,6 +647,40 @@ export function writeRxnfile(
 }
 
 /** The structure as a one-record SD file. */
+/** An atom or a bond of a molecule in 3D, as a file gives it: in ångströms, its bonds by atom index. */
+export type Atom3D = { el: string; x: number; y: number; z: number; charge?: number; isotope?: number };
+export type Bond3D = { a1: number; a2: number; order: number };
+
+/** The second header line of a molfile in 3D: the program, no date, and that it is 3D. */
+const PROGRAM_LINE_3D = "  Meno    " + " ".repeat(10) + "3D";
+
+/**
+ * A molecule in 3D as a V2000 molfile: its atoms where they are, in
+ * ångströms, its bonds by type as given, charges and isotopes as M CHG and
+ * M ISO lines, and a header that says it is 3D ("CTfile Formats").
+ */
+export function writeMolfile3d(atoms: Atom3D[], bonds: Bond3D[], options: { title?: string } = {}): string {
+  const lines = [
+    titleLine(options.title),
+    PROGRAM_LINE_3D,
+    "",
+    `${i3(atoms.length)}${i3(bonds.length)}  0  0  0  0  0  0  0  0999 V2000`,
+  ];
+  for (const a of atoms) lines.push(`${f10(a.x)}${f10(a.y)}${f10(a.z)} ${a.el.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0`);
+  for (const b of bonds) lines.push(`${i3(b.a1 + 1)}${i3(b.a2 + 1)}${i3(b.order)}  0  0  0  0`);
+  // (eight to a line)
+  const props = (tag: string, pairs: [number, number][]) => {
+    for (let i = 0; i < pairs.length; i += 8) {
+      const some = pairs.slice(i, i + 8);
+      lines.push(`M  ${tag}${i3(some.length)}` + some.map(([k, v]) => ` ${i3(k)} ${i3(v)}`).join(""));
+    }
+  };
+  props("CHG", atoms.flatMap((a, i) => (a.charge ? [[i + 1, a.charge] as [number, number]] : [])));
+  props("ISO", atoms.flatMap((a, i) => (a.isotope ? [[i + 1, a.isotope] as [number, number]] : [])));
+  lines.push("M  END");
+  return lines.join("\n") + "\n";
+}
+
 export function writeSdf(
   model: WriterModel,
   options: { title?: string } = {},

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useEffect, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useEditorStore } from "../store";
@@ -10,22 +11,27 @@ import { editorModelOf, processFileContent, type ProcessedFileResult } from "../
 import { schemeOf, type ImportedScheme } from "../document";
 import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
-import type { Model } from "../store/types";
+import { isWorkspaceFile, readWorkspace } from "../utils/workspace";
+import type { Drawn } from "../store/types";
+import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { lookOf, rowAbout, rowAfter, solidOf } from "../utils/molecule3d";
 import type { DropZone, Dropped } from "../../../../lib/drop";
 
 /** The files a drop opens as structures, beside what is drawn. */
-const STRUCTURE_FILE = /\.(mol|sdf|rxn|xyz)$/i;
+const STRUCTURE_FILE = /\.(mol|sdf|rxn|xyz|meno)$/i;
 import { readRecord } from "../utils/copyPaste";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
 export function useStructureEvents(
   initialPayload?: string,
   initialFilename?: string,
+  /** The payload is a file opened by its name - not a document's object - which Save As then suggests. */
+  openedFile?: boolean,
 ) {
   const store = useEditorStore();
 
   // Refs
-  const camRef = useRef<THREE.OrthographicCamera | null>(null);
+  const camRef = useRef<THREE.PerspectiveCamera | null>(null);
   const domRef = useRef<HTMLCanvasElement | null>(null);
   const clickTimerRef = useRef<number | null>(null);
   // The press the next click ends, and whether it has travelled (utils/press)
@@ -49,8 +55,8 @@ export function useStructureEvents(
       -(((clientY - rect.top) / rect.height) * 2 - 1),
       0,
     );
-    v.unproject(camRef.current);
-    return { x: v.x, y: v.y };
+    const p = pageAt(v.x, v.y, camRef.current);
+    return { x: p.x, y: p.y };
   };
 
   // An import is one undo step: the model goes into the document as a whole,
@@ -58,14 +64,28 @@ export function useStructureEvents(
   const toModel = editorModelOf;
 
   // A file's reaction arrow and pluses, moved by (dx, dy) along with its
-  // atoms, and placed in the same edit as they are.
+  // atoms, and its molecules in 3D standing in a row about `at`: placed in
+  // the same edit as its atoms are.
   const importedScheme = (
-    result: Pick<ProcessedFileResult, "arrow" | "pluses">,
+    result: Pick<ProcessedFileResult, "arrow" | "pluses" | "molecules3d"> & { model?: ProcessedFileResult["model"] },
     dx: number,
     dy: number,
+    at: { x: number; y: number } = { x: 0, y: 0 },
   ): ImportedScheme => {
     const a = result.arrow;
+    const solids = (result.molecules3d ?? []).map((m) => ({ ...m, id: 0, at }));
+    const reaches = solids.map((m) => solidOf(m, STYLE_3D).reach[lookOf(m, STYLE_3D)]);
+    // (beside a drawing the same file brings, to its right)
+    const drawn = result.model?.atoms ?? [];
+    const places = drawn.length
+      ? rowAfter(
+          Math.max(...drawn.map((a) => a.x)) + dx + 2 * NOMINAL_BOND_LENGTH,
+          drawn.reduce((y, a) => y + a.y, 0) / drawn.length + dy,
+          reaches,
+        )
+      : rowAbout(at, reaches);
     return {
+      ...(solids.length ? { molecules3d: solids.map(({ id: _id, ...m }, i) => ({ ...m, at: places[i] })) } : {}),
       arrows: a
         ? [
             {
@@ -88,11 +108,18 @@ export function useStructureEvents(
       // One import per canvas: this effect runs twice under StrictMode, and
       // importing twice would leave two undo steps for a single file.
       importedInitial.current = true;
-      // A structure from a document (lib/ole): Meno's own record, taken as it is.
-      if (/\.meno$/i.test(initialFilename ?? "")) {
+      // A workspace file, as it was saved; or a structure from a document
+      // (lib/ole): Meno's own record, taken as it is.
+      if (isWorkspaceFile(initialFilename ?? "")) {
+        const ws = readWorkspace(initialPayload);
+        if (ws) {
+          store.getState().openWorkspace(ws, true);
+          if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
+          return;
+        }
         const record = readRecord(initialPayload);
         if (record) store.getState().openModel(record, schemeOf(record));
-        else reportImportError("initial payload", new Error("The document's structure could not be read."));
+        else reportImportError("initial payload", new Error("The workspace could not be read."));
         return;
       }
       try {
@@ -116,6 +143,7 @@ export function useStructureEvents(
             toModel(shifted),
             importedScheme(result, -result.centroid.x, -result.centroid.y),
           );
+        if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
       } catch (e) {
         reportImportError("initial payload", e);
       }
@@ -156,6 +184,8 @@ export function useStructureEvents(
       clickTimerRef.current = null;
     }
     if (!camRef.current || !domRef.current) return;
+    // (twice on a molecule in 3D: nothing drawn on the page under it)
+    if (store.getState().hovered3d) return;
     // (Ctrl or ⌘, or Shift, clicked twice: the selection's, not a bond drawn)
     if (addsToSelection(e) || e.shiftKey) return;
     const stNow = store.getState();
@@ -171,7 +201,7 @@ export function useStructureEvents(
       -(((e.clientY - rect.top) / rect.height) * 2 - 1),
       0,
     );
-    ndc.unproject(camRef.current);
+    ndc.copy(pageAt(ndc.x, ndc.y, camRef.current));
 
     const st = store.getState();
     const atoms = st.model.atoms;
@@ -221,33 +251,18 @@ export function useStructureEvents(
         const near = store
           .getState()
           .findAtomNear(nx, ny, NOMINAL_BOND_LENGTH * 0.3, base.id);
-        // One gesture, one undo step: the atom and its bond together.
+        // One gesture, one undo step: the atom and its bond together. (A
+        // third click takes it back, to draw a chain instead.)
         if (near != null) {
           st.connectAtoms(base.id, near, 1);
         } else {
           st.addAtomBonded(base.id, nx, ny, "C", 1);
         }
+        st.noteDoubleClickBond(base.id);
         return;
       }
     }
-
-    const nowMs2 =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    if (stNow.suppressDblClickUntil && nowMs2 < stNow.suppressDblClickUntil)
-      return;
-
-    const half = L * 0.5;
-    const theta = Math.PI / 6;
-    const dx = half * Math.cos(theta);
-    const dy = half * Math.sin(theta);
-    const ax = ndc.x - dx;
-    const ay = ndc.y - dy;
-    const bx = ndc.x + dx;
-    const by = ndc.y + dy;
-    st.addBondedPair({ x: ax, y: ay, el: "C" }, { x: bx, y: by, el: "C" }, 1);
-    try {
-      store.getState().suppressDoubleClick(320);
-    } catch {}
+    // (on empty space, two clicks begin a chain: Selection2D)
   };
 
   const handleWrapperMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -262,6 +277,12 @@ export function useStructureEvents(
       return;
     }
     pointerRef.current = { x: e.clientX, y: e.clientY };
+    // A molecule in 3D stands over the page: what is drawn under it is not
+    // under the pointer.
+    if (st.hovered3d) {
+      st.clearAtomHover();
+      return;
+    }
     const p = clientToWorld(e.clientX, e.clientY);
     if (!p) return;
     const tol = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
@@ -298,16 +319,21 @@ export function useStructureEvents(
     const stClick = store.getState();
     const nowClick =
       typeof performance !== "undefined" ? performance.now() : Date.now();
+    // The click that ends a gesture - a long press let go, a box drawn, a
+    // turn - is held off as it comes: by the time its label would be
+    // edited, the holding off is over.
+    const heldOff =
+      !!stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil;
     if (
       e.target === domRef.current &&
       stClick.hovered.atomId == null &&
       stClick.hovered.bondId == null &&
-      !(stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil)
+      !heldOff
     )
       stClick.clearSel();
     // The second click of a double-click (as the system reckons one) edits
     // nothing, and neither does its first, if the edit is not yet begun.
-    if (e.detail >= 2) return;
+    if (e.detail >= 2 || heldOff) return;
     const since = clickClock();
     clickTimerRef.current = window.setTimeout(() => {
       if (doubleClickedSince(since)) return;
@@ -326,7 +352,7 @@ export function useStructureEvents(
   // What is being dragged is read as it comes over the drawing: by the time
   // it is dropped, Word or PowerPoint may already have taken it back (on a
   // Mac, the drag pasteboard is emptied as the drag ends).
-  const dropReading = useRef<Promise<Model | null> | null>(null);
+  const dropReading = useRef<Promise<Drawn | null> | null>(null);
   // The drawing as a drop zone (lib/drop): it takes files and whatever
   // else is dragged to it, and reads the latter as it comes
   const dropZone: DropZone = {
@@ -356,7 +382,7 @@ export function useStructureEvents(
       // hand over what it drags only once it is dropped)
       const found =
         (reading && (await reading.catch(() => null))) || (await structureInDrop().catch(() => null));
-      if (found?.atoms.length) {
+      if (found?.atoms.length || found?.molecules3d?.length) {
         store.getState().pasteModel(centredAt(found, at));
         setImportError(null);
         return;
@@ -365,6 +391,15 @@ export function useStructureEvents(
     if (!dropped) return;
     const f = dropped;
     const text = await f.text();
+    // a workspace dropped: what it holds, beside what is drawn, selected
+    if (isWorkspaceFile(f.name)) {
+      const ws = readWorkspace(text);
+      if (ws) {
+        store.getState().pasteModel(centredAt(ws.drawn, at));
+        setImportError(null);
+      } else reportImportError("append", new Error("The workspace could not be read."));
+      return;
+    }
     try {
       const result = await processFileContent(f.name, text);
       const dx = at.x - result.centroid.x;
@@ -381,7 +416,7 @@ export function useStructureEvents(
 
       store
         .getState()
-        .appendModel(toModel(shifted), importedScheme(result, dx, dy));
+        .appendModel(toModel(shifted), importedScheme(result, dx, dy, at));
       setImportError(null);
     } catch (err) {
       reportImportError("append", err);

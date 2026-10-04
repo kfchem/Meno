@@ -8,7 +8,6 @@ export type TabMeta = {
 };
 
 export type TabKind =
-  | "3d"
   | "2d"
   | "text"
   | "settings"

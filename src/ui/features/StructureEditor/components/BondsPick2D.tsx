@@ -1,13 +1,23 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useEffect, useMemo, useRef } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useThree } from "@react-three/fiber";
-import { useEditor } from "../store";
+import { useEditor, useEditorStore } from "../store";
+import { DOUBLE_CLICK_MS, LONG_PRESS_MS, MOV_PX } from "../constants";
+import { dragSelection } from "../utils/dragSelection";
 import { commitInstanceMatrices } from "./instances";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
 export default function BondsPick2D() {
-  useThree();
+  const { camera, gl } = useThree();
+  const store = useEditorStore();
+  const toWorld = (cx: number, cy: number) => {
+    const rect = gl.domElement.getBoundingClientRect();
+    const v = new THREE.Vector3(((cx - rect.left) / rect.width) * 2 - 1, -(((cy - rect.top) / rect.height) * 2 - 1), 0);
+    const p = pageAt(v.x, v.y, camera);
+    return { x: p.x, y: p.y };
+  };
   const {
     model,
     setHoveredFromId,
@@ -184,10 +194,10 @@ export default function BondsPick2D() {
     updateBond(b.id, { order: 3 as any, stereo: "none" });
   }
 
+  const { atoms, bonds } = model;
   useEffect(() => {
     const m = inst.current;
     if (!m) return;
-    const { atoms, bonds } = model;
     m.count = bonds.length;
     const thickWorld = PICK_THICKNESS_RATIO * NOMINAL_BOND_LENGTH;
     for (let i = 0; i < bonds.length; i++) {
@@ -208,7 +218,7 @@ export default function BondsPick2D() {
       m.setMatrixAt(i, tmpM);
     }
     commitInstanceMatrices(m);
-  }, [model.atoms, model.bonds, tmpM, tmpQ]);
+  }, [atoms, bonds, tmpM, tmpQ]);
 
   return (
     <instancedMesh
@@ -289,6 +299,38 @@ export default function BondsPick2D() {
         const pid =
           (e as any).pointerId ?? (e as any).nativeEvent?.pointerId ?? null;
         if (pid != null) beginPanHold(pid);
+        // Held still, the press selects the whole structure, the selection
+        // spreading out from the bond as it is held (HoldProgress2D); a drag
+        // from there moves it. A click or a drag before then is the bond's.
+        {
+          const ev0 = (e as any).nativeEvent ?? e;
+          const sx = ev0.clientX;
+          const sy = ev0.clientY;
+          store.getState().setPressHold({ atomId: b.a, start: performance.now() });
+          const letGo = () => {
+            window.clearTimeout(hold);
+            store.getState().setPressHold(null);
+            window.removeEventListener("pointermove", onEarlyMove);
+            window.removeEventListener("pointerup", letGo, true);
+          };
+          const onEarlyMove = (ev: PointerEvent) => {
+            if (Math.hypot(ev.clientX - sx, ev.clientY - sy) >= MOV_PX) letGo();
+          };
+          const hold = window.setTimeout(() => {
+            letGo();
+            if (!clickState.current.armed || clickState.current.downBondId !== b.id) return;
+            // (no click of the bond's, now)
+            clickState.current.armed = false;
+            clickState.current.downBondId = null;
+            store.getState().selectStructure(b.a);
+            dragSelection(store, toWorld, { x: sx, y: sy }, (ev) => {
+              store.getState().suppressDoubleClick(DOUBLE_CLICK_MS);
+              endPanHold(ev.pointerId ?? pid);
+            });
+          }, LONG_PRESS_MS);
+          window.addEventListener("pointermove", onEarlyMove);
+          window.addEventListener("pointerup", letGo, true);
+        }
         try {
           const ev = (e as any).nativeEvent ?? e;
           clickState.current.downPos = { x: ev.clientX, y: ev.clientY };

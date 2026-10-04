@@ -11,6 +11,8 @@ import {
   BondsPick2D,
   AtomsHoverRings2D,
   ExtendPreview2D,
+  HoldProgress2D,
+  ChainGuide2D,
   MovePreview2D,
   Arrows2D,
   Pluses2D,
@@ -25,13 +27,17 @@ import {
 } from "./components";
 import { ExclamationTriangleIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { CANVAS_RESIZE, DURATION, EASE_SLIDE, FADE, RISE } from "../../theme/motion";
 import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
-import PartMenu, { type MenuTarget } from "./PartMenu";
+import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { offerCommands, type CommandGroup } from "../../layouts/commands";
+import { STYLE_3D } from "../../../lib/chem/style3d";
+import { chosenPath, lookOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
 
@@ -64,6 +70,8 @@ import { useOfficeLink } from "./hooks/useOfficeLink";
 import { useDropZone } from "../../../lib/drop";
 import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
+import PageCamera, { PAGE_DISTANCE } from "./components/PageCamera";
+import Molecules3D from "./components/Molecules3D";
 
 function StructureCanvasContent({
   active,
@@ -72,6 +80,7 @@ function StructureCanvasContent({
   initialFilename,
   officeId,
   ownTab,
+  nameTab,
   styleOpen,
   toggleStyle,
   openArrowStyle,
@@ -85,6 +94,11 @@ function StructureCanvasContent({
   officeId?: number;
   /** Whether the canvas is a tab's own, which offers the app's menu its commands. */
   ownTab: boolean;
+  /**
+   * Names the canvas's tab after the file it is saved as. (One opened from
+   * a document keeps that document's name.)
+   */
+  nameTab?: (label: string) => void;
   /** Whether the drawing-style panel is open beside the canvas. */
   styleOpen: boolean;
   toggleStyle: () => void;
@@ -95,6 +109,8 @@ function StructureCanvasContent({
 }) {
   const fitNonce = useEditor((s) => s.fitNonce);
   const requestFit = useEditor((s) => s.requestFit);
+  // (a canvas opened from a document keeps that document's name)
+  const named = officeId == null ? nameTab : undefined;
 
   const {
     camRef,
@@ -109,13 +125,13 @@ function StructureCanvasContent({
     handleMouseDownCapture,
     clientToWorld,
     pasteTarget,
-  } = useStructureEvents(initialPayload, initialFilename);
+  } = useStructureEvents(initialPayload, initialFilename, officeId == null);
   useOfficeLink(officeId);
 
   const onCreated = useCanvasSetup(camRef, domRef);
 
   // Save and export. Ctrl/Cmd+S belongs to the tab in front, like undo.
-  const files = useFileActions();
+  const files = useFileActions(named);
   const { save, saveAs } = files;
   useEffect(() => {
     if (!active) return;
@@ -213,14 +229,20 @@ function StructureCanvasContent({
       const { hovered, sel } = st;
       const kind = hoveredPart();
       const id = kind === "atom" ? hovered.atomId : hovered.bondId;
-      const selected = sel.atoms.size > 0 || sel.bonds.size > 0;
+      const drawingSelected = sel.atoms.size > 0 || sel.bonds.size > 0;
+      const selected = drawingSelected || st.sel3d.size > 0;
       const busy = st.labelEdit.active || st.moveDrag.active || st.extend.active;
       if (isCleanUpKey(e)) {
         e.preventDefault();
-        runCleanUp(selected ? sel.atoms : structureAt(kind, id));
+        runCleanUp(drawingSelected ? sel.atoms : structureAt(kind, id));
       } else if (isFitKey(e)) {
         e.preventDefault();
         requestFit();
+      } else if (isDeleteKey(e) && !busy && st.hoveredMeasure3d) {
+        // a measurement under the pointer, before anything else
+        e.preventDefault();
+        st.removeMeasure3d(st.hoveredMeasure3d.id, st.hoveredMeasure3d.measure);
+        st.setHoveredMeasure3d(null);
       } else if (isDeleteKey(e) && selected) {
         e.preventDefault();
         if (!busy) st.deleteSelection();
@@ -236,6 +258,10 @@ function StructureCanvasContent({
         e.preventDefault();
         st.removePlus(st.hoveredPlus);
         st.setHoveredPlus(null);
+      } else if (isDeleteKey(e) && !busy && st.hovered3d) {
+        // a molecule in 3D under the pointer
+        e.preventDefault();
+        st.removeMolecule3d(st.hovered3d.id);
       } else if (chargeStep(e) && kind === "atom" && id != null) {
         e.preventDefault();
         chargeAtom(id, chargeStep(e) as 1 | -1);
@@ -248,7 +274,7 @@ function StructureCanvasContent({
       } else if (isSelectAllKey(e) && !busy) {
         e.preventDefault();
         st.selectAll();
-      } else if (isDeselectKey(e) && selected && !busy && !menu) {
+      } else if (isDeselectKey(e) && (selected || st.chosen3d) && !busy && !menu) {
         // (Esc with the menu open closes the menu only)
         st.clearSel();
       }
@@ -258,6 +284,21 @@ function StructureCanvasContent({
   }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget, requestFit]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
+  // a molecule in 3D right-clicked: what its menu does to it
+  const molecules3d = useEditor((s) => s.molecules3d);
+  const chosen3d = useEditor((s) => s.chosen3d);
+  const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
+  const menu3d: MenuMolecule3D | undefined = menuMolecule
+    ? {
+        look: lookOf(menuMolecule, STYLE_3D),
+        chosen: chosen3d?.id === menuMolecule.id ? (chosenPath(menuMolecule, chosen3d)?.length ?? 0) : 0,
+        onMeasure: () => store.getState().measureChosen3d(),
+        onLook: (look) => store.getState().setLook3d(menuMolecule.id, look),
+        onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
+        onCut: () => void clip.cut(menuMolecule.id),
+        onCopy: () => void clip.copy(menuMolecule.id),
+      }
+    : undefined;
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
   // A right-drag moves the view, so the menu waits for the button to come
   // up without having travelled. macOS asks for the menu as the button goes
@@ -298,7 +339,7 @@ function StructureCanvasContent({
     // A card's text field keeps the system's own menu - cut, copy, paste.
     if (e.target !== domRef.current) return;
     e.preventDefault(); // no browser menu over the drawing
-    const { hovered, hoveredArrow, arrows, hoveredPlus, pluses } = store.getState();
+    const { hovered, hoveredArrow, arrows, hoveredPlus, pluses, hovered3d, sel3d, hoveredMeasure3d } = store.getState();
     const box = e.currentTarget.getBoundingClientRect();
     const place = {
       at: clientToWorld(e.clientX, e.clientY) ?? pasteTarget(),
@@ -308,6 +349,29 @@ function StructureCanvasContent({
     };
     const kind = hoveredPart();
     const r = rightPress.current;
+    const open = (target: MenuTarget) => {
+      if (r?.down) r.pending = target; // macOS: open on the way up
+      else if (!r?.moved) setMenu(target); // Windows, or a Ctrl-click on a Mac
+    };
+    // over a measurement's value, on a molecule in 3D: its own menu
+    if (hoveredMeasure3d) {
+      open({ kind: "measure3d", id: hoveredMeasure3d.id, measure: hoveredMeasure3d.measure, selection: "none", ...place });
+      return;
+    }
+    // on a molecule in 3D: its own menu, or the selection's when it is in it
+    if (hovered3d) {
+      const { sel } = store.getState();
+      const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
+      const here = sel3d.has(hovered3d.id);
+      open({
+        kind: "molecule3d",
+        id: hovered3d.id,
+        selection: here ? "here" : drawing || sel3d.size ? "elsewhere" : "none",
+        drawing,
+        ...place,
+      });
+      return;
+    }
     // on a reaction arrow, and nothing else: the arrow's menu
     if (!kind && hoveredArrow != null && arrows.some((a) => a.id === hoveredArrow)) {
       const target: MenuTarget = { kind: "arrow", id: hoveredArrow, selection: "none", ...place };
@@ -327,7 +391,8 @@ function StructureCanvasContent({
     // selection's menu; on nothing else, the canvas's (paste, select all)
     const { sel } = store.getState();
     const part = kind && id != null;
-    const selected = sel.atoms.size > 0 || sel.bonds.size > 0;
+    const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
+    const selected = drawing || sel3d.size > 0;
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
@@ -335,6 +400,7 @@ function StructureCanvasContent({
       kind: part ? kind : null,
       id: part ? id : null,
       selection: !selected ? "none" : onSelected || !part ? "here" : "elsewhere",
+      drawing,
       ...place,
     };
     if (r?.down) r.pending = target; // macOS: open on the way up
@@ -426,8 +492,11 @@ function StructureCanvasContent({
       onPointerUpCapture={onRightUp}
     >
       {/* Import error */}
+      <AnimatePresence>
       {alert && (
-        <div
+        <motion.div
+          key="alert"
+          {...RISE}
           role="alert"
           className="absolute top-3 left-1/2 -translate-x-1/2 z-50 max-w-[90%] flex items-start gap-2 rounded-md border border-gh-line bg-white/95 shadow-sm px-3 py-2 text-xs text-gh-black"
         >
@@ -444,30 +513,45 @@ function StructureCanvasContent({
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
-        </div>
+        </motion.div>
       )}
-      {active &&
-        (chem.state === "setting-up" || chem.state === "starting") && (
-          <div
+      </AnimatePresence>
+      <AnimatePresence>
+        {active && (chem.state === "setting-up" || chem.state === "starting") && (
+          <motion.div
+            key="rdkit"
+            {...RISE}
+            layout
             role="status"
             className="absolute right-3 bottom-3 z-50 rounded-full border border-gh-line bg-white/95 shadow-sm px-3 py-1.5 text-xs text-gh-gray"
           >
-            {chem.state === "setting-up"
-              ? "Setting up RDKit…"
-              : "Starting RDKit…"}
-          </div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span key={chem.state} {...FADE} className="block">
+                {chem.state === "setting-up" ? "Setting up RDKit…" : "Starting RDKit…"}
+              </motion.span>
+            </AnimatePresence>
+          </motion.div>
         )}
-      {smilesOpen && <SmilesPanel onClose={() => setSmilesOpen(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {smilesOpen && <SmilesPanel key="smiles" onClose={() => setSmilesOpen(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
       {menu && (
         <PartMenu
+          key={`${menu.x},${menu.y}`}
           target={menu}
           onClose={closeMenu}
           onDelete={() => {
-            if (menu.kind === "arrow" && menu.id != null) store.getState().removeArrow(menu.id);
-            else if (menu.kind === "plus" && menu.id != null) store.getState().removePlus(menu.id);
-            else if (menu.selection === "here") store.getState().deleteSelection();
+            const st = store.getState();
+            if (menu.kind === "arrow" && menu.id != null) st.removeArrow(menu.id);
+            else if (menu.kind === "plus" && menu.id != null) st.removePlus(menu.id);
+            else if (menu.kind === "measure3d" && menu.id != null && menu.measure != null) st.removeMeasure3d(menu.id, menu.measure);
+            else if (menu.selection === "here") st.deleteSelection();
+            else if (menu.kind === "molecule3d" && menu.id != null) st.removeMolecule3d(menu.id);
             else if (menu.kind && menu.id != null) deletePart(menu.kind, menu.id);
           }}
+          molecule3d={menu3d}
           onArrowStyle={() => {
             if (menu.kind === "arrow" && menu.id != null) openArrowStyle(menu.id);
           }}
@@ -517,14 +601,19 @@ function StructureCanvasContent({
           }}
         />
       )}
+      </AnimatePresence>
       <Canvas
         key={tabId}
-        orthographic
-        camera={{ position: [0, 0, 10], zoom: startZoom }}
+        // The page is seen head-on, in perspective (PageCamera): drawn just
+        // as an orthographic camera draws it, while what stands off it - a
+        // 3D molecule - is seen in depth.
+        camera={{ position: [0, 0, PAGE_DISTANCE], fov: 50, near: 0.1, far: 2000, zoom: startZoom }}
         // Render on demand: interactions, store changes and the animation
         // layers request frames (see PanZoom2D and the preview components)
         // instead of redrawing continuously while nothing changes.
         frameloop={active ? "demand" : "never"}
+        // (following its box as the panel beside it slides)
+        resize={CANVAS_RESIZE}
         dpr={CANVAS_DPR}
         onDoubleClick={handleDoubleClick}
         gl={{
@@ -536,7 +625,6 @@ function StructureCanvasContent({
         }}
         onCreated={onCreated}
       >
-        <ambientLight intensity={0.8} />
         <color attach="background" args={["#ffffff"]} />
         <FitToContent2D trigger={fitNonce} />
         {/* The drawing, laid out once for every layer below to draw from */}
@@ -555,6 +643,10 @@ function StructureCanvasContent({
           <AtomsHoverRings2D />
           {/* what is selected, the box or lasso selecting, the handle turning it */}
           <Selection2D />
+          {/* a press held, for a long press: the selection spreading, or a ring */}
+          <HoldProgress2D />
+          {/* the honeycomb a chain is traced on */}
+          <ChainGuide2D />
           {/* A label's font is read before it is drawn: the rest of the
               drawing does not wait for it, nor go if it cannot be read. */}
           <Suspense fallback={null}>
@@ -575,7 +667,10 @@ function StructureCanvasContent({
           <Arrows2D />
           <Pluses2D />
         </DrawnLayoutProvider>
+        {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
+        <Molecules3D />
         <PanZoom2D />
+        <PageCamera />
       </Canvas>
     </div>
   );
@@ -588,6 +683,7 @@ export default function StructureCanvas({
   officeId,
   active = true,
   document,
+  nameTab,
 }: {
   tabId: string;
   initialPayload?: string;
@@ -598,6 +694,8 @@ export default function StructureCanvas({
   active?: boolean;
   /** The tab's document; omitted for canvases embedded in other views. */
   document?: DocumentStore<StructureDocument>;
+  /** Names the canvas's tab after the file it is saved as. */
+  nameTab?: (label: string) => void;
 }) {
   // The document's drawing style - or one reaction arrow's own - opens in a
   // panel beside the canvas rather than over it, so the drawing stays in
@@ -616,27 +714,39 @@ export default function StructureCanvas({
           initialFilename={initialFilename}
           officeId={officeId}
           ownTab={document != null}
+          nameTab={nameTab}
           styleOpen={styleOpen}
           toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
           openArrowStyle={(id) => setPanel({ arrow: id })}
           openSaveAbbreviation={(ids, smiles) => setPanel({ abbreviation: { ids, smiles } })}
         />
-        {styleOpen && <DocumentStylePanel onClose={() => setPanel(null)} />}
-        {panel && panel !== "style" && "arrow" in panel && (
-          <ArrowStylePanel
-            key={panel.arrow}
-            arrowId={panel.arrow}
-            onClose={() => setPanel(null)}
-          />
-        )}
-        {panel && panel !== "style" && "abbreviation" in panel && (
-          <SaveAbbreviationPanel
-            key={panel.abbreviation.ids.join(",")}
-            ids={panel.abbreviation.ids}
-            smiles={panel.abbreviation.smiles}
-            onClose={() => setPanel(null)}
-          />
-        )}
+        {/* The panel beside the canvas slides open and shut, the canvas giving
+            way as it does; one going as another comes takes as long, so the
+            canvas keeps its width. */}
+        <AnimatePresence initial={false}>
+          {panel && (
+            <motion.div
+              key={panel === "style" ? "style" : "arrow" in panel ? `arrow-${panel.arrow}` : `abbreviation-${panel.abbreviation.ids.join(",")}`}
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "auto", opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: DURATION.move, ease: EASE_SLIDE }}
+              className="shrink-0 h-full overflow-hidden"
+            >
+              {panel === "style" ? (
+                <DocumentStylePanel onClose={() => setPanel(null)} />
+              ) : "arrow" in panel ? (
+                <ArrowStylePanel arrowId={panel.arrow} onClose={() => setPanel(null)} />
+              ) : (
+                <SaveAbbreviationPanel
+                  ids={panel.abbreviation.ids}
+                  smiles={panel.abbreviation.smiles}
+                  onClose={() => setPanel(null)}
+                />
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </EditorProvider>
   );

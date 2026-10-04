@@ -8,7 +8,7 @@
 # - Right-click an atom, Select this structure: the whole ibuprofen; its
 #   menu turns it over left to right - its hashed bond becomes a wedge, the
 #   same molecule seen from behind - and undo puts it back.
-# - A double-click on empty space that drags, with Alt (Option): a lasso
+# - A long press on empty space that drags, with Alt (Option): a lasso
 #   round the isobutyl group.
 # - Ctrl-click one atom, Shift-click another: every atom and bond on the
 #   way between them; Backspace deletes them, and undo brings them back.
@@ -42,7 +42,7 @@ Wait-MenoSettled | Out-Null
 Save-Step "moved"
 
 # its handle, above it, turned a quarter to the right about its middle
-Invoke-MenoDrag -FromX 1856 -FromY 1070 -ToX 2093 -ToY 1307 -Via @(, @(2024, 1140)) -Steps 10
+Invoke-MenoDrag -FromX 1884 -FromY 1096 -ToX 2121 -ToY 1333 -Via @(, @(2052, 1166)) -Steps 10
 Wait-MenoSettled | Out-Null
 Save-Step "turned"
 
@@ -50,10 +50,10 @@ Send-MenoKey Escape
 Wait-MenoSettled | Out-Null
 
 # the ibuprofen, from an atom's menu
-Invoke-MenoClick -X 905 -Y 553 -Right
+Invoke-MenoClick -X 806 -Y 596 -Right
 Wait-MenoSettled | Out-Null
 Save-Step "atom-menu"
-Invoke-MenoClick -X 1105 -Y 849     # Select this structure, below the charge items
+Invoke-MenoClick -X 1006 -Y 892     # Select this structure, below the charge items
 Wait-MenoSettled | Out-Null
 Save-Step "structure"
 
@@ -61,7 +61,7 @@ Save-Step "structure"
 Invoke-MenoClick -X 1280 -Y 250 -Right
 Wait-MenoSettled | Out-Null
 Save-Step "selection-menu"
-Invoke-MenoClick -X 1480 -Y 354     # Turn over left to right
+Invoke-MenoClick -X 1480 -Y 630     # Turn over left to right, below the clipboard items
 Wait-MenoSettled | Out-Null
 Save-Step "turned-over"
 Send-MenoShortcut Z
@@ -69,16 +69,15 @@ Wait-MenoSettled | Out-Null
 Send-MenoKey Escape
 Wait-MenoSettled | Out-Null
 
-# a lasso round the isobutyl group: a double-click that drags, with Alt
-Invoke-MenoClick -X 40 -Y 470
-Invoke-MenoDrag -FromX 40 -FromY 470 -Via @(@(560, 480), @(590, 640), @(420, 980), @(60, 980)) -ToX 30 -ToY 500 -Count 2 -Hold Alt -Steps 6
+# a lasso round the isobutyl group: a long press that drags, with Alt
+Invoke-MenoDrag -FromX 40 -FromY 470 -Via @(@(560, 480), @(590, 640), @(420, 980), @(60, 980)) -ToX 30 -ToY 500 -PressMs 600 -Hold Alt -Steps 6
 Wait-MenoSettled | Out-Null
 Save-Step "lasso"
 Send-MenoKey Escape
 
 # one ring atom, and then the carboxyl carbon with Shift: the way between
-Invoke-MenoClick -X 703 -Y 902 -Hold Shortcut
-Invoke-MenoClick -X 1508 -Y 902 -Hold Shift
+Invoke-MenoClick -X 630 -Y 900 -Hold Shortcut
+Invoke-MenoClick -X 1336 -Y 900 -Hold Shift
 Wait-MenoSettled | Out-Null
 Save-Step "path"
 Send-MenoKey Backspace

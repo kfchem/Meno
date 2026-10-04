@@ -20,11 +20,12 @@ describe("openedAs", () => {
     });
   });
 
-  it("opens an XYZ file in the 3D viewer, its molecules read", () => {
-    const opened = openedAs("water.xyz", "3\nwater\nO 0 0 0\nH 0.76 0.59 0\nH -0.76 0.59 0\n");
-    expect(opened.kind).toBe("3d");
-    expect(opened.label).toBe("water.xyz");
-    expect((opened.data.molecules as unknown[]).length).toBe(1);
+  it("opens an XYZ file and a Meno workspace on a structure canvas too, where 3D stands in 3D", () => {
+    const xyz = "3\nwater\nO 0 0 0\nH 0.76 0.59 0\nH -0.76 0.59 0\n";
+    expect(openedAs("water.xyz", xyz)).toEqual({ kind: "structure", label: "water.xyz", data: { filename: "water.xyz", payload: xyz } });
+    // (known by its content, whatever it is called)
+    expect(openedAs("water.out", xyz).kind).toBe("structure");
+    expect(openedAs("work.meno", "{}").kind).toBe("structure");
   });
 
   it("opens text in the text editor, and JSON laid out", () => {
@@ -34,6 +35,6 @@ describe("openedAs", () => {
   });
 
   it("offers chemical files and text to Open", () => {
-    for (const ext of [".mol", ".sdf", ".rxn", ".xyz", ".txt", ".py"]) expect(OPENABLE.split(",")).toContain(ext);
+    for (const ext of [".meno", ".mol", ".sdf", ".rxn", ".xyz", ".txt", ".py"]) expect(OPENABLE.split(",")).toContain(ext);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { colorRef, emfComments, emfPlusRecords, emfRecords, layoutEmf } from "./emf";
 import { drawingLayout } from "../../ui/features/StructureEditor/fileActions";
 import { ACS_1996 } from "./style";
+import { createSVG } from "./layout2d";
 import { NOMINAL_BOND_LENGTH } from "./acs";
 import type { Model } from "../../ui/features/StructureEditor/store/types";
 
@@ -152,5 +153,98 @@ describe("colorRef", () => {
     expect(colorRef("#f00")).toBe(0x0000ff);
     expect(colorRef("rgb(1, 2, 3)")).toBe(0x030201);
     expect(colorRef(undefined)).toBe(0);
+  });
+});
+
+describe("molecules in 3D in an EMF", () => {
+  const water3d = {
+    atoms: [
+      { el: "O", x: 0, y: 0, z: 0 },
+      { el: "H", x: 0.76, y: 0.59, z: 0 },
+      { el: "H", x: -0.76, y: 0.59, z: 0.3 },
+    ],
+    bonds: [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 0, a2: 2, order: 1 },
+    ],
+    at: { x: 6, y: 0 },
+  };
+  const { layout, opts } = drawingLayout({ ...model, molecules3d: [water3d] }, aromatic, ACS_1996);
+  const { emf } = layoutEmf(layout, opts, new TextEncoder().encode("MENO{}"));
+  const records = emfRecords(emf)!;
+  const plus = emfPlusRecords(emf);
+
+  it("takes in the molecule, beside the drawing", () => {
+    expect(layout.solids!.filter((m) => m.kind === "ball")).toHaveLength(3);
+    expect(layout.solids!.filter((m) => m.kind === "stick")).toHaveLength(2);
+    expect(layout.bounds.max.x).toBeGreaterThan(6);
+  });
+
+  it("draws each ball as discs, one inside the next, twice over - EMF+ and GDI - and each stick as a band", () => {
+    const fillsPlus = plus.filter((r) => r.type === 0x400e).length;
+    const ellipses = records.filter((r) => r.type === 42).length;
+    expect(fillsPlus).toBe(3 * 12);
+    expect(ellipses).toBe(fillsPlus);
+    expect(plus.filter((r) => r.type === 0x400c).length).toBeGreaterThanOrEqual(2);
+    // (still read back)
+    expect(emfComments(emf).some((c) => new TextDecoder().decode(c).startsWith("MENO"))).toBe(true);
+    expect(emf.length % 4).toBe(0);
+  });
+
+  it("draws the molecules from a bitmap of them in EMF+, given one - whole, or in parts when large - and keeps GDI's discs", () => {
+    const bounds = { min: { x: 4, y: -2 }, max: { x: 8, y: 2 } };
+    for (const size of [200, 200000]) {
+      const png = new Uint8Array(size).map((_, i) => i % 251);
+      const withPicture = layoutEmf(layout, opts, undefined, { png, width: 300, height: 300, bounds }).emf;
+      const p = emfPlusRecords(withPicture);
+      // no discs for EMF+, the picture instead; GDI's discs as they were
+      expect(p.filter((r) => r.type === 0x400e)).toHaveLength(0);
+      expect(emfRecords(withPicture)!.filter((r) => r.type === 42)).toHaveLength(3 * 12);
+      const images = p.filter((r) => r.type === 0x4008 && ((r.flags >> 8) & 0x7f) === 5);
+      const draw = p.filter((r) => r.type === 0x401a);
+      expect(draw).toHaveLength(1);
+      // the object it draws is the image, its parts together the PNG as given
+      expect(draw[0].flags & 0xff).toBe(images[0].flags & 0xff);
+      const continued = (images[0].flags & 0x8000) !== 0;
+      expect(continued).toBe(size > 0xfff0);
+      const bytes = images.flatMap((r) => {
+        const at = continued ? 4 : 0;
+        return Array.from(new Uint8Array(r.data.buffer, r.data.byteOffset + at, r.data.byteLength - at));
+      });
+      expect(bytes.slice(28, 28 + size)).toEqual(Array.from(png));
+      expect(withPicture.length % 4).toBe(0);
+    }
+  });
+
+  it("blends the same pixels in for GDI, given them, in place of the discs: premultiplied, bottom row first", () => {
+    const bounds = { min: { x: 4, y: -2 }, max: { x: 8, y: 2 } };
+    // two pixels across, two down: the top row red, half there; the bottom blue
+    const rgba = new Uint8Array([255, 0, 0, 128, 255, 0, 0, 128, 0, 0, 255, 255, 0, 0, 255, 255]);
+    const emf2 = layoutEmf(layout, opts, undefined, { png: new Uint8Array(8), rgba, width: 2, height: 2, bounds }).emf;
+    const gdi = emfRecords(emf2)!;
+    expect(gdi.filter((r) => r.type === 42)).toHaveLength(0);
+    const blend = gdi.filter((r) => r.type === 114);
+    expect(blend).toHaveLength(1);
+    const v = new DataView(blend[0].body.buffer, blend[0].body.byteOffset, blend[0].body.byteLength);
+    expect(v.getUint32(32, true)).toBe(0x01ff0000);
+    expect([v.getInt32(92, true), v.getInt32(96, true)]).toEqual([2, 2]);
+    const bits = Array.from(blend[0].body.subarray(140, 156));
+    // bottom row (blue) first, as BGRA; then the red, its colour times its alpha
+    expect(bits).toEqual([255, 0, 0, 255, 255, 0, 0, 255, 0, 0, 128, 128, 0, 0, 128, 128]);
+    expect(emf2.length % 4).toBe(0);
+  });
+
+  it("is an image in the SVG, given one drawn in 3D, in place of the discs - where the image says", () => {
+    const image = { href: "data:image/png;base64,AAAA", bounds: { min: { x: 4, y: -2 }, max: { x: 8, y: 2 } } };
+    const svg = createSVG({ ...layout, solidsImage: image }, opts);
+    expect(svg).toContain('<image href="data:image/png;base64,AAAA" x="4" y="-2" width="4" height="4"');
+    expect(svg).not.toContain("radialGradient");
+    expect(createSVG(layout, opts)).toContain("radialGradient");
+  });
+
+  it("is only the molecule, where there is no drawing", () => {
+    const alone = drawingLayout({ atoms: [], bonds: [], molecules3d: [water3d] }, aromatic, ACS_1996).layout;
+    expect(Number.isFinite(alone.bounds.min.x) && Number.isFinite(alone.bounds.max.y)).toBe(true);
+    expect(alone.bounds.min.x).toBeGreaterThan(4);
   });
 });

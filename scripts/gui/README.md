@@ -79,10 +79,12 @@ available:
 | `Start-Meno` | start the app under test, sized and in front |
 | `Open-MenoFile -Path` | open a structure with Ctrl/Cmd+O: in place of the first tab's blank canvas, or in a tab of its own |
 | `Invoke-MenoMenu -Item` | a command from the menu Meno's logo opens: `"SMILES..."`, `"Clean up all"`, `"Show R and S"` … (positions read off a Mac's shot) |
+| `Save-MenoFile -Path` | Save As from Meno's menu, under a path not already taken - a workspace (`.meno`), say |
 | `Save-Step -Name` | a numbered screenshot |
 | `Invoke-MenoClick -X -Y [-Count] [-Right] [-Hold]` | client coordinates, not screen; `-Right` for the other button; `-Hold Shortcut, Shift, Alt` holds those keys through it (Shortcut: Ctrl on Windows, ⌘ on a Mac) |
-| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-Count] [-AtStep] [-Right] [-Hold] [-Via]` | press, travel, release; `-Count 2` after an `Invoke-MenoClick` there is a double-click that drags; `-Right` with the other button; `-Hold` as for a click; `-Via @(@(x, y), ...)` passes through those points on the way - a lasso |
+| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-PressMs] [-Count] [-AtStep] [-Right] [-Hold] [-Via]` | press, travel, release; `-PressMs 600` holds the button still first - a long press; `-Count 2` after an `Invoke-MenoClick` there is a double-click that drags, `-Count 3` after an `Invoke-MenoClick -Count 2` a triple; `-Right` with the other button; `-Hold` as for a click; `-Via @(@(x, y), ...)` passes through those points on the way - a lasso |
 | `Move-MenoPointer -X -Y` | hover |
+| `Move-MenoPointerAlong -Path @(@(x, y), ...) [-StepMs] [-AtStep]` | the pointer led through points with no button down - a chain traced with the button up |
 | `Invoke-MenoWheel -X -Y -Notches` | zoom; positive is away from you, in |
 | `Invoke-MenoSwipe -X -Y [-DX] [-DY] [-Steps]` | two fingers on a trackpad: moves the view; positive DY scrolls down |
 | `Send-MenoText`, `Send-MenoKey` | typing |
@@ -172,7 +174,10 @@ What turned out not to be the same:
 ## Known rough edges
 
 - `Open-MenoFile` types a path into the system file dialog, which is the most
-  brittle step here. The app takes no file on its command line; if it ever
+  brittle step here. `Save-MenoFile` does the same in the save dialog; on a
+  Mac it types the name over the one offered and goes to the folder with
+  Command-Shift-G, as a '/' would only go into the name there. It has not
+  been run on Windows yet. The app takes no file on its command line; if it ever
   does, this becomes one argument to `Start-Meno` and the step goes away.
   On Windows it waits for the dialog to be in front before typing, and for
   it to go after Return, and fails if either does not happen: a path typed

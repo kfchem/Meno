@@ -639,13 +639,16 @@ function Invoke-MenoDrag {
       sees what it says.
 
       -Hold names the modifier keys held through it, as Invoke-MenoClick's;
-      -Via, points it passes through on its way, @(@(x, y), ...) - a lasso's.
+      -Via, points it passes through on its way, @(@(x, y), ...) - a lasso's;
+      -PressMs, how long the button is held still before it travels: 600
+      makes the press a long press.
     #>
     param(
         [Parameter(Mandatory)] [int] $FromX, [Parameter(Mandatory)] [int] $FromY,
         [Parameter(Mandatory)] [int] $ToX, [Parameter(Mandatory)] [int] $ToY,
         [int] $Steps = 12,
         [int] $StepMs = 25,
+        [int] $PressMs = 80,
         [int] $Count = 1,
         [scriptblock] $AtStep,
         [switch] $Right,
@@ -657,7 +660,7 @@ function Invoke-MenoDrag {
     $path = Get-DragPath $FromX $FromY $Via $ToX $ToY $Steps
     Assert-MenoFront
     Set-HeldKeys $Hold
-    try { Invoke-MacDrag $a $b $path $StepMs $Count $AtStep $Right } finally { Set-HeldKeys $Hold -Up }
+    try { Invoke-MacDrag $a $b $path $StepMs $PressMs $Count $AtStep $Right } finally { Set-HeldKeys $Hold -Up }
 }
 
 function Get-DragPath {
@@ -676,11 +679,11 @@ function Get-DragPath {
     return , $path
 }
 
-function Invoke-MacDrag($a, $b, $path, [int] $StepMs, [int] $Count, [scriptblock] $AtStep, [bool] $Right) {
+function Invoke-MacDrag($a, $b, $path, [int] $StepMs, [int] $PressMs, [int] $Count, [scriptblock] $AtStep, [bool] $Right) {
     [MacGui]::MoveTo($a.X, $a.Y)
     Start-Sleep -Milliseconds 80
     if ($Right) { [MacGui]::RightDown($a.X, $a.Y) } else { [MacGui]::LeftDown($a.X, $a.Y, $Count) }
-    Start-Sleep -Milliseconds 80
+    Start-Sleep -Milliseconds $PressMs
     try {
         for ($i = 1; $i -le $path.Count; $i++) {
             $p = ConvertTo-Screen $path[$i - 1][0] $path[$i - 1][1]
@@ -711,6 +714,29 @@ function Move-MenoPointer {
     [MacGui]::MoveTo($p.X - 4, $p.Y)
     Start-Sleep -Milliseconds 60
     [MacGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 200
+}
+
+function Move-MenoPointerAlong {
+    <#
+      .SYNOPSIS
+      Lead the pointer through points with no button down, as a hand would:
+      a chain traced with the button up.
+
+      .DESCRIPTION
+      Each point is one move, straight on from the one before - not arrived
+      at from the side, as Move-MenoPointer's is, which would make the way
+      traced a zigzag. -AtStep is called after each, with its number: where
+      a screenshot on the way goes.
+    #>
+    param([Parameter(Mandatory)] [int[][]] $Path, [int] $StepMs = 25, [scriptblock] $AtStep)
+    Assert-MenoFront
+    for ($i = 1; $i -le $Path.Count; $i++) {
+        $p = ConvertTo-Screen $Path[$i - 1][0] $Path[$i - 1][1]
+        [MacGui]::MoveTo($p.X, $p.Y)
+        Start-Sleep -Milliseconds $StepMs
+        if ($AtStep) { & $AtStep $i }
+    }
     Start-Sleep -Milliseconds 200
 }
 
@@ -795,11 +821,12 @@ function Send-MenoShortcut {
 }
 
 function Get-DialogWindows {
-    # The system's file panel, and the sheets it opens over itself, are
-    # windows of the app's own above the ordinary level. So is a tooltip -
-    # the fit button has one - which is the reason for the size.
+    # The system's file panels, and the sheets they open over themselves, are
+    # windows of the app's own besides its main one: the open panel above the
+    # ordinary level, the save panel on it. So is a tooltip - the fit button
+    # has one - which is the reason for the size.
     return @([MacGui]::Windows() | Where-Object {
-        $_.Pid -eq $script:MenoPid -and $_.Layer -gt 0 -and $_.Width -ge 200 -and $_.Height -ge 100 })
+        $_.Pid -eq $script:MenoPid -and $_.Id -ne $script:Window -and $_.Width -ge 200 -and $_.Height -ge 100 })
 }
 
 function Wait-DialogWindows {
@@ -876,6 +903,52 @@ function Complete-FileDialog {
     Wait-DialogWindows -What "the open panel to close" -Until { param($d) $d.Count -eq 0 } | Out-Null
 }
 
+function Complete-SaveDialog {
+    <#
+      .SYNOPSIS
+      The system's save panel is up: save under this path in it.
+
+      .DESCRIPTION
+      The panel opens with its name chosen in its name field, so the file's
+      name is typed over it. A '/' typed there would go into the name, not
+      open the "Go to the folder" sheet as it does in the open panel, so the
+      sheet is asked for with Command-Shift-G, waited for as the open panel's
+      is, given the folder (over whatever it last held), and gone with
+      Return. Return again saves, and the panel has to go: a name it would
+      not take, or a file already there, brings up a sheet that keeps it.
+    #>
+    param([Parameter(Mandatory)] [string] $Path)
+    if (-not $Path.StartsWith("/")) { throw "the path has to be absolute: '$Path'" }
+    $folder = Split-Path -Parent $Path
+    $name = Split-Path -Leaf $Path
+    $panel = Wait-DialogWindows -What "the save panel" -Until { param($d) $d.Count -ge 1 }
+    $before = $panel.Count
+    Wait-WindowSettled -Id $panel[0].Id -TimeoutMs 3000 -QuietMs 250 | Out-Null
+    Send-MenoShortcut A
+    Send-MenoText -Text $name
+    Start-Sleep -Milliseconds 300
+    $sheet = $null
+    for ($try = 1; $try -le 3 -and -not $sheet; $try++) {
+        Send-MenoShortcut G -Shift
+        try {
+            $sheet = Wait-DialogWindows -What "the 'Go to the folder' sheet" -TimeoutMs 2500 -Until { param($d) $d.Count -gt $before }.GetNewClosure()
+        } catch {
+            if ($try -eq 3) { throw }
+        }
+    }
+    Start-Sleep -Milliseconds 300
+    Send-MenoShortcut A
+    Send-MenoText -Text $folder
+    $new = $sheet | Where-Object { $_.Id -notin $panel.Id } | Select-Object -First 1
+    Start-Sleep -Milliseconds 600
+    Wait-WindowSettled -Id $new.Id -TimeoutMs 4000 -QuietMs 300 | Out-Null
+    Send-MenoKey -Key Enter
+    Wait-DialogWindows -What "the sheet to take the folder" -Until { param($d) $d.Count -le $before }.GetNewClosure() | Out-Null
+    Start-Sleep -Milliseconds 500
+    Send-MenoKey -Key Enter
+    Wait-DialogWindows -What "the save panel to close (a sheet may be asking whether to replace a file)" -Until { param($d) $d.Count -eq 0 } | Out-Null
+}
+
 function Wait-MenoSettled {
     <#
       .SYNOPSIS
@@ -889,7 +962,7 @@ function Wait-MenoSettled {
     return $false
 }
 
-Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
+Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog, Complete-SaveDialog,
     Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
-    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel, Invoke-MenoSwipe,
+    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Move-MenoPointerAlong, Invoke-MenoWheel, Invoke-MenoSwipe,
     Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled

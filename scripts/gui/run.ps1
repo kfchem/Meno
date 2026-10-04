@@ -6,7 +6,7 @@ Run a scenario against the built app and keep what it saw.
 Starts Meno, puts its window at a fixed size, runs the named scenario and
 writes its screenshots into a run folder. The scenario is an ordinary script
 with the verbs of the platform module available - MenoGui.psm1 on Windows,
-MenoGui.macOS.psm1 on a Mac - plus Start-Meno / Open-MenoFile / Save-Step from
+MenoGui.macOS.psm1 on a Mac - plus Start-Meno / Open-MenoFile / Save-MenoFile / Save-Step from
 here.
 
 This needs a desktop: a logged-in session that is unlocked. It cannot run in
@@ -138,6 +138,25 @@ function Invoke-MenoMenu {
     Start-Sleep -Milliseconds 400
     Invoke-MenoClick -X 200 -Y $at[$Item]
     Start-Sleep -Milliseconds 300
+}
+
+function Save-MenoFile {
+    <#
+      .SYNOPSIS
+      Save the canvas in front under a path, through Save As in Meno's menu.
+
+      .DESCRIPTION
+      Save As asks where whatever the canvas was saved as before, so a
+      scenario says where. The dialog is the system's, so the path is typed
+      into it - how, is the platform module's business.
+    #>
+    param([Parameter(Mandatory)] [string] $Path)
+    if (Test-Path $Path) { throw "'$Path' is there already: save under a new name, or the system asks whether to replace it" }
+    Invoke-MenoMenu -Item "Save As..."
+    Complete-SaveDialog -Path $Path
+    Get-MenoWindow -ProcessName Meno -TimeoutSec 10 | Out-Null
+    Set-MenoWindow -Width $Width -Height $Height
+    Wait-MenoSettled -TimeoutMs 8000 | Out-Null
 }
 
 Write-Host "scenario '$Scenario' -> $Out"

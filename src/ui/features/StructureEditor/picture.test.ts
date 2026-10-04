@@ -33,6 +33,26 @@ describe("pictures of a structure", () => {
     expect(readRecord(items[2].text!)).toEqual(model);
   });
 
+  it("of molecules in 3D alone show them, and give them back - turned as they were - when pasted", async () => {
+    const solid = {
+      atoms: [
+        { el: "O", x: 0, y: 0, z: 0 },
+        { el: "H", x: 0.76, y: 0.59, z: 0 },
+        { el: "H", x: -0.76, y: 0.59, z: 0.3 },
+      ],
+      bonds: [
+        { a1: 0, a2: 1, order: 1 },
+        { a1: 0, a2: 2, order: 1 },
+      ],
+      at: { x: 0, y: 0 },
+      turn: [0, 0, Math.SQRT1_2, Math.SQRT1_2] as [number, number, number, number],
+    };
+    const part = { atoms: [], bonds: [], molecules3d: [solid] };
+    const items = await pictureItems(part, aromatic, ACS_1996);
+    expect(items.map((i) => i.flavor)).toEqual(["gvml", "emf", "embed"]);
+    expect((await structureInPicture(items[0]))?.molecules3d).toEqual([solid]);
+  });
+
   it("are only those the platform's clipboard takes: no Windows bitmap or object on a Mac", async () => {
     const mac = new Set(["meno", "mol", "text", "gvml", "png"] as const);
     const items = await pictureItems(model, aromatic, ACS_1996, mac);

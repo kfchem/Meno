@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drawingSvg, exportPxPerWorld, structureFileText } from "./fileActions";
+import { drawingSvg, exportPxPerWorld, fileNameOf, saveKinds, structureFileText, suggestedSavePath } from "./fileActions";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { ACS_1996, RSC } from "../../../lib/chem/style";
 import type { Model } from "./store/types";
@@ -28,6 +28,40 @@ describe("structureFileText", () => {
     const rxn = structureFileText(reaction, "/tmp/oxidation.rxn");
     expect(rxn.split("\n").slice(0, 5)).toEqual(["$RXN", "oxidation", "      Meno", "", "  1  0"]);
     expect(() => structureFileText(model, "/tmp/nothing.rxn")).toThrow(/arrow/);
+  });
+});
+
+describe("suggestedSavePath", () => {
+  const structure = { solid: false, reaction: false };
+  const reaction = { solid: false, reaction: true };
+  const solid = { solid: true, reaction: false };
+
+  it("suggests where the canvas was saved; else the file opened over it; else a name for what is drawn", () => {
+    expect(suggestedSavePath({ savedPath: "/work/a.mol", openedName: null }, structure)).toBe("/work/a.mol");
+    expect(suggestedSavePath({ savedPath: null, openedName: "b.sdf" }, structure)).toBe("b.sdf");
+    expect(suggestedSavePath({ savedPath: null, openedName: null }, structure)).toBe("structure.mol");
+    expect(suggestedSavePath({ savedPath: null, openedName: null }, reaction)).toBe("reaction.rxn");
+    expect(suggestedSavePath({ savedPath: null, openedName: null }, solid)).toBe("workspace.meno");
+  });
+
+  it("suggests a file Meno does not write as a MOL file of that name, or an RXN file for a reaction", () => {
+    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, structure)).toBe("conformers.mol");
+    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, reaction)).toBe("conformers.rxn");
+  });
+
+  it("with molecules in 3D, suggests only what keeps them: the same name, in the same folder, as a workspace", () => {
+    expect(suggestedSavePath({ savedPath: "/work/a.mol", openedName: null }, solid)).toBe("/work/a.meno");
+    expect(suggestedSavePath({ savedPath: "/work/a.sdf", openedName: null }, solid)).toBe("/work/a.sdf");
+    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, solid)).toBe("conformers.meno");
+    expect(saveKinds(solid)).toEqual(["meno", "sdf"]);
+    expect(saveKinds(reaction)[0]).toBe("rxn");
+  });
+});
+
+describe("fileNameOf", () => {
+  it("names a file as a tab shows it: without its folder, on either system", () => {
+    expect(fileNameOf("/Users/me/work/ethanol.mol")).toBe("ethanol.mol");
+    expect(fileNameOf("C:\\Users\\me\\work\\ethanol.sdf")).toBe("ethanol.sdf");
   });
 });
 
@@ -79,5 +113,35 @@ describe("drawingSvg", () => {
     // run by run: the symbol, then its hydrogen
     expect(svg).toContain(">O</text>");
     expect(svg).toContain(">H</text>");
+  });
+});
+
+describe("an SD file of a canvas with molecules in 3D", () => {
+  it("holds the drawing, and each molecule in 3D a record of its own in 3D, in the frame it shows", async () => {
+    const { processFileContent } = await import("./utils/io");
+    const water3d = {
+      atoms: [
+        { el: "O", x: 0, y: 0, z: 0.5 },
+        { el: "H", x: 0.76, y: 0.59, z: 0.5 },
+        { el: "H", x: -0.76, y: 0.59, z: 0.5 },
+      ],
+      bonds: [
+        { a1: 0, a2: 1, order: 1 },
+        { a1: 0, a2: 2, order: 1 },
+      ],
+      at: { x: 0, y: 0 },
+      frames: [[0, 0, 1, 0.8, 0.6, 1, -0.8, 0.6, 1]],
+      frame: 1,
+      name: "water.xyz",
+    };
+    const text = structureFileText({ ...model, molecules3d: [water3d] }, "/tmp/both.sdf");
+    expect(text.match(/\$\$\$\$/g)).toHaveLength(2);
+    expect(text).toContain("\nwater\n");
+    const back = await processFileContent("both.sdf", text);
+    expect(back.model.atoms).toHaveLength(2);
+    expect(back.molecules3d).toHaveLength(1);
+    expect(back.molecules3d![0].atoms[1]).toMatchObject({ el: "H", x: 0.8, z: 1 });
+    // molecules in 3D alone: their records alone
+    expect(structureFileText({ atoms: [], bonds: [], molecules3d: [water3d] }, "/tmp/w.sdf").match(/\$\$\$\$/g)).toHaveLength(1);
   });
 });

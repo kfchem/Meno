@@ -7,7 +7,9 @@ import { ARROW_LENGTH_BONDS } from "../../../../../lib/chem/reactionScheme";
 import { EditorState, Bond, Arrow, Model, Drawn } from "../types";
 import { turnedOver } from "../../utils/selection";
 import { schemeAmong } from "../../utils/copyPaste";
+import type { Workspace } from "../../utils/workspace";
 import { StoreApi } from "zustand";
+import { DOUBLE_CLICK_MS } from "../../constants";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -139,20 +141,39 @@ export const createModelSlice = (
   },
 
   deleteSelection: () => {
-    const { sel, model, arrows, pluses } = get();
-    if (!sel.atoms.size && !sel.bonds.size) return;
-    // the arrows and pluses among it go with it, as with a cut
+    const { sel, sel3d, model, arrows, pluses } = get();
+    if (!sel.atoms.size && !sel.bonds.size && !sel3d.size) return;
+    // the arrows and pluses among it go with it, as with a cut; and the
+    // molecules in 3D selected, in the same step
     const among = schemeAmong({ ...model, arrows, pluses }, sel.atoms);
     const ids = (xs: { id: number }[]) => new Set(xs.map((x) => x.id));
-    if (doc.edit("delete selection", (d) => ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses)))) {
-      forgetDeleted(set);
-    }
+    const deleted = doc.edit("delete selection", (d) =>
+      ops.removeMolecules3d(ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses)), sel3d),
+    );
+    if (deleted) forgetDeleted(set);
   },
 
   moveAtom: (id: number, x: number, y: number) => {
     doc.edit("move atom", (d) => ops.moveAtom(d, id, x, y), {
       coalesceKey: `move-atom:${id}`,
     });
+  },
+
+  noteDoubleClickBond: (atomId: number) =>
+    set((prev: EditorState) => ({
+      ...prev,
+      doubleClickBond: { atomId, depth: doc.history().undoDepth, at: performance.now() },
+    })),
+
+  takeBackDoubleClickBond: (atomId: number) => {
+    const d = get().doubleClickBond;
+    set((prev: EditorState) => ({ ...prev, doubleClickBond: null }));
+    if (!d || d.atomId !== atomId || performance.now() - d.at > 2 * DOUBLE_CLICK_MS) return;
+    if (doc.history().undoDepth === d.depth) doc.undo();
+  },
+
+  drawStrokeAt: (start: { x: number; y: number }, nodes: Parameters<typeof ops.addStroke>[2]) => {
+    doc.edit("draw chain", (d) => ops.addStrokeAt(d, start, nodes));
   },
 
   drawStroke: (
@@ -239,6 +260,29 @@ export const createModelSlice = (
     get().forgetInteraction();
   },
 
+  openWorkspace: (ws: Workspace, start = false) => {
+    const { drawn } = ws;
+    const opened = (d: StructureDocument) => {
+      const next = ops.withImportedScheme(ops.replaceModel(d, drawn), ops.schemeOf(drawn));
+      return ops.setDocumentStyle(
+        { ...next, aromaticEnabled: ws.aromaticEnabled, aromaticRings: ws.aromaticRings },
+        ws.style,
+      );
+    };
+    if (start) doc.reset(opened(doc.getState()), "open workspace");
+    else doc.edit("open workspace", opened);
+    get().forgetInteraction();
+    // each molecule in 3D turned, and showing the frame, as it was saved -
+    // numbered from the first, in order, as replaceModel left them to be
+    const turns3d: EditorState["turns3d"] = {};
+    const frames3d: EditorState["frames3d"] = {};
+    (drawn.molecules3d ?? []).forEach((m, i) => {
+      if (m.turn) turns3d[i + 1] = m.turn;
+      if (m.frame) frames3d[i + 1] = m.frame;
+    });
+    set((prev: EditorState) => ({ ...prev, turns3d, frames3d }));
+  },
+
   /** A file opened over what the canvas holds: one step, arrow and all. */
   replaceModel: (next: Model, scheme?: ImportedScheme) => {
     doc.edit("open structure", (d) =>
@@ -248,10 +292,17 @@ export const createModelSlice = (
   },
 
   forgetInteraction: () => {
-    // Interaction state does not survive a new structure.
+    // Interaction state does not survive a new structure - nor how the
+    // molecules in 3D were turned, which the new ones' ids would take on.
     set((prev: EditorState) => ({
       ...prev,
       sel: { atoms: new Set(), bonds: new Set() },
+      sel3d: new Set<number>(),
+      chosen3d: null,
+      turns3d: {},
+      frames3d: {},
+      hovered3d: null,
+      hoveredMeasure3d: null,
       hovered: { atomId: null, bondId: null },
       labelEdit: { active: false, atomId: null, value: "", autoCap: true },
       moveDrag: {
@@ -267,12 +318,27 @@ export const createModelSlice = (
   },
 
   pasteModel: (next: Drawn) => {
-    if (!next.atoms.length) return;
+    const carried = next.molecules3d ?? [];
+    if (!next.atoms.length && !carried.length) return;
     const start = doc.getState().nextId;
+    const start3d = doc.getState().nextMolecule3dId ?? 1;
     if (!doc.edit("paste", (d) => ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(next)))) return;
+    // the molecules in 3D pasted, numbered from there on in order: selected
+    // with the rest, turned and showing the frame they were copied in
+    const ids = carried.map((_, i) => start3d + i);
+    const turns3d = { ...get().turns3d };
+    const frames3d = { ...get().frames3d };
+    carried.forEach((m, i) => {
+      if (m.turn) turns3d[ids[i]] = m.turn;
+      if (m.frame) frames3d[ids[i]] = m.frame;
+    });
     set((prev: EditorState) => ({
       ...prev,
       sel: added(start, doc.getState().model),
+      sel3d: new Set(ids),
+      chosen3d: null,
+      turns3d,
+      frames3d,
       selAnchor: null,
       hovered: { atomId: null, bondId: null },
     }));
@@ -327,14 +393,17 @@ export const createModelSlice = (
     doc.edit("delete plus", (d) => ops.removePlus(d, id));
   },
 
-  deleteDrawn: (part: Drawn) => {
+  deleteDrawn: (part: Drawn, molecules3d: number[] = []) => {
     const edited = doc.edit("cut", (d) =>
-      ops.deleteDrawn(
-        d,
-        new Set(part.atoms.map((a) => a.id)),
-        new Set(part.bonds.map((b) => b.id)),
-        new Set((part.arrows ?? []).map((a) => a.id)),
-        new Set((part.pluses ?? []).map((p) => p.id)),
+      ops.removeMolecules3d(
+        ops.deleteDrawn(
+          d,
+          new Set(part.atoms.map((a) => a.id)),
+          new Set(part.bonds.map((b) => b.id)),
+          new Set((part.arrows ?? []).map((a) => a.id)),
+          new Set((part.pluses ?? []).map((p) => p.id)),
+        ),
+        molecules3d,
       ),
     );
     if (edited) forgetDeleted(set);

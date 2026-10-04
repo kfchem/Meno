@@ -214,6 +214,20 @@ function Complete-FileDialog {
     Start-Sleep -Milliseconds 800
 }
 
+function Complete-SaveDialog {
+    <#
+      .SYNOPSIS
+      The system's save dialog is on its way up: save under this path in it.
+
+      .DESCRIPTION
+      Its name field takes a whole path, as the open dialog's does, with the
+      name chosen in it, so the path is typed over it and Return saves.
+      (Not yet run on Windows.)
+    #>
+    param([Parameter(Mandatory)] [string] $Path, [int] $TimeoutMs = 15000)
+    Complete-FileDialog -Path $Path -TimeoutMs $TimeoutMs
+}
+
 # The window class of the system's dialogs, the open dialog among them.
 $DialogClass = "#32770"
 
@@ -394,13 +408,16 @@ function Invoke-MenoDrag {
       already the second click of a double-click.
 
       -Hold names the modifier keys held through it, as Invoke-MenoClick's;
-      -Via, points it passes through on its way, @(@(x, y), ...) - a lasso's.
+      -Via, points it passes through on its way, @(@(x, y), ...) - a lasso's;
+      -PressMs, how long the button is held still before it travels: 600
+      makes the press a long press.
     #>
     param(
         [Parameter(Mandatory)] [int] $FromX, [Parameter(Mandatory)] [int] $FromY,
         [Parameter(Mandatory)] [int] $ToX, [Parameter(Mandatory)] [int] $ToY,
         [int] $Steps = 12,
         [int] $StepMs = 25,
+        [int] $PressMs = 80,
         [int] $Count = 1,
         [scriptblock] $AtStep,
         [switch] $Right,
@@ -410,7 +427,7 @@ function Invoke-MenoDrag {
     $path = Get-DragPath $FromX $FromY $Via $ToX $ToY $Steps
     $keys = Get-HeldKeys $Hold
     [NativeGui]::Hold($keys, $false)
-    try { Invoke-WinDrag $FromX $FromY $ToX $ToY $path $StepMs $AtStep $Right } finally { [NativeGui]::Hold($keys, $true) }
+    try { Invoke-WinDrag $FromX $FromY $ToX $ToY $path $StepMs $PressMs $AtStep $Right } finally { [NativeGui]::Hold($keys, $true) }
 }
 
 function Get-DragPath {
@@ -429,12 +446,12 @@ function Get-DragPath {
     return , $path
 }
 
-function Invoke-WinDrag([int] $FromX, [int] $FromY, [int] $ToX, [int] $ToY, $path, [int] $StepMs, [scriptblock] $AtStep, [bool] $Right) {
+function Invoke-WinDrag([int] $FromX, [int] $FromY, [int] $ToX, [int] $ToY, $path, [int] $StepMs, [int] $PressMs, [scriptblock] $AtStep, [bool] $Right) {
     $a = ConvertTo-Screen $FromX $FromY
     [NativeGui]::MoveTo($a.X, $a.Y)
     Start-Sleep -Milliseconds 80
     if ($Right) { [NativeGui]::RightDown($a.X, $a.Y) } else { [NativeGui]::LeftDown($a.X, $a.Y) }
-    Start-Sleep -Milliseconds 80
+    Start-Sleep -Milliseconds $PressMs
     for ($i = 1; $i -le $path.Count; $i++) {
         $p = ConvertTo-Screen $path[$i - 1][0] $path[$i - 1][1]
         [NativeGui]::MoveTo($p.X, $p.Y)
@@ -460,6 +477,28 @@ function Move-MenoPointer {
     [NativeGui]::MoveTo($p.X - 4, $p.Y)
     Start-Sleep -Milliseconds 60
     [NativeGui]::MoveTo($p.X, $p.Y)
+    Start-Sleep -Milliseconds 200
+}
+
+function Move-MenoPointerAlong {
+    <#
+      .SYNOPSIS
+      Lead the pointer through points with no button down, as a hand would:
+      a chain traced with the button up.
+
+      .DESCRIPTION
+      Each point is one move, straight on from the one before - not arrived
+      at from the side, as Move-MenoPointer's is, which would make the way
+      traced a zigzag. -AtStep is called after each, with its number: where
+      a screenshot on the way goes.
+    #>
+    param([Parameter(Mandatory)] [int[][]] $Path, [int] $StepMs = 25, [scriptblock] $AtStep)
+    for ($i = 1; $i -le $Path.Count; $i++) {
+        $p = ConvertTo-Screen $Path[$i - 1][0] $Path[$i - 1][1]
+        [NativeGui]::MoveTo($p.X, $p.Y)
+        Start-Sleep -Milliseconds $StepMs
+        if ($AtStep) { & $AtStep $i }
+    }
     Start-Sleep -Milliseconds 200
 }
 
@@ -536,7 +575,7 @@ function Wait-MenoSettled {
     return $false
 }
 
-Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
+Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog, Complete-SaveDialog,
     Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
-    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Invoke-MenoWheel, Invoke-MenoSwipe,
+    ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Move-MenoPointerAlong, Invoke-MenoWheel, Invoke-MenoSwipe,
     Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled

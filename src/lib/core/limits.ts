@@ -7,9 +7,8 @@ import type { State, TabKind } from "./types";
  */
 export const CANVASES_PER_KIND: Partial<Record<TabKind, number>> = {
   "2d": 1,
-  "3d": 1,
   structure: 1,
-  // A workflow node graph embeds a 2D sketch canvas and a 3D viewer.
+  // A workflow node graph embeds two canvases: a sketch, and one in 3D.
   node: 2,
 };
 

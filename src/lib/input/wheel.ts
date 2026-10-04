@@ -35,12 +35,21 @@ const RUN_MS = 250;
  */
 const NOTCH_PX = 8;
 
+/**
+ * How near a whole number a step may be and still be whole: Windows' display
+ * scaling leaves notches a hair off - ten at once came as 999.99993 px at
+ * 175 % - where fingers leave real fractions.
+ */
+const WHOLE_WITHIN = 1e-3;
+
+const whole = (v: number) => Math.abs(v - Math.round(v)) < WHOLE_WITHIN;
+
 /** Whether an event, the first of its run, looks like fingers on a trackpad. */
 export function looksLikeFingers(e: WheelLike): boolean {
   if (e.deltaMode !== 0) return false; // lines or pages: a wheel
   if (e.deltaX !== 0 && !e.shiftKey) return true; // sideways: fingers
   // (with Shift, Windows turns a wheel's notch sideways)
-  if (!Number.isInteger(e.deltaX) || !Number.isInteger(e.deltaY)) return true;
+  if (!whole(e.deltaX) || !whole(e.deltaY)) return true;
   return Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY)) < NOTCH_PX;
 }
 

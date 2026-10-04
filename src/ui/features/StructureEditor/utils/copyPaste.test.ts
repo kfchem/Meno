@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Drawn, Model } from "../store/types";
-import { centredAt, clipItems, looksLikeMolfile, looksLikeSmiles, partToCopy, readRecord } from "./copyPaste";
+import { centredAt, clipItems, looksLikeMolfile, looksLikeSmiles, partToCopy, readRecord, recordText } from "./copyPaste";
 
 const atom = (id: number, x: number, y: number, el = "C") => ({ id, x, y, r: 0.9, el });
 
@@ -110,5 +110,59 @@ describe("a reaction, copied and pasted", () => {
     expect(moved.atoms[0].x).toBeCloseTo(-4.5);
     expect(moved.arrows![0]).toMatchObject({ x: 0.5, y: 10 });
     expect(moved.pluses![0]).toMatchObject({ x: -3.5, y: 10 });
+  });
+});
+
+describe("molecules in 3D on the clipboard", () => {
+  const water3d = {
+    atoms: [
+      { el: "O", x: 1, y: 1, z: 1 },
+      { el: "H", x: 1.76, y: 1.59, z: 1 },
+      { el: "H", x: 0.24, y: 1.59, z: 1 },
+    ],
+    bonds: [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 0, a2: 2, order: 1 },
+    ],
+    at: { x: 4, y: 2 },
+    frames: [[1, 1, 1, 1.8, 1.6, 1, 0.2, 1.6, 1]],
+    look: "space" as const,
+    measures: [{ id: 1, atoms: [1, 0, 2] }],
+    name: "water.xyz",
+    turn: [0, 0, Math.SQRT1_2, Math.SQRT1_2] as [number, number, number, number],
+    frame: 1,
+  };
+
+  it("go into Meno's record as they are, turn and frame and all, and come back so", () => {
+    const back = readRecord(recordText({ atoms: [], bonds: [], molecules3d: [water3d] }));
+    expect(back?.molecules3d).toEqual([water3d]);
+  });
+
+  it("are left out of a record where they do not read, not the rest", () => {
+    const text = JSON.stringify({
+      ...JSON.parse(recordText({ atoms: [], bonds: [], molecules3d: [water3d] })),
+      molecules3d: [{ ...water3d, bonds: [{ a1: 0, a2: 9, order: 1 }] }, water3d],
+    });
+    expect(readRecord(text)?.molecules3d).toHaveLength(1);
+  });
+
+  it("go to other programs as a molfile in 3D, as they are seen", () => {
+    const items = clipItems({ atoms: [], bonds: [], molecules3d: [water3d] });
+    const mol = items.find((i) => i.flavor === "mol")!.text!;
+    expect(mol.split("\n")[0]).toBe("water");
+    expect(mol.split("\n")[1].substring(20, 22)).toBe("3D");
+    // the second frame, turned a quarter about z: the O-H bonds now along y
+    const rows = mol.split("\n").slice(4, 7).map((l) => l.trim().split(/\s+/).slice(0, 3).map(Number));
+    expect(Math.abs(rows[1][0] - rows[0][0])).toBeLessThan(0.7);
+    expect(Math.abs(rows[1][1] - rows[0][1])).toBeGreaterThan(0.7);
+    expect(items.some((i) => i.flavor === "rxn")).toBe(false);
+  });
+
+  it("are pasted about the point asked for, with the rest", () => {
+    const moved = centredAt({ atoms: [], bonds: [], molecules3d: [water3d, { ...water3d, at: { x: 8, y: 2 } }] }, { x: 0, y: 0 });
+    expect(moved.molecules3d!.map((m) => m.at)).toEqual([
+      { x: -2, y: 0 },
+      { x: 2, y: 0 },
+    ]);
   });
 });

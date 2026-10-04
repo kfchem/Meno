@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { RootState } from "@react-three/fiber";
 
 export function useCanvasSetup(
-  camRef: React.MutableRefObject<THREE.OrthographicCamera | null>,
+  camRef: React.MutableRefObject<THREE.PerspectiveCamera | null>,
   domRef: React.MutableRefObject<HTMLCanvasElement | null>,
 ) {
   return useCallback(
@@ -17,7 +17,7 @@ export function useCanvasSetup(
       const onRestored = () => state.invalidate();
       canvas.addEventListener("webglcontextlost", onLost as any, false);
       canvas.addEventListener("webglcontextrestored", onRestored as any, false);
-      camRef.current = state.camera as THREE.OrthographicCamera;
+      camRef.current = state.camera as THREE.PerspectiveCamera;
       domRef.current = canvas;
 
       // The canvas `dpr` prop owns the pixel ratio (CANVAS_DPR); overriding it

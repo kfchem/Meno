@@ -5,6 +5,7 @@ import {
   advanceStroke,
   finishStroke,
   holdStroke,
+  NEW_ATOM,
   startStroke,
   type Stroke,
 } from "../../utils/stroke";
@@ -27,7 +28,9 @@ const ended: EditorState["extend"] = {
 
 export function createInteractionSlice(set: SetState, get: GetState) {
   return {
-    startExtend: (atomId: number, kind: Stroke["kind"] = "bond") =>
+    setPressHold: (h: EditorState["pressHold"]) =>
+      set((prev: EditorState) => (prev.pressHold === h ? prev : { ...prev, pressHold: h })),
+    startExtend: (atomId: number, kind: Stroke["kind"] = "bond", tracing = false) =>
       set((prev: EditorState) => ({
         ...prev,
         extend: {
@@ -35,8 +38,23 @@ export function createInteractionSlice(set: SetState, get: GetState) {
           atomId,
           pointer: null,
           mode: "snap",
-          stroke: startStroke(kind, atomId),
+          stroke: startStroke(kind, atomId, prev.model, undefined, NOMINAL_BOND_LENGTH),
           preview: null,
+          tracing,
+        },
+        suppressDblClickUntil: Math.max(prev.suppressDblClickUntil, now() + 120),
+      })),
+    startChainAt: (x: number, y: number, tracing = false) =>
+      set((prev: EditorState) => ({
+        ...prev,
+        extend: {
+          active: true,
+          atomId: null,
+          pointer: null,
+          mode: "snap",
+          stroke: startStroke("chain", NEW_ATOM, prev.model, { x, y }, NOMINAL_BOND_LENGTH),
+          preview: null,
+          tracing,
         },
         suppressDblClickUntil: Math.max(prev.suppressDblClickUntil, now() + 120),
       })),
@@ -77,7 +95,8 @@ export function createInteractionSlice(set: SetState, get: GetState) {
         const nodes = pointer
           ? finishStroke(st.model, stroke, pointer, NOMINAL_BOND_LENGTH)
           : stroke.nodes;
-        if (nodes.length) st.drawStroke(stroke.baseId, nodes, stroke.kind);
+        if (nodes.length && stroke.baseId === NEW_ATOM && stroke.start) st.drawStrokeAt(stroke.start, nodes);
+        else if (nodes.length) st.drawStroke(stroke.baseId, nodes, stroke.kind);
       }
       set((prev: EditorState) => ({
         ...prev,

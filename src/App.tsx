@@ -1,3 +1,5 @@
+import { AnimatePresence, motion } from "motion/react";
+import { RISE } from "./ui/theme/motion";
 import "./App.css";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import TopBar, { type TabsController } from "./ui/layouts/TopBar";
@@ -221,8 +223,17 @@ export default function App() {
 
   // Structures from Office documents (Windows, a double-click on one): each
   // opens in a tab of its own - or brings its tab forward if it is open -
-  // and the tab closes when the document is done with it.
+  // and the tab closes when the document is done with it. (Listened for
+  // once; what it does is this render's, as the tabs are now.)
+  const office = useRef<{
+    openTab: (o: Opened) => boolean;
+    closeTab: (id: string) => void;
+    leaveIfOnlyForOffice: (closing?: string) => void;
+  } | null>(null);
   useEffect(() => {
+    const openTab = (o: Opened) => office.current!.openTab(o);
+    const closeTab = (id: string) => office.current!.closeTab(id);
+    const leaveIfOnlyForOffice = (closing?: string) => office.current!.leaveIfOnlyForOffice(closing);
     const tabOf = (officeId: number) =>
       Object.values(stateRef.current.tabsById).find((t) => officeIdOf(t) === officeId);
     const open = async () => {
@@ -277,6 +288,7 @@ export default function App() {
       if (!left.length) void getCurrentWindow().close();
     });
   };
+  office.current = { openTab, closeTab, leaveIfOnlyForOffice };
 
   const ctl: TabsController = {
     tabOrder: state.tabOrder,
@@ -359,8 +371,10 @@ export default function App() {
           void openFiles(files);
         }}
       />
+      <AnimatePresence>
       {pendingClose && (
         <ConfirmDiscard
+          key="confirm-discard"
           title={
             pendingClose.kind === "tab"
               ? `Close "${state.tabsById[pendingClose.id]?.meta.label ?? "this tab"}"?`
@@ -382,8 +396,12 @@ export default function App() {
           }}
         />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {notice && (
-        <div
+        <motion.div
+          key="notice"
+          {...RISE}
           role="alert"
           className="absolute top-12 left-1/2 -translate-x-1/2 z-50 max-w-[90%] flex items-start gap-3 rounded-md border border-gh-line bg-white/95 shadow-sm px-3 py-2 text-xs text-gh-black"
         >
@@ -394,8 +412,9 @@ export default function App() {
           >
             OK
           </button>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
       {state.mountOrder.map((id) => {
         const tab = state.tabsById[id];
         const entry = tab ? viewRegistry[tab.content.kind] : undefined;
@@ -426,6 +445,7 @@ export default function App() {
         resolveView={resolveView}
         patchData={patchData}
         getDocument={getDocument}
+        renameTab={(id, label) => dispatch({ type: "RENAME_TAB", id, label })}
       />
     </div>
   );

@@ -20,6 +20,8 @@ export function createUiSlice(
       set((prev: EditorState) => ({ ...prev, savedPath: path }));
       doc.markSaved();
     },
+    markOpenedOver: (name: string) =>
+      set((prev: EditorState) => ({ ...prev, savedPath: null, openedName: name })),
 
     beginLabelEdit: (atomId: number, initial = "", forceLower = false) =>
       set((prev: EditorState) => {

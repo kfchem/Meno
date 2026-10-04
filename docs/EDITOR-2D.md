@@ -51,11 +51,35 @@ and in particular:
   - A bond led within reach of an atom closes onto it, and so does one led
     onto an atom however far away - a long bond closes a ring too; the
     preview shows it closed before the button comes up.
-  - Chains - a bond laid down for every bond length the pointer goes - are
-    not drawn for now (2026-09-28); they are to come back in some form.
-    `utils/stroke` still knows them.
+  - **Chains** (agreed 2026-10-03): three clicks on an atom, or two on
+    empty space, draw a chain - led by a drag, or, the last click let go
+    where it was, traced with the button up until a click ends it; Escape
+    lets it go. The third click takes back the bond the double-click drew.
+    - It runs on a honeycomb of the drawing's own lengths and angles laid
+      out from its start (`utils/honeycomb`), turned so that a bond the
+      atom already has is one of its own; across at 30 degrees from empty
+      space. The honeycomb opens out from the start as the chain begins,
+      fades with the distance from the chain's end, and folds back into
+      the start when it is done (`ChainGuide2D`).
+    - Led along it, it lays a bond down a step at a time; led back, it
+      takes them back - led back a little beside the way it came too, as a
+      hand leads it back, as far as the point it is led back to, with no
+      ring for that; led round a hexagon, it closes a six-membered ring;
+      onto an atom already there, it joins it.
+    - Led round in a loop back to the chain - enclosing room, not straight
+      back - it draws a ring there of as many members as the loop is long
+      (3 to 12), on the side the loop went round, with the bond the loop
+      began along: back to the chain's end, a ring through it (a
+      cyclopentyl, say); back to the atom before it, a ring fused on that
+      bond (`utils/chain`). Led on from there, the ring stays; led back
+      past it, it goes. Round a hexagon, a loop as long as six bonds is
+      that hexagon; another length wins over it. A loop is measured as the
+      hand meant it: the way is taken a quarter of a bond at a time, so a
+      tremble does not lengthen it, and a way out and back that encloses
+      only a sliver - less round than a triangle drawn by hand - draws no
+      ring.
 
-  The whole stroke is one undo step. (PR #57)
+  The whole stroke is one undo step. (PR #57; chains, agent/gestures)
 - **The mouse alone should be enough**, and it should travel as little as
   possible: what is done to an atom is done where the atom is, not from a
   toolbar across the window. Keys are shortcuts, never the only way.
@@ -76,7 +100,7 @@ main movement; everything else moves or zooms the same way in both.
 
 | | Mouse | Trackpad | 2D | 3D |
 |---|---|---|---|---|
-| Left drag from empty space | left drag | press and drag | move | turn |
+| Left drag from empty space | left drag | press and drag | move | move (on a molecule in 3D, turns it) |
 | Right or middle drag, anywhere | right or middle drag | two-finger press and drag | move | move |
 | Scroll | the wheel zooms | two fingers move | as the device | as the device |
 | Zoom | the wheel | pinch | zoom | zoom |
@@ -88,11 +112,23 @@ gesture or, in Chromium, with Ctrl held. Measured on the maintainer's Mac,
 a trackpad's first step is 1 or 2 px however fast the stroke, and a
 smoothly scrolling mouse's notch (an MX Master 3S) is 13 px, so 8 px tells
 them apart; a notch zooms at least as far as a plain wheel's 40 px line.
-(PR #55; 3D follows when the views are joined.)
+A step within a thousandth of a pixel of whole counts as whole: Windows'
+display scaling leaves notches that close (ten notches at once came as
+999.99993 px at 175 %), and read as fingers they moved the view a thousand
+pixels, off the drawing.
+(PR #55. In the workspace the page never tilts: each molecule in 3D turns by
+itself, under a left drag on it - [WORKSPACE.md](WORKSPACE.md).)
+
+A drag that moves the view and is let go while still moving glides on,
+as fast as it was going over its last moments and slowing to a stop; one
+held still before it is let go stays where it was put. (It used to glide on
+by its last move whatever came after - a drag held still went on drifting
+when it was let go.)
 
 **A click keeps each view's own meaning**: in 2D a click on an atom edits
 its label and a click on a bond changes its kind, as drawing wants; in 3D a
-click on an atom selects it. A right-click, or a press with two fingers,
+click on an atom chooses it, for a measurement, and a click elsewhere on the
+molecule selects it. A right-click, or a press with two fingers,
 opens the menu for what is under the pointer; it waits for the button to
 come up, so a right drag is a move, not a menu.
 
@@ -102,15 +138,28 @@ come up, so a right drag is a move, not a menu.
 |---|---|---|
 | Add or take out one atom or bond | Ctrl+click | ⌘+click |
 | Everything along the bonds from the last atom chosen to this one | Shift+click | Shift+click |
-| A box: what it holds | double-click empty space and drag, or Ctrl+drag | double-click empty space and drag, or ⌘+drag |
+| A box: what it holds | a long press on empty space, then a drag; or Ctrl+drag at once | a long press on empty space, then a drag; or ⌘+drag at once |
 | A lasso: what it encloses | the box's gesture with Alt held | the box's gesture with Option held |
-| A whole structure | right-click, *Select this structure* | the same |
+| A whole structure | a long press on an atom or a bond (and a drag from there moves it); or right-click, *Select this structure* | the same |
 | Everything | Ctrl+A | ⌘A |
 | Nothing | click empty space, or Esc | the same |
 
-A double-click in empty space that does not move still draws a bond, and a
-double-click-and-drag that starts on an atom draws out of it instead. On a
-trackpad a double-tap and drag does the same as a double-click and drag.
+**A long press** is a press held still for LONG_PRESS_MS (0.4 s), on the
+first press only: the second of a double-click held still waits to be
+dragged. It is counted while the button is held, so a click's label edit,
+which waits for DOUBLE_CLICK_MS after the button comes up, is unaffected.
+As it is held, the selection's shade spreads out from the atom along the
+bonds, reaching the whole structure as it is selected; on empty space a
+ring opens where the box will begin (`HoldProgress2D`). Let go early, it
+goes again. Let go where it was held, the long press has selected and
+that is all: the click its release makes edits no label, being held off
+as it comes (`suppressDoubleClick`), not when the edit would begin. On a
+trackpad that taps to click, a long press is a press of
+the pad held.
+
+A double-click on empty space begins a chain (above); a double-click and
+a drag that starts on an atom draws one bond out of it. On a trackpad a
+double-tap and drag does the same as a double-click and drag.
 A box or a lasso drawn with Ctrl (⌘) held adds what it takes to the
 selection; drawn without, it replaces it.
 
@@ -314,9 +363,10 @@ All hover-based, as above.
   an atom, or from its menu, which also gives or takes an unpaired
   electron.)
 - Ring templates (3- to 8-membered, benzene), fused onto a bond or an atom;
-  chains. (Chains: PR #57, a double-click on an atom that drags - taken out
-  again for now, that gesture drawing one bond. Rings, when they come, grow
-  out of the same dragging, not keys.)
+  chains. (Chains and rings came back on 2026-10-03 as the honeycomb: three
+  clicks on an atom or two on empty space, a ring as large as a loop drawn
+  back to the chain - see *Drawing is dragging bonds out of atoms*. Benzene
+  and other ring templates are still to come.)
 - Every bond type from the pointer: wavy, bold, dashed, and the rest of what
   the cycle cannot reach today.
 - Abbreviations (Me, Ph, Boc, OTBS …) that read correctly and can be expanded.
@@ -454,6 +504,11 @@ traced from reference drawings.
 
 - Save and Save As (MOL/SDF), Ctrl+S, and closing asks when there is
   something to lose. (PR #43)
+- Open (Ctrl/Cmd+O, or Meno's menu) puts a file in a tab of its own - or
+  in place of a blank canvas - named for the file. The canvas is saved
+  nowhere then: Save asks where, suggesting that name. A save names the
+  tab for its file too. A canvas opened from Word or PowerPoint keeps the
+  document's name either way.
 - Import that keeps charges, isotopes, radicals, atom lists and S-groups, and
   V3000 reactions.
 - SMILES in and out. (PR #52: a SMILES card on the canvas)

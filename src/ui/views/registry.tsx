@@ -9,7 +9,6 @@ import type { DocumentStore } from "../../lib/doc";
 import PyConsole from "../features/PythonConsole";
 import GraphEditor from "../features/WorkflowEditor";
 import SettingsPanel from "../features/SettingsPanel";
-import MoleculeViewer from "../features/MoleculeViewer";
 
 import type {
   TabId,
@@ -28,6 +27,8 @@ export type ViewProps = {
   content: TabContentBase;
   active: boolean;
   dispatchPatchData: (patch: unknown) => void;
+  /** Names the tab anew: after the file it was saved as. */
+  renameTab: (label: string) => void;
   /** Present once the view's kind declares `createDocument` (see ViewEntry). */
   document?: DocumentStore<any>;
 };
@@ -55,29 +56,17 @@ const create = (label: string, kind: TabKind, data?: unknown): TabInstance => {
 };
 
 export const viewRegistry: Record<string, ViewEntry> = {
-  "3d": {
-    kind: "3d",
-    Component: ({ tabId, content, active }) => (
-      <MoleculeViewer
-        tabId={tabId}
-        initialMolecules={(content.data as any)?.molecules ?? []}
-        energies={(content.data as any)?.energies}
-        showAtomIndex={false}
-        paused={!active}
-      />
-    ),
-    create: (label: string) => create(label, "3d", { molecules: [] }),
-  },
   "2d": {
     kind: "2d",
     createDocument: () => createStructureDocument(),
-    Component: ({ tabId, content, active, document }) => (
+    Component: ({ tabId, content, active, document, renameTab }) => (
       <StructureCanvas
         tabId={tabId}
         active={active}
         document={document as DocumentStore<StructureDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
+        nameTab={renameTab}
       />
     ),
     create: (label) => create(label, "2d", {}),
@@ -122,7 +111,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
   structure: {
     kind: "structure",
     createDocument: () => createStructureDocument(),
-    Component: ({ tabId, content, active, document }) => (
+    Component: ({ tabId, content, active, document, renameTab }) => (
       <StructureCanvas
         tabId={tabId}
         active={active}
@@ -130,6 +119,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
         officeId={(content as any)?.data?.officeId}
+        nameTab={renameTab}
       />
     ),
     create: (label) => create(label, "structure", {}),

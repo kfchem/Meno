@@ -14,6 +14,8 @@ import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
 import { createInteractionSlice } from "./slices/interactionSlice";
 import { createUiSlice } from "./slices/uiSlice";
+import { createMolecules3dSlice, heldOf } from "./slices/molecules3dSlice";
+import { turnsAcross } from "./turnJournal";
 
 // Re-export types for backward compatibility
 export * from "./types";
@@ -35,6 +37,7 @@ function mirrorOf(doc: StructureDocument) {
     nextId: doc.nextId,
     nextArrowId: doc.nextArrowId,
     nextPlusId: doc.nextPlusId ?? 1,
+    molecules3d: doc.molecules3d ?? [],
     docStyle: doc.style,
   };
 }
@@ -49,8 +52,25 @@ export function connectStoreToDocument(
   store: EditorStore,
   doc: DocumentStore<StructureDocument>,
 ): () => void {
+  let was = doc.getState();
   const sync = () =>
-    store.setState((prev) => ({ ...prev, ...mirrorOf(doc.getState()) }));
+    store.setState((prev) => {
+      const now = doc.getState();
+      const mirrored = mirrorOf(now);
+      // (a turn of several as one body undone or redone: their turns too)
+      const turns = turnsAcross(doc, was, now);
+      was = now;
+      const held = heldOf(prev, mirrored.molecules3d);
+      if (turns) {
+        const turns3d = { ...(held.turns3d ?? prev.turns3d) };
+        for (const [id, t] of Object.entries(turns)) {
+          if (t) turns3d[Number(id)] = t;
+          else delete turns3d[Number(id)];
+        }
+        held.turns3d = turns3d;
+      }
+      return { ...prev, ...mirrored, ...held };
+    });
   sync();
   return doc.subscribe(sync);
 }
@@ -68,9 +88,17 @@ export function createEditorStore(
     selAnchor: null,
     boxSelect: { active: false, kind: "box", points: [] },
     hovered: { atomId: null, bondId: null },
+    hovered3d: null,
+    turns3d: {},
+    frames3d: {},
+    sel3d: new Set<number>(),
+    chosen3d: null,
+    hoveredMeasure3d: null,
     hoveredArrow: null,
     hoveredPlus: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
+    pressHold: null,
+    doubleClickBond: null,
     fitNonce: 0,
     autoFitSuspended: false,
     labelEdit: { active: false, atomId: null, value: "", autoCap: true },
@@ -85,12 +113,14 @@ export function createEditorStore(
     panHold: { active: false, pointerId: null },
     suppressDblClickUntil: 0,
     savedPath: null,
+    openedName: null,
 
     ...createModelSlice(doc, set, get),
     ...createSelectionSlice(set),
     ...createHoverSlice(set),
     ...createUiSlice(doc, set, get),
     ...createInteractionSlice(set, get),
+    ...createMolecules3dSlice(doc, set, get),
   }));
 
   return store;
