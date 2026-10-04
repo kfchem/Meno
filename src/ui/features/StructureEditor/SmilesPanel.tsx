@@ -1,5 +1,5 @@
 import { ClipboardDocumentIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { chemMolblock } from "../../../lib/rdkit/molblock";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
@@ -22,6 +22,22 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [smiles, setSmiles] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Escape closes it, wherever the keys are - unless a menu is open (the
+  // Escape is the menu's) or another box is being typed in.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing) return;
+      if (document.querySelector("[role=menu]")) return;
+      const at = e.target as HTMLElement | null;
+      const typing = at?.closest("input, textarea, [contenteditable=true]");
+      if (typing && !ref.current?.contains(typing)) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   // What is drawn, as RDKit writes it; a moment after it stops changing.
   useEffect(() => {
@@ -83,6 +99,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      ref={ref}
       className="absolute left-3 bottom-3 z-50 w-[28rem] max-w-[calc(100%-1.5rem)] rounded-lg border border-gh-line bg-white shadow-lg p-3 text-sm text-gh-black"
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}

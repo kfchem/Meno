@@ -46,7 +46,7 @@ export default function MenoMenu({ own }: { own: CommandGroup[] }) {
         aria-label="Menu"
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Menu"
+        title={open ? undefined : "Menu"}
         onClick={() => (open ? setOpen(false) : show())}
         className="h-7.5 w-7.5 flex items-center justify-center hover:bg-gray-200 rounded-lg outline-none"
       >
