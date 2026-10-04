@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import { COLORS } from "../../../theme/colors";
@@ -8,6 +8,8 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, turned } from "../utils/selection";
+import { useDrawnLayout } from "./drawnLayoutContext";
+import { TAU, follow } from "../../../theme/motion";
 
 /** How far above the selection its turning handle stands, as a share of a bond. */
 const HANDLE_ABOVE = 0.75;
@@ -175,11 +177,18 @@ export default function Selection2D() {
   }, [gl, camera, store, invalidate]);
 
   // --- turning -------------------------------------------------------------
-  const mid = useMemo(() => middleOf(model, sel.atoms), [model, sel.atoms]);
+  // (where the drawing is drawn: on its way somewhere, the handle and the
+  // shading go with it)
+  const drawn = useDrawnLayout();
+  const shownModel = useMemo(() => {
+    const at = new Map(drawn.atoms.map((a) => [a.id, a]));
+    return { ...model, atoms: model.atoms.map((a) => ({ ...a, x: at.get(a.id)?.x ?? a.x, y: at.get(a.id)?.y ?? a.y })) };
+  }, [model, drawn.atoms]);
+  const mid = useMemo(() => middleOf(shownModel, sel.atoms), [shownModel, sel.atoms]);
   const top = useMemo(() => {
-    const ys = model.atoms.filter((a) => sel.atoms.has(a.id)).map((a) => a.y);
+    const ys = shownModel.atoms.filter((a) => sel.atoms.has(a.id)).map((a) => a.y);
     return ys.length ? Math.max(...ys) : 0;
-  }, [model, sel.atoms]);
+  }, [shownModel, sel.atoms]);
   const turnable = sel.atoms.size > 1 && mid != null;
   const handleAt = turnable ? { x: mid!.x, y: top + NOMINAL_BOND_LENGTH * HANDLE_ABOVE } : null;
 
@@ -231,17 +240,98 @@ export default function Selection2D() {
     window.addEventListener("pointerup", onUp, true);
   };
 
-  // the handle the same size on the screen at any zoom
-  useFrame(() => {
-    if (handle.current) handle.current.scale.setScalar(HANDLE_PX / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6));
+  // --- coming and going ------------------------------------------------------
+  // What is shaded, the box or lasso, and the handle each come into view and
+  // go out of it rather than appear and vanish (TAU.quick): each shaded part
+  // and its last place, the last box drawn, and the handle's last place, with
+  // how far in view each is.
+  const parts = useRef(new Map<string, { level: number; atom?: { x: number; y: number }; bond?: { p: { x: number; y: number }; q: { x: number; y: number } } }>());
+  const chosen = useRef(new Set<string>());
+  const box = useRef<{ level: number; outline: { line: THREE.LineLoop; fill: THREE.Mesh } | null }>({ level: 0, outline: null });
+  const handleSeen = useRef<{ level: number; at: { x: number; y: number } | null }>({ level: 0, at: null });
+  const [, setFrame] = useState(0);
+  {
+    const at = new Map(shownModel.atoms.map((a) => [a.id, a]));
+    const now = new Set<string>();
+    for (const id of sel.atoms) {
+      const a = at.get(id);
+      if (!a) continue;
+      const e = parts.current.get(`a${id}`) ?? { level: 0 };
+      e.atom = { x: a.x, y: a.y };
+      parts.current.set(`a${id}`, e);
+      now.add(`a${id}`);
+    }
+    for (const b of model.bonds) {
+      if (!sel.bonds.has(b.id)) continue;
+      const p = at.get(b.a);
+      const q = at.get(b.b);
+      if (!p || !q) continue;
+      const e = parts.current.get(`b${b.id}`) ?? { level: 0 };
+      e.bond = { p: { x: p.x, y: p.y }, q: { x: q.x, y: q.y } };
+      parts.current.set(`b${b.id}`, e);
+      now.add(`b${b.id}`);
+    }
+    chosen.current = now;
+    if (handleAt) handleSeen.current.at = handleAt;
+  }
+  useFrame((_, dt) => {
+    const d = Math.min(dt, 1 / 20);
+    let moving = false;
+    for (const [k, e] of parts.current) {
+      const to = chosen.current.has(k) ? 1 : 0;
+      if (e.level !== to) {
+        const n = follow(e.level, to, d, TAU.quick);
+        e.level = Math.abs(n - to) < 0.01 ? to : n;
+        moving = true;
+      }
+      if (e.level === 0 && to === 0) parts.current.delete(k);
+    }
+    const b = box.current;
+    const boxTo = b.outline && boxSelect.active ? 1 : 0;
+    if (b.level !== boxTo) {
+      const n = follow(b.level, boxTo, d, TAU.quick);
+      b.level = Math.abs(n - boxTo) < 0.01 ? boxTo : n;
+      moving = true;
+    }
+    if (b.outline) {
+      (b.outline.line.material as THREE.LineBasicMaterial).opacity = b.level;
+      (b.outline.fill.material as THREE.MeshBasicMaterial).opacity = 0.08 * b.level;
+      if (b.level === 0 && !boxSelect.active) {
+        b.outline.line.geometry.dispose();
+        (b.outline.line.material as THREE.Material).dispose();
+        b.outline.fill.geometry.dispose();
+        (b.outline.fill.material as THREE.Material).dispose();
+        b.outline = null;
+        moving = true;
+      }
+    }
+    const h = handleSeen.current;
+    const handleTo = turnable ? 1 : 0;
+    if (h.level !== handleTo) {
+      const n = follow(h.level, handleTo, d, TAU.quick);
+      h.level = Math.abs(n - handleTo) < 0.01 ? handleTo : n;
+      moving = true;
+    }
+    // the handle the same size on the screen at any zoom, growing in and shrinking out
+    if (handle.current) {
+      handle.current.scale.setScalar((HANDLE_PX / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6)) * (0.6 + 0.4 * h.level));
+      handle.current.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+        if (m && m.userData.seen) m.opacity = h.level;
+      });
+    }
+    if (moving) {
+      setFrame((f) => f + 1);
+      invalidate();
+    }
   });
 
   // --- shading -------------------------------------------------------------
   const r = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
-  const shade = SELECTION_SHADE;
-  const byId = useMemo(() => new Map(model.atoms.map((a) => [a.id, a])), [model.atoms]);
-  const shadedBonds = model.bonds.filter((b) => sel.bonds.has(b.id));
-  const shadedAtoms = model.atoms.filter((a) => sel.atoms.has(a.id));
+  const shade = useMemo(() => new THREE.Color(SELECTION_SHADE), []);
+  // (shading coming or going: the page's white going over to the shade, so
+  // that where parts overlap it stays even)
+  const shadeAt = (level: number) => new THREE.Color("#ffffff").lerp(shade, level);
   // the box or the lasso being drawn: a pale fill inside a line
   const outline = useMemo(() => {
     if (!boxSelect.active || boxSelect.points.length < 2) return null;
@@ -256,7 +346,7 @@ export default function Selection2D() {
         : boxSelect.points;
     const line = new THREE.LineLoop(
       new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(p.x, p.y, 0.5))),
-      new THREE.LineBasicMaterial({ color: COLORS.highlight, depthTest: false, toneMapped: false }),
+      new THREE.LineBasicMaterial({ color: COLORS.highlight, depthTest: false, toneMapped: false, transparent: true, opacity: 0 }),
     );
     line.renderOrder = 40;
     const fill = new THREE.Mesh(
@@ -264,7 +354,7 @@ export default function Selection2D() {
       new THREE.MeshBasicMaterial({
         color: COLORS.highlight,
         transparent: true,
-        opacity: 0.08,
+        opacity: 0,
         depthWrite: false,
         toneMapped: false,
       }),
@@ -273,49 +363,52 @@ export default function Selection2D() {
     fill.renderOrder = 39;
     return { line, fill };
   }, [boxSelect]);
-  useEffect(
-    () => () => {
-      for (const o of outline ? [outline.line, outline.fill] : []) {
+  // the box drawn last: kept as the gesture ends, to go out of view
+  useEffect(() => {
+    if (!outline) return;
+    const was = box.current.outline;
+    if (was && was !== outline) {
+      for (const o of [was.line, was.fill]) {
         o.geometry.dispose();
         (o.material as THREE.Material).dispose();
       }
-    },
-    [outline],
-  );
+    }
+    box.current.outline = outline;
+    invalidate();
+  }, [outline, invalidate]);
 
+  const shown = [...parts.current.entries()];
+  const lastBox = box.current.outline;
+  const handlePlace = handleSeen.current.at;
   return (
     <group>
-      {shadedAtoms.map((a) => (
-        <mesh key={`sa-${a.id}`} position={[a.x, a.y, -0.04]} renderOrder={-2}>
-          <circleGeometry args={[r, 32]} />
-          <meshBasicMaterial color={shade} depthWrite={false} toneMapped={false} />
-        </mesh>
-      ))}
-      {shadedBonds.map((b) => {
-        const p = byId.get(b.a);
-        const q = byId.get(b.b);
-        if (!p || !q) return null;
-        const len = Math.hypot(q.x - p.x, q.y - p.y);
-        return (
+      {shown.map(([k, e]) =>
+        e.atom ? (
+          <mesh key={k} position={[e.atom.x, e.atom.y, -0.04]} renderOrder={-2}>
+            <circleGeometry args={[r, 32]} />
+            <meshBasicMaterial color={shadeAt(e.level)} depthWrite={false} toneMapped={false} />
+          </mesh>
+        ) : e.bond ? (
           <mesh
-            key={`sb-${b.id}`}
-            position={[(p.x + q.x) / 2, (p.y + q.y) / 2, -0.045]}
-            rotation={[0, 0, Math.atan2(q.y - p.y, q.x - p.x)]}
+            key={k}
+            position={[(e.bond.p.x + e.bond.q.x) / 2, (e.bond.p.y + e.bond.q.y) / 2, -0.045]}
+            rotation={[0, 0, Math.atan2(e.bond.q.y - e.bond.p.y, e.bond.q.x - e.bond.p.x)]}
             renderOrder={-2}
           >
-            <planeGeometry args={[len, r * 1.1]} />
-            <meshBasicMaterial color={shade} depthWrite={false} toneMapped={false} />
+            <planeGeometry args={[Math.hypot(e.bond.q.x - e.bond.p.x, e.bond.q.y - e.bond.p.y), r * 1.1]} />
+            <meshBasicMaterial color={shadeAt(e.level)} depthWrite={false} toneMapped={false} />
           </mesh>
-        );
-      })}
-      {outline && <primitive object={outline.fill} />}
-      {outline && <primitive object={outline.line} />}
-      {handleAt && (
+        ) : null,
+      )}
+      {lastBox && <primitive object={lastBox.fill} />}
+      {lastBox && <primitive object={lastBox.line} />}
+      {handlePlace && (handleAt || handleSeen.current.level > 0) && (
         <group
           ref={handle}
-          position={[handleAt.x, handleAt.y, 0.6]}
+          position={[handlePlace.x, handlePlace.y, 0.6]}
           onPointerDown={(e) => {
             if ((e.nativeEvent?.button ?? 0) !== 0) return;
+            if (!handleAt) return;
             e.stopPropagation();
             startTurn(e.nativeEvent);
           }}
@@ -327,11 +420,11 @@ export default function Selection2D() {
           </mesh>
           <mesh renderOrder={41}>
             <circleGeometry args={[1, 24]} />
-            <meshBasicMaterial color="#ffffff" depthTest={false} toneMapped={false} />
+            <meshBasicMaterial color="#ffffff" depthTest={false} toneMapped={false} transparent opacity={0} userData={{ seen: true }} />
           </mesh>
           <mesh renderOrder={42}>
             <ringGeometry args={[0.68, 1, 24]} />
-            <meshBasicMaterial color={COLORS.highlight} depthTest={false} toneMapped={false} />
+            <meshBasicMaterial color={COLORS.highlight} depthTest={false} toneMapped={false} transparent opacity={0} userData={{ seen: true }} />
           </mesh>
         </group>
       )}

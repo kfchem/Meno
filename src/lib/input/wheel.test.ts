@@ -34,6 +34,16 @@ describe("looksLikeFingers", () => {
     // Shift turns a wheel sideways on Windows: still a wheel
     expect(looksLikeFingers(ev({ deltaX: 100, shiftKey: true }))).toBe(false);
   });
+
+  it("reads notches a hair off whole, as display scaling leaves them, as a wheel", () => {
+    // Chromium on Windows at 175 %: ten notches sent at once, measured
+    expect(looksLikeFingers(ev({ deltaY: 999.9999302455357 }))).toBe(false);
+    expect(looksLikeFingers(ev({ deltaY: -999.9999302455357 }))).toBe(false);
+    // (and the run they begin is a wheel's: it zooms, it does not move the view)
+    expect(wheelReader()(ev({ deltaY: 999.9999302455357, timeStamp: 1000 }))).toBe("zoom");
+    // a trackpad's fractions are still fingers
+    expect(looksLikeFingers(ev({ deltaY: 13.25 }))).toBe(true);
+  });
 });
 
 describe("isPinch", () => {
