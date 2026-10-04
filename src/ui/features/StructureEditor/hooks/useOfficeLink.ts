@@ -33,10 +33,9 @@ export function useOfficeLink(officeId: number | undefined) {
       // (an emptied canvas leaves the document the last picture it had)
       if (!s.model.atoms.length) return;
       const style = styleOf(s.docStyle ?? useAppSettings.getState().drawingStyle);
-      const { record, emf } = structurePicture(drawnOf(s), s, style);
-      sendToOffice(officeId, record, emf).catch((e: unknown) =>
-        console.warn("the document did not take the structure", e),
-      );
+      structurePicture(drawnOf(s), s, style)
+        .then(({ record, emf }) => sendToOffice(officeId, record, emf))
+        .catch((e: unknown) => console.warn("the document did not take the structure", e));
     };
     const stop = store.subscribe((s, prev) => {
       const same =

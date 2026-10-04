@@ -2,7 +2,8 @@
  * Pictures of a structure for the clipboard, each carrying Meno's record of
  * it so that the structure comes back when the picture is pasted into Meno:
  *
- * - an EMF - vectors, at the style's own size - in Office's own clip format,
+ * - an EMF - vectors, at the style's own size; molecules in 3D a bitmap in
+ *   it, shaded as on the canvas - in Office's own clip format,
  *   which Word and PowerPoint keep as it is on either system and hand back
  *   when the picture is copied again (lib/office/gvml); the record in a
  *   comment of the EMF;
@@ -21,8 +22,8 @@ import { clipboardTakes, type ClipItem, type Flavor } from "../../../lib/clipboa
 import { cfbStreams } from "../../../lib/binary/cfb";
 import { dibOf } from "../../../lib/binary/dib";
 import { textOf, withDpi, withText } from "../../../lib/binary/png";
-import { emfComments, layoutEmf } from "../../../lib/chem/emf";
-import { createSVG } from "../../../lib/chem/layout2d";
+import { emfComments, layoutEmf, type SolidsPicture } from "../../../lib/chem/emf";
+import { createSVG, solidsSVG, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
 import type { DrawingStyle } from "../../../lib/chem/style";
 import { gvmlImages, gvmlPicture } from "../../../lib/office/gvml";
 import { drawingLayout } from "./fileActions";
@@ -33,6 +34,11 @@ import { readRecord, recordText } from "./utils/copyPaste";
 const EMF_MARK = "MENO";
 const PNG_KEY = "meno-structure";
 const PNG_DPI = 300;
+/**
+ * The most pixels the bitmap of molecules in 3D in an EMF is across, either
+ * way: its GDI copy is uncompressed, four bytes a pixel.
+ */
+const SOLIDS_MOST_PX = 1600;
 
 const utf8 = new TextEncoder();
 
@@ -42,12 +48,28 @@ type Aromatic = Pick<EditorState, "aromaticEnabled" | "aromaticRings">;
  * Meno's record of `part` and the EMF of it that carries the record - what a
  * copy puts in Office's clip format, and what a document holding the
  * structure as an object keeps and shows. A reaction's arrows and "+" signs
- * are in both.
+ * are in both; molecules in 3D are a bitmap in the EMF, where there is a page
+ * to draw one in.
  */
-export function structurePicture(part: Drawn, aromatic: Aromatic, style: DrawingStyle) {
+export async function structurePicture(part: Drawn, aromatic: Aromatic, style: DrawingStyle) {
   const record = recordText(part);
   const { layout, opts } = drawingLayout(part, aromatic, style);
-  return { record, layout, opts, ...layoutEmf(layout, opts, utf8.encode(EMF_MARK + record)) };
+  const solids = await solidsPicture(layout, opts).catch(() => null);
+  return { record, layout, opts, ...layoutEmf(layout, opts, utf8.encode(EMF_MARK + record), solids ?? undefined) };
+}
+
+/**
+ * A layout's molecules in 3D as one bitmap, at the PNG's resolution (or
+ * less, for a very large one), for the EMF to draw them from; null where
+ * there are none, or no page to draw them in.
+ */
+async function solidsPicture(layout: Layout, opts: LayoutOptions): Promise<SolidsPicture | null> {
+  const alone = solidsSVG(layout, opts);
+  if (!alone) return null;
+  const zoom = layout.zoom > 0 ? layout.zoom : 1;
+  const across = Math.max(alone.bounds.max.x - alone.bounds.min.x, alone.bounds.max.y - alone.bounds.min.y) * zoom;
+  const raster = await rasterized(alone.svg, Math.min(PNG_DPI / 96, SOLIDS_MOST_PX / Math.max(across, 1)), false, true);
+  return raster ? { png: raster.png, rgba: raster.rgba ?? undefined, width: raster.width, height: raster.height, bounds: alone.bounds } : null;
 }
 
 /**
@@ -63,7 +85,7 @@ export async function pictureItems(
 ): Promise<ClipItem[]> {
   const takes = platformTakes === undefined ? await clipboardTakes() : platformTakes;
   const wanted = (f: ClipItem["flavor"]) => !takes || takes.has(f);
-  const { record, layout, opts, emf, widthPt, heightPt } = structurePicture(part, aromatic, style);
+  const { record, layout, opts, emf, widthPt, heightPt } = await structurePicture(part, aromatic, style);
   const items: ClipItem[] = [
     { flavor: "gvml", bytes: gvmlPicture(emf, "emf", widthPt, heightPt, "Structure") },
     { flavor: "emf", bytes: emf },
@@ -122,14 +144,16 @@ function fromPng(png: Uint8Array): Drawn | null {
 
 /**
  * An SVG drawn at `scale` pixels to the SVG's pixel: as a PNG, and - `dib`
- * asked for - as a DIB for Windows' bitmap-only programs; null where there
+ * asked for - as a DIB for Windows' bitmap-only programs, and - `pixels`
+ * asked for - as its RGBA pixels; and its size in pixels. Null where there
  * is no page to draw it in.
  */
 async function rasterized(
   svg: string,
   scale: number,
   dib: boolean,
-): Promise<{ png: Uint8Array; dib: Uint8Array | null } | null> {
+  pixels = false,
+): Promise<{ png: Uint8Array; dib: Uint8Array | null; rgba: Uint8ClampedArray | null; width: number; height: number } | null> {
   if (typeof document === "undefined") return null;
   const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   try {
@@ -144,9 +168,13 @@ async function rasterized(
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/png"));
     if (!blob) return null;
+    const data = dib || pixels ? ctx.getImageData(0, 0, canvas.width, canvas.height).data : null;
     return {
       png: new Uint8Array(await blob.arrayBuffer()),
-      dib: dib ? dibOf(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, PNG_DPI) : null,
+      dib: dib && data ? dibOf(data, canvas.width, canvas.height, PNG_DPI) : null,
+      rgba: pixels ? data : null,
+      width: canvas.width,
+      height: canvas.height,
     };
   } finally {
     URL.revokeObjectURL(url);

@@ -4004,6 +4004,40 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
  * Molecules in 3D as an SVG draws them: each ball filled with a radial
  * gradient of its colour, light where the light falls, each stick a line.
  */
+/** How far molecules in 3D reach on the page, drawn as their marks are; null with none. */
+export function solidsBounds(marks: readonly SolidMark[]): { min: Vec2; max: Vec2 } | null {
+  if (!marks.length) return null;
+  const min = { x: Infinity, y: Infinity };
+  const max = { x: -Infinity, y: -Infinity };
+  const take = (x: number, y: number, r: number) => {
+    min.x = Math.min(min.x, x - r);
+    min.y = Math.min(min.y, y - r);
+    max.x = Math.max(max.x, x + r);
+    max.y = Math.max(max.y, y + r);
+  };
+  for (const m of marks) {
+    if (m.kind === "ball") take(m.c.x, m.c.y, m.r);
+    else {
+      take(m.a.x, m.a.y, m.width / 2);
+      take(m.b.x, m.b.y, m.width / 2);
+    }
+  }
+  return { min, max };
+}
+
+/**
+ * The molecules in 3D of a layout alone, as an SVG of just where they reach
+ * (`bounds`) - what a picture made of vectors draws as one bitmap, shaded as
+ * the canvas shades them; null with none.
+ */
+export function solidsSVG(layout: Layout, opts: LayoutOptions): { svg: string; bounds: { min: Vec2; max: Vec2 } } | null {
+  const solids = layout.solids ?? [];
+  const bounds = solidsBounds(solids);
+  if (!bounds) return null;
+  const alone: Layout = { lines: [], polys: [], texts: [], circles: [], fills: [], solids, bounds, zoom: layout.zoom, reach: [] };
+  return { svg: createSVG(alone, { ...opts, paddingPx: 0 }), bounds };
+}
+
 function svgSolids(marks: SolidMark[]): string {
   if (!marks.length) return "";
   const ids = new Map<string, string>();

@@ -10,6 +10,12 @@
  * with jagged edges but which every reader of EMF understands. A reader
  * that knows EMF+ draws those and passes over the rest ("EMF+ Dual").
  *
+ * Molecules in 3D are shaded balls, which vectors draw only as discs one
+ * inside the next - and Office draws those with a grain at each disc's
+ * edge (PowerPoint for Mac draws an EMF's GDI records, not its EMF+). Given
+ * a bitmap of them, drawn as the canvas shades them, both draw that instead:
+ * EMF+ the PNG, GDI the same pixels blended in over the page.
+ *
  * Records follow [MS-EMF] and [MS-EMFPLUS]; every record's size is a
  * multiple of four, which PowerPoint's reader is strict about.
  */
@@ -47,6 +53,7 @@ const EMR = {
   DELETEOBJECT: 40,
   ELLIPSE: 42,
   COMMENT: 70,
+  ALPHABLEND: 114,
   EXTCREATEFONTINDIRECTW: 82,
   EXTTEXTOUTW: 84,
   EXTCREATEPEN: 95,
@@ -63,6 +70,7 @@ const PLUS = {
   DRAW_LINES: 0x400d,
   FILL_ELLIPSE: 0x400e,
   DRAW_ELLIPSE: 0x400f,
+  DRAW_IMAGE: 0x401a,
   SET_ANTI_ALIAS_MODE: 0x401e,
   SET_TEXT_RENDERING_HINT: 0x401f,
   SET_PAGE_TRANSFORM: 0x4030,
@@ -72,7 +80,10 @@ const PLUS = {
 const PLUS_COMMENT = 0x2b464d45;
 /** The metafile signature and the GDI+ version the records are written for (1.1). */
 const PLUS_VERSION = 0xdbc01002;
-const PLUS_OBJECT = { PEN: 2, FONT: 6 } as const;
+const PLUS_OBJECT = { PEN: 2, IMAGE: 5, FONT: 6, IMAGE_ATTRIBUTES: 8 } as const;
+/** An EMF+ object record's flag saying its object goes on in the next; and how much of an object one record takes. */
+const CONTINUED = 0x8000;
+const OBJECT_PART = 0xfff0;
 /** The high bit of a drawing record's flags: its brush is a colour given in place. */
 const SOLID = 0x8000;
 /** EMF+ has only 64 object slots; the drawing needs a pen per width and a font per size. */
@@ -128,13 +139,30 @@ export function colorRef(css: string | undefined): number {
 }
 
 /**
+ * Molecules in 3D drawn as a bitmap: a PNG, the same pixels (RGBA, top row
+ * first, not premultiplied, as a canvas gives them), its size in pixels, and
+ * where on the page it goes (the drawing's own coordinates) - what
+ * layout2d's `solidsSVG` draws, rasterised. Without the pixels, GDI keeps
+ * the discs.
+ */
+export type SolidsPicture = {
+  png: Uint8Array;
+  rgba?: Uint8Array | Uint8ClampedArray;
+  width: number;
+  height: number;
+  bounds: { min: { x: number; y: number }; max: { x: number; y: number } };
+};
+
+/**
  * The drawing `layout` as an EMF, `comment` carried in it (the first record
- * after EMF+'s header), and its size in points.
+ * after EMF+'s header), and its size in points; its molecules in 3D drawn
+ * from `solids` by a reader of EMF+, where that is given.
  */
 export function layoutEmf(
   layout: Layout,
   opts: LayoutOptions,
   comment?: Uint8Array,
+  solids?: SolidsPicture,
 ): { emf: Uint8Array; widthPt: number; heightPt: number } {
   const zoom = layout.zoom > 0 ? layout.zoom : 1;
   const pad = opts.paddingPx / zoom;
@@ -252,6 +280,22 @@ export function layoutEmf(
     id = Math.min(objects.size, PLUS_SLOTS - 1);
     for (const [k, i] of objects) if (i === id) objects.delete(k);
     w.plus(PLUS.OBJECT, (type << 8) | id, size, fill);
+    objects.set(key, id);
+    return id;
+  };
+  // an object too large for one record - a picture - goes in parts, each
+  // record saying how large the whole is
+  const largeObject = (key: string, type: number, data: Uint8Array) => {
+    if (data.length <= OBJECT_PART) return object(key, type, data.length, (v) => new Uint8Array(v.buffer, v.byteOffset, data.length).set(data));
+    const id = Math.min(objects.size, PLUS_SLOTS - 1);
+    for (const [k, i] of objects) if (i === id) objects.delete(k);
+    for (let at = 0; at < data.length; at += OBJECT_PART) {
+      const part = data.subarray(at, at + OBJECT_PART);
+      w.plus(PLUS.OBJECT, CONTINUED | (type << 8) | id, 4 + part.length, (v) => {
+        v.setUint32(0, data.length, true);
+        new Uint8Array(v.buffer, v.byteOffset + 4, part.length).set(part);
+      });
+    }
     objects.set(key, id);
     return id;
   };
@@ -445,9 +489,85 @@ export function layoutEmf(
   }
   // molecules in 3D, from the back forward: a stick a band, a ball discs
   // one inside the next, each lighter and nearer the light, as the SVG's
-  // gradient shades it
-  const solids = layout.solids ?? [];
-  if (solids.length) {
+  // gradient shades it - for GDI, and for EMF+ unless it has the bitmap
+  const marks = layout.solids ?? [];
+  if (marks.length && solids) {
+    // (its attributes: drawn as it is, nothing round it)
+    const attributes = object("image attributes", PLUS_OBJECT.IMAGE_ATTRIBUTES, 24, (v) => {
+      v.setUint32(0, PLUS_VERSION, true);
+      v.setUint32(8, 4, true); // WrapModeClamp, the clamp colour transparent
+    });
+    const image = new Uint8Array(28 + solids.png.length);
+    const iv = new DataView(image.buffer);
+    iv.setUint32(0, PLUS_VERSION, true);
+    iv.setUint32(4, 1, true); // ImageDataTypeBitmap
+    iv.setUint32(8, solids.width, true);
+    iv.setUint32(12, solids.height, true);
+    iv.setUint32(16, solids.width * 4, true);
+    iv.setUint32(20, 0x0026200a, true); // PixelFormat32bppARGB
+    iv.setUint32(24, 1, true); // BitmapDataTypeCompressed: the PNG as it is
+    image.set(solids.png, 28);
+    const id = largeObject("solids", PLUS_OBJECT.IMAGE, image);
+    const l = X(solids.bounds.min.x);
+    const t = Y(solids.bounds.max.y);
+    const r = X(solids.bounds.max.x);
+    const b = Y(solids.bounds.min.y);
+    w.plus(PLUS.DRAW_IMAGE, id, 40, (v) => {
+      v.setUint32(0, attributes, true);
+      v.setUint32(4, 2, true); // UnitTypePixel
+      [0, 0, solids.width, solids.height].forEach((n, i) => v.setFloat32(8 + 4 * i, n, true));
+      [px(l), px(t), px(r - l), px(b - t)].forEach((n, i) => v.setFloat32(24 + 4 * i, n, true));
+    });
+  }
+  // GDI: the same pixels, blended in over the page - its alpha premultiplied,
+  // the rows bottom up, as a DIB has them
+  if (marks.length && solids?.rgba && solids.rgba.length === solids.width * solids.height * 4) {
+    const { width, height, rgba } = solids;
+    const l = X(solids.bounds.min.x);
+    const t = Y(solids.bounds.max.y);
+    const r = X(solids.bounds.max.x);
+    const b = Y(solids.bounds.min.y);
+    const bits = width * height * 4;
+    w.add(EMR.ALPHABLEND, 100 + 40 + bits, (v, bytes) => {
+      [l, t, r, b].forEach((n, i) => v.setInt32(4 * i, n, true));
+      v.setInt32(16, l, true);
+      v.setInt32(20, t, true);
+      v.setInt32(24, r - l, true);
+      v.setInt32(28, b - t, true);
+      v.setUint32(32, 0x01ff0000, true); // AC_SRC_OVER, the constant alpha 255, AC_SRC_ALPHA
+      // xSrc, ySrc 0; xformSrc the identity
+      v.setFloat32(44, 1, true);
+      v.setFloat32(56, 1, true);
+      v.setUint32(72, 0, true); // DIB_RGB_COLORS
+      v.setUint32(76, 108, true); // where the header is, and the bits, from the record's start
+      v.setUint32(80, 40, true);
+      v.setUint32(84, 148, true);
+      v.setUint32(88, bits, true);
+      v.setInt32(92, width, true);
+      v.setInt32(96, height, true);
+      // BITMAPINFOHEADER: 32 bits a pixel, BI_RGB, bottom up
+      v.setUint32(100, 40, true);
+      v.setInt32(104, width, true);
+      v.setInt32(108, height, true);
+      v.setUint16(112, 1, true);
+      v.setUint16(114, 32, true);
+      v.setUint32(116, 0, true);
+      v.setUint32(120, bits, true);
+      for (let y = 0; y < height; y++) {
+        const from = (height - 1 - y) * width * 4;
+        const to = 140 + y * width * 4;
+        for (let x = 0; x < width; x++) {
+          const i = from + 4 * x;
+          const o = to + 4 * x;
+          const a = rgba[i + 3];
+          bytes[o] = Math.round((rgba[i + 2] * a) / 255);
+          bytes[o + 1] = Math.round((rgba[i + 1] * a) / 255);
+          bytes[o + 2] = Math.round((rgba[i] * a) / 255);
+          bytes[o + 3] = a;
+        }
+      }
+    });
+  } else if (marks.length) {
     select(NULL_PEN);
     const brushes = new Map<number, number>();
     const fillWith = (color: number) => {
@@ -459,15 +579,17 @@ export function layoutEmf(
       select(h);
     };
     const filled = (pts: readonly (readonly [number, number])[], color: number) => {
-      w.plus(PLUS.FILL_POLYGON, SOLID, 8 + 8 * pts.length, (v) => {
-        v.setUint32(0, argb(color), true);
-        v.setUint32(4, pts.length, true);
-        plusPoints(v, 8, pts);
-      });
+      if (!solids) {
+        w.plus(PLUS.FILL_POLYGON, SOLID, 8 + 8 * pts.length, (v) => {
+          v.setUint32(0, argb(color), true);
+          v.setUint32(4, pts.length, true);
+          plusPoints(v, 8, pts);
+        });
+      }
       fillWith(color);
       poly(EMR.POLYGON, pts);
     };
-    for (const m of solids) {
+    for (const m of marks) {
       if (m.kind === "stick") {
         const len = Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y);
         if (len < 1e-9) continue;
@@ -492,10 +614,12 @@ export function layoutEmf(
           y: m.c.y + 2 * m.r * BALL_SHADE.focus.y * (1 - u),
         };
         const color = colorRef(ballShade(m.color, u));
-        w.plus(PLUS.FILL_ELLIPSE, SOLID, 20, (v) => {
-          v.setUint32(0, argb(color), true);
-          plusBox(v, 4, c, r);
-        });
+        if (!solids) {
+          w.plus(PLUS.FILL_ELLIPSE, SOLID, 20, (v) => {
+            v.setUint32(0, argb(color), true);
+            plusBox(v, 4, c, r);
+          });
+        }
         fillWith(color);
         ellipse(c, r);
       }
