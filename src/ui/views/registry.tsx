@@ -1,5 +1,4 @@
 import type { JSX } from "react";
-import OmniLoader from "../features/OmniHub";
 import TextEditor from "../features/TextEditor";
 import TextDocumentEditor from "../features/TextEditor/TextDocumentEditor";
 import {
@@ -28,7 +27,8 @@ export type ViewProps = {
   content: TabContentBase;
   active: boolean;
   dispatchPatchData: (patch: unknown) => void;
-  replaceContent: (next: unknown) => void;
+  /** Names the tab anew: after the file it was saved as. */
+  renameTab: (label: string) => void;
   /** Present once the view's kind declares `createDocument` (see ViewEntry). */
   document?: DocumentStore<any>;
 };
@@ -56,23 +56,17 @@ const create = (label: string, kind: TabKind, data?: unknown): TabInstance => {
 };
 
 export const viewRegistry: Record<string, ViewEntry> = {
-  loader: {
-    kind: "loader",
-    Component: ({ replaceContent }) => (
-      <OmniLoader onResolve={(next) => replaceContent(next as any)} />
-    ),
-    create: (label) => create(label, "loader"),
-  },
   "2d": {
     kind: "2d",
     createDocument: () => createStructureDocument(),
-    Component: ({ tabId, content, active, document }) => (
+    Component: ({ tabId, content, active, document, renameTab }) => (
       <StructureCanvas
         tabId={tabId}
         active={active}
         document={document as DocumentStore<StructureDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
+        nameTab={renameTab}
       />
     ),
     create: (label) => create(label, "2d", {}),
@@ -117,7 +111,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
   structure: {
     kind: "structure",
     createDocument: () => createStructureDocument(),
-    Component: ({ tabId, content, active, document }) => (
+    Component: ({ tabId, content, active, document, renameTab }) => (
       <StructureCanvas
         tabId={tabId}
         active={active}
@@ -125,6 +119,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
         officeId={(content as any)?.data?.officeId}
+        nameTab={renameTab}
       />
     ),
     create: (label) => create(label, "structure", {}),

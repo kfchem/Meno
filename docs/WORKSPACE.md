@@ -141,13 +141,17 @@ for each topic (one pull request per dependent chain).
   light of their own, drawn on demand.
 - In the document: place, look, frames, energies and measurements, undone;
   the clipboard and the workspace file.
+- Pictures: in a copy's EMF, SVG and PNG, molecules in 3D are drawn as the
+  canvas draws them - lit, in depth - each seen from straight above its
+  centre, a bitmap at 300 dpi. A structure opened from Word or PowerPoint
+  goes back with its molecules in 3D, turned as they are, and one holding
+  only molecules in 3D is updated too.
 - Opening: XYZ files, and 3D MOL and SD records, by Open, a drop or a new
   tab.
 - Working them: as the pointer table has it, with the right-click menu.
 - The old viewer: retired, and the workflow's 3D node is a canvas.
 
 Left for later:
-- pictures of molecules in 3D for Office;
 - values of measurements that overlap each other;
 - energies only from XYZ comment lines, until stage 3's readers.
 
@@ -211,6 +215,10 @@ Taken on 2026-10-03:
     - selected with a drawing, everything in the page's plane, the
       molecules carried round and turned with it;
     - with Shift, each molecule about its own centre, the drawing staying.
+
+    Every turn by the handle is one undo step, Shift's and one molecule's
+    alone too (agreed 2026-10-04), and the undo puts the turns back; a
+    drag on a molecule itself turns only the view.
 - **What a 3D molecule looks like** starts from the 3D viewer's look:
   - atom size and colour, material and light, and the turn's inertia,
     near enough;
@@ -263,7 +271,7 @@ Taken while stage 1 was built, on 2026-10-03:
     conformer set.
   - Its atoms go over to another frame rather than jump.
 - **What is the view's.** How a molecule is turned and which frame it
-  shows are not undone. They are kept by a copy and by the workspace file,
+  shows are not undone, save a turn by the selection's handle. They are kept by a copy and by the workspace file,
   so that what is pasted or opened looks as it did.
 - **Saving.**
   - `.meno` is JSON (`meno-workspace`, version 1).
@@ -277,6 +285,71 @@ Taken while stage 1 was built, on 2026-10-03:
   lines (CREST, xtb, ORCA), lives apart in `lib/calc`, and what it finds
   is plain data on the molecule.
 
+Taken on 2026-10-04:
+
+- **The structure canvas is the workspace**, and everything else is to be
+  reached from it. The New Tab page is gone: Meno starts on a canvas, "+"
+  makes another, and Open puts a file in a tab of its own. The New… menu
+  goes too, later: the text editor, the Python console and the workflow
+  builder are to be reached from the canvas.
+- **Text files and PDFs on the page**: a small preview of each sits on the
+  workspace, and is edited in a split view or in a window inside Meno's.
+- **No buttons on the canvas.** Commands are in Meno's menu, from its logo,
+  each with its key; the right-click menu has what concerns what is under
+  the pointer, and the canvas as a whole on empty space; keys are kept to
+  what is used most, and reachable by the left hand (Ctrl/Cmd+1 fits, not
+  Ctrl/Cmd+0).
+- **The system's menu bar stays as the system has it.** On a Mac, Meno's
+  commands do not go into it. A Mac's window is to get its own controls
+  (the close button and its neighbours) at some stage.
+- **Closing the last tab quits Meno.**
+
+## Stage 2, as built
+
+- **A drawing to 3D.** A structure's right-click menu, or a selection's,
+  has *3D structure*; Meno's menu (and the right-click menu on empty
+  space) has *3D structures*, for what is selected or else everything
+  drawn. Stereo drawn without a configuration is ringed on
+  the drawing while Meno asks what to make: every stereoisomer it gives,
+  one, or none for now. Each is made as a conformer set (RDKit's ETKDG,
+  then MMFF94) and comes onto the page as a molecule in 3D, its frames the
+  conformers, lowest first. Of two enantiomers, one is made as the other's
+  mirror image, so the two have the same conformers and shares.
+- **Rising out of the drawing.** Turned to lie over the drawing (Horn's
+  quaternion, `utils/align3d`), its atoms grow on the drawing's, go over
+  to their places in 3D as it comes up off the page, and it moves to rest
+  beside the drawing: to its right, its left, below or above - the first
+  that is in view as it is seen - the view taking it in where none is.
+  Several rise one after another, in a row.
+- **Told apart.** A stereoisomer's centres that were left open carry
+  their R and S always, every centre's while R and S are shown. They are
+  as large as the drawing's R and S, set clear of their atom in the widest
+  gap between its bonds as it is seen - or the nearest way round that
+  covers no other atom - and clear of each other.
+- **Tied to the drawing.** An atom hovered in either lights in the other.
+  Drawn otherwise since - atoms, bonds or wedges, not where they are - the
+  molecule stays as it is and says so under its frames, with *Make
+  again*, made where it stood. What the drawing leaves open is made as
+  the molecule had it (so an (S) stays (S)), and Meno asks only about
+  stereo that is new. An undo brings the molecule back as it was turned.
+  *Turn like the drawing* is in its menu.
+  Pasted with its drawing, it is tied to the pasted drawing.
+- **And back.** *Draw as formula*: a molecule in 3D with no drawing is
+  drawn by Meno's engine, wedged as it is in 3D, its bonds' orders found
+  where a file of coordinates gave none, and tied to it.
+- **Conformer sets.** Each conformer's share at room temperature
+  (Boltzmann) stands beside its energy; *Show all conformers* draws the
+  others over the one shown, each as dark as it is likely.
+
+Taken on 2026-10-04, for stage 2:
+
+- *3D structure* is on a structure's right-click menu and in Meno's menu.
+- A drawing changed after its molecule in 3D was made: the molecule stays,
+  and is made again only when asked.
+- What is made is a conformer set from the first.
+- Stereo left open is asked about before anything is made, and *all the
+  stereoisomers* is one of the answers.
+
 ## Risks
 
 - **The 2D drawing changing.** The thinnest lines and the place of every
@@ -289,5 +362,3 @@ Taken while stage 1 was built, on 2026-10-03:
   instanced from the start.
 - **Testing.** The GUI harness sees a WebGL canvas only while its window
   is on screen.
-- **Office.** A copy of 3D molecules alone carries no picture yet, so
-  Word and PowerPoint get nothing to show.

@@ -146,6 +146,31 @@ describe("molecules in 3D on the clipboard", () => {
     expect(readRecord(text)?.molecules3d).toHaveLength(1);
   });
 
+  it("keep what ties them to their drawing, and their stereochemistry, and come back so", () => {
+    const made = {
+      ...water3d,
+      drawnFrom: [10, null, null],
+      drawnAs: "O",
+      conformerSet: true,
+      stereo: { atoms: { 0: "R" }, bonds: {}, chosen: { atoms: [0], bonds: [] } },
+    };
+    const back = readRecord(recordText({ atoms: [], bonds: [], molecules3d: [made] }));
+    expect(back?.molecules3d).toEqual([made]);
+  });
+
+  it("lose a tie or labels that do not read, not the molecule", () => {
+    const text = recordText({
+      atoms: [],
+      bonds: [],
+      molecules3d: [{ ...water3d, drawnFrom: [10, null], drawnAs: "O", stereo: { atoms: { 7: "R" }, bonds: {} } }],
+    });
+    const back = readRecord(text)!.molecules3d![0];
+    expect(back.drawnFrom).toBeUndefined();
+    expect(back.drawnAs).toBeUndefined();
+    expect(back.stereo).toBeUndefined();
+    expect(back.atoms).toHaveLength(3);
+  });
+
   it("go to other programs as a molfile in 3D, as they are seen", () => {
     const items = clipItems({ atoms: [], bonds: [], molecules3d: [water3d] });
     const mol = items.find((i) => i.flavor === "mol")!.text!;

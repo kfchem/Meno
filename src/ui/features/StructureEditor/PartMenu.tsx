@@ -1,3 +1,5 @@
+import { motion } from "motion/react";
+import { RISE } from "../../theme/motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
@@ -65,6 +67,14 @@ export type MenuMolecule3D = {
   /** It alone, cut or copied. */
   onCut: () => void;
   onCopy: () => void;
+  /** Turned to lie as the drawing it was made from does; unset, where it was made from none there is. */
+  onTurnLikeDrawing?: () => void;
+  /** Made again from its drawing, which has changed since; unset, where it has not. */
+  onRemake?: () => void;
+  /** Drawn as a formula beside it, by Meno's engine: unset, where it has a drawing already. */
+  onDrawFormula?: () => void;
+  /** Its frames all shown at once, or one: unset, where it has one only; `conformers`, whether they are a conformer set's. */
+  overlay?: { on: boolean; conformers: boolean; set: (on: boolean) => void };
 };
 
 /**
@@ -77,6 +87,7 @@ export default function PartMenu({
   target,
   onDelete,
   onCleanUp,
+  onMake3d,
   onSelectStructure,
   onTurnOver,
   onCharge,
@@ -87,6 +98,7 @@ export default function PartMenu({
   onAddArrow,
   onAddPlus,
   onSaveAbbreviation,
+  canvas = [],
   clipboard,
   molecule3d,
   onClose,
@@ -96,6 +108,8 @@ export default function PartMenu({
   onDelete: () => void;
   /** The part's structure cleaned up, or the selection's structures. */
   onCleanUp: () => void;
+  /** The part's structure made in 3D, or the selection's structures. */
+  onMake3d: () => void;
   onSelectStructure: () => void;
   /** The selection turned over, left to right or top to bottom. */
   onTurnOver: (axis: "vertical" | "horizontal") => void;
@@ -113,6 +127,8 @@ export default function PartMenu({
   onAddPlus: () => void;
   /** The selection saved as an abbreviation of the user's own. */
   onSaveAbbreviation: () => void;
+  /** What the canvas does as a whole - fit, R and S, its style - offered on empty space. */
+  canvas?: { name: string; keys: string; run: () => void }[];
   clipboard: MenuClipboard;
   /** The molecule in 3D right-clicked, when it is one. */
   molecule3d?: MenuMolecule3D;
@@ -174,6 +190,18 @@ export default function PartMenu({
           ? { name: "Ball and stick", keys: "", run: () => molecule3d.onLook("balls") }
           : { name: "Space-filling", keys: "", run: () => molecule3d.onLook("space") },
         { name: "Reset orientation", keys: "", run: molecule3d.onResetTurn },
+        ...(molecule3d.overlay
+          ? [
+              {
+                name: `Show ${molecule3d.overlay.on ? "one" : "all"} ${molecule3d.overlay.conformers ? "conformer" : "frame"}${molecule3d.overlay.on ? "" : "s"}`,
+                keys: "",
+                run: () => molecule3d.overlay!.set(!molecule3d.overlay!.on),
+              },
+            ]
+          : []),
+        ...(molecule3d.onTurnLikeDrawing ? [{ name: "Turn like the drawing", keys: "", run: molecule3d.onTurnLikeDrawing }] : []),
+        ...(molecule3d.onRemake ? [{ name: "Make again from the drawing", keys: "", run: molecule3d.onRemake, divider: true }] : []),
+        ...(molecule3d.onDrawFormula ? [{ name: "Draw as formula", keys: "", run: molecule3d.onDrawFormula }] : []),
       ]
     : [];
   const items: Item[] =
@@ -208,13 +236,19 @@ export default function PartMenu({
                 { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
                 { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
                 { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
+                { name: "3D structures", keys: "", run: onMake3d },
                 { name: "Save as abbreviation…", keys: "", run: onSaveAbbreviation, divider: true },
               ]
             : []),
           ...(target.kind == null ? scheme : []),
         ]
       : target.kind == null
-        ? [paste, { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll }, ...scheme]
+        ? [
+            paste,
+            { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll },
+            ...scheme,
+            ...canvas.map((item, i) => ({ ...item, divider: i === 0 })),
+          ]
         : [
           {
             name: target.kind === "atom" ? "Delete atom" : "Delete bond",
@@ -236,11 +270,13 @@ export default function PartMenu({
             keys: keys ? cleanUpKey : "",
             run: onCleanUp,
           },
+          { name: "3D structure", keys: "", run: onMake3d },
         ];
   const height = items.length * ITEM + items.filter((i) => i.divider).length * 9 + 12;
   return (
-    <div
+    <motion.div
       ref={ref}
+      {...RISE}
       role="menu"
       aria-label={
         target.selection === "here"
@@ -282,12 +318,12 @@ export default function PartMenu({
             onClose();
             item.run();
           }}
-          className="w-full h-8 px-3 flex items-center justify-between gap-4 text-left whitespace-nowrap hover:bg-gh-base focus:bg-gh-base outline-none"
+          className="w-full h-8 px-3 flex items-center justify-between gap-4 text-left whitespace-nowrap transition-colors duration-150 ease-meno hover:bg-gh-base focus:bg-gh-base outline-none"
         >
           <span>{item.name}</span>
           <kbd className="font-sans text-xs text-gh-gray">{item.keys}</kbd>
         </button>,
       ])}
-    </div>
+    </motion.div>
   );
 }

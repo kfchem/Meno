@@ -77,16 +77,18 @@ available:
 | | |
 |---|---|
 | `Start-Meno` | start the app under test, sized and in front |
-| `Open-MenoFile -Path` | open a structure into an empty tab |
-| `Save-MenoFile -Path -X -Y` | Save As, by Shift and the round Save button at (X, Y), under a path not already taken - a workspace (`.meno`), say |
+| `Open-MenoFile -Path` | open a structure with Ctrl/Cmd+O: in place of the first tab's blank canvas, or in a tab of its own |
+| `Invoke-MenoMenu -Item` | a command from the menu Meno's logo opens: `"SMILES..."`, `"Clean up all"`, `"Show R and S"` … (positions read off a Mac's shot) |
+| `Save-MenoFile -Path` | Save As from Meno's menu, under a path not already taken - a workspace (`.meno`), say |
 | `Save-Step -Name` | a numbered screenshot |
 | `Invoke-MenoClick -X -Y [-Count] [-Right] [-Hold]` | client coordinates, not screen; `-Right` for the other button; `-Hold Shortcut, Shift, Alt` holds those keys through it (Shortcut: Ctrl on Windows, ⌘ on a Mac) |
-| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-Count] [-AtStep] [-Right] [-Hold] [-Via]` | press, travel, release; `-Count 2` after an `Invoke-MenoClick` there is a double-click that drags; `-Right` with the other button; `-Hold` as for a click; `-Via @(@(x, y), ...)` passes through those points on the way - a lasso |
+| `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-PressMs] [-Count] [-AtStep] [-Right] [-Hold] [-Via]` | press, travel, release; `-PressMs 600` holds the button still first - a long press; `-Count 2` after an `Invoke-MenoClick` there is a double-click that drags, `-Count 3` after an `Invoke-MenoClick -Count 2` a triple; `-Right` with the other button; `-Hold` as for a click; `-Via @(@(x, y), ...)` passes through those points on the way - a lasso |
 | `Move-MenoPointer -X -Y` | hover |
+| `Move-MenoPointerAlong -Path @(@(x, y), ...) [-StepMs] [-AtStep]` | the pointer led through points with no button down - a chain traced with the button up |
 | `Invoke-MenoWheel -X -Y -Notches` | zoom; positive is away from you, in |
 | `Invoke-MenoSwipe -X -Y [-DX] [-DY] [-Steps]` | two fingers on a trackpad: moves the view; positive DY scrolls down |
 | `Send-MenoText`, `Send-MenoKey` | typing |
-| `Send-MenoShortcut -Key [-Shift]` | Ctrl (Windows) or Cmd (Mac) with a key: `Z` is undo |
+| `Send-MenoShortcut -Key [-Shift]` | Ctrl (Windows) or Cmd (Mac) with a key: `Z` is undo, `1` fits the drawing to the view |
 | `Get-ClientSize`, `Wait-MenoSettled` | |
 
 Coordinates are pixels of the window's own screenshot, so they can be read
@@ -184,7 +186,8 @@ What turned out not to be the same:
   dialog never came: `Get-MenoWindow` had taken the window Tauri's event
   loop makes for itself, which is briefly the process's main window, and
   placed that - so the app's own window stayed where it opened and the
-  click on its Open button landed elsewhere. It now waits for the app's.)
+  click on its Open button landed elsewhere. It now waits for the app's,
+  and opens with Ctrl/Cmd+O.)
 - `Wait-MenoSettled` compares whole screenshots, so a blinking cursor or a
   clock in shot would keep it waiting until it times out. Nothing in the app
   does that today.

@@ -7,18 +7,16 @@
 #   (with R/S on, RDKit reads them as 1R,2R,3S,5S). The SMILES needs RDKit,
 #   set up on first use.
 #
-# R/S labels show if they are on (the R/S button; the setting stays), which
-# this leaves alone. Coordinates are read off the shots on a Mac
-# (2560x1720): the canvas's buttons, bottom left.
+# R/S labels show if they are on (Show R and S in the menu; the setting
+# stays), which this leaves alone. Commands come from the menu Meno's logo
+# opens (Invoke-MenoMenu).
 
 Start-Meno
 Open-MenoFile "$PSScriptRoot/../fixtures/messy-taxol.mol"
 Wait-MenoSettled | Out-Null
 Save-Step "messy"
 
-$c = Get-ClientSize
-$row = $c.Height - 60
-Invoke-MenoClick -X 588 -Y $row          # Clean-up
+Invoke-MenoMenu "Clean up all"
 Wait-MenoSettled | Out-Null
 Save-Step "cleaned"
 
@@ -28,7 +26,7 @@ Save-Step "undone"
 Send-MenoShortcut Z -Shift
 Wait-MenoSettled | Out-Null
 
-Invoke-MenoClick -X 498 -Y $row          # SMILES: its box takes the keys
+Invoke-MenoMenu "SMILES..."             # its box takes the keys
 Start-Sleep -Seconds 2
 Send-MenoText "CN1[C@H]2CC[C@@H]1[C@H]([C@H](C2)OC(=O)C3=CC=CC=C3)C(=O)OC" -CharMs 10
 Send-MenoKey Enter

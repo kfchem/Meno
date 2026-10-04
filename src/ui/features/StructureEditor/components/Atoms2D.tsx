@@ -3,10 +3,10 @@ import { pageAt } from "../utils/page";
 import { useEffect, useMemo, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
-import { schemeAmong } from "../utils/copyPaste";
+import { dragSelection } from "../utils/dragSelection";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { computeMoveSnap } from "../utils/moveSnap";
-import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
+import { ATOM_PICK_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX } from "../constants";
 import { clickClock, doubleClickedSince } from "../utils/clickCount";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { commitInstanceMatrices } from "./instances";
@@ -37,10 +37,8 @@ export function Atoms2D() {
     updateMovePointer,
     endMoveDrag,
     suppressDoubleClick,
-    sel,
     toggleAtomSel,
     selectPathTo,
-    moveAtoms,
   } = useEditor();
   const store = useEditorStore();
   const inst = useRef<THREE.InstancedMesh>(null!);
@@ -57,12 +55,17 @@ export function Atoms2D() {
     const p = pageAt(v.x, v.y, camera);
     return { x: p.x, y: p.y };
   };
+  // the last press on an atom, and how many clicks it is of
   const lastDown = useRef<{
     t: number;
     id: number | null;
     x: number;
     y: number;
-  }>({ t: 0, id: null, x: 0, y: 0 });
+    count: number;
+  }>({ t: 0, id: null, x: 0, y: 0, count: 0 });
+  const forgetPresses = () => {
+    lastDown.current = { t: 0, id: null, x: 0, y: 0, count: 0 };
+  };
   const cand = useRef<{
     active: boolean;
     atomId: number | null;
@@ -280,49 +283,12 @@ export function Atoms2D() {
   const selectionMoveGesture = (pid: number | null) => {
     cand.current.started = true;
     suppressDoubleClick?.(600);
-    const from = model.atoms
-      .filter((a) => sel.atoms.has(a.id))
-      .map((a) => ({ id: a.id, x: a.x, y: a.y }));
-    // the arrows and pluses among the selection go with it, and the
-    // molecules in 3D selected with it
-    const st = store.getState();
-    const among = schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses }, sel.atoms);
-    const solids = st.molecules3d.filter((m) => st.sel3d.has(m.id)).map((m) => ({ id: m.id, at: m.at }));
-    const p0 = toWorld(cand.current.sx, cand.current.sy);
-    const gesture = `drag-${performance.now()}`;
-    let frame: number | null = null;
-    let last = p0;
-    const apply = () => {
-      frame = null;
-      const dx = last.x - p0.x;
-      const dy = last.y - p0.y;
-      const by = (p: { id: number; x: number; y: number }) => ({ id: p.id, x: p.x + dx, y: p.y + dy });
-      moveAtoms(from.map(by), gesture, {
-        arrows: among.arrows.map(by),
-        pluses: among.pluses.map(by),
-        molecules3d: solids.map((m) => ({ id: m.id, at: { x: m.at.x + dx, y: m.at.y + dy } })),
-      });
-    };
-    const onMove = (ev: PointerEvent) => {
-      last = toWorld(ev.clientX, ev.clientY);
-      // (one move a frame: every move lays the drawing out again)
-      if (frame == null) frame = window.requestAnimationFrame(apply);
-    };
-    const onUp = (ev: PointerEvent) => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp, true);
-      if (frame != null) {
-        window.cancelAnimationFrame(frame);
-        last = toWorld(ev.clientX, ev.clientY);
-        apply();
-      }
+    dragSelection(store, toWorld, { x: cand.current.sx, y: cand.current.sy }, (ev) => {
       resetCand();
       endedByInteractive.current = true;
       suppressDoubleClick?.(480);
       endPanHold(ev.pointerId ?? pid);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp, true);
+    });
   };
 
   const countCap = Math.max(model.atoms.length, 1);
@@ -368,14 +334,15 @@ export function Atoms2D() {
         if (native && (addsToSelection(native) || native.shiftKey)) {
           (e as any).stopPropagation?.();
           cancelPendingEdit();
-          lastDown.current = { t: 0, id: null, x: 0, y: 0 };
+          forgetPresses();
           if (native.shiftKey) selectPathTo(a.id);
           else toggleAtomSel(a.id);
           return;
         }
         const DBL_MS = DOUBLE_CLICK_MS;
-        const second =
-          lastDown.current.id === a.id && now - lastDown.current.t <= DBL_MS;
+        const again = lastDown.current.id === a.id && now - lastDown.current.t <= DBL_MS;
+        const count = again ? lastDown.current.count + 1 : 1;
+        const second = count === 2;
         cand.current = {
           active: true,
           atomId: a.id,
@@ -388,6 +355,20 @@ export function Atoms2D() {
         endedByInteractive.current = false;
         // the drag is the atom's, not the view's
         beginPanHold(pid);
+        if (count >= 3) {
+          // Three clicks draw a chain out of the atom, on its honeycomb
+          // (utils/chain): led by a drag, or - the third click let go where
+          // it was - traced with the button up, until a click ends it. The
+          // bond the double-click drew is taken back for it.
+          cancelPendingEdit();
+          forgetPresses();
+          store.getState().takeBackDoubleClickBond(a.id);
+          strokeGesture(a.id, "chain", pid, () => {
+            startExtend(a.id, "chain", true);
+            endedByInteractive.current = true;
+          });
+          return;
+        }
         if (second) {
           // A double-click that drags draws a bond out of the atom, where it
           // is led; a pause lets it go where the pointer is. One that does
@@ -396,7 +377,8 @@ export function Atoms2D() {
           // bond length the pointer goes, are not drawn this way for now:
           // utils/stroke still knows them.)
           cancelPendingEdit();
-          lastDown.current = { t: 0, id: null, x: 0, y: 0 };
+          // (a third click may follow)
+          lastDown.current = { t: now, id: a.id, x: cx, y: cy, count: 2 };
           strokeGesture(a.id, "bond", pid, (ev) => {
             // Tap-connect: released without a drag beside another atom
             const p = toWorld(ev.clientX, ev.clientY);
@@ -414,26 +396,50 @@ export function Atoms2D() {
           });
           return;
         }
-        lastDown.current = { t: now, id: a.id, x: cx, y: cy };
+        lastDown.current = { t: now, id: a.id, x: cx, y: cy, count: 1 };
         // A drag moves the atom - or, the atom selected with others, the
-        // selection; a click edits its label.
-        const withSelection = sel.atoms.has(a.id) && sel.atoms.size > 1;
+        // selection; a click edits its label. Held still, the press selects
+        // the whole structure, the selection spreading out from the atom as
+        // it is held (HoldProgress2D); a drag from there moves it.
+        let held = false;
+        store.getState().setPressHold({ atomId: a.id, start: now });
+        const hold = window.setTimeout(() => {
+          if (!cand.current.active || cand.current.started) return;
+          held = true;
+          cancelPendingEdit();
+          forgetPresses();
+          store.getState().selectStructure(a.id);
+          store.getState().setPressHold(null);
+        }, LONG_PRESS_MS);
+        const letGo = () => {
+          window.clearTimeout(hold);
+          store.getState().setPressHold(null);
+        };
         const onFirstMove = (ev: PointerEvent) => {
           if (!cand.current.active || cand.current.started) return;
           if (Math.hypot(ev.clientX - cx, ev.clientY - cy) < MOV_PX) return;
           window.removeEventListener("pointermove", onFirstMove);
           window.removeEventListener("pointerup", onEarlyUp, true);
+          letGo();
           cancelPendingEdit();
           // a drag is not the first click of a double-click
-          lastDown.current = { t: 0, id: null, x: 0, y: 0 };
+          forgetPresses();
+          const st = store.getState();
+          const withSelection = held || (st.sel.atoms.has(a.id) && st.sel.atoms.size > 1);
           if (withSelection) selectionMoveGesture(pid);
           else moveGesture(idx, ev, pid);
         };
         const onEarlyUp = (ev: PointerEvent) => {
           window.removeEventListener("pointermove", onFirstMove);
           window.removeEventListener("pointerup", onEarlyUp, true);
+          letGo();
           resetCand();
           endPanHold(ev.pointerId ?? null);
+          // (a long press: the structure is selected, and that is all)
+          if (held) {
+            suppressDoubleClick?.(DOUBLE_CLICK_MS);
+            return;
+          }
           // A click: its label is edited, unless a second click follows -
           // then onPointerDown cancels this.
           cancelPendingEdit();

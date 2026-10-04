@@ -13,6 +13,7 @@ import { chemistry } from "../../../../lib/chem/molecule";
 import { currentStyle3D } from "../style3d";
 import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
 import { PAGE_DISTANCE } from "./PageCamera";
+import { setViewGoal } from "./viewGoal";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -37,6 +38,9 @@ export default function FitToContent2D({
   // needs, never further in. (Molecules in 3D stand beside a drawing, where
   // the opening zoom alone may not reach.)
   const opened = useRef(false);
+  // (the first fit, of a canvas that has shown nothing yet, is where its
+  // view starts; after that a fit goes there)
+  const fitted = useRef(false);
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
     if (autoFitSuspended) return; // skip while suspended
@@ -100,9 +104,14 @@ export default function FitToContent2D({
     const z = first ? Math.min(fit, cam.zoom || fit) : fit;
     const cx = seen.cx;
     const cy = seen.cy;
-    cam.zoom = z;
-    cam.updateProjectionMatrix();
-    cam.position.set(cx, cy, cam.position.z);
+    if (fitted.current) {
+      setViewGoal(cam, { zoom: z, x: cx, y: cy });
+    } else {
+      cam.zoom = z;
+      cam.updateProjectionMatrix();
+      cam.position.set(cx, cy, cam.position.z);
+      fitted.current = true;
+    }
     invalidate();
     lastTriggerRef.current = trigger;
     // size changes should also refit

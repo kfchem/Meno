@@ -376,8 +376,12 @@ function Turnable({ style }: { style: Style3D }) {
       framesOpen={false}
       onFrame={() => {}}
       hoveredMeasure={null}
+      // (a sample, with no R and S on it)
+      stereoShown={null}
+      stereoFont={NO_STEREO_FONT}
     />
   );
 }
 
+const NO_STEREO_FONT = { size: 0, units: "px" as const };
 const NONE: number[] = [];

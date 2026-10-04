@@ -12,7 +12,7 @@ a workspace holding 2D and 3D together - see [`WORKSPACE.md`](./WORKSPACE.md).
 | --- | --- | --- |
 | Tauri shell (Rust) | `src-tauri/src/lib.rs` | Window, plugins (`fs`, `os`, `opener`), and the only code that spawns OS processes: the bundled `uv` binary and the Python sidecar. No chemistry logic lives here. |
 | App shell (React) | `src/App.tsx`, `src/lib/core/`, `src/ui/layouts/`, `src/ui/views/` | Tab model (open/close/reorder/rename), mapping a tab's `kind` to a view component. |
-| Features (React) | `src/ui/features/*` | One folder per view: the structure canvas (2D drawing and molecules in 3D), workflow editor, Python console, text editor, file loader, settings. |
+| Features (React) | `src/ui/features/*` | One folder per view: the structure canvas (2D drawing and molecules in 3D), workflow editor, Python console, text editor, settings. |
 | Chemistry helpers (TS) | `src/lib/chem/`, `src/utils/` | File parsing (MOL/SDF/RXN/XYZ), editor model conversion, 2D depiction layout (bond lines, wedges, labels) and ACS-style sizing. Pure functions — no React, no Tauri. |
 | Python worker | `src-tauri/resources/workers/interactive_worker.py` | Line-delimited JSON REPL run inside a `uv`-managed venv. |
 
@@ -40,13 +40,14 @@ src/
   utils/atomUtils         element table (radii, colours)
   samples/                textbook structures and reactions for the tests and the workflow's 3D node
                           (see samples/README.md)
-  ui/layouts/TopBar       custom title bar: tabs, "New…" menu, online/offline, Settings, window buttons
+  ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "New…" menu, online/offline, Settings, window buttons
+  ui/layouts/MenoMenu     the logo's menu: the app's commands and those the tab in front offers (commands.ts)
   ui/fonts/               the typefaces labels are drawn in, read from their files
   ui/network/             consent dialog, activity cards, Settings › Network
   ui/views/registry       TabKind -> { Component, create } table
   ui/views/Deck           renders every open tab, hides inactive ones with CSS
+  ui/views/openFile       a file to the tab it opens in: Open (Ctrl/Cmd+O)
   ui/features/
-    OmniHub/              "Open file / drop a file" start page; routes a file to a view
     StructureEditor/      2D editor (see below)
     WorkflowEditor/       React Flow graph (prototype, not executable yet)
     PythonConsole/        UI for the Python sidecar
@@ -67,8 +68,8 @@ src-tauri/
 
 ## Tabs and views
 
-`src/lib/core` holds a small reducer (`ADD_TAB`, `CLOSE_TAB`, `SELECT_TAB`,
-`REORDER`, `SET_CONTENT`, `PATCH_DATA`, `RENAME_TAB`, `SET_DIRTY`). Each tab is
+`src/lib/core` holds a small reducer (`ADD_TAB`, `CLOSE_TAB`, `REPLACE_TAB`,
+`SELECT_TAB`, `REORDER`, `SET_CONTENT`, `PATCH_DATA`, `RENAME_TAB`, `SET_DIRTY`). Each tab is
 `{ meta: { id, label, dirty? }, content: { kind, data? } }`.
 
 - `tabOrder` is the visual order in the title bar; `mountOrder` is the stable
@@ -81,8 +82,22 @@ src-tauri/
   16, `lib/core/limits.ts` budgets them: a 2D or structure tab costs one, a
   workflow tab two, and opening past the limit is refused with a notice rather
   than silently blanking the oldest view.
-- A new tab starts as `loader` (OmniHub). When a file is chosen, OmniHub calls
-  `replaceContent({ kind, ...data, filename })` and the tab switches view.
+- Meno starts on a structure canvas, and "+" makes another: the canvas is
+  the workspace (docs/WORKSPACE.md), so there is no start page.
+- **Open** (Ctrl/Cmd+O, or the menu) reads the files picked in the system's
+  dialog and opens each in a tab of its own, by what it is
+  (`ui/views/openFile`): in place of the tab in front if that is a canvas
+  nothing is drawn on (`REPLACE_TAB`). A structure from an Office document
+  opens the same way.
+- **Closing the last tab quits Meno.**
+- **Commands.** The canvas carries nothing but the drawing. Every command
+  is in Meno's menu, which its logo opens, with its key; the app's own
+  (Open…) and those the tab in front offers through `offerCommands`
+  (`ui/layouts/commands.ts`), asked for as the menu opens. A structure
+  canvas offers Save, Save As, Export as SVG, SMILES, Clean up all, Fit to
+  content (Ctrl/Cmd+1), R and S, and Drawing style, and puts the same on its
+  right-click menu on empty space. The system's own menu bar is left as the
+  system has it.
 
 ## Documents and undo (`lib/doc`, being adopted)
 
@@ -105,6 +120,31 @@ imports React.
 Adoption is incremental. The text view and the structure canvas, with its
 molecules in 3D, are on documents; the workflow editor still keeps its
 content in component state, and it is still lost when its tab closes.
+
+## How things move
+
+Nothing on screen changes at a jump (asked for by the maintainer, for all
+of Meno): a highlight eases in and out, a menu, a card or a mark comes into
+view and goes out of it, and the drawing and the view go where they are
+sent rather than appear there. Short and understated; what belongs together
+moves together, in the same time and the same way.
+
+- **One place** for how long and how: `ui/theme/motion.ts` - `DURATION`
+  (quick 0.12 s for colours and highlights, base 0.16 s for things coming
+  and going, move 0.22 s for the drawing and the view), one easing (CSS's
+  `--ease-meno`) - save a panel sliding beside the canvas, which moves the
+  drawing and so starts as gently as it ends (`EASE_SLIDE`) - `TAU` for
+  following a moving target, the spring, and motion's `FADE` and `RISE`.
+- **The page's elements**: motion's `AnimatePresence` for what mounts and
+  unmounts (menus, dialogs, notices, cards, panels, tabs); CSS
+  `meno-fade-in` for what comes into view as a class goes on, and
+  `meno-fade-out` with `ui/theme/presence.ts#usePresence` for what has just
+  gone; every button's colours ease (one rule in `App.css`).
+- **The canvas**: each layer eases its own parts in `useFrame` - each
+  part its own way in and out, so one can go while the next comes - and
+  invalidates only while something moves (see *Frame loop*). The drawing
+  itself goes from shape to shape in `DrawnLayout` (`utils/glide.ts`), and
+  a fit goes there through `components/viewGoal.ts`.
 
 ## 2D structure editor (`ui/features/StructureEditor`)
 
@@ -156,11 +196,17 @@ What is left before the editor counts as finished, and in what order, is in
   the pointer (`PartMenu.tsx`), which offers the same actions to the mouse
   alone. Only the main button works atoms and bonds; the other is the
   menu's. Over a button or a card nothing counts as hovered.
-- **Strokes**: bonds dragged out of an atom are a stroke (`utils/stroke.ts`,
+- **Strokes**: bonds drawn in one gesture are a stroke (`utils/stroke.ts`,
   with the angles in `utils/extendSnap.ts`) - a bond, or a chain - held in
-  `extend.stroke` while the button is down. The store, `ExtendPreview2D`,
-  `SnapArc2D` and the drawn layout all read the same stroke, so what is
-  shown is what is added; `addStroke` adds it in one edit on release.
+  `extend.stroke` while it is drawn. A chain walks a honeycomb
+  (`utils/honeycomb.ts`, `utils/chain.ts`) and may start on empty space
+  (`NEW_ATOM`) or be traced with the button up (`extend.tracing`,
+  `ChainGuide2D`). The store, `ExtendPreview2D`, `SnapArc2D` and the drawn
+  layout all read the same stroke, so what is shown is what is added;
+  `addStroke` (or `addStrokeAt`) adds it in one edit when it ends.
+- **Long presses**: a press held still is `pressHold` in the store, which
+  `HoldProgress2D` shows; `Atoms2D`, `BondsPick2D` and `Selection2D` time it
+  (`LONG_PRESS_MS`) and select the structure, or begin a box.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
 - **Chemistry**: RDKit's marks on the structure, in `chem/` and
   `ChemMarks2D` (see the chemistry worker below); clean-up and a SMILES's
@@ -185,7 +231,9 @@ What is left before the editor counts as finished, and in what order, is in
     is selected of them (`sel3d`) and the atoms and bonds chosen in one
     (`chosen3d`). A turn of several as one body moves them, so it is the
     document's too: `store/turnJournal.ts` keeps the turns with that undo
-    step.
+    step, which stays one step however long the hand pauses in it. A turn
+    by the selection's handle where they stand moves nothing, but is a
+    step all the same (`keepTurns3d`), for the turns to go with.
   - How they are drawn: a molecule stands as high as it reaches, so no
     turn takes it behind the page - or where a turn of several as one body
     put it (`at.z`). It is instanced, lit, drawn after the
@@ -233,7 +281,8 @@ PyConsole ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_set
 The chemistry worker (`resources/workers/chem_worker.py`) is a sidecar of
 the `chem` profile, started by `lib/rdkit/worker.ts` and asked through
 `lib/rdkit/client.ts`: JSON lines, a fixed set of requests (ping,
-to_smiles, from_smiles, clean, analyse), MOL blocks in (written by
+to_smiles, from_smiles, clean, analyse, and for 3D open_stereo,
+conformers and drawing_of), MOL blocks in (written by
 `lib/rdkit/molblock.ts`, a label that is not an element as `*`) and V3000
 blocks or coordinates out. It runs no code it is sent, and the app keeps it
 off the network. Its tests need RDKit and run by hand
@@ -248,6 +297,22 @@ turned over, and its chains turned over their single bonds, whichever
 lies closest - keeping the drawn wedges when they still say the same
 stereochemistry and otherwise giving RDKit's; the editor applies it as one
 undo step.
+
+A drawn structure made in 3D (`StructureEditor/chem/make3d.ts`, stage 2 of
+docs/WORKSPACE.md): `open_stereo` says what its drawing leaves open, which
+Meno asks about first; `conformers` makes each stereoisomer asked for
+(ETKDG, then MMFF94 or UFF, on every core; the same shape twice kept once;
+lowest first, each laid over the first, with every centre's CIP label; of
+two enantiomers, the one whose SMILES comes first is made and the other is
+its mirror image). Both take `like`, a molecule in 3D made before from the
+drawing - where it has the block's atoms - so that what the drawing leaves
+open is made as it was (*Make again*). The molecule in 3D that comes of it
+keeps which drawing atom each of its atoms is and what the drawing was (`drawnFrom`, `drawnAs`;
+`utils/drawnLink`), so that hover is shared and a changed drawing is seen.
+`drawing_of` goes the other way: a molecule in 3D's heavy atoms in their
+order, wedged as they are in 3D, its bonds' orders found where a file of
+coordinates gave none, for Meno's engine to draw. These take as long as
+they take (`CONFORMERS_MS`, five minutes at most).
 
 The venv lives under the app data dir at `uv/<profile>/venv`; a stamp file
 (`uv/stamps/<profile>.json`) stores the lock-file hash so setup reruns only when

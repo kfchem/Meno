@@ -15,8 +15,7 @@
 Start-Meno
 Open-MenoFile "$PSScriptRoot/../fixtures/depiction-check.mol"
 
-$c = Get-ClientSize
-Invoke-MenoClick -X 60 -Y ($c.Height - 60)   # fit to content, bottom left
+Send-MenoShortcut 1                          # fit to content
 Wait-MenoSettled | Out-Null
 Save-Step "fitted"
 
@@ -35,7 +34,7 @@ Invoke-MenoDrag -FromX 626 -FromY 439 -ToX 626 -ToY 228 -AtStep $midDrag
 Wait-MenoSettled | Out-Null
 Save-Step "chain-dropped"
 
-Invoke-MenoClick -X 60 -Y ($c.Height - 60)
+Send-MenoShortcut 1
 Wait-MenoSettled | Out-Null
 
 # The oxygen of an OH. A label takes the bond's end away with it, so no cap
@@ -45,7 +44,7 @@ Invoke-MenoDrag -FromX 1354 -FromY 809 -ToX 1587 -ToY 918 -AtStep $midDrag
 Wait-MenoSettled | Out-Null
 Save-Step "label-dropped"
 
-Invoke-MenoClick -X 60 -Y ($c.Height - 60)
+Send-MenoShortcut 1
 Wait-MenoSettled | Out-Null
 
 # The stereocentre of the wedge cluster: three wedges and a hashed one meet

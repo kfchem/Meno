@@ -1,6 +1,8 @@
 export const COLORS = {
   // Accent color for hover/highlight overlays in 2D editors
   highlight: "#1e90ff", // DodgerBlue
+  // What asks for attention on the drawing: stereo left open (the app's accent, --color-accel-accent)
+  attention: "#cd4560",
 
   // Base drawing colors (kept here for centralization)
   bond: "#000000",

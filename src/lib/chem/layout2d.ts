@@ -451,6 +451,13 @@ export type Layout = {
   fills: Circle[];
   /** Molecules in 3D, as seen, from the back forward. */
   solids?: SolidMark[];
+  /**
+   * The same molecules drawn as the canvas draws them, lit and in depth, as
+   * an image (a data URL) and where on the page it goes: a picture shows
+   * that rather than the marks, which as flat discs one over another cannot
+   * show balls running into one another.
+   */
+  solidsImage?: { href: string; bounds: { min: Vec2; max: Vec2 } };
   bounds: { min: Vec2; max: Vec2 };
   /**
    * Pixels per coordinate unit this layout was built for. Sizes the layout
@@ -3995,7 +4002,11 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
   for (const t of layout.texts) {
     s += svgLabel(t, fontSize, set, fill);
   }
-  s += svgSolids(layout.solids ?? []);
+  const img = layout.solidsImage;
+  s += img
+    ? `<image href="${img.href}" x="${img.bounds.min.x}" y="${-img.bounds.max.y}"` +
+      ` width="${img.bounds.max.x - img.bounds.min.x}" height="${img.bounds.max.y - img.bounds.min.y}" preserveAspectRatio="none" />`
+    : svgSolids(layout.solids ?? []);
   s += `</svg>`;
   return s;
 }
@@ -4004,6 +4015,27 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
  * Molecules in 3D as an SVG draws them: each ball filled with a radial
  * gradient of its colour, light where the light falls, each stick a line.
  */
+/** How far molecules in 3D reach on the page, drawn as their marks are; null with none. */
+export function solidsBounds(marks: readonly SolidMark[]): { min: Vec2; max: Vec2 } | null {
+  if (!marks.length) return null;
+  const min = { x: Infinity, y: Infinity };
+  const max = { x: -Infinity, y: -Infinity };
+  const take = (x: number, y: number, r: number) => {
+    min.x = Math.min(min.x, x - r);
+    min.y = Math.min(min.y, y - r);
+    max.x = Math.max(max.x, x + r);
+    max.y = Math.max(max.y, y + r);
+  };
+  for (const m of marks) {
+    if (m.kind === "ball") take(m.c.x, m.c.y, m.r);
+    else {
+      take(m.a.x, m.a.y, m.width / 2);
+      take(m.b.x, m.b.y, m.width / 2);
+    }
+  }
+  return { min, max };
+}
+
 function svgSolids(marks: SolidMark[]): string {
   if (!marks.length) return "";
   const ids = new Map<string, string>();

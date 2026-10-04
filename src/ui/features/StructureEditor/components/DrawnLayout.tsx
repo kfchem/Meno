@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import {
@@ -13,9 +13,36 @@ import { needsFallback, useTypefaces } from "../../../fonts/typefaces";
 import { chemistry } from "../../../../lib/chem/molecule";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { DrawnLayoutContext } from "./drawnLayoutContext";
+import { NEW_ATOM } from "../utils/stroke";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
+import { DURATION, easeOut } from "../../../theme/motion";
+import { glideAt, partsOf, planGlide, type GlidePlan, type Pt } from "../utils/glide";
+
+/**
+ * How far an atom may move in one change, while a button is held, and still
+ * be drawn there at once: a drag follows the pointer. Further - a snap of a
+ * turn, a drop onto an atom - or with no button held - a Clean-up, an undo -
+ * the drawing goes there rather than appearing there.
+ */
+const FOLLOWED = 0.35 * NOMINAL_BOND_LENGTH;
+/** Close enough to where it is going to be drawn there. */
+const ARRIVED = 1e-3;
+/** How long the drawing takes to get where it is going, in ms. */
+const GLIDE_MS = DURATION.move * 1000;
+
+/** Whether a pointer button is held anywhere in the window, for what moves the drawing as it is. */
+const held = { buttons: 0 };
+if (typeof window !== "undefined") {
+  const note = (e: PointerEvent) => (held.buttons = e.buttons);
+  window.addEventListener("pointerdown", note, true);
+  window.addEventListener("pointerup", note, true);
+  window.addEventListener("pointercancel", () => (held.buttons = 0), true);
+}
 
 /** The id the atom a bond is being drawn out to goes by until it is made. */
 export const EXTENDING_ATOM_ID = -1;
+/** The new atom a stroke on empty space starts at, while it is drawn. */
+const STROKE_START_ID = -100000;
 
 /**
  * The drawing as it stands this frame - the model, with an atom that is being
@@ -26,7 +53,7 @@ export const EXTENDING_ATOM_ID = -1;
  * come from the same layout.
  */
 export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
-  const { camera } = useThree();
+  const { camera, invalidate } = useThree();
   const [zoom, setZoom] = useState(
     () => (camera as THREE.OrthographicCamera).zoom || 1,
   );
@@ -59,6 +86,10 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
       ...chemistry(a),
       ...(a.z != null ? { z: a.z } : {}),
     }));
+    // (a stroke on empty space: its own new atom where it starts)
+    if (stroke && stroke.baseId === NEW_ATOM && stroke.start) {
+      out.push({ id: STROKE_START_ID, x: stroke.start.x, y: stroke.start.y, el: "C" });
+    }
     stroke?.nodes.forEach((n, i) => {
       if (n.atomId == null && n.pathIndex == null) {
         out.push({ id: EXTENDING_ATOM_ID - i, x: n.x, y: n.y, el: "C" });
@@ -69,21 +100,86 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
     }
     return out;
   }, [model.atoms, draggedId, dragX, dragY, stroke, preview]);
+  // Where each atom is drawn: where it is, or - after a Clean-up, an undo, a
+  // snap - on its way there, each structure turning as a whole and settling
+  // into its new shape (utils/glide) rather than jumping. An atom being
+  // dragged, and what a stroke is laying down, are drawn where the gesture
+  // has them.
+  const shown = useRef(new Map<number, Pt>());
+  const glide = useRef<{ plan: GlidePlan; from: Map<number, Pt>; start: number } | null>(null);
+  const planned = useRef<LAtom[] | null>(null);
+  const [step, setStep] = useState(0);
+  const drawnAtoms: LAtom[] = useMemo(() => {
+    const was = shown.current;
+    if (planned.current !== atoms) {
+      // what changed: drawn there at once, or on its way
+      planned.current = atoms;
+      let far = 0;
+      for (const a of atoms) {
+        const s = a.id === draggedId || a.id < 0 ? undefined : was.get(a.id);
+        if (s) far = Math.max(far, Math.hypot(a.x - s.x, a.y - s.y));
+      }
+      const atOnce = !glide.current && (far <= ARRIVED || (held.buttons !== 0 && far <= FOLLOWED));
+      if (atOnce) {
+        glide.current = null;
+      } else {
+        const from = new Map<number, Pt>();
+        const to = new Map<number, Pt>();
+        for (const a of atoms) {
+          const s = was.get(a.id);
+          if (!s || a.id === draggedId || a.id < 0) continue;
+          from.set(a.id, s);
+          to.set(a.id, { x: a.x, y: a.y, ...(a.z != null ? { z: a.z } : {}) });
+        }
+        glide.current = { plan: planGlide(from, to, partsOf(model.atoms, model.bonds)), from, start: performance.now() };
+      }
+    }
+    const g = glide.current;
+    const on = g ? glideAt(g.plan, g.from, easeOut((performance.now() - g.start) / GLIDE_MS)) : null;
+    const next = new Map<number, Pt>();
+    const out = atoms.map((a) => {
+      const p = on?.get(a.id);
+      if (!p) {
+        next.set(a.id, { x: a.x, y: a.y, ...(a.z != null ? { z: a.z } : {}) });
+        return a;
+      }
+      next.set(a.id, p);
+      return { ...a, x: p.x, y: p.y, ...(a.z != null && p.z != null ? { z: p.z } : {}) };
+    });
+    shown.current = next;
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- step: a frame of the way there; model: its structures, read as the way is planned
+  }, [atoms, draggedId, step]);
+  // On the way: drawn again every frame until there.
+  useFrame(() => {
+    const g = glide.current;
+    if (!g) return;
+    if (performance.now() - g.start >= GLIDE_MS) glide.current = null;
+    setStep((n) => n + 1);
+    invalidate();
+  });
+  useEffect(() => {
+    if (glide.current) invalidate();
+  });
   const bonds: LBond[] = useMemo(() => {
     const index = new Map<number, number>();
-    atoms.forEach((a, i) => index.set(a.id, i));
+    drawnAtoms.forEach((a, i) => index.set(a.id, i));
     const out = layoutBonds(model.bonds, index);
     if (!stroke) return out;
     // where each node of the stroke is drawn: its own atom, or the one it
     // closed onto
+    const baseIndex = index.get(stroke.baseId === NEW_ATOM ? STROKE_START_ID : stroke.baseId);
+    // (a path index of -1 is the stroke's own start)
+    const ofPath = (i: number) => (i === -1 ? baseIndex : index.get(EXTENDING_ATOM_ID - i));
     const at = (n: { atomId?: number; pathIndex?: number }, i: number) =>
       n.atomId != null
         ? index.get(n.atomId)
         : n.pathIndex != null
-          ? index.get(EXTENDING_ATOM_ID - n.pathIndex)
+          ? ofPath(n.pathIndex)
           : index.get(EXTENDING_ATOM_ID - i);
-    let from = index.get(stroke.baseId);
+    let from = baseIndex;
     stroke.nodes.forEach((n, i) => {
+      if (n.from != null) from = ofPath(n.from) ?? from;
       const to = at(n, i);
       if (from != null && to != null && from !== to) {
         out.push({ a1: from, a2: to, order: 1, stereo: "none" });
@@ -100,7 +196,7 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
       }
     }
     return out;
-  }, [atoms, model.bonds, stroke, preview]);
+  }, [drawnAtoms, model.bonds, stroke, preview]);
   const opts = useMemo(() => {
     const keys = Object.keys(aromaticRings || {}).filter(
       (k) => aromaticRings[k],
@@ -122,13 +218,13 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
   // (a label is read by the abbreviations Meno knows, the user's among them)
   const abbreviations = useAppSettings((s) => s.abbreviations);
   const layout = useMemo(
-    () => layoutMolecule(atoms, bonds, opts, zoom),
+    () => layoutMolecule(drawnAtoms, bonds, opts, zoom),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fonts, abbreviations: see above
-    [atoms, bonds, opts, zoom, fonts, abbreviations],
+    [drawnAtoms, bonds, opts, zoom, fonts, abbreviations],
   );
   const value = useMemo(
-    () => ({ atoms, bonds, opts, layout, zoom }),
-    [atoms, bonds, opts, layout, zoom],
+    () => ({ atoms: drawnAtoms, bonds, opts, layout, zoom }),
+    [drawnAtoms, bonds, opts, layout, zoom],
   );
   return (
     <DrawnLayoutContext.Provider value={value}>

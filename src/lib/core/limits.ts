@@ -14,13 +14,13 @@ export const CANVASES_PER_KIND: Partial<Record<TabKind, number>> = {
 
 export const MAX_CANVASES = 16;
 
-export function canvasCost(kind: TabKind | string): number {
-  return CANVASES_PER_KIND[kind as TabKind] ?? 0;
+export function canvasCost(kind: TabKind | string | undefined): number {
+  return kind ? (CANVASES_PER_KIND[kind as TabKind] ?? 0) : 0;
 }
 
 export function countCanvases(state: State): number {
   return state.tabOrder.reduce(
-    (n, id) => n + canvasCost(state.tabsById[id]?.content.kind ?? "loader"),
+    (n, id) => n + canvasCost(state.tabsById[id]?.content.kind),
     0,
   );
 }
@@ -35,7 +35,7 @@ export function canOpenKind(
   replacingTabId?: string,
 ): boolean {
   const freed = replacingTabId
-    ? canvasCost(state.tabsById[replacingTabId]?.content.kind ?? "loader")
+    ? canvasCost(state.tabsById[replacingTabId]?.content.kind)
     : 0;
   return countCanvases(state) - freed + canvasCost(kind) <= MAX_CANVASES;
 }

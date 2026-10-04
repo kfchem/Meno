@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { addMolecule3d, createStructureDocument } from "../document";
 import { molecules3dIn } from "../utils/selection";
+import { readRecord, recordText } from "../utils/copyPaste";
+import { linkOf, signatureOf } from "../utils/drawnLink";
 
 const water = {
   atoms: [
@@ -60,6 +62,45 @@ describe("molecules in 3D turned together, as one body", () => {
     expect(state().turns3d).toEqual({ 1: [0, 0, 0, 1] });
     doc.redo();
     expect(state().turns3d).toEqual({ 1: half, 2: half });
+  });
+
+  it("stay one undo step, turns and all, however long the hand pauses in the turn", () => {
+    vi.useFakeTimers();
+    try {
+      const { doc, state } = editor();
+      const depth = doc.history().undoDepth;
+      state().turnMolecules3d([{ id: 1, at: { x: 1, y: 0, z: 2 }, turn: [0, 0, 1, 0] }], "turn-1");
+      vi.advanceTimersByTime(2000);
+      state().turnMolecules3d([{ id: 1, at: { x: 2, y: 0, z: 2 }, turn: half }], "turn-1");
+      expect(doc.history().undoDepth).toBe(depth + 1);
+      doc.undo();
+      expect(state().molecules3d[0].at).toEqual({ x: 0, y: 0 });
+      expect(state().turns3d[1]).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("turned where they stand by the handle: one undo step, which puts the turns back", () => {
+    const { doc, state } = editor();
+    state().setTurn3d(1, [0, 0, 0, 1]);
+    const at = state().molecules3d.map((m) => m.at);
+    const before = { 1: state().turns3d[1], 2: state().turns3d[2] };
+    state().setTurn3d(1, half);
+    state().setTurn3d(2, half);
+    state().keepTurns3d(before, { 1: half, 2: half });
+    expect(doc.history().undoLabel).toBe("turn molecules");
+    doc.undo();
+    expect(state().turns3d).toEqual({ 1: [0, 0, 0, 1] });
+    expect(state().molecules3d.map((m) => m.at)).toEqual(at);
+    doc.redo();
+    expect(state().turns3d).toEqual({ 1: half, 2: half });
+    // (one turned alone, likewise)
+    state().setTurn3d(2, [0, 0, 1, 0]);
+    state().keepTurns3d({ 2: half }, { 2: [0, 0, 1, 0] });
+    expect(doc.history().undoLabel).toBe("turn molecule");
+    doc.undo();
+    expect(state().turns3d[2]).toEqual(half);
   });
 
   it("leave the turns alone on an undo of something else", () => {
@@ -178,5 +219,91 @@ describe("molecules in 3D, chosen and selected", () => {
       { x: 5, y: 1 },
     ];
     expect(molecules3dIn(ms, "lasso", lasso)).toEqual([2]);
+  });
+});
+
+describe("molecules in 3D and their drawings", () => {
+  it("rise as one undo step, turned and rising from over the drawing, several one after another", () => {
+    const { doc, state } = editor();
+    const ids = state().riseMolecules3d([
+      { m: { ...water, at: { x: 10, y: 0 } }, turn: [0, 0, 0, 1], from: { x: 1, y: 1 } },
+      { m: { ...water, at: { x: 14, y: 0 } }, turn: [0, 1, 0, 0], from: { x: 1, y: 1 } },
+    ]);
+    expect(ids).toEqual([3, 4]);
+    expect(doc.history().undoLabel).toBe("3D structures");
+    expect(state().turns3d[4]).toEqual([0, 1, 0, 0]);
+    expect(state().rising3d[4].start).toBeGreaterThan(state().rising3d[3].start);
+    state().risen3d(3);
+    expect(state().rising3d[3]).toBeUndefined();
+    doc.undo();
+    expect(state().molecules3d.map((m) => m.id)).toEqual([1, 2]);
+  });
+
+  it("are made again in place of the one before, as one step, which an undo puts back as it was turned", () => {
+    const { doc, state } = editor();
+    const turned: [number, number, number, number] = [0, 0, 1, 0];
+    state().setTurn3d(1, turned);
+    state().riseMolecules3d([{ m: { ...water, at: { x: 0, y: 0 } }, turn: [0, 1, 0, 0], from: { x: 0, y: 0 } }], [1]);
+    expect(state().molecules3d.map((m) => m.id)).toEqual([2, 3]);
+    expect(state().turns3d[1]).toBeUndefined();
+    expect(doc.history().undoLabel).toBe("3D structure made again");
+    doc.undo();
+    expect(state().molecules3d.map((m) => m.id)).toEqual([1, 2]);
+    expect(state().turns3d[1]).toEqual(turned);
+    expect(state().turns3d[3]).toBeUndefined();
+    // (and a redo, the new one as it was made)
+    doc.redo();
+    expect(state().turns3d[3]).toEqual([0, 1, 0, 0]);
+    expect(state().turns3d[1]).toBeUndefined();
+  });
+
+  it("are drawn as a formula, added to the drawing and tied to it, as one step", () => {
+    const { doc, state } = editor();
+    const formula = {
+      atoms: [{ id: 7, x: -5, y: 0, r: 0.9, el: "O" }],
+      bonds: [],
+    };
+    state().drawFormula3d(1, formula, [7, null, null, null, null]);
+    const atom = state().model.atoms[0];
+    expect(atom.el).toBe("O");
+    const m = state().molecules3d[0];
+    expect(m.drawnFrom).toEqual([atom.id, null, null, null, null]);
+    expect(linkOf(m, state().model)).toBe("live");
+    expect(doc.history().undoLabel).toBe("draw as formula");
+    doc.undo();
+    expect(state().model.atoms).toEqual([]);
+    expect(state().molecules3d[0].drawnFrom).toBeUndefined();
+  });
+
+  it("pasted with their drawing, are tied to the pasted drawing; pasted alone, to none", () => {
+    const { state } = editor();
+    const drawing = { atoms: [{ id: 50, x: 0, y: 0, r: 0.9, el: "O" }], bonds: [] };
+    const made = { ...water, at: { x: 3, y: 0 }, drawnFrom: [50, null, null, null, null], drawnAs: signatureOf(drawing, [50]) };
+    state().pasteModel({ ...drawing, molecules3d: [made] });
+    const pasted = state().molecules3d[2];
+    const atom = state().model.atoms[0];
+    expect(atom.id).not.toBe(50);
+    expect(pasted.drawnFrom).toEqual([atom.id, null, null, null, null]);
+    expect(linkOf(pasted, state().model)).toBe("live");
+    state().pasteModel({ atoms: [], bonds: [], molecules3d: [made] });
+    expect(state().molecules3d[3].drawnFrom).toBeUndefined();
+  });
+
+  it("copied with their drawing and pasted from the clipboard's record, are tied to the pasted drawing", () => {
+    const { state } = editor();
+    const drawing = { atoms: [{ id: 50, x: 0, y: 0, r: 0.9, el: "O" }], bonds: [] };
+    const made = { ...water, at: { x: 3, y: 0 }, drawnFrom: [50, null, null, null, null], drawnAs: signatureOf(drawing, [50]) };
+    state().pasteModel(readRecord(recordText({ ...drawing, molecules3d: [made] }))!);
+    const pasted = state().molecules3d[2];
+    expect(pasted.drawnFrom).toEqual([state().model.atoms[0].id, null, null, null, null]);
+    expect(linkOf(pasted, state().model)).toBe("live");
+  });
+
+  it("show their frames overlaid, or not, as the view has it", () => {
+    const { state } = editor();
+    state().setOverlay3d(2, true);
+    expect(state().overlay3d).toEqual({ 2: true });
+    state().setOverlay3d(2, false);
+    expect(state().overlay3d).toEqual({});
   });
 });

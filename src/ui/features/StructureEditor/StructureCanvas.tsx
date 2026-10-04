@@ -11,6 +11,8 @@ import {
   BondsPick2D,
   AtomsHoverRings2D,
   ExtendPreview2D,
+  HoldProgress2D,
+  ChainGuide2D,
   MovePreview2D,
   Arrows2D,
   Pluses2D,
@@ -23,28 +25,24 @@ import {
   SnapArc2D,
   Selection2D,
 } from "./components";
-import {
-  ArrowDownTrayIcon,
-  ArrowsPointingInIcon,
-  ExclamationTriangleIcon,
-  FolderOpenIcon,
-  PhotoIcon,
-  SparklesIcon,
-  SwatchIcon,
-  CodeBracketIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { CANVAS_RESIZE, DURATION, EASE_SLIDE, FADE, RISE } from "../../theme/motion";
 import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
-import { useStyle3D } from "./style3d";
-import { chosenPath, lookOf } from "./utils/molecule3d";
+import { currentStyle3D, useStyle3D } from "./style3d";
+import { offerCommands, type CommandGroup } from "../../layouts/commands";
+import { chosenPath, frameOf, lookOf, solidOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
+
+/** No atoms or bonds: the same array each time, so that nothing redraws for it. */
+const NO_IDS: number[] = [];
 
 /** Whether an atom is an abbreviation that can be drawn out: a file's, or one the dictionary knows. */
 function expandable(a: { el: string; abbrev?: unknown } | undefined): boolean {
@@ -56,9 +54,11 @@ import {
   clipboardIntent,
   isCleanUpKey,
   isDeleteKey,
+  isFitKey,
   isDeselectKey,
   isSelectAllKey,
   saveIntent,
+  shortcutLabel,
 } from "../../../lib/doc/shortcuts";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
 import { useAppSettings } from "../../../lib/settings/appSettings";
@@ -75,6 +75,14 @@ import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 import PageCamera, { PAGE_DISTANCE } from "./components/PageCamera";
 import Molecules3D from "./components/Molecules3D";
+import OpenStereo2D from "./components/OpenStereo2D";
+import LinkedHover2D from "./components/LinkedHover2D";
+import Ask3D from "./Ask3D";
+import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf, moleculeOf, openIn, placeRow, rowFrom, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
+import { centredAt } from "./utils/copyPaste";
+import { Remake3D } from "./components/remake3d";
+import { turnOnto } from "./utils/align3d";
+import type { Molecule3D } from "./store/types";
 
 function StructureCanvasContent({
   active,
@@ -82,6 +90,8 @@ function StructureCanvasContent({
   initialPayload,
   initialFilename,
   officeId,
+  ownTab,
+  nameTab,
   styleOpen,
   toggleStyle,
   openArrowStyle,
@@ -93,6 +103,13 @@ function StructureCanvasContent({
   initialFilename?: string;
   /** The object in a document this canvas was opened from (lib/ole). */
   officeId?: number;
+  /** Whether the canvas is a tab's own, which offers the app's menu its commands. */
+  ownTab: boolean;
+  /**
+   * Names the canvas's tab after the file it is saved as. (One opened from
+   * a document keeps that document's name.)
+   */
+  nameTab?: (label: string) => void;
   /** Whether the drawing-style panel is open beside the canvas. */
   styleOpen: boolean;
   toggleStyle: () => void;
@@ -103,30 +120,29 @@ function StructureCanvasContent({
 }) {
   const fitNonce = useEditor((s) => s.fitNonce);
   const requestFit = useEditor((s) => s.requestFit);
+  // (a canvas opened from a document keeps that document's name)
+  const named = officeId == null ? nameTab : undefined;
 
   const {
     camRef,
     domRef,
-    fileInputRef,
     handleDoubleClick,
     handleWrapperMouseMove,
     handleWrapperMouseLeave,
     handleWrapperClick,
     dropZone,
-    onPickFiles,
-    openFilePicker,
     importError,
     dismissImportError,
     handleMouseDownCapture,
     clientToWorld,
     pasteTarget,
-  } = useStructureEvents(initialPayload, initialFilename);
+  } = useStructureEvents(initialPayload, initialFilename, officeId == null);
   useOfficeLink(officeId);
 
   const onCreated = useCanvasSetup(camRef, domRef);
 
   // Save and export. Ctrl/Cmd+S belongs to the tab in front, like undo.
-  const files = useFileActions();
+  const files = useFileActions(named);
   const { save, saveAs } = files;
   useEffect(() => {
     if (!active) return;
@@ -166,6 +182,134 @@ function StructureCanvasContent({
           cleaningNow.current = false;
           setCleaning(false);
         });
+    },
+    [store],
+  );
+  // The page in view, in world units: what the camera sees of it
+  const viewBox = useCallback((): Box | null => {
+    const cam = camRef.current;
+    const el = domRef.current;
+    if (!cam || !el || !cam.zoom) return null;
+    const w = el.clientWidth / 2 / cam.zoom;
+    const h = el.clientHeight / 2 / cam.zoom;
+    return { x0: cam.position.x - w, x1: cam.position.x + w, y0: cam.position.y - h, y1: cam.position.y + h };
+  }, [camRef, domRef]);
+  // Structures made in 3D (chem/make3d): asked first about what their
+  // drawing leaves open, then their conformers made and risen out of them
+  const [ask3d, setAsk3d] = useState<{ blocks: Block[]; open: Open[]; replacing?: Molecule3D } | null>(null);
+  // (what RDKit is doing for it, said meanwhile)
+  const [working3d, setWorking3d] = useState<string | null>(null);
+  const build3d = useCallback(
+    async (blocks: Block[], isomers: "one" | "all", replacing?: Molecule3D) => {
+      setWorking3d("Making the 3D structure…");
+      setChemError(null);
+      try {
+        const chem = await chemWorker();
+        const made: Parameters<ReturnType<typeof store.getState>["riseMolecules3d"]>[0] = [];
+        let allInView = true;
+        for (const block of blocks) {
+          const ms = (await conformersOf(chem, block, isomers)).map((c) => moleculeOf(c, block));
+          const model = store.getState().model;
+          const turned = ms.map((m) => turnedOver(m, model, currentStyle3D()));
+          // beside the drawing, where they can be seen as the view is now -
+          // or, made again, where the one made before stood
+          const row = replacing
+            ? { at: rowFrom(turned, replacing.at), inView: true }
+            : placeRow(turned, boxOf(block.part), viewBox());
+          allInView &&= row.inView;
+          ms.forEach((m, i) =>
+            made.push({ m: { ...m, at: row.at[i] }, turn: turned[i].turn, from: turned[i].start, flat: turned[i].flat }),
+          );
+        }
+        store.getState().riseMolecules3d(made, replacing ? [replacing.id] : []);
+        // (with no room for them in view, the view takes them in)
+        if (!allInView) requestFit();
+      } catch (e: unknown) {
+        setChemError(`No 3D structure could be made: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setWorking3d(null);
+      }
+    },
+    [store, viewBox, requestFit],
+  );
+  const make3d = useCallback(
+    async (around: Iterable<number>, replacing?: Molecule3D) => {
+      // (made again: what the drawing leaves open, as the one before has it)
+      const blocks = blocksOf(store.getState().model, around).map((b) =>
+        replacing ? { ...b, like: likeOf(b, replacing) } : b,
+      );
+      if (!blocks.length) return;
+      setChemError(null);
+      try {
+        const chem = await chemWorker();
+        const open = await Promise.all(
+          blocks.map(async (b) =>
+            openIn(b, await chem.request("open_stereo", { molblock: b.molblock, ...(b.like ? { like: b.like } : {}) })),
+          ),
+        );
+        // (stereo drawn without a configuration: asked what to make first)
+        if (open.some((o) => o.atoms.length || o.bonds.length)) setAsk3d({ blocks, open, replacing });
+        else await build3d(blocks, "one", replacing);
+      } catch (e: unknown) {
+        setChemError(`No 3D structure could be made: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+    [store, build3d],
+  );
+  // A molecule in 3D made again from its drawing, which has changed since:
+  // in its place, as one undo step
+  const remake3d = useCallback(
+    (id: number) => {
+      const { molecules3d: ms, model: m } = store.getState();
+      const mol = ms.find((x) => x.id === id);
+      const present = new Set(m.atoms.map((a) => a.id));
+      const atoms = (mol?.drawnFrom ?? []).filter((a): a is number => a != null && present.has(a));
+      if (mol && atoms.length) void make3d(atoms, mol);
+    },
+    [store, make3d],
+  );
+  // A molecule in 3D drawn as a formula beside it - by Meno's engine, from
+  // the frame it shows - and tied to it, as one undo step
+  const drawFormula = useCallback(
+    async (id: number) => {
+      const st = store.getState();
+      const mol = st.molecules3d.find((x) => x.id === id);
+      if (!mol) return;
+      setWorking3d("Drawing the formula…");
+      setChemError(null);
+      try {
+        const { model: formula, link } = await formulaOf(await chemWorker(), mol, st.frames3d[id] ?? 0);
+        const placed = centredAt(formula, formulaPlace(mol, formula, currentStyle3D()));
+        store.getState().drawFormula3d(id, placed, link);
+        // (beyond the view, the view takes it in)
+        const view = viewBox();
+        if (view && placed.atoms.some((a) => a.x < view.x0 || a.x > view.x1 || a.y < view.y0 || a.y > view.y1)) requestFit();
+      } catch (e: unknown) {
+        setChemError(`The formula could not be drawn: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setWorking3d(null);
+      }
+    },
+    [store, viewBox, requestFit],
+  );
+  // A molecule in 3D turned to lie as its drawing does, as it did as it rose
+  const turnLikeDrawing = useCallback(
+    (id: number) => {
+      const st = store.getState();
+      const mol = st.molecules3d.find((x) => x.id === id);
+      if (!mol?.drawnFrom) return;
+      const solid = solidOf(mol, currentStyle3D());
+      const places = solid.frames[frameOf(solid, st.frames3d[id])];
+      const byId = new Map(st.model.atoms.map((a) => [a.id, a]));
+      const from: number[] = [];
+      const to: number[] = [];
+      mol.drawnFrom.forEach((aid, i) => {
+        const a = aid == null ? undefined : byId.get(aid);
+        if (!a) return;
+        from.push(places[3 * i], places[3 * i + 1], places[3 * i + 2]);
+        to.push(a.x, a.y);
+      });
+      if (to.length >= 4) st.setTurn3d(id, turnOnto(from, to));
     },
     [store],
   );
@@ -230,6 +374,9 @@ function StructureCanvasContent({
       if (isCleanUpKey(e)) {
         e.preventDefault();
         runCleanUp(drawingSelected ? sel.atoms : structureAt(kind, id));
+      } else if (isFitKey(e)) {
+        e.preventDefault();
+        requestFit();
       } else if (isDeleteKey(e) && !busy && st.hoveredMeasure3d) {
         // a measurement under the pointer, before anything else
         e.preventDefault();
@@ -273,7 +420,7 @@ function StructureCanvasContent({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget]);
+  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget, requestFit]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
   // a molecule in 3D right-clicked: what its menu does to it
@@ -281,6 +428,7 @@ function StructureCanvasContent({
   const chosen3d = useEditor((s) => s.chosen3d);
   const style3d = useStyle3D();
   const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
+  const menuLink = menuMolecule ? linkOf(menuMolecule, model) : null;
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
         look: lookOf(menuMolecule, style3d),
@@ -290,6 +438,18 @@ function StructureCanvasContent({
         onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
         onCut: () => void clip.cut(menuMolecule.id),
         onCopy: () => void clip.copy(menuMolecule.id),
+        ...(menuLink === "live" || menuLink === "changed" ? { onTurnLikeDrawing: () => turnLikeDrawing(menuMolecule.id) } : {}),
+        ...(menuLink === "changed" ? { onRemake: () => remake3d(menuMolecule.id) } : {}),
+        ...(menuLink == null || menuLink === "gone" ? { onDrawFormula: () => void drawFormula(menuMolecule.id) } : {}),
+        ...((menuMolecule.frames?.length ?? 0) > 0
+          ? {
+              overlay: {
+                on: !!store.getState().overlay3d[menuMolecule.id],
+                conformers: !!menuMolecule.conformerSet,
+                set: (on: boolean) => store.getState().setOverlay3d(menuMolecule.id, on),
+              },
+            }
+          : {}),
       }
     : undefined;
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
@@ -429,6 +589,57 @@ function StructureCanvasContent({
   // SMILES in and out, by RDKit, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
 
+  // What the canvas does besides drawing - saving, fitting, R and S, its
+  // style - offered to the app's menu while its tab is in front, and on
+  // empty space in the right-click menu; the keys say the same.
+  const commandsNow = useRef<() => CommandGroup[]>(() => []);
+  commandsNow.current = () => [
+    {
+      title: "File",
+      items: [
+        { name: "Save", keys: shortcutLabel("S"), run: () => void save() },
+        { name: "Save As…", keys: shortcutLabel("S", true), run: () => void saveAs() },
+        { name: "Export as SVG…", run: () => void files.exportSvg() },
+      ],
+    },
+    {
+      title: "Edit",
+      items: [
+        { name: "SMILES…", run: () => setSmilesOpen(true) },
+        {
+          name: "Clean up all",
+          keys: shortcutLabel("K", true),
+          run: () => runCleanUp(null),
+          disabled: cleaning || model.bonds.length === 0,
+        },
+        {
+          // (what is selected, or else everything drawn)
+          name: "3D structures",
+          run: () => {
+            const { sel, model: m } = store.getState();
+            void make3d(sel.atoms.size ? sel.atoms : m.atoms.map((a) => a.id));
+          },
+          disabled: working3d != null || ask3d != null || model.bonds.length === 0,
+        },
+      ],
+    },
+    {
+      title: "View",
+      items: [
+        { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit },
+        { name: chemistry.stereoLabels ? "Hide R and S" : "Show R and S", run: toggleStereoLabels },
+      ],
+    },
+    {
+      title: "Format",
+      items: [{ name: ownStyle ? "Drawing style (its own)…" : "Drawing style…", run: () => !styleOpen && toggleStyle() }],
+    },
+  ];
+  useEffect(() => {
+    if (!active || !ownTab) return;
+    return offerCommands(tabId, () => commandsNow.current());
+  }, [active, ownTab, tabId]);
+
   return (
     <div
       ref={dropRef}
@@ -442,21 +653,12 @@ function StructureCanvasContent({
       onPointerMoveCapture={onRightMove}
       onPointerUpCapture={onRightUp}
     >
-      {/* Hidden file input for Open (replace) */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        accept={[".mol", ".sdf", ".rxn", ".xyz", ".meno"].join(",")}
-        onChange={(e) => {
-          if (e.target.files) onPickFiles(e.target.files);
-          // Allow picking the same file again.
-          e.target.value = "";
-        }}
-      />
       {/* Import error */}
+      <AnimatePresence>
       {alert && (
-        <div
+        <motion.div
+          key="alert"
+          {...RISE}
           role="alert"
           className="absolute top-3 left-1/2 -translate-x-1/2 z-50 max-w-[90%] flex items-start gap-2 rounded-md border border-gh-line bg-white/95 shadow-sm px-3 py-2 text-xs text-gh-black"
         >
@@ -473,138 +675,54 @@ function StructureCanvasContent({
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
-        </div>
+        </motion.div>
       )}
-      {/* Fit / Open buttons */}
-      <div className="absolute left-3 bottom-3 z-50 flex gap-2">
-        <button
-          aria-label="Fit to content"
-          title="Fit to content"
-          onClick={() => requestFit()}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
-        >
-          <ArrowsPointingInIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Open structure file"
-          title="Open structure file (replaces the canvas)"
-          onClick={(e) => {
-            e.stopPropagation();
-            openFilePicker();
-          }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
-        >
-          <FolderOpenIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Save structure"
-          title="Save (Ctrl/Cmd+S; with Shift, Save As)"
-          onClick={(e) => {
-            e.stopPropagation();
-            void (e.shiftKey ? saveAs() : save());
-          }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
-        >
-          <ArrowDownTrayIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Export as SVG"
-          title="Export the drawing as an SVG picture"
-          onClick={(e) => {
-            e.stopPropagation();
-            void files.exportSvg();
-          }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
-        >
-          <PhotoIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Drawing style"
-          aria-pressed={styleOpen}
-          title={
-            ownStyle
-              ? "Drawing style (this document has its own)"
-              : "Drawing style"
-          }
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleStyle();
-          }}
-          className={
-            "relative h-9 w-9 rounded-full border shadow-sm flex items-center justify-center " +
-            (styleOpen
-              ? "border-accel-base bg-accel-lightbase"
-              : "border-gh-line bg-white/90 hover:bg-gray-100")
-          }
-        >
-          <SwatchIcon className="h-5 w-5 text-gh-black" />
-          {ownStyle && (
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-accel-base" />
-          )}
-        </button>
-        <button
-          aria-label="SMILES"
-          aria-pressed={smilesOpen}
-          title="SMILES in and out"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSmilesOpen((v) => !v);
-          }}
-          className={
-            "h-9 w-9 rounded-full border shadow-sm flex items-center justify-center " +
-            (smilesOpen
-              ? "border-accel-base bg-accel-lightbase"
-              : "border-gh-line bg-white/90 hover:bg-gray-100")
-          }
-        >
-          <CodeBracketIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Clean up"
-          title="Clean up: even bonds and angles, over where it is drawn (Ctrl/Cmd+Shift+K; with the pointer on a structure, just that one)"
-          disabled={cleaning || model.bonds.length === 0}
-          onClick={(e) => {
-            e.stopPropagation();
-            runCleanUp(null);
-          }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center disabled:opacity-40 disabled:hover:bg-white/90"
-        >
-          <SparklesIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Show R and S"
-          aria-pressed={chemistry.stereoLabels}
-          title="R and S at stereocentres, E and Z at double bonds, Ra and Sa at axes"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleStereoLabels();
-          }}
-          className={
-            "h-9 w-9 rounded-full border shadow-sm flex items-center justify-center text-[11px] font-semibold text-gh-black " +
-            (chemistry.stereoLabels
-              ? "border-accel-base bg-accel-lightbase"
-              : "border-gh-line bg-white/90 hover:bg-gray-100")
-          }
-        >
-          <span>
-            <i>R</i>/<i>S</i>
-          </span>
-        </button>
-      </div>
-      {active &&
-        (chem.state === "setting-up" || chem.state === "starting") && (
-          <div
+      </AnimatePresence>
+      <AnimatePresence>
+        {active && (chem.state === "setting-up" || chem.state === "starting" || working3d) && (
+          <motion.div
+            key="rdkit"
+            {...RISE}
+            layout
             role="status"
             className="absolute right-3 bottom-3 z-50 rounded-full border border-gh-line bg-white/95 shadow-sm px-3 py-1.5 text-xs text-gh-gray"
           >
-            {chem.state === "setting-up"
-              ? "Setting up RDKit…"
-              : "Starting RDKit…"}
-          </div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span key={chem.state === "setting-up" || chem.state === "starting" ? chem.state : "working"} {...FADE} className="block">
+                {chem.state === "setting-up"
+                  ? "Setting up RDKit…"
+                  : chem.state === "starting"
+                    ? "Starting RDKit…"
+                    : working3d}
+              </motion.span>
+            </AnimatePresence>
+          </motion.div>
         )}
-      {smilesOpen && <SmilesPanel onClose={() => setSmilesOpen(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {ask3d && (
+          <Ask3D
+            key="ask3d"
+            open={ask3d.open}
+            onAll={() => {
+              setAsk3d(null);
+              void build3d(ask3d.blocks, "all", ask3d.replacing);
+            }}
+            onOne={() => {
+              setAsk3d(null);
+              void build3d(ask3d.blocks, "one", ask3d.replacing);
+            }}
+            onCancel={() => setAsk3d(null)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {smilesOpen && <SmilesPanel key="smiles" onClose={() => setSmilesOpen(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
       {menu && (
         <PartMenu
+          key={`${menu.x},${menu.y}`}
           target={menu}
           onClose={closeMenu}
           onDelete={() => {
@@ -635,6 +753,10 @@ function StructureCanvasContent({
                 : structureAt(menu.kind, menu.id),
             )
           }
+          onMake3d={() => {
+            const around = menu.selection === "here" ? store.getState().sel.atoms : structureAt(menu.kind, menu.id);
+            if (around != null) void make3d(typeof around === "number" ? [around] : around);
+          }}
           onSelectStructure={() => {
             const at = structureAt(menu.kind, menu.id);
             if (at != null) store.getState().selectStructure(at);
@@ -652,6 +774,11 @@ function StructureCanvasContent({
               ? () => store.getState().expandAbbreviation(menu.id!)
               : undefined
           }
+          canvas={commandsNow.current()
+            .filter((g) => g.title !== "File")
+            .flatMap((g) => g.items)
+            .filter((c) => !c.disabled)
+            .map((c) => ({ name: c.name, keys: c.keys ?? "", run: c.run }))}
           clipboard={{
             onCut: () => void clip.cut(),
             onCopy: () => void clip.copy(),
@@ -661,6 +788,9 @@ function StructureCanvasContent({
           }}
         />
       )}
+      </AnimatePresence>
+      {/* (a molecule in 3D made again from its changed drawing: asked of RDKit here) */}
+      <Remake3D.Provider value={remake3d}>
       <Canvas
         key={tabId}
         // The page is seen head-on, in perspective (PageCamera): drawn just
@@ -671,6 +801,8 @@ function StructureCanvasContent({
         // layers request frames (see PanZoom2D and the preview components)
         // instead of redrawing continuously while nothing changes.
         frameloop={active ? "demand" : "never"}
+        // (following its box as the panel beside it slides)
+        resize={CANVAS_RESIZE}
         dpr={CANVAS_DPR}
         onDoubleClick={handleDoubleClick}
         gl={{
@@ -700,6 +832,10 @@ function StructureCanvasContent({
           <AtomsHoverRings2D />
           {/* what is selected, the box or lasso selecting, the handle turning it */}
           <Selection2D />
+          {/* a press held, for a long press: the selection spreading, or a ring */}
+          <HoldProgress2D />
+          {/* the honeycomb a chain is traced on */}
+          <ChainGuide2D />
           {/* A label's font is read before it is drawn: the rest of the
               drawing does not wait for it, nor go if it cannot be read. */}
           <Suspense fallback={null}>
@@ -707,6 +843,10 @@ function StructureCanvasContent({
           </Suspense>
           {/* RDKit's marks: valence problems, R/S and E/Z */}
           <ChemMarks2D marks={marks} />
+          {/* the atom a molecule in 3D under the pointer was made from */}
+          <LinkedHover2D />
+          {/* stereo drawn without a configuration, while Meno asks about it */}
+          <OpenStereo2D atoms={ask3d?.open.flatMap((o) => o.atoms) ?? NO_IDS} bonds={ask3d?.open.flatMap((o) => o.bonds) ?? NO_IDS} />
           {/* Label editor */}
           <LabelEditor2D />
           {/* Hover overlay */}
@@ -725,6 +865,7 @@ function StructureCanvasContent({
         <PanZoom2D />
         <PageCamera />
       </Canvas>
+      </Remake3D.Provider>
     </div>
   );
 }
@@ -736,6 +877,7 @@ export default function StructureCanvas({
   officeId,
   active = true,
   document,
+  nameTab,
 }: {
   tabId: string;
   initialPayload?: string;
@@ -746,6 +888,8 @@ export default function StructureCanvas({
   active?: boolean;
   /** The tab's document; omitted for canvases embedded in other views. */
   document?: DocumentStore<StructureDocument>;
+  /** Names the canvas's tab after the file it is saved as. */
+  nameTab?: (label: string) => void;
 }) {
   // The document's drawing style - or one reaction arrow's own - opens in a
   // panel beside the canvas rather than over it, so the drawing stays in
@@ -763,27 +907,40 @@ export default function StructureCanvas({
           initialPayload={initialPayload}
           initialFilename={initialFilename}
           officeId={officeId}
+          ownTab={document != null}
+          nameTab={nameTab}
           styleOpen={styleOpen}
           toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
           openArrowStyle={(id) => setPanel({ arrow: id })}
           openSaveAbbreviation={(ids, smiles) => setPanel({ abbreviation: { ids, smiles } })}
         />
-        {styleOpen && <DocumentStylePanel onClose={() => setPanel(null)} />}
-        {panel && panel !== "style" && "arrow" in panel && (
-          <ArrowStylePanel
-            key={panel.arrow}
-            arrowId={panel.arrow}
-            onClose={() => setPanel(null)}
-          />
-        )}
-        {panel && panel !== "style" && "abbreviation" in panel && (
-          <SaveAbbreviationPanel
-            key={panel.abbreviation.ids.join(",")}
-            ids={panel.abbreviation.ids}
-            smiles={panel.abbreviation.smiles}
-            onClose={() => setPanel(null)}
-          />
-        )}
+        {/* The panel beside the canvas slides open and shut, the canvas giving
+            way as it does; one going as another comes takes as long, so the
+            canvas keeps its width. */}
+        <AnimatePresence initial={false}>
+          {panel && (
+            <motion.div
+              key={panel === "style" ? "style" : "arrow" in panel ? `arrow-${panel.arrow}` : `abbreviation-${panel.abbreviation.ids.join(",")}`}
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "auto", opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: DURATION.move, ease: EASE_SLIDE }}
+              className="shrink-0 h-full overflow-hidden"
+            >
+              {panel === "style" ? (
+                <DocumentStylePanel onClose={() => setPanel(null)} />
+              ) : "arrow" in panel ? (
+                <ArrowStylePanel arrowId={panel.arrow} onClose={() => setPanel(null)} />
+              ) : (
+                <SaveAbbreviationPanel
+                  ids={panel.abbreviation.ids}
+                  smiles={panel.abbreviation.smiles}
+                  onClose={() => setPanel(null)}
+                />
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </EditorProvider>
   );

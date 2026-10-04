@@ -10,6 +10,8 @@ import {
 import {
   bondSide,
   exitDistance,
+  MARK_MIN_PX,
+  MARK_SCALE,
   placeMark,
   valenceMessage,
   waysOut,
@@ -19,13 +21,10 @@ import {
 import { useEditor } from "../store";
 import type { Model } from "../store/types";
 import { useDrawnLayout } from "./drawnLayoutContext";
+import { usePresence } from "../../../theme/presence";
 
 /** Marks sit over the drawing, and under the canvas's buttons and cards. */
 const Z_RANGE = [20, 10];
-/** A stereodescriptor's letters, against the labels'. */
-const MARK_SCALE = 0.6;
-/** The smallest a mark's letters get, however far out the view is. */
-const MIN_FONT_PX = 9;
 
 /**
  * RDKit's marks on the structure: a ring round each atom with more bonds
@@ -67,7 +66,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
 
   const z = Math.max(zoom, 1e-6);
   const labelFont = opts.units === "px" ? opts.fontPx / z : opts.fontPx;
-  const fontPx = Math.max(MIN_FONT_PX, labelFont * MARK_SCALE * z);
+  const fontPx = Math.max(MARK_MIN_PX, labelFont * MARK_SCALE * z);
 
   // R, S, E and Z, each placed clear of the bonds, the labels and the
   // marks placed before it
@@ -133,69 +132,58 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
     return out;
   }, [marks, drawn, boxes, fontPx, z]);
 
-  if (!marks) return null;
+  // Each mark where it goes: a valence problem's box round its atom's label
+  // (or a ring round its atom), and the stereodescriptors.
   const at = new Map(drawn.atoms.map((a) => [a.id, a]));
+  const boxesOf: { key: string; id: number; x: number; y: number; w: number; h: number; round: boolean; message: string }[] = [];
+  for (const [id, problem] of marks ? [...marks.valence] : []) {
+    const a = at.get(id);
+    if (!a) continue;
+    const box = boxes.get(id);
+    const pad = 0.12 * labelFont;
+    const r = box
+      ? { left: box.left + pad, right: box.right + pad, top: box.top + pad, bottom: box.bottom + pad }
+      : { left: 0.3 * labelFont, right: 0.3 * labelFont, top: 0.3 * labelFont, bottom: 0.3 * labelFont };
+    boxesOf.push({
+      key: `valence-${id}`,
+      id,
+      x: a.x + (r.right - r.left) / 2,
+      y: a.y + (r.top - r.bottom) / 2,
+      w: (r.left + r.right) * z,
+      h: (r.top + r.bottom) * z,
+      round: !box,
+      message: valenceMessage(a.el, problem),
+    });
+  }
+  // (each comes into view and goes out of it, rather than appearing and
+  // vanishing as the marks are worked out again after an edit)
+  const valenceShown = usePresence(boxesOf, (m) => m.key);
+  const stereoShown = usePresence(marks ? stereo : [], (m) => m.key);
+  if (!valenceShown.length && !stereoShown.length) return null;
 
   return (
     <group>
-      {[...marks.valence].map(([id, problem]) => {
-        const a = at.get(id);
-        if (!a) return null;
-        const box = boxes.get(id);
-        const pad = 0.12 * labelFont;
-        const r = box
-          ? {
-              left: box.left + pad,
-              right: box.right + pad,
-              top: box.top + pad,
-              bottom: box.bottom + pad,
-            }
-          : {
-              left: 0.3 * labelFont,
-              right: 0.3 * labelFont,
-              top: 0.3 * labelFont,
-              bottom: 0.3 * labelFont,
-            };
-        return (
-          <Html
-            key={`valence-${id}`}
-            position={[
-              a.x + (r.right - r.left) / 2,
-              a.y + (r.top - r.bottom) / 2,
-              0,
-            ]}
-            center
-            zIndexRange={Z_RANGE}
-            style={{ pointerEvents: "none" }}
+      {valenceShown.map(({ key, item: m, leaving }) => (
+        <Html key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
+          <div
+            role="img"
+            aria-label={m.message}
+            className={"relative border-[1.5px] border-accel-accent bg-accel-accent/10 " + (leaving ? "meno-fade-out" : "meno-fade-in")}
+            style={{ width: m.w, height: m.h, borderRadius: m.round ? "50%" : 3 }}
           >
-            <div
-              role="img"
-              aria-label={valenceMessage(a.el, problem)}
-              className="relative border-[1.5px] border-accel-accent bg-accel-accent/10"
-              style={{
-                width: (r.left + r.right) * z,
-                height: (r.top + r.bottom) * z,
-                borderRadius: box ? 3 : "50%",
-              }}
-            >
-              {hoveredAtom === id && (
-                <div className="absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-gh-line bg-white px-2 py-1 text-[11px] text-gh-black shadow-sm">
-                  {valenceMessage(a.el, problem)}
-                </div>
-              )}
-            </div>
-          </Html>
-        );
-      })}
-      {stereo.map((m) => (
-        <Html
-          key={m.key}
-          position={[m.x, m.y, 0]}
-          center
-          zIndexRange={Z_RANGE}
-          style={{ pointerEvents: "none" }}
-        >
-          <StereoMark text={m.text} fontPx={fontPx} />
+            {hoveredAtom === m.id && !leaving && (
+              <div className="meno-fade-in absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-gh-line bg-white px-2 py-1 text-[11px] text-gh-black shadow-sm">
+                {m.message}
+              </div>
+            )}
+          </div>
+        </Html>
+      ))}
+      {stereoShown.map(({ key, item: m, leaving }) => (
+        <Html key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
+          <div className={leaving ? "meno-fade-out" : "meno-fade-in"}>
+            <StereoMark text={m.text} fontPx={fontPx} />
+          </div>
         </Html>
       ))}
     </group>

@@ -15,6 +15,55 @@ export type ChemRequests = {
   from_smiles: { args: { smiles: string }; result: { molblock: string } };
   /** Hydrogens, valence, aromaticity and stereo labels, per atom and bond. */
   analyse: { args: { molblock: string }; result: Analysis };
+  /**
+   * The stereocentres and double bonds left open, by index, and how many
+   * stereoisomers they make - but for those `like` gives a configuration.
+   */
+  open_stereo: { args: { molblock: string; like?: Like }; result: OpenStereo };
+  /**
+   * Conformers of a structure, made in 3D (ETKDG, then MMFF94): of the first
+   * of its stereoisomers, or of each, where some of its stereo is left open
+   * - and `like` does not give it. Of two enantiomers, one is made as the
+   * other's mirror image.
+   */
+  conformers: {
+    args: { molblock: string; isomers?: "one" | "all"; count?: number; like?: Like };
+    result: { isomers: Conformers[] };
+  };
+  /**
+   * A molecule in 3D as a formula to draw: its heavy atoms in their order,
+   * laid out in 2D and wedged as it is in 3D; its bonds' orders found where
+   * they are not known (`perceive`).
+   */
+  drawing_of: { args: { molblock: string; perceive?: boolean }; result: { molblock: string } };
+};
+
+export type OpenStereo = { atoms: number[]; bonds: number[]; isomers: number };
+
+/**
+ * Some of a block's atoms, by index, where a molecule in 3D made from it
+ * before has them: a stereocentre or double bond the block leaves open is
+ * made as it is there, where it and the atoms bonded to it all have a place.
+ */
+export type Like = Record<number, [number, number, number]>;
+
+/**
+ * One stereoisomer's conformers: its atoms - those of the block in their
+ * order, then the hydrogens made for them - its bonds by index, each
+ * conformer's coordinates in angstroms, laid over the first, and its energy
+ * in hartrees, lowest first; the force field's name; and the CIP label of
+ * every stereocentre and double bond, and of those that were left open and
+ * chosen, by the block's atom and bond index.
+ */
+export type Conformers = {
+  atoms: { el: string; charge: number }[];
+  bonds: { a1: number; a2: number; order: 1 | 2 | 3 }[];
+  frames: number[][];
+  energies: number[];
+  field: string;
+  cip: { atoms: Record<string, string>; bonds: Record<string, string> };
+  chosen: { atoms: Record<string, string>; bonds: Record<string, string> };
+  smiles: string;
 };
 
 export type ChemOp = keyof ChemRequests;
@@ -100,17 +149,21 @@ export class ChemClient {
     else p.reject(new ChemError(m.error ?? "RDKit could not answer"));
   }
 
-  /** Asks the worker; the answer, or an error saying why there is none. */
+  /**
+   * Asks the worker; the answer, or an error saying why there is none -
+   * after `timeoutMs`, if given, for what takes long.
+   */
   request<Op extends ChemOp>(
     op: Op,
     args: ChemRequests[Op]["args"],
+    timeoutMs = this.timeoutMs,
   ): Promise<ChemRequests[Op]["result"]> {
     const id = this.next++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new ChemError(`RDKit did not answer ${op} in time`));
-      }, this.timeoutMs);
+      }, timeoutMs);
       this.pending.set(id, {
         resolve: resolve as (v: unknown) => void,
         reject,

@@ -1,5 +1,7 @@
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
+import { AnimatePresence, motion } from "motion/react";
+import { RISE } from "../../theme/motion";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import NetworkSettings from "../../network/NetworkSettings";
 import StyleEditor from "../StyleEditor";
@@ -42,10 +44,10 @@ export default function SettingsPanel() {
                 aria-selected={section === s.id}
                 onClick={() => useSettingsSection.setState({ section: s.id })}
                 className={clsx(
-                  "h-8 px-3 rounded-md text-sm",
+                  "h-8 px-3 rounded-md text-sm border transition-[background-color,border-color,color,box-shadow] duration-150 ease-meno",
                   section === s.id
-                    ? "bg-white border border-gh-line text-gh-black shadow-sm"
-                    : "text-gh-gray hover:text-gh-black",
+                    ? "bg-white border-gh-line text-gh-black shadow-sm"
+                    : "border-transparent text-gh-gray hover:text-gh-black",
                 )}
               >
                 {s.name}
@@ -53,15 +55,20 @@ export default function SettingsPanel() {
             ))}
           </div>
         </div>
-        {error && (
-          <div
-            role="alert"
-            className="mt-3 flex items-start gap-2 rounded-md border border-gh-line bg-white px-3 py-2 text-xs text-gh-black"
-          >
-            <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-accel-accent" />
-            {error}
-          </div>
-        )}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              key="error"
+              {...RISE}
+              role="alert"
+              className="mt-3 flex items-start gap-2 rounded-md border border-gh-line bg-white px-3 py-2 text-xs text-gh-black"
+            >
+              <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-accel-accent" />
+              {error}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div key={section} className="meno-fade-in">
         {section === "style" ? (
           <section className="mt-6">
             <h2 className="text-base font-semibold text-gh-black">
@@ -120,6 +127,7 @@ export default function SettingsPanel() {
             <NetworkSettings />
           </section>
         )}
+        </div>
       </div>
     </div>
   );

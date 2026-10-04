@@ -2,7 +2,9 @@
  * Pictures of a structure for the clipboard, each carrying Meno's record of
  * it so that the structure comes back when the picture is pasted into Meno:
  *
- * - an EMF - vectors, at the style's own size - in Office's own clip format,
+ * - an EMF - vectors, at the style's own size; molecules in 3D a bitmap in
+ *   it, drawn as the canvas draws them (./render3d) - in Office's own clip
+ *   format,
  *   which Word and PowerPoint keep as it is on either system and hand back
  *   when the picture is copied again (lib/office/gvml); the record in a
  *   comment of the EMF;
@@ -21,13 +23,15 @@ import { clipboardTakes, type ClipItem, type Flavor } from "../../../lib/clipboa
 import { cfbStreams } from "../../../lib/binary/cfb";
 import { dibOf } from "../../../lib/binary/dib";
 import { textOf, withDpi, withText } from "../../../lib/binary/png";
-import { emfComments, layoutEmf } from "../../../lib/chem/emf";
+import { emfComments, layoutEmf, type SolidsPicture } from "../../../lib/chem/emf";
 import { createSVG } from "../../../lib/chem/layout2d";
+import { currentStyle3D } from "./style3d";
 import type { DrawingStyle } from "../../../lib/chem/style";
 import { gvmlImages, gvmlPicture } from "../../../lib/office/gvml";
 import { drawingLayout } from "./fileActions";
 import type { Drawn, EditorState } from "./store/types";
 import { readRecord, recordText } from "./utils/copyPaste";
+import { withSolidsImage } from "./render3d";
 
 /** What marks Meno's record in an EMF's comment, and names it in a PNG. */
 const EMF_MARK = "MENO";
@@ -42,12 +46,20 @@ type Aromatic = Pick<EditorState, "aromaticEnabled" | "aromaticRings">;
  * Meno's record of `part` and the EMF of it that carries the record - what a
  * copy puts in Office's clip format, and what a document holding the
  * structure as an object keeps and shows. A reaction's arrows and "+" signs
- * are in both.
+ * are in both; molecules in 3D are a bitmap in the EMF, where there is a page
+ * to draw one in.
  */
-export function structurePicture(part: Drawn, aromatic: Aromatic, style: DrawingStyle) {
+export async function structurePicture(part: Drawn, aromatic: Aromatic, style: DrawingStyle) {
   const record = recordText(part);
   const { layout, opts } = drawingLayout(part, aromatic, style);
-  return { record, layout, opts, ...layoutEmf(layout, opts, utf8.encode(EMF_MARK + record)) };
+  // (the layout then draws them so too, for the PNG)
+  let solids: SolidsPicture | null = null;
+  try {
+    solids = withSolidsImage(part.molecules3d ?? [], layout, currentStyle3D());
+  } catch {
+    solids = null;
+  }
+  return { record, layout, opts, ...layoutEmf(layout, opts, utf8.encode(EMF_MARK + record), solids ?? undefined) };
 }
 
 /**
@@ -63,7 +75,7 @@ export async function pictureItems(
 ): Promise<ClipItem[]> {
   const takes = platformTakes === undefined ? await clipboardTakes() : platformTakes;
   const wanted = (f: ClipItem["flavor"]) => !takes || takes.has(f);
-  const { record, layout, opts, emf, widthPt, heightPt } = structurePicture(part, aromatic, style);
+  const { record, layout, opts, emf, widthPt, heightPt } = await structurePicture(part, aromatic, style);
   const items: ClipItem[] = [
     { flavor: "gvml", bytes: gvmlPicture(emf, "emf", widthPt, heightPt, "Structure") },
     { flavor: "emf", bytes: emf },

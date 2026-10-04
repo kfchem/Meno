@@ -25,6 +25,8 @@ import { addsToSelection } from "../../../../lib/doc/shortcuts";
 export function useStructureEvents(
   initialPayload?: string,
   initialFilename?: string,
+  /** The payload is a file opened by its name - not a document's object - which Save As then suggests. */
+  openedFile?: boolean,
 ) {
   const store = useEditorStore();
 
@@ -34,7 +36,6 @@ export function useStructureEvents(
   const clickTimerRef = useRef<number | null>(null);
   // The press the next click ends, and whether it has travelled (utils/press)
   const pressRef = useRef<Press | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Where the pointer is over the drawing, in the window; null off it
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   // Last import failure, shown in the canvas until dismissed or replaced.
@@ -114,6 +115,7 @@ export function useStructureEvents(
         const ws = readWorkspace(initialPayload);
         if (ws) {
           store.getState().openWorkspace(ws, true);
+          if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
           return;
         }
         const record = readRecord(initialPayload);
@@ -142,6 +144,7 @@ export function useStructureEvents(
             toModel(shifted),
             importedScheme(result, -result.centroid.x, -result.centroid.y),
           );
+        if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
       } catch (e) {
         reportImportError("initial payload", e);
       }
@@ -249,33 +252,18 @@ export function useStructureEvents(
         const near = store
           .getState()
           .findAtomNear(nx, ny, NOMINAL_BOND_LENGTH * 0.3, base.id);
-        // One gesture, one undo step: the atom and its bond together.
+        // One gesture, one undo step: the atom and its bond together. (A
+        // third click takes it back, to draw a chain instead.)
         if (near != null) {
           st.connectAtoms(base.id, near, 1);
         } else {
           st.addAtomBonded(base.id, nx, ny, "C", 1);
         }
+        st.noteDoubleClickBond(base.id);
         return;
       }
     }
-
-    const nowMs2 =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    if (stNow.suppressDblClickUntil && nowMs2 < stNow.suppressDblClickUntil)
-      return;
-
-    const half = L * 0.5;
-    const theta = Math.PI / 6;
-    const dx = half * Math.cos(theta);
-    const dy = half * Math.sin(theta);
-    const ax = ndc.x - dx;
-    const ay = ndc.y - dy;
-    const bx = ndc.x + dx;
-    const by = ndc.y + dy;
-    st.addBondedPair({ x: ax, y: ay, el: "C" }, { x: bx, y: by, el: "C" }, 1);
-    try {
-      store.getState().suppressDoubleClick(320);
-    } catch {}
+    // (on empty space, two clicks begin a chain: Selection2D)
   };
 
   const handleWrapperMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -332,16 +320,21 @@ export function useStructureEvents(
     const stClick = store.getState();
     const nowClick =
       typeof performance !== "undefined" ? performance.now() : Date.now();
+    // The click that ends a gesture - a long press let go, a box drawn, a
+    // turn - is held off as it comes: by the time its label would be
+    // edited, the holding off is over.
+    const heldOff =
+      !!stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil;
     if (
       e.target === domRef.current &&
       stClick.hovered.atomId == null &&
       stClick.hovered.bondId == null &&
-      !(stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil)
+      !heldOff
     )
       stClick.clearSel();
     // The second click of a double-click (as the system reckons one) edits
     // nothing, and neither does its first, if the edit is not yet begun.
-    if (e.detail >= 2) return;
+    if (e.detail >= 2 || heldOff) return;
     const since = clickClock();
     clickTimerRef.current = window.setTimeout(() => {
       if (doubleClickedSince(since)) return;
@@ -431,43 +424,6 @@ export function useStructureEvents(
     }
   };
 
-  const onPickFiles = async (files: FileList) => {
-    if (!files || !files.length) return;
-    const f = files[0];
-    const text = await f.text();
-    // a workspace: everything in it, as it was saved, over what is drawn
-    if (isWorkspaceFile(f.name)) {
-      const ws = readWorkspace(text);
-      if (ws) {
-        store.getState().openWorkspace(ws);
-        setImportError(null);
-      } else reportImportError("replace", new Error("The workspace could not be read."));
-      return;
-    }
-    try {
-      const result = await processFileContent(f.name, text);
-      const shifted = {
-        atoms: result.model.atoms.map((a) => ({
-          ...a,
-          x: a.x - result.centroid.x,
-          y: a.y - result.centroid.y,
-        })),
-        bonds: result.model.bonds,
-      };
-      // Over what the canvas holds: an edit, so a wrong file can be undone.
-      store
-        .getState()
-        .replaceModel(
-          toModel(shifted),
-          importedScheme(result, -result.centroid.x, -result.centroid.y),
-        );
-      setImportError(null);
-    } catch (err) {
-      reportImportError("replace", err);
-    }
-  };
-
-  const openFilePicker = () => fileInputRef.current?.click();
   const dismissImportError = () => setImportError(null);
 
   const handleMouseDownCapture = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -508,14 +464,11 @@ export function useStructureEvents(
     domRef,
     clientToWorld,
     pasteTarget,
-    fileInputRef,
     handleDoubleClick,
     handleWrapperMouseMove,
     handleWrapperMouseLeave,
     handleWrapperClick,
     dropZone,
-    onPickFiles,
-    openFilePicker,
     importError,
     dismissImportError,
     handleMouseDownCapture,
