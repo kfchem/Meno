@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPinch, looksLikeFingers, wheelReader, type WheelLike } from "./wheel";
+import { isPinch, looksLikeFingers, wheelReader, zoomTaken, type WheelLike } from "./wheel";
 
 const ev = (over: Partial<WheelLike>): WheelLike => ({
   deltaX: 0,
@@ -80,5 +80,32 @@ describe("wheelReader", () => {
     // a pause, then a wheel's notch: a new run
     expect(read(ev({ deltaY: 120, timeStamp: 600 }))).toBe("zoom");
     expect(read(ev({ deltaY: 4, timeStamp: 650 }))).toBe("zoom");
+  });
+});
+
+describe("zoomTaken", () => {
+  const all = (left: number, dts: number[]) => {
+    let taken = 0;
+    for (const dt of dts) {
+      if (left === 0) break;
+      const t = zoomTaken(left, dt, 10);
+      taken += t;
+      left -= t;
+    }
+    return { taken, left };
+  };
+
+  it("takes all a notch has to zoom and no more, at sixty frames a second or at a hundred and twenty", () => {
+    for (const dt of [1 / 60, 1 / 120, 1 / 240]) {
+      const { taken, left } = all(0.16, Array(2000).fill(dt));
+      expect(taken).toBeCloseTo(0.16, 9);
+      expect(left).toBe(0);
+    }
+  });
+
+  it("takes no more than a thirtieth of a second's worth in a frame long in coming - the first after the view was still", () => {
+    expect(zoomTaken(0.16, 5, 10)).toBeCloseTo(0.16 * (1 - Math.exp(-10 / 30)), 9);
+    const { taken } = all(-0.16, [5, ...Array(500).fill(1 / 60)]);
+    expect(taken).toBeCloseTo(-0.16, 9);
   });
 });

@@ -112,6 +112,11 @@ gesture or, in Chromium, with Ctrl held. Measured on the maintainer's Mac,
 a trackpad's first step is 1 or 2 px however fast the stroke, and a
 smoothly scrolling mouse's notch (an MX Master 3S) is 13 px, so 8 px tells
 them apart; a notch zooms at least as far as a plain wheel's 40 px line.
+Each notch zooms by the same ratio - 17 % for a 100 px notch - whether the
+view was still before it or already moving, at any frame rate: what is left
+to zoom is gone over a share a frame (`zoomTaken`), all of it in the end.
+The wheel over what is laid on the canvas - a molecule's frames chip, its
+note - zooms as over the canvas.
 A step within a thousandth of a pixel of whole counts as whole: Windows'
 display scaling leaves notches that close (ten notches at once came as
 999.99993 px at 175 %), and read as fingers they moved the view a thousand

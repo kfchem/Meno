@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { FRAME_ORDER, pageAt } from "../utils/page";
-import { isPinch, wheelReader } from "../../../../lib/input/wheel";
+import { isPinch, wheelReader, zoomTaken } from "../../../../lib/input/wheel";
 import { useEditor, useEditorStore } from "../store";
 import { letViewGoalGo, viewGoalOf } from "./viewGoal";
 import { TAU, follow } from "../../../theme/motion";
@@ -17,6 +17,16 @@ const PINCH_PER_PX = 0.01;
 /** The least a wheel's step counts for when it zooms, in px: a plain wheel's line. */
 const NOTCH_MIN_PX = 40;
 /**
+ * How far a wheel's step zooms, by ratio, per px of it - all of it, however
+ * long the view had been still and however often frames come: a 100 px
+ * notch zooms by 17 % - and the most a burst of steps has left to zoom at
+ * once (by 2.2 times). It is gone over in a short glide, ZOOM_RATE of what
+ * is left a second.
+ */
+const ZOOM_PER_PX = 0.0016;
+const ZOOM_LEFT_MOST = 0.78;
+const ZOOM_RATE = 10;
+/**
  * A drag let go while still moving glides on: as fast as it went over the
  * last RECENT_MS, slowing by GLIDE_FRICTION a second - unless it was held
  * still for HELD_MS before the release, when it stays where it is.
@@ -26,7 +36,7 @@ const HELD_MS = 80;
 const GLIDE_FRICTION = 4;
 
 export function PanZoom2D() {
-  const { camera, gl, invalidate } = useThree();
+  const { camera, gl, invalidate, events } = useThree();
   const dom = gl.domElement as HTMLCanvasElement;
   const { extend } = useEditor();
   const fitNonce = useEditor((s) => s.fitNonce);
@@ -53,7 +63,8 @@ export function PanZoom2D() {
   // how fast the view glides on after a drag, in world units a second; and the drag's latest moves
   const vel = useRef(new THREE.Vector2(0, 0));
   const recent = useRef<{ t: number; dx: number; dy: number }[]>([]);
-  const zVel = useRef(0);
+  // how far the wheel has yet to zoom, by the log of the ratio
+  const zoomLeft = useRef(0);
   const anchor = useRef({ cx: 0, cy: 0 });
   // (the camera's zoom: CSS pixels per world unit on the page, whether it is
   // orthographic - the canvas's - or in perspective, as PageCamera keeps it)
@@ -184,7 +195,7 @@ export function PanZoom2D() {
       pos.current.x += before.x - after.x;
       pos.current.y += before.y - after.y;
       vel.current.set(0, 0);
-      zVel.current = 0;
+      zoomLeft.current = 0;
       invalidate();
     };
     // A pinch in WebKit: gestures, while they last, rather than wheels.
@@ -225,14 +236,10 @@ export function PanZoom2D() {
         zoomAt(Math.exp(-e.deltaY * PINCH_PER_PX), e.clientX, e.clientY);
         return;
       }
-      // lower sensitivity (was 0.001)
-      const SENS = 0.00025;
       // (a notch zooms at least as far as a plain wheel's line of 40 px
       // does: a smoothly scrolling mouse's notch is only 13 px)
       const step = Math.sign(e.deltaY) * Math.max(Math.abs(e.deltaY), NOTCH_MIN_PX);
-      zVel.current += -step * SENS; // accumulate in log-zoom space
-      // clamp to avoid spikes from large wheel deltas
-      zVel.current = Math.max(-0.12, Math.min(0.12, zVel.current));
+      zoomLeft.current = Math.max(-ZOOM_LEFT_MOST, Math.min(ZOOM_LEFT_MOST, zoomLeft.current - step * ZOOM_PER_PX));
       const rect = dom.getBoundingClientRect();
       anchor.current.cx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       anchor.current.cy = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
@@ -242,27 +249,31 @@ export function PanZoom2D() {
     dom.addEventListener("pointerdown", onDown);
     dom.addEventListener("pointermove", onMove);
     dom.addEventListener("pointerup", onUp);
-    dom.addEventListener("wheel", onWheel, { passive: false });
-    dom.addEventListener("gesturestart", onGestureStart);
-    dom.addEventListener("gesturechange", onGestureChange);
-    dom.addEventListener("gestureend", onGestureEnd);
+    // (the wheel and a pinch over what is laid on the canvas - a molecule's
+    // frames chip, its note - zoom as over the canvas: they are heard on
+    // the box the canvas's events are, where drei's Html lays those)
+    const box = events.connected instanceof HTMLElement ? events.connected : dom;
+    box.addEventListener("wheel", onWheel, { passive: false });
+    box.addEventListener("gesturestart", onGestureStart);
+    box.addEventListener("gesturechange", onGestureChange);
+    box.addEventListener("gestureend", onGestureEnd);
     return () => {
       dom.removeEventListener("pointerdown", onDown);
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerup", onUp);
-      dom.removeEventListener("wheel", onWheel);
-      dom.removeEventListener("gesturestart", onGestureStart);
-      dom.removeEventListener("gesturechange", onGestureChange);
-      dom.removeEventListener("gestureend", onGestureEnd);
+      box.removeEventListener("wheel", onWheel);
+      box.removeEventListener("gesturestart", onGestureStart);
+      box.removeEventListener("gesturechange", onGestureChange);
+      box.removeEventListener("gestureend", onGestureEnd);
     };
-  }, [camera, gl, invalidate, dom, extend.active, store]);
+  }, [camera, gl, invalidate, dom, extend.active, store, events.connected]);
 
   // When camera is updated externally (e.g., FitToContent2D), mirror it internally to avoid overrides
   useEffect(() => {
     const cam = camera as any;
     pos.current.set(cam.position.x, cam.position.y);
     vel.current.set(0, 0);
-    zVel.current = 0;
+    zoomLeft.current = 0;
     // Force a render on the next frame
     try {
       invalidate();
@@ -302,7 +313,7 @@ export function PanZoom2D() {
       cam.updateProjectionMatrix?.();
       pos.current.set(there ? goal.x : x, there ? goal.y : y);
       vel.current.set(0, 0);
-      zVel.current = 0;
+      zoomLeft.current = 0;
       if (there) letViewGoalGo(camera);
       invalidate();
     }
@@ -317,11 +328,12 @@ export function PanZoom2D() {
     cam.position.x = pos.current.x;
     cam.position.y = pos.current.y;
 
-    // inertial zoom with anchor
-    if (Math.abs(zVel.current) > 1e-5) {
+    // the wheel's zoom, about where the pointer was: a share of what is left
+    // each frame (a frame long in coming no more than a short one's worth)
+    if (Math.abs(zoomLeft.current) > 1e-4) {
       const old = cam.zoom || 1;
-      let next = old * Math.exp(zVel.current);
-      next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+      const take = zoomTaken(zoomLeft.current, dt, ZOOM_RATE);
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, old * Math.exp(take)));
       // Keep cursor-anchored world point stable using unproject
       const cx = anchor.current.cx;
       const cy = anchor.current.cy;
@@ -333,9 +345,8 @@ export function PanZoom2D() {
       cam.position.x += before.x - after.x;
       cam.position.y += before.y - after.y;
       pos.current.set(cam.position.x, cam.position.y);
-      // stronger friction for smoother stop (was -6)
-      const zoomFriction = Math.exp(-10 * dt);
-      zVel.current *= zoomFriction;
+      // (at a limit, the rest goes)
+      zoomLeft.current = next === old * Math.exp(take) ? zoomLeft.current - take : 0;
     }
 
     // On-demand rendering: request the next frame while the camera is still
@@ -343,7 +354,7 @@ export function PanZoom2D() {
     if (
       dragging.current ||
       vel.current.lengthSq() > 1e-8 ||
-      Math.abs(zVel.current) > 1e-5
+      Math.abs(zoomLeft.current) > 1e-4
     ) {
       invalidate();
     }
