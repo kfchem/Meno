@@ -84,3 +84,16 @@ export function wheelReader(): (e: WheelLike) => WheelIntent {
     return intent;
   };
 }
+
+/**
+ * How much of what a wheel has left to zoom (`left`, by the log of the
+ * ratio) a frame of `dt` seconds takes, at `rate` of what is left a second:
+ * the frames together take all of it and no more, however many there are
+ * and however long the first was in coming after the view was still - a
+ * frame counts for a thirtieth of a second at most. The last crumb is taken
+ * whole.
+ */
+export function zoomTaken(left: number, dt: number, rate: number): number {
+  const share = 1 - Math.exp(-rate * Math.min(Math.max(dt, 0), 1 / 30));
+  return Math.abs(left) * (1 - share) < 1e-4 ? left : left * share;
+}
