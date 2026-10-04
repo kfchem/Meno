@@ -6,6 +6,7 @@ import { COLORS, ALPHA } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useDrawnLayout } from "./drawnLayoutContext";
 import { computeMoveSnap } from "../utils/moveSnap";
+import { TAU, follow } from "../../../theme/motion";
 
 // Preview for moving an atom without mutating coordinates during drag.
 // - Works out where the atom snaps to, springing towards it, and publishes
@@ -34,6 +35,10 @@ export default function MovePreview2D() {
   const angVelRef = useRef(0);
   const lastActiveRef = useRef(false);
   const lastAtomIdRef = useRef<number | null>(null);
+  // how far the preview's lines and dot are in view: in as a drag starts,
+  // out after it, from where they last were
+  const seenRef = useRef(0);
+  const thinOpacityRef = useRef<number>(ALPHA.highlight);
   // For deg>=2 candidate-based snapping
   const centerRef = useRef<{ x: number; y: number } | null>(null);
   const radiusRef = useRef(NOMINAL_BOND_LENGTH);
@@ -51,6 +56,22 @@ export default function MovePreview2D() {
     if (moveDrag.active) invalidate();
     const mThin = thinInst.current;
     if (!mThin || !cursorDot.current) return;
+    const live = moveDrag.active && moveDrag.atomId != null && !!moveDrag.pointer;
+    const seenTo = live ? 1 : 0;
+    if (seenRef.current !== seenTo) {
+      const n = follow(seenRef.current, seenTo, Math.min(dtRaw, 1 / 20), TAU.quick);
+      seenRef.current = Math.abs(n - seenTo) < 0.01 ? seenTo : n;
+    }
+    const dotMat = cursorDot.current.material as THREE.MeshBasicMaterial;
+    if (!live && seenRef.current > 0) {
+      // let go: what was shown goes out of view where it was
+      const matThin = mThin.material as THREE.MeshBasicMaterial | undefined;
+      if (matThin) matThin.opacity = thinOpacityRef.current * seenRef.current;
+      dotMat.opacity = ALPHA.highlight * seenRef.current;
+      invalidate();
+      return;
+    }
+    dotMat.opacity = ALPHA.highlight * seenRef.current;
 
     // hide by default
     mThin.count = 0;
@@ -88,7 +109,8 @@ export default function MovePreview2D() {
     const baseOpacity = ALPHA.highlight;
     const op = baseOpacity / Math.sqrt(Math.max(1, deg));
     const matThin = mThin.material as THREE.MeshBasicMaterial | undefined;
-    if (matThin) matThin.opacity = Math.max(0.18, Math.min(baseOpacity, op));
+    thinOpacityRef.current = Math.max(0.18, Math.min(baseOpacity, op));
+    if (matThin) matThin.opacity = thinOpacityRef.current * seenRef.current;
 
     // determine snapping for deg cases
     const justActivated =

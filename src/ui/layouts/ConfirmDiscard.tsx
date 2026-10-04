@@ -1,3 +1,5 @@
+import { motion } from "motion/react";
+import { FADE, RISE } from "../theme/motion";
 import { useEffect, useRef } from "react";
 
 /**
@@ -36,14 +38,16 @@ export default function ConfirmDiscard({
   }, [onCancel]);
 
   return (
-    <div
+    <motion.div
+      {...FADE}
       className="absolute inset-0 z-[100] flex items-center justify-center bg-black/20"
       onPointerDown={(e) => {
         // A press outside the box is a way of saying no.
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div
+      <motion.div
+        {...RISE}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-discard-title"
@@ -57,18 +61,18 @@ export default function ConfirmDiscard({
           <button
             ref={cancelRef}
             onClick={onCancel}
-            className="rounded-md border border-gh-line px-3 py-1.5 hover:bg-gray-100"
+            className="rounded-md border border-gh-line px-3 py-1.5 transition-colors duration-150 ease-meno hover:bg-gray-100"
           >
             Cancel
           </button>
           <button
             onClick={onDiscard}
-            className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-red-700 hover:bg-red-100"
+            className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-red-700 transition-colors duration-150 ease-meno hover:bg-red-100"
           >
             {discardLabel}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

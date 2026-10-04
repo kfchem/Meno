@@ -12,6 +12,7 @@ import CapJoinLine from "./CapJoinLine";
 import { editorLayoutOptions } from "../layoutOptions";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { useDrawnLayout } from "./drawnLayoutContext";
+import { TAU, follow } from "../../../theme/motion";
 
 export default function AromaticCircles2D() {
   const { camera, invalidate } = useThree();
@@ -21,12 +22,44 @@ export default function AromaticCircles2D() {
   // the rings' circles come with the rest of the drawing
   const { atoms, bonds, opts, layout, zoom } = useDrawnLayout();
   const [now, setNow] = useState(0);
-  useFrame(() => {
+  // each circle as last laid out, with how far it is in view; the preview's
+  // last place, with how far it is in view
+  const circleSeen = useRef(new Map<string, { level: number; c: any }>());
+  const circleOn = useRef(new Set<string>());
+  const previewSeen = useRef<{ level: number; on: boolean; last: { x: number; y: number; inner: number; outer: number } | null }>({
+    level: 0,
+    on: false,
+    last: null,
+  });
+  const [, setFrame] = useState(0);
+  useFrame((_, dt) => {
     // `now` only drives the hover ring's expand animation (~780 ms). Updating
     // it on every frame re-rendered this component continuously, which would
     // defeat on-demand rendering.
     if (hoverStart != null && performance.now() - hoverStart < 780) {
       setNow(performance.now());
+      invalidate();
+    }
+    const d = Math.min(dt, 1 / 20);
+    let moving = false;
+    for (const [k, e] of circleSeen.current) {
+      const to = circleOn.current.has(k) ? 1 : 0;
+      if (e.level !== to) {
+        const n = follow(e.level, to, d, TAU.quick);
+        e.level = Math.abs(n - to) < 0.01 ? to : n;
+        moving = true;
+      }
+      if (e.level === 0 && to === 0) circleSeen.current.delete(k);
+    }
+    const p = previewSeen.current;
+    const pTo = p.on ? 1 : 0;
+    if (p.level !== pTo) {
+      const n = follow(p.level, pTo, d, TAU.quick);
+      p.level = Math.abs(n - pTo) < 0.01 ? pTo : n;
+      moving = true;
+    }
+    if (moving) {
+      setFrame((f) => f + 1);
       invalidate();
     }
   });
@@ -152,18 +185,56 @@ export default function AromaticCircles2D() {
     };
   }, [gl, previewCenters, camera, toggleRing, toggleAromatic]);
 
+  // Each circle comes into view as it is turned on - opening out a little
+  // as it fades in - and goes out of it as it is turned off; the preview of
+  // one fades in and out the same way (TAU.quick).
+  const circlesNow = ((layout as any).circles ?? []) as any[];
+  {
+    const now = new Set<string>();
+    circlesNow.forEach((c, i) => {
+      const k = c.key ?? `circle-${i}`;
+      now.add(k);
+      const e = circleSeen.current.get(k) ?? { level: 0, c };
+      e.c = c;
+      circleSeen.current.set(k, e);
+    });
+    circleOn.current = now;
+  }
+  const preview = (() => {
+    if (!hoverCenter || hoverStart == null) return null;
+    const dt = now - hoverStart; // ms since hover
+    if (dt < 500) return null;
+    const t = Math.min(1, (dt - 500) / 220);
+    const ease = 1 - Math.pow(1 - t, 3);
+    const targetR = hoverCenter.r * 0.5; // match layout default scaling
+    const thicknessWorld = Math.max(prevOpts.lineWidthPx / Math.max(zoom, 1e-6), targetR * 0.06);
+    const outer = Math.max(thicknessWorld * 1.2, targetR * (0.7 + 0.3 * ease));
+    const inner = Math.max(0, outer - thicknessWorld);
+    // (none for a ring whose circle is already on)
+    const alreadyOn = (hoverCenter as any).key ? !!aromaticRings[(hoverCenter as any).key] : aromaticEnabled;
+    if (alreadyOn) return null;
+    return { x: hoverCenter.x, y: hoverCenter.y, inner, outer };
+  })();
+  if (preview) previewSeen.current.last = preview;
+  previewSeen.current.on = !!preview;
+  const lastPreview = previewSeen.current.last;
   return (
     <group>
-      {(layout as any).circles?.map((c: any, i: number) => {
+      {[...circleSeen.current.entries()].map(([k, { level, c }]) => {
         // (an ellipse, for a ring seen in perspective)
-        const pts: [number, number, number][] = circlePoints(c).map((p) => [p.x, p.y, 0]);
+        const grow = 0.85 + 0.15 * level;
+        const pts: [number, number, number][] = circlePoints(c).map((p) => [
+          c.c.x + (p.x - c.c.x) * grow,
+          c.c.y + (p.y - c.c.y) * grow,
+          0,
+        ]);
         const lw =
           opts.units === "world"
             ? opts.lineWidthPx * Math.max(zoom, 1e-6)
             : opts.lineWidthPx;
         return (
           <CapJoinLine
-            key={`circ-${i}`}
+            key={k}
             points={pts}
             color={opts.bondColor ?? "black"}
             lineWidth={lw}
@@ -173,44 +244,23 @@ export default function AromaticCircles2D() {
             depthTest={false}
             depthWrite={false}
             renderOrder={25}
+            opacity={level}
           />
         );
       })}
-      {/* hover preview ring (gray) with radial expand animation */}
-      {hoverCenter &&
-        hoverStart != null &&
-        (() => {
-          const dt = now - hoverStart; // ms since hover
-          const ready = dt >= 500;
-          if (!ready) return null;
-          const t = Math.min(1, (dt - 500) / 220);
-          const ease = 1 - Math.pow(1 - t, 3);
-          const targetR = hoverCenter.r * 0.5; // match layout default scaling
-          const thicknessWorld = Math.max(
-            prevOpts.lineWidthPx / Math.max(zoom, 1e-6),
-            targetR * 0.06
-          );
-          const minOuter = Math.max(thicknessWorld * 1.2, targetR * 0.12);
-          const outer = Math.max(minOuter, targetR * ease);
-          const inner = Math.max(0, outer - thicknessWorld);
-          // Hide preview if the ring is already enabled
-          const alreadyOn = (hoverCenter as any).key
-            ? !!aromaticRings[(hoverCenter as any).key]
-            : aromaticEnabled;
-          if (alreadyOn) return null;
-          return (
-            <mesh position={[hoverCenter.x, hoverCenter.y, 0]} renderOrder={24}>
-              <ringGeometry args={[inner, outer, 64]} />
-              <meshBasicMaterial
-                color="#999"
-                transparent
-                opacity={0.85}
-                depthTest={false}
-                depthWrite={false}
-              />
-            </mesh>
-          );
-        })()}
+      {/* hover preview ring (gray), opening out as it fades in */}
+      {lastPreview && previewSeen.current.level > 0 && (
+        <mesh position={[lastPreview.x, lastPreview.y, 0]} renderOrder={24}>
+          <ringGeometry args={[lastPreview.inner, lastPreview.outer, 64]} />
+          <meshBasicMaterial
+            color="#999"
+            transparent
+            opacity={0.85 * previewSeen.current.level}
+            depthTest={false}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
     </group>
   );
 }

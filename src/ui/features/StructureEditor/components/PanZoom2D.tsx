@@ -3,6 +3,8 @@ import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { isPinch, wheelReader } from "../../../../lib/input/wheel";
 import { useEditor, useEditorStore } from "../store";
+import { letViewGoalGo, viewGoalOf } from "./viewGoal";
+import { TAU, follow } from "../../../theme/motion";
 
 /** WebKit's pinch on a trackpad, which it gives as gestures, not wheels. */
 type GestureLike = Event & { scale: number; clientX: number; clientY: number };
@@ -55,6 +57,8 @@ export function PanZoom2D() {
   // camera is OrthographicCamera in r3f Canvas when orthographic prop is set
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
+      // (the user takes the view: a fit on its way gives way)
+      letViewGoalGo(camera);
       // disable pan during bond extension or on a double-click down
       if (extendRef.current) return;
       const btn = (e as any).button;
@@ -183,6 +187,7 @@ export function PanZoom2D() {
     let pinch: number | null = null;
     const onGestureStart = (e: Event) => {
       e.preventDefault();
+      letViewGoalGo(camera);
       pinch = 1;
     };
     const onGestureChange = (e: Event) => {
@@ -199,6 +204,7 @@ export function PanZoom2D() {
     const readWheel = wheelReader();
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      letViewGoalGo(camera);
       if (pinch !== null) return; // the gesture has it
       const cz = (camera as any).zoom || 1;
       if (readWheel(e) === "pan") {
@@ -279,6 +285,23 @@ export function PanZoom2D() {
 
   useFrame((_, dt) => {
     const cam = camera as any;
+    // a fit on its way: the view going there - its zoom by ratio, so a large
+    // change takes no longer than a small one
+    const goal = viewGoalOf(camera);
+    if (goal && !dragging.current) {
+      const d = Math.min(dt, 1 / 20);
+      const zoom = Math.exp(follow(Math.log(cam.zoom || 1), Math.log(goal.zoom), d, TAU.move));
+      const x = follow(pos.current.x, goal.x, d, TAU.move);
+      const y = follow(pos.current.y, goal.y, d, TAU.move);
+      const there = Math.abs(Math.log(zoom / goal.zoom)) < 1e-3 && Math.hypot(goal.x - x, goal.y - y) * zoom < 0.25;
+      cam.zoom = there ? goal.zoom : zoom;
+      cam.updateProjectionMatrix?.();
+      pos.current.set(there ? goal.x : x, there ? goal.y : y);
+      vel.current.set(0, 0);
+      zVel.current = 0;
+      if (there) letViewGoalGo(camera);
+      invalidate();
+    }
     // inertial pan
     if (!dragging.current) {
       // (a frame long in coming moves it no further than a short one)
