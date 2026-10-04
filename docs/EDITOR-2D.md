@@ -88,6 +88,10 @@ gesture or, in Chromium, with Ctrl held. Measured on the maintainer's Mac,
 a trackpad's first step is 1 or 2 px however fast the stroke, and a
 smoothly scrolling mouse's notch (an MX Master 3S) is 13 px, so 8 px tells
 them apart; a notch zooms at least as far as a plain wheel's 40 px line.
+A step within a thousandth of a pixel of whole counts as whole: Windows'
+display scaling leaves notches that close (ten notches at once came as
+999.99993 px at 175 %), and read as fingers they moved the view a thousand
+pixels, off the drawing.
 (PR #55; 3D follows when the views are joined.)
 
 **A click keeps each view's own meaning**: in 2D a click on an atom edits
