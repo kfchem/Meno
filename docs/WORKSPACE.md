@@ -281,7 +281,8 @@ Taken while stage 1 was built, on 2026-10-03:
   the drawing while Meno asks what to make: every stereoisomer it gives,
   one, or none for now. Each is made as a conformer set (RDKit's ETKDG,
   then MMFF94) and comes onto the page as a molecule in 3D, its frames the
-  conformers, lowest first.
+  conformers, lowest first. Of two enantiomers, one is made as the other's
+  mirror image, so the two have the same conformers and shares.
 - **Rising out of the drawing.** Turned to lie over the drawing (Horn's
   quaternion, `utils/align3d`), its atoms grow on the drawing's, go over
   to their places in 3D as it comes up off the page, and it moves to rest
@@ -289,11 +290,16 @@ Taken while stage 1 was built, on 2026-10-03:
   that is in view as it is seen - the view taking it in where none is.
   Several rise one after another, in a row.
 - **Told apart.** A stereoisomer's centres that were left open carry
-  their R and S always, every centre's while R and S are shown.
+  their R and S always, every centre's while R and S are shown. They are
+  as large as the drawing's R and S, set clear of their atom in the widest
+  gap between its bonds as it is seen, and clear of each other.
 - **Tied to the drawing.** An atom hovered in either lights in the other.
   Drawn otherwise since - atoms, bonds or wedges, not where they are - the
   molecule stays as it is and says so under its frames, with *Make
-  again*, made where it stood. *Turn like the drawing* is in its menu.
+  again*, made where it stood. What the drawing leaves open is made as
+  the molecule had it (so an (S) stays (S)), and Meno asks only about
+  stereo that is new. An undo brings the molecule back as it was turned.
+  *Turn like the drawing* is in its menu.
   Pasted with its drawing, it is tied to the pasted drawing.
 - **And back.** *Draw as formula*: a molecule in 3D with no drawing is
   drawn by Meno's engine, wedged as it is in 3D, its bonds' orders found

@@ -12,6 +12,28 @@ export const WORLD_PER_ANGSTROM = NOMINAL_BOND_LENGTH / 1.5;
 const RT_HARTREE = (8.314462618 * 298.15) / 2625499.6;
 
 /**
+ * The widest way out from a point between the ways to its neighbours, given
+ * as angles: halfway across the widest gap between them, as a unit vector.
+ * Straight away from a lone neighbour; up and to the right with none (on a
+ * screen, y down).
+ */
+export function widestWay(angles: readonly number[]): { x: number; y: number } {
+  if (!angles.length) return { x: Math.SQRT1_2, y: -Math.SQRT1_2 };
+  const sorted = [...angles].sort((p, q) => p - q);
+  let size = -1;
+  let mid = 0;
+  sorted.forEach((from, i) => {
+    const to = i + 1 < sorted.length ? sorted[i + 1] : sorted[0] + 2 * Math.PI;
+    // (an even split goes up, as a label would sooner sit)
+    if (to - from > size + 1e-9 || (Math.abs(to - from - size) <= 1e-9 && Math.sin((from + to) / 2) < Math.sin(mid))) {
+      size = to - from;
+      mid = (from + to) / 2;
+    }
+  });
+  return { x: Math.cos(mid), y: Math.sin(mid) };
+}
+
+/**
  * How much of a conformer set each conformer is at room temperature (298 K),
  * by Boltzmann: from its energy in hartrees, the shares adding up to one.
  */

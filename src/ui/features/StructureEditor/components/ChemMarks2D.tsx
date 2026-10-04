@@ -10,6 +10,7 @@ import {
 import {
   bondSide,
   exitDistance,
+  MARK_SCALE,
   placeMark,
   valenceMessage,
   waysOut,
@@ -22,8 +23,6 @@ import { useDrawnLayout } from "./drawnLayoutContext";
 
 /** Marks sit over the drawing, and under the canvas's buttons and cards. */
 const Z_RANGE = [20, 10];
-/** A stereodescriptor's letters, against the labels'. */
-const MARK_SCALE = 0.6;
 /** The smallest a mark's letters get, however far out the view is. */
 const MIN_FONT_PX = 9;
 

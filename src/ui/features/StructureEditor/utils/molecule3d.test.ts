@@ -22,6 +22,7 @@ import {
   turnedTogether,
   WORLD_PER_ANGSTROM,
   populations,
+  widestWay,
   type Turning3D,
 } from "./molecule3d";
 import type { SolidMark } from "../../../../lib/chem/layout2d";
@@ -297,6 +298,27 @@ describe("a molecule in 3D in a picture", () => {
   it("is balls alone, space-filling", () => {
     const marks = pictureMarks({ ...ethane(), look: "space" }, STYLE_3D);
     expect(marks.every((x) => x.kind === "ball")).toBe(true);
+  });
+});
+
+describe("widestWay", () => {
+  const near = (v: { x: number; y: number }, x: number, y: number) => {
+    expect(v.x).toBeCloseTo(x);
+    expect(v.y).toBeCloseTo(y);
+  };
+
+  it("goes halfway across the widest gap between the neighbours", () => {
+    // (three bonds, two of them close together on the right: out to the left)
+    near(widestWay([-0.3, 0.3, Math.PI / 2]), Math.cos((Math.PI / 2 + 2 * Math.PI - 0.3) / 2), Math.sin((Math.PI / 2 + 2 * Math.PI - 0.3) / 2));
+  });
+
+  it("goes straight away from a lone neighbour, and up between two opposite ones", () => {
+    near(widestWay([0]), -1, 0);
+    near(widestWay([0, Math.PI]), 0, -1);
+  });
+
+  it("goes up and to the right with no neighbours", () => {
+    near(widestWay([]), Math.SQRT1_2, -Math.SQRT1_2);
   });
 });
 

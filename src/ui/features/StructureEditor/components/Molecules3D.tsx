@@ -1,5 +1,5 @@
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { KEY_LIGHT_FROM, STYLE_3D, type Style3D } from "../../../../lib/chem/style3d";
@@ -13,6 +13,9 @@ import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
 import Molecule3DView from "./Molecule3DView";
+import { useDrawingStyle } from "../useDrawingStyle";
+import { editorLayoutOptions } from "../layoutOptions";
+import { MARK_SCALE } from "../chem/marks";
 
 /** A turn left to itself stops below this speed, in radians a second. */
 const STILL = 0.02;
@@ -96,6 +99,12 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const remake = useContext(Remake3D);
   // (R and S on, every molecule's labels; off, a stereoisomer's own, which tell it from the others)
   const stereoLabels = useAppSettings((s) => s.chemistry.stereoLabels);
+  // (R and S on them as large as on the drawing)
+  const drawingStyle = useDrawingStyle();
+  const stereoFont = useMemo(() => {
+    const opts = editorLayoutOptions(drawingStyle);
+    return { size: opts.fontPx * MARK_SCALE, units: opts.units === "px" ? ("px" as const) : ("world" as const) };
+  }, [drawingStyle]);
   const frames = useEditor((s) => s.frames3d);
   const hovered = useEditor((s) => s.hovered3d);
   const sel3d = useEditor((s) => s.sel3d);
@@ -421,6 +430,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           rising={rising[m.id]}
           onRisen={() => store.getState().risen3d(m.id)}
           stereoShown={stereoLabels ? "all" : m.stereo?.chosen ? "chosen" : null}
+          stereoFont={stereoFont}
           overlay={!!overlay[m.id]}
           linkedAtom={hoveredDrawn != null && m.drawnFrom ? (m.drawnFrom.indexOf(hoveredDrawn) >= 0 ? m.drawnFrom.indexOf(hoveredDrawn) : null) : null}
           onHoverAtom={(atom) => store.getState().setHoveredAtom3d(m.id, atom)}
@@ -446,6 +456,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           hoveredMeasure={null}
           leaving={() => setLeaving((l) => l.filter((x) => x.m !== m))}
           stereoShown={null}
+          stereoFont={stereoFont}
         />
       ))}
     </group>

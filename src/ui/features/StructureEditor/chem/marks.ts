@@ -9,6 +9,9 @@ import { molIndex } from "../../../../lib/rdkit/molblock";
 import { elements } from "../../../../utils/atomUtils";
 import type { Model } from "../store/types";
 
+/** A stereodescriptor's letters, against the labels': on the drawing and on a molecule in 3D alike. */
+export const MARK_SCALE = 0.6;
+
 export type ValenceProblem = { valence: number; most?: number };
 
 export type ChemMarks = {
