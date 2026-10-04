@@ -1,3 +1,5 @@
+import { AnimatePresence, motion } from "motion/react";
+import { RISE } from "./ui/theme/motion";
 import "./App.css";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import TopBar, { type TabsController } from "./ui/layouts/TopBar";
@@ -300,8 +302,10 @@ export default function App() {
   return (
     <div className="h-screen w-screen flex flex-col relative">
       <TopBar ctl={ctl} />
+      <AnimatePresence>
       {pendingClose && (
         <ConfirmDiscard
+          key="confirm-discard"
           title={
             pendingClose.kind === "tab"
               ? `Close "${state.tabsById[pendingClose.id]?.meta.label ?? "this tab"}"?`
@@ -323,8 +327,12 @@ export default function App() {
           }}
         />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {notice && (
-        <div
+        <motion.div
+          key="notice"
+          {...RISE}
           role="alert"
           className="absolute top-12 left-1/2 -translate-x-1/2 z-50 max-w-[90%] flex items-start gap-3 rounded-md border border-gh-line bg-white/95 shadow-sm px-3 py-2 text-xs text-gh-black"
         >
@@ -335,8 +343,9 @@ export default function App() {
           >
             OK
           </button>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
       {state.mountOrder.map((id) => {
         const tab = state.tabsById[id];
         const entry = tab ? viewRegistry[tab.content.kind] : undefined;
@@ -368,6 +377,7 @@ export default function App() {
         patchData={patchData}
         replaceData={replaceData}
         getDocument={getDocument}
+        renameTab={(id, label) => dispatch({ type: "RENAME_TAB", id, label })}
       />
     </div>
   );

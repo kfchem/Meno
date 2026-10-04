@@ -92,7 +92,7 @@ export default function ChemistrySettings() {
         </div>
       ))}
       <div className="flex items-start gap-3 px-1 pt-1 text-xs text-gh-gray">
-        <p className="flex-1">
+        <p key={`${chem.state}-${!!error}`} className="flex-1 meno-fade-in">
           {status}
           {chem.state === "failed" && (
             <span className="text-accel-accent">
@@ -109,7 +109,7 @@ export default function ChemistrySettings() {
                 setError(e instanceof Error ? e.message : String(e)),
               );
             }}
-            className="h-7 shrink-0 rounded-md border border-gh-line bg-white px-3 text-xs text-gh-black hover:bg-gh-base"
+            className="h-7 shrink-0 rounded-md border border-gh-line bg-white px-3 text-xs text-gh-black hover:bg-gh-base meno-fade-in"
           >
             Set up RDKit
           </button>

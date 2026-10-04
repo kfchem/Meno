@@ -3,15 +3,18 @@ import { pageAt } from "../utils/page";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
-import { ALPHA, COLORS } from "../../../theme/colors";
+import { COLORS } from "../../../theme/colors";
+import { SELECTION_SHADE } from "./selectionShade";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
+import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
 import { lookOf, poseOf, seenBounds, solidOf, standingHeight, turnedInPlane, turnedTogether, type Turning3D } from "../utils/molecule3d";
 import { PAGE_DISTANCE } from "../utils/page";
 import type { Model, Molecule3D, Turn3D } from "../store/types";
+import { useDrawnLayout } from "./drawnLayoutContext";
+import { TAU, follow } from "../../../theme/motion";
 
 /** How far above the selection its turning handle stands, as a share of a bond. */
 const HANDLE_ABOVE = 0.75;
@@ -20,19 +23,6 @@ const HANDLE_PX = 6;
 const HANDLE_HIT = 2;
 /** Turning snaps to steps of this many degrees, until a pause lets it go. */
 const TURN_STEP = 15;
-/** How strongly what is selected is shaded, against the hover highlight's. */
-const SHADE = 0.45;
-
-/**
- * The highlight laid over the white page at `alpha`, as one opaque colour:
- * where an atom's shading meets its bonds' it is no darker than elsewhere.
- */
-function overWhite(hex: string, alpha: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const mix = (c: number) => Math.round(255 + (c - 255) * alpha);
-  const [r, g, b] = [mix((n >> 16) & 255), mix((n >> 8) & 255), mix(n & 255)];
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
-}
 
 /** A molecule in 3D as a turn takes it, turned as it is now. */
 const turningOf =
@@ -115,27 +105,10 @@ export default function Selection2D() {
     // the last press on nothing that was not a drag: a second press soon
     // after it, near it, is a double-click's
     let lastEmpty = { t: -Infinity, x: 0, y: 0 };
-    const onDown = (e: PointerEvent) => {
-      if (e.button !== 0 || e.target !== gl.domElement) return;
+    // A box, or (Alt) a lasso, from a press: drawn as the pointer goes, what
+    // it holds selected when the button comes up.
+    const box = (e: PointerEvent, sx: number, sy: number, kind: "box" | "lasso", add: boolean) => {
       const st = store.getState();
-      if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || st.labelEdit.active) return;
-      const add = addsToSelection(e);
-      const second =
-        e.timeStamp - lastEmpty.t <= DOUBLE_CLICK_MS && Math.hypot(e.clientX - lastEmpty.x, e.clientY - lastEmpty.y) < 8;
-      const sx = e.clientX;
-      const sy = e.clientY;
-      if (!add && !second) {
-        // (a pan is no first click)
-        lastEmpty = { t: e.timeStamp, x: sx, y: sy };
-        const onFirstUp = (ev: PointerEvent) => {
-          window.removeEventListener("pointerup", onFirstUp, true);
-          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) >= MOV_PX) lastEmpty = { t: -Infinity, x: 0, y: 0 };
-        };
-        window.addEventListener("pointerup", onFirstUp, true);
-        return;
-      }
-      lastEmpty = { t: -Infinity, x: 0, y: 0 };
-      const kind = e.altKey ? "lasso" : "box";
       const start = toWorld(sx, sy);
       let moved = false;
       let points = [start];
@@ -158,7 +131,7 @@ export default function Selection2D() {
         window.removeEventListener("pointerup", onUp, true);
         const s = store.getState();
         s.endPanHold(ev.pointerId);
-        if (!moved) return; // a double-click, not dragged, draws its bond as ever
+        if (!moved) return;
         s.setBoxSelect({ active: false, kind, points: [] });
         invalidate();
         const got = kind === "box" ? inBox(s.model, points[0], points[1]) : inLasso(s.model, points);
@@ -174,15 +147,103 @@ export default function Selection2D() {
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp, true);
     };
+
+    // A chain from a point of empty space, two clicks there: led by a drag
+    // from the second, or - the second let go where it was - traced with
+    // the button up until a click ends it (ChainGuide2D).
+    const chain = (e: PointerEvent, sx: number, sy: number) => {
+      const st = store.getState();
+      const start = toWorld(sx, sy);
+      let started = false;
+      st.beginPanHold(e.pointerId);
+      const onMove = (ev: PointerEvent) => {
+        if (!started) {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < MOV_PX) return;
+          started = true;
+          store.getState().startChainAt(start.x, start.y, false);
+        }
+        const p = toWorld(ev.clientX, ev.clientY);
+        store.getState().updateExtend(p.x, p.y);
+        invalidate();
+      };
+      const onUp = (ev: PointerEvent) => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp, true);
+        const s = store.getState();
+        s.endPanHold(ev.pointerId);
+        if (started) s.commitExtend();
+        else s.startChainAt(start.x, start.y, true);
+        s.suppressDoubleClick(DOUBLE_CLICK_MS);
+        invalidate();
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp, true);
+    };
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || e.target !== gl.domElement) return;
+      const st = store.getState();
+      if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || st.labelEdit.active || st.extend.active) return;
+      const add = addsToSelection(e);
+      const second =
+        e.timeStamp - lastEmpty.t <= DOUBLE_CLICK_MS && Math.hypot(e.clientX - lastEmpty.x, e.clientY - lastEmpty.y) < 8;
+      const sx = e.clientX;
+      const sy = e.clientY;
+      const kind = e.altKey ? "lasso" : "box";
+      // with Ctrl (⌘): a box at once, added to the selection
+      if (add) {
+        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        box(e, sx, sy, kind, true);
+        return;
+      }
+      if (second) {
+        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        chain(e, sx, sy);
+        return;
+      }
+      // A first press: a drag moves the view (PanZoom2D), a click lets the
+      // selection go; held still, a box begins where it is, a ring
+      // spreading there as it is held (HoldProgress2D).
+      lastEmpty = { t: e.timeStamp, x: sx, y: sy };
+      st.setPressHold({ at: toWorld(sx, sy), start: performance.now() });
+      const hold = window.setTimeout(() => {
+        cleanUp();
+        store.getState().setPressHold(null);
+        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        box(e, sx, sy, kind, false);
+      }, LONG_PRESS_MS);
+      const onFirstMove = (ev: PointerEvent) => {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < MOV_PX) return;
+        // (a pan is no first click)
+        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        cleanUp();
+      };
+      const onFirstUp = () => cleanUp();
+      const cleanUp = () => {
+        window.clearTimeout(hold);
+        store.getState().setPressHold(null);
+        window.removeEventListener("pointermove", onFirstMove);
+        window.removeEventListener("pointerup", onFirstUp, true);
+      };
+      window.addEventListener("pointermove", onFirstMove);
+      window.addEventListener("pointerup", onFirstUp, true);
+    };
     host.addEventListener("pointerdown", onDown, true);
     return () => host.removeEventListener("pointerdown", onDown, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gl, camera, store, invalidate]);
 
   // --- turning -------------------------------------------------------------
+  // (where the drawing is drawn: on its way somewhere, the handle and the
+  // shading go with it)
+  const drawn = useDrawnLayout();
+  const shownModel = useMemo(() => {
+    const at = new Map(drawn.atoms.map((a) => [a.id, a]));
+    return { ...model, atoms: model.atoms.map((a) => ({ ...a, x: at.get(a.id)?.x ?? a.x, y: at.get(a.id)?.y ?? a.y })) };
+  }, [model, drawn.atoms]);
   const extent = useMemo(
-    () => held ?? selectionExtent(model, sel.atoms, molecules3d, sel3d, turns3d, frames3d),
-    [held, model, sel.atoms, molecules3d, sel3d, turns3d, frames3d],
+    () => held ?? selectionExtent(shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d),
+    [held, shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d],
   );
   const turnable = extent != null && (sel.atoms.size > 1 || sel3d.size > 0);
   const handleAt = turnable ? { x: extent!.mid.x, y: extent!.top + NOMINAL_BOND_LENGTH * HANDLE_ABOVE } : null;
@@ -303,17 +364,98 @@ export default function Selection2D() {
     window.addEventListener("pointerup", onUp, true);
   };
 
-  // the handle the same size on the screen at any zoom
-  useFrame(() => {
-    if (handle.current) handle.current.scale.setScalar(HANDLE_PX / Math.max((camera as THREE.PerspectiveCamera).zoom, 1e-6));
+  // --- coming and going ------------------------------------------------------
+  // What is shaded, the box or lasso, and the handle each come into view and
+  // go out of it rather than appear and vanish (TAU.quick): each shaded part
+  // and its last place, the last box drawn, and the handle's last place, with
+  // how far in view each is.
+  const parts = useRef(new Map<string, { level: number; atom?: { x: number; y: number }; bond?: { p: { x: number; y: number }; q: { x: number; y: number } } }>());
+  const chosen = useRef(new Set<string>());
+  const box = useRef<{ level: number; outline: { line: THREE.LineLoop; fill: THREE.Mesh } | null }>({ level: 0, outline: null });
+  const handleSeen = useRef<{ level: number; at: { x: number; y: number } | null }>({ level: 0, at: null });
+  const [, setFrame] = useState(0);
+  {
+    const at = new Map(shownModel.atoms.map((a) => [a.id, a]));
+    const now = new Set<string>();
+    for (const id of sel.atoms) {
+      const a = at.get(id);
+      if (!a) continue;
+      const e = parts.current.get(`a${id}`) ?? { level: 0 };
+      e.atom = { x: a.x, y: a.y };
+      parts.current.set(`a${id}`, e);
+      now.add(`a${id}`);
+    }
+    for (const b of model.bonds) {
+      if (!sel.bonds.has(b.id)) continue;
+      const p = at.get(b.a);
+      const q = at.get(b.b);
+      if (!p || !q) continue;
+      const e = parts.current.get(`b${b.id}`) ?? { level: 0 };
+      e.bond = { p: { x: p.x, y: p.y }, q: { x: q.x, y: q.y } };
+      parts.current.set(`b${b.id}`, e);
+      now.add(`b${b.id}`);
+    }
+    chosen.current = now;
+    if (handleAt) handleSeen.current.at = handleAt;
+  }
+  useFrame((_, dt) => {
+    const d = Math.min(dt, 1 / 20);
+    let moving = false;
+    for (const [k, e] of parts.current) {
+      const to = chosen.current.has(k) ? 1 : 0;
+      if (e.level !== to) {
+        const n = follow(e.level, to, d, TAU.quick);
+        e.level = Math.abs(n - to) < 0.01 ? to : n;
+        moving = true;
+      }
+      if (e.level === 0 && to === 0) parts.current.delete(k);
+    }
+    const b = box.current;
+    const boxTo = b.outline && boxSelect.active ? 1 : 0;
+    if (b.level !== boxTo) {
+      const n = follow(b.level, boxTo, d, TAU.quick);
+      b.level = Math.abs(n - boxTo) < 0.01 ? boxTo : n;
+      moving = true;
+    }
+    if (b.outline) {
+      (b.outline.line.material as THREE.LineBasicMaterial).opacity = b.level;
+      (b.outline.fill.material as THREE.MeshBasicMaterial).opacity = 0.08 * b.level;
+      if (b.level === 0 && !boxSelect.active) {
+        b.outline.line.geometry.dispose();
+        (b.outline.line.material as THREE.Material).dispose();
+        b.outline.fill.geometry.dispose();
+        (b.outline.fill.material as THREE.Material).dispose();
+        b.outline = null;
+        moving = true;
+      }
+    }
+    const h = handleSeen.current;
+    const handleTo = turnable ? 1 : 0;
+    if (h.level !== handleTo) {
+      const n = follow(h.level, handleTo, d, TAU.quick);
+      h.level = Math.abs(n - handleTo) < 0.01 ? handleTo : n;
+      moving = true;
+    }
+    // the handle the same size on the screen at any zoom, growing in and shrinking out
+    if (handle.current) {
+      handle.current.scale.setScalar((HANDLE_PX / Math.max((camera as THREE.PerspectiveCamera).zoom, 1e-6)) * (0.6 + 0.4 * h.level));
+      handle.current.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+        if (m && m.userData.seen) m.opacity = h.level;
+      });
+    }
+    if (moving) {
+      setFrame((f) => f + 1);
+      invalidate();
+    }
   });
 
   // --- shading -------------------------------------------------------------
   const r = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
-  const shade = overWhite(COLORS.highlight, ALPHA.highlight * SHADE);
-  const byId = useMemo(() => new Map(model.atoms.map((a) => [a.id, a])), [model.atoms]);
-  const shadedBonds = model.bonds.filter((b) => sel.bonds.has(b.id));
-  const shadedAtoms = model.atoms.filter((a) => sel.atoms.has(a.id));
+  const shade = useMemo(() => new THREE.Color(SELECTION_SHADE), []);
+  // (shading coming or going: the page's white going over to the shade, so
+  // that where parts overlap it stays even)
+  const shadeAt = (level: number) => new THREE.Color("#ffffff").lerp(shade, level);
   // the box or the lasso being drawn: a pale fill inside a line
   const outline = useMemo(() => {
     if (!boxSelect.active || boxSelect.points.length < 2) return null;
@@ -328,7 +470,7 @@ export default function Selection2D() {
         : boxSelect.points;
     const line = new THREE.LineLoop(
       new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(p.x, p.y, 0.005))),
-      new THREE.LineBasicMaterial({ color: COLORS.highlight, depthTest: false, toneMapped: false }),
+      new THREE.LineBasicMaterial({ color: COLORS.highlight, depthTest: false, toneMapped: false, transparent: true, opacity: 0 }),
     );
     line.renderOrder = 40;
     const fill = new THREE.Mesh(
@@ -336,7 +478,7 @@ export default function Selection2D() {
       new THREE.MeshBasicMaterial({
         color: COLORS.highlight,
         transparent: true,
-        opacity: 0.08,
+        opacity: 0,
         depthWrite: false,
         toneMapped: false,
       }),
@@ -345,49 +487,52 @@ export default function Selection2D() {
     fill.renderOrder = 39;
     return { line, fill };
   }, [boxSelect]);
-  useEffect(
-    () => () => {
-      for (const o of outline ? [outline.line, outline.fill] : []) {
+  // the box drawn last: kept as the gesture ends, to go out of view
+  useEffect(() => {
+    if (!outline) return;
+    const was = box.current.outline;
+    if (was && was !== outline) {
+      for (const o of [was.line, was.fill]) {
         o.geometry.dispose();
         (o.material as THREE.Material).dispose();
       }
-    },
-    [outline],
-  );
+    }
+    box.current.outline = outline;
+    invalidate();
+  }, [outline, invalidate]);
 
+  const shown = [...parts.current.entries()];
+  const lastBox = box.current.outline;
+  const handlePlace = handleSeen.current.at;
   return (
     <group>
-      {shadedAtoms.map((a) => (
-        <mesh key={`sa-${a.id}`} position={[a.x, a.y, -0.04]} renderOrder={-2}>
-          <circleGeometry args={[r, 32]} />
-          <meshBasicMaterial color={shade} depthWrite={false} toneMapped={false} />
-        </mesh>
-      ))}
-      {shadedBonds.map((b) => {
-        const p = byId.get(b.a);
-        const q = byId.get(b.b);
-        if (!p || !q) return null;
-        const len = Math.hypot(q.x - p.x, q.y - p.y);
-        return (
+      {shown.map(([k, e]) =>
+        e.atom ? (
+          <mesh key={k} position={[e.atom.x, e.atom.y, -0.04]} renderOrder={-2}>
+            <circleGeometry args={[r, 32]} />
+            <meshBasicMaterial color={shadeAt(e.level)} depthWrite={false} toneMapped={false} />
+          </mesh>
+        ) : e.bond ? (
           <mesh
-            key={`sb-${b.id}`}
-            position={[(p.x + q.x) / 2, (p.y + q.y) / 2, -0.045]}
-            rotation={[0, 0, Math.atan2(q.y - p.y, q.x - p.x)]}
+            key={k}
+            position={[(e.bond.p.x + e.bond.q.x) / 2, (e.bond.p.y + e.bond.q.y) / 2, -0.045]}
+            rotation={[0, 0, Math.atan2(e.bond.q.y - e.bond.p.y, e.bond.q.x - e.bond.p.x)]}
             renderOrder={-2}
           >
-            <planeGeometry args={[len, r * 1.1]} />
-            <meshBasicMaterial color={shade} depthWrite={false} toneMapped={false} />
+            <planeGeometry args={[Math.hypot(e.bond.q.x - e.bond.p.x, e.bond.q.y - e.bond.p.y), r * 1.1]} />
+            <meshBasicMaterial color={shadeAt(e.level)} depthWrite={false} toneMapped={false} />
           </mesh>
-        );
-      })}
-      {outline && <primitive object={outline.fill} />}
-      {outline && <primitive object={outline.line} />}
-      {handleAt && (
+        ) : null,
+      )}
+      {lastBox && <primitive object={lastBox.fill} />}
+      {lastBox && <primitive object={lastBox.line} />}
+      {handlePlace && (handleAt || handleSeen.current.level > 0) && (
         <group
           ref={handle}
-          position={[handleAt.x, handleAt.y, 0.006]}
+          position={[handlePlace.x, handlePlace.y, 0.006]}
           onPointerDown={(e) => {
             if ((e.nativeEvent?.button ?? 0) !== 0) return;
+            if (!handleAt) return;
             e.stopPropagation();
             startTurn(e.nativeEvent);
           }}
@@ -399,11 +544,11 @@ export default function Selection2D() {
           </mesh>
           <mesh renderOrder={41}>
             <circleGeometry args={[1, 24]} />
-            <meshBasicMaterial color="#ffffff" depthTest={false} toneMapped={false} />
+            <meshBasicMaterial color="#ffffff" depthTest={false} toneMapped={false} transparent opacity={0} userData={{ seen: true }} />
           </mesh>
           <mesh renderOrder={42}>
             <ringGeometry args={[0.68, 1, 24]} />
-            <meshBasicMaterial color={COLORS.highlight} depthTest={false} toneMapped={false} />
+            <meshBasicMaterial color={COLORS.highlight} depthTest={false} toneMapped={false} transparent opacity={0} userData={{ seen: true }} />
           </mesh>
         </group>
       )}

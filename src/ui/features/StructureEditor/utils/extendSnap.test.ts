@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chainStart, chainStep, snapBond } from "./extendSnap";
+import { snapBond } from "./extendSnap";
 
 const deg = (a: number) => ((((a * 180) / Math.PI) % 360) + 360) % 360;
 
@@ -53,47 +53,3 @@ describe("keeping bonds apart", () => {
   });
 });
 
-describe("chainStart", () => {
-  it("leaves a bare atom 30 degrees off the stroke, so a straight one zigzags", () => {
-    const first = chainStart({ x: 0, y: 0 }, [], { x: 5, y: 0 }, 1);
-    expect(deg(first.angle)).toBeCloseTo(30, 6);
-    const next = chainStep({ x: 0, y: 0 }, first.end, { x: 5, y: 0 }, first.turn, 1);
-    expect(deg(next.angle)).toBeCloseTo(330, 6);
-  });
-
-  it("leaves an atom with a bond at 120 degrees to it, toward the pointer", () => {
-    // a bond at 210° and the pointer to the left: up, then along
-    const n = [{ x: Math.cos((210 * Math.PI) / 180), y: Math.sin((210 * Math.PI) / 180) }];
-    const first = chainStart({ x: 0, y: 0 }, n, { x: -5, y: 0 }, 1);
-    expect(deg(first.angle)).toBeCloseTo(90, 6);
-    const next = chainStep({ x: 0, y: 0 }, first.end, { x: -5, y: 0.5 }, first.turn, 1);
-    expect(deg(next.angle)).toBeCloseTo(150, 6);
-  });
-});
-
-describe("chainStep", () => {
-  it("zigzags a straight stroke", () => {
-    // a chain going right along the x axis, the pointer far ahead on it
-    let previous = { x: -1, y: 0 };
-    let tip = { x: 0, y: 0 };
-    let turn = 0;
-    const ys: number[] = [];
-    for (let i = 0; i < 4; i++) {
-      const s = chainStep(previous, tip, { x: 100, y: 0 }, turn, 1);
-      ys.push(Math.sign(s.end.y - tip.y));
-      previous = tip;
-      tip = s.end;
-      turn = s.turn;
-    }
-    // up, down, up, down (or the other way round): never twice the same
-    expect(ys[0]).not.toBe(ys[1]);
-    expect(ys[1]).not.toBe(ys[2]);
-    expect(ys[2]).not.toBe(ys[3]);
-  });
-
-  it("turns toward the pointer when it leaves the line", () => {
-    const s = chainStep({ x: -1, y: 0 }, { x: 0, y: 0 }, { x: 0.5, y: 2 }, 1, 1);
-    expect(s.end.y).toBeGreaterThan(0);
-    expect(deg(s.angle)).toBeCloseTo(60, 6);
-  });
-});

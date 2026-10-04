@@ -6,6 +6,7 @@ import { COLORS, ALPHA } from "../../../theme/colors";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { strokeTarget } from "../utils/stroke";
 import { useDrawnLayout } from "./drawnLayoutContext";
+import { TAU, follow } from "../../../theme/motion";
 
 // Preview for a stroke drawn out of an atom (see utils/stroke).
 // - Works out where the bond the pointer is leading ends - springing round
@@ -31,6 +32,8 @@ export default function ExtendPreview2D() {
   // Letting go of the grid eases from the snapped bond to the pointer.
   const freeing = useRef<{ t: number; ang: number } | null>(null);
   const wasFree = useRef(false);
+  // how far the thin line is in view: in as a bond is drawn out, out after
+  const seen = useRef(0);
 
   useFrame((_, dtRaw) => {
     // Angle smoothing runs while the gesture is active (on-demand rendering).
@@ -40,8 +43,16 @@ export default function ExtendPreview2D() {
       extend.active && extend.stroke && ptr
         ? strokeTarget(model, extend.stroke, ptr, NOMINAL_BOND_LENGTH)
         : null;
+    const seenTo = target && ptr ? 1 : 0;
+    if (seen.current !== seenTo) {
+      const n = follow(seen.current, seenTo, Math.min(dtRaw || 0.016, 1 / 20), TAU.quick);
+      seen.current = Math.abs(n - seenTo) < 0.01 ? seenTo : n;
+    }
+    if (thin.current) (thin.current.material as THREE.MeshBasicMaterial).opacity = ALPHA.highlight * seen.current;
     if (!target || !thin.current || !ptr) {
-      if (thin.current) thin.current.visible = false;
+      // (let go: the line goes out of view where it was)
+      if (thin.current) thin.current.visible = seen.current > 0;
+      if (seen.current > 0) invalidate();
       angVelRef.current = 0;
       lastTip.current = null;
       freeing.current = null;
@@ -134,7 +145,7 @@ export default function ExtendPreview2D() {
         <meshBasicMaterial
           color={COLORS.highlight}
           transparent
-          opacity={ALPHA.highlight}
+          opacity={0}
           depthWrite={false}
           depthTest={true}
           toneMapped={false}

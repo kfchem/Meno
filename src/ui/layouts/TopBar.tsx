@@ -1,4 +1,5 @@
-import { Reorder } from "motion/react";
+import { AnimatePresence, Reorder, motion } from "motion/react";
+import { DURATION, EASE, FADE, RISE } from "../theme/motion";
 import {
   XMarkIcon,
   PlusIcon,
@@ -52,6 +53,19 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
     document.addEventListener("mousedown", onDoc as any);
     return () => document.removeEventListener("mousedown", onDoc as any);
   }, []);
+  // Escape closes the menu, as a click elsewhere does - and only that: the
+  // tab beneath does not take it as well
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [menuOpen]);
 
   const onSelectMenu = (
     profile: "texteditor" | "pyconsole" | "node" | "structure"
@@ -88,6 +102,9 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
         className="flex h-full items-end space-x-1 flex-1 px-1.5 overflow-hidden relative"
         data-tauri-drag-region
       >
+        {/* A tab comes in rising, and closed goes the same way, the others
+            closing up after it. */}
+        <AnimatePresence initial={false}>
         {tabOrder.map((id) => {
           const tab = tabsById[id];
           const selected = id === activeId;
@@ -96,13 +113,13 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
               key={id}
               value={id}
               initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: 0.15 } }}
-              exit={{ opacity: 0, y: 20, transition: { duration: 0.3 } }}
-              // Chosen or not, a tab changes at once: its curved corners
-              // are drawn beside it and come and go at once, and a tab that
-              // faded its colours in left them a fifth of a second ahead.
+              animate={{ opacity: 1, y: 0, transition: { duration: DURATION.base, ease: EASE } }}
+              exit={{ opacity: 0, y: 20, transition: { duration: DURATION.base, ease: EASE } }}
+              // Chosen or not, a tab goes over in the same time and the same
+              // way as its curved corners, which are drawn beside it: the
+              // two change together, never one ahead of the other.
               className={clsx(
-                "relative rounded-t-lg w-48 h-8.5 text-xs flex justify-between items-top0 min-w-8",
+                "relative rounded-t-lg w-48 h-8.5 text-xs flex justify-between items-top0 min-w-8 transition-[background-color,border-color,color] duration-150 ease-meno",
                 selected
                   ? "bg-white text-gh-black border border-gh-line border-b-transparent"
                   : "bg-gh-base text-gh-gray border border-transparent"
@@ -114,32 +131,40 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
               }}
               title={tab.label}
             >
-              {selected ? (
-                <>
-                  <div className="absolute -bottom-[1px] -left-2 h-2 w-2 bg-white" />
-                  <div className="absolute -bottom-[1px] -left-2 h-2 w-2 bg-gh-base rounded-br-xl border-b border-r border-gh-line" />
-                  <div className="absolute -bottom-[1px] -right-2 h-2 w-2 bg-white" />
-                  <div className="absolute -bottom-[1px] -right-2 h-2 w-2 bg-gh-base rounded-bl-xl border-b border-l border-gh-line" />
-                </>
-              ) : (
-                <div className="h-px bg-transparent border-b border-gh-line absolute -bottom-[0.5px] right-0 left-0" />
-              )}
+              {/* the curved corners of the chosen tab, and the line under one
+                  not chosen: both always there, one or the other seen */}
+              <div className={clsx("transition-opacity duration-150 ease-meno", selected ? "opacity-100" : "opacity-0")}>
+                <div className="absolute -bottom-[1px] -left-2 h-2 w-2 bg-white" />
+                <div className="absolute -bottom-[1px] -left-2 h-2 w-2 bg-gh-base rounded-br-xl border-b border-r border-gh-line" />
+                <div className="absolute -bottom-[1px] -right-2 h-2 w-2 bg-white" />
+                <div className="absolute -bottom-[1px] -right-2 h-2 w-2 bg-gh-base rounded-bl-xl border-b border-l border-gh-line" />
+              </div>
               <div
                 className={clsx(
-                  "flex items-center w-full py-1 justify-between rounded-lg h-7 mx-0.5 px-2",
+                  "h-px bg-transparent border-b border-gh-line absolute -bottom-[0.5px] right-0 left-0 transition-opacity duration-150 ease-meno",
+                  selected ? "opacity-0" : "opacity-100",
+                )}
+              />
+              <div
+                className={clsx(
+                  "flex items-center w-full py-1 justify-between rounded-lg h-7 mx-0.5 px-2 transition-colors duration-150 ease-meno",
                   !selected && "hover:bg-gh-gray/10"
                 )}
               >
                 <span className="truncate">
-                  {tab.dirty && (
-                    <span
-                      className="mr-1 text-gh-gray"
-                      aria-label="Unsaved changes"
-                      title="Unsaved changes"
-                    >
-                      ●
-                    </span>
-                  )}
+                  <AnimatePresence initial={false}>
+                    {tab.dirty && (
+                      <motion.span
+                        key="dirty"
+                        {...FADE}
+                        className="mr-1 text-gh-gray"
+                        aria-label="Unsaved changes"
+                        title="Unsaved changes"
+                      >
+                        ●
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                   {tab.label}
                 </span>
                 <button
@@ -151,7 +176,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
                     e.stopPropagation();
                     close(id);
                   }}
-                  className="h-4 w-4 rounded-full p-0.5 hover:bg-gh-line shrink-0"
+                  className="h-4 w-4 rounded-full p-0.5 transition-colors duration-150 ease-meno hover:bg-gh-line shrink-0"
                   aria-label="Close tab"
                   title="Close"
                 >
@@ -161,15 +186,20 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
             </Reorder.Item>
           );
         })}
+        </AnimatePresence>
       </Reorder.Group>
 
       <div className="h-full flex items-center gap-1">
         <div className="relative flex" ref={menuRef}>
           <button
             aria-label="New tab"
-            onClick={add}
+            onClick={() => {
+              // (beside the menu's own button, so not a click elsewhere: it closes the menu itself)
+              setMenuOpen(false);
+              add();
+            }}
             onMouseDown={stop}
-            className="h-7 px-2 rounded-l-md border border-gh-line bg-white hover:bg-gray-100"
+            className="h-7 px-2 rounded-l-md border border-gh-line bg-white transition-colors duration-150 ease-meno hover:bg-gray-100"
           >
             <div className="flex items-center gap-1">
               <PlusIcon className="h-3 w-3" />
@@ -180,48 +210,53 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
             title="New…"
             onMouseDown={stop}
             onClick={() => setMenuOpen((v) => !v)}
-            className="h-7 px-2 rounded-r-md border border-l-0 border-gh-line bg-white hover:bg-gray-100 -ml-px"
+            className="h-7 px-2 rounded-r-md border border-l-0 border-gh-line bg-white transition-colors duration-150 ease-meno hover:bg-gray-100 -ml-px"
           >
             <ChevronDownIcon className="h-3.5 w-3.5" />
           </button>
 
+          <AnimatePresence>
           {menuOpen && (
-            <div
+            <motion.div
+              key="new-menu"
+              {...RISE}
+              style={{ transformOrigin: "top right" }}
               className="absolute right-0 mt-7 w-56 rounded-md border border-gh-line bg-white shadow-lg z-50 overflow-hidden"
               onMouseDown={stop}
             >
               <div className="py-1">
                 <button
-                  className="w-full px-3 py-2 text-left hover:bg-gray-100 flex items-center justify-between text-sm"
+                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
                   onClick={() => onSelectMenu("texteditor")}
                 >
                   <span>Text Editor</span>
                   <span className="text-xs text-gray-500">new</span>
                 </button>
                 <button
-                  className="w-full px-3 py-2 text-left hover:bg-gray-100 flex items-center justify-between text-sm"
+                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
                   onClick={() => onSelectMenu("pyconsole")}
                 >
                   <span>Python Console</span>
                   <span className="text-xs text-gray-500">accel</span>
                 </button>
                 <button
-                  className="w-full px-3 py-2 text-left hover:bg-gray-100 flex items-center justify-between text-sm"
+                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
                   onClick={() => onSelectMenu("node")}
                 >
                   <span>Workflow Builder</span>
                   <span className="text-xs text-gray-500">new</span>
                 </button>
                 <button
-                  className="w-full px-3 py-2 text-left hover:bg-gray-100 flex items-center justify-between text-sm"
+                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
                   onClick={() => onSelectMenu("structure")}
                 >
                   <span>Structure Canvas</span>
                   <span className="text-xs text-gray-500">test</span>
                 </button>
               </div>
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
         </div>
 
         <OfflineToggle />
@@ -230,7 +265,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
           title="Settings"
           onMouseDown={stop}
           onClick={() => openByKind?.("settings", { label: "Settings" })}
-          className="h-7 w-7 ml-1 rounded-md flex items-center justify-center text-gh-gray hover:bg-gray-200 hover:text-gh-black"
+          className="h-7 w-7 ml-1 rounded-md flex items-center justify-center text-gh-gray transition-colors duration-150 ease-meno hover:bg-gray-200 hover:text-gh-black"
         >
           <Cog6ToothIcon className="h-4.5 w-4.5" />
         </button>
@@ -241,7 +276,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
             title="Minimize"
             onMouseDown={stop}
             onClick={() => appWindow.minimize()}
-            className="h-10 w-11 flex items-center justify-center hover:bg-gray-200"
+            className="h-10 w-11 flex items-center justify-center transition-colors duration-150 ease-meno hover:bg-gray-200"
           >
             <MinusIcon className="h-4 w-4" />
           </button>
@@ -250,7 +285,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
             title="Maximize / Restore"
             onMouseDown={stop}
             onClick={() => appWindow.toggleMaximize()}
-            className="h-10 w-11 flex items-center justify-center hover:bg-gray-200"
+            className="h-10 w-11 flex items-center justify-center transition-colors duration-150 ease-meno hover:bg-gray-200"
           >
             <StopIcon className="h-4 w-4" />
           </button>
@@ -259,7 +294,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
             title="Close"
             onMouseDown={stop}
             onClick={() => appWindow.close()}
-            className="h-10 w-11 flex items-center justify-center hover:bg-red-500 hover:text-white"
+            className="h-10 w-11 flex items-center justify-center transition-colors duration-150 ease-meno hover:bg-red-500 hover:text-white"
           >
             <XMarkIcon className="h-4 w-4" />
           </button>

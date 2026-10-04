@@ -29,6 +29,8 @@ export type ViewProps = {
   active: boolean;
   dispatchPatchData: (patch: unknown) => void;
   replaceContent: (next: unknown) => void;
+  /** Names the tab anew: a file opened in the view over what it held. */
+  renameTab: (label: string) => void;
   /** Present once the view's kind declares `createDocument` (see ViewEntry). */
   document?: DocumentStore<any>;
 };
@@ -66,13 +68,14 @@ export const viewRegistry: Record<string, ViewEntry> = {
   "2d": {
     kind: "2d",
     createDocument: () => createStructureDocument(),
-    Component: ({ tabId, content, active, document }) => (
+    Component: ({ tabId, content, active, document, renameTab }) => (
       <StructureCanvas
         tabId={tabId}
         active={active}
         document={document as DocumentStore<StructureDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
+        nameTab={renameTab}
       />
     ),
     create: (label) => create(label, "2d", {}),
@@ -117,7 +120,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
   structure: {
     kind: "structure",
     createDocument: () => createStructureDocument(),
-    Component: ({ tabId, content, active, document }) => (
+    Component: ({ tabId, content, active, document, renameTab }) => (
       <StructureCanvas
         tabId={tabId}
         active={active}
@@ -125,6 +128,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
         officeId={(content as any)?.data?.officeId}
+        nameTab={renameTab}
       />
     ),
     create: (label) => create(label, "structure", {}),
