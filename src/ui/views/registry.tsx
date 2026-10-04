@@ -1,5 +1,4 @@
 import type { JSX } from "react";
-import OmniLoader from "../features/OmniHub";
 import TextEditor from "../features/TextEditor";
 import TextDocumentEditor from "../features/TextEditor/TextDocumentEditor";
 import {
@@ -29,7 +28,6 @@ export type ViewProps = {
   content: TabContentBase;
   active: boolean;
   dispatchPatchData: (patch: unknown) => void;
-  replaceContent: (next: unknown) => void;
   /** Present once the view's kind declares `createDocument` (see ViewEntry). */
   document?: DocumentStore<any>;
 };
@@ -57,13 +55,6 @@ const create = (label: string, kind: TabKind, data?: unknown): TabInstance => {
 };
 
 export const viewRegistry: Record<string, ViewEntry> = {
-  loader: {
-    kind: "loader",
-    Component: ({ replaceContent }) => (
-      <OmniLoader onResolve={(next) => replaceContent(next as any)} />
-    ),
-    create: (label) => create(label, "loader"),
-  },
   "3d": {
     kind: "3d",
     Component: ({ tabId, content, active }) => (

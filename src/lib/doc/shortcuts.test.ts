@@ -6,10 +6,13 @@ import {
   isCleanUpKey,
   isDeleteKey,
   isDeselectKey,
+  isFitKey,
   isSelectAllKey,
   keepClipboard,
   keepPageUnselected,
+  openIntent,
   saveIntent,
+  shortcutLabel,
   undoIntent,
 } from "./shortcuts";
 
@@ -173,5 +176,29 @@ describe("clipboardIntent", () => {
     expect(clipboardIntent({ key: "v", ctrlKey: true, shiftKey: true })).toBeNull();
     expect(clipboardIntent({ key: "c", metaKey: true, target: { tagName: "INPUT" } })).toBeNull();
     expect(clipboardIntent({ key: "c", metaKey: true, target: { tagName: "TEXTAREA" } })).toBeNull();
+  });
+});
+
+describe("openIntent, isFitKey and shortcutLabel", () => {
+  it("opens with Ctrl/Cmd+O, from anywhere", () => {
+    expect(openIntent({ key: "o", metaKey: true })).toBe(true);
+    expect(openIntent({ key: "O", ctrlKey: true, target: { tagName: "INPUT" } })).toBe(true);
+    expect(openIntent({ key: "o", metaKey: true, shiftKey: true })).toBe(false);
+    expect(openIntent({ key: "o" })).toBe(false);
+  });
+
+  it("fits with Ctrl/Cmd+1, but not in a text field", () => {
+    expect(isFitKey({ key: "1", metaKey: true })).toBe(true);
+    expect(isFitKey({ key: "1", ctrlKey: true })).toBe(true);
+    expect(isFitKey({ key: "1" })).toBe(false);
+    expect(isFitKey({ key: "!", metaKey: true, shiftKey: true })).toBe(false);
+    expect(isFitKey({ key: "1", metaKey: true, target: { tagName: "INPUT" } })).toBe(false);
+  });
+
+  it("writes a shortcut as each system's menus do", () => {
+    expect(shortcutLabel("S", false, true)).toBe("\u2318S");
+    expect(shortcutLabel("S", true, true)).toBe("\u21e7\u2318S");
+    expect(shortcutLabel("S", true, false)).toBe("Ctrl+Shift+S");
+    expect(shortcutLabel("1", false, false)).toBe("Ctrl+1");
   });
 });

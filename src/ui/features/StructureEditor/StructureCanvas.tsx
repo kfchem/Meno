@@ -23,17 +23,7 @@ import {
   SnapArc2D,
   Selection2D,
 } from "./components";
-import {
-  ArrowDownTrayIcon,
-  ArrowsPointingInIcon,
-  ExclamationTriangleIcon,
-  FolderOpenIcon,
-  PhotoIcon,
-  SparklesIcon,
-  SwatchIcon,
-  CodeBracketIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
@@ -41,6 +31,7 @@ import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuTarget } from "./PartMenu";
+import { offerCommands, type CommandGroup } from "../../layouts/commands";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
 
@@ -54,9 +45,11 @@ import {
   clipboardIntent,
   isCleanUpKey,
   isDeleteKey,
+  isFitKey,
   isDeselectKey,
   isSelectAllKey,
   saveIntent,
+  shortcutLabel,
 } from "../../../lib/doc/shortcuts";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
 import { useAppSettings } from "../../../lib/settings/appSettings";
@@ -78,6 +71,7 @@ function StructureCanvasContent({
   initialPayload,
   initialFilename,
   officeId,
+  ownTab,
   styleOpen,
   toggleStyle,
   openArrowStyle,
@@ -89,6 +83,8 @@ function StructureCanvasContent({
   initialFilename?: string;
   /** The object in a document this canvas was opened from (lib/ole). */
   officeId?: number;
+  /** Whether the canvas is a tab's own, which offers the app's menu its commands. */
+  ownTab: boolean;
   /** Whether the drawing-style panel is open beside the canvas. */
   styleOpen: boolean;
   toggleStyle: () => void;
@@ -103,14 +99,11 @@ function StructureCanvasContent({
   const {
     camRef,
     domRef,
-    fileInputRef,
     handleDoubleClick,
     handleWrapperMouseMove,
     handleWrapperMouseLeave,
     handleWrapperClick,
     dropZone,
-    onPickFiles,
-    openFilePicker,
     importError,
     dismissImportError,
     handleMouseDownCapture,
@@ -225,6 +218,9 @@ function StructureCanvasContent({
       if (isCleanUpKey(e)) {
         e.preventDefault();
         runCleanUp(selected ? sel.atoms : structureAt(kind, id));
+      } else if (isFitKey(e)) {
+        e.preventDefault();
+        requestFit();
       } else if (isDeleteKey(e) && selected) {
         e.preventDefault();
         if (!busy) st.deleteSelection();
@@ -259,7 +255,7 @@ function StructureCanvasContent({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget]);
+  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget, requestFit]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
@@ -374,6 +370,48 @@ function StructureCanvasContent({
   // SMILES in and out, by RDKit, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
 
+  // What the canvas does besides drawing - saving, fitting, R and S, its
+  // style - offered to the app's menu while its tab is in front, and on
+  // empty space in the right-click menu; the keys say the same.
+  const commandsNow = useRef<() => CommandGroup[]>(() => []);
+  commandsNow.current = () => [
+    {
+      title: "File",
+      items: [
+        { name: "Save", keys: shortcutLabel("S"), run: () => void save() },
+        { name: "Save As…", keys: shortcutLabel("S", true), run: () => void saveAs() },
+        { name: "Export as SVG…", run: () => void files.exportSvg() },
+      ],
+    },
+    {
+      title: "Edit",
+      items: [
+        { name: "SMILES…", run: () => setSmilesOpen(true) },
+        {
+          name: "Clean up all",
+          keys: shortcutLabel("K", true),
+          run: () => runCleanUp(null),
+          disabled: cleaning || model.bonds.length === 0,
+        },
+      ],
+    },
+    {
+      title: "View",
+      items: [
+        { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit },
+        { name: chemistry.stereoLabels ? "Hide R and S" : "Show R and S", run: toggleStereoLabels },
+      ],
+    },
+    {
+      title: "Format",
+      items: [{ name: ownStyle ? "Drawing style (its own)…" : "Drawing style…", run: () => !styleOpen && toggleStyle() }],
+    },
+  ];
+  useEffect(() => {
+    if (!active || !ownTab) return;
+    return offerCommands(tabId, () => commandsNow.current());
+  }, [active, ownTab, tabId]);
+
   return (
     <div
       ref={dropRef}
@@ -387,18 +425,6 @@ function StructureCanvasContent({
       onPointerMoveCapture={onRightMove}
       onPointerUpCapture={onRightUp}
     >
-      {/* Hidden file input for Open (replace) */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        accept={[".mol", ".sdf", ".rxn", ".xyz"].join(",")}
-        onChange={(e) => {
-          if (e.target.files) onPickFiles(e.target.files);
-          // Allow picking the same file again.
-          e.target.value = "";
-        }}
-      />
       {/* Import error */}
       {alert && (
         <div
@@ -420,122 +446,6 @@ function StructureCanvasContent({
           </button>
         </div>
       )}
-      {/* Fit / Open buttons */}
-      <div className="absolute left-3 bottom-3 z-50 flex gap-2">
-        <button
-          aria-label="Fit to content"
-          title="Fit to content"
-          onClick={() => requestFit()}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
-        >
-          <ArrowsPointingInIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Open structure file"
-          title="Open structure file (replaces the canvas)"
-          onClick={(e) => {
-            e.stopPropagation();
-            openFilePicker();
-          }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
-        >
-          <FolderOpenIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Save structure"
-          title="Save (Ctrl/Cmd+S; with Shift, Save As)"
-          onClick={(e) => {
-            e.stopPropagation();
-            void (e.shiftKey ? saveAs() : save());
-          }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
-        >
-          <ArrowDownTrayIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Export as SVG"
-          title="Export the drawing as an SVG picture"
-          onClick={(e) => {
-            e.stopPropagation();
-            void files.exportSvg();
-          }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center"
-        >
-          <PhotoIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Drawing style"
-          aria-pressed={styleOpen}
-          title={
-            ownStyle
-              ? "Drawing style (this document has its own)"
-              : "Drawing style"
-          }
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleStyle();
-          }}
-          className={
-            "relative h-9 w-9 rounded-full border shadow-sm flex items-center justify-center " +
-            (styleOpen
-              ? "border-accel-base bg-accel-lightbase"
-              : "border-gh-line bg-white/90 hover:bg-gray-100")
-          }
-        >
-          <SwatchIcon className="h-5 w-5 text-gh-black" />
-          {ownStyle && (
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-accel-base" />
-          )}
-        </button>
-        <button
-          aria-label="SMILES"
-          aria-pressed={smilesOpen}
-          title="SMILES in and out"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSmilesOpen((v) => !v);
-          }}
-          className={
-            "h-9 w-9 rounded-full border shadow-sm flex items-center justify-center " +
-            (smilesOpen
-              ? "border-accel-base bg-accel-lightbase"
-              : "border-gh-line bg-white/90 hover:bg-gray-100")
-          }
-        >
-          <CodeBracketIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Clean up"
-          title="Clean up: even bonds and angles, over where it is drawn (Ctrl/Cmd+Shift+K; with the pointer on a structure, just that one)"
-          disabled={cleaning || model.bonds.length === 0}
-          onClick={(e) => {
-            e.stopPropagation();
-            runCleanUp(null);
-          }}
-          className="h-9 w-9 rounded-full border border-gh-line bg-white/90 hover:bg-gray-100 shadow-sm flex items-center justify-center disabled:opacity-40 disabled:hover:bg-white/90"
-        >
-          <SparklesIcon className="h-5 w-5 text-gh-black" />
-        </button>
-        <button
-          aria-label="Show R and S"
-          aria-pressed={chemistry.stereoLabels}
-          title="R and S at stereocentres, E and Z at double bonds, Ra and Sa at axes"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleStereoLabels();
-          }}
-          className={
-            "h-9 w-9 rounded-full border shadow-sm flex items-center justify-center text-[11px] font-semibold text-gh-black " +
-            (chemistry.stereoLabels
-              ? "border-accel-base bg-accel-lightbase"
-              : "border-gh-line bg-white/90 hover:bg-gray-100")
-          }
-        >
-          <span>
-            <i>R</i>/<i>S</i>
-          </span>
-        </button>
-      </div>
       {active &&
         (chem.state === "setting-up" || chem.state === "starting") && (
           <div
@@ -593,6 +503,11 @@ function StructureCanvasContent({
               ? () => store.getState().expandAbbreviation(menu.id!)
               : undefined
           }
+          canvas={commandsNow.current()
+            .filter((g) => g.title !== "File")
+            .flatMap((g) => g.items)
+            .filter((c) => !c.disabled)
+            .map((c) => ({ name: c.name, keys: c.keys ?? "", run: c.run }))}
           clipboard={{
             onCut: () => void clip.cut(),
             onCopy: () => void clip.copy(),
@@ -700,6 +615,7 @@ export default function StructureCanvas({
           initialPayload={initialPayload}
           initialFilename={initialFilename}
           officeId={officeId}
+          ownTab={document != null}
           styleOpen={styleOpen}
           toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
           openArrowStyle={(id) => setPanel({ arrow: id })}

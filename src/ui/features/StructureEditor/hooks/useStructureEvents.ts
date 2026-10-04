@@ -30,7 +30,6 @@ export function useStructureEvents(
   const clickTimerRef = useRef<number | null>(null);
   // The press the next click ends, and whether it has travelled (utils/press)
   const pressRef = useRef<Press | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Where the pointer is over the drawing, in the window; null off it
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   // Last import failure, shown in the canvas until dismissed or replaced.
@@ -389,34 +388,6 @@ export function useStructureEvents(
     }
   };
 
-  const onPickFiles = async (files: FileList) => {
-    if (!files || !files.length) return;
-    const f = files[0];
-    const text = await f.text();
-    try {
-      const result = await processFileContent(f.name, text);
-      const shifted = {
-        atoms: result.model.atoms.map((a) => ({
-          ...a,
-          x: a.x - result.centroid.x,
-          y: a.y - result.centroid.y,
-        })),
-        bonds: result.model.bonds,
-      };
-      // Over what the canvas holds: an edit, so a wrong file can be undone.
-      store
-        .getState()
-        .replaceModel(
-          toModel(shifted),
-          importedScheme(result, -result.centroid.x, -result.centroid.y),
-        );
-      setImportError(null);
-    } catch (err) {
-      reportImportError("replace", err);
-    }
-  };
-
-  const openFilePicker = () => fileInputRef.current?.click();
   const dismissImportError = () => setImportError(null);
 
   const handleMouseDownCapture = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -457,14 +428,11 @@ export function useStructureEvents(
     domRef,
     clientToWorld,
     pasteTarget,
-    fileInputRef,
     handleDoubleClick,
     handleWrapperMouseMove,
     handleWrapperMouseLeave,
     handleWrapperClick,
     dropZone,
-    onPickFiles,
-    openFilePicker,
     importError,
     dismissImportError,
     handleMouseDownCapture,

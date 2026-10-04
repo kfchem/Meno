@@ -39,6 +39,11 @@ export type StructureDocument = {
   expanded?: number[];
 };
 
+/** Whether nothing is drawn: no structure, arrow or "+" sign. */
+export function isBlankDocument(doc: StructureDocument): boolean {
+  return !doc.model.atoms.length && !doc.arrows.length && !doc.pluses.length;
+}
+
 export function emptyStructureDocument(): StructureDocument {
   return {
     model: { atoms: [], bonds: [] },

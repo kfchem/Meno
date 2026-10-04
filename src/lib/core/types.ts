@@ -8,7 +8,6 @@ export type TabMeta = {
 };
 
 export type TabKind =
-  | "loader"
   | "3d"
   | "2d"
   | "text"
@@ -37,6 +36,8 @@ export type State = {
 export type Action =
   | { type: "ADD_TAB"; tab: TabInstance }
   | { type: "CLOSE_TAB"; id: TabId }
+  /** `tab` in `id`'s place in the tab bar, which goes. */
+  | { type: "REPLACE_TAB"; id: TabId; tab: TabInstance }
   | { type: "SELECT_TAB"; id: TabId }
   | { type: "REORDER"; order: TabId[] }
   | { type: "SET_CONTENT"; id: TabId; content: TabContentBase }

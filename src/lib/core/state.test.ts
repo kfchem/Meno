@@ -14,11 +14,21 @@ function withTabs(...ids: string[]): State {
 }
 
 describe("tab reducer", () => {
-  it("starts with a single loader tab", () => {
+  it("starts with a single structure canvas", () => {
     const s = createInitialState();
     expect(s.tabOrder).toHaveLength(1);
-    expect(s.tabsById[s.tabOrder[0]].content.kind).toBe("loader");
+    expect(s.tabsById[s.tabOrder[0]].content.kind).toBe("structure");
     expect(s.activeId).toBe(s.tabOrder[0]);
+  });
+
+  it("puts a tab in another's place, which goes, and brings it to the front", () => {
+    const s = reducer(withTabs("a", "b", "c"), { type: "SELECT_TAB", id: "a" });
+    const r = reducer(s, { type: "REPLACE_TAB", id: "b", tab: tab("d") });
+    expect(r.tabOrder).toEqual(["a", "d", "c"]);
+    expect(r.mountOrder).toEqual(["a", "d", "c"]);
+    expect(r.tabsById.b).toBeUndefined();
+    expect(r.activeId).toBe("d");
+    expect(reducer(s, { type: "REPLACE_TAB", id: "x", tab: tab("d") })).toBe(s);
   });
 
   it("activates newly added tabs", () => {

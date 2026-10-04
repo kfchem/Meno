@@ -10,9 +10,10 @@ import {
 import clsx from "clsx";
 import { useMemo, MouseEvent, useRef, useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import logo from "../../assets/icon.png";
 import { TabKind } from "../../lib/core";
+import { shortcutLabel } from "../../lib/doc/shortcuts";
 import OfflineToggle from "../network/OfflineToggle";
+import MenoMenu from "./MenoMenu";
 
 type TabMeta = { id: string; label: string; dirty?: boolean };
 
@@ -25,6 +26,8 @@ export type TabsController = {
   close: (id: string) => void;
   add: () => void;
   openByKind?: (kind: TabKind, opts?: { label?: string }) => void;
+  /** Files picked in the system's dialog, each opened in a tab (Open…). */
+  openFiles: () => void;
 };
 
 export default function TopBar({ ctl }: { ctl: TabsController }) {
@@ -70,15 +73,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
       data-tauri-drag-region
       className="w-full flex items-stretch justify-between h-10 min-h-10 bg-gh-base select-none relative"
     >
-      <button
-        onClick={() => {
-          return;
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-        className="h-7.5 w-7.5 flex items-center justify-center hover:bg-gray-200 rounded-lg mt-1.5 ml-1.5"
-      >
-        <img src={logo} alt="Meno Icon" className="h-6 w-6" />
-      </button>
+      <MenoMenu own={[{ title: "File", items: [{ name: "Open…", keys: shortcutLabel("O"), run: ctl.openFiles }] }]} />
       <div className="h-px bg-transparent border-t border-gh-line absolute bottom-0 right-0 left-0" />
 
       <Reorder.Group

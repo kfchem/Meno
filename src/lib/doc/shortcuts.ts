@@ -107,6 +107,30 @@ export function clipboardIntent(event: KeyLike & { altKey?: boolean }): "copy" |
   return key === "c" ? "copy" : key === "x" ? "cut" : key === "v" ? "paste" : null;
 }
 
+/** Ctrl/Cmd+O opens files, from wherever the keys are. */
+export function openIntent(event: KeyLike): boolean {
+  return (event.ctrlKey || event.metaKey) === true && !event.shiftKey && !event.altKey && (event.key || "").toLowerCase() === "o";
+}
+
+/**
+ * Ctrl/Cmd+1 fits the drawing to the view - a key the left hand reaches
+ * without leaving the mouse - but not while a text field has the keys.
+ */
+export function isFitKey(event: KeyLike): boolean {
+  return (
+    (event.ctrlKey || event.metaKey) === true &&
+    !event.shiftKey &&
+    !event.altKey &&
+    event.key === "1" &&
+    !isTextTarget(event.target)
+  );
+}
+
+/** A shortcut as a menu shows it: ⌘S, ⇧⌘S on a Mac; Ctrl+S, Ctrl+Shift+S elsewhere. */
+export function shortcutLabel(key: string, shift = false, mac = IS_MAC): string {
+  return mac ? `${shift ? "\u21e7" : ""}\u2318${key}` : `Ctrl+${shift ? "Shift+" : ""}${key}`;
+}
+
 /** Ctrl/Cmd+S saves; Ctrl/Cmd+Shift+S saves as. */
 export function saveIntent(event: KeyLike): "save" | "saveAs" | null {
   if (!(event.ctrlKey || event.metaKey)) return null;

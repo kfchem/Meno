@@ -22,7 +22,6 @@ function withKinds(...kinds: TabKind[]): State {
 
 describe("canvas budget", () => {
   it("counts canvases per view kind", () => {
-    expect(canvasCost("loader")).toBe(0);
     expect(canvasCost("text")).toBe(0);
     expect(canvasCost("2d")).toBe(1);
     expect(canvasCost("3d")).toBe(1);
@@ -32,8 +31,8 @@ describe("canvas budget", () => {
   });
 
   it("ignores views without a canvas", () => {
-    expect(countCanvases(withKinds("loader", "text", "pyconsole"))).toBe(0);
-    expect(canOpenKind(withKinds("loader", "text"), "node")).toBe(true);
+    expect(countCanvases(withKinds("settings", "text", "pyconsole"))).toBe(0);
+    expect(canOpenKind(withKinds("settings", "text"), "node")).toBe(true);
   });
 
   it("allows filling the budget exactly", () => {
@@ -49,16 +48,16 @@ describe("canvas budget", () => {
     expect(canOpenKind(full, "text")).toBe(true);
   });
 
-  it("frees the canvases of a tab being converted", () => {
+  it("frees the canvases of a tab being replaced", () => {
     const s = withKinds(
       ...Array<TabKind>(MAX_CANVASES - 1).fill("2d"),
-      "loader",
+      "structure",
     );
-    const loaderId = s.tabOrder[s.tabOrder.length - 1];
-    // converting the loader into a workflow tab needs 2 canvases: one too many
-    expect(canOpenKind(s, "node", loaderId)).toBe(false);
-    expect(canOpenKind(s, "3d", loaderId)).toBe(true);
-    // converting a 2D tab frees its own canvas first
+    const blankId = s.tabOrder[s.tabOrder.length - 1];
+    // a workflow tab in place of a canvas needs 2 canvases: one too many
+    expect(canOpenKind(s, "node", blankId)).toBe(false);
+    expect(canOpenKind(s, "3d", blankId)).toBe(true);
+    // a 2D tab in place of another frees its own canvas first
     expect(canOpenKind(s, "2d", s.tabOrder[0])).toBe(true);
   });
 });

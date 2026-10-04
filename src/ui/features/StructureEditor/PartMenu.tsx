@@ -64,6 +64,7 @@ export default function PartMenu({
   onAddArrow,
   onAddPlus,
   onSaveAbbreviation,
+  canvas = [],
   clipboard,
   onClose,
 }: {
@@ -89,6 +90,8 @@ export default function PartMenu({
   onAddPlus: () => void;
   /** The selection saved as an abbreviation of the user's own. */
   onSaveAbbreviation: () => void;
+  /** What the canvas does as a whole - fit, R and S, its style - offered on empty space. */
+  canvas?: { name: string; keys: string; run: () => void }[];
   clipboard: MenuClipboard;
   onClose: () => void;
 }) {
@@ -158,7 +161,12 @@ export default function PartMenu({
           ...(target.kind == null ? scheme : []),
         ]
       : target.kind == null
-        ? [paste, { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll }, ...scheme]
+        ? [
+            paste,
+            { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll },
+            ...scheme,
+            ...canvas.map((item, i) => ({ ...item, divider: i === 0 })),
+          ]
         : [
           {
             name: target.kind === "atom" ? "Delete atom" : "Delete bond",

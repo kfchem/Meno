@@ -83,7 +83,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="absolute left-3 bottom-16 z-50 w-[28rem] max-w-[calc(100%-1.5rem)] rounded-lg border border-gh-line bg-white shadow-lg p-3 text-sm text-gh-black"
+      className="absolute left-3 bottom-3 z-50 w-[28rem] max-w-[calc(100%-1.5rem)] rounded-lg border border-gh-line bg-white shadow-lg p-3 text-sm text-gh-black"
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}

@@ -8,7 +8,6 @@ type Props = {
   activeId: TabId | null;
   resolveView: (kind: string) => Promise<ViewEntry> | ViewEntry;
   patchData: (id: TabId, patch: unknown) => void;
-  replaceData: (id: TabId, next: unknown) => void;
   /** Document for a tab, when its view kind uses one. */
   getDocument: (tab: TabInstance) => DocumentStore<any> | undefined;
 };
@@ -19,7 +18,6 @@ export default function Deck({
   activeId,
   resolveView,
   patchData,
-  replaceData,
   getDocument,
 }: Props) {
   return (
@@ -40,7 +38,6 @@ export default function Deck({
                 active={active}
                 document={getDocument(t)}
                 dispatchPatchData={(patch) => patchData(id, patch)}
-                replaceContent={(next) => replaceData(id, next)}
               />
             ) : null}
           </div>
