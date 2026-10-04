@@ -54,6 +54,17 @@ export default function LabelEditor2D() {
   // Fade control and position retention
   const [mounted, setMounted] = useState(false);
   const [exiting, setExiting] = useState(false);
+  // in view from the frame after it is first drawn, so it fades in as it
+  // fades out rather than appearing at once
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (!mounted) {
+      setEntered(false);
+      return;
+    }
+    const f = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(f);
+  }, [mounted]);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const ANIM_MS = 180;
   // Focus helper
@@ -181,7 +192,7 @@ export default function LabelEditor2D() {
   if (!mounted && !exiting) return null;
   const pos = atom ?? lastPosRef.current ?? { x: 0, y: 0 };
 
-  const wrapperOpacity = labelEdit.active ? 1 : 0;
+  const wrapperOpacity = labelEdit.active && entered ? 1 : 0;
 
   return (
     <Html

@@ -1,6 +1,8 @@
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { TAU, follow } from "../../../theme/motion";
 import { labelSetOf, placeLabel } from "../../../../lib/chem/layout2d";
 import {
   needsFallback,
@@ -40,7 +42,21 @@ export default function Labels2D() {
   useEffect(() => {
     if (font !== null) noteUncovered(family, key.split("\n"));
   }, [font, family, key]);
+  // Once the font is in, the labels fade in (TAU.quick) rather than appear.
+  const seen = useRef<{ font: string | null; level: number }>({ font: null, level: 0 });
+  if (seen.current.font !== font) seen.current = { font, level: 0 };
+  const [, setFrame] = useState(0);
+  const invalidate = useThree((st) => st.invalidate);
+  useFrame((_, dt) => {
+    const s = seen.current;
+    if (s.font === null || s.level === 1) return;
+    const n = follow(s.level, 1, Math.min(dt, 1 / 20), TAU.quick);
+    s.level = n > 0.99 ? 1 : n;
+    setFrame((f) => f + 1);
+    invalidate();
+  });
   if (font === null) return null;
+  const fill = seen.current.level;
   return (
     <group>
       {layout.texts.map((t, i) => {
@@ -56,6 +72,7 @@ export default function Labels2D() {
                   font={font}
                   fontSize={run.size}
                   color={opts.labelColor ?? "black"}
+                  fillOpacity={fill}
                   anchorX="left"
                   anchorY="top-baseline"
                   renderOrder={30}

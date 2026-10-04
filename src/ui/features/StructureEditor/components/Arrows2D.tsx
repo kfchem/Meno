@@ -7,6 +7,7 @@ import { COLORS } from "../../../theme/colors";
 import { FREE_MS } from "../constants";
 import { useEditor, useEditorStore } from "../store";
 import ReactionArrow2D from "./ReactionArrow2D";
+import { TAU, follow } from "../../../theme/motion";
 
 /** An end handle's radius on the screen, in pixels, and how far round it a press takes it. */
 const HANDLE_PX = 6;
@@ -30,7 +31,7 @@ export default function Arrows2D() {
   const arrows = useEditor((s) => s.arrows);
   const hoveredArrow = useEditor((s) => s.hoveredArrow);
   const store = useEditorStore();
-  const { camera, gl } = useThree();
+  const { camera, gl, invalidate } = useThree();
   const canvas = gl.domElement as HTMLCanvasElement;
   const toWorld = (cx: number, cy: number) => {
     const rect = canvas.getBoundingClientRect();
@@ -45,10 +46,38 @@ export default function Arrows2D() {
   // the arrow whose end is being drawn out: its handles stay while it is
   const [reshaping, setReshaping] = useState<number | null>(null);
   const handles = useRef<THREE.Group[]>([]);
+  // how far each arrow's handles are in view: they grow in as it is hovered
+  // and shrink out as it is left, rather than appear and vanish
+  const handleLevel = useRef(new Map<number, number>());
+  const [, setFrame] = useState(0);
   // the handles the same size on the screen at any zoom
-  useFrame(() => {
+  useFrame((_, dt) => {
+    let moving = false;
+    const d = Math.min(dt, 1 / 20);
+    for (const a of arrows) {
+      const to = hoveredArrow === a.id || reshaping === a.id ? 1 : 0;
+      const was = handleLevel.current.get(a.id) ?? 0;
+      if (was === to) continue;
+      const n = follow(was, to, d, TAU.quick);
+      const next = Math.abs(n - to) < 0.01 ? to : n;
+      if (next === 0) handleLevel.current.delete(a.id);
+      else handleLevel.current.set(a.id, next);
+      moving = true;
+    }
     const k = HANDLE_PX / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6);
-    for (const h of handles.current) h?.scale.setScalar(k);
+    for (const h of handles.current) {
+      if (!h) continue;
+      const level = (h.userData.level as number) ?? 1;
+      h.scale.setScalar(k * (0.6 + 0.4 * level));
+      h.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+        if (m && m.userData.seen) m.opacity = level;
+      });
+    }
+    if (moving) {
+      setFrame((f) => f + 1);
+      invalidate();
+    }
   });
 
   /** A press on the arrow: it follows the pointer, as one step. */
@@ -123,7 +152,8 @@ export default function Arrows2D() {
     <group>
       {arrows.map((a) => {
         const { from, to } = arrowEnds(a);
-        const shown = hoveredArrow === a.id || reshaping === a.id;
+        const level = handleLevel.current.get(a.id) ?? 0;
+        const shown = level > 0;
         return (
           <group
             key={a.id}
@@ -154,6 +184,7 @@ export default function Arrows2D() {
                   ref={(g) => {
                     if (g) handles.current.push(g);
                   }}
+                  userData={{ level }}
                   position={[at.x, at.y, 0.6]}
                   onPointerDown={(e) => startReshape(a.id, end, e)}
                 >
@@ -164,11 +195,11 @@ export default function Arrows2D() {
                   </mesh>
                   <mesh renderOrder={41}>
                     <circleGeometry args={[1, 24]} />
-                    <meshBasicMaterial color="#ffffff" depthTest={false} toneMapped={false} />
+                    <meshBasicMaterial color="#ffffff" depthTest={false} toneMapped={false} transparent opacity={level} userData={{ seen: true }} />
                   </mesh>
                   <mesh renderOrder={42}>
                     <ringGeometry args={[0.68, 1, 24]} />
-                    <meshBasicMaterial color={COLORS.highlight} depthTest={false} toneMapped={false} />
+                    <meshBasicMaterial color={COLORS.highlight} depthTest={false} toneMapped={false} transparent opacity={level} userData={{ seen: true }} />
                   </mesh>
                 </group>
               ))}
