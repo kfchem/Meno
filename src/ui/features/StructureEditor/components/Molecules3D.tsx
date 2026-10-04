@@ -88,6 +88,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const molecules = useEditor((s) => s.molecules3d);
   const turns = useEditor((s) => s.turns3d);
   const rising = useEditor((s) => s.rising3d);
+  const overlay = useEditor((s) => s.overlay3d);
   // the drawing's atom under the pointer: lit in the molecules made from it
   const hoveredDrawn = useEditor((s) => s.hovered.atomId);
   // and the drawing each was made from, which may have changed since
@@ -420,6 +421,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           rising={rising[m.id]}
           onRisen={() => store.getState().risen3d(m.id)}
           stereoShown={stereoLabels ? "all" : m.stereo?.chosen ? "chosen" : null}
+          overlay={!!overlay[m.id]}
           linkedAtom={hoveredDrawn != null && m.drawnFrom ? (m.drawnFrom.indexOf(hoveredDrawn) >= 0 ? m.drawnFrom.indexOf(hoveredDrawn) : null) : null}
           onHoverAtom={(atom) => store.getState().setHoveredAtom3d(m.id, atom)}
           onRemake={remake && linkOf(m, drawing) === "changed" ? () => remake(m.id) : undefined}

@@ -64,6 +64,12 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
       }));
       return ids;
     },
+    setOverlay3d: (id: number, on: boolean) =>
+      set((prev) => {
+        if (!!prev.overlay3d[id] === on) return prev;
+        const { [id]: _, ...rest } = prev.overlay3d;
+        return { ...prev, overlay3d: on ? { ...rest, [id]: true as const } : rest };
+      }),
     risen3d: (id: number) =>
       set((prev) => {
         if (!(id in prev.rising3d)) return prev;

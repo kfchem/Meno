@@ -21,6 +21,7 @@ import {
   turnedInPlane,
   turnedTogether,
   WORLD_PER_ANGSTROM,
+  populations,
   type Turning3D,
 } from "./molecule3d";
 import type { SolidMark } from "../../../../lib/chem/layout2d";
@@ -296,5 +297,17 @@ describe("a molecule in 3D in a picture", () => {
   it("is balls alone, space-filling", () => {
     const marks = pictureMarks({ ...ethane(), look: "space" }, STYLE_3D);
     expect(marks.every((x) => x.kind === "ball")).toBe(true);
+  });
+});
+
+describe("populations", () => {
+  const HARTREE = 627.509474;
+  it("shares a conformer set by Boltzmann at room temperature, adding up to one", () => {
+    expect(populations([0, 0])).toEqual([0.5, 0.5]);
+    // 1.364 kcal/mol above: a tenth as much, at 298 K
+    const [low, high] = populations([-0.5, -0.5 + 1.3642 / HARTREE]);
+    expect(low / high).toBeCloseTo(10, 1);
+    expect(low + high).toBeCloseTo(1, 12);
+    expect(populations([])).toEqual([]);
   });
 });

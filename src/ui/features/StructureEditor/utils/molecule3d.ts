@@ -8,6 +8,21 @@ import type { Carried3D, Molecule3D, Turn3D } from "../store/types";
 /** World units to the ångström: a bond of 1.5 Å as long as a drawn bond. */
 export const WORLD_PER_ANGSTROM = NOMINAL_BOND_LENGTH / 1.5;
 
+/** RT at 298.15 K, in hartrees: the energy a conformer's population falls by e for. */
+const RT_HARTREE = (8.314462618 * 298.15) / 2625499.6;
+
+/**
+ * How much of a conformer set each conformer is at room temperature (298 K),
+ * by Boltzmann: from its energy in hartrees, the shares adding up to one.
+ */
+export function populations(energies: readonly number[]): number[] {
+  if (!energies.length) return [];
+  const lowest = Math.min(...energies);
+  const w = energies.map((e) => Math.exp(-(e - lowest) / RT_HARTREE));
+  const sum = w.reduce((a, b) => a + b, 0);
+  return w.map((x) => x / sum);
+}
+
 /** How a molecule in 3D is drawn: balls and sticks, or space-filling. */
 export type Look = "balls" | "space";
 

@@ -97,6 +97,8 @@ export type Molecule3D = {
   drawnFrom?: (number | null)[];
   /** What its drawing was when it was made from it (chem/make3d `signatureOf`). */
   drawnAs?: string;
+  /** Its frames are conformers - not a path through time - so each is as likely as its energy says (`populations`). */
+  conformerSet?: boolean;
   /**
    * Its stereocentres' and double bonds' CIP labels, by atom and bond index;
    * and which of them its drawing left open - one stereoisomer of several
@@ -149,6 +151,9 @@ export type EditorState = {
    * turned. Gone once risen.
    */
   rising3d: Record<number, Rising3D>;
+  /** Molecules in 3D shown with all their frames at once - their conformers overlaid - by id. */
+  overlay3d: Record<number, true>;
+  setOverlay3d: (id: number, on: boolean) => void;
   /**
    * The atoms and bonds chosen in one molecule in 3D, by index, each in the
    * order chosen: what a measurement is of (utils/molecule3d `chosenPath`).

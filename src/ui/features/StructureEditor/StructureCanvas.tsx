@@ -400,6 +400,15 @@ function StructureCanvasContent({
         onCopy: () => void clip.copy(menuMolecule.id),
         ...(menuLink === "live" || menuLink === "changed" ? { onTurnLikeDrawing: () => turnLikeDrawing(menuMolecule.id) } : {}),
         ...(menuLink === "changed" ? { onRemake: () => remake3d(menuMolecule.id) } : {}),
+        ...((menuMolecule.frames?.length ?? 0) > 0
+          ? {
+              overlay: {
+                on: !!store.getState().overlay3d[menuMolecule.id],
+                conformers: !!menuMolecule.conformerSet,
+                set: (on: boolean) => store.getState().setOverlay3d(menuMolecule.id, on),
+              },
+            }
+          : {}),
       }
     : undefined;
   useEffect(() => setMenu(null), [model]); // what it was about may be gone

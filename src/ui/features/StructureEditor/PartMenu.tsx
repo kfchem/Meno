@@ -69,6 +69,8 @@ export type MenuMolecule3D = {
   onTurnLikeDrawing?: () => void;
   /** Made again from its drawing, which has changed since; unset, where it has not. */
   onRemake?: () => void;
+  /** Its frames all shown at once, or one: unset, where it has one only; `conformers`, whether they are a conformer set's. */
+  overlay?: { on: boolean; conformers: boolean; set: (on: boolean) => void };
 };
 
 /**
@@ -181,6 +183,15 @@ export default function PartMenu({
           ? { name: "Ball and stick", keys: "", run: () => molecule3d.onLook("balls") }
           : { name: "Space-filling", keys: "", run: () => molecule3d.onLook("space") },
         { name: "Reset orientation", keys: "", run: molecule3d.onResetTurn },
+        ...(molecule3d.overlay
+          ? [
+              {
+                name: `Show ${molecule3d.overlay.on ? "one" : "all"} ${molecule3d.overlay.conformers ? "conformer" : "frame"}${molecule3d.overlay.on ? "" : "s"}`,
+                keys: "",
+                run: () => molecule3d.overlay!.set(!molecule3d.overlay!.on),
+              },
+            ]
+          : []),
         ...(molecule3d.onTurnLikeDrawing ? [{ name: "Turn like the drawing", keys: "", run: molecule3d.onTurnLikeDrawing }] : []),
         ...(molecule3d.onRemake ? [{ name: "Make again from the drawing", keys: "", run: molecule3d.onRemake, divider: true }] : []),
       ]

@@ -12,6 +12,11 @@ const MANY = 60;
 const WIDE = 300;
 const LEAST_BAR = 3;
 
+/** A conformer's share of its set, as it is written: "62%", "<1%". */
+function share(p: number): string {
+  return p < 0.005 ? "<1%" : `${Math.round(p * 100)}%`;
+}
+
 /** An energy above the lowest, as it is written: "1.23 kcal/mol". */
 function relative(e: number): string {
   return `${e < 10 ? e.toFixed(2) : e.toFixed(1)} kcal/mol`;
@@ -33,6 +38,7 @@ export default function Frames3D({
   open,
   onFrame,
   below,
+  populations,
 }: {
   count: number;
   frame: number;
@@ -43,6 +49,8 @@ export default function Frames3D({
   onFrame: (frame: number) => void;
   /** Said just below it - a note on its molecule - and moved down as it opens. */
   below?: ReactNode;
+  /** A conformer set's: how much of it each conformer is, at room temperature. */
+  populations?: number[];
 }) {
   const [hovered, setHovered] = useState(false);
   const [pointed, setPointed] = useState<number | null>(null);
@@ -117,6 +125,7 @@ export default function Frames3D({
           <div ref={said} className="w-max text-[11px] leading-[18px] text-gh-gray tabular-nums whitespace-nowrap">
             {told + 1} / {count}
             {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
+            {populations?.[told] != null && <span className="text-gh-black"> · {share(populations[told])}</span>}
           </div>
         </div>
         {below}

@@ -92,6 +92,7 @@ export function createEditorStore(
     hoveredAtom3d: null,
     turns3d: {},
     rising3d: {},
+    overlay3d: {},
     frames3d: {},
     sel3d: new Set<number>(),
     chosen3d: null,

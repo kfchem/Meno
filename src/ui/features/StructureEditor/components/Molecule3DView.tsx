@@ -5,11 +5,12 @@ import * as THREE from "three";
 import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
 import type { Look3D, Measure3D, Molecule3D, Rising3D, Turn3D } from "../store/types";
-import { bondLines, bondReach, frameOf, linesOf, solidOf, WORLD_PER_ANGSTROM, type BondLine } from "../utils/molecule3d";
+import { bondLines, bondReach, frameOf, linesOf, populations, solidOf, WORLD_PER_ANGSTROM, type BondLine } from "../utils/molecule3d";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { kindOf, measureMarks, measureText, measureValue } from "../utils/measure3d";
 import { PAGE_DISTANCE } from "./PageCamera";
 import Frames3D from "./Frames3D";
+import Overlay3D from "./Overlay3D";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -145,6 +146,8 @@ export type Molecule3DViewProps = {
   onHoverAtom?: (atom: number | null) => void;
   /** Its drawing has changed since it was made from it: made again, asked for. */
   onRemake?: () => void;
+  /** Its other frames - conformers - drawn over the one it shows. */
+  overlay?: boolean;
   /** Its stereocentres' and double bonds' labels shown: all, only those its drawing left open, or none. */
   stereoShown: "all" | "chosen" | null;
   onRisen?: () => void;
@@ -237,6 +240,12 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const [measureTexts, setMeasureTexts] = useState<Record<number, string>>({});
   const [shownMeasures, setShownMeasures] = useState<Measure3D[]>(m.measures ?? []);
   const dirty = useRef(true);
+  // a conformer set's shares, by Boltzmann; and its atoms' elements
+  const shares = useMemo(
+    () => (m.conformerSet && m.energies?.length === solid.frames.length ? populations(m.energies) : undefined),
+    [m.conformerSet, m.energies, solid.frames.length],
+  );
+  const els = useMemo(() => m.atoms.map((a) => a.el), [m.atoms]);
   // its stereocentres' and double bonds' labels: all, or those its drawing left open
   const stereoMarks = useMemo(() => {
     const st = m.stereo;
@@ -778,6 +787,17 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
             </Html>
           </group>
         ))}
+        {solid.frames.length > 1 && (
+          <Overlay3D
+            solid={solid}
+            bonds={m.bonds}
+            els={els}
+            frame={frameOf(solid, frame)}
+            on={!!props.overlay}
+            radius={style.bondRadius * WORLD_PER_ANGSTROM}
+            weights={shares}
+          />
+        )}
         {stereoMarks.map((mark) => (
           <group
             key={mark.key}
@@ -814,6 +834,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               open={props.framesOpen}
               onFrame={props.onFrame}
               below={props.onRemake && <Changed onRemake={props.onRemake} />}
+              populations={shares}
             />
           ) : (
             props.onRemake && (

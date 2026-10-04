@@ -107,6 +107,7 @@ export function moleculeOf(c: Conformers, block: Block): Omit<Molecule3D, "id" |
     energies: c.energies,
     drawnFrom: c.atoms.map((_, i) => (i < block.part.atoms.length ? block.atoms[i] : null)),
     drawnAs: signatureOf(block.part, block.atoms),
+    conformerSet: true,
     stereo: {
       atoms: numbered(c.cip?.atoms),
       bonds: numbered(c.cip?.bonds),
