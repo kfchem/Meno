@@ -10,10 +10,9 @@ type Props = {
   activeId: TabId | null;
   resolveView: (kind: string) => Promise<ViewEntry> | ViewEntry;
   patchData: (id: TabId, patch: unknown) => void;
-  replaceData: (id: TabId, next: unknown) => void;
   /** Document for a tab, when its view kind uses one. */
   getDocument: (tab: TabInstance) => DocumentStore<any> | undefined;
-  /** Names a tab anew: a file opened in its view over what it held. */
+  /** Names a tab anew: after the file its view was saved as. */
   renameTab: (id: TabId, label: string) => void;
 };
 
@@ -23,7 +22,6 @@ export default function Deck({
   activeId,
   resolveView,
   patchData,
-  replaceData,
   getDocument,
   renameTab,
 }: Props) {
@@ -64,7 +62,6 @@ export default function Deck({
                   active={active}
                   document={getDocument(t)}
                   dispatchPatchData={(patch) => patchData(id, patch)}
-                  replaceContent={(next) => replaceData(id, next)}
                   renameTab={(label) => renameTab(id, label)}
                 />
               </div>

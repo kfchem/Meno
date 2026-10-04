@@ -25,8 +25,8 @@ import { addsToSelection } from "../../../../lib/doc/shortcuts";
 export function useStructureEvents(
   initialPayload?: string,
   initialFilename?: string,
-  /** Names the canvas's tab: for a file opened over what it held. */
-  nameTab?: (label: string) => void,
+  /** The payload is a file opened by its name - not a document's object - which Save As then suggests. */
+  openedFile?: boolean,
 ) {
   const store = useEditorStore();
 
@@ -36,7 +36,6 @@ export function useStructureEvents(
   const clickTimerRef = useRef<number | null>(null);
   // The press the next click ends, and whether it has travelled (utils/press)
   const pressRef = useRef<Press | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Where the pointer is over the drawing, in the window; null off it
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   // Last import failure, shown in the canvas until dismissed or replaced.
@@ -115,6 +114,7 @@ export function useStructureEvents(
         const ws = readWorkspace(initialPayload);
         if (ws) {
           store.getState().openWorkspace(ws, true);
+          if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
           return;
         }
         const record = readRecord(initialPayload);
@@ -143,6 +143,7 @@ export function useStructureEvents(
             toModel(shifted),
             importedScheme(result, -result.centroid.x, -result.centroid.y),
           );
+        if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
       } catch (e) {
         reportImportError("initial payload", e);
       }
@@ -422,47 +423,6 @@ export function useStructureEvents(
     }
   };
 
-  const onPickFiles = async (files: FileList) => {
-    if (!files || !files.length) return;
-    const f = files[0];
-    const text = await f.text();
-    // a workspace: everything in it, as it was saved, over what is drawn
-    if (isWorkspaceFile(f.name)) {
-      const ws = readWorkspace(text);
-      if (ws) {
-        store.getState().openWorkspace(ws);
-        setImportError(null);
-      } else reportImportError("replace", new Error("The workspace could not be read."));
-      return;
-    }
-    try {
-      const result = await processFileContent(f.name, text);
-      const shifted = {
-        atoms: result.model.atoms.map((a) => ({
-          ...a,
-          x: a.x - result.centroid.x,
-          y: a.y - result.centroid.y,
-        })),
-        bonds: result.model.bonds,
-      };
-      // Over what the canvas holds: an edit, so a wrong file can be undone.
-      store
-        .getState()
-        .replaceModel(
-          toModel(shifted),
-          importedScheme(result, -result.centroid.x, -result.centroid.y),
-        );
-      // The canvas is that file now: the tab is named for it, and Save
-      // asks where, rather than writing over the file it was saved to.
-      store.getState().markOpenedOver(f.name);
-      nameTab?.(f.name);
-      setImportError(null);
-    } catch (err) {
-      reportImportError("replace", err);
-    }
-  };
-
-  const openFilePicker = () => fileInputRef.current?.click();
   const dismissImportError = () => setImportError(null);
 
   const handleMouseDownCapture = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -503,14 +463,11 @@ export function useStructureEvents(
     domRef,
     clientToWorld,
     pasteTarget,
-    fileInputRef,
     handleDoubleClick,
     handleWrapperMouseMove,
     handleWrapperMouseLeave,
     handleWrapperClick,
     dropZone,
-    onPickFiles,
-    openFilePicker,
     importError,
     dismissImportError,
     handleMouseDownCapture,

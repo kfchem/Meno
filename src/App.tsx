@@ -12,9 +12,11 @@ import {
 } from "./lib/core";
 import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
-import type { TabInstance } from "./lib/core";
+import { openedAs, OPENABLE, type Opened } from "./ui/views/openFile";
+import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
-import { keepClipboard, keepPageUnselected, undoIntent } from "./lib/doc/shortcuts";
+import { keepClipboard, keepPageUnselected, openIntent, undoIntent } from "./lib/doc/shortcuts";
+import { isBlankDocument, type StructureDocument } from "./ui/features/StructureEditor/document";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
@@ -39,6 +41,14 @@ const officeIdOf = (tab: TabInstance | undefined) =>
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
+  // The tabs as they are, for what is registered once and called later - and
+  // brought up to date at once by `act`, for what acts twice in a row.
+  const stateRef = useRef<State>(state);
+  stateRef.current = state;
+  const act = (action: Action) => {
+    stateRef.current = reducer(stateRef.current, action);
+    dispatch(action);
+  };
   // Shown when an action is refused, e.g. the WebGL canvas budget is full.
   const [notice, setNotice] = useState<string | null>(null);
   // Something with unsaved changes, waiting on a yes or a no.
@@ -127,10 +137,64 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // The last tab closed, Meno goes with it. (Destroyed, not closed: what
+  // was unsaved has been asked about already.)
   const closeTab = (id: string) => {
     documentsRef.current.delete(id);
-    dispatch({ type: "CLOSE_TAB", id });
+    const last = stateRef.current.tabOrder.every((x) => x === id);
+    act({ type: "CLOSE_TAB", id });
+    if (last) {
+      try {
+        void getCurrentWindow().destroy().catch(() => {});
+      } catch {}
+    }
   };
+
+  // A canvas nothing is drawn on, nor opened into: what a file opened takes
+  // the place of, and nothing to keep a Meno started for Office open.
+  const isBlankTab = (t: TabInstance | undefined): t is TabInstance => {
+    if (!t || t.content.kind !== "structure" || officeIdOf(t) != null) return false;
+    if ((t.content.data as { payload?: string } | undefined)?.payload) return false;
+    const doc = documentsRef.current.get(t.meta.id)?.doc as DocumentStore<StructureDocument> | undefined;
+    return !doc || isBlankDocument(doc.getState());
+  };
+
+  // Something opened - a file, a structure from a document - in a tab of its
+  // own: in place of the tab in front, if that is a blank canvas. False when
+  // there is no room for another canvas.
+  const openTab = (opened: Opened): boolean => {
+    const s = stateRef.current;
+    const front = s.activeId ? s.tabsById[s.activeId] : undefined;
+    const blank = isBlankTab(front) ? front.meta.id : undefined;
+    if (!canOpenKind(s, opened.kind, blank)) {
+      setNotice(TOO_MANY_CANVASES);
+      return false;
+    }
+    const made = viewRegistry[opened.kind].create(opened.label);
+    const tab = { ...made, content: { ...made.content, data: opened.data } } as TabInstance;
+    if (blank) {
+      documentsRef.current.delete(blank);
+      act({ type: "REPLACE_TAB", id: blank, tab });
+    } else act({ type: "ADD_TAB", tab });
+    return true;
+  };
+
+  // Open (Ctrl/Cmd+O, or the menu): files picked in the system's dialog,
+  // each in a tab, by what it is (openFile).
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pickFiles = () => fileInputRef.current?.click();
+  const openFiles = async (files: File[]) => {
+    for (const f of files) openTab(openedAs(f.name, await f.text()));
+  };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!openIntent(e)) return;
+      e.preventDefault();
+      pickFiles();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Closing the window - its own button, Alt+F4 - asks first when a tab
   // holds unsaved changes (a structure from a document has none: its
@@ -159,10 +223,17 @@ export default function App() {
 
   // Structures from Office documents (Windows, a double-click on one): each
   // opens in a tab of its own - or brings its tab forward if it is open -
-  // and the tab closes when the document is done with it.
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  // and the tab closes when the document is done with it. (Listened for
+  // once; what it does is this render's, as the tabs are now.)
+  const office = useRef<{
+    openTab: (o: Opened) => boolean;
+    closeTab: (id: string) => void;
+    leaveIfOnlyForOffice: (closing?: string) => void;
+  } | null>(null);
   useEffect(() => {
+    const openTab = (o: Opened) => office.current!.openTab(o);
+    const closeTab = (id: string) => office.current!.closeTab(id);
+    const leaveIfOnlyForOffice = (closing?: string) => office.current!.leaveIfOnlyForOffice(closing);
     const tabOf = (officeId: number) =>
       Object.values(stateRef.current.tabsById).find((t) => officeIdOf(t) === officeId);
     const open = async () => {
@@ -172,14 +243,9 @@ export default function App() {
           dispatch({ type: "SELECT_TAB", id: held.meta.id });
           continue;
         }
-        if (!canOpenKind(stateRef.current, "structure")) {
-          setNotice(TOO_MANY_CANVASES);
-          void letOfficeGo(s.id);
-          continue;
-        }
-        const tab = viewRegistry.structure.create(s.name ? `${s.name} - Office` : "Structure from Office");
+        const label = s.name ? `${s.name} - Office` : "Structure from Office";
         const data = { payload: s.record, filename: "office.meno", officeId: s.id };
-        dispatch({ type: "ADD_TAB", tab: { ...tab, content: { ...tab.content, data } } as TabInstance });
+        if (!openTab({ kind: "structure", label, data })) void letOfficeGo(s.id);
       }
     };
     void open(); // (any asked for before the page was up)
@@ -217,11 +283,12 @@ export default function App() {
     void startedForOffice().then((forOffice) => {
       if (!forOffice) return;
       const left = Object.values(stateRef.current.tabsById).filter(
-        (t) => t.meta.id !== closing && (officeIdOf(t) != null || t.content.kind !== "loader"),
+        (t) => t.meta.id !== closing && !isBlankTab(t),
       );
       if (!left.length) void getCurrentWindow().close();
     });
   };
+  office.current = { openTab, closeTab, leaveIfOnlyForOffice };
 
   const ctl: TabsController = {
     tabOrder: state.tabOrder,
@@ -241,10 +308,15 @@ export default function App() {
       } else if (state.tabsById[id]?.meta.dirty) setPendingClose({ kind: "tab", id });
       else closeTab(id);
     },
+    // "+": a canvas, the page everything else is opened from
     add: () => {
-      const t = viewRegistry.loader.create("New Tab");
-      dispatch({ type: "ADD_TAB", tab: t });
+      if (!canOpenKind(state, "structure")) {
+        setNotice(TOO_MANY_CANVASES);
+        return;
+      }
+      dispatch({ type: "ADD_TAB", tab: viewRegistry.structure.create("Structure Canvas") });
     },
+    openFiles: pickFiles,
     openByKind: async (kind: TabKind, opts?: { label?: string }) => {
       // There is one Settings tab: asking again brings it to the front.
       if (kind === "settings") {
@@ -260,7 +332,7 @@ export default function App() {
         setNotice(TOO_MANY_CANVASES);
         return;
       }
-      const entry: ViewEntry = viewRegistry[kind] ?? viewRegistry.loader;
+      const entry: ViewEntry = viewRegistry[kind] ?? viewRegistry.structure;
       const label = opts?.label ?? "New Tab";
       const tab = entry.create(label);
       dispatch({ type: "ADD_TAB", tab });
@@ -270,7 +342,7 @@ export default function App() {
   const resolveView = useCallback(
     (kind: string): ViewEntry | Promise<ViewEntry> => {
       if (kind in viewRegistry) return viewRegistry[kind];
-      return viewRegistry.loader;
+      return viewRegistry.structure;
     },
     []
   );
@@ -283,25 +355,22 @@ export default function App() {
     dispatch({ type: "SET_DIRTY", id, dirty: true });
   };
 
-  // Explicit replace flow (used by OmniLoader and similar)
-  const replaceData = (id: string, next: any) => {
-    const nextKind = next?.kind ?? "loader";
-    if (!canOpenKind(state, nextKind, id)) {
-      setNotice(TOO_MANY_CANVASES);
-      return;
-    }
-    const nextData = { ...next };
-    // Keep `filename` in the data: views use it (e.g. the 2D editor's
-    // `initialFilename`) to pick a parser by extension.
-    const filename = nextData.filename as string | undefined;
-    delete (nextData as any).kind;
-    if (filename) dispatch({ type: "RENAME_TAB", id, label: filename });
-    dispatch({ type: "SET_CONTENT", id, content: { kind: nextKind, data: nextData } });
-  };
-
   return (
     <div className="h-screen w-screen flex flex-col relative">
       <TopBar ctl={ctl} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        accept={OPENABLE}
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          // (the same file can be picked again)
+          e.target.value = "";
+          void openFiles(files);
+        }}
+      />
       <AnimatePresence>
       {pendingClose && (
         <ConfirmDiscard
@@ -375,7 +444,6 @@ export default function App() {
         activeId={state.activeId}
         resolveView={resolveView}
         patchData={patchData}
-        replaceData={replaceData}
         getDocument={getDocument}
         renameTab={(id, label) => dispatch({ type: "RENAME_TAB", id, label })}
       />

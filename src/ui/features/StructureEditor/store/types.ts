@@ -366,8 +366,8 @@ export type EditorState = {
   /** The document has just been written to `path`: it is saved there. */
   markSavedAs: (path: string) => void;
   /**
-   * A file named `name` has been opened over what the canvas held: it is
-   * saved nowhere now, and Save asks where, suggesting that name.
+   * A file named `name` has been opened on the canvas, as what it starts
+   * with: it is saved nowhere yet, and Save asks where, suggesting that name.
    */
   markOpenedOver: (name: string) => void;
   setExtendPreview: (

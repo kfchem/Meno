@@ -31,6 +31,19 @@ export function reducer(state: State, action: Action): State {
         activeId: next,
       };
     }
+    case "REPLACE_TAB": {
+      const { id, tab: t } = action;
+      if (!state.tabsById[id]) return state;
+      const swap = (ids: string[]) => ids.map((x) => (x === id ? t.meta.id : x));
+      const { [id]: _, ...rest } = state.tabsById;
+      return {
+        ...state,
+        tabOrder: swap(state.tabOrder),
+        mountOrder: swap(state.mountOrder),
+        tabsById: { ...rest, [t.meta.id]: t },
+        activeId: t.meta.id,
+      };
+    }
     case "SELECT_TAB":
       return { ...state, activeId: action.id };
     case "REORDER":
@@ -99,8 +112,8 @@ export const createInitialState = (): State => {
     mountOrder: [a],
     tabsById: {
       [a]: {
-        meta: { id: a, label: "New Tab" },
-        content: { kind: "loader" },
+        meta: { id: a, label: "Structure Canvas" },
+        content: { kind: "structure", data: {} },
       },
     },
     activeId: a,

@@ -93,13 +93,11 @@ function Start-Meno {
 function Open-MenoFile {
     <#
       .SYNOPSIS
-      Open a structure into an empty tab, through the app's own Open button.
+      Open a structure through the app's own Open: Ctrl+O (Cmd+O on a Mac).
 
       .DESCRIPTION
-      An empty tab offers one big Open button in the middle of the canvas, so
-      that is what is pressed; on a tab that already holds a structure the
-      button is the small round one at the bottom left instead, and pressing
-      the middle of the canvas would draw on it. Pass -X and -Y for that case.
+      The file opens in a tab of its own, or in place of the tab in front if
+      that is a canvas nothing is drawn on - the first tab, as Meno starts.
 
       The file picker is the system dialog, so the path is typed into it
       rather than clicked for - how, is the platform module's business. The
@@ -107,16 +105,9 @@ function Open-MenoFile {
       one argument to Start-Meno and the most brittle step in the harness goes
       away.
     #>
-    param(
-        [Parameter(Mandatory)] [string] $Path,
-        [int] $X = -1,
-        [int] $Y = -1
-    )
+    param([Parameter(Mandatory)] [string] $Path)
     $full = (Resolve-Path $Path).Path
-    $c = Get-ClientSize
-    if ($X -lt 0) { $X = [int]($c.Width / 2) }
-    if ($Y -lt 0) { $Y = [int]($c.Height / 2) + 8 }
-    Invoke-MenoClick -X $X -Y $Y
+    Send-MenoShortcut O
     Complete-FileDialog -Path $full
     # The dialog took the foreground with it; take it back.
     Get-MenoWindow -ProcessName Meno -TimeoutSec 10 | Out-Null
@@ -124,25 +115,44 @@ function Open-MenoFile {
     Wait-MenoSettled -TimeoutMs 8000 | Out-Null
 }
 
+function Invoke-MenoMenu {
+    <#
+      .SYNOPSIS
+      A command from Meno's menu, the one its logo opens at the top left:
+      Invoke-MenoMenu "SMILES..." opens the SMILES card.
+
+      .DESCRIPTION
+      The items are where a structure canvas in front has them, read off a
+      Mac's shot (2560x1720); the menu is at the window's left, so they do
+      not move with its size. Three dots stand for the ellipsis.
+    #>
+    param([Parameter(Mandatory)] [ValidateSet(
+        "Open...", "Save", "Save As...", "Export as SVG...", "SMILES...", "Clean up all",
+        "Fit to content", "Show R and S", "Drawing style...")] [string] $Item)
+    $at = @{
+        "Open..." = 170; "Save" = 234; "Save As..." = 298; "Export as SVG..." = 362
+        "SMILES..." = 486; "Clean up all" = 550; "Fit to content" = 676; "Show R and S" = 740
+        "Drawing style..." = 866
+    }
+    Invoke-MenoClick -X 42 -Y 42
+    Start-Sleep -Milliseconds 400
+    Invoke-MenoClick -X 200 -Y $at[$Item]
+    Start-Sleep -Milliseconds 300
+}
+
 function Save-MenoFile {
     <#
       .SYNOPSIS
-      Save the canvas in front under a path, through Save As (Shift with the
-      round Save button at the bottom left).
+      Save the canvas in front under a path, through Save As in Meno's menu.
 
       .DESCRIPTION
       Save As asks where whatever the canvas was saved as before, so a
       scenario says where. The dialog is the system's, so the path is typed
-      into it - how, is the platform module's business. -X and -Y say where
-      the Save button is, in shot pixels.
+      into it - how, is the platform module's business.
     #>
-    param(
-        [Parameter(Mandatory)] [string] $Path,
-        [Parameter(Mandatory)] [int] $X,
-        [Parameter(Mandatory)] [int] $Y
-    )
+    param([Parameter(Mandatory)] [string] $Path)
     if (Test-Path $Path) { throw "'$Path' is there already: save under a new name, or the system asks whether to replace it" }
-    Invoke-MenoClick -X $X -Y $Y -Hold Shift
+    Invoke-MenoMenu -Item "Save As..."
     Complete-SaveDialog -Path $Path
     Get-MenoWindow -ProcessName Meno -TimeoutSec 10 | Out-Null
     Set-MenoWindow -Width $Width -Height $Height
