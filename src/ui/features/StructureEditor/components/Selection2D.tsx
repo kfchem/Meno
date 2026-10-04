@@ -246,12 +246,16 @@ export default function Selection2D() {
 
   /**
    * Molecules in 3D turned by the handle in space, as a drag on one turns
-   * it: as one body about their common centre - which moves them, and is
-   * one undo step - or, `each`, every one about its own centre.
+   * it: as one body about their common centre - which moves them - or,
+   * `each`, every one about its own centre. Either is one undo step, which
+   * puts the turns back (a drag on a molecule itself turns only the view).
    */
   const turnInSpace = (e: PointerEvent, molecules: Molecule3D[], each: boolean) => {
     const st = store.getState();
     const from = molecules.map(turningOf(st.turns3d));
+    const turnsBefore = Object.fromEntries(molecules.map((m) => [m.id, st.turns3d[m.id]]));
+    const inPlace = each || from.length === 1;
+    let went = false;
     const gesture = `turn-3d-${performance.now()}`;
     const q = new THREE.Quaternion();
     setHeld(selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d));
@@ -261,8 +265,9 @@ export default function Selection2D() {
     st.suppressDoubleClick(DOUBLE_CLICK_MS);
     const apply = () => {
       frame = null;
+      went = true;
       const s = store.getState();
-      if (each || from.length === 1) {
+      if (inPlace) {
         for (const m of from) {
           const t = q.clone().multiply(m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion()).normalize();
           s.setTurn3d(m.id, [t.x, t.y, t.z, t.w]);
@@ -292,6 +297,7 @@ export default function Selection2D() {
       const s = store.getState();
       s.endPanHold(ev.pointerId);
       s.suppressDoubleClick(DOUBLE_CLICK_MS);
+      if (inPlace && went) s.keepTurns3d(turnsBefore, Object.fromEntries(from.map((m) => [m.id, s.turns3d[m.id]])));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, true);

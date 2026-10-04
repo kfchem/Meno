@@ -215,6 +215,10 @@ Taken on 2026-10-03:
     - selected with a drawing, everything in the page's plane, the
       molecules carried round and turned with it;
     - with Shift, each molecule about its own centre, the drawing staying.
+
+    Every turn by the handle is one undo step, Shift's and one molecule's
+    alone too (agreed 2026-10-04), and the undo puts the turns back; a
+    drag on a molecule itself turns only the view.
 - **What a 3D molecule looks like** starts from the 3D viewer's look:
   - atom size and colour, material and light, and the turn's inertia,
     near enough;
@@ -256,7 +260,7 @@ Taken while stage 1 was built, on 2026-10-03:
     conformer set.
   - Its atoms go over to another frame rather than jump.
 - **What is the view's.** How a molecule is turned and which frame it
-  shows are not undone. They are kept by a copy and by the workspace file,
+  shows are not undone, save a turn by the selection's handle. They are kept by a copy and by the workspace file,
   so that what is pasted or opened looks as it did.
 - **Saving.**
   - `.meno` is JSON (`meno-workspace`, version 1).

@@ -159,6 +159,13 @@ export type EditorState = {
     gesture: string,
     drawing?: { id: number; x: number; y: number }[],
   ) => void;
+  /**
+   * Molecules in 3D turned where they stand, by the selection's handle, from
+   * `turnsBefore` to `turnsAfter` (each set as it turned): one undo step,
+   * which puts the turns back - though how each is turned is the view's,
+   * and where they stand has not changed.
+   */
+  keepTurns3d: (turnsBefore: Record<number, Turn3D | undefined>, turnsAfter: Record<number, Turn3D>) => void;
   /** Moves a molecule in 3D on the page; moves sharing `gesture` are one undo step. */
   moveMolecule3d: (id: number, at: { x: number; y: number }, gesture?: string) => void;
   /** Moves molecules in 3D on the page together; moves sharing `gesture` are one undo step. */

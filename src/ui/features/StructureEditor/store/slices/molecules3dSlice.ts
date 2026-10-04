@@ -13,12 +13,16 @@ type GetState = StoreApi<EditorState>["getState"];
 const MOST_CHOSEN = 4;
 const MOST_BONDS = 3;
 
+/** How many turns in place have been kept as steps: each its own. */
+let kept = 0;
+
 /**
  * Molecules in 3D on the page: where they stand, how they look and what is
  * measured on them are the document's, and are undone; how they are turned,
  * which frame they show, which is under the pointer and what is selected or
  * chosen of them are the view's - save that a turn of several as one body,
- * which moves them, is undone with its turns (../turnJournal).
+ * which moves them, and a turn by the selection's handle are undone with
+ * their turns (../turnJournal).
  */
 export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, set: SetState, get: GetState) {
   return {
@@ -70,13 +74,25 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
       const turnsBefore: Record<number, Turn3D | undefined> = {};
       for (const m of moves) turnsBefore[m.id] = was[m.id];
       const places = moves.map(({ id, at }) => ({ id, at }));
-      if (drawing?.length) get().moveAtoms(drawing, gesture, { molecules3d: places });
-      else doc.edit("turn molecules", (d) => ops.moveMolecules3d(d, places), { coalesceKey: gesture });
+      // (one step however long the hand pauses in it: the turns go with the
+      // whole step, and with nothing less)
+      const meta = { coalesceKey: gesture, coalesceWithinMs: Infinity };
+      if (drawing?.length)
+        doc.edit("turn selection", (d) => ops.placeMarks(ops.placeAtoms(d, drawing), { molecules3d: places }), meta);
+      else doc.edit("turn molecules", (d) => ops.moveMolecules3d(d, places), meta);
       const turnsAfter: Record<number, Turn3D> = {};
       for (const m of moves) turnsAfter[m.id] = m.turn;
       set((prev) => ({ ...prev, turns3d: { ...prev.turns3d, ...turnsAfter } }));
       const after = doc.getState();
       if (after !== before) noteTurns(doc, gesture, before, after, turnsBefore, turnsAfter);
+    },
+    keepTurns3d: (turnsBefore: Record<number, Turn3D | undefined>, turnsAfter: Record<number, Turn3D>) => {
+      const before = doc.getState();
+      // (where they stand is as it was: a step of the document's all the
+      // same, for the turns to go with)
+      doc.edit(Object.keys(turnsAfter).length > 1 ? "turn molecules" : "turn molecule", (d) => ({ ...d }));
+      const after = doc.getState();
+      if (after !== before) noteTurns(doc, `kept-${++kept}`, before, after, turnsBefore, turnsAfter);
     },
     moveMolecule3d: (id: number, at: { x: number; y: number }, gesture?: string) => {
       doc.edit("move molecule", (d) => ops.moveMolecule3d(d, id, at), gesture ? { coalesceKey: gesture } : undefined);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { addMolecule3d, createStructureDocument } from "../document";
 import { molecules3dIn } from "../utils/selection";
@@ -60,6 +60,45 @@ describe("molecules in 3D turned together, as one body", () => {
     expect(state().turns3d).toEqual({ 1: [0, 0, 0, 1] });
     doc.redo();
     expect(state().turns3d).toEqual({ 1: half, 2: half });
+  });
+
+  it("stay one undo step, turns and all, however long the hand pauses in the turn", () => {
+    vi.useFakeTimers();
+    try {
+      const { doc, state } = editor();
+      const depth = doc.history().undoDepth;
+      state().turnMolecules3d([{ id: 1, at: { x: 1, y: 0, z: 2 }, turn: [0, 0, 1, 0] }], "turn-1");
+      vi.advanceTimersByTime(2000);
+      state().turnMolecules3d([{ id: 1, at: { x: 2, y: 0, z: 2 }, turn: half }], "turn-1");
+      expect(doc.history().undoDepth).toBe(depth + 1);
+      doc.undo();
+      expect(state().molecules3d[0].at).toEqual({ x: 0, y: 0 });
+      expect(state().turns3d[1]).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("turned where they stand by the handle: one undo step, which puts the turns back", () => {
+    const { doc, state } = editor();
+    state().setTurn3d(1, [0, 0, 0, 1]);
+    const at = state().molecules3d.map((m) => m.at);
+    const before = { 1: state().turns3d[1], 2: state().turns3d[2] };
+    state().setTurn3d(1, half);
+    state().setTurn3d(2, half);
+    state().keepTurns3d(before, { 1: half, 2: half });
+    expect(doc.history().undoLabel).toBe("turn molecules");
+    doc.undo();
+    expect(state().turns3d).toEqual({ 1: [0, 0, 0, 1] });
+    expect(state().molecules3d.map((m) => m.at)).toEqual(at);
+    doc.redo();
+    expect(state().turns3d).toEqual({ 1: half, 2: half });
+    // (one turned alone, likewise)
+    state().setTurn3d(2, [0, 0, 1, 0]);
+    state().keepTurns3d({ 2: half }, { 2: [0, 0, 1, 0] });
+    expect(doc.history().undoLabel).toBe("turn molecule");
+    doc.undo();
+    expect(state().turns3d[2]).toEqual(half);
   });
 
   it("leave the turns alone on an undo of something else", () => {

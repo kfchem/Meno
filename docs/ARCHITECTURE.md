@@ -185,7 +185,9 @@ What is left before the editor counts as finished, and in what order, is in
     is selected of them (`sel3d`) and the atoms and bonds chosen in one
     (`chosen3d`). A turn of several as one body moves them, so it is the
     document's too: `store/turnJournal.ts` keeps the turns with that undo
-    step.
+    step, which stays one step however long the hand pauses in it. A turn
+    by the selection's handle where they stand moves nothing, but is a
+    step all the same (`keepTurns3d`), for the turns to go with.
   - How they are drawn: a molecule stands as high as it reaches, so no
     turn takes it behind the page - or where a turn of several as one body
     put it (`at.z`). It is instanced, lit, drawn after the
