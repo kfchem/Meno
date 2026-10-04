@@ -186,6 +186,11 @@ class ChemWorkerTest(unittest.TestCase):
         chosen = {tuple(sorted(i["chosen"]["atoms"].items())) for i in every}
         self.assertEqual(len(chosen), 4)
         self.assertTrue(all(set(i["chosen"]["atoms"]) == {"1", "2"} for i in every))
+        # every centre labelled, the ones left open among them
+        self.assertTrue(all(i["cip"]["atoms"] == i["chosen"]["atoms"] for i in every))
+        drawn = ask("conformers", molblock=PCPA, count=2)["result"]["isomers"][0]
+        self.assertEqual(drawn["cip"]["atoms"], {"7": ask("analyse", molblock=PCPA)["result"]["atoms"][7]["cip"]})
+        self.assertEqual(drawn["chosen"], {"atoms": {}, "bonds": {}})
 
     def test_answers_what_it_cannot_do_with_an_error_not_a_crash(self):
         self.assertEqual(ask("exec", code="1")["error"], "no such request: exec")

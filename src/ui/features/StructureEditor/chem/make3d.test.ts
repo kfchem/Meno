@@ -33,6 +33,7 @@ const answer: Conformers = {
   ],
   energies: [-0.001, 0.002],
   field: "MMFF94",
+  cip: { atoms: {}, bonds: {} },
   chosen: { atoms: {}, bonds: {} },
   smiles: "CCO",
 };
@@ -52,6 +53,12 @@ describe("making a drawn structure in 3D", () => {
     expect(m.frames).toEqual([answer.frames[1]]);
     expect(m.energies).toEqual(answer.energies);
     expect(m.drawnFrom).toEqual([11, 12, 13, null, null]);
+    expect(m.stereo).toEqual({ atoms: {}, bonds: {} });
+  });
+
+  it("keeps each centre's label, and which were left open, so that stereoisomers are told apart", () => {
+    const iso = { ...answer, cip: { atoms: { "1": "R" }, bonds: {} }, chosen: { atoms: { "1": "R" }, bonds: {} } };
+    expect(moleculeOf(iso, blocksOf(ethanol, [11])[0]).stereo).toEqual({ atoms: { 1: "R" }, bonds: {}, chosen: { atoms: [1], bonds: [] } });
   });
 
   it("starts each atom on its drawing's atom - a hydrogen on the atom it is bonded to - and lies over the drawing", () => {

@@ -70,8 +70,18 @@ export function moleculeOf(c: Conformers, block: Block): Omit<Molecule3D, "id" |
     ...(c.frames.length > 1 ? { frames: c.frames.slice(1) } : {}),
     energies: c.energies,
     drawnFrom: c.atoms.map((_, i) => (i < block.part.atoms.length ? block.atoms[i] : null)),
+    stereo: {
+      atoms: numbered(c.cip?.atoms),
+      bonds: numbered(c.cip?.bonds),
+      ...(Object.keys(c.chosen.atoms).length || Object.keys(c.chosen.bonds).length
+        ? { chosen: { atoms: Object.keys(c.chosen.atoms).map(Number), bonds: Object.keys(c.chosen.bonds).map(Number) } }
+        : {}),
+    },
   };
 }
+
+const numbered = (r: Record<string, string> | undefined): Record<number, string> =>
+  Object.fromEntries(Object.entries(r ?? {}).map(([k, v]) => [Number(k), v]));
 
 /** A box on the page: from x0 to x1 across, y0 to y1 up. */
 export type Box = { x0: number; x1: number; y0: number; y1: number };

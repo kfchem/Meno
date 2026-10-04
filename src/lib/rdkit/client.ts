@@ -33,9 +33,9 @@ export type OpenStereo = { atoms: number[]; bonds: number[]; isomers: number };
  * One stereoisomer's conformers: its atoms - those of the block in their
  * order, then the hydrogens made for them - its bonds by index, each
  * conformer's coordinates in angstroms, laid over the first, and its energy
- * in hartrees, lowest first; the force field's name; and the configurations
- * chosen for what was left open, by CIP label, by the block's atom and bond
- * index.
+ * in hartrees, lowest first; the force field's name; and the CIP label of
+ * every stereocentre and double bond, and of those that were left open and
+ * chosen, by the block's atom and bond index.
  */
 export type Conformers = {
   atoms: { el: string; charge: number }[];
@@ -43,6 +43,7 @@ export type Conformers = {
   frames: number[][];
   energies: number[];
   field: string;
+  cip: { atoms: Record<string, string>; bonds: Record<string, string> };
   chosen: { atoms: Record<string, string>; bonds: Record<string, string> };
   smiles: string;
 };

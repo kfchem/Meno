@@ -1,3 +1,4 @@
+import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
@@ -85,6 +86,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const molecules = useEditor((s) => s.molecules3d);
   const turns = useEditor((s) => s.turns3d);
   const rising = useEditor((s) => s.rising3d);
+  // (R and S on, every molecule's labels; off, a stereoisomer's own, which tell it from the others)
+  const stereoLabels = useAppSettings((s) => s.chemistry.stereoLabels);
   const frames = useEditor((s) => s.frames3d);
   const hovered = useEditor((s) => s.hovered3d);
   const sel3d = useEditor((s) => s.sel3d);
@@ -409,6 +412,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           hoveredMeasure={hoveredMeasure?.id === m.id ? hoveredMeasure.measure : null}
           rising={rising[m.id]}
           onRisen={() => store.getState().risen3d(m.id)}
+          stereoShown={stereoLabels ? "all" : m.stereo?.chosen ? "chosen" : null}
         />
       ))}
       {leaving.map(({ m, turn, frame }) => (
@@ -429,6 +433,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           onFrame={() => {}}
           hoveredMeasure={null}
           leaving={() => setLeaving((l) => l.filter((x) => x.m !== m))}
+          stereoShown={null}
         />
       ))}
     </group>

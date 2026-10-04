@@ -95,6 +95,12 @@ export type Molecule3D = {
    * abbreviation.
    */
   drawnFrom?: (number | null)[];
+  /**
+   * Its stereocentres' and double bonds' CIP labels, by atom and bond index;
+   * and which of them its drawing left open - one stereoisomer of several
+   * made from it - so that it is told apart from the others.
+   */
+  stereo?: { atoms: Record<number, string>; bonds: Record<number, string>; chosen?: { atoms: number[]; bonds: number[] } };
 };
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];

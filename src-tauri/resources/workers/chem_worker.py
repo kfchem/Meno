@@ -232,8 +232,9 @@ def conformers(mol, count=CONFORMERS, seed=0x4D45):
 def op_conformers(m):
     """Conformers of a structure drawn in 2D. With stereocentres or double
     bonds left open, `isomers` says what to make: "one" (the first of its
-    stereoisomers) or "all" (each, up to MOST_ISOMERS); the configurations
-    chosen go back with each, by CIP label, atom by atom and bond by bond."""
+    stereoisomers) or "all" (each, up to MOST_ISOMERS). Each goes back with
+    the CIP label of every stereocentre and double bond (`cip`), and of the
+    ones that were left open (`chosen`), atom by atom and bond by bond."""
     mol = read(m["molblock"])
     atoms, bonds = open_stereo(mol)
     isomers = isomers_of(mol)
@@ -243,6 +244,10 @@ def op_conformers(m):
     for iso in isomers:
         entry = conformers(iso, int(m.get("count", CONFORMERS)))
         rdCIPLabeler.AssignCIPLabels(iso)
+        entry["cip"] = {
+            "atoms": {str(a.GetIdx()): a.GetProp("_CIPCode") for a in iso.GetAtoms() if a.HasProp("_CIPCode")},
+            "bonds": {str(b.GetIdx()): b.GetProp("_CIPCode") for b in iso.GetBonds() if b.HasProp("_CIPCode")},
+        }
         entry["chosen"] = {
             "atoms": {str(i): iso.GetAtomWithIdx(i).GetProp("_CIPCode") for i in atoms if iso.GetAtomWithIdx(i).HasProp("_CIPCode")},
             "bonds": {str(i): iso.GetBondWithIdx(i).GetProp("_CIPCode") for i in bonds if iso.GetBondWithIdx(i).HasProp("_CIPCode")},

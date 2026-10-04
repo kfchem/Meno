@@ -53,6 +53,9 @@ const PILL_TAU = 0.12;
 const TURN_FOLLOWED = 0.3;
 /** How much larger the atom under the pointer is drawn, and its spring: the 3D viewer's. */
 const ATOM_SWELL = 1.1;
+/** Where a stereocentre's label stands from its atom on the screen, and the white round its letters. */
+const STEREO_OFFSET = "translate(0.95em, -0.95em)";
+const STEREO_HALO = "0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff";
 /**
  * A molecule rising out of its drawing, in seconds: its atoms grow out of the
  * drawing's, where they lie on the page, and go over to their places in 3D as
@@ -133,6 +136,8 @@ export type Molecule3DViewProps = {
   leaving?: () => void;
   /** Rising out of its drawing: where it started, over the drawing, and when; and what is told once it has risen. */
   rising?: Rising3D;
+  /** Its stereocentres' and double bonds' labels shown: all, only those its drawing left open, or none. */
+  stereoShown: "all" | "chosen" | null;
   onRisen?: () => void;
 };
 
@@ -220,6 +225,27 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const [measureTexts, setMeasureTexts] = useState<Record<number, string>>({});
   const [shownMeasures, setShownMeasures] = useState<Measure3D[]>(m.measures ?? []);
   const dirty = useRef(true);
+  // its stereocentres' and double bonds' labels: all, or those its drawing left open
+  const stereoMarks = useMemo(() => {
+    const st = m.stereo;
+    if (!st || !props.stereoShown) return [];
+    const only = props.stereoShown === "chosen" ? st.chosen : null;
+    if (props.stereoShown === "chosen" && !only) return [];
+    const out: { key: string; atoms: number[]; text: string }[] = [];
+    for (const [i, text] of Object.entries(st.atoms)) {
+      if (!only || only.atoms.includes(Number(i))) out.push({ key: `a${i}`, atoms: [Number(i)], text });
+    }
+    for (const [i, text] of Object.entries(st.bonds)) {
+      const b = m.bonds[Number(i)];
+      if (b && (!only || only.bonds.includes(Number(i)))) out.push({ key: `b${i}`, atoms: [b.a1, b.a2], text });
+    }
+    return out;
+  }, [m.stereo, m.bonds, props.stereoShown]);
+  const stereoAnchors = useRef(new Map<string, { anchor: THREE.Group | null; el: HTMLDivElement | null }>());
+  useEffect(() => {
+    dirty.current = true;
+    invalidate();
+  }, [stereoMarks, invalidate]);
 
   // the molecule itself changed - its atoms, its frames, the style: drawn afresh
   useLayoutEffect(() => {
@@ -497,6 +523,18 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       }
     }
     if (reshaped || fading || dirty.current) drawMeasures(p);
+    // the stereo labels, on their atom - a double bond's, at its middle - and
+    // set off from it on the screen, as the drawing's are
+    if (reshaped || dirty.current) {
+      for (const mark of stereoMarks) {
+        const l = stereoAnchors.current.get(mark.key);
+        if (!l?.anchor) continue;
+        l.anchor.position.set(0, 0, 0);
+        for (const i of mark.atoms) l.anchor.position.add(new THREE.Vector3(p[3 * i], p[3 * i + 1], p[3 * i + 2]));
+        l.anchor.position.divideScalar(mark.atoms.length);
+        if (l.el) l.el.style.opacity = String(risen.current);
+      }
+    }
     dirty.current = false;
     // its frames, beside it: just below it on the page
     if (pill.current) {
@@ -699,6 +737,30 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
                 style={{ opacity: 0 }}
               >
                 {measureTexts[x.id] ?? ""}
+              </div>
+            </Html>
+          </group>
+        ))}
+        {stereoMarks.map((mark) => (
+          <group
+            key={mark.key}
+            ref={(g) => {
+              const l = stereoAnchors.current.get(mark.key) ?? { anchor: null, el: null };
+              l.anchor = g;
+              stereoAnchors.current.set(mark.key, l);
+            }}
+          >
+            <Html center zIndexRange={[30, 20]} style={{ pointerEvents: "none" }}>
+              <div
+                ref={(el) => {
+                  const l = stereoAnchors.current.get(mark.key) ?? { anchor: null, el: null };
+                  l.el = el;
+                  stereoAnchors.current.set(mark.key, l);
+                }}
+                className="pointer-events-none select-none whitespace-nowrap text-accel-blue text-[12px] leading-none"
+                style={{ opacity: 0, transform: STEREO_OFFSET, textShadow: STEREO_HALO }}
+              >
+                (<i>{mark.text}</i>)
               </div>
             </Html>
           </group>
