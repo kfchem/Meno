@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { pageAt } from "../utils/page";
+import { FRAME_ORDER, pageAt } from "../utils/page";
 import { isPinch, wheelReader } from "../../../../lib/input/wheel";
 import { useEditor, useEditorStore } from "../store";
 import { letViewGoalGo, viewGoalOf } from "./viewGoal";
@@ -347,6 +347,6 @@ export function PanZoom2D() {
     ) {
       invalidate();
     }
-  });
+  }, FRAME_ORDER.camera);
   return null;
 }

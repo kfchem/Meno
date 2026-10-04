@@ -9,7 +9,7 @@ import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf
 import { MARK_MIN_PX } from "../chem/marks";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { kindOf, measureMarks, measureText, measureValue } from "../utils/measure3d";
-import { eyeOf, seenAt } from "../utils/page";
+import { eyeOf, FRAME_ORDER, seenAt } from "../utils/page";
 import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
 
@@ -332,6 +332,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
 
   useEffect(() => invalidate(), [lit, selected, look, frame, turn, invalidate]);
 
+  // (before the labels' Html places them, so that they are placed where the
+  // atoms are drawn this frame, not the one before: FRAME_ORDER)
   useFrame((_, dt) => {
     const step = Math.min(dt, 1 / 30);
     let moving = false;
@@ -640,7 +642,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       pill.current.position.set(0, pillAt.current / g, -at.z / g);
     }
     if (moving) invalidate();
-  });
+  }, FRAME_ORDER.molecules);
 
   /** The measurements' marks and values, as the atoms are now. */
   const drawMeasures = (p: Float32Array) => {
