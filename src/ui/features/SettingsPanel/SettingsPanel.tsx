@@ -1,7 +1,7 @@
-import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import clsx from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import { RISE } from "../../theme/motion";
+import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import clsx from "clsx";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import NetworkSettings from "../../network/NetworkSettings";
 import StyleEditor from "../StyleEditor";
