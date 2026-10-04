@@ -189,6 +189,25 @@ Taken on 2026-10-03:
   - held as a style, as the 2D drawing's is, so that it can be set the
     same way later.
 
+Taken on 2026-10-04:
+
+- **The structure canvas is the workspace**, and everything else is to be
+  reached from it. The New Tab page is gone: Meno starts on a canvas, "+"
+  makes another, and Open puts a file in a tab of its own. The New… menu
+  goes too, later: the text editor, the Python console and the workflow
+  builder are to be reached from the canvas.
+- **Text files and PDFs on the page**: a small preview of each sits on the
+  workspace, and is edited in a split view or in a window inside Meno's.
+- **No buttons on the canvas.** Commands are in Meno's menu, from its logo,
+  each with its key; the right-click menu has what concerns what is under
+  the pointer, and the canvas as a whole on empty space; keys are kept to
+  what is used most, and reachable by the left hand (Ctrl/Cmd+1 fits, not
+  Ctrl/Cmd+0).
+- **The system's menu bar stays as the system has it.** On a Mac, Meno's
+  commands do not go into it. A Mac's window is to get its own controls
+  (the close button and its neighbours) at some stage.
+- **Closing the last tab quits Meno.**
+
 ## Risks
 
 - **The 2D drawing changing.** The thinnest lines and the place of every

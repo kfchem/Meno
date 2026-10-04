@@ -12,7 +12,7 @@ a workspace holding 2D and 3D together - see [`WORKSPACE.md`](./WORKSPACE.md).
 | --- | --- | --- |
 | Tauri shell (Rust) | `src-tauri/src/lib.rs` | Window, plugins (`fs`, `os`, `opener`), and the only code that spawns OS processes: the bundled `uv` binary and the Python sidecar. No chemistry logic lives here. |
 | App shell (React) | `src/App.tsx`, `src/lib/core/`, `src/ui/layouts/`, `src/ui/views/` | Tab model (open/close/reorder/rename), mapping a tab's `kind` to a view component. |
-| Features (React) | `src/ui/features/*` | One folder per view: 2D structure editor, 3D molecule viewer, workflow editor, Python console, text editor, file loader, settings. |
+| Features (React) | `src/ui/features/*` | One folder per view: 2D structure editor, 3D molecule viewer, workflow editor, Python console, text editor, settings. |
 | Chemistry helpers (TS) | `src/lib/chem/`, `src/utils/` | File parsing (MOL/SDF/RXN/XYZ), editor model conversion, 2D depiction layout (bond lines, wedges, labels) and ACS-style sizing. Pure functions — no React, no Tauri. |
 | Python worker | `src-tauri/resources/workers/interactive_worker.py` | Line-delimited JSON REPL run inside a `uv`-managed venv. |
 
@@ -39,13 +39,14 @@ src/
   utils/atomUtils         element table (radii, colours)
   samples/                textbook structures and reactions for the tests and the workflow's 3D node
                           (see samples/README.md)
-  ui/layouts/TopBar       custom title bar: tabs, "New…" menu, online/offline, Settings, window buttons
+  ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "New…" menu, online/offline, Settings, window buttons
+  ui/layouts/MenoMenu     the logo's menu: the app's commands and those the tab in front offers (commands.ts)
   ui/fonts/               the typefaces labels are drawn in, read from their files
   ui/network/             consent dialog, activity cards, Settings › Network
   ui/views/registry       TabKind -> { Component, create } table
   ui/views/Deck           renders every open tab, hides inactive ones with CSS
+  ui/views/openFile       a file to the tab it opens in: Open (Ctrl/Cmd+O)
   ui/features/
-    OmniHub/              "Open file / drop a file" start page; routes a file to a view
     StructureEditor/      2D editor (see below)
     MoleculeViewer/       3D ball-and-stick / CPK viewer with measurements and frame slider
     WorkflowEditor/       React Flow graph (prototype, not executable yet)
@@ -67,8 +68,8 @@ src-tauri/
 
 ## Tabs and views
 
-`src/lib/core` holds a small reducer (`ADD_TAB`, `CLOSE_TAB`, `SELECT_TAB`,
-`REORDER`, `SET_CONTENT`, `PATCH_DATA`, `RENAME_TAB`, `SET_DIRTY`). Each tab is
+`src/lib/core` holds a small reducer (`ADD_TAB`, `CLOSE_TAB`, `REPLACE_TAB`,
+`SELECT_TAB`, `REORDER`, `SET_CONTENT`, `PATCH_DATA`, `RENAME_TAB`, `SET_DIRTY`). Each tab is
 `{ meta: { id, label, dirty? }, content: { kind, data? } }`.
 
 - `tabOrder` is the visual order in the title bar; `mountOrder` is the stable
@@ -81,8 +82,22 @@ src-tauri/
   16, `lib/core/limits.ts` budgets them: a 2D/3D/structure tab costs one, a
   workflow tab two, and opening past the limit is refused with a notice rather
   than silently blanking the oldest view.
-- A new tab starts as `loader` (OmniHub). When a file is chosen, OmniHub calls
-  `replaceContent({ kind, ...data, filename })` and the tab switches view.
+- Meno starts on a structure canvas, and "+" makes another: the canvas is
+  the workspace (docs/WORKSPACE.md), so there is no start page.
+- **Open** (Ctrl/Cmd+O, or the menu) reads the files picked in the system's
+  dialog and opens each in a tab of its own, by what it is
+  (`ui/views/openFile`): in place of the tab in front if that is a canvas
+  nothing is drawn on (`REPLACE_TAB`). A structure from an Office document
+  opens the same way.
+- **Closing the last tab quits Meno.**
+- **Commands.** The canvas carries nothing but the drawing. Every command
+  is in Meno's menu, which its logo opens, with its key; the app's own
+  (Open…) and those the tab in front offers through `offerCommands`
+  (`ui/layouts/commands.ts`), asked for as the menu opens. A structure
+  canvas offers Save, Save As, Export as SVG, SMILES, Clean up all, Fit to
+  content (Ctrl/Cmd+1), R and S, and Drawing style, and puts the same on its
+  right-click menu on empty space. The system's own menu bar is left as the
+  system has it.
 
 ## Documents and undo (`lib/doc`, being adopted)
 

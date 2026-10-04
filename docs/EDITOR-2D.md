@@ -235,8 +235,9 @@ Both go together, because both touch every layer.
   length, whichever the user prefers.
 - **Scope.** An application default; a document's own style over it; and
   per-bond and per-atom overrides over that (a coloured atom, a bold bond).
-- **Where it is set.** Settings holds the application's style, and the
-  canvas's Drawing style button gives a document one of its own. Either is
+- **Where it is set.** Settings holds the application's style, and
+  *Drawing style…* (Meno's menu, or a right-click on empty space) gives a
+  document one of its own. Either is
   a preset - ACS 1996, RSC, Wiley or Nature - and what was changed from it;
   every setting has its name, description, unit and range in
   `styleFields.ts`, and the preview is drawn by the same layout as the
@@ -458,7 +459,13 @@ traced from reference drawings.
 - SMILES in and out. (PR #52: a SMILES card on the canvas)
 - SVG export, drawn exactly as on the canvas - with the drawing style it was
   drawn in - and PNG. The SVG export draws what the canvas draws (PR #36),
-  at ACS 1996's own size, from a button beside Save (PR #43); PNG to come.
+  at ACS 1996's own size (PR #43); PNG to come.
+- No buttons on the canvas (2026-10-04): Open (Ctrl/Cmd+O), Save, Save As,
+  Export as SVG, SMILES, Clean up all, Fit to content (Ctrl/Cmd+1), R and
+  S, and Drawing style are in Meno's menu, from its logo, and - all but the
+  files - on the right-click menu on empty space. Open puts a file in a tab
+  of its own, never over what is drawn; a file dropped on the drawing is
+  added to it.
 - The clipboard, for Word and PowerPoint: a vector picture in each platform's
   own form (EMF on Windows, PDF on macOS), PNG and MOL alongside it.
   Agreed 2026-09-29: the structure is re-edited from Office - on Windows by
