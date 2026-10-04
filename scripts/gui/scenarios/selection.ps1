@@ -14,22 +14,19 @@
 #   way between them; Backspace deletes them, and undo brings them back.
 # - Ctrl+A, then the clean-up key: every structure the selection is in.
 #
-# Coordinates are read off the shots on a Mac (2560x1720), in the view the
-# fit button gives - the same every run, where a turn of the wheel is not.
+# Coordinates are read off the shots on a Mac (2560x1720), in the view
+# fitting gives (Ctrl/Cmd+1) - the same every run, where a turn of the
+# wheel is not.
 
 Start-Meno
-Invoke-MenoClick -X 2103 -Y 40      # New…
-Start-Sleep -Milliseconds 400
-Invoke-MenoClick -X 1820 -Y 330     # Structure Canvas
-Wait-MenoSettled | Out-Null
-$c = Get-ClientSize
-Invoke-MenoClick -X 498 -Y ($c.Height - 60)   # SMILES: its box takes the keys
+Wait-MenoSettled | Out-Null          # Meno starts on a structure canvas
+Invoke-MenoMenu "SMILES..."                    # its box takes the keys
 Start-Sleep -Seconds 2
 Send-MenoText "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O.OCC" -CharMs 10
 Send-MenoKey Enter
 Start-Sleep -Seconds 8
-Invoke-MenoClick -X 869 -Y 1298     # the SMILES card closed
-Invoke-MenoClick -X 60 -Y ($c.Height - 60)    # fit to content: the same view every run
+Invoke-MenoClick -X 869 -Y 1402     # the SMILES card closed
+Send-MenoShortcut 1                           # fit to content: the same view every run
 Start-Sleep -Seconds 1
 Wait-MenoSettled | Out-Null
 Save-Step "loaded"

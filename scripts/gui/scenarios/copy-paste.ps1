@@ -12,17 +12,13 @@
 # (2560x1720); the keys need none.
 
 Start-Meno
-Invoke-MenoClick -X 2103 -Y 40      # New…
-Start-Sleep -Milliseconds 400
-Invoke-MenoClick -X 1820 -Y 330     # Structure Canvas
-Wait-MenoSettled | Out-Null
-$c = Get-ClientSize
-Invoke-MenoClick -X 498 -Y ($c.Height - 60)   # SMILES: its box takes the keys
+Wait-MenoSettled | Out-Null          # Meno starts on a structure canvas
+Invoke-MenoMenu "SMILES..."                    # its box takes the keys
 Start-Sleep -Seconds 2
 Send-MenoText "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O" -CharMs 10
 Send-MenoKey Enter
 Start-Sleep -Seconds 8
-Invoke-MenoClick -X 869 -Y 1298     # the SMILES card closed
+Invoke-MenoClick -X 869 -Y 1402     # the SMILES card closed
 Invoke-MenoWheel -X 1280 -Y 860 -Notches -3
 Start-Sleep -Seconds 1
 Wait-MenoSettled | Out-Null
@@ -40,10 +36,10 @@ Send-MenoShortcut X
 Wait-MenoSettled | Out-Null
 Save-Step "cut"
 
-Invoke-MenoClick -X 700 -Y 1300 -Right
+Invoke-MenoClick -X 300 -Y 1000 -Right    # (high enough for the whole menu below it)
 Wait-MenoSettled | Out-Null
 Save-Step "canvas-menu"
-Invoke-MenoClick -X 800 -Y 1340     # Paste
+Invoke-MenoClick -X 400 -Y 1041     # Paste, its first item
 Wait-MenoSettled | Out-Null
 Save-Step "pasted-from-menu"
 

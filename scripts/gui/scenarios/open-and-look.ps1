@@ -10,10 +10,9 @@ Save-Step "empty"
 Open-MenoFile "$PSScriptRoot/../fixtures/depiction-check.mol"
 Save-Step "opened"
 
-# Fit to content, bottom left, so the whole structure is in the picture at a
-# size that does not depend on where the camera happened to be.
-$c = Get-ClientSize
-Invoke-MenoClick -X 60 -Y ($c.Height - 60)
+# Fit to content (Ctrl/Cmd+1), so the whole structure is in the picture at
+# a size that does not depend on where the camera happened to be.
+Send-MenoShortcut 1
 Wait-MenoSettled | Out-Null
 Save-Step "fitted"
 
