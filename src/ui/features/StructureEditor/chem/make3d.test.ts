@@ -3,7 +3,7 @@ import { STYLE_3D } from "../../../../lib/chem/style3d";
 import type { Conformers } from "../../../../lib/rdkit/client";
 import type { Model } from "../store/types";
 import { solidOf } from "../utils/molecule3d";
-import { blocksOf, moleculeOf, placeRow, turnedOver, type Box, type Turned } from "./make3d";
+import { blocksOf, linkOf, moleculeOf, placeRow, rowFrom, signatureOf, turnedOver, type Box, type Turned } from "./make3d";
 
 /** Ethanol drawn: C1-C2-O3, a bond's length apart. */
 const ethanol: Model = {
@@ -107,5 +107,43 @@ describe("placeRow", () => {
     const row = placeRow([item(30)], drawing, { x0: -1, x1: 5, y0: -1, y1: 3 });
     expect(row.inView).toBe(false);
     expect(row.at[0].x).toBeGreaterThan(4);
+  });
+});
+
+describe("how a molecule in 3D stands to its drawing", () => {
+  const m = moleculeOf(answer, blocksOf(ethanol, [11])[0]);
+
+  it("is its drawing's while the drawing says the same, wherever its atoms are drawn", () => {
+    expect(m.drawnAs).toBe(signatureOf(ethanol, [11, 12, 13]));
+    expect(linkOf(m, ethanol)).toBe("live");
+    const moved = { ...ethanol, atoms: ethanol.atoms.map((a) => ({ ...a, x: a.x + 5 })) };
+    expect(linkOf(m, moved)).toBe("live");
+  });
+
+  it("is changed once an atom, a bond or a wedge is, or something is added to it", () => {
+    const sulfur = { ...ethanol, atoms: ethanol.atoms.map((a) => (a.id === 13 ? { ...a, el: "S" } : a)) };
+    expect(linkOf(m, sulfur)).toBe("changed");
+    const double = { ...ethanol, bonds: ethanol.bonds.map((b) => (b.id === 22 ? { ...b, order: 2 as const } : b)) };
+    expect(linkOf(m, double)).toBe("changed");
+    const wedged = { ...ethanol, bonds: ethanol.bonds.map((b) => (b.id === 21 ? { ...b, stereo: "up" as const } : b)) };
+    expect(linkOf(m, wedged)).toBe("changed");
+    const longer: Model = {
+      atoms: [...ethanol.atoms, { id: 14, x: 4.7, y: 0.9, r: 0.9, el: "C" }],
+      bonds: [...ethanol.bonds, { id: 23, a: 13, b: 14, order: 1 }],
+    };
+    expect(linkOf(m, longer)).toBe("changed");
+  });
+
+  it("is gone with its drawing, and is nothing for a molecule made from none", () => {
+    expect(linkOf(m, { atoms: [], bonds: [] })).toBe("gone");
+    expect(linkOf({ drawnFrom: undefined }, ethanol)).toBeNull();
+  });
+
+  it("is made again in a row from where the one before stood", () => {
+    const t = (w: number): Turned => ({ turn: [0, 0, 0, 1], start: { x: 0, y: 0 }, reach: { x0: -w / 2, x1: w / 2, y0: -1, y1: 1 }, flat: [], height: 1 });
+    const at = rowFrom([t(2), t(4)], { x: 10, y: 3 });
+    expect(at[0]).toEqual({ x: 10, y: 3 });
+    expect(at[1].x).toBeGreaterThan(10 + 1 + 2);
+    expect(at[1].y).toBe(3);
   });
 });

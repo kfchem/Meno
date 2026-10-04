@@ -1,5 +1,5 @@
 import { Html } from "@react-three/drei";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 
 /** Kilocalories per mole in a hartree. */
 const KCAL_PER_HARTREE = 627.509474;
@@ -32,6 +32,7 @@ export default function Frames3D({
   energies,
   open,
   onFrame,
+  below,
 }: {
   count: number;
   frame: number;
@@ -40,6 +41,8 @@ export default function Frames3D({
   /** Shown in full: its molecule hovered or selected. */
   open: boolean;
   onFrame: (frame: number) => void;
+  /** Said just below it - a note on its molecule - and moved down as it opens. */
+  below?: ReactNode;
 }) {
   const [hovered, setHovered] = useState(false);
   const [pointed, setPointed] = useState<number | null>(null);
@@ -116,6 +119,7 @@ export default function Frames3D({
             {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
           </div>
         </div>
+        {below}
       </div>
     </Html>
   );

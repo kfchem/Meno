@@ -39,6 +39,41 @@ export function blocksOf(model: Model, atoms: Iterable<number>): Block[] {
     });
 }
 
+/**
+ * What a drawn structure is, as its molecules in 3D were made from it: its
+ * atoms (by id: element, charge, mass), its bonds (order and wedge), and
+ * those that leave it - not where anything is drawn. A molecule in 3D whose
+ * drawing no longer says the same is its drawing's no longer.
+ */
+export function signatureOf(model: Model, ids: Iterable<number>): string {
+  const of = new Set(ids);
+  const atoms = model.atoms
+    .filter((a) => of.has(a.id))
+    .map((a) => `${a.id}:${a.el}:${a.charge ?? 0}:${a.isotope ?? ""}`)
+    .sort();
+  const bonds = model.bonds
+    .filter((b) => of.has(b.a) || of.has(b.b))
+    .map((b) => {
+      const ends = of.has(b.a) && of.has(b.b) ? `${b.a}-${b.b}` : of.has(b.a) ? `${b.a}-out` : `${b.b}-out`;
+      return `${ends}:${b.order}:${b.stereo ?? "none"}`;
+    })
+    .sort();
+  return [...atoms, "|", ...bonds].join(",");
+}
+
+/**
+ * How a molecule in 3D stands to the drawing it was made from: the same
+ * structure still ("live"), drawn otherwise since ("changed"), gone, or
+ * made from none.
+ */
+export function linkOf(m: Pick<Molecule3D, "drawnFrom" | "drawnAs">, model: Model): "live" | "changed" | "gone" | null {
+  if (!m.drawnFrom) return null;
+  const ids = m.drawnFrom.filter((id): id is number => id != null);
+  const present = new Set(model.atoms.map((a) => a.id));
+  if (!ids.some((id) => present.has(id))) return "gone";
+  return m.drawnAs != null && signatureOf(model, ids) !== m.drawnAs ? "changed" : "live";
+}
+
 /** What a structure leaves open: its stereocentres and double bonds drawn without a configuration, by id, and how many stereoisomers they make. */
 export type Open = { atoms: number[]; bonds: number[]; isomers: number };
 
@@ -71,6 +106,7 @@ export function moleculeOf(c: Conformers, block: Block): Omit<Molecule3D, "id" |
     ...(c.frames.length > 1 ? { frames: c.frames.slice(1) } : {}),
     energies: c.energies,
     drawnFrom: c.atoms.map((_, i) => (i < block.part.atoms.length ? block.atoms[i] : null)),
+    drawnAs: signatureOf(block.part, block.atoms),
     stereo: {
       atoms: numbered(c.cip?.atoms),
       bonds: numbered(c.cip?.bonds),
@@ -223,6 +259,15 @@ export function placeRow(items: Turned[], drawing: Box, view: Box | null): { at:
     if (view && inside(seenAs(row.box, view, height), view)) return { at: row.at, inView: true };
   }
   return { at: sides[0]().at, inView: !view };
+}
+
+/** A row of molecules in 3D starting where `at` is - where one made again stood - each after the last. */
+export function rowFrom(items: Turned[], at: { x: number; y: number }): { x: number; y: number }[] {
+  let x = at.x;
+  return items.map((t, i) => {
+    if (i > 0) x += items[i - 1].reach.x1 + GAP - t.reach.x0;
+    return { x, y: at.y };
+  });
 }
 
 /** Each stereoisomer asked for, its conformers made: what `conformers` answers. */

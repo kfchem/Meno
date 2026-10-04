@@ -42,7 +42,7 @@ import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { STYLE_3D } from "../../../lib/chem/style3d";
-import { chosenPath, lookOf } from "./utils/molecule3d";
+import { chosenPath, frameOf, lookOf, solidOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
 
@@ -81,7 +81,10 @@ import Molecules3D from "./components/Molecules3D";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
-import { blocksOf, boxOf, conformersOf, moleculeOf, openIn, placeRow, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
+import { blocksOf, boxOf, conformersOf, linkOf, moleculeOf, openIn, placeRow, rowFrom, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
+import { Remake3D } from "./components/remake3d";
+import { turnOnto } from "./utils/align3d";
+import type { Molecule3D } from "./store/types";
 
 function StructureCanvasContent({
   active,
@@ -187,10 +190,10 @@ function StructureCanvasContent({
   }, [camRef, domRef]);
   // Structures made in 3D (chem/make3d): asked first about what their
   // drawing leaves open, then their conformers made and risen out of them
-  const [ask3d, setAsk3d] = useState<{ blocks: Block[]; open: Open[] } | null>(null);
+  const [ask3d, setAsk3d] = useState<{ blocks: Block[]; open: Open[]; replacing?: Molecule3D } | null>(null);
   const [making3d, setMaking3d] = useState(false);
   const build3d = useCallback(
-    async (blocks: Block[], isomers: "one" | "all") => {
+    async (blocks: Block[], isomers: "one" | "all", replacing?: Molecule3D) => {
       setMaking3d(true);
       setChemError(null);
       try {
@@ -201,14 +204,17 @@ function StructureCanvasContent({
           const ms = (await conformersOf(chem, block, isomers)).map((c) => moleculeOf(c, block));
           const model = store.getState().model;
           const turned = ms.map((m) => turnedOver(m, model, STYLE_3D));
-          // beside the drawing, where they can be seen as the view is now
-          const row = placeRow(turned, boxOf(block.part), viewBox());
+          // beside the drawing, where they can be seen as the view is now -
+          // or, made again, where the one made before stood
+          const row = replacing
+            ? { at: rowFrom(turned, replacing.at), inView: true }
+            : placeRow(turned, boxOf(block.part), viewBox());
           allInView &&= row.inView;
           ms.forEach((m, i) =>
             made.push({ m: { ...m, at: row.at[i] }, turn: turned[i].turn, from: turned[i].start, flat: turned[i].flat }),
           );
         }
-        store.getState().riseMolecules3d(made);
+        store.getState().riseMolecules3d(made, replacing ? [replacing.id] : []);
         // (with no room for them in view, the view takes them in)
         if (!allInView) requestFit();
       } catch (e: unknown) {
@@ -220,7 +226,7 @@ function StructureCanvasContent({
     [store, viewBox, requestFit],
   );
   const make3d = useCallback(
-    async (around: Iterable<number>) => {
+    async (around: Iterable<number>, replacing?: Molecule3D) => {
       const blocks = blocksOf(store.getState().model, around);
       if (!blocks.length) return;
       setChemError(null);
@@ -230,13 +236,46 @@ function StructureCanvasContent({
           blocks.map(async (b) => openIn(b, await chem.request("open_stereo", { molblock: b.molblock }))),
         );
         // (stereo drawn without a configuration: asked what to make first)
-        if (open.some((o) => o.atoms.length || o.bonds.length)) setAsk3d({ blocks, open });
-        else await build3d(blocks, "one");
+        if (open.some((o) => o.atoms.length || o.bonds.length)) setAsk3d({ blocks, open, replacing });
+        else await build3d(blocks, "one", replacing);
       } catch (e: unknown) {
         setChemError(`No 3D structure could be made: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
     [store, build3d],
+  );
+  // A molecule in 3D made again from its drawing, which has changed since:
+  // in its place, as one undo step
+  const remake3d = useCallback(
+    (id: number) => {
+      const { molecules3d: ms, model: m } = store.getState();
+      const mol = ms.find((x) => x.id === id);
+      const present = new Set(m.atoms.map((a) => a.id));
+      const atoms = (mol?.drawnFrom ?? []).filter((a): a is number => a != null && present.has(a));
+      if (mol && atoms.length) void make3d(atoms, mol);
+    },
+    [store, make3d],
+  );
+  // A molecule in 3D turned to lie as its drawing does, as it did as it rose
+  const turnLikeDrawing = useCallback(
+    (id: number) => {
+      const st = store.getState();
+      const mol = st.molecules3d.find((x) => x.id === id);
+      if (!mol?.drawnFrom) return;
+      const solid = solidOf(mol, STYLE_3D);
+      const places = solid.frames[frameOf(solid, st.frames3d[id])];
+      const byId = new Map(st.model.atoms.map((a) => [a.id, a]));
+      const from: number[] = [];
+      const to: number[] = [];
+      mol.drawnFrom.forEach((aid, i) => {
+        const a = aid == null ? undefined : byId.get(aid);
+        if (!a) return;
+        from.push(places[3 * i], places[3 * i + 1], places[3 * i + 2]);
+        to.push(a.x, a.y);
+      });
+      if (to.length >= 4) st.setTurn3d(id, turnOnto(from, to));
+    },
+    [store],
   );
   // What is under the pointer is what a key acts on: Delete deletes it, and
   // the clean-up key cleans up the structure it is in (everything, when the
@@ -349,6 +388,7 @@ function StructureCanvasContent({
   const molecules3d = useEditor((s) => s.molecules3d);
   const chosen3d = useEditor((s) => s.chosen3d);
   const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
+  const menuLink = menuMolecule ? linkOf(menuMolecule, model) : null;
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
         look: lookOf(menuMolecule, STYLE_3D),
@@ -358,6 +398,8 @@ function StructureCanvasContent({
         onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
         onCut: () => void clip.cut(menuMolecule.id),
         onCopy: () => void clip.copy(menuMolecule.id),
+        ...(menuLink === "live" || menuLink === "changed" ? { onTurnLikeDrawing: () => turnLikeDrawing(menuMolecule.id) } : {}),
+        ...(menuLink === "changed" ? { onRemake: () => remake3d(menuMolecule.id) } : {}),
       }
     : undefined;
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
@@ -677,11 +719,11 @@ function StructureCanvasContent({
           open={ask3d.open}
           onAll={() => {
             setAsk3d(null);
-            void build3d(ask3d.blocks, "all");
+            void build3d(ask3d.blocks, "all", ask3d.replacing);
           }}
           onOne={() => {
             setAsk3d(null);
-            void build3d(ask3d.blocks, "one");
+            void build3d(ask3d.blocks, "one", ask3d.replacing);
           }}
           onCancel={() => setAsk3d(null)}
         />
@@ -749,6 +791,8 @@ function StructureCanvasContent({
           }}
         />
       )}
+      {/* (a molecule in 3D made again from its changed drawing: asked of RDKit here) */}
+      <Remake3D.Provider value={remake3d}>
       <Canvas
         key={tabId}
         // The page is seen head-on, in perspective (PageCamera): drawn just
@@ -817,6 +861,7 @@ function StructureCanvasContent({
         <PanZoom2D />
         <PageCamera />
       </Canvas>
+      </Remake3D.Provider>
     </div>
   );
 }

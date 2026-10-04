@@ -95,6 +95,8 @@ export type Molecule3D = {
    * abbreviation.
    */
   drawnFrom?: (number | null)[];
+  /** What its drawing was when it was made from it (chem/make3d `signatureOf`). */
+  drawnAs?: string;
   /**
    * Its stereocentres' and double bonds' CIP labels, by atom and bond index;
    * and which of them its drawing left open - one stereoisomer of several
@@ -161,9 +163,10 @@ export type EditorState = {
   setTurn3d: (id: number, turn: Turn3D) => void;
   /**
    * Molecules in 3D made from a drawing, as one undo step: each where it is
-   * to rest, turned as `turn` says, rising out of the drawing from `from`.
+   * to rest, turned as `turn` says, rising out of the drawing from `from` -
+   * in place of the molecules `replacing`, made from it before it changed.
    */
-  riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[]) => number[];
+  riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[], replacing?: number[]) => number[];
   /** A molecule in 3D has risen. */
   risen3d: (id: number) => void;
   /** A molecule in 3D turned back to face as its file has it. */

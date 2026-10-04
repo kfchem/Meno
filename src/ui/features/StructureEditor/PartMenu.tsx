@@ -65,6 +65,10 @@ export type MenuMolecule3D = {
   /** It alone, cut or copied. */
   onCut: () => void;
   onCopy: () => void;
+  /** Turned to lie as the drawing it was made from does; unset, where it was made from none there is. */
+  onTurnLikeDrawing?: () => void;
+  /** Made again from its drawing, which has changed since; unset, where it has not. */
+  onRemake?: () => void;
 };
 
 /**
@@ -177,6 +181,8 @@ export default function PartMenu({
           ? { name: "Ball and stick", keys: "", run: () => molecule3d.onLook("balls") }
           : { name: "Space-filling", keys: "", run: () => molecule3d.onLook("space") },
         { name: "Reset orientation", keys: "", run: molecule3d.onResetTurn },
+        ...(molecule3d.onTurnLikeDrawing ? [{ name: "Turn like the drawing", keys: "", run: molecule3d.onTurnLikeDrawing }] : []),
+        ...(molecule3d.onRemake ? [{ name: "Make again from the drawing", keys: "", run: molecule3d.onRemake, divider: true }] : []),
       ]
     : [];
   const items: Item[] =

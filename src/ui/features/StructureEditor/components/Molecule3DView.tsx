@@ -143,6 +143,8 @@ export type Molecule3DViewProps = {
   linkedAtom?: number | null;
   /** Its atom under the pointer, as it comes and goes. */
   onHoverAtom?: (atom: number | null) => void;
+  /** Its drawing has changed since it was made from it: made again, asked for. */
+  onRemake?: () => void;
   /** Its stereocentres' and double bonds' labels shown: all, only those its drawing left open, or none. */
   stereoShown: "all" | "chosen" | null;
   onRisen?: () => void;
@@ -802,15 +804,26 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         ))}
       </group>
       {/* (rising out of its drawing, it shows its frames once it has risen) */}
-      {solid.frames.length > 1 && !props.rising && (
+      {(solid.frames.length > 1 || props.onRemake) && !props.rising && (
         <group ref={pill}>
-          <Frames3D
-            count={solid.frames.length}
-            frame={frameOf(solid, frame)}
-            energies={m.energies?.length === solid.frames.length ? m.energies : undefined}
-            open={props.framesOpen}
-            onFrame={props.onFrame}
-          />
+          {solid.frames.length > 1 ? (
+            <Frames3D
+              count={solid.frames.length}
+              frame={frameOf(solid, frame)}
+              energies={m.energies?.length === solid.frames.length ? m.energies : undefined}
+              open={props.framesOpen}
+              onFrame={props.onFrame}
+              below={props.onRemake && <Changed onRemake={props.onRemake} />}
+            />
+          ) : (
+            props.onRemake && (
+              <Html zIndexRange={[30, 20]}>
+                <div style={{ transform: "translate(-50%, 10px)" }}>
+                  <Changed onRemake={props.onRemake} />
+                </div>
+              </Html>
+            )
+          )}
         </group>
       )}
     </group>
@@ -857,3 +870,17 @@ function placePiece(mesh: THREE.InstancedMesh, k: number, a: THREE.Vector3, b: T
   mesh.setMatrixAt(k, mtx);
 }
 
+/** Its drawing changed since it was made from it: said quietly, under its frames, with the way to make it again. */
+function Changed({ onRemake }: { onRemake: () => void }) {
+  return (
+    <div
+      className="mt-1.5 whitespace-nowrap rounded-full border border-gh-line bg-white/90 px-2 text-[11px] leading-[20px] text-gh-gray shadow-sm"
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      Its drawing has changed ·{" "}
+      <button className="text-accel-base hover:underline" onClick={onRemake}>
+        Make again
+      </button>
+    </div>
+  );
+}

@@ -46,10 +46,11 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
       ),
     setTurn3d: (id: number, turn: Turn3D) =>
       set((prev) => ({ ...prev, turns3d: { ...prev.turns3d, [id]: turn } })),
-    riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[]) => {
+    riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[], replacing: number[] = []) => {
       if (!made.length) return [];
       const first = doc.getState().nextMolecule3dId ?? 1;
-      doc.edit(made.length > 1 ? "3D structures" : "3D structure", (d) => made.reduce((x, { m }) => ops.addMolecule3d(x, m), d));
+      const label = replacing.length ? "3D structure made again" : made.length > 1 ? "3D structures" : "3D structure";
+      doc.edit(label, (d) => made.reduce((x, { m }) => ops.addMolecule3d(x, m), replacing.length ? ops.removeMolecules3d(d, replacing) : d));
       const ids = made.map((_, i) => first + i);
       // (several - a structure's stereoisomers - come out one after another)
       const start = performance.now();

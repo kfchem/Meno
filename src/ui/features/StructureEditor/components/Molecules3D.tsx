@@ -1,6 +1,5 @@
-import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { KEY_LIGHT_FROM, STYLE_3D, type Style3D } from "../../../../lib/chem/style3d";
@@ -8,6 +7,9 @@ import { LONG_PRESS_MS, MOV_PX } from "../constants";
 import { useEditor, useEditorStore } from "../store";
 import type { Molecule3D, Turn3D } from "../store/types";
 import { atomAt, bondAt, lookOf, nearestAtom, onMolecule, poseOf, solidOf } from "../utils/molecule3d";
+import { Remake3D } from "./remake3d";
+import { linkOf } from "../chem/make3d";
+import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
 import Molecule3DView from "./Molecule3DView";
@@ -88,6 +90,9 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const rising = useEditor((s) => s.rising3d);
   // the drawing's atom under the pointer: lit in the molecules made from it
   const hoveredDrawn = useEditor((s) => s.hovered.atomId);
+  // and the drawing each was made from, which may have changed since
+  const drawing = useEditor((s) => s.model);
+  const remake = useContext(Remake3D);
   // (R and S on, every molecule's labels; off, a stereoisomer's own, which tell it from the others)
   const stereoLabels = useAppSettings((s) => s.chemistry.stereoLabels);
   const frames = useEditor((s) => s.frames3d);
@@ -417,6 +422,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           stereoShown={stereoLabels ? "all" : m.stereo?.chosen ? "chosen" : null}
           linkedAtom={hoveredDrawn != null && m.drawnFrom ? (m.drawnFrom.indexOf(hoveredDrawn) >= 0 ? m.drawnFrom.indexOf(hoveredDrawn) : null) : null}
           onHoverAtom={(atom) => store.getState().setHoveredAtom3d(m.id, atom)}
+          onRemake={remake && linkOf(m, drawing) === "changed" ? () => remake(m.id) : undefined}
         />
       ))}
       {leaving.map(({ m, turn, frame }) => (
