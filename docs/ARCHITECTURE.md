@@ -233,7 +233,8 @@ PyConsole ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_set
 The chemistry worker (`resources/workers/chem_worker.py`) is a sidecar of
 the `chem` profile, started by `lib/rdkit/worker.ts` and asked through
 `lib/rdkit/client.ts`: JSON lines, a fixed set of requests (ping,
-to_smiles, from_smiles, clean, analyse), MOL blocks in (written by
+to_smiles, from_smiles, clean, analyse, and for 3D open_stereo,
+conformers and drawing_of), MOL blocks in (written by
 `lib/rdkit/molblock.ts`, a label that is not an element as `*`) and V3000
 blocks or coordinates out. It runs no code it is sent, and the app keeps it
 off the network. Its tests need RDKit and run by hand
@@ -248,6 +249,19 @@ turned over, and its chains turned over their single bonds, whichever
 lies closest - keeping the drawn wedges when they still say the same
 stereochemistry and otherwise giving RDKit's; the editor applies it as one
 undo step.
+
+A drawn structure made in 3D (`StructureEditor/chem/make3d.ts`, stage 2 of
+docs/WORKSPACE.md): `open_stereo` says what its drawing leaves open, which
+Meno asks about first; `conformers` makes each stereoisomer asked for
+(ETKDG, then MMFF94 or UFF, on every core; the same shape twice kept once;
+lowest first, each laid over the first, with every centre's CIP label);
+and the molecule in 3D that comes of it keeps which drawing atom each of
+its atoms is and what the drawing was (`drawnFrom`, `drawnAs`;
+`utils/drawnLink`), so that hover is shared and a changed drawing is seen.
+`drawing_of` goes the other way: a molecule in 3D's heavy atoms in their
+order, wedged as they are in 3D, its bonds' orders found where a file of
+coordinates gave none, for Meno's engine to draw. These take as long as
+they take (`CONFORMERS_MS`, five minutes at most).
 
 The venv lives under the app data dir at `uv/<profile>/venv`; a stamp file
 (`uv/stamps/<profile>.json`) stores the lock-file hash so setup reruns only when
