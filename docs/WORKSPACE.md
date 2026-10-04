@@ -141,13 +141,17 @@ for each topic (one pull request per dependent chain).
   light of their own, drawn on demand.
 - In the document: place, look, frames, energies and measurements, undone;
   the clipboard and the workspace file.
+- Pictures: in a copy's EMF, SVG and PNG, molecules in 3D are drawn as the
+  canvas draws them - lit, in depth - each seen from straight above its
+  centre, a bitmap at 300 dpi. A structure opened from Word or PowerPoint
+  goes back with its molecules in 3D, turned as they are, and one holding
+  only molecules in 3D is updated too.
 - Opening: XYZ files, and 3D MOL and SD records, by Open, a drop or a new
   tab.
 - Working them: as the pointer table has it, with the right-click menu.
 - The old viewer: retired, and the workflow's 3D node is a canvas.
 
 Left for later:
-- pictures of molecules in 3D for Office;
 - values of measurements that overlap each other;
 - energies only from XYZ comment lines, until stage 3's readers.
 
@@ -278,5 +282,3 @@ Taken while stage 1 was built, on 2026-10-03:
   instanced from the start.
 - **Testing.** The GUI harness sees a WebGL canvas only while its window
   is on screen.
-- **Office.** A copy of 3D molecules alone carries no picture yet, so
-  Word and PowerPoint get nothing to show.
