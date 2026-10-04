@@ -292,7 +292,8 @@ Taken while stage 1 was built, on 2026-10-03:
 - **Told apart.** A stereoisomer's centres that were left open carry
   their R and S always, every centre's while R and S are shown. They are
   as large as the drawing's R and S, set clear of their atom in the widest
-  gap between its bonds as it is seen, and clear of each other.
+  gap between its bonds as it is seen - or the nearest way round that
+  covers no other atom - and clear of each other.
 - **Tied to the drawing.** An atom hovered in either lights in the other.
   Drawn otherwise since - atoms, bonds or wedges, not where they are - the
   molecule stays as it is and says so under its frames, with *Make
