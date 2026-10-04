@@ -239,13 +239,22 @@ describe("molecules in 3D and their drawings", () => {
     expect(state().molecules3d.map((m) => m.id)).toEqual([1, 2]);
   });
 
-  it("are made again in place of the one before, as one step", () => {
+  it("are made again in place of the one before, as one step, which an undo puts back as it was turned", () => {
     const { doc, state } = editor();
-    state().riseMolecules3d([{ m: { ...water, at: { x: 0, y: 0 } }, turn: [0, 0, 0, 1], from: { x: 0, y: 0 } }], [1]);
+    const turned: [number, number, number, number] = [0, 0, 1, 0];
+    state().setTurn3d(1, turned);
+    state().riseMolecules3d([{ m: { ...water, at: { x: 0, y: 0 } }, turn: [0, 1, 0, 0], from: { x: 0, y: 0 } }], [1]);
     expect(state().molecules3d.map((m) => m.id)).toEqual([2, 3]);
+    expect(state().turns3d[1]).toBeUndefined();
     expect(doc.history().undoLabel).toBe("3D structure made again");
     doc.undo();
     expect(state().molecules3d.map((m) => m.id)).toEqual([1, 2]);
+    expect(state().turns3d[1]).toEqual(turned);
+    expect(state().turns3d[3]).toBeUndefined();
+    // (and a redo, the new one as it was made)
+    doc.redo();
+    expect(state().turns3d[3]).toEqual([0, 1, 0, 0]);
+    expect(state().turns3d[1]).toBeUndefined();
   });
 
   it("are drawn as a formula, added to the drawing and tied to it, as one step", () => {
