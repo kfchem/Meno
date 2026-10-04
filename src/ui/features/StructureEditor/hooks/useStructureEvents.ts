@@ -21,8 +21,8 @@ import { addsToSelection } from "../../../../lib/doc/shortcuts";
 export function useStructureEvents(
   initialPayload?: string,
   initialFilename?: string,
-  /** A file has been opened over what the canvas held: its name, for the tab. */
-  onOpened?: (filename: string) => void,
+  /** Names the canvas's tab: for a file opened over what it held. */
+  nameTab?: (label: string) => void,
 ) {
   const store = useEditorStore();
 
@@ -415,7 +415,7 @@ export function useStructureEvents(
       // The canvas is that file now: the tab is named for it, and Save
       // asks where, rather than writing over the file it was saved to.
       store.getState().markOpenedOver(f.name);
-      onOpened?.(f.name);
+      nameTab?.(f.name);
       setImportError(null);
     } catch (err) {
       reportImportError("replace", err);

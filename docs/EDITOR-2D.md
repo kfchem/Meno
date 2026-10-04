@@ -456,7 +456,9 @@ traced from reference drawings.
 - Open (the folder button) puts a file in place of what is drawn, as an
   edit that can be undone. The tab takes the file's name, and the canvas
   is saved nowhere then: the next Save asks where, suggesting that name,
-  rather than writing over the file it was saved to before.
+  rather than writing over the file it was saved to before. A save names
+  the tab for its file too. A canvas opened from Word or PowerPoint keeps
+  the document's name either way.
 - Import that keeps charges, isotopes, radicals, atom lists and S-groups, and
   V3000 reactions.
 - SMILES in and out. (PR #52: a SMILES card on the canvas)

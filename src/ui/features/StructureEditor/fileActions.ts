@@ -1,6 +1,6 @@
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { createSVG, layoutMolecule, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
 import { writeMolfile, writeSdf } from "../../../lib/chem/molWriter";
@@ -13,6 +13,11 @@ import { useEditorStore } from "./store";
 import type { Drawn, EditorState } from "./store/types";
 import { chemistry } from "../../../lib/chem/molecule";
 import { schemeOutlines } from "../../../lib/chem/reactionScheme";
+
+/** A file's name without its folder. */
+export function fileNameOf(path: string): string {
+  return path.split(/[\\/]/).pop() ?? "";
+}
 
 /** A file's name without its folder or its extension. */
 function stem(path: string): string {
@@ -120,9 +125,12 @@ export function drawingSvg(
  * the document is then saved, and the tab's unsaved mark goes. An export is
  * a copy, and leaves that alone. `error` says what went wrong, if anything.
  */
-export function useFileActions() {
+export function useFileActions(nameTab?: (label: string) => void) {
   const store = useEditorStore();
   const [error, setError] = useState<string | null>(null);
+  // (the tab is named for the file it is saved to, as for one opened in it)
+  const naming = useRef(nameTab);
+  naming.current = nameTab;
 
   const attempt = useCallback(async (what: string, run: () => Promise<void>) => {
     try {
@@ -137,6 +145,7 @@ export function useFileActions() {
     async (path: string) => {
       await writeTextFile(path, structureFileText(drawnOf(store.getState()), path));
       store.getState().markSavedAs(path);
+      naming.current?.(fileNameOf(path));
     },
     [store],
   );

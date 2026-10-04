@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drawingSvg, exportPxPerWorld, structureFileText, suggestedSavePath } from "./fileActions";
+import { drawingSvg, exportPxPerWorld, fileNameOf, structureFileText, suggestedSavePath } from "./fileActions";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { ACS_1996, RSC } from "../../../lib/chem/style";
 import type { Model } from "./store/types";
@@ -42,6 +42,13 @@ describe("suggestedSavePath", () => {
   it("suggests a file Meno does not write as a MOL file of that name, or an RXN file for a reaction", () => {
     expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, false)).toBe("conformers.mol");
     expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, true)).toBe("conformers.rxn");
+  });
+});
+
+describe("fileNameOf", () => {
+  it("names a file as a tab shows it: without its folder, on either system", () => {
+    expect(fileNameOf("/Users/me/work/ethanol.mol")).toBe("ethanol.mol");
+    expect(fileNameOf("C:\\Users\\me\\work\\ethanol.sdf")).toBe("ethanol.sdf");
   });
 });
 

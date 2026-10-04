@@ -89,7 +89,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
         document={document as DocumentStore<StructureDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
-        onOpened={renameTab}
+        nameTab={renameTab}
       />
     ),
     create: (label) => create(label, "2d", {}),
@@ -142,7 +142,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
         officeId={(content as any)?.data?.officeId}
-        onOpened={renameTab}
+        nameTab={renameTab}
       />
     ),
     create: (label) => create(label, "structure", {}),
