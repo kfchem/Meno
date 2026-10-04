@@ -21,6 +21,9 @@ import {
   turnedInPlane,
   turnedTogether,
   WORLD_PER_ANGSTROM,
+  labelSpot,
+  populations,
+  widestWay,
   type Turning3D,
 } from "./molecule3d";
 import type { SolidMark } from "../../../../lib/chem/layout2d";
@@ -296,5 +299,102 @@ describe("a molecule in 3D in a picture", () => {
   it("is balls alone, space-filling", () => {
     const marks = pictureMarks({ ...ethane(), look: "space" }, STYLE_3D);
     expect(marks.every((x) => x.kind === "ball")).toBe(true);
+  });
+});
+
+describe("widestWay", () => {
+  const near = (v: { x: number; y: number }, x: number, y: number) => {
+    expect(v.x).toBeCloseTo(x);
+    expect(v.y).toBeCloseTo(y);
+  };
+
+  it("goes halfway across the widest gap between the neighbours", () => {
+    // (three bonds, two of them close together on the right: out to the left)
+    near(widestWay([-0.3, 0.3, Math.PI / 2]), Math.cos((Math.PI / 2 + 2 * Math.PI - 0.3) / 2), Math.sin((Math.PI / 2 + 2 * Math.PI - 0.3) / 2));
+  });
+
+  it("goes straight away from a lone neighbour, and up between two opposite ones", () => {
+    near(widestWay([0]), -1, 0);
+    near(widestWay([0, Math.PI]), 0, -1);
+  });
+
+  it("goes up and to the right with no neighbours", () => {
+    near(widestWay([]), Math.SQRT1_2, -Math.SQRT1_2);
+  });
+});
+
+describe("labelSpot", () => {
+  const o = { x: 100, y: 100 };
+  const half = { x: 12, y: 6 };
+  const right = { x: 1, y: 0 };
+
+  // (how far a box's nearest point is from a point)
+  const gapTo = (p: { x: number; y: number }, b: { x: number; y: number; hx: number; hy: number }) =>
+    Math.hypot(Math.max(Math.abs(p.x - b.x) - b.hx, 0), Math.max(Math.abs(p.y - b.y) - b.hy, 0));
+
+  it("stands the way preferred, its nearest edge the reach away, when nothing is there", () => {
+    const spot = labelSpot(o, 10, half, right, [], []);
+    expect(spot.x).toBeCloseTo(122);
+    expect(spot.y).toBeCloseTo(100);
+    // (on a slant too: its corner no nearer its atom than the reach)
+    const slant = labelSpot(o, 10, half, { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, [], []);
+    expect(gapTo(o, slant)).toBeCloseTo(10);
+  });
+
+  it("goes round to the nearest clear way when an atom is in the way - one in front of it, say", () => {
+    const spot = labelSpot(o, 10, half, right, [{ x: 124, y: 100, r: 8 }], []);
+    const clear = (b: { x: number; y: number; r: number }) =>
+      Math.hypot(Math.max(Math.abs(b.x - spot.x) - spot.hx, 0), Math.max(Math.abs(b.y - spot.y) - spot.hy, 0)) >= b.r;
+    expect(clear({ x: 124, y: 100, r: 8 })).toBe(true);
+    // (still on the preferred side: up or down a little, not round to the left)
+    expect(spot.x).toBeGreaterThan(o.x);
+  });
+
+  it("keeps clear of the labels already placed", () => {
+    const first = labelSpot(o, 10, half, right, [], []);
+    const second = labelSpot({ x: 104, y: 100 }, 10, half, right, [], [first]);
+    const overlap = Math.abs(second.x - first.x) < 24 && Math.abs(second.y - first.y) < 12;
+    expect(overlap).toBe(false);
+  });
+
+  it("goes a little further out, the same way round, when every way at the reach is taken", () => {
+    // (a ring of small atoms just beyond the reach, all the way round)
+    const ring = Array.from({ length: 48 }, (_, k) => ({ x: 100 + 13 * Math.cos((k * Math.PI) / 24), y: 100 + 13 * Math.sin((k * Math.PI) / 24), r: 1.5 }));
+    const spot = labelSpot(o, 10, half, right, ring, []);
+    expect(ring.every((b) => gapTo(b, spot) >= b.r)).toBe(true);
+    expect(spot.x).toBeGreaterThan(o.x);
+  });
+
+  it("would sooner touch two atoms at their edges than hide one", () => {
+    // (one atom right where the label would go, two others touching every other way)
+    const balls = [
+      { x: 122, y: 100, r: 6 },
+      ...Array.from({ length: 23 }, (_, k) => {
+        const a = ((k + 1) * Math.PI) / 12;
+        return { x: 100 + 24 * Math.cos(a), y: 100 + 24 * Math.sin(a), r: 3 };
+      }),
+    ];
+    const spot = labelSpot(o, 10, half, right, balls, []);
+    expect(gapTo({ x: 122, y: 100 }, spot)).toBeGreaterThan(0);
+  });
+
+  it("takes the way that covers least where none is clear", () => {
+    const ring = Array.from({ length: 24 }, (_, k) => ({ x: 100 + 30 * Math.cos((k * Math.PI) / 12), y: 100 + 30 * Math.sin((k * Math.PI) / 12), r: k === 6 ? 2 : 12 }));
+    const spot = labelSpot(o, 10, half, right, ring, []);
+    // (the small one is straight down, on a screen)
+    expect(spot.y).toBeGreaterThan(o.y);
+    expect(Math.abs(spot.x - o.x)).toBeLessThan(1e-9);
+  });
+});
+
+describe("populations", () => {
+  const HARTREE = 627.509474;
+  it("shares a conformer set by Boltzmann at room temperature, adding up to one", () => {
+    expect(populations([0, 0])).toEqual([0.5, 0.5]);
+    // 1.364 kcal/mol above: a tenth as much, at 298 K
+    const [low, high] = populations([-0.5, -0.5 + 1.3642 / HARTREE]);
+    expect(low / high).toBeCloseTo(10, 1);
+    expect(low + high).toBeCloseTo(1, 12);
+    expect(populations([])).toEqual([]);
   });
 });

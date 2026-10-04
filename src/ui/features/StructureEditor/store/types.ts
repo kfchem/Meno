@@ -89,9 +89,27 @@ export type Molecule3D = {
   measures?: Measure3D[];
   /** The file it came from. */
   name?: string;
+  /**
+   * The drawing it was made from: the drawing's atom each of its atoms is,
+   * by id; null, a hydrogen made for it or an atom written out of an
+   * abbreviation.
+   */
+  drawnFrom?: (number | null)[];
+  /** What its drawing was when it was made from it (chem/make3d `signatureOf`). */
+  drawnAs?: string;
+  /** Its frames are conformers - not a path through time - so each is as likely as its energy says (`populations`). */
+  conformerSet?: boolean;
+  /**
+   * Its stereocentres' and double bonds' CIP labels, by atom and bond index;
+   * and which of them its drawing left open - one stereoisomer of several
+   * made from it - so that it is told apart from the others.
+   */
+  stereo?: { atoms: Record<number, string>; bonds: Record<number, string>; chosen?: { atoms: number[]; bonds: number[] } };
 };
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];
+/** A molecule in 3D rising out of its drawing (EditorState `rising3d`). */
+export type Rising3D = { from: { x: number; y: number }; start: number; flat?: number[] };
 /**
  * Structures with the arrows and "+" signs drawn among them: what a copy
  * takes, a picture shows and a paste brings.
@@ -116,6 +134,8 @@ export type EditorState = {
   hovered: { atomId: number | null; bondId: number | null };
   /** The molecule in 3D under the pointer: on its atoms, its bonds or within its rings. */
   hovered3d: { id: number } | null;
+  /** The atom of a molecule in 3D under the pointer, by index: lit in its drawing too. */
+  hoveredAtom3d: { id: number; atom: number } | null;
   /** The molecules in 3D on the page. */
   molecules3d: Molecule3D[];
   /** How each molecule in 3D is turned, by id; unturned if absent. */
@@ -125,6 +145,16 @@ export type EditorState = {
   /** The molecules in 3D selected, whole, by id: besides `sel`, which is the drawing's. */
   sel3d: Set<number>;
   /**
+   * Molecules in 3D rising out of their drawing, by id: where each started,
+   * over the drawing, and when (`performance.now()`); and where each of its
+   * atoms started - on its drawing's atom - about its centre, as it is
+   * turned. Gone once risen.
+   */
+  rising3d: Record<number, Rising3D>;
+  /** Molecules in 3D shown with all their frames at once - their conformers overlaid - by id. */
+  overlay3d: Record<number, true>;
+  setOverlay3d: (id: number, on: boolean) => void;
+  /**
    * The atoms and bonds chosen in one molecule in 3D, by index, each in the
    * order chosen: what a measurement is of (utils/molecule3d `chosenPath`).
    */
@@ -133,7 +163,23 @@ export type EditorState = {
   hoveredMeasure3d: { id: number; measure: number } | null;
   setHoveredMeasure3d: (h: { id: number; measure: number } | null) => void;
   setHovered3d: (h: { id: number } | null) => void;
+  /** The atom of molecule `id` under the pointer; null, none of its atoms. */
+  setHoveredAtom3d: (id: number, atom: number | null) => void;
   setTurn3d: (id: number, turn: Turn3D) => void;
+  /**
+   * Molecules in 3D made from a drawing, as one undo step: each where it is
+   * to rest, turned as `turn` says, rising out of the drawing from `from` -
+   * in place of the molecules `replacing`, made from it before it changed.
+   */
+  riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[], replacing?: number[]) => number[];
+  /** A molecule in 3D has risen. */
+  risen3d: (id: number) => void;
+  /**
+   * A molecule in 3D drawn as a formula: `model` added to the drawing, and
+   * the molecule tied to it - `link`, each of its atoms' atom in `model` -
+   * as one undo step.
+   */
+  drawFormula3d: (id: number, model: Model, link: (number | null)[]) => void;
   /** A molecule in 3D turned back to face as its file has it. */
   resetTurn3d: (id: number) => void;
   setFrame3d: (id: number, frame: number) => void;

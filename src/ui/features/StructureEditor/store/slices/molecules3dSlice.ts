@@ -2,9 +2,10 @@ import type { StoreApi } from "zustand";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
 import type { StructureDocument } from "../../document";
-import type { EditorState, Look3D, Molecule3D, Turn3D } from "../types";
+import type { EditorState, Look3D, Model, Molecule3D, Rising3D, Turn3D } from "../types";
 import { chosenPath } from "../../utils/molecule3d";
 import { noteTurns } from "../turnJournal";
+import { signatureOf } from "../../utils/drawnLink";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -13,7 +14,10 @@ type GetState = StoreApi<EditorState>["getState"];
 const MOST_CHOSEN = 4;
 const MOST_BONDS = 3;
 
-/** How many turns in place have been kept as steps: each its own. */
+/** Molecules made in 3D together rise one after another, this far apart. */
+const RISE_STAGGER_MS = 120;
+
+/** How many steps have been kept with turns of their own: each its own. */
 let kept = 0;
 
 /**
@@ -21,13 +25,20 @@ let kept = 0;
  * measured on them are the document's, and are undone; how they are turned,
  * which frame they show, which is under the pointer and what is selected or
  * chosen of them are the view's - save that a turn of several as one body,
- * which moves them, and a turn by the selection's handle are undone with
- * their turns (../turnJournal).
+ * which moves them, a turn by the selection's handle and molecules made
+ * (or made again) are undone with their turns (../turnJournal).
  */
 export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, set: SetState, get: GetState) {
   return {
     setHovered3d: (h: { id: number } | null) =>
       set((prev) => (prev.hovered3d?.id === h?.id ? prev : { ...prev, hovered3d: h })),
+    setHoveredAtom3d: (id: number, atom: number | null) =>
+      set((prev) => {
+        const was = prev.hoveredAtom3d;
+        // (one molecule's atom left as another's is come to: that one's stays)
+        if (atom == null) return was?.id === id ? { ...prev, hoveredAtom3d: null } : prev;
+        return was?.id === id && was.atom === atom ? prev : { ...prev, hoveredAtom3d: { id, atom } };
+      }),
     setHoveredMeasure3d: (h: { id: number; measure: number } | null) =>
       set((prev) =>
         prev.hoveredMeasure3d?.id === h?.id && prev.hoveredMeasure3d?.measure === h?.measure
@@ -36,6 +47,54 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
       ),
     setTurn3d: (id: number, turn: Turn3D) =>
       set((prev) => ({ ...prev, turns3d: { ...prev.turns3d, [id]: turn } })),
+    riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[], replacing: number[] = []) => {
+      if (!made.length) return [];
+      const first = doc.getState().nextMolecule3dId ?? 1;
+      const label = replacing.length ? "3D structure made again" : made.length > 1 ? "3D structures" : "3D structure";
+      const ids = made.map((_, i) => first + i);
+      // (an undo puts back how the one made again was turned; a redo, how
+      // the ones made were)
+      const before = doc.getState();
+      const was = get().turns3d;
+      const turnsBefore: Record<number, Turn3D | undefined> = Object.fromEntries(replacing.map((id) => [id, was[id]]));
+      const turnsAfter: Record<number, Turn3D> = Object.fromEntries(made.map(({ turn }, i) => [ids[i], turn]));
+      doc.edit(label, (d) => made.reduce((x, { m }) => ops.addMolecule3d(x, m), replacing.length ? ops.removeMolecules3d(d, replacing) : d));
+      // (several - a structure's stereoisomers - come out one after another)
+      const start = performance.now();
+      set((prev) => ({
+        ...prev,
+        turns3d: { ...prev.turns3d, ...turnsAfter },
+        rising3d: {
+          ...prev.rising3d,
+          ...Object.fromEntries(made.map(({ from, flat }, i) => [ids[i], { from, start: start + i * RISE_STAGGER_MS, flat }])),
+        },
+      }));
+      const after = doc.getState();
+      if (after !== before) noteTurns(doc, `made-${++kept}`, before, after, turnsBefore, turnsAfter);
+      return ids;
+    },
+    setOverlay3d: (id: number, on: boolean) =>
+      set((prev) => {
+        if (!!prev.overlay3d[id] === on) return prev;
+        const { [id]: _, ...rest } = prev.overlay3d;
+        return { ...prev, overlay3d: on ? { ...rest, [id]: true as const } : rest };
+      }),
+    drawFormula3d: (id: number, model: Model, link: (number | null)[]) => {
+      // (the drawing's atoms are numbered on from here, in their order)
+      const start = doc.getState().nextId;
+      const newId = new Map(model.atoms.map((a, k) => [a.id, start + k]));
+      const drawnFrom = link.map((a) => (a == null ? null : (newId.get(a) ?? null)));
+      doc.edit("draw as formula", (d) => {
+        const drawn = ops.appendModel(d, model);
+        return ops.linkMolecule3d(drawn, id, drawnFrom, signatureOf(drawn.model, drawnFrom.filter((a): a is number => a != null)));
+      });
+    },
+    risen3d: (id: number) =>
+      set((prev) => {
+        if (!(id in prev.rising3d)) return prev;
+        const { [id]: _, ...rest } = prev.rising3d;
+        return { ...prev, rising3d: rest };
+      }),
     resetTurn3d: (id: number) =>
       set((prev) => {
         if (!(id in prev.turns3d)) return prev;

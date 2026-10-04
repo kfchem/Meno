@@ -10,6 +10,8 @@ import {
 import {
   bondSide,
   exitDistance,
+  MARK_MIN_PX,
+  MARK_SCALE,
   placeMark,
   valenceMessage,
   waysOut,
@@ -23,10 +25,6 @@ import { usePresence } from "../../../theme/presence";
 
 /** Marks sit over the drawing, and under the canvas's buttons and cards. */
 const Z_RANGE = [20, 10];
-/** A stereodescriptor's letters, against the labels'. */
-const MARK_SCALE = 0.6;
-/** The smallest a mark's letters get, however far out the view is. */
-const MIN_FONT_PX = 9;
 
 /**
  * RDKit's marks on the structure: a ring round each atom with more bonds
@@ -68,7 +66,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
 
   const z = Math.max(zoom, 1e-6);
   const labelFont = opts.units === "px" ? opts.fontPx / z : opts.fontPx;
-  const fontPx = Math.max(MIN_FONT_PX, labelFont * MARK_SCALE * z);
+  const fontPx = Math.max(MARK_MIN_PX, labelFont * MARK_SCALE * z);
 
   // R, S, E and Z, each placed clear of the bonds, the labels and the
   // marks placed before it

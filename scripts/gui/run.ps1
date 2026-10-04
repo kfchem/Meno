@@ -128,11 +128,11 @@ function Invoke-MenoMenu {
     #>
     param([Parameter(Mandatory)] [ValidateSet(
         "Open...", "Save", "Save As...", "Export as SVG...", "SMILES...", "Clean up all",
-        "Fit to content", "Show R and S", "Drawing style...")] [string] $Item)
+        "3D structures", "Fit to content", "Show R and S", "Drawing style...")] [string] $Item)
     $at = @{
         "Open..." = 170; "Save" = 234; "Save As..." = 298; "Export as SVG..." = 362
-        "SMILES..." = 486; "Clean up all" = 550; "Fit to content" = 676; "Show R and S" = 740
-        "Drawing style..." = 866
+        "SMILES..." = 486; "Clean up all" = 550; "3D structures" = 614; "Fit to content" = 740
+        "Show R and S" = 804; "Drawing style..." = 930
     }
     Invoke-MenoClick -X 42 -Y 42
     Start-Sleep -Milliseconds 400

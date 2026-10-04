@@ -293,6 +293,52 @@ Taken on 2026-10-04:
   (the close button and its neighbours) at some stage.
 - **Closing the last tab quits Meno.**
 
+## Stage 2, as built
+
+- **A drawing to 3D.** A structure's right-click menu, or a selection's,
+  has *3D structure*; Meno's menu (and the right-click menu on empty
+  space) has *3D structures*, for what is selected or else everything
+  drawn. Stereo drawn without a configuration is ringed on
+  the drawing while Meno asks what to make: every stereoisomer it gives,
+  one, or none for now. Each is made as a conformer set (RDKit's ETKDG,
+  then MMFF94) and comes onto the page as a molecule in 3D, its frames the
+  conformers, lowest first. Of two enantiomers, one is made as the other's
+  mirror image, so the two have the same conformers and shares.
+- **Rising out of the drawing.** Turned to lie over the drawing (Horn's
+  quaternion, `utils/align3d`), its atoms grow on the drawing's, go over
+  to their places in 3D as it comes up off the page, and it moves to rest
+  beside the drawing: to its right, its left, below or above - the first
+  that is in view as it is seen - the view taking it in where none is.
+  Several rise one after another, in a row.
+- **Told apart.** A stereoisomer's centres that were left open carry
+  their R and S always, every centre's while R and S are shown. They are
+  as large as the drawing's R and S, set clear of their atom in the widest
+  gap between its bonds as it is seen - or the nearest way round that
+  covers no other atom - and clear of each other.
+- **Tied to the drawing.** An atom hovered in either lights in the other.
+  Drawn otherwise since - atoms, bonds or wedges, not where they are - the
+  molecule stays as it is and says so under its frames, with *Make
+  again*, made where it stood. What the drawing leaves open is made as
+  the molecule had it (so an (S) stays (S)), and Meno asks only about
+  stereo that is new. An undo brings the molecule back as it was turned.
+  *Turn like the drawing* is in its menu.
+  Pasted with its drawing, it is tied to the pasted drawing.
+- **And back.** *Draw as formula*: a molecule in 3D with no drawing is
+  drawn by Meno's engine, wedged as it is in 3D, its bonds' orders found
+  where a file of coordinates gave none, and tied to it.
+- **Conformer sets.** Each conformer's share at room temperature
+  (Boltzmann) stands beside its energy; *Show all conformers* draws the
+  others over the one shown, each as dark as it is likely.
+
+Taken on 2026-10-04, for stage 2:
+
+- *3D structure* is on a structure's right-click menu and in Meno's menu.
+- A drawing changed after its molecule in 3D was made: the molecule stays,
+  and is made again only when asked.
+- What is made is a conformer set from the first.
+- Stereo left open is asked about before anything is made, and *all the
+  stereoisomers* is one of the answers.
+
 ## Risks
 
 - **The 2D drawing changing.** The thinnest lines and the place of every

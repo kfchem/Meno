@@ -132,6 +132,160 @@ class ChemWorkerTest(unittest.TestCase):
         block = v2000([("C", 0, 0), ("*", 1.5, 0)], [(0, 1, 1, None)])
         self.assertEqual(ask("to_smiles", molblock=block)["result"]["smiles"], "*C")
 
+    def test_finds_the_stereocentres_and_double_bonds_left_open(self):
+        # PCPA's centre is drawn on a wedge: nothing open
+        self.assertEqual(ask("open_stereo", molblock=PCPA)["result"], {"atoms": [], "bonds": [], "isomers": 1})
+        # butan-2-ol drawn flat: its carbinol carbon is open, two isomers
+        flat = v2000(
+            [("C", 0, 0), ("C", 1.3, 0.75), ("C", 2.6, 0), ("C", 3.9, 0.75), ("O", 1.3, 2.25)],
+            [(0, 1, 1, None), (1, 2, 1, None), (2, 3, 1, None), (1, 4, 1, None)],
+        )
+        self.assertEqual(ask("open_stereo", molblock=flat)["result"], {"atoms": [1], "bonds": [], "isomers": 2})
+
+    def test_makes_conformers_keeping_the_atoms_and_the_drawn_wedge(self):
+        made = ask("conformers", molblock=PCPA, count=8)["result"]["isomers"]
+        self.assertEqual(len(made), 1)
+        mol = made[0]
+        # the drawn atoms first, in their order, the hydrogens made for them after
+        self.assertEqual([a["el"] for a in mol["atoms"][:13]], ["C"] * 9 + ["O", "O", "N", "Cl"])
+        self.assertTrue(all(a["el"] == "H" for a in mol["atoms"][13:]))
+        self.assertEqual(len(mol["atoms"]), 13 + 10)
+        # lowest energy first, every frame with every atom
+        self.assertEqual(mol["energies"], sorted(mol["energies"]))
+        self.assertTrue(all(len(f) == 3 * len(mol["atoms"]) for f in mol["frames"]))
+        self.assertEqual(len(mol["frames"]), len(mol["energies"]))
+        # the wedge's configuration, read back from the 3D structure
+        from rdkit import Chem
+
+        built = Chem.RWMol()
+        for a in mol["atoms"]:
+            built.AddAtom(Chem.Atom(a["el"]))
+        for b in mol["bonds"]:
+            built.AddBond(b["a1"], b["a2"], {1: Chem.BondType.SINGLE, 2: Chem.BondType.DOUBLE}[b["order"]])
+        conf = Chem.Conformer(len(mol["atoms"]))
+        xyz = mol["frames"][0]
+        for i in range(len(mol["atoms"])):
+            conf.SetAtomPosition(i, (xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2]))
+        built = built.GetMol()
+        Chem.SanitizeMol(built)
+        built.AddConformer(conf)
+        Chem.AssignStereochemistryFrom3D(built)
+        drawn = ask("analyse", molblock=PCPA)["result"]["atoms"][7]["cip"]
+        self.assertEqual(Chem.FindMolChiralCenters(built)[0], (7, drawn))
+
+    def test_makes_each_stereoisomer_when_asked_for_all(self):
+        # 3-aminobutan-2-ol drawn flat: two open centres, four isomers
+        flat = v2000(
+            [("C", 0, 0), ("C", 1.3, 0.75), ("C", 2.6, 0), ("C", 3.9, 0.75), ("O", 1.3, 2.25), ("N", 2.6, -1.5)],
+            [(0, 1, 1, None), (1, 2, 1, None), (2, 3, 1, None), (1, 4, 1, None), (2, 5, 1, None)],
+        )
+        one = ask("conformers", molblock=flat, count=4)["result"]["isomers"]
+        every = ask("conformers", molblock=flat, count=4, isomers="all")["result"]["isomers"]
+        self.assertEqual(len(one), 1)
+        self.assertEqual(len(every), 4)
+        chosen = {tuple(sorted(i["chosen"]["atoms"].items())) for i in every}
+        self.assertEqual(len(chosen), 4)
+        self.assertTrue(all(set(i["chosen"]["atoms"]) == {"1", "2"} for i in every))
+        # every centre labelled, the ones left open among them
+        self.assertTrue(all(i["cip"]["atoms"] == i["chosen"]["atoms"] for i in every))
+        drawn = ask("conformers", molblock=PCPA, count=2)["result"]["isomers"][0]
+        self.assertEqual(drawn["cip"]["atoms"], {"7": ask("analyse", molblock=PCPA)["result"]["atoms"][7]["cip"]})
+        self.assertEqual(drawn["chosen"], {"atoms": {}, "bonds": {}})
+
+    def test_makes_an_enantiomer_as_the_mirror_image_of_the_other(self):
+        # 3-aminobutan-2-ol's four isomers: two pairs of enantiomers
+        flat = v2000(
+            [("C", 0, 0), ("C", 1.3, 0.75), ("C", 2.6, 0), ("C", 3.9, 0.75), ("O", 1.3, 2.25), ("N", 2.6, -1.5)],
+            [(0, 1, 1, None), (1, 2, 1, None), (2, 3, 1, None), (1, 4, 1, None), (2, 5, 1, None)],
+        )
+        every = ask("conformers", molblock=flat, count=6, isomers="all")["result"]["isomers"]
+        flip = {"R": "S", "S": "R"}
+        by = {tuple(sorted(i["cip"]["atoms"].items())): i for i in every}
+        for labels, iso in by.items():
+            twin = by[tuple((k, flip[v]) for k, v in labels)]
+            self.assertEqual(twin["energies"], iso["energies"])
+            mirrored = [-v if k % 3 == 0 else v for k, v in enumerate(iso["frames"][0])]
+            self.assertEqual(twin["frames"][0], mirrored)
+        # and the same when each is drawn on its own: PCPA's wedge turned over
+        down = PCPA.replace("  8 12  1  1", "  8 12  1  6")
+        up = ask("conformers", molblock=PCPA, count=6)["result"]["isomers"][0]
+        other = ask("conformers", molblock=down, count=6)["result"]["isomers"][0]
+        self.assertNotEqual(up["cip"], other["cip"])
+        self.assertEqual(up["energies"], other["energies"])
+
+    def test_keeps_the_configuration_of_a_molecule_made_before(self):
+        # butan-2-ol drawn flat, made in 3D as each isomer; made again from
+        # the same drawing, or from one with a chlorine added, like it
+        flat = v2000(
+            [("C", 0, 0), ("C", 1.3, 0.75), ("C", 2.6, 0), ("C", 3.9, 0.75), ("O", 1.3, 2.25)],
+            [(0, 1, 1, None), (1, 2, 1, None), (2, 3, 1, None), (1, 4, 1, None)],
+        )
+        grown = v2000(
+            [("C", 0, 0), ("C", 1.3, 0.75), ("C", 2.6, 0), ("C", 3.9, 0.75), ("O", 1.3, 2.25), ("Cl", 5.2, 0)],
+            [(0, 1, 1, None), (1, 2, 1, None), (2, 3, 1, None), (1, 4, 1, None), (3, 5, 1, None)],
+        )
+
+        def volume(frame, centre, a, b, c):
+            # (the sign says which way round a, b and c go about the centre)
+            p = lambda i: frame[3 * i : 3 * i + 3]
+            o = p(centre)
+            u, v, w = ([p(i)[k] - o[k] for k in range(3)] for i in (a, b, c))
+            return u[0] * (v[1] * w[2] - v[2] * w[1]) - u[1] * (v[0] * w[2] - v[2] * w[0]) + u[2] * (v[0] * w[1] - v[1] * w[0])
+
+        for iso in ask("conformers", molblock=flat, count=4, isomers="all")["result"]["isomers"]:
+            f = iso["frames"][0]
+            like = {str(i): f[3 * i : 3 * i + 3] for i in range(5)}
+            self.assertEqual(ask("open_stereo", molblock=flat, like=like)["result"], {"atoms": [], "bonds": [], "isomers": 1})
+            again = ask("conformers", molblock=flat, count=4, like=like)["result"]["isomers"]
+            self.assertEqual(len(again), 1)
+            # (still counted as chosen: the drawing leaves it open)
+            self.assertEqual(again[0]["chosen"], iso["chosen"])
+            self.assertEqual(ask("open_stereo", molblock=grown, like=like)["result"]["atoms"], [])
+            more = ask("conformers", molblock=grown, count=4, like=like)["result"]["isomers"][0]
+            self.assertGreater(volume(f, 1, 0, 2, 4) * volume(more["frames"][0], 1, 0, 2, 4), 0)
+        # with a neighbour of the centre not in it, the centre stays open
+        f = ask("conformers", molblock=flat, count=2)["result"]["isomers"][0]["frames"][0]
+        part = {str(i): f[3 * i : 3 * i + 3] for i in (0, 1, 2, 3)}
+        self.assertEqual(ask("open_stereo", molblock=flat, like=part)["result"]["atoms"], [1])
+
+    def test_keeps_a_double_bond_left_open_as_a_molecule_made_before_has_it(self):
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+
+        open_ = Chem.MolFromSmiles("CC=CCC")
+        self.assertEqual(worker.open_stereo(open_)[1], [1])
+        for smiles, label in (("C/C=C/CC", "E"), ("C/C=C\\CC", "Z")):
+            made = Chem.AddHs(Chem.MolFromSmiles(smiles))
+            AllChem.EmbedMolecule(made, randomSeed=7)
+            xyz = made.GetConformer().GetPositions()
+            out = worker.kept(open_, {str(i): list(xyz[i]) for i in range(5)})
+            self.assertEqual(worker.open_stereo(out), ([], []))
+            from rdkit.Chem import rdCIPLabeler
+
+            rdCIPLabeler.AssignCIPLabels(out)
+            self.assertEqual(out.GetBondWithIdx(1).GetProp("_CIPCode"), label)
+            # (and made so in 3D)
+            (iso,) = worker.isomers_of(out)
+            self.assertEqual(worker.smiles_from_3d(iso, worker.conformers(iso, 2)["frames"][0]), Chem.MolToSmiles(Chem.MolFromSmiles(smiles)))
+
+    def test_draws_a_molecule_in_3d_as_a_formula_keeping_its_configuration(self):
+        from rdkit import Chem
+
+        made = ask("conformers", molblock=PCPA, count=2)["result"]["isomers"][0]
+        lines = ["", "  test", "", f"{len(made['atoms']):3d}{len(made['bonds']):3d}  0  0  0  0  0  0  0  0999 V2000"]
+        xyz = made["frames"][0]
+        for i, a in enumerate(made["atoms"]):
+            lines.append(f"{xyz[3*i]:10.4f}{xyz[3*i+1]:10.4f}{xyz[3*i+2]:10.4f} {a['el']:<3} 0  0")
+        for b in made["bonds"]:
+            # (all single, as coordinates alone give them: the orders are found again)
+            lines.append(f"{b['a1'] + 1:3d}{b['a2'] + 1:3d}  1  0")
+        block = "\n".join(lines + ["M  END"]) + "\n"
+        drawn = ask("drawing_of", molblock=block, perceive=True)["result"]["molblock"]
+        mol = Chem.MolFromMolBlock(drawn)
+        # its heavy atoms, in their order, and the same molecule, configuration and all
+        self.assertEqual([a.GetSymbol() for a in mol.GetAtoms()], ["C"] * 9 + ["O", "O", "N", "Cl"])
+        self.assertEqual(Chem.MolToSmiles(mol), ask("to_smiles", molblock=PCPA)["result"]["smiles"])
+
     def test_answers_what_it_cannot_do_with_an_error_not_a_crash(self):
         self.assertEqual(ask("exec", code="1")["error"], "no such request: exec")
         self.assertFalse(ask("from_smiles", smiles="C1CC")["ok"])
