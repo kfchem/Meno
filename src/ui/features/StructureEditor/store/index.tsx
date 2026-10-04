@@ -89,6 +89,7 @@ export function createEditorStore(
     boxSelect: { active: false, kind: "box", points: [] },
     hovered: { atomId: null, bondId: null },
     hovered3d: null,
+    hoveredAtom3d: null,
     turns3d: {},
     rising3d: {},
     frames3d: {},

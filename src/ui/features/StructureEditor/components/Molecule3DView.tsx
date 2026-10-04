@@ -31,6 +31,9 @@ const SELECTED_BLUE = 0.27;
 /** A chosen atom's ring, or a chosen bond's sleeve: how wide, in pixels, and how much of the highlight it takes. */
 const CHOSEN_PX = 3.2;
 const CHOSEN_BLUE = 0.75;
+/** An atom whose drawing's atom is under the pointer: its outline, in pixels, and how blue. */
+const LINKED_PX = 2.6;
+const LINKED_BLUE = 0.5;
 const outlineAt = (level: number, table: number[]) => {
   const i = Math.min(Math.floor(level), table.length - 2);
   return table[i] + (table[i + 1] - table[i]) * (level - i);
@@ -136,6 +139,10 @@ export type Molecule3DViewProps = {
   leaving?: () => void;
   /** Rising out of its drawing: where it started, over the drawing, and when; and what is told once it has risen. */
   rising?: Rising3D;
+  /** Its atom whose drawing's atom is under the pointer: lit as if it were. */
+  linkedAtom?: number | null;
+  /** Its atom under the pointer, as it comes and goes. */
+  onHoverAtom?: (atom: number | null) => void;
   /** Its stereocentres' and double bonds' labels shown: all, only those its drawing left open, or none. */
   stereoShown: "all" | "chosen" | null;
   onRisen?: () => void;
@@ -160,6 +167,9 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const atomHull = useRef<THREE.InstancedMesh>(null!);
   const bondHull = useRef<THREE.InstancedMesh>(null);
   const chosenHull = useRef<THREE.InstancedMesh>(null!);
+  const linkedHull = useRef<THREE.Mesh>(null!);
+  // the atom lit for its drawing's, and how far its outline has come
+  const linked = useRef<{ atom: number | null; v: number }>({ atom: null, v: 0 });
   const chosenSleeves = useRef<THREE.InstancedMesh>(null);
   const pieces = useRef<THREE.InstancedMesh>(null!);
   const fans = useRef<THREE.Mesh>(null!);
@@ -270,12 +280,17 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     invalidate();
   }, [m.measures, invalidate]);
 
-  // the atom under the pointer swells, and the one it leaves goes back
+  // the atom under the pointer swells - or the one whose drawing's atom is -
+  // and the one it leaves goes back
+  const linkedAtom = props.linkedAtom ?? null;
   useEffect(() => {
-    for (const [i, s] of swell.current) s.to = i === hoverAtom ? ATOM_SWELL : 1;
-    if (hoverAtom != null && !swell.current.has(hoverAtom)) swell.current.set(hoverAtom, { v: 1, vel: 0, to: ATOM_SWELL });
+    const lit = [hoverAtom, linkedAtom].filter((i): i is number => i != null);
+    for (const [i, s] of swell.current) s.to = lit.includes(i) ? ATOM_SWELL : 1;
+    for (const i of lit) if (!swell.current.has(i)) swell.current.set(i, { v: 1, vel: 0, to: ATOM_SWELL });
     invalidate();
-  }, [hoverAtom, invalidate]);
+  }, [hoverAtom, linkedAtom, invalidate]);
+  const onHoverAtom = props.onHoverAtom;
+  useEffect(() => onHoverAtom?.(hoverAtom), [hoverAtom, onHoverAtom]);
 
   // chosen atoms are ringed, the ring opening out, and chosen bonds
   // sleeved likewise; let go, it closes
@@ -481,6 +496,22 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       (atomHull.current.material as THREE.MeshBasicMaterial).color.copy(colour);
       if (bondHull.current) (bondHull.current.material as THREE.MeshBasicMaterial).color.copy(colour);
     }
+    // the atom whose drawing's atom is under the pointer, outlined
+    {
+      const l = linked.current;
+      const want = props.linkedAtom ?? null;
+      if (want != null) l.atom = want;
+      const v = follow(l.v, want != null ? 1 : 0, step, OUTLINE_TAU);
+      if (Math.abs(v - (want != null ? 1 : 0)) > 0.005) moving = true;
+      l.v = Math.abs(v - (want != null ? 1 : 0)) <= 0.005 ? (want != null ? 1 : 0) : v;
+      const mesh = linkedHull.current;
+      mesh.visible = l.v > 0 && l.atom != null && l.atom < n;
+      if (mesh.visible) {
+        const i = l.atom!;
+        mesh.position.set(p[3 * i], p[3 * i + 1], p[3 * i + 2]);
+        mesh.scale.setScalar(radius(i) + LINKED_PX * px * l.v);
+      }
+    }
     // the chosen atoms' rings
     if (reshaped || ringing || dirty.current) {
       const mesh = chosenHull.current;
@@ -663,6 +694,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
             <meshBasicMaterial transparent opacity={1} depthWrite={false} toneMapped={false} />
           </instancedMesh>
         )}
+        <mesh ref={linkedHull} renderOrder={OVER_PAGE - 1} frustumCulled={false} visible={false} raycast={() => {}}>
+          <sphereGeometry args={[1, style.ballSegments, style.ballSegments]} />
+          <meshBasicMaterial color={blue(LINKED_BLUE)} transparent opacity={1} depthWrite={false} toneMapped={false} />
+        </mesh>
         <instancedMesh
           ref={chosenHull}
           args={[undefined, undefined, n]}

@@ -12,6 +12,7 @@ import { chemMolblock, molIndex } from "../../../../lib/rdkit/molblock";
 import type { Model, Molecule3D, Turn3D } from "../store/types";
 import { turnOnto } from "../utils/align3d";
 import { solidOf } from "../utils/molecule3d";
+import { PAGE_DISTANCE } from "../utils/page";
 import { fragmentsHolding, partOf } from "./cleanUp";
 
 /** How long a structure's conformers may take: a large one's, on a slow machine, minutes. */
@@ -94,7 +95,7 @@ export type Box = { x0: number; x1: number; y0: number; y1: number };
  * centre, unturned: on its drawing's atom, flat on the page - a hydrogen made
  * for it on the atom it is bonded to - so that it rises out of the drawing.
  */
-export type Turned = { turn: Turn3D; start: { x: number; y: number }; reach: Box; flat: number[] };
+export type Turned = { turn: Turn3D; start: { x: number; y: number }; reach: Box; flat: number[]; height: number };
 
 export function turnedOver(m: Omit<Molecule3D, "id" | "at">, model: Model, style: Style3D): Turned {
   const solid = solidOf({ ...m, id: 0, at: { x: 0, y: 0 } }, style);
@@ -147,7 +148,7 @@ export function turnedOver(m: Omit<Molecule3D, "id" | "at">, model: Model, style
     reach.y0 = Math.min(reach.y0, v.y - radii[i]);
     reach.y1 = Math.max(reach.y1, v.y + radii[i]);
   }
-  return { turn, start, reach, flat };
+  return { turn, start, reach, flat, height: solid.reach.balls };
 }
 
 /** Where a drawn structure is on the page: its atoms' box, a little round them. */
@@ -159,6 +160,18 @@ export function boxOf(part: Model): Box {
 }
 
 const inside = (b: Box, view: Box) => b.x0 >= view.x0 && b.x1 <= view.x1 && b.y0 >= view.y0 && b.y1 <= view.y1;
+
+/**
+ * How a box on the page is seen when what is in it stands `height` above the
+ * page - as high again at its top - by the camera over the view's middle:
+ * larger, and further out from the middle.
+ */
+function seenAs(b: Box, view: Box, height: number): Box {
+  const cx = (view.x0 + view.x1) / 2;
+  const cy = (view.y0 + view.y1) / 2;
+  const k = PAGE_DISTANCE / Math.max(PAGE_DISTANCE - 2 * height, 1);
+  return { x0: cx + (b.x0 - cx) * k, x1: cx + (b.x1 - cx) * k, y0: cy + (b.y0 - cy) * k, y1: cy + (b.y1 - cy) * k };
+}
 
 /**
  * Where molecules in 3D made from a drawing come to rest: in a row beside
@@ -204,9 +217,10 @@ export function placeRow(items: Turned[], drawing: Box, view: Box | null): { at:
       return { at, box: { x0: cx - across / 2, x1: cx + across / 2, y0, y1: y0 + tall } };
     }),
   ];
+  const height = Math.max(...items.map((t) => t.height));
   for (const side of sides) {
     const row = side();
-    if (view && inside(row.box, view)) return { at: row.at, inView: true };
+    if (view && inside(seenAs(row.box, view, height), view)) return { at: row.at, inView: true };
   }
   return { at: sides[0]().at, inView: !view };
 }

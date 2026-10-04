@@ -76,7 +76,7 @@ describe("making a drawn structure in 3D", () => {
 });
 
 describe("placeRow", () => {
-  const item = (w: number): Turned => ({ turn: [0, 0, 0, 1], start: { x: 0, y: 0 }, reach: { x0: -w / 2, x1: w / 2, y0: -1, y1: 1 }, flat: [] });
+  const item = (w: number, height = 1): Turned => ({ turn: [0, 0, 0, 1], start: { x: 0, y: 0 }, reach: { x0: -w / 2, x1: w / 2, y0: -1, y1: 1 }, flat: [], height });
   const drawing: Box = { x0: 0, x1: 4, y0: 0, y1: 2 };
 
   it("rests beside the drawing, to its right, where that is in view", () => {
@@ -94,6 +94,13 @@ describe("placeRow", () => {
     const below = placeRow([item(2)], drawing, { x0: -0.5, x1: 4.5, y0: -10, y1: 3 });
     expect(below.inView).toBe(true);
     expect(below.at[0].y).toBeLessThan(0);
+  });
+
+  it("counts on a molecule standing up off the page being seen larger, further out", () => {
+    const view = { x0: -6, x1: 14, y0: -10, y1: 10 };
+    expect(placeRow([item(6, 1)], drawing, view).at[0].x).toBeGreaterThan(4);
+    // (standing tall, it would be seen past the view's right edge: so it goes elsewhere)
+    expect(placeRow([item(6, 12)], drawing, view).at[0].x).toBeLessThan(4);
   });
 
   it("says so where it is in view nowhere, and goes to the right", () => {

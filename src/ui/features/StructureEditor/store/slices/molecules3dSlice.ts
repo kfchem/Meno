@@ -31,6 +31,13 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
   return {
     setHovered3d: (h: { id: number } | null) =>
       set((prev) => (prev.hovered3d?.id === h?.id ? prev : { ...prev, hovered3d: h })),
+    setHoveredAtom3d: (id: number, atom: number | null) =>
+      set((prev) => {
+        const was = prev.hoveredAtom3d;
+        // (one molecule's atom left as another's is come to: that one's stays)
+        if (atom == null) return was?.id === id ? { ...prev, hoveredAtom3d: null } : prev;
+        return was?.id === id && was.atom === atom ? prev : { ...prev, hoveredAtom3d: { id, atom } };
+      }),
     setHoveredMeasure3d: (h: { id: number; measure: number } | null) =>
       set((prev) =>
         prev.hoveredMeasure3d?.id === h?.id && prev.hoveredMeasure3d?.measure === h?.measure

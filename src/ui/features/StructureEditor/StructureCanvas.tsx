@@ -79,6 +79,7 @@ import type { StructureDocument } from "./document";
 import PageCamera, { PAGE_DISTANCE } from "./components/PageCamera";
 import Molecules3D from "./components/Molecules3D";
 import OpenStereo2D from "./components/OpenStereo2D";
+import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
 import { blocksOf, boxOf, conformersOf, moleculeOf, openIn, placeRow, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
 
@@ -794,6 +795,8 @@ function StructureCanvasContent({
           </Suspense>
           {/* RDKit's marks: valence problems, R/S and E/Z */}
           <ChemMarks2D marks={marks} />
+          {/* the atom a molecule in 3D under the pointer was made from */}
+          <LinkedHover2D />
           {/* stereo drawn without a configuration, while Meno asks about it */}
           <OpenStereo2D atoms={ask3d?.open.flatMap((o) => o.atoms) ?? NO_IDS} bonds={ask3d?.open.flatMap((o) => o.bonds) ?? NO_IDS} />
           {/* Label editor */}

@@ -86,6 +86,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const molecules = useEditor((s) => s.molecules3d);
   const turns = useEditor((s) => s.turns3d);
   const rising = useEditor((s) => s.rising3d);
+  // the drawing's atom under the pointer: lit in the molecules made from it
+  const hoveredDrawn = useEditor((s) => s.hovered.atomId);
   // (R and S on, every molecule's labels; off, a stereoisomer's own, which tell it from the others)
   const stereoLabels = useAppSettings((s) => s.chemistry.stereoLabels);
   const frames = useEditor((s) => s.frames3d);
@@ -413,6 +415,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           rising={rising[m.id]}
           onRisen={() => store.getState().risen3d(m.id)}
           stereoShown={stereoLabels ? "all" : m.stereo?.chosen ? "chosen" : null}
+          linkedAtom={hoveredDrawn != null && m.drawnFrom ? (m.drawnFrom.indexOf(hoveredDrawn) >= 0 ? m.drawnFrom.indexOf(hoveredDrawn) : null) : null}
+          onHoverAtom={(atom) => store.getState().setHoveredAtom3d(m.id, atom)}
         />
       ))}
       {leaving.map(({ m, turn, frame }) => (

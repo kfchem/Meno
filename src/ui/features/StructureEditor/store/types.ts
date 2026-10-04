@@ -130,6 +130,8 @@ export type EditorState = {
   hovered: { atomId: number | null; bondId: number | null };
   /** The molecule in 3D under the pointer: on its atoms, its bonds or within its rings. */
   hovered3d: { id: number } | null;
+  /** The atom of a molecule in 3D under the pointer, by index: lit in its drawing too. */
+  hoveredAtom3d: { id: number; atom: number } | null;
   /** The molecules in 3D on the page. */
   molecules3d: Molecule3D[];
   /** How each molecule in 3D is turned, by id; unturned if absent. */
@@ -154,6 +156,8 @@ export type EditorState = {
   hoveredMeasure3d: { id: number; measure: number } | null;
   setHoveredMeasure3d: (h: { id: number; measure: number } | null) => void;
   setHovered3d: (h: { id: number } | null) => void;
+  /** The atom of molecule `id` under the pointer; null, none of its atoms. */
+  setHoveredAtom3d: (id: number, atom: number | null) => void;
   setTurn3d: (id: number, turn: Turn3D) => void;
   /**
    * Molecules in 3D made from a drawing, as one undo step: each where it is
