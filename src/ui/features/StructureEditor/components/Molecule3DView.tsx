@@ -8,7 +8,7 @@ import type { Look3D, Measure3D, Molecule3D, Rising3D, Turn3D } from "../store/t
 import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine, type LabelBox } from "../utils/molecule3d";
 import { MARK_MIN_PX } from "../chem/marks";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
-import { kindOf, measureMarks, measureText, measureValue } from "../utils/measure3d";
+import { dashesOf, kindOf, MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, measureText, measureValue } from "../utils/measure3d";
 import { eyeOf, FRAME_ORDER, seenAt } from "../utils/page";
 import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
@@ -80,10 +80,6 @@ const easeInOutCubic = (u: number) => {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 };
 const SPRING = { stiffness: 150, damping: 15 };
-/** A measurement's lines: how thick, and a distance's dashes and gaps, in ångströms. */
-const MEASURE_RADIUS = 0.03;
-const DASH = 0.16;
-const GAP = 0.11;
 /** The most dashes and arc steps one molecule's measurements are drawn with. */
 const MEASURE_PIECES = 2048;
 
@@ -658,19 +654,11 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       for (let k = 0; k + 1 < marks.lines.length; k += 2) {
         a.copy(marks.lines[k]);
         b.copy(marks.lines[k + 1]);
-        const length = a.distanceTo(b);
         if (!marks.dashed) {
           if (used < MEASURE_PIECES) placePiece(mesh, used++, a, b, r);
           continue;
         }
-        const period = (DASH + GAP) * WORLD_PER_ANGSTROM;
-        const dashes = Math.max(1, Math.round(length / period));
-        const along = b.clone().sub(a).divideScalar(dashes);
-        for (let d = 0; d < dashes && used < MEASURE_PIECES; d++) {
-          const s = a.clone().addScaledVector(along, d + GAP / (DASH + GAP) / 2);
-          const e = a.clone().addScaledVector(along, d + 1 - GAP / (DASH + GAP) / 2);
-          placePiece(mesh, used++, s, e, r);
-        }
+        for (const [s, e] of dashesOf(a, b)) if (used < MEASURE_PIECES) placePiece(mesh, used++, s, e, r);
       }
       for (const v of marks.fan) fanPoints.push(v.x, v.y, v.z);
       texts[id] = measureText(kindOf(l.m.atoms), measureValue(p, l.m.atoms));
@@ -796,7 +784,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
           <meshBasicMaterial
             color={COLORS.highlight}
             transparent
-            opacity={0.16}
+            opacity={MEASURE_FAN_OPACITY}
             side={THREE.DoubleSide}
             depthWrite={false}
             toneMapped={false}

@@ -248,3 +248,57 @@ describe("molecules in 3D in an EMF", () => {
     expect(alone.bounds.min.x).toBeGreaterThan(4);
   });
 });
+
+describe("measurements in a picture", () => {
+  // water, and the distance between its two hydrogens measured on it
+  const water3d = {
+    atoms: [
+      { el: "O", x: 0, y: 0, z: 0 },
+      { el: "H", x: 0.76, y: 0.59, z: 0 },
+      { el: "H", x: -0.76, y: 0.59, z: 0 },
+    ],
+    bonds: [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 0, a2: 2, order: 1 },
+    ],
+    at: { x: 6, y: 0 },
+    measures: [{ id: 1, atoms: [1, 2] }],
+  };
+  const { layout, opts } = drawingLayout({ ...model, molecules3d: [water3d] }, aromatic, ACS_1996);
+  const text = "1.52 Å";
+
+  it("are taken in, over the molecules: dashes, the value, and room for it", () => {
+    expect(layout.measures).toHaveLength(1);
+    const m = layout.measures![0];
+    expect(m.text).toBe(text);
+    expect(m.lines.length).toBeGreaterThan(3);
+    // (written about where the two atoms meet, the molecule placed at x 6)
+    expect(m.label.x).toBeCloseTo(6, 1);
+    expect(layout.bounds.max.x).toBeGreaterThan(m.label.x);
+  });
+
+  it("are drawn in an SVG after the molecules: the dashes, a white ground and the value", () => {
+    const svg = createSVG(layout, opts);
+    const at = svg.indexOf(`>${text}</text>`);
+    expect(at).toBeGreaterThan(svg.lastIndexOf("<circle"));
+    expect(svg).toContain('fill="white" fill-opacity="0.9"');
+    expect(svg.match(/<line [^>]*stroke="#1e90ff"/g)!.length).toBe(layout.measures![0].lines.length);
+  });
+
+  it("are drawn in an EMF, twice over: the value written in GDI and EMF+, its letters in its colour", () => {
+    const { emf } = layoutEmf(layout, opts);
+    const records = emfRecords(emf)!;
+    const units = [...text].map((c) => c.charCodeAt(0));
+    const written = records.filter((r) => r.type === 84).some((r) => {
+      const v = new DataView(r.body.buffer, r.body.byteOffset, r.body.byteLength);
+      const n = v.getUint32(36, true);
+      const at = v.getUint32(40, true) - 8;
+      return n === units.length && units.every((u, i) => v.getUint16(at + 2 * i, true) === u);
+    });
+    expect(written).toBe(true);
+    // (and its colour set for it: Windows' blue-green-red of #1e90ff)
+    expect(records.filter((r) => r.type === 24).some((r) => new DataView(r.body.buffer, r.body.byteOffset).getUint32(0, true) === colorRef("#1e90ff"))).toBe(true);
+    expect(emfPlusRecords(emf).filter((r) => r.type === 0x4036).length).toBeGreaterThanOrEqual(1);
+    expect(emf.length % 4).toBe(0);
+  });
+});

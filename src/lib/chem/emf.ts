@@ -24,6 +24,7 @@ import {
   BALL_SHADE,
   circlePoints,
   labelSetOf,
+  measureLabelBox,
   placeLabel,
   shadeOf,
   type Layout,
@@ -383,108 +384,112 @@ export function layoutEmf(
     for (const h of pens.values()) remove(h);
   }
 
-  // labels: each run at its pen position on its baseline, at the typeface's own advances
+  // letters: each run at its pen position on its baseline, at the typeface's
+  // own advances - the labels', and measurements' values over the molecules
+  // in 3D - in fonts made as they are first wanted, by size and slant
+  const set = labelSetOf(opts);
+  const family = set.fontFamily ?? "Arial";
+  const face = family.slice(0, 31);
+  const font = labelFont(family);
+  const fonts = new Map<string, number>();
+  let textColor: number | null = null;
+  const writeRun = (run: { x: number; y: number; size: number; italic?: boolean; text: string }, color: number) => {
+    if (textColor == null) w.add(EMR.SETTEXTALIGN, 4, (v) => v.setUint32(0, 24, true)); // TA_BASELINE | TA_LEFT
+    if (textColor !== color) {
+      w.add(EMR.SETTEXTCOLOR, 4, (v) => v.setUint32(0, color, true));
+      textColor = color;
+    }
+    const height = L(run.size);
+    const italic = !!run.italic;
+    const key = `${height}${italic ? " italic" : ""}`;
+    let h = fonts.get(key);
+    if (h == null) {
+      h = w.handle();
+      const handle = h;
+      w.add(EMR.EXTCREATEFONTINDIRECTW, 4 + 92, (v) => {
+        v.setUint32(0, handle, true);
+        v.setInt32(4, -height, true); // the em, not the cell
+        v.setInt32(20, 400, true); // FW_NORMAL
+        if (italic) v.setUint8(24, 1); // lfItalic
+        v.setUint8(27, 1); // DEFAULT_CHARSET
+        v.setUint8(28, 4); // OUT_TT_PRECIS
+        v.setUint8(30, 4); // ANTIALIASED_QUALITY
+        [...face].forEach((ch, i) => v.setUint16(32 + 2 * i, ch.charCodeAt(0), true));
+      });
+      fonts.set(key, h);
+    }
+    select(h);
+    const units = [...run.text].flatMap((ch) => {
+      const advance = L(font.advance(ch) * run.size);
+      const code = ch.codePointAt(0)!;
+      return code > 0xffff
+        ? [
+            { unit: 0xd800 + ((code - 0x10000) >> 10), dx: advance },
+            { unit: 0xdc00 + ((code - 0x10000) & 0x3ff), dx: 0 },
+          ]
+        : [{ unit: code, dx: advance }];
+    });
+
+    // EMF+: each letter where GDI's advances put it. A letter beyond the
+    // BMP cannot be looked up this way, so is left to the GDI record.
+    let at = X(run.x);
+    const glyphs = units.flatMap((u) => {
+      const x = at;
+      at += u.dx;
+      return u.unit >= 0xd800 && u.unit < 0xe000 ? [] : [{ unit: u.unit, x }];
+    });
+    if (glyphs.length) {
+      const id = object(`font ${key}`, PLUS_OBJECT.FONT, 24 + 2 * face.length, (v) => {
+        v.setUint32(0, PLUS_VERSION, true);
+        v.setFloat32(4, px(height), true); // the em
+        v.setUint32(8, 0, true); // in the drawing's own units
+        v.setUint32(12, italic ? 2 : 0, true); // FontStyleItalic, or regular
+        v.setUint32(16, 0, true);
+        v.setUint32(20, face.length, true);
+        for (let i = 0; i < face.length; i++) v.setUint16(24 + 2 * i, face.charCodeAt(i), true);
+      });
+      const n = glyphs.length;
+      w.plus(PLUS.DRAW_DRIVER_STRING, SOLID | id, 16 + 2 * n + 8 * n, (v) => {
+        v.setUint32(0, argb(color), true);
+        v.setUint32(4, 1, true); // DriverStringOptionsCmapLookup: characters, not glyph numbers
+        v.setUint32(8, 0, true); // no transform
+        v.setUint32(12, n, true);
+        glyphs.forEach((g, i) => {
+          v.setUint16(16 + 2 * i, g.unit, true);
+          v.setFloat32(16 + 2 * n + 8 * i, px(g.x), true);
+          v.setFloat32(16 + 2 * n + 8 * i + 4, px(Y(run.y)), true);
+        });
+      });
+    }
+
+    const strBytes = units.length * 2 + ((4 - ((units.length * 2) % 4)) % 4);
+    const offString = 8 + 68; // from the record's start: the fixed part
+    w.add(EMR.EXTTEXTOUTW, 68 + strBytes + 4 * units.length, (v) => {
+      // bounds unknown: 0,0,-1,-1
+      v.setInt32(8, -1, true);
+      v.setInt32(12, -1, true);
+      v.setUint32(16, 1, true); // GM_COMPATIBLE
+      const scale = 2540 / 96 / S; // .01 mm to the logical unit
+      v.setFloat32(20, scale, true);
+      v.setFloat32(24, scale, true);
+      v.setInt32(28, X(run.x), true);
+      v.setInt32(32, Y(run.y), true);
+      v.setUint32(36, units.length, true);
+      v.setUint32(40, offString, true);
+      v.setUint32(44, 0, true); // no options
+      // no clipping rectangle (48..63)
+      v.setUint32(64, offString + strBytes, true);
+      units.forEach((u, i) => v.setUint16(68 + 2 * i, u.unit, true));
+      units.forEach((u, i) => v.setUint32(68 + strBytes + 4 * i, u.dx, true));
+    });
+  };
   if (layout.texts.length) {
-    const set = labelSetOf(opts);
-    const family = set.fontFamily ?? "Arial";
-    const face = family.slice(0, 31);
-    const font = labelFont(family);
     const fontSize = opts.units === "world" ? opts.fontPx : opts.fontPx / zoom;
-    w.add(EMR.SETTEXTALIGN, 4, (v) => v.setUint32(0, 24, true)); // TA_BASELINE | TA_LEFT
-    w.add(EMR.SETTEXTCOLOR, 4, (v) => v.setUint32(0, ink, true));
-    // (by size, and whether in italics: the t of t-Bu)
-    const fonts = new Map<string, number>();
     for (const t of layout.texts) {
       for (const run of placeLabel(t, fontSize, set)) {
         if (run.mark || !run.text) continue; // (a mark is drawn with the lines and shapes)
-        const height = L(run.size);
-        const italic = !!run.italic;
-        const key = `${height}${italic ? " italic" : ""}`;
-        let h = fonts.get(key);
-        if (h == null) {
-          h = w.handle();
-          const handle = h;
-          w.add(EMR.EXTCREATEFONTINDIRECTW, 4 + 92, (v) => {
-            v.setUint32(0, handle, true);
-            v.setInt32(4, -height, true); // the em, not the cell
-            v.setInt32(20, 400, true); // FW_NORMAL
-            if (italic) v.setUint8(24, 1); // lfItalic
-            v.setUint8(27, 1); // DEFAULT_CHARSET
-            v.setUint8(28, 4); // OUT_TT_PRECIS
-            v.setUint8(30, 4); // ANTIALIASED_QUALITY
-            [...face].forEach((ch, i) => v.setUint16(32 + 2 * i, ch.charCodeAt(0), true));
-          });
-          fonts.set(key, h);
-        }
-        select(h);
-        const units = [...run.text].flatMap((ch) => {
-          const advance = L(font.advance(ch) * run.size);
-          const code = ch.codePointAt(0)!;
-          return code > 0xffff
-            ? [
-                { unit: 0xd800 + ((code - 0x10000) >> 10), dx: advance },
-                { unit: 0xdc00 + ((code - 0x10000) & 0x3ff), dx: 0 },
-              ]
-            : [{ unit: code, dx: advance }];
-        });
-
-        // EMF+: each letter where GDI's advances put it. A letter beyond the
-        // BMP cannot be looked up this way, so is left to the GDI record.
-        let at = X(run.x);
-        const glyphs = units.flatMap((u) => {
-          const x = at;
-          at += u.dx;
-          return u.unit >= 0xd800 && u.unit < 0xe000 ? [] : [{ unit: u.unit, x }];
-        });
-        if (glyphs.length) {
-          const id = object(`font ${key}`, PLUS_OBJECT.FONT, 24 + 2 * face.length, (v) => {
-            v.setUint32(0, PLUS_VERSION, true);
-            v.setFloat32(4, px(height), true); // the em
-            v.setUint32(8, 0, true); // in the drawing's own units
-            v.setUint32(12, italic ? 2 : 0, true); // FontStyleItalic, or regular
-            v.setUint32(16, 0, true);
-            v.setUint32(20, face.length, true);
-            for (let i = 0; i < face.length; i++) v.setUint16(24 + 2 * i, face.charCodeAt(i), true);
-          });
-          const n = glyphs.length;
-          w.plus(PLUS.DRAW_DRIVER_STRING, SOLID | id, 16 + 2 * n + 8 * n, (v) => {
-            v.setUint32(0, argb(ink), true);
-            v.setUint32(4, 1, true); // DriverStringOptionsCmapLookup: characters, not glyph numbers
-            v.setUint32(8, 0, true); // no transform
-            v.setUint32(12, n, true);
-            glyphs.forEach((g, i) => {
-              v.setUint16(16 + 2 * i, g.unit, true);
-              v.setFloat32(16 + 2 * n + 8 * i, px(g.x), true);
-              v.setFloat32(16 + 2 * n + 8 * i + 4, px(Y(run.y)), true);
-            });
-          });
-        }
-
-        const strBytes = units.length * 2 + ((4 - ((units.length * 2) % 4)) % 4);
-        const offString = 8 + 68; // from the record's start: the fixed part
-        w.add(EMR.EXTTEXTOUTW, 68 + strBytes + 4 * units.length, (v) => {
-          // bounds unknown: 0,0,-1,-1
-          v.setInt32(8, -1, true);
-          v.setInt32(12, -1, true);
-          v.setUint32(16, 1, true); // GM_COMPATIBLE
-          const scale = 2540 / 96 / S; // .01 mm to the logical unit
-          v.setFloat32(20, scale, true);
-          v.setFloat32(24, scale, true);
-          v.setInt32(28, X(run.x), true);
-          v.setInt32(32, Y(run.y), true);
-          v.setUint32(36, units.length, true);
-          v.setUint32(40, offString, true);
-          v.setUint32(44, 0, true); // no options
-          // no clipping rectangle (48..63)
-          v.setUint32(64, offString + strBytes, true);
-          units.forEach((u, i) => v.setUint16(68 + 2 * i, u.unit, true));
-          units.forEach((u, i) => v.setUint32(68 + strBytes + 4 * i, u.dx, true));
-        });
+        writeRun(run, ink);
       }
-    }
-    if (fonts.size) {
-      w.add(EMR.SELECTOBJECT, 4, (v) => v.setUint32(0, 0x8000000d, true)); // SYSTEM_FONT
-      for (const h of fonts.values()) remove(h);
     }
   }
   // molecules in 3D, from the back forward: a stick a band, a ball discs
@@ -626,6 +631,51 @@ export function layoutEmf(
     }
     select(NULL_BRUSH);
     for (const h of brushes.values()) remove(h);
+  }
+
+  // measurements over the molecules in 3D: the fan faint (for EMF+; GDI
+  // has no way to fill faintly), the lines as bands, the value on its white
+  // ground
+  const measures = layout.measures ?? [];
+  if (measures.length) {
+    select(NULL_PEN);
+    const brushes = new Map<number, number>();
+    const fill = (pts: readonly (readonly [number, number])[], color: number, alpha = 1, gdi = true) => {
+      w.plus(PLUS.FILL_POLYGON, SOLID, 8 + 8 * pts.length, (v) => {
+        v.setUint32(0, ((Math.round(alpha * 255) << 24) | (argb(color) & 0xffffff)) >>> 0, true);
+        v.setUint32(4, pts.length, true);
+        plusPoints(v, 8, pts);
+      });
+      if (!gdi) return;
+      let h = brushes.get(color);
+      if (h == null) {
+        h = brush(color);
+        brushes.set(color, h);
+      }
+      select(h);
+      poly(EMR.POLYGON, pts);
+    };
+    const white = colorRef("#ffffff");
+    for (const m of measures) {
+      const color = colorRef(m.color);
+      for (const tri of m.fan) fill(points(tri), color, m.fanOpacity, false);
+      for (const [a, b] of m.lines) {
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len < 1e-9) continue;
+        const nx = (-(b.y - a.y) / len) * (m.width / 2);
+        const ny = ((b.x - a.x) / len) * (m.width / 2);
+        fill(points([{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }, { x: b.x - nx, y: b.y - ny }, { x: a.x - nx, y: a.y - ny }]), color);
+      }
+      const box = measureLabelBox(m, family);
+      fill(points([box.min, { x: box.max.x, y: box.min.y }, box.max, { x: box.min.x, y: box.max.y }]), white, 0.9);
+      writeRun({ x: box.baseline.x, y: box.baseline.y, size: m.size, text: m.text }, color);
+    }
+    select(NULL_BRUSH);
+    for (const h of brushes.values()) remove(h);
+  }
+  if (fonts.size) {
+    w.add(EMR.SELECTOBJECT, 4, (v) => v.setUint32(0, 0x8000000d, true)); // SYSTEM_FONT
+    for (const h of fonts.values()) remove(h);
   }
 
   w.plus(PLUS.END_OF_FILE, 0, 0, () => {});

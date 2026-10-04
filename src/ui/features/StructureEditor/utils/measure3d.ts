@@ -3,7 +3,22 @@
  * show them - pure, over atoms' places in the molecule's own frame.
  */
 import * as THREE from "three";
-import { WORLD_PER_ANGSTROM } from "./molecule3d";
+import type { MeasureMark } from "../../../../lib/chem/layout2d";
+import type { Style3D } from "../../../../lib/chem/style3d";
+import { COLORS } from "../../../theme/colors";
+import type { Carried3D, Molecule3D } from "../store/types";
+import { frameOf, heightOf, lookOf, solidOf, WORLD_PER_ANGSTROM } from "./molecule3d";
+import { seenAt, type Eye } from "./page";
+
+/**
+ * How a measurement is drawn, on the canvas and in a picture alike: its
+ * lines' radius, a distance's dashes and gaps (in ångströms), and how
+ * strongly its fan is filled.
+ */
+export const MEASURE_RADIUS = 0.03;
+export const MEASURE_DASH = 0.16;
+export const MEASURE_GAP = 0.11;
+export const MEASURE_FAN_OPACITY = 0.16;
 
 const at = (places: ArrayLike<number>, i: number) =>
   new THREE.Vector3(places[3 * i], places[3 * i + 1], places[3 * i + 2]);
@@ -99,4 +114,61 @@ export function measureMarks(places: ArrayLike<number>, atoms: number[]): Measur
   }
   const middle = from.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(normal, angle / 2));
   return { lines, dashed: false, fan, label: centre.clone().addScaledVector(middle, radius * 1.6) };
+}
+
+/** A line from `a` to `b` (world units) cut into a distance's dashes, each as its two ends. */
+export function dashesOf(a: THREE.Vector3, b: THREE.Vector3): [THREE.Vector3, THREE.Vector3][] {
+  const period = (MEASURE_DASH + MEASURE_GAP) * WORLD_PER_ANGSTROM;
+  const dashes = Math.max(1, Math.round(a.distanceTo(b) / period));
+  const along = b.clone().sub(a).divideScalar(dashes);
+  const inset = MEASURE_GAP / (MEASURE_DASH + MEASURE_GAP) / 2;
+  const out: [THREE.Vector3, THREE.Vector3][] = [];
+  for (let d = 0; d < dashes; d++) {
+    out.push([a.clone().addScaledVector(along, d + inset), a.clone().addScaledVector(along, d + 1 - inset)]);
+  }
+  return out;
+}
+
+/**
+ * A molecule in 3D's measurements as a picture shows them (`MeasureMark`):
+ * in the frame it shows, turned as it is, seen as the canvas sees it -
+ * straight from above, or from an `eye` in perspective - their values
+ * `size` high (world units).
+ */
+export function measurePictureMarks(m: Carried3D, style: Style3D, size: number, eye?: Eye): MeasureMark[] {
+  const measures = m.measures ?? [];
+  if (!measures.length) return [];
+  const molecule = { ...m, id: 0 } as Molecule3D;
+  const solid = solidOf(molecule, style);
+  const places = solid.frames[frameOf(solid, m.frame)];
+  const height = heightOf(m, solid, lookOf(molecule, style));
+  const q = m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion();
+  const seen = (v: THREE.Vector3) => {
+    const p = v.clone().applyQuaternion(q);
+    const at = seenAt(m.at.x + p.x, m.at.y + p.y, height + p.z, eye);
+    return { x: at.x, y: at.y };
+  };
+  const n = m.atoms.length;
+  return measures
+    .filter((x) => x.atoms.length >= 2 && x.atoms.every((i) => i >= 0 && i < n))
+    .map((x) => {
+      const marks = measureMarks(places, x.atoms);
+      const lines: [THREE.Vector3, THREE.Vector3][] = [];
+      for (let k = 0; k + 1 < marks.lines.length; k += 2) {
+        if (marks.dashed) lines.push(...dashesOf(marks.lines[k], marks.lines[k + 1]));
+        else lines.push([marks.lines[k], marks.lines[k + 1]]);
+      }
+      const fan: MeasureMark["fan"] = [];
+      for (let k = 0; k + 2 < marks.fan.length; k += 3) fan.push([seen(marks.fan[k]), seen(marks.fan[k + 1]), seen(marks.fan[k + 2])]);
+      return {
+        lines: lines.map(([a, b]) => [seen(a), seen(b)] as [{ x: number; y: number }, { x: number; y: number }]),
+        width: 2 * MEASURE_RADIUS * WORLD_PER_ANGSTROM,
+        fan,
+        fanOpacity: MEASURE_FAN_OPACITY,
+        label: seen(marks.label),
+        text: measureText(kindOf(x.atoms), measureValue(places, x.atoms)),
+        size,
+        color: COLORS.highlight,
+      };
+    });
 }

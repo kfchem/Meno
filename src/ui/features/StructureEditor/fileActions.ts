@@ -2,7 +2,7 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useCallback, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
-import { createSVG, layoutMolecule, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
+import { createSVG, labelSetOf, layoutMolecule, measureLabelBox, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
 import { writeMolfile, writeMolfile3d, writeSdf, type Atom3D } from "../../../lib/chem/molWriter";
 import { forFlatReaders } from "./chem/drawing";
 import { reactionFileText } from "./chem/reactionFile";
@@ -13,6 +13,8 @@ import { useEditorStore } from "./store";
 import type { Carried3D, Drawn, EditorState } from "./store/types";
 import { carriedOf, isWorkspaceFile, workspaceText } from "./utils/workspace";
 import { pictureMarks } from "./utils/molecule3d";
+import { measurePictureMarks } from "./utils/measure3d";
+import { MARK_SCALE } from "./chem/marks";
 import { currentStyle3D } from "./style3d";
 import { withSolidsImage } from "./render3d";
 import { chemistry } from "../../../lib/chem/molecule";
@@ -167,6 +169,26 @@ export function drawingLayout(
         xs.push(m.a.x, m.b.x);
         ys.push(m.a.y, m.b.y);
       }
+    }
+    take(xs, ys);
+  }
+  // and their measurements, over them: their values as large as the
+  // drawing's R and S
+  const markSize = (opts.units === "px" ? opts.fontPx / layout.zoom : opts.fontPx) * MARK_SCALE;
+  const measures = (model.molecules3d ?? []).flatMap((m) => measurePictureMarks(m, currentStyle3D(), markSize));
+  if (measures.length) {
+    layout.measures = measures;
+    const family = labelSetOf(opts).fontFamily;
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const m of measures) {
+      for (const [a, b] of m.lines) {
+        xs.push(a.x, b.x);
+        ys.push(a.y, b.y);
+      }
+      const box = measureLabelBox(m, family);
+      xs.push(box.min.x, box.max.x);
+      ys.push(box.min.y, box.max.y);
     }
     take(xs, ys);
   }
