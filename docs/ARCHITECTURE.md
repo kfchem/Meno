@@ -173,11 +173,17 @@ What is left before the editor counts as finished, and in what order, is in
   the pointer (`PartMenu.tsx`), which offers the same actions to the mouse
   alone. Only the main button works atoms and bonds; the other is the
   menu's. Over a button or a card nothing counts as hovered.
-- **Strokes**: bonds dragged out of an atom are a stroke (`utils/stroke.ts`,
+- **Strokes**: bonds drawn in one gesture are a stroke (`utils/stroke.ts`,
   with the angles in `utils/extendSnap.ts`) - a bond, or a chain - held in
-  `extend.stroke` while the button is down. The store, `ExtendPreview2D`,
-  `SnapArc2D` and the drawn layout all read the same stroke, so what is
-  shown is what is added; `addStroke` adds it in one edit on release.
+  `extend.stroke` while it is drawn. A chain walks a honeycomb
+  (`utils/honeycomb.ts`, `utils/chain.ts`) and may start on empty space
+  (`NEW_ATOM`) or be traced with the button up (`extend.tracing`,
+  `ChainGuide2D`). The store, `ExtendPreview2D`, `SnapArc2D` and the drawn
+  layout all read the same stroke, so what is shown is what is added;
+  `addStroke` (or `addStrokeAt`) adds it in one edit when it ends.
+- **Long presses**: a press held still is `pressHold` in the store, which
+  `HoldProgress2D` shows; `Atoms2D`, `BondsPick2D` and `Selection2D` time it
+  (`LONG_PRESS_MS`) and select the structure, or begin a box.
 - **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
 - **Chemistry**: RDKit's marks on the structure, in `chem/` and
   `ChemMarks2D` (see the chemistry worker below); clean-up and a SMILES's

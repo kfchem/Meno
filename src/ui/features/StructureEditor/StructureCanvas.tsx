@@ -11,6 +11,8 @@ import {
   BondsPick2D,
   AtomsHoverRings2D,
   ExtendPreview2D,
+  HoldProgress2D,
+  ChainGuide2D,
   MovePreview2D,
   Arrows2D,
   Pluses2D,
@@ -661,6 +663,10 @@ function StructureCanvasContent({
           <AtomsHoverRings2D />
           {/* what is selected, the box or lasso selecting, the handle turning it */}
           <Selection2D />
+          {/* a press held, for a long press: the selection spreading, or a ring */}
+          <HoldProgress2D />
+          {/* the honeycomb a chain is traced on */}
+          <ChainGuide2D />
           {/* A label's font is read before it is drawn: the rest of the
               drawing does not wait for it, nor go if it cannot be read. */}
           <Suspense fallback={null}>

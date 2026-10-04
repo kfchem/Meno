@@ -222,33 +222,18 @@ export function useStructureEvents(
         const near = store
           .getState()
           .findAtomNear(nx, ny, NOMINAL_BOND_LENGTH * 0.3, base.id);
-        // One gesture, one undo step: the atom and its bond together.
+        // One gesture, one undo step: the atom and its bond together. (A
+        // third click takes it back, to draw a chain instead.)
         if (near != null) {
           st.connectAtoms(base.id, near, 1);
         } else {
           st.addAtomBonded(base.id, nx, ny, "C", 1);
         }
+        st.noteDoubleClickBond(base.id);
         return;
       }
     }
-
-    const nowMs2 =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    if (stNow.suppressDblClickUntil && nowMs2 < stNow.suppressDblClickUntil)
-      return;
-
-    const half = L * 0.5;
-    const theta = Math.PI / 6;
-    const dx = half * Math.cos(theta);
-    const dy = half * Math.sin(theta);
-    const ax = ndc.x - dx;
-    const ay = ndc.y - dy;
-    const bx = ndc.x + dx;
-    const by = ndc.y + dy;
-    st.addBondedPair({ x: ax, y: ay, el: "C" }, { x: bx, y: by, el: "C" }, 1);
-    try {
-      store.getState().suppressDoubleClick(320);
-    } catch {}
+    // (on empty space, two clicks begin a chain: Selection2D)
   };
 
   const handleWrapperMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -299,16 +284,21 @@ export function useStructureEvents(
     const stClick = store.getState();
     const nowClick =
       typeof performance !== "undefined" ? performance.now() : Date.now();
+    // The click that ends a gesture - a long press let go, a box drawn, a
+    // turn - is held off as it comes: by the time its label would be
+    // edited, the holding off is over.
+    const heldOff =
+      !!stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil;
     if (
       e.target === domRef.current &&
       stClick.hovered.atomId == null &&
       stClick.hovered.bondId == null &&
-      !(stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil)
+      !heldOff
     )
       stClick.clearSel();
     // The second click of a double-click (as the system reckons one) edits
     // nothing, and neither does its first, if the edit is not yet begun.
-    if (e.detail >= 2) return;
+    if (e.detail >= 2 || heldOff) return;
     const since = clickClock();
     clickTimerRef.current = window.setTimeout(() => {
       if (doubleClickedSince(since)) return;

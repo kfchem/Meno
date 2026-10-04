@@ -13,6 +13,7 @@ import { needsFallback, useTypefaces } from "../../../fonts/typefaces";
 import { chemistry } from "../../../../lib/chem/molecule";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { DrawnLayoutContext } from "./drawnLayoutContext";
+import { NEW_ATOM } from "../utils/stroke";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { DURATION, easeOut } from "../../../theme/motion";
 import { glideAt, partsOf, planGlide, type GlidePlan, type Pt } from "../utils/glide";
@@ -40,6 +41,8 @@ if (typeof window !== "undefined") {
 
 /** The id the atom a bond is being drawn out to goes by until it is made. */
 export const EXTENDING_ATOM_ID = -1;
+/** The new atom a stroke on empty space starts at, while it is drawn. */
+const STROKE_START_ID = -100000;
 
 /**
  * The drawing as it stands this frame - the model, with an atom that is being
@@ -83,6 +86,10 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
       ...chemistry(a),
       ...(a.z != null ? { z: a.z } : {}),
     }));
+    // (a stroke on empty space: its own new atom where it starts)
+    if (stroke && stroke.baseId === NEW_ATOM && stroke.start) {
+      out.push({ id: STROKE_START_ID, x: stroke.start.x, y: stroke.start.y, el: "C" });
+    }
     stroke?.nodes.forEach((n, i) => {
       if (n.atomId == null && n.pathIndex == null) {
         out.push({ id: EXTENDING_ATOM_ID - i, x: n.x, y: n.y, el: "C" });
@@ -161,14 +168,18 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
     if (!stroke) return out;
     // where each node of the stroke is drawn: its own atom, or the one it
     // closed onto
+    const baseIndex = index.get(stroke.baseId === NEW_ATOM ? STROKE_START_ID : stroke.baseId);
+    // (a path index of -1 is the stroke's own start)
+    const ofPath = (i: number) => (i === -1 ? baseIndex : index.get(EXTENDING_ATOM_ID - i));
     const at = (n: { atomId?: number; pathIndex?: number }, i: number) =>
       n.atomId != null
         ? index.get(n.atomId)
         : n.pathIndex != null
-          ? index.get(EXTENDING_ATOM_ID - n.pathIndex)
+          ? ofPath(n.pathIndex)
           : index.get(EXTENDING_ATOM_ID - i);
-    let from = index.get(stroke.baseId);
+    let from = baseIndex;
     stroke.nodes.forEach((n, i) => {
+      if (n.from != null) from = ofPath(n.from) ?? from;
       const to = at(n, i);
       if (from != null && to != null && from !== to) {
         out.push({ a1: from, a2: to, order: 1, stereo: "none" });

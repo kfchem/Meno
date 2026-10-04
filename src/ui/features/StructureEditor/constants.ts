@@ -28,6 +28,17 @@ export const DOUBLE_CLICK_MS = 500;
 export const MOV_PX = 5;
 
 /**
+ * How long a press held still takes to be a long press: it selects the
+ * whole structure on an atom or a bond, and on empty space begins a box. It
+ * is counted while the button is held - a click's label edit waits
+ * DOUBLE_CLICK_MS after it comes up - and only on the first press of
+ * clicks: the second of a double-click held still waits to be dragged.
+ */
+export const LONG_PRESS_MS = 400;
+/** A long press shows nothing for its first part, so that a click shows nothing. */
+export const LONG_PRESS_SHOW_MS = 120;
+
+/**
  * How long a pause in a drag takes to let a bond or a moved atom go where
  * the pointer is, off the grid - or to lay down the bond a chain is on. A
  * drag slows down as it arrives, and should not let go of the grid on its

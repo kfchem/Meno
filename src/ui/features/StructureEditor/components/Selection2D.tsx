@@ -2,9 +2,10 @@ import * as THREE from "three";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
-import { ALPHA, COLORS } from "../../../theme/colors";
+import { COLORS } from "../../../theme/colors";
+import { SELECTION_SHADE } from "./selectionShade";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, MOV_PX } from "../constants";
+import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, turned } from "../utils/selection";
 import { useDrawnLayout } from "./drawnLayoutContext";
@@ -17,19 +18,6 @@ const HANDLE_PX = 6;
 const HANDLE_HIT = 2;
 /** Turning snaps to steps of this many degrees, until a pause lets it go. */
 const TURN_STEP = 15;
-/** How strongly what is selected is shaded, against the hover highlight's. */
-const SHADE = 0.45;
-
-/**
- * The highlight laid over the white page at `alpha`, as one opaque colour:
- * where an atom's shading meets its bonds' it is no darker than elsewhere.
- */
-function overWhite(hex: string, alpha: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const mix = (c: number) => Math.round(255 + (c - 255) * alpha);
-  const [r, g, b] = [mix((n >> 16) & 255), mix((n >> 8) & 255), mix(n & 255)];
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
-}
 
 /**
  * The selection, drawn and worked:
@@ -62,27 +50,10 @@ export default function Selection2D() {
     // the last press on nothing that was not a drag: a second press soon
     // after it, near it, is a double-click's
     let lastEmpty = { t: -Infinity, x: 0, y: 0 };
-    const onDown = (e: PointerEvent) => {
-      if (e.button !== 0 || e.target !== gl.domElement) return;
+    // A box, or (Alt) a lasso, from a press: drawn as the pointer goes, what
+    // it holds selected when the button comes up.
+    const box = (e: PointerEvent, sx: number, sy: number, kind: "box" | "lasso", add: boolean) => {
       const st = store.getState();
-      if (st.hovered.atomId != null || st.hovered.bondId != null || st.labelEdit.active) return;
-      const add = addsToSelection(e);
-      const second =
-        e.timeStamp - lastEmpty.t <= DOUBLE_CLICK_MS && Math.hypot(e.clientX - lastEmpty.x, e.clientY - lastEmpty.y) < 8;
-      const sx = e.clientX;
-      const sy = e.clientY;
-      if (!add && !second) {
-        // (a pan is no first click)
-        lastEmpty = { t: e.timeStamp, x: sx, y: sy };
-        const onFirstUp = (ev: PointerEvent) => {
-          window.removeEventListener("pointerup", onFirstUp, true);
-          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) >= MOV_PX) lastEmpty = { t: -Infinity, x: 0, y: 0 };
-        };
-        window.addEventListener("pointerup", onFirstUp, true);
-        return;
-      }
-      lastEmpty = { t: -Infinity, x: 0, y: 0 };
-      const kind = e.altKey ? "lasso" : "box";
       const start = toWorld(sx, sy);
       let moved = false;
       let points = [start];
@@ -105,7 +76,7 @@ export default function Selection2D() {
         window.removeEventListener("pointerup", onUp, true);
         const s = store.getState();
         s.endPanHold(ev.pointerId);
-        if (!moved) return; // a double-click, not dragged, draws its bond as ever
+        if (!moved) return;
         s.setBoxSelect({ active: false, kind, points: [] });
         invalidate();
         const got = kind === "box" ? inBox(s.model, points[0], points[1]) : inLasso(s.model, points);
@@ -118,6 +89,87 @@ export default function Selection2D() {
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp, true);
+    };
+
+    // A chain from a point of empty space, two clicks there: led by a drag
+    // from the second, or - the second let go where it was - traced with
+    // the button up until a click ends it (ChainGuide2D).
+    const chain = (e: PointerEvent, sx: number, sy: number) => {
+      const st = store.getState();
+      const start = toWorld(sx, sy);
+      let started = false;
+      st.beginPanHold(e.pointerId);
+      const onMove = (ev: PointerEvent) => {
+        if (!started) {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < MOV_PX) return;
+          started = true;
+          store.getState().startChainAt(start.x, start.y, false);
+        }
+        const p = toWorld(ev.clientX, ev.clientY);
+        store.getState().updateExtend(p.x, p.y);
+        invalidate();
+      };
+      const onUp = (ev: PointerEvent) => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp, true);
+        const s = store.getState();
+        s.endPanHold(ev.pointerId);
+        if (started) s.commitExtend();
+        else s.startChainAt(start.x, start.y, true);
+        s.suppressDoubleClick(DOUBLE_CLICK_MS);
+        invalidate();
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp, true);
+    };
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || e.target !== gl.domElement) return;
+      const st = store.getState();
+      if (st.hovered.atomId != null || st.hovered.bondId != null || st.labelEdit.active || st.extend.active) return;
+      const add = addsToSelection(e);
+      const second =
+        e.timeStamp - lastEmpty.t <= DOUBLE_CLICK_MS && Math.hypot(e.clientX - lastEmpty.x, e.clientY - lastEmpty.y) < 8;
+      const sx = e.clientX;
+      const sy = e.clientY;
+      const kind = e.altKey ? "lasso" : "box";
+      // with Ctrl (⌘): a box at once, added to the selection
+      if (add) {
+        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        box(e, sx, sy, kind, true);
+        return;
+      }
+      if (second) {
+        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        chain(e, sx, sy);
+        return;
+      }
+      // A first press: a drag moves the view (PanZoom2D), a click lets the
+      // selection go; held still, a box begins where it is, a ring
+      // spreading there as it is held (HoldProgress2D).
+      lastEmpty = { t: e.timeStamp, x: sx, y: sy };
+      st.setPressHold({ at: toWorld(sx, sy), start: performance.now() });
+      const hold = window.setTimeout(() => {
+        cleanUp();
+        store.getState().setPressHold(null);
+        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        box(e, sx, sy, kind, false);
+      }, LONG_PRESS_MS);
+      const onFirstMove = (ev: PointerEvent) => {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < MOV_PX) return;
+        // (a pan is no first click)
+        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        cleanUp();
+      };
+      const onFirstUp = () => cleanUp();
+      const cleanUp = () => {
+        window.clearTimeout(hold);
+        store.getState().setPressHold(null);
+        window.removeEventListener("pointermove", onFirstMove);
+        window.removeEventListener("pointerup", onFirstUp, true);
+      };
+      window.addEventListener("pointermove", onFirstMove);
+      window.addEventListener("pointerup", onFirstUp, true);
     };
     host.addEventListener("pointerdown", onDown, true);
     return () => host.removeEventListener("pointerdown", onDown, true);
@@ -276,7 +328,7 @@ export default function Selection2D() {
 
   // --- shading -------------------------------------------------------------
   const r = ATOM_HOVER_RING_RADIUS_RATIO * NOMINAL_BOND_LENGTH;
-  const shade = useMemo(() => new THREE.Color(overWhite(COLORS.highlight, ALPHA.highlight * SHADE)), []);
+  const shade = useMemo(() => new THREE.Color(SELECTION_SHADE), []);
   // (shading coming or going: the page's white going over to the shade, so
   // that where parts overlap it stays even)
   const shadeAt = (level: number) => new THREE.Color("#ffffff").lerp(shade, level);
