@@ -274,10 +274,31 @@ Taken while stage 1 was built, on 2026-10-03:
   lines (CREST, xtb, ORCA), lives apart in `lib/calc`, and what it finds
   is plain data on the molecule.
 
-## Stage 2, as built (agent/workspace-2d3d, after #112)
+Taken on 2026-10-04:
+
+- **The structure canvas is the workspace**, and everything else is to be
+  reached from it. The New Tab page is gone: Meno starts on a canvas, "+"
+  makes another, and Open puts a file in a tab of its own. The New… menu
+  goes too, later: the text editor, the Python console and the workflow
+  builder are to be reached from the canvas.
+- **Text files and PDFs on the page**: a small preview of each sits on the
+  workspace, and is edited in a split view or in a window inside Meno's.
+- **No buttons on the canvas.** Commands are in Meno's menu, from its logo,
+  each with its key; the right-click menu has what concerns what is under
+  the pointer, and the canvas as a whole on empty space; keys are kept to
+  what is used most, and reachable by the left hand (Ctrl/Cmd+1 fits, not
+  Ctrl/Cmd+0).
+- **The system's menu bar stays as the system has it.** On a Mac, Meno's
+  commands do not go into it. A Mac's window is to get its own controls
+  (the close button and its neighbours) at some stage.
+- **Closing the last tab quits Meno.**
+
+## Stage 2, as built
 
 - **A drawing to 3D.** A structure's right-click menu, or a selection's,
-  has *3D structure*. Stereo drawn without a configuration is ringed on
+  has *3D structure*; Meno's menu (and the right-click menu on empty
+  space) has *3D structures*, for what is selected or else everything
+  drawn. Stereo drawn without a configuration is ringed on
   the drawing while Meno asks what to make: every stereoisomer it gives,
   one, or none for now. Each is made as a conformer set (RDKit's ETKDG,
   then MMFF94) and comes onto the page as a molecule in 3D, its frames the
@@ -311,8 +332,7 @@ Taken while stage 1 was built, on 2026-10-03:
 
 Taken on 2026-10-04, for stage 2:
 
-- *3D structure* is on a structure's right-click menu and in Meno's menu
-  (the latter once #119 is in).
+- *3D structure* is on a structure's right-click menu and in Meno's menu.
 - A drawing changed after its molecule in 3D was made: the molecule stays,
   and is made again only when asked.
 - What is made is a conformer set from the first.

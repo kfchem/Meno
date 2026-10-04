@@ -4,6 +4,8 @@ import * as THREE from "three";
 import { pageAt } from "../utils/page";
 import { isPinch, wheelReader } from "../../../../lib/input/wheel";
 import { useEditor, useEditorStore } from "../store";
+import { letViewGoalGo, viewGoalOf } from "./viewGoal";
+import { TAU, follow } from "../../../theme/motion";
 
 /** WebKit's pinch on a trackpad, which it gives as gestures, not wheels. */
 type GestureLike = Event & { scale: number; clientX: number; clientY: number };
@@ -14,6 +16,14 @@ const MAX_ZOOM = 300;
 const PINCH_PER_PX = 0.01;
 /** The least a wheel's step counts for when it zooms, in px: a plain wheel's line. */
 const NOTCH_MIN_PX = 40;
+/**
+ * A drag let go while still moving glides on: as fast as it went over the
+ * last RECENT_MS, slowing by GLIDE_FRICTION a second - unless it was held
+ * still for HELD_MS before the release, when it stays where it is.
+ */
+const RECENT_MS = 64;
+const HELD_MS = 80;
+const GLIDE_FRICTION = 4;
 
 export function PanZoom2D() {
   const { camera, gl, invalidate } = useThree();
@@ -40,12 +50,16 @@ export function PanZoom2D() {
   const pos = useRef(
     new THREE.Vector2((camera as any).position.x, (camera as any).position.y)
   );
+  // how fast the view glides on after a drag, in world units a second; and the drag's latest moves
   const vel = useRef(new THREE.Vector2(0, 0));
+  const recent = useRef<{ t: number; dx: number; dy: number }[]>([]);
   const zVel = useRef(0);
   const anchor = useRef({ cx: 0, cy: 0 });
   // (the page camera: PageCamera, its zoom kept as an orthographic camera's)
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
+      // (the user takes the view: a fit on its way gives way)
+      letViewGoalGo(camera);
       // disable pan during bond extension or on a double-click down
       if (extendRef.current) return;
       const btn = (e as any).button;
@@ -80,6 +94,7 @@ export function PanZoom2D() {
       last.current.x = e.clientX;
       last.current.y = e.clientY;
       vel.current.set(0, 0);
+      recent.current = [];
     };
     const onMove = (e: PointerEvent) => {
       if (extendRef.current) {
@@ -116,13 +131,24 @@ export function PanZoom2D() {
       const dy = (e.clientY - last.current.y) / cz;
       pos.current.x -= dx;
       pos.current.y += dy;
-      vel.current.set(-dx, dy);
+      recent.current = [...recent.current, { t: e.timeStamp, dx: -dx, dy }].filter((r) => e.timeStamp - r.t <= RECENT_MS);
       last.current.x = e.clientX;
       last.current.y = e.clientY;
       invalidate();
     };
     const onUp = (e: PointerEvent) => {
       if (dragging.current) {
+        // let go while moving, it glides on as fast as it was going; held
+        // still first, it stays
+        const moves = recent.current;
+        const latest = moves.length ? moves[moves.length - 1].t : -Infinity;
+        if (e.timeStamp - latest > HELD_MS || moves.length < 2) vel.current.set(0, 0);
+        else {
+          const took = Math.max((latest - moves[0].t) / 1000, 1 / 60);
+          const sum = moves.slice(1).reduce((a, r) => ({ x: a.x + r.dx, y: a.y + r.dy }), { x: 0, y: 0 });
+          vel.current.set(sum.x / took, sum.y / took);
+        }
+        recent.current = [];
         // The view may glide on after the release: what was under the
         // pointer need not be any more. The next move finds what is.
         store.getState().clearAtomHover();
@@ -164,6 +190,7 @@ export function PanZoom2D() {
     let pinch: number | null = null;
     const onGestureStart = (e: Event) => {
       e.preventDefault();
+      letViewGoalGo(camera);
       pinch = 1;
     };
     const onGestureChange = (e: Event) => {
@@ -180,6 +207,7 @@ export function PanZoom2D() {
     const readWheel = wheelReader();
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      letViewGoalGo(camera);
       if (pinch !== null) return; // the gesture has it
       const cz = (camera as any).zoom || 1;
       if (readWheel(e) === "pan") {
@@ -260,13 +288,30 @@ export function PanZoom2D() {
 
   useFrame((_, dt) => {
     const cam = camera as any;
+    // a fit on its way: the view going there - its zoom by ratio, so a large
+    // change takes no longer than a small one
+    const goal = viewGoalOf(camera);
+    if (goal && !dragging.current) {
+      const d = Math.min(dt, 1 / 20);
+      const zoom = Math.exp(follow(Math.log(cam.zoom || 1), Math.log(goal.zoom), d, TAU.move));
+      const x = follow(pos.current.x, goal.x, d, TAU.move);
+      const y = follow(pos.current.y, goal.y, d, TAU.move);
+      const there = Math.abs(Math.log(zoom / goal.zoom)) < 1e-3 && Math.hypot(goal.x - x, goal.y - y) * zoom < 0.25;
+      cam.zoom = there ? goal.zoom : zoom;
+      cam.updateProjectionMatrix?.();
+      pos.current.set(there ? goal.x : x, there ? goal.y : y);
+      vel.current.set(0, 0);
+      zVel.current = 0;
+      if (there) letViewGoalGo(camera);
+      invalidate();
+    }
     // inertial pan
     if (!dragging.current) {
-      const panFriction = Math.exp(-4 * dt);
-      vel.current.multiplyScalar(panFriction);
-      if (vel.current.lengthSq() > 1e-8) {
-        pos.current.add(vel.current);
-      }
+      // (a frame long in coming moves it no further than a short one)
+      const step = Math.min(dt, 1 / 30);
+      vel.current.multiplyScalar(Math.exp(-GLIDE_FRICTION * step));
+      if (vel.current.lengthSq() > 1e-4) pos.current.addScaledVector(vel.current, step);
+      else vel.current.set(0, 0);
     }
     cam.position.x = pos.current.x;
     cam.position.y = pos.current.y;

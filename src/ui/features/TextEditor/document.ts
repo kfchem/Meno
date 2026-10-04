@@ -11,7 +11,7 @@ export function createTextDocument(data: unknown): DocumentStore<TextDocument> {
 
 /**
  * Mirrors the document back into the tab's data, so everything that reads a
- * tab's content (the loader flow, later the save path) keeps working while
+ * tab's content (a file opened into it, later the save path) keeps working while
  * views migrate to documents one at a time.
  */
 export function textToTabData(text: TextDocument): { text: string } {

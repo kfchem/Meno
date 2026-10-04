@@ -18,3 +18,5 @@ export { default as Pluses2D } from "./Pluses2D";
 export { default as ChemMarks2D } from "./ChemMarks2D";
 export { default as SnapArc2D } from "./SnapArc2D";
 export { default as Selection2D } from "./Selection2D";
+export { default as HoldProgress2D } from "./HoldProgress2D";
+export { default as ChainGuide2D } from "./ChainGuide2D";

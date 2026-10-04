@@ -10,6 +10,7 @@ import { schemeAmong } from "../../utils/copyPaste";
 import { relinked } from "../../utils/drawnLink";
 import type { Workspace } from "../../utils/workspace";
 import { StoreApi } from "zustand";
+import { DOUBLE_CLICK_MS } from "../../constants";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -157,6 +158,23 @@ export const createModelSlice = (
     doc.edit("move atom", (d) => ops.moveAtom(d, id, x, y), {
       coalesceKey: `move-atom:${id}`,
     });
+  },
+
+  noteDoubleClickBond: (atomId: number) =>
+    set((prev: EditorState) => ({
+      ...prev,
+      doubleClickBond: { atomId, depth: doc.history().undoDepth, at: performance.now() },
+    })),
+
+  takeBackDoubleClickBond: (atomId: number) => {
+    const d = get().doubleClickBond;
+    set((prev: EditorState) => ({ ...prev, doubleClickBond: null }));
+    if (!d || d.atomId !== atomId || performance.now() - d.at > 2 * DOUBLE_CLICK_MS) return;
+    if (doc.history().undoDepth === d.depth) doc.undo();
+  },
+
+  drawStrokeAt: (start: { x: number; y: number }, nodes: Parameters<typeof ops.addStroke>[2]) => {
+    doc.edit("draw chain", (d) => ops.addStrokeAt(d, start, nodes));
   },
 
   drawStroke: (

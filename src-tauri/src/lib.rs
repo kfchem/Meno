@@ -20,11 +20,6 @@ mod update;
 #[cfg(windows)]
 mod ole;
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 // uv-based Python env helpers
 #[derive(Deserialize, Clone)]
 struct PyEnvInfo {
@@ -643,7 +638,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
             // the system clipboard, for structures
             clipboard::clipboard_write,
             clipboard::clipboard_read,

@@ -1,35 +1,50 @@
 /**
- * A stroke: bonds drawn out of an atom in one press of the button.
+ * A stroke: bonds drawn in one gesture.
  *
- * - A **bond** stroke - a plain drag from an atom - draws one bond, which
- *   points where the pointer leads it (see `snapBond`) and, after a pause,
- *   goes exactly where the pointer is.
- * - A **chain** stroke - a double-click on an atom, then a drag - lays an
- *   atom down every time the pointer has gone a bond's length past the last
- *   one, turning 120 degrees each time to follow it (see `chainStep`); a
- *   pause lays down the bond it is on.
+ * - A **bond** stroke - a double-click on an atom, then a drag - draws one
+ *   bond, which points where the pointer leads it (see `snapBond`) and,
+ *   after a pause, goes exactly where the pointer is. It ends on an atom
+ *   already there when it comes within reach of one - it closes a ring -
+ *   and on the atom the pointer is on, however far away.
+ * - A **chain** stroke - three clicks on an atom, or two on empty space -
+ *   runs on a honeycomb laid out from where it starts (./chain): led along
+ *   it, it lays a bond down a step at a time; led back, it takes them back;
+ *   led round in a loop, it draws a ring as large as the loop.
  *
- * Either ends on an atom already there when it comes within reach of one -
- * it closes a ring - and a chain goes on from it. A bond also ends on the
- * atom the pointer is on, however far away: a long bond closes a ring too. Nothing is added to the
- * document until the button comes up: the stroke is one undo step.
+ * Nothing is added to the document until the stroke ends: it is one undo
+ * step.
  */
-import { chainStart, chainStep, snapBond, type Pt } from "./extendSnap";
+import { snapBond, type Pt } from "./extendSnap";
+import { endChain, followChain, ringsOf, startChain, type Chain } from "./chain";
+import { cellOf } from "./honeycomb";
 
 /**
  * An atom a stroke has reached: a new one where it goes, an atom already
- * there (`atomId`), or one this stroke laid down before (`pathIndex`).
+ * there (`atomId`), or one this stroke laid down before (`pathIndex`; -1 is
+ * the atom the stroke started at). Its bond comes from the node before it,
+ * or from `from` (a path index likewise) - where a ring a chain draws goes
+ * off from the chain.
  */
-export type StrokeNode = Pt & { atomId?: number; pathIndex?: number };
+export type StrokeNode = Pt & { atomId?: number; pathIndex?: number; from?: number };
+
+/** The stroke's own start, as a path index. */
+export const BASE = -1;
+/** A stroke's base where it starts on empty space: a new atom, at `start`. */
+export const NEW_ATOM = -1;
 
 export type Stroke = {
   kind: "bond" | "chain";
+  /** The atom it starts at; NEW_ATOM where it starts on empty space. */
   baseId: number;
+  /** Where it starts, when that is empty space. */
+  start?: Pt;
   nodes: StrokeNode[];
   /** Which way the chain turned last: +1 left, -1 right, 0 not yet. */
   lastTurn: number;
   /** A bond stroke after a pause: it goes where the pointer is, unsnapped. */
   free: boolean;
+  /** A chain's walk on its honeycomb, and the rings drawn on the way. */
+  chain?: Chain;
 };
 
 type StrokeModel = {
@@ -39,12 +54,87 @@ type StrokeModel = {
 
 /** How near an atom the end of a bond has to come to close onto it. */
 export const JOIN_REACH = 0.4;
-/** How far past the last atom the pointer has to be for a chain's pause or release to add a bond. */
-const LAY_REACH = 0.35;
-const RELEASE_REACH = 0.5;
 
-export function startStroke(kind: Stroke["kind"], baseId: number): Stroke {
-  return { kind, baseId, nodes: [], lastTurn: 0, free: false };
+/**
+ * A stroke from the atom `baseId`, or - a chain - from `start` on empty
+ * space (baseId NEW_ATOM). A chain's honeycomb is turned so that a bond its
+ * atom already has is one of the honeycomb's.
+ */
+export function startStroke(
+  kind: Stroke["kind"],
+  baseId: number,
+  model?: StrokeModel,
+  start?: Pt,
+  length = 1,
+): Stroke {
+  const s: Stroke = { kind, baseId, nodes: [], lastTurn: 0, free: false, ...(start ? { start } : {}) };
+  if (kind !== "chain" || !model) return s;
+  const base = baseId === NEW_ATOM ? start : model.atoms.find((a) => a.id === baseId);
+  if (!base) return s;
+  const bonded = model.bonds
+    .flatMap((b) => (b.a === baseId ? [b.b] : b.b === baseId ? [b.a] : []))
+    .map((id) => model.atoms.find((a) => a.id === id))
+    .filter((a): a is { id: number; x: number; y: number } => !!a);
+  return { ...s, chain: startChain({ x: base.x, y: base.y }, bonded, length) };
+}
+
+/**
+ * A chain's walk and rings as the nodes it adds: each point of the walk an
+ * atom - one already there where the honeycomb's point falls on it - a
+ * point it comes round to again the same atom, and each ring's atoms going
+ * off from the walk's point and back to it.
+ */
+export function chainNodes(model: StrokeModel, s: Stroke): StrokeNode[] {
+  const c = s.chain;
+  if (!c) return s.nodes;
+  const L = c.honeycomb.length;
+  const nodes: StrokeNode[] = [];
+  const base = s.baseId === NEW_ATOM ? s.start : model.atoms.find((a) => a.id === s.baseId);
+  // where each placed atom is, by its path index: the base, then the nodes
+  const placed: { at: Pt; ref: number }[] = base ? [{ at: base, ref: BASE }] : [];
+  const near = (p: Pt) => placed.find((q) => Math.hypot(q.at.x - p.x, q.at.y - p.y) < 0.3 * L)?.ref;
+  const existing = (p: Pt) =>
+    model.atoms.find((a) => a.id !== s.baseId && Math.hypot(a.x - p.x, a.y - p.y) < 0.35 * L)?.id;
+  const place = (p: Pt, from?: number): number => {
+    const again = near(p);
+    if (again != null) {
+      nodes.push({ x: p.x, y: p.y, pathIndex: again, ...(from != null ? { from } : {}) });
+      return again;
+    }
+    const atomId = existing(p);
+    nodes.push({ x: p.x, y: p.y, ...(atomId != null ? { atomId } : {}), ...(from != null ? { from } : {}) });
+    placed.push({ at: p, ref: nodes.length - 1 });
+    return nodes.length - 1;
+  };
+  // the walk: one bond a step
+  const refs: number[] = [BASE];
+  for (let i = 1; i < c.walk.length; i++) {
+    const cell = cellOf(c.honeycomb, c.walk[i]);
+    // (a step from somewhere other than the node before: after coming round
+    // to a point it had been through, the walk goes on from there)
+    const prev = refs[i - 1];
+    const from = nodes.length && refOf(nodes, nodes.length - 1) !== prev ? prev : undefined;
+    refs.push(place(cell, from));
+  }
+  // the rings: off from the walk's point, round, and back to it
+  for (const r of ringsOf(c)) {
+    const at = refs[r.at];
+    if (at == null) continue;
+    let from: number | undefined = at;
+    for (const p of r.points) {
+      place(p, from);
+      from = undefined;
+    }
+    const j = at === BASE ? base : nodes[at];
+    if (j) nodes.push({ x: j.x, y: j.y, pathIndex: at });
+  }
+  return nodes;
+}
+
+/** What a node stands for, as a path index: itself, or the atom it closes onto among the stroke's. */
+function refOf(nodes: StrokeNode[], i: number): number {
+  const n = nodes[i];
+  return n.pathIndex != null ? n.pathIndex : i;
 }
 
 /** The atom a stroke is at: where it is, the one before it, and what it is bonded to. */
@@ -54,7 +144,7 @@ function tipOf(model: StrokeModel, s: Stroke) {
     model.bonds.flatMap((b) =>
       b.a === id ? [b.b] : b.b === id ? [b.a] : [],
     );
-  const base = at.get(s.baseId);
+  const base = s.baseId === NEW_ATOM ? s.start : at.get(s.baseId);
   if (!base) return null;
   const n = s.nodes.length;
   const tip: Pt = n ? s.nodes[n - 1] : base;
@@ -93,22 +183,15 @@ export function strokeTarget(
   pointer: Pt,
   length: number,
 ): StrokeTarget | null {
+  // (a chain leads no bond of its own: its walk is what it lays down)
+  if (s.kind === "chain") return null;
   const t = tipOf(model, s);
   if (!t) return null;
   let end: Pt;
   let trigonalTo: number | undefined;
   let turn: 1 | -1 | undefined;
-  if (s.kind === "bond" && s.free) {
+  if (s.free) {
     end = pointer;
-  } else if (s.kind === "chain" && t.previous) {
-    const step = chainStep(t.previous, t.tip, pointer, s.lastTurn, length);
-    end = step.end;
-    turn = step.turn;
-  } else if (s.kind === "chain") {
-    const first = chainStart(t.tip, t.neighbours, pointer, length);
-    end = first.end;
-    trigonalTo = first.trigonalTo;
-    if (first.turn !== 0) turn = first.turn;
   } else {
     const b = snapBond(t.tip, t.neighbours, pointer, length);
     end = b.end;
@@ -174,48 +257,37 @@ function lay(s: Stroke, target: StrokeTarget): Stroke {
 }
 
 /**
- * The stroke after the pointer has moved: a chain lays an atom down for
- * every bond length the pointer has gone past the last one.
+ * The stroke after the pointer has moved: a chain goes on along its
+ * honeycomb, or back, and draws its rings (./chain).
  */
 export function advanceStroke(
   model: StrokeModel,
   s: Stroke,
   pointer: Pt,
-  length: number,
+  _length: number,
 ): Stroke {
-  if (s.kind !== "chain") return s;
-  let next = s;
-  for (let i = 0; i < 64; i++) {
-    const target = strokeTarget(model, next, pointer, length);
-    if (!target) break;
-    if (Math.hypot(pointer.x - target.tip.x, pointer.y - target.tip.y) < length)
-      break;
-    next = lay(next, target);
-  }
-  return next;
+  if (s.kind !== "chain" || !s.chain) return s;
+  const chain = followChain(s.chain, pointer);
+  if (chain === s.chain) return s;
+  const next = { ...s, chain };
+  return { ...next, nodes: chainNodes(model, next) };
 }
 
-/**
- * A pause in the stroke: a bond lets go of the grid and follows the pointer
- * exactly; a chain lays down the bond it is on, snapped as it is.
- */
+/** A pause in the stroke: a bond lets go of the grid and follows the pointer exactly; a chain goes on as it was. */
 export function holdStroke(
-  model: StrokeModel,
+  _model: StrokeModel,
   s: Stroke,
-  pointer: Pt,
-  length: number,
+  _pointer: Pt,
+  _length: number,
 ): Stroke {
   if (s.kind === "bond") return s.free ? s : { ...s, free: true };
-  const target = strokeTarget(model, s, pointer, length);
-  if (!target) return s;
-  const far = Math.hypot(pointer.x - target.tip.x, pointer.y - target.tip.y);
-  return far < LAY_REACH * length ? s : lay(s, target);
+  return s;
 }
 
 /**
- * Everything the stroke adds when the button comes up: its atoms, and the
- * bond it is on - always for a bond, for a chain only when the pointer has
- * gone far enough past the last atom to mean it.
+ * Everything the stroke adds when it ends: a bond stroke's atom and the
+ * bond it is on; a chain's walk, and its rings - the one the latest step
+ * back drew among them.
  */
 export function finishStroke(
   model: StrokeModel,
@@ -223,11 +295,11 @@ export function finishStroke(
   pointer: Pt,
   length: number,
 ): StrokeNode[] {
+  if (s.kind === "chain") {
+    if (!s.chain) return s.nodes;
+    return chainNodes(model, { ...s, chain: endChain(s.chain) });
+  }
   const target = strokeTarget(model, s, pointer, length);
   if (!target) return s.nodes;
-  if (s.kind === "chain") {
-    const far = Math.hypot(pointer.x - target.tip.x, pointer.y - target.tip.y);
-    if (far < RELEASE_REACH * length) return s.nodes;
-  }
   return lay(s, target).nodes;
 }

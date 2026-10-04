@@ -13,8 +13,6 @@
 Start-Meno
 Open-MenoFile "$PSScriptRoot/../fixtures/strokes.mol"
 Wait-MenoSettled | Out-Null
-$c = Get-ClientSize
-$row = $c.Height - 60
 # left ethane's upper carbon: + (a carbocation); its lower carbon: - twice
 Move-MenoPointer -X 772 -Y 877
 Send-MenoText "+"
@@ -37,7 +35,7 @@ Start-Sleep -Milliseconds 400
 Save-Step "menu"
 Send-MenoKey Escape
 # charged molecules from a SMILES
-Invoke-MenoClick -X 498 -Y $row
+Invoke-MenoMenu "SMILES..."
 Start-Sleep -Seconds 2
 Send-MenoText "C[N+](=O)[O-].CC(=O)[O-].[Na+].CC[N+](C)(C)C.[13CH3]C" -CharMs 10
 Send-MenoKey Enter

@@ -262,6 +262,11 @@ export type EditorState = {
     /** The stroke being drawn: a bond or a chain, and what it has laid down. */
     stroke?: Stroke | null;
     /**
+     * A chain traced with the button up - started by a click, ended by
+     * another - rather than dragged: the pointer's moves lead it as they come.
+     */
+    tracing?: boolean;
+    /**
      * Where the bond the pointer is leading ends, as ExtendPreview2D shows it
      * (after snapping, and the spring into place) - on an atom already there
      * or one of the stroke's own when it closes onto it - so the drawing can
@@ -353,7 +358,10 @@ export type EditorState = {
   clearAtomHover: () => void;
   clearBondHover: () => void;
   /** Begins a stroke out of an atom: one bond, or a chain. */
-  startExtend: (atomId: number, kind?: Stroke["kind"]) => void;
+  /** A stroke from an atom: `tracing`, a chain led with the button up (see `extend.tracing`). */
+  startExtend: (atomId: number, kind?: Stroke["kind"], tracing?: boolean) => void;
+  /** A chain from a new atom at a point on empty space. */
+  startChainAt: (x: number, y: number, tracing?: boolean) => void;
   updateExtend: (x: number, y: number) => void;
   /** A pause in the stroke: see `holdStroke`. */
   holdExtend: () => void;
@@ -365,6 +373,21 @@ export type EditorState = {
     nodes: readonly StrokeNode[],
     kind: Stroke["kind"],
   ) => void;
+  /**
+   * A press being held, for a long press: on an atom (its structure is
+   * what it selects) or at a point of empty space (a box begins there), and
+   * when it began. Null once it moves, comes up, or has been held long
+   * enough.
+   */
+  pressHold: { atomId?: number; at?: { x: number; y: number }; start: number } | null;
+  setPressHold: (h: EditorState["pressHold"]) => void;
+  /** The bond a double-click on an atom drew, which a third click takes back to draw a chain instead. */
+  doubleClickBond: { atomId: number; depth: number; at: number } | null;
+  noteDoubleClickBond: (atomId: number) => void;
+  /** The double-click's bond on `atomId` taken back, if it is the last edit and has only just been made. */
+  takeBackDoubleClickBond: (atomId: number) => void;
+  /** A chain drawn from a new atom on empty space, as one edit. */
+  drawStrokeAt: (start: { x: number; y: number }, nodes: readonly StrokeNode[]) => void;
   suppressDoubleClick: (ms?: number) => void;
   triggerHoverPulse: (bondId: number) => void;
   beginPanHold: (pointerId: number | null) => void;
@@ -381,8 +404,18 @@ export type EditorState = {
    * until it has been saved once.
    */
   savedPath: string | null;
+  /**
+   * The file last opened over what the canvas held (its name only): what
+   * Save As suggests, the canvas being saved nowhere since.
+   */
+  openedName: string | null;
   /** The document has just been written to `path`: it is saved there. */
   markSavedAs: (path: string) => void;
+  /**
+   * A file named `name` has been opened on the canvas, as what it starts
+   * with: it is saved nowhere yet, and Save asks where, suggesting that name.
+   */
+  markOpenedOver: (name: string) => void;
   setExtendPreview: (
     x: number,
     y: number,

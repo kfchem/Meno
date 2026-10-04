@@ -497,4 +497,18 @@ describe("a document's own drawing style", () => {
     doc.undo();
     expect(state().docStyle).toEqual({ preset: "rsc", changes: {} });
   });
+
+  it("forgets where it was saved once a file is opened over it, Save to ask where", () => {
+    const { doc, state } = editor();
+    state().addAtom(0, 0, "C");
+    state().markSavedAs("/work/first.mol");
+    expect(doc.history().dirty).toBe(false);
+    state().addAtom(1.5, 0, "O");
+    state().markOpenedOver("second.mol");
+    expect(state().savedPath).toBeNull();
+    expect(state().openedName).toBe("second.mol");
+    // and once saved again, it is saved there
+    state().markSavedAs("/work/second.mol");
+    expect(state().savedPath).toBe("/work/second.mol");
+  });
 });

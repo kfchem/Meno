@@ -1,3 +1,5 @@
+import { AnimatePresence, motion } from "motion/react";
+import { FADE, RISE } from "../theme/motion";
 import { GlobeAltIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef } from "react";
 import { purposeName, useNetwork } from "../../lib/net/network";
@@ -23,11 +25,12 @@ export default function ConsentDialog() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [asking]);
-  if (!asking) return null;
-
   return (
-    <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/20">
-      <div
+    <AnimatePresence>
+    {asking && (
+    <motion.div key="consent" {...FADE} className="absolute inset-0 z-[110] flex items-center justify-center bg-black/20">
+      <motion.div
+        {...RISE}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="consent-title"
@@ -70,7 +73,9 @@ export default function ConsentDialog() {
             Allow and download
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+    )}
+    </AnimatePresence>
   );
 }
