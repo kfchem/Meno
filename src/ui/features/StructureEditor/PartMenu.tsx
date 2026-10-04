@@ -69,6 +69,8 @@ export type MenuMolecule3D = {
   onTurnLikeDrawing?: () => void;
   /** Made again from its drawing, which has changed since; unset, where it has not. */
   onRemake?: () => void;
+  /** Drawn as a formula beside it, by Meno's engine: unset, where it has a drawing already. */
+  onDrawFormula?: () => void;
   /** Its frames all shown at once, or one: unset, where it has one only; `conformers`, whether they are a conformer set's. */
   overlay?: { on: boolean; conformers: boolean; set: (on: boolean) => void };
 };
@@ -194,6 +196,7 @@ export default function PartMenu({
           : []),
         ...(molecule3d.onTurnLikeDrawing ? [{ name: "Turn like the drawing", keys: "", run: molecule3d.onTurnLikeDrawing }] : []),
         ...(molecule3d.onRemake ? [{ name: "Make again from the drawing", keys: "", run: molecule3d.onRemake, divider: true }] : []),
+        ...(molecule3d.onDrawFormula ? [{ name: "Draw as formula", keys: "", run: molecule3d.onDrawFormula }] : []),
       ]
     : [];
   const items: Item[] =

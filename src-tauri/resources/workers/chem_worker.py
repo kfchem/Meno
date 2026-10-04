@@ -257,6 +257,34 @@ def op_conformers(m):
     return {"isomers": made}
 
 
+def op_drawing_of(m):
+    """A molecule in 3D as a formula to draw: its heavy atoms, in their
+    order, laid out in 2D, wedged as its 3D structure says (for Meno's engine
+    to draw afresh). Where its bonds' orders are not known - all single, as a
+    file of coordinates alone gives them - they are found from where its
+    atoms are, if they can be."""
+    mol = Chem.MolFromMolBlock(m["molblock"], sanitize=False, removeHs=False)
+    if mol is None:
+        raise ValueError("not a MOL block RDKit can read")
+    if m.get("perceive"):
+        from rdkit.Chem import rdDetermineBonds
+
+        try:
+            found = Chem.Mol(mol)
+            rdDetermineBonds.DetermineBondOrders(found, charge=int(m.get("charge", 0)))
+            mol = found
+        except Exception:
+            pass  # (as the file has them, then)
+    problem = Chem.SanitizeMol(mol, catchErrors=True)
+    if problem != Chem.SanitizeFlags.SANITIZE_NONE:
+        raise ValueError(f"cannot make sense of the structure ({problem})")
+    Chem.AssignStereochemistryFrom3D(mol)
+    heavy = Chem.RemoveHs(mol)
+    heavy.RemoveAllConformers()
+    rdDepictor.Compute2DCoords(heavy)
+    return {"molblock": Chem.MolToV3KMolBlock(heavy)}
+
+
 OPS = {
     "ping": op_ping,
     "to_smiles": op_to_smiles,
@@ -264,6 +292,7 @@ OPS = {
     "analyse": op_analyse,
     "open_stereo": op_open_stereo,
     "conformers": op_conformers,
+    "drawing_of": op_drawing_of,
 }
 
 

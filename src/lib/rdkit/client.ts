@@ -25,6 +25,12 @@ export type ChemRequests = {
     args: { molblock: string; isomers?: "one" | "all"; count?: number };
     result: { isomers: Conformers[] };
   };
+  /**
+   * A molecule in 3D as a formula to draw: its heavy atoms in their order,
+   * laid out in 2D and wedged as it is in 3D; its bonds' orders found where
+   * they are not known (`perceive`).
+   */
+  drawing_of: { args: { molblock: string; perceive?: boolean }; result: { molblock: string } };
 };
 
 export type OpenStereo = { atoms: number[]; bonds: number[]; isomers: number };

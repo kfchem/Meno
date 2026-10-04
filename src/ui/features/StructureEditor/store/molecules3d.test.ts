@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { addMolecule3d, createStructureDocument } from "../document";
 import { molecules3dIn } from "../utils/selection";
+import { linkOf } from "../utils/drawnLink";
 
 const water = {
   atoms: [
@@ -217,5 +218,58 @@ describe("molecules in 3D, chosen and selected", () => {
       { x: 5, y: 1 },
     ];
     expect(molecules3dIn(ms, "lasso", lasso)).toEqual([2]);
+  });
+});
+
+describe("molecules in 3D and their drawings", () => {
+  it("rise as one undo step, turned and rising from over the drawing, several one after another", () => {
+    const { doc, state } = editor();
+    const ids = state().riseMolecules3d([
+      { m: { ...water, at: { x: 10, y: 0 } }, turn: [0, 0, 0, 1], from: { x: 1, y: 1 } },
+      { m: { ...water, at: { x: 14, y: 0 } }, turn: [0, 1, 0, 0], from: { x: 1, y: 1 } },
+    ]);
+    expect(ids).toEqual([3, 4]);
+    expect(doc.history().undoLabel).toBe("3D structures");
+    expect(state().turns3d[4]).toEqual([0, 1, 0, 0]);
+    expect(state().rising3d[4].start).toBeGreaterThan(state().rising3d[3].start);
+    state().risen3d(3);
+    expect(state().rising3d[3]).toBeUndefined();
+    doc.undo();
+    expect(state().molecules3d.map((m) => m.id)).toEqual([1, 2]);
+  });
+
+  it("are made again in place of the one before, as one step", () => {
+    const { doc, state } = editor();
+    state().riseMolecules3d([{ m: { ...water, at: { x: 0, y: 0 } }, turn: [0, 0, 0, 1], from: { x: 0, y: 0 } }], [1]);
+    expect(state().molecules3d.map((m) => m.id)).toEqual([2, 3]);
+    expect(doc.history().undoLabel).toBe("3D structure made again");
+    doc.undo();
+    expect(state().molecules3d.map((m) => m.id)).toEqual([1, 2]);
+  });
+
+  it("are drawn as a formula, added to the drawing and tied to it, as one step", () => {
+    const { doc, state } = editor();
+    const formula = {
+      atoms: [{ id: 7, x: -5, y: 0, r: 0.9, el: "O" }],
+      bonds: [],
+    };
+    state().drawFormula3d(1, formula, [7, null, null, null, null]);
+    const atom = state().model.atoms[0];
+    expect(atom.el).toBe("O");
+    const m = state().molecules3d[0];
+    expect(m.drawnFrom).toEqual([atom.id, null, null, null, null]);
+    expect(linkOf(m, state().model)).toBe("live");
+    expect(doc.history().undoLabel).toBe("draw as formula");
+    doc.undo();
+    expect(state().model.atoms).toEqual([]);
+    expect(state().molecules3d[0].drawnFrom).toBeUndefined();
+  });
+
+  it("show their frames overlaid, or not, as the view has it", () => {
+    const { state } = editor();
+    state().setOverlay3d(2, true);
+    expect(state().overlay3d).toEqual({ 2: true });
+    state().setOverlay3d(2, false);
+    expect(state().overlay3d).toEqual({});
   });
 });

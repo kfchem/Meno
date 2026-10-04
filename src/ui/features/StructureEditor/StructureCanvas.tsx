@@ -81,7 +81,8 @@ import Molecules3D from "./components/Molecules3D";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
-import { blocksOf, boxOf, conformersOf, linkOf, moleculeOf, openIn, placeRow, rowFrom, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
+import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, linkOf, moleculeOf, openIn, placeRow, rowFrom, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
+import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
 import type { Molecule3D } from "./store/types";
@@ -191,10 +192,11 @@ function StructureCanvasContent({
   // Structures made in 3D (chem/make3d): asked first about what their
   // drawing leaves open, then their conformers made and risen out of them
   const [ask3d, setAsk3d] = useState<{ blocks: Block[]; open: Open[]; replacing?: Molecule3D } | null>(null);
-  const [making3d, setMaking3d] = useState(false);
+  // (what RDKit is doing for it, said meanwhile)
+  const [working3d, setWorking3d] = useState<string | null>(null);
   const build3d = useCallback(
     async (blocks: Block[], isomers: "one" | "all", replacing?: Molecule3D) => {
-      setMaking3d(true);
+      setWorking3d("Making the 3D structure…");
       setChemError(null);
       try {
         const chem = await chemWorker();
@@ -220,7 +222,7 @@ function StructureCanvasContent({
       } catch (e: unknown) {
         setChemError(`No 3D structure could be made: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
-        setMaking3d(false);
+        setWorking3d(null);
       }
     },
     [store, viewBox, requestFit],
@@ -255,6 +257,30 @@ function StructureCanvasContent({
       if (mol && atoms.length) void make3d(atoms, mol);
     },
     [store, make3d],
+  );
+  // A molecule in 3D drawn as a formula beside it - by Meno's engine, from
+  // the frame it shows - and tied to it, as one undo step
+  const drawFormula = useCallback(
+    async (id: number) => {
+      const st = store.getState();
+      const mol = st.molecules3d.find((x) => x.id === id);
+      if (!mol) return;
+      setWorking3d("Drawing the formula…");
+      setChemError(null);
+      try {
+        const { model: formula, link } = await formulaOf(await chemWorker(), mol, st.frames3d[id] ?? 0);
+        const placed = centredAt(formula, formulaPlace(mol, formula, STYLE_3D));
+        store.getState().drawFormula3d(id, placed, link);
+        // (beyond the view, the view takes it in)
+        const view = viewBox();
+        if (view && placed.atoms.some((a) => a.x < view.x0 || a.x > view.x1 || a.y < view.y0 || a.y > view.y1)) requestFit();
+      } catch (e: unknown) {
+        setChemError(`The formula could not be drawn: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setWorking3d(null);
+      }
+    },
+    [store, viewBox, requestFit],
   );
   // A molecule in 3D turned to lie as its drawing does, as it did as it rose
   const turnLikeDrawing = useCallback(
@@ -400,6 +426,7 @@ function StructureCanvasContent({
         onCopy: () => void clip.copy(menuMolecule.id),
         ...(menuLink === "live" || menuLink === "changed" ? { onTurnLikeDrawing: () => turnLikeDrawing(menuMolecule.id) } : {}),
         ...(menuLink === "changed" ? { onRemake: () => remake3d(menuMolecule.id) } : {}),
+        ...(menuLink == null || menuLink === "gone" ? { onDrawFormula: () => void drawFormula(menuMolecule.id) } : {}),
         ...((menuMolecule.frames?.length ?? 0) > 0
           ? {
               overlay: {
@@ -711,7 +738,7 @@ function StructureCanvasContent({
         </button>
       </div>
       {active &&
-        (chem.state === "setting-up" || chem.state === "starting" || making3d) && (
+        (chem.state === "setting-up" || chem.state === "starting" || working3d) && (
           <div
             role="status"
             className="absolute right-3 bottom-3 z-50 rounded-full border border-gh-line bg-white/95 shadow-sm px-3 py-1.5 text-xs text-gh-gray"
@@ -720,7 +747,7 @@ function StructureCanvasContent({
               ? "Setting up RDKit…"
               : chem.state === "starting"
                 ? "Starting RDKit…"
-                : "Making the 3D structure…"}
+                : working3d}
           </div>
         )}
       {ask3d && (

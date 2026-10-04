@@ -677,6 +677,14 @@ export function addMolecule3d(doc: StructureDocument, m: Omit<Molecule3D, "id">)
   return { ...doc, molecules3d: [...(doc.molecules3d ?? []), { ...m, id }], nextMolecule3dId: id + 1 };
 }
 
+/** A molecule in 3D tied to a drawing atom by atom (`drawnFrom`), the drawing as it is now (`drawnAs`). */
+export function linkMolecule3d(doc: StructureDocument, id: number, drawnFrom: (number | null)[], drawnAs: string): StructureDocument {
+  return {
+    ...doc,
+    molecules3d: (doc.molecules3d ?? []).map((m) => (m.id === id ? { ...m, drawnFrom, drawnAs } : m)),
+  };
+}
+
 export function moveMolecule3d(doc: StructureDocument, id: number, at: { x: number; y: number; z?: number }): StructureDocument {
   return moveMolecules3d(doc, [{ id, at }]);
 }

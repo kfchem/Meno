@@ -9,11 +9,16 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import type { Style3D } from "../../../../lib/chem/style3d";
 import type { ChemClient, Conformers } from "../../../../lib/rdkit/client";
 import { chemMolblock, molIndex } from "../../../../lib/rdkit/molblock";
+import { writeMolfile3d } from "../../../../lib/chem/molWriter";
+import { editorModelOf, processFileContent } from "../utils/io";
 import type { Model, Molecule3D, Turn3D } from "../store/types";
 import { turnOnto } from "../utils/align3d";
+import { signatureOf } from "../utils/drawnLink";
 import { solidOf } from "../utils/molecule3d";
 import { PAGE_DISTANCE } from "../utils/page";
-import { fragmentsHolding, partOf } from "./cleanUp";
+import { fragmentsHolding, laidOut, partOf } from "./cleanUp";
+
+export { linkOf, signatureOf } from "../utils/drawnLink";
 
 /** How long a structure's conformers may take: a large one's, on a slow machine, minutes. */
 export const CONFORMERS_MS = 5 * 60_000;
@@ -37,41 +42,6 @@ export function blocksOf(model: Model, atoms: Iterable<number>): Block[] {
         part,
       };
     });
-}
-
-/**
- * What a drawn structure is, as its molecules in 3D were made from it: its
- * atoms (by id: element, charge, mass), its bonds (order and wedge), and
- * those that leave it - not where anything is drawn. A molecule in 3D whose
- * drawing no longer says the same is its drawing's no longer.
- */
-export function signatureOf(model: Model, ids: Iterable<number>): string {
-  const of = new Set(ids);
-  const atoms = model.atoms
-    .filter((a) => of.has(a.id))
-    .map((a) => `${a.id}:${a.el}:${a.charge ?? 0}:${a.isotope ?? ""}`)
-    .sort();
-  const bonds = model.bonds
-    .filter((b) => of.has(b.a) || of.has(b.b))
-    .map((b) => {
-      const ends = of.has(b.a) && of.has(b.b) ? `${b.a}-${b.b}` : of.has(b.a) ? `${b.a}-out` : `${b.b}-out`;
-      return `${ends}:${b.order}:${b.stereo ?? "none"}`;
-    })
-    .sort();
-  return [...atoms, "|", ...bonds].join(",");
-}
-
-/**
- * How a molecule in 3D stands to the drawing it was made from: the same
- * structure still ("live"), drawn otherwise since ("changed"), gone, or
- * made from none.
- */
-export function linkOf(m: Pick<Molecule3D, "drawnFrom" | "drawnAs">, model: Model): "live" | "changed" | "gone" | null {
-  if (!m.drawnFrom) return null;
-  const ids = m.drawnFrom.filter((id): id is number => id != null);
-  const present = new Set(model.atoms.map((a) => a.id));
-  if (!ids.some((id) => present.has(id))) return "gone";
-  return m.drawnAs != null && signatureOf(model, ids) !== m.drawnAs ? "changed" : "live";
 }
 
 /** What a structure leaves open: its stereocentres and double bonds drawn without a configuration, by id, and how many stereoisomers they make. */
@@ -274,4 +244,32 @@ export function rowFrom(items: Turned[], at: { x: number; y: number }): { x: num
 /** Each stereoisomer asked for, its conformers made: what `conformers` answers. */
 export async function conformersOf(chem: ChemClient, block: Block, isomers: "one" | "all"): Promise<Conformers[]> {
   return (await chem.request("conformers", { molblock: block.molblock, isomers }, CONFORMERS_MS)).isomers;
+}
+
+/**
+ * A molecule in 3D drawn as a formula, by Meno's own engine (as a SMILES is):
+ * the frame it shows, its heavy atoms, wedged as it is in 3D - its bonds'
+ * orders found where it has none (all single, as a file of coordinates
+ * gives them). And which of the formula's atoms each of its atoms is: none
+ * for a hydrogen.
+ */
+export async function formulaOf(chem: ChemClient, m: Molecule3D, frame: number): Promise<{ model: Model; link: (number | null)[] }> {
+  const xyz = frame > 0 && m.frames?.[frame - 1] ? m.frames[frame - 1] : m.atoms.flatMap((a) => [a.x, a.y, a.z]);
+  const atoms = m.atoms.map((a, i) => ({ el: a.el, charge: a.charge, x: xyz[3 * i], y: xyz[3 * i + 1], z: xyz[3 * i + 2] }));
+  const perceive = m.bonds.length > 0 && m.bonds.every((b) => b.order === 1);
+  const { molblock } = await chem.request("drawing_of", { molblock: writeMolfile3d(atoms, m.bonds), perceive });
+  const drawn = editorModelOf((await processFileContent("formula.mol", molblock)).model);
+  const model = await laidOut(drawn).catch(() => drawn);
+  // (its heavy atoms came back in their order)
+  let k = 0;
+  const link = m.atoms.map((a) => (a.el === "H" ? null : (drawn.atoms[k++]?.id ?? null)));
+  return { model, link };
+}
+
+/** Where a formula drawn of a molecule in 3D goes: beside it, to its left, level with it. */
+export function formulaPlace(m: Molecule3D, formula: Model, style: Style3D): { x: number; y: number } {
+  const solid = solidOf(m, style);
+  const xs = formula.atoms.map((a) => a.x);
+  const width = xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+  return { x: m.at.x - solid.reach.balls - GAP - width / 2, y: m.at.y };
 }

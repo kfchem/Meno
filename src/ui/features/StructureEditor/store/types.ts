@@ -174,6 +174,12 @@ export type EditorState = {
   riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[], replacing?: number[]) => number[];
   /** A molecule in 3D has risen. */
   risen3d: (id: number) => void;
+  /**
+   * A molecule in 3D drawn as a formula: `model` added to the drawing, and
+   * the molecule tied to it - `link`, each of its atoms' atom in `model` -
+   * as one undo step.
+   */
+  drawFormula3d: (id: number, model: Model, link: (number | null)[]) => void;
   /** A molecule in 3D turned back to face as its file has it. */
   resetTurn3d: (id: number) => void;
   setFrame3d: (id: number, frame: number) => void;

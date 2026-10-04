@@ -192,6 +192,24 @@ class ChemWorkerTest(unittest.TestCase):
         self.assertEqual(drawn["cip"]["atoms"], {"7": ask("analyse", molblock=PCPA)["result"]["atoms"][7]["cip"]})
         self.assertEqual(drawn["chosen"], {"atoms": {}, "bonds": {}})
 
+    def test_draws_a_molecule_in_3d_as_a_formula_keeping_its_configuration(self):
+        from rdkit import Chem
+
+        made = ask("conformers", molblock=PCPA, count=2)["result"]["isomers"][0]
+        lines = ["", "  test", "", f"{len(made['atoms']):3d}{len(made['bonds']):3d}  0  0  0  0  0  0  0  0999 V2000"]
+        xyz = made["frames"][0]
+        for i, a in enumerate(made["atoms"]):
+            lines.append(f"{xyz[3*i]:10.4f}{xyz[3*i+1]:10.4f}{xyz[3*i+2]:10.4f} {a['el']:<3} 0  0")
+        for b in made["bonds"]:
+            # (all single, as coordinates alone give them: the orders are found again)
+            lines.append(f"{b['a1'] + 1:3d}{b['a2'] + 1:3d}  1  0")
+        block = "\n".join(lines + ["M  END"]) + "\n"
+        drawn = ask("drawing_of", molblock=block, perceive=True)["result"]["molblock"]
+        mol = Chem.MolFromMolBlock(drawn)
+        # its heavy atoms, in their order, and the same molecule, configuration and all
+        self.assertEqual([a.GetSymbol() for a in mol.GetAtoms()], ["C"] * 9 + ["O", "O", "N", "Cl"])
+        self.assertEqual(Chem.MolToSmiles(mol), ask("to_smiles", molblock=PCPA)["result"]["smiles"])
+
     def test_answers_what_it_cannot_do_with_an_error_not_a_crash(self):
         self.assertEqual(ask("exec", code="1")["error"], "no such request: exec")
         self.assertFalse(ask("from_smiles", smiles="C1CC")["ok"])

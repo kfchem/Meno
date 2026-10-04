@@ -2,9 +2,10 @@ import type { StoreApi } from "zustand";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
 import type { StructureDocument } from "../../document";
-import type { EditorState, Look3D, Molecule3D, Rising3D, Turn3D } from "../types";
+import type { EditorState, Look3D, Model, Molecule3D, Rising3D, Turn3D } from "../types";
 import { chosenPath } from "../../utils/molecule3d";
 import { noteTurns } from "../turnJournal";
+import { signatureOf } from "../../utils/drawnLink";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -70,6 +71,16 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
         const { [id]: _, ...rest } = prev.overlay3d;
         return { ...prev, overlay3d: on ? { ...rest, [id]: true as const } : rest };
       }),
+    drawFormula3d: (id: number, model: Model, link: (number | null)[]) => {
+      // (the drawing's atoms are numbered on from here, in their order)
+      const start = doc.getState().nextId;
+      const newId = new Map(model.atoms.map((a, k) => [a.id, start + k]));
+      const drawnFrom = link.map((a) => (a == null ? null : (newId.get(a) ?? null)));
+      doc.edit("draw as formula", (d) => {
+        const drawn = ops.appendModel(d, model);
+        return ops.linkMolecule3d(drawn, id, drawnFrom, signatureOf(drawn.model, drawnFrom.filter((a): a is number => a != null)));
+      });
+    },
     risen3d: (id: number) =>
       set((prev) => {
         if (!(id in prev.rising3d)) return prev;
