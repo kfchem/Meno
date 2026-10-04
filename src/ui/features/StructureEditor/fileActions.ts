@@ -21,6 +21,22 @@ function stem(path: string): string {
 }
 
 /**
+ * Where Save As suggests saving: where the canvas was last saved; else the
+ * name of the file last opened over it - as a MOL or RXN file, if it was
+ * none Meno writes; else a name for what is drawn.
+ */
+export function suggestedSavePath(
+  state: Pick<EditorState, "savedPath" | "openedName">,
+  reaction: boolean,
+): string {
+  if (state.savedPath) return state.savedPath;
+  const ext = reaction ? "rxn" : "mol";
+  const opened = state.openedName;
+  if (opened) return /\.(mol|sdf|rxn)$/i.test(opened) ? opened : `${stem(opened)}.${ext}`;
+  return reaction ? "reaction.rxn" : "structure.mol";
+}
+
+/**
  * The drawing as the file at `path` is to hold it: an RXN file for `.rxn` -
  * the reaction its arrow shows, throwing where it shows none - an SD file
  * for `.sdf`, a MOL file for anything else, titled with the file's own
@@ -137,7 +153,7 @@ export function useFileActions() {
         const rxn = { name: "RXN file", extensions: ["rxn"] };
         const path = await saveDialog({
           title: reaction ? "Save reaction" : "Save structure",
-          defaultPath: store.getState().savedPath ?? (reaction ? "reaction.rxn" : "structure.mol"),
+          defaultPath: suggestedSavePath(store.getState(), reaction),
           filters: reaction ? [rxn, ...structure] : [...structure, rxn],
         });
         if (path) await saveTo(path);
@@ -153,10 +169,11 @@ export function useFileActions() {
   const exportSvg = useCallback(
     () =>
       attempt("Export", async () => {
-        const saved = store.getState().savedPath;
+        const { savedPath, openedName } = store.getState();
+        const named = savedPath ?? openedName;
         const path = await saveDialog({
           title: "Export as SVG",
-          defaultPath: saved ? `${stem(saved)}.svg` : "structure.svg",
+          defaultPath: named ? `${stem(named)}.svg` : "structure.svg",
           filters: [{ name: "SVG picture", extensions: ["svg"] }],
         });
         if (!path) return;

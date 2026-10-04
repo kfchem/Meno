@@ -78,6 +78,7 @@ function StructureCanvasContent({
   initialPayload,
   initialFilename,
   officeId,
+  onOpened,
   styleOpen,
   toggleStyle,
   openArrowStyle,
@@ -89,6 +90,8 @@ function StructureCanvasContent({
   initialFilename?: string;
   /** The object in a document this canvas was opened from (lib/ole). */
   officeId?: number;
+  /** A file has been opened over what the canvas held: its name, for the tab. */
+  onOpened?: (filename: string) => void;
   /** Whether the drawing-style panel is open beside the canvas. */
   styleOpen: boolean;
   toggleStyle: () => void;
@@ -116,7 +119,7 @@ function StructureCanvasContent({
     handleMouseDownCapture,
     clientToWorld,
     pasteTarget,
-  } = useStructureEvents(initialPayload, initialFilename);
+  } = useStructureEvents(initialPayload, initialFilename, onOpened);
   useOfficeLink(officeId);
 
   const onCreated = useCanvasSetup(camRef, domRef);
@@ -673,6 +676,7 @@ export default function StructureCanvas({
   officeId,
   active = true,
   document,
+  onOpened,
 }: {
   tabId: string;
   initialPayload?: string;
@@ -683,6 +687,8 @@ export default function StructureCanvas({
   active?: boolean;
   /** The tab's document; omitted for canvases embedded in other views. */
   document?: DocumentStore<StructureDocument>;
+  /** A file has been opened over what the canvas held: its name, for the tab. */
+  onOpened?: (filename: string) => void;
 }) {
   // The document's drawing style - or one reaction arrow's own - opens in a
   // panel beside the canvas rather than over it, so the drawing stays in
@@ -700,6 +706,7 @@ export default function StructureCanvas({
           initialPayload={initialPayload}
           initialFilename={initialFilename}
           officeId={officeId}
+          onOpened={onOpened}
           styleOpen={styleOpen}
           toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
           openArrowStyle={(id) => setPanel({ arrow: id })}
