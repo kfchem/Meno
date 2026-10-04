@@ -1,6 +1,6 @@
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { createSVG, layoutMolecule, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
 import { writeMolfile, writeSdf } from "../../../lib/chem/molWriter";
@@ -14,10 +14,31 @@ import type { Drawn, EditorState } from "./store/types";
 import { chemistry } from "../../../lib/chem/molecule";
 import { schemeOutlines } from "../../../lib/chem/reactionScheme";
 
+/** A file's name without its folder. */
+export function fileNameOf(path: string): string {
+  return path.split(/[\\/]/).pop() ?? "";
+}
+
 /** A file's name without its folder or its extension. */
 function stem(path: string): string {
   const name = path.split(/[\\/]/).pop() ?? "";
   return name.replace(/\.[^.]*$/, "");
+}
+
+/**
+ * Where Save As suggests saving: where the canvas was last saved; else the
+ * name of the file last opened over it - as a MOL or RXN file, if it was
+ * none Meno writes; else a name for what is drawn.
+ */
+export function suggestedSavePath(
+  state: Pick<EditorState, "savedPath" | "openedName">,
+  reaction: boolean,
+): string {
+  if (state.savedPath) return state.savedPath;
+  const ext = reaction ? "rxn" : "mol";
+  const opened = state.openedName;
+  if (opened) return /\.(mol|sdf|rxn)$/i.test(opened) ? opened : `${stem(opened)}.${ext}`;
+  return reaction ? "reaction.rxn" : "structure.mol";
 }
 
 /**
@@ -104,9 +125,12 @@ export function drawingSvg(
  * the document is then saved, and the tab's unsaved mark goes. An export is
  * a copy, and leaves that alone. `error` says what went wrong, if anything.
  */
-export function useFileActions() {
+export function useFileActions(nameTab?: (label: string) => void) {
   const store = useEditorStore();
   const [error, setError] = useState<string | null>(null);
+  // (the tab is named for the file it is saved to, as for one opened in it)
+  const naming = useRef(nameTab);
+  naming.current = nameTab;
 
   const attempt = useCallback(async (what: string, run: () => Promise<void>) => {
     try {
@@ -121,6 +145,7 @@ export function useFileActions() {
     async (path: string) => {
       await writeTextFile(path, structureFileText(drawnOf(store.getState()), path));
       store.getState().markSavedAs(path);
+      naming.current?.(fileNameOf(path));
     },
     [store],
   );
@@ -137,7 +162,7 @@ export function useFileActions() {
         const rxn = { name: "RXN file", extensions: ["rxn"] };
         const path = await saveDialog({
           title: reaction ? "Save reaction" : "Save structure",
-          defaultPath: store.getState().savedPath ?? (reaction ? "reaction.rxn" : "structure.mol"),
+          defaultPath: suggestedSavePath(store.getState(), reaction),
           filters: reaction ? [rxn, ...structure] : [...structure, rxn],
         });
         if (path) await saveTo(path);
@@ -153,10 +178,11 @@ export function useFileActions() {
   const exportSvg = useCallback(
     () =>
       attempt("Export", async () => {
-        const saved = store.getState().savedPath;
+        const { savedPath, openedName } = store.getState();
+        const named = savedPath ?? openedName;
         const path = await saveDialog({
           title: "Export as SVG",
-          defaultPath: saved ? `${stem(saved)}.svg` : "structure.svg",
+          defaultPath: named ? `${stem(named)}.svg` : "structure.svg",
           filters: [{ name: "SVG picture", extensions: ["svg"] }],
         });
         if (!path) return;

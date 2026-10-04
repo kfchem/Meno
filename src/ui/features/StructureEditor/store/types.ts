@@ -253,8 +253,18 @@ export type EditorState = {
    * until it has been saved once.
    */
   savedPath: string | null;
+  /**
+   * The file last opened over what the canvas held (its name only): what
+   * Save As suggests, the canvas being saved nowhere since.
+   */
+  openedName: string | null;
   /** The document has just been written to `path`: it is saved there. */
   markSavedAs: (path: string) => void;
+  /**
+   * A file named `name` has been opened over what the canvas held: it is
+   * saved nowhere now, and Save asks where, suggesting that name.
+   */
+  markOpenedOver: (name: string) => void;
   setExtendPreview: (
     x: number,
     y: number,

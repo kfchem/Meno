@@ -82,6 +82,7 @@ function StructureCanvasContent({
   initialPayload,
   initialFilename,
   officeId,
+  nameTab,
   styleOpen,
   toggleStyle,
   openArrowStyle,
@@ -93,6 +94,11 @@ function StructureCanvasContent({
   initialFilename?: string;
   /** The object in a document this canvas was opened from (lib/ole). */
   officeId?: number;
+  /**
+   * Names the canvas's tab: for a file opened over what it held, or saved
+   * to. (One opened from a document keeps that document's name.)
+   */
+  nameTab?: (label: string) => void;
   /** Whether the drawing-style panel is open beside the canvas. */
   styleOpen: boolean;
   toggleStyle: () => void;
@@ -103,6 +109,8 @@ function StructureCanvasContent({
 }) {
   const fitNonce = useEditor((s) => s.fitNonce);
   const requestFit = useEditor((s) => s.requestFit);
+  // (a canvas opened from a document keeps that document's name)
+  const named = officeId == null ? nameTab : undefined;
 
   const {
     camRef,
@@ -120,13 +128,13 @@ function StructureCanvasContent({
     handleMouseDownCapture,
     clientToWorld,
     pasteTarget,
-  } = useStructureEvents(initialPayload, initialFilename);
+  } = useStructureEvents(initialPayload, initialFilename, named);
   useOfficeLink(officeId);
 
   const onCreated = useCanvasSetup(camRef, domRef);
 
   // Save and export. Ctrl/Cmd+S belongs to the tab in front, like undo.
-  const files = useFileActions();
+  const files = useFileActions(named);
   const { save, saveAs } = files;
   useEffect(() => {
     if (!active) return;
@@ -700,6 +708,7 @@ export default function StructureCanvas({
   officeId,
   active = true,
   document,
+  nameTab,
 }: {
   tabId: string;
   initialPayload?: string;
@@ -710,6 +719,8 @@ export default function StructureCanvas({
   active?: boolean;
   /** The tab's document; omitted for canvases embedded in other views. */
   document?: DocumentStore<StructureDocument>;
+  /** Names the canvas's tab: for a file opened over what it held, or saved to. */
+  nameTab?: (label: string) => void;
 }) {
   // The document's drawing style - or one reaction arrow's own - opens in a
   // panel beside the canvas rather than over it, so the drawing stays in
@@ -727,6 +738,7 @@ export default function StructureCanvas({
           initialPayload={initialPayload}
           initialFilename={initialFilename}
           officeId={officeId}
+          nameTab={nameTab}
           styleOpen={styleOpen}
           toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
           openArrowStyle={(id) => setPanel({ arrow: id })}

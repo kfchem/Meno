@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drawingSvg, exportPxPerWorld, structureFileText } from "./fileActions";
+import { drawingSvg, exportPxPerWorld, fileNameOf, structureFileText, suggestedSavePath } from "./fileActions";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { ACS_1996, RSC } from "../../../lib/chem/style";
 import type { Model } from "./store/types";
@@ -28,6 +28,27 @@ describe("structureFileText", () => {
     const rxn = structureFileText(reaction, "/tmp/oxidation.rxn");
     expect(rxn.split("\n").slice(0, 5)).toEqual(["$RXN", "oxidation", "      Meno", "", "  1  0"]);
     expect(() => structureFileText(model, "/tmp/nothing.rxn")).toThrow(/arrow/);
+  });
+});
+
+describe("suggestedSavePath", () => {
+  it("suggests where the canvas was saved; else the file opened over it; else a name for what is drawn", () => {
+    expect(suggestedSavePath({ savedPath: "/work/a.mol", openedName: null }, false)).toBe("/work/a.mol");
+    expect(suggestedSavePath({ savedPath: null, openedName: "b.sdf" }, false)).toBe("b.sdf");
+    expect(suggestedSavePath({ savedPath: null, openedName: null }, false)).toBe("structure.mol");
+    expect(suggestedSavePath({ savedPath: null, openedName: null }, true)).toBe("reaction.rxn");
+  });
+
+  it("suggests a file Meno does not write as a MOL file of that name, or an RXN file for a reaction", () => {
+    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, false)).toBe("conformers.mol");
+    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, true)).toBe("conformers.rxn");
+  });
+});
+
+describe("fileNameOf", () => {
+  it("names a file as a tab shows it: without its folder, on either system", () => {
+    expect(fileNameOf("/Users/me/work/ethanol.mol")).toBe("ethanol.mol");
+    expect(fileNameOf("C:\\Users\\me\\work\\ethanol.sdf")).toBe("ethanol.sdf");
   });
 });
 

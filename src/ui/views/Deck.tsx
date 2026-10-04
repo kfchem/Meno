@@ -13,6 +13,8 @@ type Props = {
   replaceData: (id: TabId, next: unknown) => void;
   /** Document for a tab, when its view kind uses one. */
   getDocument: (tab: TabInstance) => DocumentStore<any> | undefined;
+  /** Names a tab anew: a file opened in its view over what it held. */
+  renameTab: (id: TabId, label: string) => void;
 };
 
 export default function Deck({
@@ -23,6 +25,7 @@ export default function Deck({
   patchData,
   replaceData,
   getDocument,
+  renameTab,
 }: Props) {
   // the tab just left, kept in view beneath the chosen one while it fades in
   const [beneath, setBeneath] = useState<TabId | null>(null);
@@ -62,6 +65,7 @@ export default function Deck({
                   document={getDocument(t)}
                   dispatchPatchData={(patch) => patchData(id, patch)}
                   replaceContent={(next) => replaceData(id, next)}
+                  renameTab={(label) => renameTab(id, label)}
                 />
               </div>
             ) : null}

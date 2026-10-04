@@ -377,6 +377,7 @@ export default function App() {
         patchData={patchData}
         replaceData={replaceData}
         getDocument={getDocument}
+        renameTab={(id, label) => dispatch({ type: "RENAME_TAB", id, label })}
       />
     </div>
   );

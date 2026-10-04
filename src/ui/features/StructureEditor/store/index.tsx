@@ -87,6 +87,7 @@ export function createEditorStore(
     panHold: { active: false, pointerId: null },
     suppressDblClickUntil: 0,
     savedPath: null,
+    openedName: null,
 
     ...createModelSlice(doc, set, get),
     ...createSelectionSlice(set),
