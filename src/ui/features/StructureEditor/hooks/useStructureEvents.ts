@@ -284,16 +284,21 @@ export function useStructureEvents(
     const stClick = store.getState();
     const nowClick =
       typeof performance !== "undefined" ? performance.now() : Date.now();
+    // The click that ends a gesture - a long press let go, a box drawn, a
+    // turn - is held off as it comes: by the time its label would be
+    // edited, the holding off is over.
+    const heldOff =
+      !!stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil;
     if (
       e.target === domRef.current &&
       stClick.hovered.atomId == null &&
       stClick.hovered.bondId == null &&
-      !(stClick.suppressDblClickUntil && nowClick < stClick.suppressDblClickUntil)
+      !heldOff
     )
       stClick.clearSel();
     // The second click of a double-click (as the system reckons one) edits
     // nothing, and neither does its first, if the edit is not yet begun.
-    if (e.detail >= 2) return;
+    if (e.detail >= 2 || heldOff) return;
     const since = clickClock();
     clickTimerRef.current = window.setTimeout(() => {
       if (doubleClickedSince(since)) return;

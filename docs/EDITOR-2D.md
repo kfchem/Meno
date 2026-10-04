@@ -139,7 +139,10 @@ which waits for DOUBLE_CLICK_MS after the button comes up, is unaffected.
 As it is held, the selection's shade spreads out from the atom along the
 bonds, reaching the whole structure as it is selected; on empty space a
 ring opens where the box will begin (`HoldProgress2D`). Let go early, it
-goes again. On a trackpad that taps to click, a long press is a press of
+goes again. Let go where it was held, the long press has selected and
+that is all: the click its release makes edits no label, being held off
+as it comes (`suppressDoubleClick`), not when the edit would begin. On a
+trackpad that taps to click, a long press is a press of
 the pad held.
 
 A double-click on empty space begins a chain (above); a double-click and

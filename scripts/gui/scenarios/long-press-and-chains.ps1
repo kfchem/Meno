@@ -2,7 +2,9 @@
 #
 # - A long press on an atom selects its whole structure - the selection
 #   spreading out from the atom as it is held - and a drag from there moves
-#   the structure; one undo puts it back.
+#   the structure; one undo puts it back. Let go where it was held, it
+#   selects and that is all: no label is edited once the double-click
+#   time is over.
 # - Three clicks on an atom, the third dragged: a chain out of it along the
 #   honeycomb that opens out from the atom; led back - a little beside the
 #   way it went - it takes its bonds back, and closes no ring for that.
@@ -28,6 +30,14 @@ Invoke-MenoDrag -FromX 1924 -FromY 877 -ToX 1924 -ToY 1027 -PressMs 600 -Steps 1
 Wait-MenoSettled | Out-Null
 Save-Step "held-and-moved"
 Send-MenoShortcut Z
+Send-MenoKey Escape
+Wait-MenoSettled | Out-Null
+
+# the right ethane held, and let go where it was: past the double-click
+# time, the structure is selected and no label is being edited
+Invoke-MenoDrag -FromX 1924 -FromY 877 -ToX 1924 -ToY 877 -PressMs 600 -Steps 1
+Start-Sleep -Milliseconds 1200
+Save-Step "held-let-go"
 Send-MenoKey Escape
 Wait-MenoSettled | Out-Null
 
