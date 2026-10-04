@@ -36,7 +36,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { CANVAS_RESIZE, DURATION, EASE, FADE, RISE } from "../../theme/motion";
+import { CANVAS_RESIZE, DURATION, EASE_SLIDE, FADE, RISE } from "../../theme/motion";
 import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
@@ -736,7 +736,7 @@ export default function StructureCanvas({
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: "auto", opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: DURATION.move, ease: EASE }}
+              transition={{ duration: DURATION.move, ease: EASE_SLIDE }}
               className="shrink-0 h-full overflow-hidden"
             >
               {panel === "style" ? (

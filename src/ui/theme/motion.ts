@@ -18,6 +18,13 @@ export const DURATION = {
 /** The easing of all of it: quick out of the start, settling gently (CSS's `--ease-meno`). */
 export const EASE: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
 
+/**
+ * The easing of a panel sliding open or shut beside the canvas, which moves
+ * the drawing with it: as gentle out of the start as into the end, so that
+ * neither way does the drawing set off at a jump.
+ */
+export const EASE_SLIDE: [number, number, number, number] = [0.45, 0, 0.55, 1];
+
 /** Time constants for following a moving target, in seconds. */
 export const TAU = {
   quick: 0.05,
