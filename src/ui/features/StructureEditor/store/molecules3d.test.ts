@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { addMolecule3d, createStructureDocument } from "../document";
 import { molecules3dIn } from "../utils/selection";
+import { readRecord, recordText } from "../utils/copyPaste";
 import { linkOf, signatureOf } from "../utils/drawnLink";
 
 const water = {
@@ -277,6 +278,16 @@ describe("molecules in 3D and their drawings", () => {
     expect(linkOf(pasted, state().model)).toBe("live");
     state().pasteModel({ atoms: [], bonds: [], molecules3d: [made] });
     expect(state().molecules3d[3].drawnFrom).toBeUndefined();
+  });
+
+  it("copied with their drawing and pasted from the clipboard's record, are tied to the pasted drawing", () => {
+    const { state } = editor();
+    const drawing = { atoms: [{ id: 50, x: 0, y: 0, r: 0.9, el: "O" }], bonds: [] };
+    const made = { ...water, at: { x: 3, y: 0 }, drawnFrom: [50, null, null, null, null], drawnAs: signatureOf(drawing, [50]) };
+    state().pasteModel(readRecord(recordText({ ...drawing, molecules3d: [made] }))!);
+    const pasted = state().molecules3d[2];
+    expect(pasted.drawnFrom).toEqual([state().model.atoms[0].id, null, null, null, null]);
+    expect(linkOf(pasted, state().model)).toBe("live");
   });
 
   it("show their frames overlaid, or not, as the view has it", () => {

@@ -197,6 +197,13 @@ export function readCarried3D(given: unknown): Carried3D | null {
     (x): x is Measure3D => isNum(x.id) && Array.isArray(x.atoms) && x.atoms.length >= 2 && x.atoms.length <= 4 && x.atoms.every(index),
   );
   const turn = Array.isArray(m.turn) && m.turn.length === 4 && m.turn.every(isNum) ? (m.turn as Turn3D) : undefined;
+  // what ties it to the drawing it was made from: the drawing's atom each
+  // of its atoms is (a paste ties it to the pasted drawing: pasteModel)
+  const drawnFrom =
+    Array.isArray(m.drawnFrom) && m.drawnFrom.length === n && m.drawnFrom.every((id) => id === null || Number.isInteger(id))
+      ? (m.drawnFrom as (number | null)[])
+      : undefined;
+  const stereo = readStereo(m.stereo, n, bonds.length);
   return {
     atoms: atoms as Carried3D["atoms"],
     bonds: bonds as Carried3D["bonds"],
@@ -208,7 +215,38 @@ export function readCarried3D(given: unknown): Carried3D | null {
     ...(typeof m.name === "string" ? { name: m.name } : {}),
     ...(turn ? { turn } : {}),
     ...(Number.isInteger(m.frame) ? { frame: m.frame as number } : {}),
+    ...(drawnFrom ? { drawnFrom } : {}),
+    ...(drawnFrom && typeof m.drawnAs === "string" ? { drawnAs: m.drawnAs } : {}),
+    ...(m.conformerSet === true ? { conformerSet: true } : {}),
+    ...(stereo ? { stereo } : {}),
   };
+}
+
+/**
+ * A molecule's CIP labels, by atom and bond index, and which of them its
+ * drawing left open - where they read: every index one of its own.
+ */
+function readStereo(given: unknown, atoms: number, bonds: number): Carried3D["stereo"] | undefined {
+  const s = given as { atoms?: unknown; bonds?: unknown; chosen?: unknown } | null | undefined;
+  if (!s || typeof s !== "object") return undefined;
+  const labels = (r: unknown, n: number): Record<number, string> | null => {
+    if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+    const out: Record<number, string> = {};
+    for (const [k, v] of Object.entries(r)) {
+      const i = Number(k);
+      if (!Number.isInteger(i) || i < 0 || i >= n || typeof v !== "string") return null;
+      out[i] = v;
+    }
+    return out;
+  };
+  const a = labels(s.atoms, atoms);
+  const b = labels(s.bonds, bonds);
+  if (!a || !b) return undefined;
+  const within = (v: unknown, n: number): v is number[] =>
+    Array.isArray(v) && v.every((i) => Number.isInteger(i) && i >= 0 && i < n);
+  const c = s.chosen as { atoms?: unknown; bonds?: unknown } | undefined;
+  const chosen = c && within(c.atoms, atoms) && within(c.bonds, bonds) ? { atoms: c.atoms, bonds: c.bonds } : undefined;
+  return { atoms: a, bonds: b, ...(chosen ? { chosen } : {}) };
 }
 
 /** Whether plain text is a MOL file (or an SD file) rather than, say, a SMILES. */
