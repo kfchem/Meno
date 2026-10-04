@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useEffect, useMemo, useRef } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { useThree } from "@react-three/fiber";
@@ -14,8 +15,8 @@ export default function BondsPick2D() {
   const toWorld = (cx: number, cy: number) => {
     const rect = gl.domElement.getBoundingClientRect();
     const v = new THREE.Vector3(((cx - rect.left) / rect.width) * 2 - 1, -(((cy - rect.top) / rect.height) * 2 - 1), 0);
-    v.unproject(camera);
-    return { x: v.x, y: v.y };
+    const p = pageAt(v.x, v.y, camera);
+    return { x: p.x, y: p.y };
   };
   const {
     model,

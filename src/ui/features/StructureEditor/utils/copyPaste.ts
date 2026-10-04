@@ -5,12 +5,13 @@
  */
 import type { ClipItem } from "../../../../lib/clipboard";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { writeMolfile } from "../../../../lib/chem/molWriter";
+import { writeMolfile, writeMolfile3d } from "../../../../lib/chem/molWriter";
 import { arrowEnds } from "../../../../lib/chem/reactionScheme";
 import { fragmentOf, partOf } from "../chem/cleanUp";
 import { forFlatReaders } from "../chem/drawing";
 import { notOneReaction, reactionFileText } from "../chem/reactionFile";
-import type { Arrow, Atom, Bond, Drawn, Plus, Sel } from "../store/types";
+import type { Arrow, Atom, Bond, Carried3D, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
+import { asSeen } from "./molecule3d";
 
 type Pt = { x: number; y: number };
 
@@ -74,6 +75,25 @@ const VERSION = 1;
  * saved file has it; for a reaction, an RXN file too.
  */
 export function clipItems(part: Drawn): ClipItem[] {
+  // molecules in 3D alone: a molfile in 3D, as they are seen
+  if (!part.atoms.length) {
+    const ms = part.molecules3d ?? [];
+    if (!ms.length) return [];
+    const placed = ms.length > 1;
+    const seen = ms.map((m) => asSeen(m, m.turn, m.frame, placed));
+    const offsets = seen.map((_, i) => seen.slice(0, i).reduce((n, a) => n + a.length, 0));
+    return [
+      { flavor: "meno", text: recordText(part) },
+      {
+        flavor: "mol",
+        text: writeMolfile3d(
+          seen.flat(),
+          ms.flatMap((m, i) => m.bonds.map((b) => ({ a1: b.a1 + offsets[i], a2: b.a2 + offsets[i], order: b.order }))),
+          { title: ms.length === 1 ? ms[0].name?.replace(/\.[^.]*$/, "") : undefined },
+        ),
+      },
+    ];
+  }
   return [
     { flavor: "meno", text: recordText(part) },
     { flavor: "mol", text: writeMolfile(forFlatReaders(part)) },
@@ -94,6 +114,7 @@ export function recordText(part: Drawn): string {
     bonds: part.bonds,
     ...(part.arrows?.length ? { arrows: part.arrows } : {}),
     ...(part.pluses?.length ? { pluses: part.pluses } : {}),
+    ...(part.molecules3d?.length ? { molecules3d: part.molecules3d } : {}),
   });
 }
 
@@ -107,8 +128,27 @@ export function readRecord(text: string): Drawn | null {
   } catch {
     return null;
   }
-  const r = data as { format?: unknown; version?: unknown; atoms?: unknown; bonds?: unknown; arrows?: unknown; pluses?: unknown };
-  if (r?.format !== RECORD || r.version !== VERSION || !Array.isArray(r.atoms) || !Array.isArray(r.bonds)) return null;
+  const r = data as { format?: unknown; version?: unknown };
+  if (r?.format !== RECORD || r.version !== VERSION) return null;
+  return readDrawn(data);
+}
+
+/**
+ * What is drawn, as Meno's own record and workspace file hold it: atoms and
+ * bonds, arrows, pluses and molecules in 3D. Null where the atoms or bonds
+ * do not read; what else does not read is left out.
+ */
+export function readDrawn(data: unknown): Drawn | null {
+  const r = data as {
+    format?: unknown;
+    version?: unknown;
+    atoms?: unknown;
+    bonds?: unknown;
+    arrows?: unknown;
+    pluses?: unknown;
+    molecules3d?: unknown;
+  };
+  if (!r || !Array.isArray(r.atoms) || !Array.isArray(r.bonds)) return null;
   const atoms = r.atoms as Partial<Atom>[];
   const bonds = r.bonds as Partial<Bond>[];
   if (!atoms.every((a) => isNum(a.id) && isNum(a.x) && isNum(a.y) && typeof a.el === "string")) return null;
@@ -123,11 +163,51 @@ export function readRecord(text: string): Drawn | null {
   const pluses = (Array.isArray(r.pluses) ? (r.pluses as Partial<Plus>[]) : []).filter(
     (p) => isNum(p.id) && isNum(p.x) && isNum(p.y),
   ) as Plus[];
+  const molecules3d = (Array.isArray(r.molecules3d) ? r.molecules3d : []).flatMap((m) => {
+    const read = readCarried3D(m);
+    return read ? [read] : [];
+  });
   return {
     atoms: atoms.map((a) => ({ r: 0.9, ...a }) as Atom),
     bonds: bonds as Bond[],
     ...(arrows.length ? { arrows } : {}),
     ...(pluses.length ? { pluses } : {}),
+    ...(molecules3d.length ? { molecules3d } : {}),
+  };
+}
+
+/** A molecule in 3D in Meno's own record, or null where it does not read as one. */
+export function readCarried3D(given: unknown): Carried3D | null {
+  const m = given as Partial<Record<keyof Carried3D, unknown>>;
+  if (!m || !Array.isArray(m.atoms) || !Array.isArray(m.bonds) || !m.at) return null;
+  const atoms = m.atoms as Partial<Carried3D["atoms"][number]>[];
+  const n = atoms.length;
+  if (!n || !atoms.every((a) => typeof a.el === "string" && isNum(a.x) && isNum(a.y) && isNum(a.z))) return null;
+  const index = (v: unknown) => Number.isInteger(v) && (v as number) >= 0 && (v as number) < n;
+  const bonds = m.bonds as Partial<Carried3D["bonds"][number]>[];
+  if (!bonds.every((b) => index(b.a1) && index(b.a2) && Number.isInteger(b.order))) return null;
+  const at = m.at as Partial<Pt & { z: number }>;
+  if (!isNum(at.x) || !isNum(at.y)) return null;
+  // (what does not read is left out, not the molecule)
+  const frames = (Array.isArray(m.frames) ? (m.frames as unknown[]) : []).filter(
+    (f): f is number[] => Array.isArray(f) && f.length === 3 * n && f.every(isNum),
+  );
+  const energies = Array.isArray(m.energies) && m.energies.every(isNum) && m.energies.length === frames.length + 1 ? (m.energies as number[]) : undefined;
+  const measures = (Array.isArray(m.measures) ? (m.measures as Partial<Measure3D>[]) : []).filter(
+    (x): x is Measure3D => isNum(x.id) && Array.isArray(x.atoms) && x.atoms.length >= 2 && x.atoms.length <= 4 && x.atoms.every(index),
+  );
+  const turn = Array.isArray(m.turn) && m.turn.length === 4 && m.turn.every(isNum) ? (m.turn as Turn3D) : undefined;
+  return {
+    atoms: atoms as Carried3D["atoms"],
+    bonds: bonds as Carried3D["bonds"],
+    at: { x: at.x, y: at.y, ...(isNum(at.z) ? { z: at.z } : {}) },
+    ...(frames.length ? { frames } : {}),
+    ...(energies ? { energies } : {}),
+    ...(m.look === "space" || m.look === "balls" ? { look: m.look } : {}),
+    ...(measures.length ? { measures } : {}),
+    ...(typeof m.name === "string" ? { name: m.name } : {}),
+    ...(turn ? { turn } : {}),
+    ...(Number.isInteger(m.frame) ? { frame: m.frame as number } : {}),
   };
 }
 
@@ -147,12 +227,13 @@ export function looksLikeSmiles(text: string): boolean {
 
 /** `drawn` moved so that the middle of the box round it - its arrows and pluses too - is at `p`. */
 export function centredAt<D extends Drawn>(drawn: D, p: Pt): D {
-  if (!drawn.atoms.length) return drawn;
   const points = [
     ...drawn.atoms,
     ...(drawn.arrows ?? []).flatMap((a) => Object.values(arrowEnds(a))),
     ...(drawn.pluses ?? []),
+    ...(drawn.molecules3d ?? []).map((m) => m.at),
   ];
+  if (!points.length) return drawn;
   const xs = points.map((a) => a.x);
   const ys = points.map((a) => a.y);
   const dx = p.x - (Math.min(...xs) + Math.max(...xs)) / 2;
@@ -163,5 +244,6 @@ export function centredAt<D extends Drawn>(drawn: D, p: Pt): D {
     atoms: drawn.atoms.map(moved),
     ...(drawn.arrows ? { arrows: drawn.arrows.map(moved) } : {}),
     ...(drawn.pluses ? { pluses: drawn.pluses.map(moved) } : {}),
+    ...(drawn.molecules3d ? { molecules3d: drawn.molecules3d.map((m) => ({ ...m, at: moved(m.at) })) } : {}),
   };
 }

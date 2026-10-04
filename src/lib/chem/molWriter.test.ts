@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { writeMolfile, writeRxnfile, writeSdf, MOL_BOND_LENGTH, type WriterModel } from "./molWriter";
+import { writeMolfile, writeMolfile3d, writeRxnfile, writeSdf, MOL_BOND_LENGTH, type WriterModel } from "./molWriter";
 import { readRxnfile } from "./ctfile";
 import { NOMINAL_BOND_LENGTH } from "./acs";
 import {
@@ -303,5 +303,31 @@ describe("writeRxnfile", () => {
     // one M  END, at the end
     expect(lines.filter((l) => l === "M  END")).toHaveLength(1);
     expect(readRxnfile(text).reactants[0].bonds[0].type).toBe(10);
+  });
+});
+
+describe("a molecule in 3D as a molfile", () => {
+  const ammonium = {
+    atoms: [
+      { el: "N", x: 0, y: 0, z: 0, charge: 1, isotope: 15 },
+      { el: "H", x: 1.02, y: 0, z: 0 },
+      { el: "H", x: -0.34, y: 0.96, z: 0 },
+      { el: "H", x: -0.34, y: -0.48, z: 0.83 },
+      { el: "H", x: -0.34, y: -0.48, z: -0.83 },
+    ],
+    bonds: [1, 2, 3, 4].map((i) => ({ a1: 0, a2: i, order: 1 })),
+  };
+
+  it("says it is 3D, and is read back where its atoms were, in depth", () => {
+    const text = writeMolfile3d(ammonium.atoms, ammonium.bonds, { title: "ammonium" });
+    const lines = text.split("\n");
+    expect(lines[0]).toBe("ammonium");
+    expect(lines[1].substring(20, 22)).toBe("3D");
+    expect(text).toContain("M  CHG  1   1   1");
+    expect(text).toContain("M  ISO  1   1  15");
+    const [m] = readMoleculesFromText(text, "mol");
+    expect(m.atoms[3].z).toBeCloseTo(0.83, 4);
+    expect(m.atoms[0]).toMatchObject({ el: "N", charge: 1, isotope: 15 });
+    expect(m.bonds).toHaveLength(4);
   });
 });

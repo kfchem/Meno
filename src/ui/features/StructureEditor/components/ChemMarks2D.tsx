@@ -166,7 +166,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
   return (
     <group>
       {valenceShown.map(({ key, item: m, leaving }) => (
-        <Html key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} pointerEvents="none">
+        <Html key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
           <div
             role="img"
             aria-label={m.message}
@@ -182,7 +182,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
         </Html>
       ))}
       {stereoShown.map(({ key, item: m, leaving }) => (
-        <Html key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} pointerEvents="none">
+        <Html key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
           <div className={leaving ? "meno-fade-out" : "meno-fade-in"}>
             <StereoMark text={m.text} fontPx={fontPx} />
           </div>

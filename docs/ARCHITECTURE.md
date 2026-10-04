@@ -12,7 +12,7 @@ a workspace holding 2D and 3D together - see [`WORKSPACE.md`](./WORKSPACE.md).
 | --- | --- | --- |
 | Tauri shell (Rust) | `src-tauri/src/lib.rs` | Window, plugins (`fs`, `os`, `opener`), and the only code that spawns OS processes: the bundled `uv` binary and the Python sidecar. No chemistry logic lives here. |
 | App shell (React) | `src/App.tsx`, `src/lib/core/`, `src/ui/layouts/`, `src/ui/views/` | Tab model (open/close/reorder/rename), mapping a tab's `kind` to a view component. |
-| Features (React) | `src/ui/features/*` | One folder per view: 2D structure editor, 3D molecule viewer, workflow editor, Python console, text editor, file loader, settings. |
+| Features (React) | `src/ui/features/*` | One folder per view: the structure canvas (2D drawing and molecules in 3D), workflow editor, Python console, text editor, file loader, settings. |
 | Chemistry helpers (TS) | `src/lib/chem/`, `src/utils/` | File parsing (MOL/SDF/RXN/XYZ), editor model conversion, 2D depiction layout (bond lines, wedges, labels) and ACS-style sizing. Pure functions — no React, no Tauri. |
 | Python worker | `src-tauri/resources/workers/interactive_worker.py` | Line-delimited JSON REPL run inside a `uv`-managed venv. |
 
@@ -34,6 +34,7 @@ src/
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
   lib/rdkit/              the chemistry worker: client, sidecar, the MOL blocks it is asked about
+  lib/calc/               readers of calculation programs' output (to be plugins): energies, for now
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
   utils/importers         detectFormat, readMoleculesFromText, RXN grouping/layout, EditorModel conversion
   utils/atomUtils         element table (radii, colours)
@@ -47,7 +48,6 @@ src/
   ui/features/
     OmniHub/              "Open file / drop a file" start page; routes a file to a view
     StructureEditor/      2D editor (see below)
-    MoleculeViewer/       3D ball-and-stick / CPK viewer with measurements and frame slider
     WorkflowEditor/       React Flow graph (prototype, not executable yet)
     PythonConsole/        UI for the Python sidecar
     TextEditor/           plain textarea with line numbers
@@ -78,7 +78,7 @@ src-tauri/
   `frameloop` to `"never"`) while inactive. Workflow tabs pass the same flag to
   the canvases embedded in their nodes through `NodeActiveContext`.
 - Because every live canvas holds a WebGL context and browsers keep only about
-  16, `lib/core/limits.ts` budgets them: a 2D/3D/structure tab costs one, a
+  16, `lib/core/limits.ts` budgets them: a 2D or structure tab costs one, a
   workflow tab two, and opening past the limit is refused with a notice rather
   than silently blanking the oldest view.
 - A new tab starts as `loader` (OmniHub). When a file is chosen, OmniHub calls
@@ -102,9 +102,9 @@ must not need one undo per frame), and the stack is capped.
 `subscribe` matches React's `useSyncExternalStore`; nothing in `lib/doc`
 imports React.
 
-Adoption is incremental. The text view and the 2D structure editor are on
-documents; the workflow editor and the 3D viewer still keep their content in
-component state, and it is still lost when their tab closes.
+Adoption is incremental. The text view and the structure canvas, with its
+molecules in 3D, are on documents; the workflow editor still keeps its
+content in component state, and it is still lost when its tab closes.
 
 ## How things move
 
@@ -147,7 +147,15 @@ What is left before the editor counts as finished, and in what order, is in
   `document.ts`. A gesture is one undo step: extending a bond adds the atom and
   its bond together, an import replaces the model in one go, and repeated moves
   of one atom coalesce.
-- **Rendering**: an orthographic react-three-fiber `<Canvas>`; each visual layer
+- **Rendering**: a react-three-fiber `<Canvas>` whose page is the plane z = 0,
+  seen head-on by a perspective camera (`PageCamera`): it stands 60 world
+  units off and sets its field of view from the canvas height, so that
+  `camera.zoom` means what an orthographic camera's would - CSS pixels per
+  world unit on the page - and the drawing comes out exactly as it would
+  orthographically. What stands off the page is seen in depth. A point of
+  the screen is taken to the page with `utils/page.ts#pageAt`, never by
+  unprojecting alone. Page layers keep to the page (z within a few
+  thousandths) and are ordered by drawing order. Each visual layer
   is its own component in `components/` (`Bonds2D`, `Atoms2D`, `Wedges2D`,
   `Labels2D`, previews, hover overlays, `PanZoom2D`, `FitToContent2D`, …).
   `DrawnLayoutProvider` lays the drawing out once - the model, with an atom
@@ -198,11 +206,43 @@ What is left before the editor counts as finished, and in what order, is in
   frozen; a layer that invalidates unconditionally brings back the old
   always-on loop.
 
-## 3D molecule viewer (`ui/features/MoleculeViewer`)
-
-Perspective R3F canvas with trackball controls. Input is `Molecule[]` (frames of
-one file) or `Molecule[][]` (several files, shown with an energy ladder). Atom
-picking supports 2–4 atom distance/angle/dihedral measurements.
+- **Molecules in 3D** (`Molecules3D`, `Molecule3DView`, `Frames3D`,
+  `utils/molecule3d.ts`, `utils/measure3d.ts`):
+  - What they are: the document's `molecules3d`. Each has its atoms in
+    ångströms, its other frames and their energies, its look (ball and
+    stick or space-filling), its measurements, and where on the page its
+    centre stands. How each is turned and which frame it shows are the
+    store's (`turns3d`, `frames3d`), not the document's, and so are what
+    is selected of them (`sel3d`) and the atoms and bonds chosen in one
+    (`chosen3d`). A turn of several as one body moves them, so it is the
+    document's too: `store/turnJournal.ts` keeps the turns with that undo
+    step, which stays one step however long the hand pauses in it. A turn
+    by the selection's handle where they stand moves nothing, but is a
+    step all the same (`keepTurns3d`), for the turns to go with.
+  - How they are drawn: a molecule stands as high as it reaches, so no
+    turn takes it behind the page - or where a turn of several as one body
+    put it (`at.z`). It is instanced, lit, drawn after the
+    page and depth-tested; double and triple bonds are two and three
+    lines. Another frame, another look, or a place set by an undo is gone
+    over to, not jumped to. Its look's defaults are a style
+    (`lib/chem/style3d.ts`), the old 3D viewer's. A 1.5 Å bond is as long
+    as a drawn one.
+  - The pointer: hovered, its outline lights up faintly and the atom under
+    the pointer swells on a spring. A drag on it - its atoms, bonds or
+    within its rings - turns it, with inertia; on one selected, it moves
+    it and all that is selected. A long press selects it, the outline
+    spreading from the atom pressed on; a click chooses an atom or a
+    bond. The selection's handle (`Selection2D`) turns molecules alone as
+    one body in 3D, and with a drawing in its plane.
+  - The rest: measurements, made from its menu, are measured afresh in
+    whatever frame is shown. Its frames are a chip under it that opens to
+    a slider, with each frame's energy as a bar.
+  - See [`WORKSPACE.md`](./WORKSPACE.md).
+- **The workspace file** (`utils/workspace.ts`, `.meno`): everything on the
+  canvas as JSON (`meno-workspace`), the molecules in 3D turned and shown
+  as they are, and the document's own style. With molecules in 3D on the
+  canvas, Save offers only it or an SD file, which holds each as a 3D
+  record.
 
 ## Workflow editor (`ui/features/WorkflowEditor`)
 
@@ -356,10 +396,11 @@ network another way.
 
 | Format | Where it opens | Parser | Notes |
 | --- | --- | --- | --- |
-| MOL (V2000/V3000) | 2D editor | `parseSDF` | Stereo codes 1/6/4 → up/down/wavy. |
-| SDF | 2D editor | `parseSDF` | All records merged into one canvas. |
-| RXN (V2000) | 2D editor | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
-| XYZ (multi-frame) | 3D viewer | `parseXYZ` | Bonds inferred from covalent radii. |
+| MOL (V2000/V3000) | Structure canvas | `parseSDF` | Stereo codes 1/6/4 → up/down/wavy. A molfile that says it is 3D, or whose atoms spread in depth, stands in 3D. |
+| SDF | Structure canvas | `parseSDF` | Flat records merged into one drawing; 3D records each a molecule in 3D beside it. Saved, each molecule in 3D is a 3D record. |
+| RXN (V2000) | Structure canvas | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
+| XYZ (multi-frame) | Structure canvas, in 3D | `parseXYZ` | Bonds inferred from covalent radii. Frames kept; each frame's energy where a calculation reader (`lib/calc`) finds one on its comment line. |
+| Meno workspace (`.meno`) | Structure canvas | `readWorkspace` | Everything on the canvas, as it was saved. |
 | PDB, KET | — | none | Accepted by the file picker; the 2D editor reports "not supported yet". |
 | Text files | Text editor | — | By extension, or anything that is not recognised. |
 

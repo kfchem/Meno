@@ -325,3 +325,89 @@ describe("an abbreviation", () => {
     expect(out.model.atoms[1].el).toBe("N");
   });
 });
+
+describe("molecules in 3D on the page", () => {
+  const water = {
+    atoms: [
+      { el: "O", x: 0, y: 0, z: 0 },
+      { el: "H", x: 0.76, y: 0.59, z: 0 },
+      { el: "H", x: -0.76, y: 0.59, z: 0 },
+    ],
+    bonds: [
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 0, a2: 2, order: 1 },
+    ],
+  };
+
+  it("come with a file's scheme, each given an id of its own", () => {
+    const d = ops.withImportedScheme(doc(), {
+      molecules3d: [
+        { ...water, at: { x: 0, y: 0 } },
+        { ...water, at: { x: 5, y: 0 } },
+      ],
+    });
+    expect(d.molecules3d!.map((m) => m.id)).toEqual([1, 2]);
+    expect(d.nextMolecule3dId).toBe(3);
+  });
+
+  it("are moved and taken away by id", () => {
+    let d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
+    d = ops.moveMolecule3d(d, 1, { x: 2, y: -1 });
+    expect(d.molecules3d![0].at).toEqual({ x: 2, y: -1 });
+    expect(ops.removeMolecule3d(d, 1).molecules3d).toEqual([]);
+  });
+
+  it("go when a file is opened over them", () => {
+    const d = ops.addMolecule3d(ethane(), { ...water, at: { x: 0, y: 0 } });
+    const next = ops.replaceModel(d, { atoms: [], bonds: [] });
+    expect(next.molecules3d).toEqual([]);
+    expect(next.nextMolecule3dId).toBe(1);
+  });
+
+  it("move with the drawing they are selected with, in the same edit", () => {
+    const d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
+    const moved = ops.placeMarks(d, { molecules3d: [{ id: 1, at: { x: 3, y: -2 } }] });
+    expect(moved.molecules3d![0].at).toEqual({ x: 3, y: -2 });
+    expect(ops.placeMarks(d, {})).toBe(d);
+  });
+
+  it("move together, and go together", () => {
+    let d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
+    d = ops.addMolecule3d(d, { ...water, at: { x: 5, y: 0 } });
+    d = ops.moveMolecules3d(d, [
+      { id: 1, at: { x: 1, y: 1 } },
+      { id: 2, at: { x: 6, y: 1 } },
+    ]);
+    expect(d.molecules3d!.map((m) => m.at)).toEqual([
+      { x: 1, y: 1 },
+      { x: 6, y: 1 },
+    ]);
+    expect(ops.removeMolecules3d(d, [2, 1]).molecules3d).toEqual([]);
+    // (none of them there: the same document)
+    expect(ops.removeMolecules3d(d, [7])).toBe(d);
+  });
+
+  it("are drawn space-filling, or balls and sticks, each its own way", () => {
+    const d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
+    const space = ops.setLook3d(d, 1, "space");
+    expect(space.molecules3d![0].look).toBe("space");
+    expect(ops.setLook3d(d, 1, "balls")).toBe(d);
+  });
+
+  it("keep measurements of two, three or four of their atoms, each once", () => {
+    let d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
+    d = ops.addMeasure3d(d, 1, [1, 0, 2]);
+    d = ops.addMeasure3d(d, 1, [0, 1]);
+    expect(d.molecules3d![0].measures).toEqual([
+      { id: 1, atoms: [1, 0, 2] },
+      { id: 2, atoms: [0, 1] },
+    ]);
+    // the same atoms the other way round, one alone, one twice, one it has not: none
+    for (const atoms of [[2, 0, 1], [0], [0, 0], [0, 3]]) expect(ops.addMeasure3d(d, 1, atoms)).toBe(d);
+    d = ops.removeMeasure3d(d, 1, 1);
+    expect(d.molecules3d![0].measures).toEqual([{ id: 2, atoms: [0, 1] }]);
+    // (a new one is numbered past every one there is)
+    expect(ops.addMeasure3d(d, 1, [1, 2]).molecules3d![0].measures!.map((x) => x.id)).toEqual([2, 3]);
+  });
+});
+

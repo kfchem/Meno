@@ -25,9 +25,8 @@ describe("canvas budget", () => {
     expect(canvasCost("loader")).toBe(0);
     expect(canvasCost("text")).toBe(0);
     expect(canvasCost("2d")).toBe(1);
-    expect(canvasCost("3d")).toBe(1);
     expect(canvasCost("structure")).toBe(1);
-    // a workflow tab embeds a 2D sketch and a 3D viewer
+    // a workflow tab embeds two canvases: a sketch, and one in 3D
     expect(canvasCost("node")).toBe(2);
   });
 
@@ -39,7 +38,7 @@ describe("canvas budget", () => {
   it("allows filling the budget exactly", () => {
     const s = withKinds(...Array<TabKind>(MAX_CANVASES - 1).fill("2d"));
     expect(countCanvases(s)).toBe(MAX_CANVASES - 1);
-    expect(canOpenKind(s, "3d")).toBe(true);
+    expect(canOpenKind(s, "structure")).toBe(true);
     expect(canOpenKind(s, "node")).toBe(false);
   });
 
@@ -57,7 +56,7 @@ describe("canvas budget", () => {
     const loaderId = s.tabOrder[s.tabOrder.length - 1];
     // converting the loader into a workflow tab needs 2 canvases: one too many
     expect(canOpenKind(s, "node", loaderId)).toBe(false);
-    expect(canOpenKind(s, "3d", loaderId)).toBe(true);
+    expect(canOpenKind(s, "structure", loaderId)).toBe(true);
     // converting a 2D tab frees its own canvas first
     expect(canOpenKind(s, "2d", s.tabOrder[0])).toBe(true);
   });

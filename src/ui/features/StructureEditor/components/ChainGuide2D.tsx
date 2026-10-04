@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pageAt } from "../utils/page";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
@@ -68,8 +69,8 @@ export default function ChainGuide2D() {
     const toPage = (e: PointerEvent | MouseEvent) => {
       const r = dom.getBoundingClientRect();
       const v = new THREE.Vector3(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1), 0);
-      v.unproject(camera);
-      return { x: v.x, y: v.y };
+      const p = pageAt(v.x, v.y, camera);
+      return { x: p.x, y: p.y };
     };
     const swallow = (ev: Event) => {
       ev.stopPropagation();

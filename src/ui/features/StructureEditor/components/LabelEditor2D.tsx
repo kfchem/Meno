@@ -10,10 +10,10 @@ import { labelKey, typedLabel } from "../utils/labelTyping";
 
 export default function LabelEditor2D() {
   const { camera } = useThree();
-  const [zoom, setZoom] = useState((camera as THREE.OrthographicCamera).zoom);
+  const [zoom, setZoom] = useState((camera as THREE.PerspectiveCamera).zoom);
   useEffect(() => {
     const onFrame = () => {
-      const z = (camera as THREE.OrthographicCamera).zoom;
+      const z = (camera as THREE.PerspectiveCamera).zoom;
       if (z !== zoom) setZoom(z);
       raf = requestAnimationFrame(onFrame);
     };

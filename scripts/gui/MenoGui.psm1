@@ -214,6 +214,20 @@ function Complete-FileDialog {
     Start-Sleep -Milliseconds 800
 }
 
+function Complete-SaveDialog {
+    <#
+      .SYNOPSIS
+      The system's save dialog is on its way up: save under this path in it.
+
+      .DESCRIPTION
+      Its name field takes a whole path, as the open dialog's does, with the
+      name chosen in it, so the path is typed over it and Return saves.
+      (Not yet run on Windows.)
+    #>
+    param([Parameter(Mandatory)] [string] $Path, [int] $TimeoutMs = 15000)
+    Complete-FileDialog -Path $Path -TimeoutMs $TimeoutMs
+}
+
 # The window class of the system's dialogs, the open dialog among them.
 $DialogClass = "#32770"
 
@@ -561,7 +575,7 @@ function Wait-MenoSettled {
     return $false
 }
 
-Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog,
+Export-ModuleMember -Function Get-MenoBuild, Start-MenoProcess, Close-MenoProcess, Complete-FileDialog, Complete-SaveDialog,
     Get-MenoWindow, Set-MenoWindow, Get-ClientOrigin, Get-ClientSize,
     ConvertTo-Screen, Save-MenoShot, Invoke-MenoClick, Invoke-MenoDrag, Move-MenoPointer, Move-MenoPointerAlong, Invoke-MenoWheel, Invoke-MenoSwipe,
     Send-MenoText, Send-MenoKey, Send-MenoShortcut, Wait-MenoSettled

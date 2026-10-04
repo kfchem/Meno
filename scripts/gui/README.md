@@ -78,6 +78,7 @@ available:
 |---|---|
 | `Start-Meno` | start the app under test, sized and in front |
 | `Open-MenoFile -Path` | open a structure into an empty tab |
+| `Save-MenoFile -Path -X -Y` | Save As, by Shift and the round Save button at (X, Y), under a path not already taken - a workspace (`.meno`), say |
 | `Save-Step -Name` | a numbered screenshot |
 | `Invoke-MenoClick -X -Y [-Count] [-Right] [-Hold]` | client coordinates, not screen; `-Right` for the other button; `-Hold Shortcut, Shift, Alt` holds those keys through it (Shortcut: Ctrl on Windows, ⌘ on a Mac) |
 | `Invoke-MenoDrag -FromX -FromY -ToX -ToY [-Steps] [-PressMs] [-Count] [-AtStep] [-Right] [-Hold] [-Via]` | press, travel, release; `-PressMs 600` holds the button still first - a long press; `-Count 2` after an `Invoke-MenoClick` there is a double-click that drags, `-Count 3` after an `Invoke-MenoClick -Count 2` a triple; `-Right` with the other button; `-Hold` as for a click; `-Via @(@(x, y), ...)` passes through those points on the way - a lasso |
@@ -172,7 +173,10 @@ What turned out not to be the same:
 ## Known rough edges
 
 - `Open-MenoFile` types a path into the system file dialog, which is the most
-  brittle step here. The app takes no file on its command line; if it ever
+  brittle step here. `Save-MenoFile` does the same in the save dialog; on a
+  Mac it types the name over the one offered and goes to the folder with
+  Command-Shift-G, as a '/' would only go into the name there. It has not
+  been run on Windows yet. The app takes no file on its command line; if it ever
   does, this becomes one argument to `Start-Meno` and the step goes away.
   On Windows it waits for the dialog to be in front before typing, and for
   it to go after Return, and fails if either does not happen: a path typed

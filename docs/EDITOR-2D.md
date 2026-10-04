@@ -100,7 +100,7 @@ main movement; everything else moves or zooms the same way in both.
 
 | | Mouse | Trackpad | 2D | 3D |
 |---|---|---|---|---|
-| Left drag from empty space | left drag | press and drag | move | turn |
+| Left drag from empty space | left drag | press and drag | move | move (on a molecule in 3D, turns it) |
 | Right or middle drag, anywhere | right or middle drag | two-finger press and drag | move | move |
 | Scroll | the wheel zooms | two fingers move | as the device | as the device |
 | Zoom | the wheel | pinch | zoom | zoom |
@@ -116,7 +116,8 @@ A step within a thousandth of a pixel of whole counts as whole: Windows'
 display scaling leaves notches that close (ten notches at once came as
 999.99993 px at 175 %), and read as fingers they moved the view a thousand
 pixels, off the drawing.
-(PR #55; 3D follows when the views are joined.)
+(PR #55. In the workspace the page never tilts: each molecule in 3D turns by
+itself, under a left drag on it - [WORKSPACE.md](WORKSPACE.md).)
 
 A drag that moves the view and is let go while still moving glides on,
 as fast as it was going over its last moments and slowing to a stop; one
@@ -126,7 +127,8 @@ when it was let go.)
 
 **A click keeps each view's own meaning**: in 2D a click on an atom edits
 its label and a click on a bond changes its kind, as drawing wants; in 3D a
-click on an atom selects it. A right-click, or a press with two fingers,
+click on an atom chooses it, for a measurement, and a click elsewhere on the
+molecule selects it. A right-click, or a press with two fingers,
 opens the menu for what is under the pointer; it waits for the button to
 come up, so a right drag is a move, not a menu.
 

@@ -1,0 +1,63 @@
+import type { Turn3D } from "./types";
+
+/**
+ * Turns of several molecules in 3D as one body, as undo sees them. Where
+ * the molecules stand is the document's and is undone; how each is turned
+ * is the view's and is not - but the two go together in such a turn, so the
+ * document as it was before one and after it are kept here with the turns
+ * of each: an undo or a redo across that very step puts the turns back too.
+ * Keyed by the document store; the last few steps of each.
+ */
+type Step = {
+  gesture: string;
+  before: object;
+  after: object;
+  turnsBefore: Record<number, Turn3D | undefined>;
+  turnsAfter: Record<number, Turn3D>;
+};
+
+/** How many such steps are kept: as many as undo goes back. */
+const KEPT = 100;
+
+const journals = new WeakMap<object, Step[]>();
+
+/**
+ * Notes a turn as one body, the document having gone from `before` to
+ * `after` with it; the turns of a drag that goes on are one step, as its
+ * edits are.
+ */
+export function noteTurns(
+  doc: object,
+  gesture: string,
+  before: object,
+  after: object,
+  turnsBefore: Record<number, Turn3D | undefined>,
+  turnsAfter: Record<number, Turn3D>,
+): void {
+  const steps = journals.get(doc) ?? [];
+  const last = steps[steps.length - 1];
+  if (last?.gesture === gesture) {
+    last.after = after;
+    last.turnsAfter = { ...last.turnsAfter, ...turnsAfter };
+    return;
+  }
+  steps.push({ gesture, before, after, turnsBefore, turnsAfter });
+  if (steps.length > KEPT) steps.splice(0, steps.length - KEPT);
+  journals.set(doc, steps);
+}
+
+/**
+ * The turns to put back as the document goes from `was` to `now`: those
+ * before a turn as one body, when it is undone; those after it, when it is
+ * redone. Null when the change is no such step.
+ */
+export function turnsAcross(doc: object, was: object, now: object): Record<number, Turn3D | undefined> | null {
+  const steps = journals.get(doc);
+  if (!steps) return null;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i];
+    if (was === s.after && now === s.before) return s.turnsBefore;
+    if (was === s.before && now === s.after) return s.turnsAfter;
+  }
+  return null;
+}

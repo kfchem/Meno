@@ -7,14 +7,22 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * the canvas is, so that the menu stays inside it.
  */
 export type MenuTarget = {
-  /** The atom, bond, reaction arrow or "+" right-clicked; null, when it was nothing. */
-  kind: "atom" | "bond" | "arrow" | "plus" | null;
+  /**
+   * The atom, bond, reaction arrow or "+" right-clicked, or a molecule in 3D
+   * or a measurement on one; null, when it was nothing.
+   */
+  kind: "atom" | "bond" | "arrow" | "plus" | "molecule3d" | "measure3d" | null;
+  /** Its id: for a measurement, its molecule's. */
   id: number | null;
+  /** A measurement's own id. */
+  measure?: number;
   /**
    * Whether there is a selection, and whether the menu is its: right-clicked
    * on something selected, or on nothing.
    */
   selection: "none" | "elsewhere" | "here";
+  /** Whether the selection has any of the drawing in it, not molecules in 3D alone; so unless false. */
+  drawing?: boolean;
   /** Where in the drawing it was opened: where a paste from it goes. */
   at: { x: number; y: number };
   x: number;
@@ -46,6 +54,21 @@ export type MenuClipboard = {
 
 type Item = { name: string; keys: string; run: () => void; divider?: boolean };
 
+/** What can be done to a molecule in 3D from the menu. */
+export type MenuMolecule3D = {
+  /** How it is drawn: the menu offers the other. */
+  look: "balls" | "space";
+  /** How many atoms what is chosen of it measures: two, three or four make a measurement. */
+  chosen: number;
+  onMeasure: () => void;
+  onLook: (look: "balls" | "space") => void;
+  /** Turned back to face as its file has it. */
+  onResetTurn: () => void;
+  /** It alone, cut or copied. */
+  onCut: () => void;
+  onCopy: () => void;
+};
+
 /**
  * What can be done to the atom or bond under the pointer - or to the
  * selection, or on empty space - at the pointer: the mouse alone reaches
@@ -67,6 +90,7 @@ export default function PartMenu({
   onAddPlus,
   onSaveAbbreviation,
   clipboard,
+  molecule3d,
   onClose,
 }: {
   target: MenuTarget;
@@ -92,6 +116,8 @@ export default function PartMenu({
   /** The selection saved as an abbreviation of the user's own. */
   onSaveAbbreviation: () => void;
   clipboard: MenuClipboard;
+  /** The molecule in 3D right-clicked, when it is one. */
+  molecule3d?: MenuMolecule3D;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -132,13 +158,37 @@ export default function PartMenu({
   // (with a selection elsewhere, the keys are the selection's)
   const keys = target.selection === "none";
   const paste: Item = { name: "Paste", keys: shortcut("V"), run: clipboard.onPaste };
+  const cutItem: Item = { name: "Cut", keys: shortcut("X"), run: clipboard.onCut };
+  const drawing = target.drawing !== false;
   // (on empty space: a reaction scheme's arrow, or a "+", there)
   const scheme: Item[] = [
     { name: "Add reaction arrow", keys: "", run: onAddArrow, divider: true },
     { name: "Add plus", keys: "", run: onAddPlus },
   ];
+  // a molecule in 3D: a measurement of its chosen atoms, its look, its turn
+  const measureName = ["", "", "Measure distance", "Measure angle", "Measure torsion angle"];
+  const molecule: Item[] = molecule3d
+    ? [
+        ...(molecule3d.chosen >= 2 && molecule3d.chosen <= 4
+          ? [{ name: measureName[molecule3d.chosen], keys: "", run: molecule3d.onMeasure }]
+          : []),
+        molecule3d.look === "space"
+          ? { name: "Ball and stick", keys: "", run: () => molecule3d.onLook("balls") }
+          : { name: "Space-filling", keys: "", run: () => molecule3d.onLook("space") },
+        { name: "Reset orientation", keys: "", run: molecule3d.onResetTurn },
+      ]
+    : [];
   const items: Item[] =
-    target.kind === "arrow"
+    target.kind === "measure3d"
+      ? [{ name: "Delete measurement", keys: deleteKey, run: onDelete }]
+      : target.kind === "molecule3d" && target.selection !== "here" && molecule3d
+      ? [
+          ...molecule,
+          { name: "Cut", keys: keys ? shortcut("X") : "", run: molecule3d.onCut, divider: true },
+          { name: "Copy", keys: keys ? shortcut("C") : "", run: molecule3d.onCopy },
+          { name: "Delete molecule", keys: keys ? deleteKey : "", run: onDelete },
+        ]
+      : target.kind === "arrow"
       ? [
           { name: "Arrow style…", keys: "", run: onArrowStyle },
           { name: "Delete arrow", keys: deleteKey, run: onDelete },
@@ -147,16 +197,22 @@ export default function PartMenu({
       ? [{ name: "Delete plus", keys: deleteKey, run: onDelete }]
       : target.selection === "here"
       ? [
-          { name: "Cut", keys: shortcut("X"), run: clipboard.onCut },
+          // (on a molecule in 3D in it: that molecule's own, first)
+          ...(molecule.length ? [...molecule, { ...cutItem, divider: true }] : [cutItem]),
           { name: "Copy", keys: shortcut("C"), run: clipboard.onCopy },
-          { name: "Copy as SMILES", keys: "", run: clipboard.onCopySmiles },
+          ...(drawing ? [{ name: "Copy as SMILES", keys: "", run: clipboard.onCopySmiles }] : []),
           // (on empty space, a paste goes there)
           ...(target.kind == null ? [paste] : []),
           { name: "Delete selection", keys: deleteKey, run: onDelete, divider: true },
-          { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
-          { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
-          { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
-          { name: "Save as abbreviation…", keys: "", run: onSaveAbbreviation, divider: true },
+          // (what only a drawing has: none, for molecules in 3D alone)
+          ...(drawing
+            ? [
+                { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
+                { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
+                { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
+                { name: "Save as abbreviation…", keys: "", run: onSaveAbbreviation, divider: true },
+              ]
+            : []),
           ...(target.kind == null ? scheme : []),
         ]
       : target.kind == null
@@ -200,7 +256,11 @@ export default function PartMenu({
                 ? "Arrow"
                 : target.kind === "plus"
                   ? "Plus"
-                  : "Canvas"
+                  : target.kind === "molecule3d"
+                    ? "Molecule"
+                    : target.kind === "measure3d"
+                      ? "Measurement"
+                      : "Canvas"
       }
       className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
       style={{
