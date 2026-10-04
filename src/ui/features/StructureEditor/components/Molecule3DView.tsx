@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
-import type { Look3D, Measure3D, Molecule3D, Turn3D } from "../store/types";
+import type { Look3D, Measure3D, Molecule3D, Rising3D, Turn3D } from "../store/types";
 import { bondLines, bondReach, frameOf, linesOf, solidOf, WORLD_PER_ANGSTROM, type BondLine } from "../utils/molecule3d";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { kindOf, measureMarks, measureText, measureValue } from "../utils/measure3d";
@@ -53,6 +53,20 @@ const PILL_TAU = 0.12;
 const TURN_FOLLOWED = 0.3;
 /** How much larger the atom under the pointer is drawn, and its spring: the 3D viewer's. */
 const ATOM_SWELL = 1.1;
+/**
+ * A molecule rising out of its drawing, in seconds: its atoms grow out of the
+ * drawing's, where they lie on the page, and go over to their places in 3D as
+ * it comes up off the page; then it goes over to rest beside the drawing.
+ */
+const RISE_GROW = 0.3;
+const RISE_UP = 0.6;
+const RISE_ACROSS_FROM = 0.45;
+const RISE_END = 1.15;
+const easeOutCubic = (u: number) => 1 - (1 - Math.min(Math.max(u, 0), 1)) ** 3;
+const easeInOutCubic = (u: number) => {
+  const t = Math.min(Math.max(u, 0), 1);
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+};
 const SPRING = { stiffness: 150, damping: 15 };
 /** A measurement's lines: how thick, and a distance's dashes and gaps, in ångströms. */
 const MEASURE_RADIUS = 0.03;
@@ -117,6 +131,9 @@ export type Molecule3DViewProps = {
   hoveredMeasure: number | null;
   /** Taken away: it shrinks out of view, and says when it is gone. */
   leaving?: () => void;
+  /** Rising out of its drawing: where it started, over the drawing, and when; and what is told once it has risen. */
+  rising?: Rising3D;
+  onRisen?: () => void;
 };
 
 /**
@@ -190,7 +207,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   }, [holding, m.atoms, m.bonds, n]);
   // each bond's lines, by bond
   const lineBond = useMemo(() => m.bonds.flatMap((b, i) => Array.from({ length: linesOf(b.order) }, () => i)), [m.bonds]);
-  const grown = useRef({ v: leaving ? 1 : 0, vel: 0, to: leaving ? 0 : 1 });
+  // (rising out of a drawing, it is its full size from the first: its atoms grow instead)
+  const grown = useRef({ v: leaving || props.rising ? 1 : 0, vel: 0, to: leaving ? 0 : 1 });
+  // how far its atoms have grown, rising out of a drawing
+  const risen = useRef(props.rising ? 0 : 1);
   const level = useRef(0);
   const selLevel = useRef(0);
   const shown = useRef<THREE.Vector3 | null>(null);
@@ -256,7 +276,16 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     let reshaped = dirty.current;
     const p = places.current;
     let far = 0;
-    for (let i = 0; i < p.length; i++) far = Math.max(far, Math.abs(p[i] - target[i]));
+    const rising = props.rising;
+    const riseT = rising ? (performance.now() - rising.start) / 1000 : 0;
+    if (rising?.flat && rising.flat.length === p.length && riseT < RISE_UP) {
+      // rising out of the drawing: from its atoms on the page to their places in 3D
+      const u = easeInOutCubic(riseT / RISE_UP);
+      for (let i = 0; i < p.length; i++) p[i] = rising.flat[i] + (target[i] - rising.flat[i]) * u;
+      reshaped = moving = true;
+    } else {
+      for (let i = 0; i < p.length; i++) far = Math.max(far, Math.abs(p[i] - target[i]));
+    }
     if (far > 1e-4) {
       const k = 1 - Math.exp(-step / FRAME_TAU);
       for (let i = 0; i < p.length; i++) p[i] += (target[i] - p[i]) * k;
@@ -275,8 +304,30 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     const height = m.at.z ?? solid.reach.balls + (solid.reach.space - solid.reach.balls) * fill.current;
     // where it stands: put back by an undo, it goes there rather than jumps
     const goal = new THREE.Vector3(m.at.x, m.at.y, height);
+    const rise = props.rising;
+    if (rise) {
+      // rising out of its drawing: off the page, its depth growing, and over to beside it
+      const t = riseT;
+      const up = easeInOutCubic(t / RISE_UP);
+      const across = easeInOutCubic((t - RISE_ACROSS_FROM) / (RISE_END - RISE_ACROSS_FROM));
+      shown.current = new THREE.Vector3(
+        rise.from.x + (goal.x - rise.from.x) * across,
+        rise.from.y + (goal.y - rise.from.y) * across,
+        goal.z * up,
+      );
+      const grow = easeOutCubic(t / RISE_GROW);
+      if (grow !== risen.current) reshaped = true;
+      risen.current = grow;
+      moving = true;
+      if (t >= RISE_END) {
+        risen.current = 1;
+        p.set(target);
+        reshaped = true;
+        props.onRisen?.();
+      }
+    }
     // (a drag - its own, or the drawing's it is selected with - it follows at once)
-    if (!shown.current || following || buttonHeld()) shown.current = goal.clone();
+    else if (!shown.current || following || buttonHeld()) shown.current = goal.clone();
     else if (shown.current.distanceToSquared(goal) > 1e-8) {
       shown.current.lerp(goal, 1 - Math.exp(-step / PLACE_TAU));
       moving = true;
@@ -362,9 +413,9 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
 
     const radius = (i: number) => {
       const r = solid.radii.balls[i] + (solid.radii.space[i] - solid.radii.balls[i]) * fill.current;
-      return r * (swell.current.get(i)?.v ?? 1);
+      return r * (swell.current.get(i)?.v ?? 1) * risen.current;
     };
-    const bondR = style.bondRadius * WORLD_PER_ANGSTROM * (1 - fill.current);
+    const bondR = style.bondRadius * WORLD_PER_ANGSTROM * (1 - fill.current) * risen.current;
     let lines: BondLine[] | null = null;
     if (reshaped) {
       placeAtoms(atoms.current, p, radius, 0);
@@ -653,7 +704,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
           </group>
         ))}
       </group>
-      {solid.frames.length > 1 && (
+      {/* (rising out of its drawing, it shows its frames once it has risen) */}
+      {solid.frames.length > 1 && !props.rising && (
         <group ref={pill}>
           <Frames3D
             count={solid.frames.length}

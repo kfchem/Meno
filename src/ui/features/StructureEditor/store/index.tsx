@@ -90,6 +90,7 @@ export function createEditorStore(
     hovered: { atomId: null, bondId: null },
     hovered3d: null,
     turns3d: {},
+    rising3d: {},
     frames3d: {},
     sel3d: new Set<number>(),
     chosen3d: null,

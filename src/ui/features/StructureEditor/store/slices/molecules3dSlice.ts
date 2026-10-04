@@ -2,7 +2,7 @@ import type { StoreApi } from "zustand";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
 import type { StructureDocument } from "../../document";
-import type { EditorState, Look3D, Molecule3D, Turn3D } from "../types";
+import type { EditorState, Look3D, Molecule3D, Rising3D, Turn3D } from "../types";
 import { chosenPath } from "../../utils/molecule3d";
 import { noteTurns } from "../turnJournal";
 
@@ -12,6 +12,9 @@ type GetState = StoreApi<EditorState>["getState"];
 /** The most atoms a measurement takes: four, for a torsion angle; and the most bonds, three. */
 const MOST_CHOSEN = 4;
 const MOST_BONDS = 3;
+
+/** Molecules made in 3D together rise one after another, this far apart. */
+const RISE_STAGGER_MS = 120;
 
 /** How many turns in place have been kept as steps: each its own. */
 let kept = 0;
@@ -36,6 +39,29 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
       ),
     setTurn3d: (id: number, turn: Turn3D) =>
       set((prev) => ({ ...prev, turns3d: { ...prev.turns3d, [id]: turn } })),
+    riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[]) => {
+      if (!made.length) return [];
+      const first = doc.getState().nextMolecule3dId ?? 1;
+      doc.edit(made.length > 1 ? "3D structures" : "3D structure", (d) => made.reduce((x, { m }) => ops.addMolecule3d(x, m), d));
+      const ids = made.map((_, i) => first + i);
+      // (several - a structure's stereoisomers - come out one after another)
+      const start = performance.now();
+      set((prev) => ({
+        ...prev,
+        turns3d: { ...prev.turns3d, ...Object.fromEntries(made.map(({ turn }, i) => [ids[i], turn])) },
+        rising3d: {
+          ...prev.rising3d,
+          ...Object.fromEntries(made.map(({ from, flat }, i) => [ids[i], { from, start: start + i * RISE_STAGGER_MS, flat }])),
+        },
+      }));
+      return ids;
+    },
+    risen3d: (id: number) =>
+      set((prev) => {
+        if (!(id in prev.rising3d)) return prev;
+        const { [id]: _, ...rest } = prev.rising3d;
+        return { ...prev, rising3d: rest };
+      }),
     resetTurn3d: (id: number) =>
       set((prev) => {
         if (!(id in prev.turns3d)) return prev;

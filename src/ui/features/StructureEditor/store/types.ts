@@ -89,9 +89,17 @@ export type Molecule3D = {
   measures?: Measure3D[];
   /** The file it came from. */
   name?: string;
+  /**
+   * The drawing it was made from: the drawing's atom each of its atoms is,
+   * by id; null, a hydrogen made for it or an atom written out of an
+   * abbreviation.
+   */
+  drawnFrom?: (number | null)[];
 };
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];
+/** A molecule in 3D rising out of its drawing (EditorState `rising3d`). */
+export type Rising3D = { from: { x: number; y: number }; start: number; flat?: number[] };
 /**
  * Structures with the arrows and "+" signs drawn among them: what a copy
  * takes, a picture shows and a paste brings.
@@ -125,6 +133,13 @@ export type EditorState = {
   /** The molecules in 3D selected, whole, by id: besides `sel`, which is the drawing's. */
   sel3d: Set<number>;
   /**
+   * Molecules in 3D rising out of their drawing, by id: where each started,
+   * over the drawing, and when (`performance.now()`); and where each of its
+   * atoms started - on its drawing's atom - about its centre, as it is
+   * turned. Gone once risen.
+   */
+  rising3d: Record<number, Rising3D>;
+  /**
    * The atoms and bonds chosen in one molecule in 3D, by index, each in the
    * order chosen: what a measurement is of (utils/molecule3d `chosenPath`).
    */
@@ -134,6 +149,13 @@ export type EditorState = {
   setHoveredMeasure3d: (h: { id: number; measure: number } | null) => void;
   setHovered3d: (h: { id: number } | null) => void;
   setTurn3d: (id: number, turn: Turn3D) => void;
+  /**
+   * Molecules in 3D made from a drawing, as one undo step: each where it is
+   * to rest, turned as `turn` says, rising out of the drawing from `from`.
+   */
+  riseMolecules3d: (made: ({ m: Omit<Molecule3D, "id">; turn: Turn3D } & Omit<Rising3D, "start">)[]) => number[];
+  /** A molecule in 3D has risen. */
+  risen3d: (id: number) => void;
   /** A molecule in 3D turned back to face as its file has it. */
   resetTurn3d: (id: number) => void;
   setFrame3d: (id: number, frame: number) => void;

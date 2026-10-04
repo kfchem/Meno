@@ -46,6 +46,9 @@ import { chosenPath, lookOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/rdkit/molblock";
 
+/** No atoms or bonds: the same array each time, so that nothing redraws for it. */
+const NO_IDS: number[] = [];
+
 /** Whether an atom is an abbreviation that can be drawn out: a file's, or one the dictionary knows. */
 function expandable(a: { el: string; abbrev?: unknown } | undefined): boolean {
   return !!a && !isElementSymbol(a.el) && (!!a.abbrev || !!abbreviationOf(a.el));
@@ -75,6 +78,9 @@ import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 import PageCamera, { PAGE_DISTANCE } from "./components/PageCamera";
 import Molecules3D from "./components/Molecules3D";
+import OpenStereo2D from "./components/OpenStereo2D";
+import Ask3D from "./Ask3D";
+import { blocksOf, boxOf, conformersOf, moleculeOf, openIn, placeRow, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
 
 function StructureCanvasContent({
   active,
@@ -168,6 +174,68 @@ function StructureCanvasContent({
         });
     },
     [store],
+  );
+  // The page in view, in world units: what the camera sees of it
+  const viewBox = useCallback((): Box | null => {
+    const cam = camRef.current;
+    const el = domRef.current;
+    if (!cam || !el || !cam.zoom) return null;
+    const w = el.clientWidth / 2 / cam.zoom;
+    const h = el.clientHeight / 2 / cam.zoom;
+    return { x0: cam.position.x - w, x1: cam.position.x + w, y0: cam.position.y - h, y1: cam.position.y + h };
+  }, [camRef, domRef]);
+  // Structures made in 3D (chem/make3d): asked first about what their
+  // drawing leaves open, then their conformers made and risen out of them
+  const [ask3d, setAsk3d] = useState<{ blocks: Block[]; open: Open[] } | null>(null);
+  const [making3d, setMaking3d] = useState(false);
+  const build3d = useCallback(
+    async (blocks: Block[], isomers: "one" | "all") => {
+      setMaking3d(true);
+      setChemError(null);
+      try {
+        const chem = await chemWorker();
+        const made: Parameters<ReturnType<typeof store.getState>["riseMolecules3d"]>[0] = [];
+        let allInView = true;
+        for (const block of blocks) {
+          const ms = (await conformersOf(chem, block, isomers)).map((c) => moleculeOf(c, block));
+          const model = store.getState().model;
+          const turned = ms.map((m) => turnedOver(m, model, STYLE_3D));
+          // beside the drawing, where they can be seen as the view is now
+          const row = placeRow(turned, boxOf(block.part), viewBox());
+          allInView &&= row.inView;
+          ms.forEach((m, i) =>
+            made.push({ m: { ...m, at: row.at[i] }, turn: turned[i].turn, from: turned[i].start, flat: turned[i].flat }),
+          );
+        }
+        store.getState().riseMolecules3d(made);
+        // (with no room for them in view, the view takes them in)
+        if (!allInView) requestFit();
+      } catch (e: unknown) {
+        setChemError(`No 3D structure could be made: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setMaking3d(false);
+      }
+    },
+    [store, viewBox, requestFit],
+  );
+  const make3d = useCallback(
+    async (around: Iterable<number>) => {
+      const blocks = blocksOf(store.getState().model, around);
+      if (!blocks.length) return;
+      setChemError(null);
+      try {
+        const chem = await chemWorker();
+        const open = await Promise.all(
+          blocks.map(async (b) => openIn(b, await chem.request("open_stereo", { molblock: b.molblock }))),
+        );
+        // (stereo drawn without a configuration: asked what to make first)
+        if (open.some((o) => o.atoms.length || o.bonds.length)) setAsk3d({ blocks, open });
+        else await build3d(blocks, "one");
+      } catch (e: unknown) {
+        setChemError(`No 3D structure could be made: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+    [store, build3d],
   );
   // What is under the pointer is what a key acts on: Delete deletes it, and
   // the clean-up key cleans up the structure it is in (everything, when the
@@ -591,16 +659,32 @@ function StructureCanvasContent({
         </button>
       </div>
       {active &&
-        (chem.state === "setting-up" || chem.state === "starting") && (
+        (chem.state === "setting-up" || chem.state === "starting" || making3d) && (
           <div
             role="status"
             className="absolute right-3 bottom-3 z-50 rounded-full border border-gh-line bg-white/95 shadow-sm px-3 py-1.5 text-xs text-gh-gray"
           >
             {chem.state === "setting-up"
               ? "Setting up RDKit…"
-              : "Starting RDKit…"}
+              : chem.state === "starting"
+                ? "Starting RDKit…"
+                : "Making the 3D structure…"}
           </div>
         )}
+      {ask3d && (
+        <Ask3D
+          open={ask3d.open}
+          onAll={() => {
+            setAsk3d(null);
+            void build3d(ask3d.blocks, "all");
+          }}
+          onOne={() => {
+            setAsk3d(null);
+            void build3d(ask3d.blocks, "one");
+          }}
+          onCancel={() => setAsk3d(null)}
+        />
+      )}
       {smilesOpen && <SmilesPanel onClose={() => setSmilesOpen(false)} />}
       {menu && (
         <PartMenu
@@ -634,6 +718,10 @@ function StructureCanvasContent({
                 : structureAt(menu.kind, menu.id),
             )
           }
+          onMake3d={() => {
+            const around = menu.selection === "here" ? store.getState().sel.atoms : structureAt(menu.kind, menu.id);
+            if (around != null) void make3d(typeof around === "number" ? [around] : around);
+          }}
           onSelectStructure={() => {
             const at = structureAt(menu.kind, menu.id);
             if (at != null) store.getState().selectStructure(at);
@@ -706,6 +794,8 @@ function StructureCanvasContent({
           </Suspense>
           {/* RDKit's marks: valence problems, R/S and E/Z */}
           <ChemMarks2D marks={marks} />
+          {/* stereo drawn without a configuration, while Meno asks about it */}
+          <OpenStereo2D atoms={ask3d?.open.flatMap((o) => o.atoms) ?? NO_IDS} bonds={ask3d?.open.flatMap((o) => o.bonds) ?? NO_IDS} />
           {/* Label editor */}
           <LabelEditor2D />
           {/* Hover overlay */}

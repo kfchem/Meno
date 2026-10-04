@@ -84,6 +84,7 @@ type Going = Exclude<Gesture, { kind: "press" }>;
 export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const molecules = useEditor((s) => s.molecules3d);
   const turns = useEditor((s) => s.turns3d);
+  const rising = useEditor((s) => s.rising3d);
   const frames = useEditor((s) => s.frames3d);
   const hovered = useEditor((s) => s.hovered3d);
   const sel3d = useEditor((s) => s.sel3d);
@@ -406,6 +407,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           framesOpen={hovered?.id === m.id || sel3d.has(m.id)}
           onFrame={(f) => store.getState().setFrame3d(m.id, f)}
           hoveredMeasure={hoveredMeasure?.id === m.id ? hoveredMeasure.measure : null}
+          rising={rising[m.id]}
+          onRisen={() => store.getState().risen3d(m.id)}
         />
       ))}
       {leaving.map(({ m, turn, frame }) => (

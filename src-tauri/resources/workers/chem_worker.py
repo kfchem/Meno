@@ -13,14 +13,26 @@ network. When RDKit has been imported it says so:
 
 Structures come in as MOL blocks, V2000 or V3000, and go back as V3000 ones
 with their atoms in the order they came in. (Clean-up is Meno's own layout
-engine's, in the app: src/lib/layout.)
+engine's, in the app: src/lib/layout.) Their 3D structures go back as
+atoms, bonds and coordinates: the atoms in the order they came in, the
+hydrogens made for them after.
 """
 
 import json
 import sys
 
 from rdkit import Chem, RDLogger, rdBase
-from rdkit.Chem import rdCIPLabeler, rdDepictor
+from rdkit.Chem import (
+    rdCIPLabeler,
+    rdDepictor,
+    rdDistGeom,
+    rdForceFieldHelpers,
+    rdMolAlign,
+)
+from rdkit.Chem.EnumerateStereoisomers import (
+    EnumerateStereoisomers,
+    StereoEnumerationOptions,
+)
 
 # RDKit's own warnings go to stderr, not into the answers.
 RDLogger.DisableLog("rdApp.*")
@@ -120,11 +132,133 @@ def op_analyse(m):
     }
 
 
+# --- 3D structures -----------------------------------------------------------
+
+#: The most stereoisomers a structure is made in, all at once.
+MOST_ISOMERS = 32
+#: How many conformers are tried for each: the same shape twice is kept once.
+CONFORMERS = 30
+#: Conformers closer than this, in angstroms over their heavy atoms, are one.
+SAME_SHAPE = 0.5
+#: Kilocalories per mole in a hartree: energies go back in hartrees.
+KCAL_PER_HARTREE = 627.509474
+
+
+def open_stereo(mol):
+    """The stereocentres and double bonds a structure leaves open: those
+    that could have a configuration, and are drawn without one."""
+    atoms, bonds = [], []
+    for si in Chem.FindPotentialStereo(Chem.Mol(mol), cleanIt=True):
+        if si.specified != Chem.StereoSpecified.Unspecified:
+            continue
+        if si.type == Chem.StereoType.Atom_Tetrahedral:
+            atoms.append(si.centeredOn)
+        elif si.type == Chem.StereoType.Bond_Double:
+            bonds.append(si.centeredOn)
+    return sorted(atoms), sorted(bonds)
+
+
+def isomers_of(mol):
+    """Each stereoisomer the open stereocentres and double bonds give, the
+    ones drawn kept as drawn; the structure itself when none is open."""
+    options = StereoEnumerationOptions(onlyUnassigned=True, unique=True, maxIsomers=MOST_ISOMERS)
+    return list(EnumerateStereoisomers(mol, options=options)) or [mol]
+
+
+def op_open_stereo(m):
+    """What a 3D structure would have to choose: the open stereocentres and
+    double bonds, and how many stereoisomers they make."""
+    mol = read(m["molblock"])
+    atoms, bonds = open_stereo(mol)
+    count = len(isomers_of(mol)) if atoms or bonds else 1
+    return {"atoms": atoms, "bonds": bonds, "isomers": count}
+
+
+def kekule_order(bond):
+    # (aromatic rings as alternating bonds: a 3D structure's bonds are drawn
+    # as single, double and triple)
+    return {Chem.BondType.SINGLE: 1, Chem.BondType.DOUBLE: 2, Chem.BondType.TRIPLE: 3}.get(bond.GetBondType(), 1)
+
+
+def conformers(mol, count=CONFORMERS, seed=0x4D45):
+    """A stereoisomer's conformers, embedded (ETKDG) and optimised (MMFF94,
+    or UFF where MMFF has no parameters), lowest energy first, the same
+    shape twice kept once, and each laid over the first by its heavy atoms."""
+    mol = Chem.AddHs(mol)
+    params = rdDistGeom.ETKDGv3()
+    params.randomSeed = seed
+    params.pruneRmsThresh = SAME_SHAPE
+    params.numThreads = 0  # (every core)
+    ids = list(rdDistGeom.EmbedMultipleConfs(mol, numConfs=count, params=params))
+    if not ids:
+        # (a crowded cage embeds from random coordinates where it does not otherwise)
+        params.useRandomCoords = True
+        ids = list(rdDistGeom.EmbedMultipleConfs(mol, numConfs=count, params=params))
+    if not ids:
+        raise ValueError("no 3D structure could be made of it")
+    if rdForceFieldHelpers.MMFFHasAllMoleculeParams(mol):
+        field, results = "MMFF94", rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, numThreads=0, maxIters=2000)
+    else:
+        field, results = "UFF", rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, numThreads=0, maxIters=2000)
+    energy = {cid: e for cid, (_, e) in zip(ids, results)}
+    heavy = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() > 1]
+    kept = []
+    for cid in sorted(ids, key=lambda c: energy[c]):
+        if kept:
+            # (laid over the lowest, which keeps it so for the overlay)
+            rms = rdMolAlign.AlignMol(mol, mol, prbCid=cid, refCid=kept[0], atomMap=[(i, i) for i in heavy])
+            if rms < SAME_SHAPE or any(
+                rdMolAlign.CalcRMS(mol, mol, prbId=cid, refId=k, map=[[(i, i) for i in heavy]]) < SAME_SHAPE
+                for k in kept[1:]
+            ):
+                continue
+        kept.append(cid)
+    shown = Chem.Mol(mol)
+    Chem.Kekulize(shown, clearAromaticFlags=True)
+    return {
+        "atoms": [{"el": a.GetSymbol(), "charge": a.GetFormalCharge()} for a in mol.GetAtoms()],
+        "bonds": [
+            {"a1": b.GetBeginAtomIdx(), "a2": b.GetEndAtomIdx(), "order": kekule_order(b)}
+            for b in shown.GetBonds()
+        ],
+        "frames": [
+            [round(v, 4) for p in mol.GetConformer(cid).GetPositions() for v in p] for cid in kept
+        ],
+        "energies": [energy[cid] / KCAL_PER_HARTREE for cid in kept],
+        "field": field,
+    }
+
+
+def op_conformers(m):
+    """Conformers of a structure drawn in 2D. With stereocentres or double
+    bonds left open, `isomers` says what to make: "one" (the first of its
+    stereoisomers) or "all" (each, up to MOST_ISOMERS); the configurations
+    chosen go back with each, by CIP label, atom by atom and bond by bond."""
+    mol = read(m["molblock"])
+    atoms, bonds = open_stereo(mol)
+    isomers = isomers_of(mol)
+    if m.get("isomers", "one") != "all":
+        isomers = isomers[:1]
+    made = []
+    for iso in isomers:
+        entry = conformers(iso, int(m.get("count", CONFORMERS)))
+        rdCIPLabeler.AssignCIPLabels(iso)
+        entry["chosen"] = {
+            "atoms": {str(i): iso.GetAtomWithIdx(i).GetProp("_CIPCode") for i in atoms if iso.GetAtomWithIdx(i).HasProp("_CIPCode")},
+            "bonds": {str(i): iso.GetBondWithIdx(i).GetProp("_CIPCode") for i in bonds if iso.GetBondWithIdx(i).HasProp("_CIPCode")},
+        }
+        entry["smiles"] = Chem.MolToSmiles(iso)
+        made.append(entry)
+    return {"isomers": made}
+
+
 OPS = {
     "ping": op_ping,
     "to_smiles": op_to_smiles,
     "from_smiles": op_from_smiles,
     "analyse": op_analyse,
+    "open_stereo": op_open_stereo,
+    "conformers": op_conformers,
 }
 
 

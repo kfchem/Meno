@@ -77,6 +77,7 @@ export default function PartMenu({
   target,
   onDelete,
   onCleanUp,
+  onMake3d,
   onSelectStructure,
   onTurnOver,
   onCharge,
@@ -96,6 +97,8 @@ export default function PartMenu({
   onDelete: () => void;
   /** The part's structure cleaned up, or the selection's structures. */
   onCleanUp: () => void;
+  /** The part's structure made in 3D, or the selection's structures. */
+  onMake3d: () => void;
   onSelectStructure: () => void;
   /** The selection turned over, left to right or top to bottom. */
   onTurnOver: (axis: "vertical" | "horizontal") => void;
@@ -208,6 +211,7 @@ export default function PartMenu({
                 { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
                 { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
                 { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
+                { name: "3D structures", keys: "", run: onMake3d },
                 { name: "Save as abbreviation…", keys: "", run: onSaveAbbreviation, divider: true },
               ]
             : []),
@@ -236,6 +240,7 @@ export default function PartMenu({
             keys: keys ? cleanUpKey : "",
             run: onCleanUp,
           },
+          { name: "3D structure", keys: "", run: onMake3d },
         ];
   const height = items.length * ITEM + items.filter((i) => i.divider).length * 9 + 12;
   return (
