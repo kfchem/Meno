@@ -240,8 +240,8 @@ export const createModelSlice = (
   },
 
   /** A file opened over what the canvas holds: one step, arrow and all. */
-  replaceModel: (next: Model, scheme?: ImportedScheme) => {
-    doc.edit("open structure", (d) =>
+  replaceModel: (next: Model, scheme?: ImportedScheme, label = "open structure") => {
+    doc.edit(label, (d) =>
       ops.withImportedScheme(ops.replaceModel(d, next), scheme),
     );
     get().forgetInteraction();

@@ -13,7 +13,7 @@ describe("canvasHolding", () => {
       bonds: [{ id: 3, a: 1, b: 2, order: 1, stereo: "none" }],
     };
     const next = canvasHolding(found);
-    expect(next).toMatchObject({ kind: "structure", label: "Structure Canvas", filename: "clipboard.meno" });
+    expect(next).toMatchObject({ kind: "structure", label: "Structure Canvas", filename: "clipboard.meno", pasted: true });
     // (opened as a document's structure is: Meno's record, read back as it was)
     expect(readRecord(next.payload)).toMatchObject({ atoms: found.atoms, bonds: found.bonds });
   });

@@ -77,6 +77,7 @@ function StructureCanvasContent({
   tabId,
   initialPayload,
   initialFilename,
+  initialPasted,
   officeId,
   styleOpen,
   toggleStyle,
@@ -87,6 +88,8 @@ function StructureCanvasContent({
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
+  /** The initial payload was pasted into a new tab, rather than opened. */
+  initialPasted?: boolean;
   /** The object in a document this canvas was opened from (lib/ole). */
   officeId?: number;
   /** Whether the drawing-style panel is open beside the canvas. */
@@ -116,7 +119,7 @@ function StructureCanvasContent({
     handleMouseDownCapture,
     clientToWorld,
     pasteTarget,
-  } = useStructureEvents(initialPayload, initialFilename);
+  } = useStructureEvents(initialPayload, initialFilename, initialPasted);
   useOfficeLink(officeId);
 
   const onCreated = useCanvasSetup(camRef, domRef);
@@ -670,6 +673,7 @@ export default function StructureCanvas({
   tabId,
   initialPayload,
   initialFilename,
+  initialPasted,
   officeId,
   active = true,
   document,
@@ -677,6 +681,8 @@ export default function StructureCanvas({
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
+  /** The initial payload was pasted into a new tab, rather than opened. */
+  initialPasted?: boolean;
   /** The object in a document it was opened from, when it was (lib/ole). */
   officeId?: number;
   /** False while the owning tab is hidden: pauses the render loop. */
@@ -699,6 +705,7 @@ export default function StructureCanvas({
           tabId={tabId}
           initialPayload={initialPayload}
           initialFilename={initialFilename}
+          initialPasted={initialPasted}
           officeId={officeId}
           styleOpen={styleOpen}
           toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}

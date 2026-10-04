@@ -497,4 +497,20 @@ describe("a document's own drawing style", () => {
     doc.undo();
     expect(state().docStyle).toEqual({ preset: "rsc", changes: {} });
   });
+
+  it("takes a structure pasted into a new tab as a paste: unsaved, and undone back to nothing", () => {
+    const { doc, state } = editor();
+    const pasted = {
+      atoms: [
+        { id: 1, x: 0, y: 0, r: 0.9, el: "C" },
+        { id: 2, x: 1.5, y: 0, r: 0.9, el: "O" },
+      ],
+      bonds: [{ id: 3, a: 1, b: 2, order: 1 as const, stereo: "none" as const }],
+    };
+    state().replaceModel(pasted, undefined, "paste");
+    expect(state().model.atoms).toHaveLength(2);
+    expect(doc.history()).toMatchObject({ undoLabel: "paste", dirty: true });
+    doc.undo();
+    expect(state().model.atoms).toHaveLength(0);
+  });
 });

@@ -240,8 +240,11 @@ export type EditorState = {
   endMoveDrag: () => void;
   /** The structure a tab opens with: where its document starts, not an edit. */
   openModel: (next: Model, scheme?: ImportedScheme) => void;
-  /** A file opened over the canvas's contents, as one undo step. */
-  replaceModel: (next: Model, scheme?: ImportedScheme) => void;
+  /**
+   * A file opened over the canvas's contents - or a structure pasted into a
+   * new tab - as one undo step, `label` saying which.
+   */
+  replaceModel: (next: Model, scheme?: ImportedScheme, label?: string) => void;
   /** A file dropped onto the canvas, or a SMILES beside what is drawn: added, selected, as one undo step. */
   appendModel: (next: Model, scheme?: ImportedScheme) => void;
   /** Clears hover, selection and gestures after the structure is replaced. */

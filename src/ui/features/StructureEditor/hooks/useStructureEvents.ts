@@ -21,6 +21,8 @@ import { addsToSelection } from "../../../../lib/doc/shortcuts";
 export function useStructureEvents(
   initialPayload?: string,
   initialFilename?: string,
+  /** The payload was pasted into a new tab: put in as a paste is, unsaved. */
+  initialPasted?: boolean,
 ) {
   const store = useEditorStore();
 
@@ -92,7 +94,10 @@ export function useStructureEvents(
       // A structure from a document (lib/ole): Meno's own record, taken as it is.
       if (/\.meno$/i.test(initialFilename ?? "")) {
         const record = readRecord(initialPayload);
-        if (record) store.getState().openModel(record, schemeOf(record));
+        // (one pasted into a new tab is an edit, as a paste onto a canvas is:
+        // unsaved, and undone back to the empty canvas)
+        if (record && initialPasted) store.getState().replaceModel(record, schemeOf(record), "paste");
+        else if (record) store.getState().openModel(record, schemeOf(record));
         else reportImportError("initial payload", new Error("The document's structure could not be read."));
         return;
       }
