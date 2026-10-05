@@ -73,9 +73,9 @@ from 2.12 on; an update signed without it is refused by every Meno from
 
 ## The Mac
 
-The workflow builds Meno for Apple silicon only: the `uv` it carries for
-Python (`src-tauri/resources/py/uv`) is an arm64 build. An Intel build
-would need an x86_64 or universal `uv` first.
+The workflow builds Meno for Apple silicon only. Meno carries no `uv`: it
+fetches the build pinned for the computer it runs on (`src-tauri/src/tools.rs`),
+so an Intel build would need only its own runner.
 
 It is signed **ad hoc** (`signingIdentity: "-"`, in the job's arguments),
 the whole bundle, and not with Apple's Developer ID, which the project has

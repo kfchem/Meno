@@ -31,6 +31,14 @@ fontdb = "0.24"
 ttf-parser = "0.25.1"
 tokio = { version = "1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }
 tauri-plugin-updater = "2"
+# Fetching the tools that make Python environments (src/tools.rs): the
+# crates the updater already brings, with its TLS
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+sha2 = "0.10"
+flate2 = "1"
+tar = "0.4"
+zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
 
 # The system clipboard (src/clipboard.rs), by each platform's own API
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -68,7 +68,7 @@ jobs:
     # platforms and puts it back whole, and finds the draft the other made -
     # so one at a time, or one could undo the other.
     needs: windows
-    # (Apple silicon: the uv bundled for the Mac, resources/py/uv, is arm64)
+    # (Apple silicon)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

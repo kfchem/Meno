@@ -16,6 +16,7 @@ mod fonts;
 #[cfg(windows)]
 mod drop;
 mod net;
+mod tools;
 mod update;
 #[cfg(windows)]
 mod ole;
@@ -25,8 +26,6 @@ mod ole;
 struct PyEnvInfo {
     #[serde(rename = "os")]
     _os: String,
-    #[serde(rename = "uv")]
-    uv: String,
     #[serde(rename = "lockPath")]
     lock_path: String,
     #[serde(rename = "venvHome")]
@@ -64,16 +63,10 @@ fn setup_purpose(info: &PyEnvInfo) -> Result<String, String> {
 }
 
 // The webview supplies every path these commands use, so each one is checked
-// here: the uv binary must be the bundled one, lock files must be bundled
-// resources, venvs must live under the app data dir, and sidecars may only run
-// a venv's Python on a bundled worker script. See docs/ARCHITECTURE.md.
-
-/// The bundled uv binary, relative to the resource dir.
-const UV_REL: &str = if cfg!(windows) {
-    "resources/py/uv.exe"
-} else {
-    "resources/py/uv"
-};
+// here: lock files must be bundled resources, venvs must live under the app
+// data dir, and sidecars may only run a venv's Python on a bundled worker
+// script. uv is none of the webview's to name: it is the one pinned in
+// tools.rs, fetched when first needed. See docs/ARCHITECTURE.md.
 /// Python interpreter file names a sidecar may be started with.
 const PYTHON_NAMES: &[&str] = &["python", "python3", "python.exe"];
 /// Interpreter flags allowed before the worker script.
@@ -105,17 +98,12 @@ fn valid_python_version(v: &str) -> bool {
 /// `PyEnvInfo` paths after validation; all relative to their base directory.
 #[derive(Debug)]
 struct ValidatedEnv {
-    uv: PathBuf,
     lock: PathBuf,
     venv_home: PathBuf,
     venv_python_rel: PathBuf,
 }
 
 fn validate_env_info(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
-    let uv = safe_relative(&info.uv)?;
-    if uv.as_path() != Path::new(UV_REL) {
-        return Err(format!("unexpected uv path: {}", info.uv));
-    }
     let lock = safe_relative(&info.lock_path)?;
     if !lock.starts_with("resources/py")
         || lock.extension().and_then(|e| e.to_str()) != Some("lock")
@@ -131,7 +119,6 @@ fn validate_env_info(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
         return Err(format!("invalid Python version: {}", info.python_version));
     }
     Ok(ValidatedEnv {
-        uv,
         lock,
         venv_home,
         venv_python_rel,
@@ -276,7 +263,7 @@ async fn py_env_python_path_uv(app: AppHandle, payload: PyEnvInfo) -> Result<Str
     Ok(venv.to_string_lossy().into_owned())
 }
 
-/// A command running the bundled `uv`, with everything it keeps - the Python
+/// A command running uv (`tools::ensure`), with everything it keeps - the Python
 /// it downloads, its cache - under the app's own data directory rather than
 /// the user's, and deaf to any uv settings of the user's: Meno's environments
 /// are Meno's, and removing the app's data removes them.
@@ -318,9 +305,10 @@ async fn py_env_setup_uv(
         payload.label.clone()
     };
     let task = net.begin(&setup_purpose(&payload)?, &label)?;
-    let uv = resource_path(&app, &env.uv)?;
     let lock = resource_path(&app, &env.lock)?;
     let data = app_data_dir(&app)?;
+    // (uv itself, the first time: under the same task, the same consent)
+    let uv = tools::ensure(&data, tools::Tool::Uv, task.proxy_url()).await?;
     let venv_dir = data.join(&env.venv_home);
     std::fs::create_dir_all(&venv_dir).map_err(|e| e.to_string())?;
 
@@ -771,7 +759,7 @@ mod tests {
 
     #[test]
     fn a_setup_downloads_only_under_a_python_environments_purpose() {
-        let mut info = env_info(UV_REL, "resources/py/requirements.lock", "uv/console/venv", "3.12");
+        let mut info = env_info("resources/py/requirements.lock", "uv/console/venv", "3.12");
         assert_eq!(setup_purpose(&info).as_deref(), Ok("python-env:console"));
         // not the user's own code, which needs no asking, nor anything else
         for bad in ["python-code", "python-env:", "python-env:a b", "anything"] {
@@ -804,10 +792,9 @@ mod tests {
         assert_eq!(args, ["venv", "/data/Meno/uv/chem/venv", "--python", "3.12", "--clear"]);
     }
 
-    fn env_info(uv: &str, lock: &str, venv: &str, py: &str) -> PyEnvInfo {
+    fn env_info(lock: &str, venv: &str, py: &str) -> PyEnvInfo {
         PyEnvInfo {
             _os: String::new(),
-            uv: uv.into(),
             lock_path: lock.into(),
             venv_home: venv.into(),
             venv_python_rel: if cfg!(windows) {
@@ -861,11 +848,10 @@ mod tests {
 
     #[test]
     fn env_info_accepts_the_frontend_payload() {
-        let env = validate_env_info(&env_info(UV_REL, LOCK, "uv/console/venv", "3.12"))
+        let env = validate_env_info(&env_info(LOCK, "uv/console/venv", "3.12"))
             .expect("frontend payload must validate");
         assert_eq!(env.venv_home, Path::new("uv/console/venv"));
         assert!(validate_env_info(&env_info(
-            UV_REL,
             "resources/py/requirements.lock",
             "uv/node/venv",
             "3.12"
@@ -876,26 +862,17 @@ mod tests {
     #[test]
     fn env_info_rejects_foreign_paths() {
         let cases = [
-            env_info(
-                "C:/Windows/System32/cmd.exe",
-                LOCK,
-                "uv/console/venv",
-                "3.12",
-            ),
-            env_info("/bin/sh", LOCK, "uv/console/venv", "3.12"),
-            env_info("resources/py/../../evil", LOCK, "uv/console/venv", "3.12"),
-            env_info(UV_REL, "resources/py/notes.txt", "uv/console/venv", "3.12"),
-            env_info(UV_REL, "../outside.lock", "uv/console/venv", "3.12"),
-            env_info(UV_REL, LOCK, "../../elsewhere", "3.12"),
-            env_info(UV_REL, LOCK, "uv", "3.12"),
-            env_info(UV_REL, LOCK, "other/venv", "3.12"),
-            env_info(UV_REL, LOCK, "uv/console/venv", "3.12 --index-url x"),
+            env_info("resources/py/notes.txt", "uv/console/venv", "3.12"),
+            env_info("../outside.lock", "uv/console/venv", "3.12"),
+            env_info(LOCK, "../../elsewhere", "3.12"),
+            env_info(LOCK, "uv", "3.12"),
+            env_info(LOCK, "other/venv", "3.12"),
+            env_info(LOCK, "uv/console/venv", "3.12 --index-url x"),
         ];
         for info in &cases {
             assert!(
                 validate_env_info(info).is_err(),
-                "should reject uv={} lock={} venv={} py={}",
-                info.uv,
+                "should reject lock={} venv={} py={}",
                 info.lock_path,
                 info.venv_home,
                 info.python_version

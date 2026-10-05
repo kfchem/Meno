@@ -277,7 +277,8 @@ state only; nothing is executed yet.
 
 ```
 PyConsole ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_setup_uv (Rust)
-          │                          └─ runs resources/py/uv[.exe]: `uv venv`, `uv pip install -r <lock>`
+          │                          ├─ tools::ensure(Uv): <data>/tools/uv/<version>/uv[.exe], fetched once
+          │                          └─ runs it: `uv venv`, `uv pip install -r <lock>`
           │                             stdout/stderr → events uv:log / uv:err
           └─ext_spawn_sidecar({ entry: <venv python>, args: ["-u", <worker.py>] }) → id
              ext_stdin(id, JSON line) ─▶ worker ─▶ events ext:stdout / ext:stderr / ext:exit
@@ -422,13 +423,25 @@ per sidecar, whether it exits by itself or through `ext_kill`. `net:task` and
 `net:connection` carry the network's record (see below); `update:state`, where
 keeping Meno up to date is.
 
+The tools that make the environments - uv, and pixi for those that need
+conda-forge - are not bundled (docs/WORKSPACE.md, stage 3d): `tools.rs`
+pins each one's version and its archive's SHA-256 for every computer Meno is
+built for, and fetches it the first time an environment needs it - through
+that environment's network task, under its consent - checks the archive
+against the hash, and keeps the program in `<data>/tools/<tool>/<version>/`,
+taking away a version no longer pinned. uv comes from Astral's host
+(releases.astral.sh), as the Pythons it installs do; pixi from its releases
+on GitHub. A new pin is a change to `tools.rs`, its hashes the release's
+own, checked against the archives (`cargo test -- --ignored` fetches and
+runs both for the computer it runs on).
+
 ### What the backend accepts
 
 The webview is not trusted with process execution, so `lib.rs` validates every
 path it is given:
 
-- `py_env_*`: `uv` must be the bundled `resources/py/uv[.exe]`; `lockPath` must
-  be a `.lock` file under `resources/py/`; `venvHome` must be under `uv/` in the
+- `py_env_*`: the webview names no tool - uv is the one `tools.rs` pins;
+  `lockPath` must be a `.lock` file under `resources/py/`; `venvHome` must be under `uv/` in the
   app data dir; relative paths may not contain `..`, `.` or absolute/drive
   prefixes; `pythonVersion` must look like `3.12` or `3.12.4`; `purpose` must
   be `python-env:<name>` - never a purpose that needs no asking.
