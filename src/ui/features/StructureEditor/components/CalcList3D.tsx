@@ -47,6 +47,11 @@ export default function CalcList3D({
   const card = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState(TALLEST);
+  // what its rows reach past it, where its scroll bar takes room it was not
+  // given - so a Windows WebView does, the scroll bar come after the columns
+  // were laid out - given back as a column of its own at the right, under
+  // the scroll bar
+  const [spare, setSpare] = useState(0);
   const askRoom = useRef(onRoom);
   askRoom.current = onRoom;
   // (measured as the page moves, every frame it is up: the page is moved
@@ -66,6 +71,9 @@ export default function CalcList3D({
         if (++frames === PLACED_FRAMES) askRoom.current?.(b.top + box.offsetHeight - el.clientHeight + Math.min(TALLEST, el.scrollHeight));
         // (the card clear of the edge, its own padding under the list too)
         setRoom(Math.round(Math.min(TALLEST, Math.max(LEAST, area.getBoundingClientRect().bottom - l.top - (b.bottom - l.bottom) - MARGIN))));
+        // (never more than the scroll bar's own width: what reaches past it
+        // for any other reason - a card as wide as it may be - stays hidden)
+        setSpare(Math.min(el.offsetWidth - el.clientWidth, Math.max(0, el.scrollWidth - el.clientWidth)));
       }
       id = requestAnimationFrame(fit);
     };
@@ -107,7 +115,7 @@ export default function CalcList3D({
       <div
         className="grid gap-x-3"
         style={{
-          gridTemplateColumns: `repeat(${result.columns.length}, auto)`,
+          gridTemplateColumns: `repeat(${result.columns.length}, auto)${spare ? ` ${spare}px` : ""}`,
         }}
       >
         {headed && (
@@ -123,7 +131,7 @@ export default function CalcList3D({
           ref={list}
           role="listbox"
           aria-label={result.label}
-          className="relative overflow-y-auto"
+          className="relative overflow-y-auto overflow-x-hidden"
           style={{ ...columns, gridAutoRows: "min-content", maxHeight: room }}
           onPointerLeave={() => onPoint(null)}
         >
