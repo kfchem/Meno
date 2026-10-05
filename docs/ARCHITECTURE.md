@@ -294,6 +294,78 @@ blocks or coordinates out. It runs no code it is sent, and the app keeps it
 off the network. Its tests need RDKit and run by hand
 (`scripts/chem/test_chem_worker.py`).
 
+Calculation readers (stage 3 of docs/WORKSPACE.md) are sidecars too, one
+profile each, named `reader-<id>`: `lib/calc/catalog.ts` lists the readers
+Meno knows of - each one's lock, worker and the kinds of output it reads -
+and the kinds, each told by what its file starts with (ORCA's banner,
+Gaussian's "Entering Gaussian System", ...), never by its name. Meno's core
+knows no program's format beyond that.
+- A reader is added in Settings, *Calculation readers*: `ensurePyEnv`, with
+  the network's consent under `python-env:reader-<id>`. It is taken away
+  there too: `py_env_remove`, which removes only a `uv/reader-<id>`
+  folder.
+- `lib/calc/workers.ts` starts a reader's worker the first time it is asked
+  to read, as `lib/rdkit/worker.ts` does, and asks it through
+  `lib/calc/client.ts`: `{"op": "read", "name", "text"}` - the file's text,
+  never a path - and back Meno's own plain data (`lib/calc/output.ts`
+  `ReaderOutput`). Like the chemistry worker, it runs no code it is sent
+  and is kept off the network.
+- Where the line is between a plugin and Meno: a plugin knows the file,
+  Meno where and how what it found shows, and what can be done with it.
+  What Meno does something with has a form of its own in `ReaderOutput` -
+  the atoms, each geometry, each one's energy in hartrees, and what the
+  calculation was (program, method, basis, charge, multiplicity). Every
+  thing else is a result, in one general form (`lib/calc/results.ts`): it
+  belongs to the molecule, each frame, each atom, pairs of atoms or a list;
+  it has a group and a name; and its values are numbers or texts, each as a
+  quantity Meno knows - an energy in hartrees, a charge, a wavenumber (an
+  imaginary one negative), a length, an angle, a dipole - or with its own
+  unit. `readResults` keeps those that read as results for the molecule
+  (the right count, indices it has, no markup), and `valueText` writes
+  them, the same whoever gave them. A list's row can be of atoms, a frame or
+  a motion; a molecule's result can rank for the chip's line (`chipLine`).
+- Readers are alike: every one added that reads a kind of output reads it
+  (`readersFor`), and what they found is put together (`lib/calc/read.ts`
+  `combine`). The geometries are the first's that gives any, a reader whose
+  atoms are not those is left out, and where two give the same thing -
+  each thing the calculation was, a result of the same kind and name - the
+  one chosen in Settings for that kind (`calcReaders.chosen`) gives it, or
+  else the first in the catalog's order. Each result keeps the reader it
+  came from. Where none is added, opening the file says which to add.
+- An opened file that is no structure file but a kind of output
+  (`openedAs`, `processFileContent`) is read so, and its geometries come in
+  as an XYZ file's frames do (`calcResult`), its last shown; what the
+  calculation was, the readers that read it and its results are kept on
+  the molecule (`calc`, saved in `.meno` and read back by `readCalc` as a
+  plugin's are), so that they show as they were where no reader is
+  added.
+- Where results show (3c), as the look stays as it is: the molecule's -
+  and the frame's shown - above the frames chip, as its text is pointed at,
+  its line saying the ranked ones (`Frames3D`); an atom's, or a bond's, on a
+  card beside it once it has been pointed at a moment (`PointedCard3D`,
+  placed each frame by `Molecule3DView`); and each list from the
+  molecule's menu, under it (`CalcList3D`; the view's `lists3d`, by
+  molecule, with the row chosen and the row pointed at). Opened with too
+  little room below it, a list asks for room, and the view glides - zooming
+  out, where it must - until the molecule and the list are both seen. A
+  row pointed at outlines its atoms; one chosen shows its frame or moves the
+  molecule. No colouring (the maintainer).
+- Vibrations (3b) are a list whose rows move the molecule: one chosen, its
+  atoms move in it each frame (`Molecule3DView`): what the motion added is taken
+  off the atoms' places before the frame is placed and put on again after
+  (`utils/vibration3d` `vibrationOffsets`), so frames, measurements and
+  labels follow as for any motion; its swing eases in and out, and another
+  chosen waits for the one moving to come to rest. The atom that moves most
+  goes 0.3 Å, once every 1.2 s, whatever the frequency. No arrows and no
+  spectrum (the maintainer).
+- The first reader is cclib's (`resources/workers/reader_cclib.py`), cclib
+  used as a library, its version pinned in
+  `resources/py/requirements.reader-cclib.lock` (1.9rc1: 1.8.1 does not
+  read ORCA 6). Its tests read sample outputs from `calc-samples/`, which
+  git ignores - no program's output is committed - and run by hand
+  (`scripts/calc/test_reader_cclib.py`); the app's side is tested with the
+  plain data written by hand.
+
 On the 2D canvas (`StructureEditor/chem/`), `analyse` feeds the marks -
 valence problems, R/S and E/Z - which `ChemMarks2D` lays over the drawing
 as HTML, outside the drawing and so outside any export; they run only

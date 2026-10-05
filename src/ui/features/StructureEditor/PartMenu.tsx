@@ -75,6 +75,8 @@ export type MenuMolecule3D = {
   onDrawFormula?: () => void;
   /** Its frames all shown at once, or one: unset, where it has one only; `conformers`, whether they are a conformer set's. */
   overlay?: { on: boolean; conformers: boolean; set: (on: boolean) => void };
+  /** Its calculation's lists - its vibrations, its orbitals - each opened under it by name: none, where it gave none. */
+  lists?: { name: string; open: () => void }[];
 };
 
 /**
@@ -199,6 +201,7 @@ export default function PartMenu({
               },
             ]
           : []),
+        ...(molecule3d.lists ?? []).map((l) => ({ name: l.name, keys: "", run: l.open })),
         ...(molecule3d.onTurnLikeDrawing ? [{ name: "Turn like the drawing", keys: "", run: molecule3d.onTurnLikeDrawing }] : []),
         ...(molecule3d.onRemake ? [{ name: "Make again from the drawing", keys: "", run: molecule3d.onRemake, divider: true }] : []),
         ...(molecule3d.onDrawFormula ? [{ name: "Draw as formula", keys: "", run: molecule3d.onDrawFormula }] : []),

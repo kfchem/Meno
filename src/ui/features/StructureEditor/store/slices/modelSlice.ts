@@ -259,6 +259,9 @@ export const createModelSlice = (
       "open structure",
     );
     get().forgetInteraction();
+    // (each molecule in 3D showing the frame its file says - numbered from
+    // the first, in order, as replaceModel left them to be)
+    set((prev: EditorState) => ({ ...prev, frames3d: shownFrames(scheme, 1, {}) }));
   },
 
   openWorkspace: (ws: Workspace, start = false) => {
@@ -351,11 +354,14 @@ export const createModelSlice = (
 
   appendModel: (next: Model, scheme?: ImportedScheme) => {
     const start = doc.getState().nextId;
+    const start3d = doc.getState().nextMolecule3dId ?? 1;
     const edited = doc.edit("add structure", (d) =>
       ops.withImportedScheme(ops.appendModel(d, next), scheme),
     );
     set((prev: EditorState) => ({
       ...prev,
+      // (each molecule in 3D added showing the frame its file says)
+      ...(edited ? { frames3d: shownFrames(scheme, start3d, prev.frames3d) } : {}),
       // (selected, as a paste is)
       ...(edited && next.atoms.length ? { sel: added(start, doc.getState().model), selAnchor: null } : {}),
       hovered: { atomId: null, bondId: null },
@@ -431,3 +437,16 @@ export const createModelSlice = (
     doc.edit("arrow style", (d) => ops.setArrowLook(d, id, look), { coalesceKey });
   },
 });
+
+/**
+ * The frames shown, with each molecule in 3D a file brings showing the one
+ * its file says - an optimisation's last - those molecules numbered from
+ * `first`, in order.
+ */
+function shownFrames(scheme: ImportedScheme | undefined, first: number, shown: EditorState["frames3d"]): EditorState["frames3d"] {
+  const out = { ...shown };
+  (scheme?.molecules3d ?? []).forEach((m, i) => {
+    if (m.frame) out[first + i] = m.frame;
+  });
+  return out;
+}

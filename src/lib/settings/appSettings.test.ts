@@ -16,6 +16,7 @@ describe("the settings file", () => {
       chemistry: { valenceWarnings: false, stereoLabels: true },
       updates: { asked: true },
       abbreviations: [{ label: "Mmt", name: "4-methoxytrityl", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1", also: ["MMTr"] }],
+      calcReaders: { chosen: { orca: "cclib" } },
     };
     const text = settingsFileText(settings);
     expect(JSON.parse(text).format).toBe(1);
@@ -35,6 +36,9 @@ describe("the settings file", () => {
     expect(
       acceptAppSettings({ chemistry: { stereoLabels: "on" } }).chemistry,
     ).toEqual({ valenceWarnings: true, stereoLabels: false });
+    // a file from before calculation readers: none chosen; a choice that is not a name, left out
+    expect(acceptAppSettings({}).calcReaders).toEqual({ chosen: {} });
+    expect(acceptAppSettings({ calcReaders: { chosen: { orca: "cclib", gaussian: 3, "x y": "cclib" } } }).calcReaders).toEqual({ chosen: { orca: "cclib" } });
     // a file from before molecules in 3D had a look of their own: Meno's
     expect(acceptAppSettings({ drawingStyle: { preset: "rsc", changes: {} } }).style3d).toEqual(DEFAULT_APP_SETTINGS.style3d);
     // a file from before Meno updated itself: not asked yet

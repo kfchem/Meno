@@ -83,6 +83,7 @@ import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
 import type { Molecule3D } from "./store/types";
+import { resultsOn } from "../../../lib/calc/results";
 
 function StructureCanvasContent({
   active,
@@ -441,6 +442,14 @@ function StructureCanvasContent({
         ...(menuLink === "live" || menuLink === "changed" ? { onTurnLikeDrawing: () => turnLikeDrawing(menuMolecule.id) } : {}),
         ...(menuLink === "changed" ? { onRemake: () => remake3d(menuMolecule.id) } : {}),
         ...(menuLink == null || menuLink === "gone" ? { onDrawFormula: () => void drawFormula(menuMolecule.id) } : {}),
+        ...(resultsOn(menuMolecule.calc?.results, "list").length
+          ? {
+              lists: resultsOn(menuMolecule.calc?.results, "list").map((l) => ({
+                name: l.label,
+                open: () => store.getState().openList3d(menuMolecule.id, l.id),
+              })),
+            }
+          : {}),
         ...((menuMolecule.frames?.length ?? 0) > 0
           ? {
               overlay: {

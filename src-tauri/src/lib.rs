@@ -216,6 +216,57 @@ fn no_window(cmd: &mut Command) {
 #[cfg(not(windows))]
 fn no_window(_cmd: &mut Command) {}
 
+/// The folder a reader plugin's environment lives in - `uv/reader-<id>`,
+/// its `venv` within - and nothing else: Meno's own environments are not
+/// taken away from Settings.
+fn reader_env_dir(venv_home: &Path) -> Result<PathBuf, String> {
+    let parts: Vec<String> = venv_home
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    match parts.as_slice() {
+        [uv, name, venv]
+            if uv == "uv"
+                && venv == "venv"
+                && name.len() > "reader-".len()
+                && name.starts_with("reader-")
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') =>
+        {
+            Ok(Path::new("uv").join(name))
+        }
+        _ => Err(format!("not a reader's environment: {}", venv_home.display())),
+    }
+}
+
+/// A reader plugin's record of being set up, beside the others':
+/// `uv/stamps/reader-<id>.json`, for the folder `reader_env_dir` gives.
+fn reader_stamp(dir: &Path) -> Result<PathBuf, String> {
+    let name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("not a reader's environment: {}", dir.display()))?;
+    Ok(Path::new("uv").join("stamps").join(format!("{name}.json")))
+}
+
+/// Takes a reader plugin's environment away, and its record of being set
+/// up, when it is removed in Settings, Calculation readers. Its worker is
+/// stopped first, by the app.
+#[tauri::command]
+async fn py_env_remove(app: AppHandle, payload: PyEnvInfo) -> Result<(), String> {
+    let env = validate_env_info(&payload)?;
+    let data = app_data_dir(&app)?;
+    let rel = reader_env_dir(&env.venv_home)?;
+    let dir = data.join(&rel);
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|e| format!("removing {}: {e}", dir.display()))?;
+    }
+    let stamp = data.join(reader_stamp(&rel)?);
+    if stamp.exists() {
+        std::fs::remove_file(&stamp).map_err(|e| format!("removing {}: {e}", stamp.display()))?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn py_env_python_path_uv(app: AppHandle, payload: PyEnvInfo) -> Result<String, String> {
     let env = validate_env_info(&payload)?;
@@ -668,6 +719,7 @@ pub fn run() {
             // uv + env
             py_env_python_path_uv,
             py_env_setup_uv,
+            py_env_remove,
             // the network: what goes out, and whether it may
             net::net_state,
             net::net_set_offline,
@@ -771,6 +823,15 @@ mod tests {
     }
 
     const LOCK: &str = "resources/py/requirements.console.lock";
+
+    #[test]
+    fn only_a_reader_plugins_environment_is_taken_away() {
+        assert_eq!(reader_env_dir(Path::new("uv/reader-cclib/venv")), Ok(PathBuf::from("uv/reader-cclib")));
+        assert_eq!(reader_stamp(Path::new("uv/reader-cclib")), Ok(PathBuf::from("uv/stamps/reader-cclib.json")));
+        for bad in ["uv/chem/venv", "uv/console/venv", "uv/reader-/venv", "uv/reader-cclib", "uv/reader-cclib/venv/bin", "uv/reader-a b/venv", "data/reader-cclib/venv"] {
+            assert!(reader_env_dir(Path::new(bad)).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn safe_relative_rejects_escapes() {

@@ -1,0 +1,296 @@
+/**
+ * A calculation's results, in the one general form every plugin gives them
+ * in (docs/WORKSPACE.md, stage 3, "Where the line is"). A plugin says what
+ * each result is - what it belongs to (the molecule, each frame, each atom,
+ * pairs of atoms, or a list), what it is called and grouped under, and its
+ * values, each as a quantity Meno knows or with its own unit. Meno places
+ * them and writes them: a plugin gives data, never how it looks.
+ *
+ * What Meno does something with besides showing it - the atoms and their
+ * geometries, each frame's energy, what the calculation was - has a form of
+ * its own (output.ts) and is no result.
+ */
+
+/** The quantities Meno writes itself, each in its unit: an energy in hartrees, a charge in e, a wavenumber in cm⁻¹ (an imaginary one negative), a length in ångströms, an angle in degrees, a dipole in debye, a number without one. */
+export const QUANTITIES = ["energy", "charge", "wavenumber", "length", "angle", "dipole", "number"] as const;
+export type Quantity = (typeof QUANTITIES)[number];
+
+/** How a value is written: as a quantity Meno knows; or else with the unit given; and to how many decimals, where not as Meno would. */
+export type Measure = { quantity?: Quantity; unit?: string; digits?: number };
+/** One value: a number, a text, or none. */
+export type Cell = number | string | null;
+
+type Named = {
+  /** Its plugin's name for it, unique among a molecule's results. */
+  id: string;
+  /** What it is grouped under, and called: "Partial charges", "Mulliken". */
+  group: string;
+  label: string;
+  /** The plugin it came from, its name and version: kept, never shown. */
+  from?: string;
+};
+/** One value of the whole molecule; `rank`, where it is in the chip's line - lower first - or not there, unset. */
+export type MoleculeResult = Named & Measure & { on: "molecule"; value: Cell; rank?: number };
+/** A value of each frame, in order. */
+export type FramesResult = Named & Measure & { on: "frames"; values: Cell[] };
+/** A value of each atom, in order. */
+export type AtomsResult = Named & Measure & { on: "atoms"; values: Cell[] };
+/** Values of pairs of atoms, by their indices. */
+export type PairsResult = Named & Measure & { on: "pairs"; pairs: [number, number, Cell][] };
+export type Column = Measure & { label: string };
+/**
+ * A list's row: its values, column by column, and what Meno can do with
+ * it - the atoms it is of, marked as it is pointed at; a frame, or a
+ * motion (each atom's displacement, x, y, z), shown as it is chosen.
+ */
+export type Row = {
+  cells: Cell[];
+  atoms?: number[];
+  frame?: number;
+  move?: number[];
+};
+/** A list of rows; `focus`, the row it opens on. */
+export type ListResult = Named & {
+  on: "list";
+  columns: Column[];
+  rows: Row[];
+  focus?: number;
+};
+export type Result = MoleculeResult | FramesResult | AtomsResult | PairsResult | ListResult;
+
+/** How long a name or a text value may be, in characters; a unit; how many columns and rows a list may have. */
+const NAME_MOST = 80;
+const TEXT_MOST = 120;
+const UNIT_MOST = 24;
+const COLUMNS_MOST = 12;
+const ROWS_MOST = 5000;
+
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const isIndex = (v: unknown, below: number): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < below;
+const nameOf = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim() && v.trim().length <= NAME_MOST ? v.trim() : undefined;
+
+function cellOf(v: unknown): Cell | undefined {
+  if (v === null || isNum(v)) return v;
+  if (typeof v === "string") return v.slice(0, TEXT_MOST);
+  return undefined;
+}
+
+function cellsOf(v: unknown, count?: number): Cell[] | undefined {
+  if (!Array.isArray(v) || (count != null && v.length !== count)) return undefined;
+  const out = v.map(cellOf);
+  return out.every((c) => c !== undefined) ? (out as Cell[]) : undefined;
+}
+
+function measureOf(v: Record<string, unknown>): Measure {
+  const quantity = (QUANTITIES as readonly string[]).includes(v.quantity as string) ? (v.quantity as Quantity) : undefined;
+  const unit = typeof v.unit === "string" && v.unit.trim() && v.unit.length <= UNIT_MOST ? v.unit.trim() : undefined;
+  const digits = Number.isInteger(v.digits) && (v.digits as number) >= 0 && (v.digits as number) <= 10 ? (v.digits as number) : undefined;
+  return {
+    ...(quantity ? { quantity } : unit ? { unit } : {}),
+    ...(digits != null ? { digits } : {}),
+  };
+}
+
+function rowOf(v: unknown, columns: number, atoms: number, frames: number): Row | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const r = v as Record<string, unknown>;
+  const cells = cellsOf(r.cells, columns);
+  if (!cells) return undefined;
+  const row: Row = { cells };
+  if (Array.isArray(r.atoms) && r.atoms.length && r.atoms.every((a) => isIndex(a, atoms))) row.atoms = [...new Set(r.atoms as number[])];
+  if (isIndex(r.frame, frames)) row.frame = r.frame;
+  if (Array.isArray(r.move) && r.move.length === 3 * atoms && r.move.every(isNum)) row.move = r.move as number[];
+  return row;
+}
+
+/** One result as given - by a plugin, or a file - where it reads as one for `atoms` atoms and `frames` frames; otherwise none. */
+function resultOf(v: unknown, atoms: number, frames: number, from?: string): Result | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const r = v as Record<string, unknown>;
+  const id = nameOf(r.id);
+  const group = nameOf(r.group);
+  const label = nameOf(r.label);
+  if (!id || !group || !label) return undefined;
+  const source = nameOf(r.from) ?? from;
+  const named = { id, group, label, ...(source ? { from: source } : {}) };
+  switch (r.on) {
+    case "molecule": {
+      const value = cellOf(r.value);
+      if (value === undefined) return undefined;
+      return {
+        ...named,
+        on: "molecule",
+        ...measureOf(r),
+        value,
+        ...(isNum(r.rank) ? { rank: r.rank } : {}),
+      };
+    }
+    case "frames":
+    case "atoms": {
+      const values = cellsOf(r.values, r.on === "frames" ? frames : atoms);
+      if (!values?.length) return undefined;
+      return { ...named, on: r.on, ...measureOf(r), values };
+    }
+    case "pairs": {
+      if (!Array.isArray(r.pairs)) return undefined;
+      const pairs = r.pairs.filter(
+        (p): p is [number, number, Cell] =>
+          Array.isArray(p) && p.length === 3 && isIndex(p[0], atoms) && isIndex(p[1], atoms) && p[0] !== p[1] && cellOf(p[2]) !== undefined,
+      );
+      if (!pairs.length) return undefined;
+      return {
+        ...named,
+        on: "pairs",
+        ...measureOf(r),
+        pairs: pairs.map(([a, b, c]) => [a, b, cellOf(c)!]),
+      };
+    }
+    case "list": {
+      if (!Array.isArray(r.columns) || !r.columns.length || r.columns.length > COLUMNS_MOST || !Array.isArray(r.rows)) return undefined;
+      const columns = r.columns.map((c) =>
+        c && typeof c === "object"
+          ? {
+              label: typeof (c as { label?: unknown }).label === "string" ? (c as { label: string }).label.trim().slice(0, NAME_MOST) : "",
+              ...measureOf(c as Record<string, unknown>),
+            }
+          : null,
+      );
+      if (columns.some((c) => !c)) return undefined;
+      const rows = r.rows.slice(0, ROWS_MOST).map((x) => rowOf(x, columns.length, atoms, frames));
+      if (!rows.length || rows.some((x) => !x)) return undefined;
+      return {
+        ...named,
+        on: "list",
+        columns: columns as Column[],
+        rows: rows as Row[],
+        ...(isIndex(r.focus, rows.length) ? { focus: r.focus } : {}),
+      };
+    }
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * A molecule's results as given - by a plugin (`from`, its name and
+ * version), or a file - keeping those that read as results for `atoms`
+ * atoms and `frames` frames. A result whose name another plugin's has
+ * already is kept under its name and its plugin's; one that its own
+ * plugin's has already, not at all.
+ */
+export function readResults(given: unknown, atoms: number, frames: number, from?: string): Result[] {
+  if (!Array.isArray(given)) return [];
+  const out: Result[] = [];
+  const seen = new Map<string, string | undefined>();
+  for (const v of given) {
+    const r = resultOf(v, atoms, frames, from);
+    if (!r) continue;
+    if (seen.has(r.id)) {
+      if (seen.get(r.id) === r.from) continue;
+      r.id = `${r.id}@${r.from ?? ""}`;
+      if (seen.has(r.id)) continue;
+    }
+    seen.set(r.id, r.from);
+    out.push(r);
+  }
+  return out;
+}
+
+/** The units Meno writes its quantities with, and the decimals it gives them. */
+const UNITS: Record<Quantity, string> = {
+  energy: "Eh",
+  charge: "",
+  wavenumber: "cm⁻¹",
+  length: "Å",
+  angle: "°",
+  dipole: "D",
+  number: "",
+};
+const DIGITS: Record<Quantity, number> = {
+  energy: 6,
+  charge: 3,
+  wavenumber: 1,
+  length: 3,
+  angle: 1,
+  dipole: 2,
+  number: 4,
+};
+/** Decimals at most for a value with a unit of its own, where it does not say. */
+const DIGITS_MOST = 4;
+const MINUS = "−";
+
+/** A number as it is written: to `digits` decimals, or at most `DIGITS_MOST` with none left trailing; a true minus. */
+function numberText(v: number, digits?: number): string {
+  let t = digits != null ? v.toFixed(digits) : v.toFixed(DIGITS_MOST).replace(/\.?0+$/, "");
+  if (/^-0(\.0*)?$/.test(t)) t = t.slice(1);
+  return t.replace(/^-/, MINUS);
+}
+
+/**
+ * A value as it is written, with its unit: "−0.412", "+0.213" for a
+ * charge, "1650.2 cm⁻¹" - an imaginary wavenumber "120.5i cm⁻¹" - "2.31 D",
+ * "109.5°", "90.31 cal/(mol·K)"; a text as it is; none, a dash.
+ */
+export function valueText(v: Cell, m: Measure): string {
+  if (v == null) return "–";
+  if (typeof v === "string") return v;
+  const q = m.quantity;
+  const digits = m.digits ?? (q ? DIGITS[q] : undefined);
+  if (q === "wavenumber" && v < 0) return `${numberText(-v, digits)}i ${UNITS.wavenumber}`;
+  const t = numberText(v, digits);
+  const unit = q ? UNITS[q] : m.unit;
+  if (q === "charge") return v > 0 && !/^0(\.0*)?$/.test(t) ? `+${t}` : t;
+  if (q === "angle") return `${t}°`;
+  return unit ? `${t} ${unit}` : t;
+}
+
+/** Whether a value is marked where it is written: an imaginary wavenumber. */
+export function isMarked(v: Cell, m: Measure): boolean {
+  return m.quantity === "wavenumber" && typeof v === "number" && v < 0;
+}
+
+/** A molecule's results that belong to `on`. */
+export function resultsOn<K extends Result["on"]>(results: readonly Result[] | undefined, on: K): Extract<Result, { on: K }>[] {
+  return (results ?? []).filter((r): r is Extract<Result, { on: K }> => r.on === on);
+}
+
+/** Results by their group, in the order the groups first come. */
+export function grouped<R extends Result>(results: readonly R[]): { group: string; results: R[] }[] {
+  const out: { group: string; results: R[] }[] = [];
+  for (const r of results) {
+    const g = out.find((x) => x.group === r.group);
+    if (g) g.results.push(r);
+    else out.push({ group: r.group, results: [r] });
+  }
+  return out;
+}
+
+/** A pair's value in a result of pairs, whichever way round it is given; none, undefined. */
+export function pairValue(r: PairsResult, a: number, b: number): Cell | undefined {
+  return r.pairs.find(([x, y]) => (x === a && y === b) || (x === b && y === a))?.[2];
+}
+
+/** How long the chip's line may be, in characters. */
+export const LINE_MOST = 96;
+
+/**
+ * The chip's line: what it says first (what the calculation was, its
+ * energy), then the molecule's results its plugins ranked, in their order,
+ * as many as the line holds - each its name and value.
+ */
+export function chipLine(first: readonly string[], results: readonly Result[] | undefined, most = LINE_MOST): string {
+  const parts = first.filter(Boolean);
+  let length = parts.join(" · ").length;
+  const ranked = resultsOn(results, "molecule")
+    .filter((r) => r.rank != null)
+    .sort((a, b) => a.rank! - b.rank!);
+  for (const r of ranked) {
+    const part = `${r.label} ${valueText(r.value, r)}`;
+    const more = (parts.length ? 3 : 0) + part.length;
+    if (length + more > most) break;
+    parts.push(part);
+    length += more;
+  }
+  return parts.join(" · ");
+}

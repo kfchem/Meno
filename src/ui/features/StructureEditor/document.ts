@@ -661,8 +661,8 @@ export function appendModel(
 export type ImportedScheme = {
   arrows?: Omit<Arrow, "id">[];
   pluses?: Omit<Plus, "id">[];
-  /** Molecules in 3D a file brings, where they are to stand. */
-  molecules3d?: Omit<Molecule3D, "id">[];
+  /** Molecules in 3D a file brings, where they are to stand - and, where it says, the frame each shows (an optimisation's last). */
+  molecules3d?: (Omit<Molecule3D, "id"> & { frame?: number })[];
 };
 
 /** The arrows and pluses drawn with a part - a paste, a document's record - as a scheme to add. */
@@ -686,7 +686,8 @@ export function withImportedScheme(
     if (a.look) next = setArrowLook(next, next.nextArrowId - 1, a.look);
   }
   for (const p of scheme?.pluses ?? []) next = addPlus(next, p.x, p.y);
-  for (const m of scheme?.molecules3d ?? []) next = addMolecule3d(next, m);
+  // (the frame each shows is the canvas's to keep, not the document's)
+  for (const { frame: _frame, ...m } of scheme?.molecules3d ?? []) next = addMolecule3d(next, m);
   return next;
 }
 

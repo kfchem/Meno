@@ -1,5 +1,7 @@
 import PageHtml from "./PageHtml";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { chipLine, grouped, isMarked, resultsOn, valueText, type Result } from "../../../../lib/calc/results";
+import { ResultGroups, type CardGroups } from "./PointedCard3D";
 
 /** Kilocalories per mole in a hartree. */
 const KCAL_PER_HARTREE = 627.509474;
@@ -11,6 +13,10 @@ const SIDE = 10;
 const MANY = 60;
 const WIDE = 300;
 const LEAST_BAR = 3;
+/** How long a single geometry's chip stays once its molecule is let go - time to reach it - in milliseconds. */
+const LINGER_MS = 400;
+/** The chip kept clear of the canvas's lower edge, in pixels. */
+const EDGE = 8;
 
 /** A conformer's share of its set, as it is written: "62%", "<1%". */
 function share(p: number): string {
@@ -22,6 +28,11 @@ function relative(e: number): string {
   return `${e < 10 ? e.toFixed(2) : e.toFixed(1)} kcal/mol`;
 }
 
+/** An energy as a calculation gives it, as it is written: "−382.055117 Eh". */
+function absolute(e: number): string {
+  return `${e.toFixed(6).replace(/^-/, "\u2212")} Eh`;
+}
+
 /**
  * A molecule's frames, just below it on the page: which one it shows, of
  * how many, and - hovered or selected - a slider through them. Where its
@@ -30,6 +41,18 @@ function relative(e: number): string {
  * frames one profile through them all - and the frame shown says how far
  * above the lowest it is. Pressed, the energies show that frame, and a drag
  * along them goes through the frames.
+ *
+ * Read from a calculation (`about`, what it was), it says so too, opened:
+ * the calculation, the frame's energy as the calculation gave it, and the
+ * results its readers ranked, as many as the line holds. That pointed at,
+ * it says all the molecule's results, and the frame's, above it. A
+ * single geometry's - nothing to go through - is only that, and only while
+ * its molecule is pointed at or selected, or it is: it fades in and out,
+ * keeping its place, so that what is under it stays where it is.
+ *
+ * Opened with its molecule low on the page - filling the window, as one
+ * opened from its file does - it rises as far as it must to stay within
+ * the canvas (`area`), over its molecule, and goes back down as it shuts.
  */
 export default function Frames3D({
   count,
@@ -39,6 +62,9 @@ export default function Frames3D({
   onFrame,
   below,
   populations,
+  about,
+  results,
+  area,
 }: {
   count: number;
   frame: number;
@@ -51,8 +77,18 @@ export default function Frames3D({
   below?: ReactNode;
   /** A conformer set's: how much of it each conformer is, at room temperature. */
   populations?: number[];
+  /** What the calculation it was read from was, in a line (lib/calc `calcLine`). */
+  about?: string;
+  /** What the calculation found (lib/calc/results): the molecule's and each frame's are said here. */
+  results?: Result[];
+  /** What it keeps within: the canvas. */
+  area?: Element;
 }) {
   const [hovered, setHovered] = useState(false);
+  // (what it says pointed at: the details above it - not its bars or its
+  // slider, which go through the frames with the molecule in view)
+  const [reading, setReading] = useState(false);
+  const read = { onPointerEnter: () => setReading(true), onPointerLeave: () => setReading(false) };
   const [pointed, setPointed] = useState<number | null>(null);
   const full = open || hovered;
   const lowest = energies ? Math.min(...energies) : 0;
@@ -78,56 +114,131 @@ export default function Frames3D({
     watch.current = new ResizeObserver(measure);
     watch.current.observe(el);
   }, []);
+  // (a single geometry has nothing to go through: it says what the
+  // calculation was, and only while its molecule is pointed at)
+  const single = count < 2;
+  const [lingering, setLingering] = useState(open);
+  useEffect(() => {
+    if (open) {
+      setLingering(true);
+      return;
+    }
+    const t = window.setTimeout(() => setLingering(false), LINGER_MS);
+    return () => window.clearTimeout(t);
+  }, [open]);
+  const shown = !single || open || hovered || lingering;
+  // what the calculation found of the molecule, and of the frame told
+  const details: CardGroups = grouped([...resultsOn(results, "molecule"), ...resultsOn(results, "frames")]).map((g) => ({
+    group: g.group,
+    rows: g.results.map((r) => {
+      const v = r.on === "molecule" ? r.value : (r.values[told] ?? null);
+      return { label: r.label, text: valueText(v, r), marked: isMarked(v, r) };
+    }),
+  }));
+  const line = (energy?: number) => chipLine([about ?? "", energy != null ? absolute(energy) : ""], results);
+  // how far it has risen to stay within the canvas, followed each frame
+  // while it is open, and until it is back down
+  const chipEl = useRef<HTMLDivElement>(null);
+  const [lift, setLift] = useState(0);
+  const lifted = useRef(0);
+  useEffect(() => {
+    if (!area || (!full && lifted.current === 0)) return;
+    let id = 0;
+    const fit = () => {
+      const el = chipEl.current;
+      if (el) {
+        const over = el.getBoundingClientRect().bottom + EDGE - area.getBoundingClientRect().bottom;
+        const next = Math.max(0, Math.round(lifted.current + over));
+        if (next !== lifted.current) {
+          lifted.current = next;
+          setLift(next);
+        }
+      }
+      if (full || lifted.current > 0) id = requestAnimationFrame(fit);
+    };
+    fit();
+    return () => cancelAnimationFrame(id);
+  }, [area, full]);
   return (
     <PageHtml zIndexRange={[30, 20]}>
       <div
         className="flex flex-col items-center select-none"
-        style={{ transform: "translate(-50%, 10px)" }}
+        style={{ transform: `translate(-50%, ${10 - lift}px)` }}
         onPointerEnter={() => setHovered(true)}
         onPointerLeave={() => {
           setHovered(false);
           setPointed(null);
         }}
       >
-        <div
-          className="rounded-2xl border border-gh-line bg-white/85 backdrop-blur shadow-sm py-1 flex flex-col items-center overflow-hidden transition-[width,opacity] duration-200 ease-out"
-          style={{ opacity: full ? 1 : 0.75, width: (full ? Math.max(width, saidWidth) : saidWidth) + 2 * SIDE }}
-        >
-          <div
-            className="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
-            style={{ gridTemplateRows: full ? "1fr" : "0fr", opacity: full ? 1 : 0 }}
-          >
-            <div className="overflow-hidden flex flex-col items-center" style={{ width }}>
-              {above && (
-                <Energies
-                  above={above}
-                  highest={highest}
-                  frame={frame}
-                  pointed={pointed}
-                  width={width}
-                  onPoint={setPointed}
-                  onFrame={onFrame}
-                />
-              )}
-              <input
-                type="range"
-                aria-label="Frame"
-                min={0}
-                max={count - 1}
-                step={1}
-                value={frame}
-                onChange={(e) => onFrame(parseInt(e.target.value, 10))}
-                className="my-1.5 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
-                style={{ width }}
-              />
+        {(!single || about) && (
+          <div className="relative">
+            {details.length > 0 && (
+              <div
+                className="pointer-events-none absolute left-1/2 bottom-full mb-1.5 w-max max-w-[20rem] -translate-x-1/2 rounded-xl border border-gh-line bg-white/90 backdrop-blur shadow-sm px-2.5 pt-0.5 pb-1.5 text-[11px] leading-[16px] tabular-nums transition-opacity duration-150 ease-meno"
+                style={{ opacity: reading ? 1 : 0 }}
+              >
+                <ResultGroups groups={details} />
+              </div>
+            )}
+            <div
+              ref={chipEl}
+              className="rounded-2xl border border-gh-line bg-white/85 backdrop-blur shadow-sm py-1 flex flex-col items-center overflow-hidden transition-[width,opacity] duration-200 ease-out"
+              style={{
+                opacity: shown ? (full ? 1 : 0.75) : 0,
+                pointerEvents: shown ? undefined : "none",
+                width: (full ? Math.max(width, saidWidth) : saidWidth) + 2 * SIDE,
+              }}
+            >
+              <div
+                className="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
+                style={{ gridTemplateRows: full ? "1fr" : "0fr", opacity: full ? 1 : 0 }}
+              >
+                <div className="overflow-hidden flex flex-col items-center" style={{ width }}>
+                  {above && !single && (
+                    <Energies
+                      above={above}
+                      highest={highest}
+                      frame={frame}
+                      pointed={pointed}
+                      width={width}
+                      onPoint={setPointed}
+                      onFrame={onFrame}
+                    />
+                  )}
+                  {!single && (
+                    <input
+                      type="range"
+                      aria-label="Frame"
+                      min={0}
+                      max={count - 1}
+                      step={1}
+                      value={frame}
+                      onChange={(e) => onFrame(parseInt(e.target.value, 10))}
+                      className="my-1.5 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
+                      style={{ width }}
+                    />
+                  )}
+                  {about && !single && (
+                    <div className="mb-1 text-center text-[11px] leading-[16px] text-gh-gray tabular-nums" {...read}>
+                      {line(energies?.[told])}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div ref={said} {...read} className="w-max text-[11px] leading-[18px] text-gh-gray tabular-nums whitespace-nowrap">
+                {single ? (
+                  line(energies?.[0])
+                ) : (
+                  <>
+                    {told + 1} / {count}
+                    {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
+                    {populations?.[told] != null && <span className="text-gh-black"> · {share(populations[told])}</span>}
+                  </>
+                )}
+              </div>
             </div>
           </div>
-          <div ref={said} className="w-max text-[11px] leading-[18px] text-gh-gray tabular-nums whitespace-nowrap">
-            {told + 1} / {count}
-            {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
-            {populations?.[told] != null && <span className="text-gh-black"> · {share(populations[told])}</span>}
-          </div>
-        </div>
+        )}
         {below}
       </div>
     </PageHtml>

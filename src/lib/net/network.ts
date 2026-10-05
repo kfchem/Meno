@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
+import { READER_PLUGINS } from "../calc/catalog";
 
 /**
  * What Meno does on the network, as the window sees it. The app keeps the
@@ -79,6 +80,8 @@ export function purposeName(purpose: string): string {
     return "Setting up Python for the console";
   if (purpose === "python-env:node") return "Setting up Python for workflows";
   if (purpose === "python-env:chem") return "Setting up RDKit for chemistry";
+  const reader = READER_PLUGINS.find((p) => purpose === `python-env:${p.profile}`);
+  if (reader) return `Setting up ${reader.name} for reading calculations`;
   if (purpose.startsWith("python-env:"))
     return `Setting up Python (${purpose.slice("python-env:".length)})`;
   return purpose;

@@ -6,12 +6,15 @@ import { KEY_LIGHT_FROM, STYLE_3D, type Style3D } from "../../../../lib/chem/sty
 import { LONG_PRESS_MS, MOV_PX } from "../constants";
 import { useEditor, useEditorStore } from "../store";
 import type { Molecule3D, Turn3D } from "../store/types";
-import { atomAt, bondAt, lookOf, nearestAtom, onMolecule, poseOf, solidOf } from "../utils/molecule3d";
+import { atomAt, bondAt, lookOf, nearestAtom, onMolecule, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
+import { setViewGoal } from "./viewGoal";
 import { Remake3D } from "./remake3d";
 import { linkOf } from "../chem/make3d";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { eyeOf, pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
+import CalcList3D from "./CalcList3D";
+import { resultsOn } from "../../../../lib/calc/results";
 import Molecule3DView from "./Molecule3DView";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { editorLayoutOptions } from "../layoutOptions";
@@ -93,6 +96,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const turns = useEditor((s) => s.turns3d);
   const rising = useEditor((s) => s.rising3d);
   const overlay = useEditor((s) => s.overlay3d);
+  const lists = useEditor((s) => s.lists3d);
   // the drawing's atom under the pointer: lit in the molecules made from it
   const hoveredDrawn = useEditor((s) => s.hovered.atomId);
   // and the drawing each was made from, which may have changed since
@@ -408,6 +412,23 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     invalidate();
   });
 
+  // a list opened under a molecule with no room for it below: the view
+  // glides - zooming out, where it must - until the molecule and the list,
+  // at its full height, are both seen (`bottom`, where the list's card
+  // would end, in the window's pixels)
+  const makeRoom = (m: Molecule3D, bottom: number) => {
+    const cam = camera as THREE.OrthographicCamera;
+    const r = dom.getBoundingClientRect();
+    if (bottom <= r.bottom - ROOM_PX) return;
+    const st = store.getState();
+    const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m, style), st.turns3d[m.id], st.frames3d[m.id]), eyeOf(camera));
+    // (how far below the molecule the list reaches, which no zoom changes)
+    const under = bottom - (r.top + r.height / 2 - (b.minY - cam.position.y) * cam.zoom);
+    const zoom = Math.max(cam.zoom / 4, Math.min(cam.zoom, (r.height - 2 * ROOM_PX - under) / Math.max(b.maxY - b.minY, 1e-3)));
+    setViewGoal(cam, { zoom, x: cam.position.x, y: b.minY + (r.height / 2 - ROOM_PX - under) / zoom });
+    invalidate();
+  };
+
   if (!molecules.length && !leaving.length) return null;
   const litOf = (id: number): number => {
     if (active) return active.group.includes(id) ? (active.kind === "move" ? 2 : 1) : 0;
@@ -417,33 +438,60 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     <group>
       <ambientLight intensity={style.ambientLight} />
       <directionalLight position={KEY_LIGHT_FROM as [number, number, number]} intensity={style.keyLight} />
-      {molecules.map((m) => (
-        <Molecule3DView
-          key={m.id}
-          m={m}
-          style={style}
-          look={lookOf(m, style)}
-          frame={frames[m.id] ?? 0}
-          turn={turns[m.id]}
-          lit={litOf(m.id)}
-          selected={sel3d.has(m.id)}
-          chosen={chosen?.id === m.id ? chosen.atoms : NONE}
-          chosenBonds={chosen?.id === m.id ? chosen.bonds : NONE}
-          holding={hold?.id === m.id ? hold : null}
-          following={active?.kind === "move" && active.group.includes(m.id)}
-          framesOpen={hovered?.id === m.id || sel3d.has(m.id)}
-          onFrame={(f) => store.getState().setFrame3d(m.id, f)}
-          hoveredMeasure={hoveredMeasure?.id === m.id ? hoveredMeasure.measure : null}
-          rising={rising[m.id]}
-          onRisen={() => store.getState().risen3d(m.id)}
-          stereoShown={stereoLabels ? "all" : m.stereo?.chosen ? "chosen" : null}
-          stereoFont={stereoFont}
-          overlay={!!overlay[m.id]}
-          linkedAtom={hoveredDrawn != null && m.drawnFrom ? (m.drawnFrom.indexOf(hoveredDrawn) >= 0 ? m.drawnFrom.indexOf(hoveredDrawn) : null) : null}
-          onHoverAtom={(atom) => store.getState().setHoveredAtom3d(m.id, atom)}
-          onRemake={remake && linkOf(m, drawing) === "changed" ? () => remake(m.id) : undefined}
-        />
-      ))}
+      {molecules.map((m) => {
+        // (one of its lists open under it: the row chosen moves it, the row pointed at - or chosen - marks its atoms)
+        const open = lists[m.id];
+        const list = open ? resultsOn(m.calc?.results, "list").find((r) => r.id === open.list) : undefined;
+        const row = list && open.row != null ? list.rows[open.row] : undefined;
+        const pointed = list && open.pointed != null ? list.rows[open.pointed] : undefined;
+        return (
+          <Molecule3DView
+            key={m.id}
+            m={m}
+            style={style}
+            look={lookOf(m, style)}
+            frame={frames[m.id] ?? 0}
+            turn={turns[m.id]}
+            lit={litOf(m.id)}
+            selected={sel3d.has(m.id)}
+            chosen={chosen?.id === m.id ? chosen.atoms : NONE}
+            chosenBonds={chosen?.id === m.id ? chosen.bonds : NONE}
+            holding={hold?.id === m.id ? hold : null}
+            following={active?.kind === "move" && active.group.includes(m.id)}
+            framesOpen={hovered?.id === m.id || sel3d.has(m.id)}
+            onFrame={(f) => store.getState().setFrame3d(m.id, f)}
+            hoveredMeasure={hoveredMeasure?.id === m.id ? hoveredMeasure.measure : null}
+            rising={rising[m.id]}
+            onRisen={() => store.getState().risen3d(m.id)}
+            stereoShown={stereoLabels ? "all" : m.stereo?.chosen ? "chosen" : null}
+            stereoFont={stereoFont}
+            overlay={!!overlay[m.id]}
+            linkedAtom={hoveredDrawn != null && m.drawnFrom ? (m.drawnFrom.indexOf(hoveredDrawn) >= 0 ? m.drawnFrom.indexOf(hoveredDrawn) : null) : null}
+            onHoverAtom={(atom) => store.getState().setHoveredAtom3d(m.id, atom)}
+            onRemake={remake && linkOf(m, drawing) === "changed" ? () => remake(m.id) : undefined}
+            motion={row?.move ?? null}
+            marked={pointed?.atoms ?? row?.atoms ?? NONE}
+            list={
+              list ? (
+                <CalcList3D
+                  list={list}
+                  chosen={open.row}
+                  onChoose={(i) => {
+                    const st = store.getState();
+                    st.chooseRow3d(m.id, i);
+                    const f = i != null ? list.rows[i].frame : undefined;
+                    if (f != null) st.setFrame3d(m.id, f);
+                  }}
+                  onPoint={(i) => store.getState().pointRow3d(m.id, i)}
+                  onClose={() => store.getState().closeList3d(m.id)}
+                  onRoom={(bottom) => makeRoom(m, bottom)}
+                  area={dom}
+                />
+              ) : undefined
+            }
+          />
+        );
+      })}
       {leaving.map(({ m, turn, frame }) => (
         <Molecule3DView
           key={`leaving-${m.id}`}
@@ -471,6 +519,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
 }
 
 const NONE: number[] = [];
+/** What a list opened under a molecule is kept clear of the canvas's edges by, and the molecule too, in pixels. */
+const ROOM_PX = 24;
 
 /** How far apart two values are kept, in pixels, and how many passes it takes to part them. */
 const VALUE_GAP = 2;

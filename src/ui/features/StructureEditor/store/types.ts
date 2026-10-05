@@ -5,6 +5,7 @@ import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
 import type { BondChem, ParsedAtom, ParsedBond } from "../../../../lib/chem/molecule";
 import type { Workspace } from "../utils/workspace";
+import type { CalcInfo } from "../../../../lib/calc/output";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
 export type Atom = EditorAtom & {
@@ -105,6 +106,8 @@ export type Molecule3D = {
    * made from it - so that it is told apart from the others.
    */
   stereo?: { atoms: Record<number, string>; bonds: Record<number, string>; chosen?: { atoms: number[]; bonds: number[] } };
+  /** What the calculation it was read from says of it, besides its geometries and energies (lib/calc). */
+  calc?: CalcInfo;
 };
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];
@@ -154,6 +157,20 @@ export type EditorState = {
   /** Molecules in 3D shown with all their frames at once - their conformers overlaid - by id. */
   overlay3d: Record<number, true>;
   setOverlay3d: (id: number, on: boolean) => void;
+  /**
+   * Molecules in 3D with one of their calculation's lists open under them
+   * (lib/calc/results), by id: the list, by its result's id; the row chosen
+   * in it - the molecule moving in it, or showing its frame - and the row
+   * pointed at, its atoms marked; or null, none.
+   */
+  lists3d: Record<number, { list: string; row: number | null; pointed: number | null }>;
+  /** Opens one of a molecule's lists under it, in place of one open, none of its rows chosen. */
+  openList3d: (id: number, list: string) => void;
+  /** The row chosen in a molecule's open list; null, none - its motion comes to rest. */
+  chooseRow3d: (id: number, row: number | null) => void;
+  /** The row pointed at in a molecule's open list; null, none. */
+  pointRow3d: (id: number, row: number | null) => void;
+  closeList3d: (id: number) => void;
   /**
    * The atoms and bonds chosen in one molecule in 3D, by index, each in the
    * order chosen: what a measurement is of (utils/molecule3d `chosenPath`).

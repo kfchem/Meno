@@ -4,6 +4,7 @@ import { addMolecule3d, createStructureDocument } from "../document";
 import { molecules3dIn } from "../utils/selection";
 import { readRecord, recordText } from "../utils/copyPaste";
 import { linkOf, signatureOf } from "../utils/drawnLink";
+import type { CalcInfo } from "../../../../lib/calc/output";
 
 const water = {
   atoms: [
@@ -305,5 +306,75 @@ describe("molecules in 3D and their drawings", () => {
     expect(state().overlay3d).toEqual({ 2: true });
     state().setOverlay3d(2, false);
     expect(state().overlay3d).toEqual({});
+  });
+});
+
+describe("molecules in 3D a file brings", () => {
+  // an optimisation's three steps, read from a calculation: the file says to show its last
+  const steps = { ...water, frames: [water.atoms.flatMap((a) => [a.x, a.y, a.z]), water.atoms.flatMap((a) => [a.x, a.y, a.z + 0.1])], frame: 2 };
+
+  it("show the frame the file says, opened or added beside what is there - and the document keeps no frame of its own", () => {
+    const { doc, state } = editor();
+    state().openModel({ atoms: [], bonds: [] }, { molecules3d: [{ ...steps, at: { x: 0, y: 0 } }] });
+    expect(state().frames3d).toEqual({ 1: 2 });
+    expect("frame" in doc.getState().molecules3d![0]).toBe(false);
+    state().appendModel({ atoms: [], bonds: [] }, { molecules3d: [{ ...water, at: { x: 9, y: 0 } }, { ...steps, at: { x: 18, y: 0 } }] });
+    expect(state().frames3d).toEqual({ 1: 2, 3: 2 });
+  });
+});
+
+describe("a molecule's calculation's lists", () => {
+  // water read from a calculation: its vibrations - the last with no
+  // displacements given - and its orbitals, a list with no motion
+  const disp = (z: number) => [0, 0, z, 0, -0.43, -0.56, 0, 0.43, -0.56, 0, 0, 0, 0, 0, 0];
+  const calc: CalcInfo = {
+    readers: ["cclib 1.9rc1"],
+    results: [
+      {
+        id: "vibrations",
+        on: "list",
+        group: "Vibrations",
+        label: "Vibrations",
+        columns: [{ label: "Frequency", quantity: "wavenumber" }],
+        rows: [{ cells: [1650], move: disp(0.07) }, { cells: [3700], move: disp(0.05) }, { cells: [-120] }],
+      },
+      { id: "orbitals", on: "list", group: "Orbitals", label: "Molecular orbitals", columns: [{ label: "Orbital" }], rows: [{ cells: ["LUMO"] }, { cells: ["HOMO"], atoms: [0] }] },
+    ],
+  };
+  function calcEditor() {
+    const doc = createStructureDocument();
+    doc.edit("add", (d) => addMolecule3d(addMolecule3d(d, { ...water, at: { x: 0, y: 0 }, calc }), { ...water, at: { x: 6, y: 0 } }));
+    const store = createEditorStore(doc);
+    connectStoreToDocument(store, doc);
+    return { doc, state: () => store.getState() };
+  }
+
+  it("are opened one at a time with no row chosen, a row chosen, pointed at, and closed", () => {
+    const { state } = calcEditor();
+    state().openList3d(1, "vibrations");
+    expect(state().lists3d).toEqual({ 1: { list: "vibrations", row: null, pointed: null } });
+    state().chooseRow3d(1, 0);
+    state().pointRow3d(1, 1);
+    expect(state().lists3d[1]).toEqual({ list: "vibrations", row: 0, pointed: 1 });
+    state().chooseRow3d(1, null);
+    expect(state().lists3d[1].row).toBeNull();
+    // (another opened in its place, nothing chosen in it)
+    state().chooseRow3d(1, 1);
+    state().openList3d(1, "orbitals");
+    expect(state().lists3d).toEqual({ 1: { list: "orbitals", row: null, pointed: null } });
+    state().closeList3d(1);
+    expect(state().lists3d).toEqual({});
+  });
+
+  it("are forgotten when their molecule is gone, or has the list no more", () => {
+    const { doc, state } = calcEditor();
+    state().openList3d(1, "vibrations");
+    state().chooseRow3d(1, 1);
+    doc.edit("forget", (d) => ({ ...d, molecules3d: d.molecules3d!.map((m) => (m.id === 1 ? { ...m, calc: { readers: ["cclib"] } } : m)) }));
+    expect(state().lists3d).toEqual({});
+    const again = calcEditor();
+    again.state().openList3d(1, "orbitals");
+    again.doc.edit("delete", (d) => ({ ...d, molecules3d: d.molecules3d!.filter((m) => m.id !== 1) }));
+    expect(again.state().lists3d).toEqual({});
   });
 });

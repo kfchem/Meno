@@ -1,6 +1,6 @@
 import PageHtml from "./PageHtml";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
@@ -13,6 +13,10 @@ import { eyeOf, FRAME_ORDER, seenAt } from "../utils/page";
 import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
 import StereoText from "./StereoText";
+import { calcLine } from "../../../../lib/calc/output";
+import { grouped, isMarked, pairValue, resultsOn, valueText } from "../../../../lib/calc/results";
+import { VIBRATION_PERIOD, vibrationOffsets } from "../utils/vibration3d";
+import PointedCard3D, { type CardGroups } from "./PointedCard3D";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -37,6 +41,9 @@ const CHOSEN_BLUE = 0.75;
 /** An atom whose drawing's atom is under the pointer: its outline, in pixels, and how blue. */
 const LINKED_PX = 2.6;
 const LINKED_BLUE = 0.5;
+/** How long an atom or a bond is pointed at before what a calculation found of it is said, in milliseconds; and how far the card is off its ball, in pixels. */
+const CARD_DELAY_MS = 250;
+const CARD_OFF_PX = 10;
 const outlineAt = (level: number, table: number[]) => {
   const i = Math.min(Math.floor(level), table.length - 2);
   return table[i] + (table[i + 1] - table[i]) * (level - i);
@@ -52,6 +59,8 @@ const blue = (k: number) => WHITE.clone().lerp(HIGHLIGHT, k);
 const OUTLINE_TAU = 0.07;
 const PLACE_TAU = 0.08;
 const FRAME_TAU = 0.06;
+/** How quickly a vibration's swing eases in, and out as it comes to rest, in seconds. */
+const VIBRATION_TAU = 0.25;
 const LOOK_TAU = 0.08;
 /** How gently the frames' chip follows the molecule's lowest point as it turns, in seconds. */
 const PILL_TAU = 0.12;
@@ -160,6 +169,12 @@ export type Molecule3DViewProps = {
    */
   stereoFont: { size: number; units: "world" | "px"; family: string; parentheses: boolean; gap: number };
   onRisen?: () => void;
+  /** The motion it moves in - a vibration, its list's row chosen: its atoms' displacements, x, y, z of each; none, it rests. */
+  motion?: number[] | null;
+  /** Its atoms marked, as its drawing's atom under the pointer is: a list's row pointed at, or chosen. */
+  marked?: number[];
+  /** One of its calculation's lists, open under it (CalcList3D). */
+  list?: ReactNode;
 };
 
 /**
@@ -182,6 +197,9 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const bondHull = useRef<THREE.InstancedMesh>(null);
   const chosenHull = useRef<THREE.InstancedMesh>(null!);
   const linkedHull = useRef<THREE.Mesh>(null!);
+  const markedHull = useRef<THREE.InstancedMesh>(null!);
+  // the atoms marked, each how far its outline has come
+  const marks = useRef(new Map<number, { v: number; to: number }>());
   // the atom lit for its drawing's, and how far its outline has come
   const linked = useRef<{ atom: number | null; v: number }>({ atom: null, v: 0 });
   const chosenSleeves = useRef<THREE.InstancedMesh>(null);
@@ -190,7 +208,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const pill = useRef<THREE.Group>(null!);
   const pillAt = useRef<number | null>(null);
   const [hoverAtom, setHoverAtom] = useState<number | null>(null);
-  const { invalidate, camera, size } = useThree();
+  const [hoverBond, setHoverBond] = useState<number | null>(null);
+  const { invalidate, camera, size, gl } = useThree();
   const quaternion = useMemo(() => (turn ? new THREE.Quaternion(...turn) : new THREE.Quaternion()), [turn]);
   // how it is turned as drawn: following a drag at once, going over to a turn set afresh
   const shownTurn = useRef<THREE.Quaternion | null>(null);
@@ -198,6 +217,15 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   // what is drawn now, on its way to what it is to be
   const target = solid.frames[frameOf(solid, frame)];
   const places = useRef<Float32Array>(Float32Array.from(target));
+  // the vibration it moves in: the displacements moving it, how far into
+  // its swing (eased in and out), where in its period, and what it added to
+  // the atoms' places this frame - taken off again before the next
+  const vib = useRef<{ shown: number[] | null; level: number; phase: number; offset: Float32Array | null }>({
+    shown: null,
+    level: 0,
+    phase: 0,
+    offset: null,
+  });
   const fill = useRef(look === "space" ? 1 : 0);
   const swell = useRef(new Map<number, { v: number; vel: number; to: number }>());
   const rings = useRef(new Map<number, { v: number; vel: number; to: number }>());
@@ -335,6 +363,76 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     invalidate();
   }, [chosenBonds, invalidate]);
   useEffect(() => invalidate(), [holding, invalidate]);
+  // the atoms a list's row is of, outlined as it is pointed at
+  const marked = props.marked;
+  useEffect(() => {
+    const on = new Set(marked ?? []);
+    for (const [i, r] of marks.current) r.to = on.has(i) ? 1 : 0;
+    for (const i of on) if (!marks.current.has(i)) marks.current.set(i, { v: 0, to: 1 });
+    invalidate();
+  }, [marked, invalidate]);
+
+  // what a calculation found of an atom, or a bond, said beside it once it
+  // has been pointed at a moment - at once, where something is said already
+  const atomResults = useMemo(() => resultsOn(m.calc?.results, "atoms"), [m.calc]);
+  const pairResults = useMemo(() => resultsOn(m.calc?.results, "pairs"), [m.calc]);
+  const cardOf = (on: { atom: number } | { bond: number }): { title: string; groups: CardGroups; atoms: number[] } | null => {
+    const name = (i: number) => `${m.atoms[i]?.el ?? "?"} ${i + 1}`;
+    if ("atom" in on) {
+      const i = on.atom;
+      if (!atomResults.length || i >= n) return null;
+      const groups = grouped(atomResults).map((g) => ({
+        group: g.group,
+        rows: g.results.map((r) => ({ label: r.label, text: valueText(r.values[i], r), marked: isMarked(r.values[i], r) })),
+      }));
+      return { title: name(i), groups, atoms: [i] };
+    }
+    const b = m.bonds[on.bond];
+    if (!b || !pairResults.length) return null;
+    const known = pairResults.filter((r) => pairValue(r, b.a1, b.a2) !== undefined);
+    if (!known.length) return null;
+    const groups = grouped(known).map((g) => ({
+      group: g.group,
+      rows: g.results.map((r) => {
+        const v = pairValue(r, b.a1, b.a2)!;
+        return { label: r.label, text: valueText(v, r), marked: isMarked(v, r) };
+      }),
+    }));
+    return { title: `${name(b.a1)}\u2013${name(b.a2)}`, groups, atoms: [b.a1, b.a2] };
+  };
+  const pointedAt = hoverAtom != null ? { atom: hoverAtom } : hoverBond != null ? { bond: hoverBond } : null;
+  const pointedKey = pointedAt ? ("atom" in pointedAt ? `a${pointedAt.atom}` : `b${pointedAt.bond}`) : null;
+  const [card, setCard] = useState<{ key: string; title: string; groups: CardGroups; atoms: number[] } | null>(null);
+  const [cardShown, setCardShown] = useState(false);
+  const cardEl = useRef<HTMLDivElement>(null);
+  const cardAnchor = useRef<THREE.Group>(null);
+  useEffect(() => {
+    const said = pointedAt ? cardOf(pointedAt) : null;
+    if (!said) {
+      setCardShown(false);
+      return;
+    }
+    const show = () => {
+      setCard({ key: pointedKey!, ...said });
+      setCardShown(true);
+      invalidate();
+    };
+    if (cardShown) {
+      show();
+      return;
+    }
+    const t = window.setTimeout(show, CARD_DELAY_MS);
+    return () => window.clearTimeout(t);
+    // (said afresh as what is pointed at changes, or what is known of it)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointedKey, atomResults, pairResults]);
+  // (faded out, it is let go)
+  useEffect(() => {
+    invalidate();
+    if (cardShown || !card) return;
+    const t = window.setTimeout(() => setCard(null), 200);
+    return () => window.clearTimeout(t);
+  }, [cardShown, card, invalidate]);
 
   useEffect(() => invalidate(), [lit, selected, look, frame, turn, invalidate]);
 
@@ -346,6 +444,12 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     // another frame: its atoms go there
     let reshaped = dirty.current;
     const p = places.current;
+    // (what a vibration added last frame taken off first: what follows is
+    // of the atoms at rest)
+    const v = vib.current;
+    if (v.offset && v.offset.length === p.length) for (let i = 0; i < p.length; i++) p[i] -= v.offset[i];
+    const offset = v.offset;
+    v.offset = null;
     let far = 0;
     const rising = props.rising;
     const riseT = rising ? (performance.now() - rising.start) / 1000 : 0;
@@ -365,6 +469,27 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       p.set(target);
       reshaped = true;
     }
+    // a vibration chosen: the atoms move in it, its swing eased in and out;
+    // another chosen, the one moving comes to rest before the next begins
+    const wanted = props.motion?.length === p.length ? props.motion : null;
+    if (v.shown !== wanted && (!v.shown || v.level < 0.02)) {
+      v.shown = wanted;
+      v.phase = 0;
+    }
+    if (v.shown) {
+      v.level = follow(v.level, v.shown === wanted ? 1 : 0, step, VIBRATION_TAU);
+      if (v.shown !== wanted && v.level < 0.02) {
+        v.shown = wanted;
+        v.level = 0;
+        v.phase = 0;
+      }
+      v.phase += (step / VIBRATION_PERIOD) * 2 * Math.PI;
+      if (v.shown && v.level > 0) {
+        v.offset = vibrationOffsets(v.shown, v.level * Math.sin(v.phase), offset ?? undefined);
+        for (let i = 0; i < p.length; i++) p[i] += v.offset[i];
+      }
+      reshaped = moving = true;
+    } else if (offset) reshaped = true;
     // another look: its atoms grow, or shrink, and its bonds give way
     const f = follow(fill.current, look === "space" ? 1 : 0, step, LOOK_TAU);
     if (f !== fill.current) {
@@ -542,6 +667,53 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         mesh.position.set(p[3 * i], p[3 * i + 1], p[3 * i + 2]);
         mesh.scale.setScalar(radius(i) + LINKED_PX * px * l.v);
       }
+    }
+    // the atoms a list's row is of, outlined as the drawing's atom is
+    {
+      let marking = false;
+      for (const [i, r] of marks.current) {
+        const v = follow(r.v, r.to, step, OUTLINE_TAU);
+        if (v !== r.v) {
+          r.v = v;
+          marking = moving = true;
+        }
+        if (v === 0 && r.to === 0) {
+          marks.current.delete(i);
+          marking = true;
+        }
+      }
+      if (reshaped || marking || dirty.current) {
+        const mesh = markedHull.current;
+        for (let i = 0; i < n; i++) {
+          const v = marks.current.get(i)?.v ?? 0;
+          const r = v > 0.001 ? radius(i) + LINKED_PX * px * v : 0;
+          mtx.makeScale(r, r, r).setPosition(p[3 * i], p[3 * i + 1], p[3 * i + 2]);
+          mesh.setMatrixAt(i, mtx);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.visible = marks.current.size > 0;
+      }
+    }
+    // what is said of the atom or bond pointed at: beside its ball - or
+    // the bond's middle - on the side the canvas has room on; not while a
+    // button is held
+    if (card && cardAnchor.current && cardEl.current) {
+      const a = cardAnchor.current;
+      const at = a.position.set(0, 0, 0);
+      for (const i of card.atoms) if (i < n) at.add(new THREE.Vector3(p[3 * i], p[3 * i + 1], p[3 * i + 2]));
+      at.divideScalar(Math.max(1, card.atoms.length));
+      const g = Math.max(grown.current.v, 1e-3);
+      const off = (card.atoms.length === 1 ? (radius(card.atoms[0]) * g) / px : 0) + CARD_OFF_PX;
+      const parent = a.parent;
+      let x = off;
+      if (parent) {
+        parent.updateWorldMatrix(true, false);
+        const s = parent.localToWorld(at.clone()).project(camera);
+        const sx = ((s.x + 1) / 2) * size.width;
+        if (sx + off + cardEl.current.offsetWidth > size.width - CARD_OFF_PX) x = -off - cardEl.current.offsetWidth;
+      }
+      cardEl.current.style.transform = `translate(${x.toFixed(1)}px, -50%)`;
+      cardEl.current.style.opacity = cardShown && !buttonHeld() ? "1" : "0";
     }
     // the chosen atoms' rings
     if (reshaped || ringing || dirty.current) {
@@ -721,7 +893,22 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
           <meshStandardMaterial roughness={style.roughness} metalness={style.metalness} transparent opacity={1} />
         </instancedMesh>
         {lineCount > 0 && (
-          <instancedMesh ref={bonds} args={[undefined, undefined, lineCount]} renderOrder={OVER_PAGE} frustumCulled={false}>
+          <instancedMesh
+            ref={bonds}
+            args={[undefined, undefined, lineCount]}
+            renderOrder={OVER_PAGE}
+            frustumCulled={false}
+            // (pointed at, a bond says what a calculation found of it - where one did)
+            onPointerMove={
+              pairResults.length
+                ? (e) => {
+                    const b = e.instanceId != null ? lineBond[e.instanceId] : undefined;
+                    if (b != null && b !== hoverBond) setHoverBond(b);
+                  }
+                : undefined
+            }
+            onPointerOut={pairResults.length ? () => setHoverBond(null) : undefined}
+          >
             <cylinderGeometry args={[1, 1, 1, style.bondSegments]} />
             <meshStandardMaterial
               color={style.bondColor}
@@ -764,6 +951,17 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
           <sphereGeometry args={[1, style.ballSegments, style.ballSegments]} />
           <meshBasicMaterial color={blue(LINKED_BLUE)} transparent opacity={1} depthWrite={false} toneMapped={false} />
         </mesh>
+        <instancedMesh ref={markedHull} args={[undefined, undefined, n]} renderOrder={OVER_PAGE - 1} frustumCulled={false} visible={false} raycast={() => {}}>
+          <sphereGeometry args={[1, style.ballSegments, style.ballSegments]} />
+          <meshBasicMaterial color={blue(LINKED_BLUE)} transparent opacity={1} depthWrite={false} toneMapped={false} />
+        </instancedMesh>
+        {card && (
+          <group ref={cardAnchor}>
+            <PageHtml zIndexRange={[40, 30]} style={{ pointerEvents: "none" }}>
+              <PointedCard3D ref={cardEl} title={card.title} groups={card.groups} />
+            </PageHtml>
+          </group>
+        )}
         <instancedMesh
           ref={chosenHull}
           args={[undefined, undefined, n]}
@@ -879,17 +1077,29 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         ))}
       </group>
       {/* (rising out of its drawing, it shows its frames once it has risen) */}
-      {(solid.frames.length > 1 || props.onRemake) && !props.rising && (
+      {/* (read from a calculation, it says what the calculation was - a
+          single geometry's only when it is pointed at) */}
+      {(solid.frames.length > 1 || props.onRemake || m.calc) && !props.rising && (
         <group ref={pill}>
-          {solid.frames.length > 1 ? (
+          {solid.frames.length > 1 || m.calc ? (
             <Frames3D
               count={solid.frames.length}
               frame={frameOf(solid, frame)}
               energies={m.energies?.length === solid.frames.length ? m.energies : undefined}
               open={props.framesOpen}
               onFrame={props.onFrame}
-              below={props.onRemake && <Changed onRemake={props.onRemake} />}
+              below={
+                (props.onRemake || props.list) && (
+                  <>
+                    {props.onRemake && <Changed onRemake={props.onRemake} />}
+                    {props.list}
+                  </>
+                )
+              }
               populations={shares}
+              about={m.calc ? calcLine(m.calc) : undefined}
+              results={m.calc?.results}
+              area={gl.domElement}
             />
           ) : (
             props.onRemake && (

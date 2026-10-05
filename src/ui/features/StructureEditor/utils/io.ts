@@ -10,6 +10,9 @@ import type { Carried3D, Drawn, Model, Molecule3D } from "../store/types";
 import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, solidOf } from "./molecule3d";
 import { energiesOf } from "../../../../lib/calc/readers";
+import { outputKindOf } from "../../../../lib/calc/catalog";
+import { calcOf, xyzOf, type ReaderOutput } from "../../../../lib/calc/output";
+import { readOutput } from "../../../../lib/calc/read";
 
 /** Extensions the file pickers offer that have no parser yet. */
 const UNSUPPORTED_EXTENSIONS = new Set(["pdb", "ket"]);
@@ -21,7 +24,8 @@ export type ProcessedFileResult = {
   /** A reaction's "+" signs: their middles. */
   pluses?: { x: number; y: number }[];
   /** Molecules in 3D, as a file of 3D structures has them: not yet placed on the page. */
-  molecules3d?: Omit<Molecule3D, "id" | "at">[];
+  /** Its molecules in 3D, each showing its first frame, or the one `frame` says. */
+  molecules3d?: (Omit<Molecule3D, "id" | "at"> & { frame?: number })[];
 };
 
 /**
@@ -79,6 +83,13 @@ export async function processFileContent(
     throw new Error(
       `${ext.toUpperCase()} files are not supported yet (${name}).`,
     );
+  }
+  // a calculation's output: read by the reader plugin that reads its kind
+  // (lib/calc), whatever it is called
+  const kind = format ? null : outputKindOf(content);
+  if (kind) {
+    const { output, readers } = await readOutput(name, content, kind);
+    return calcResult(output, readers, filename);
   }
   const noMolecules = () =>
     new Error(
@@ -203,4 +214,32 @@ function inRow(ms: Omit<Molecule3D, "id" | "at">[]): Carried3D[] {
   const style = currentStyle3D();
   const at = rowAbout({ x: 0, y: 0 }, placed.map((m) => solidOf(m, style).reach[lookOf(m, style)]));
   return ms.map((m, i) => ({ ...m, at: at[i] }));
+}
+
+/**
+ * A calculation's output, as its readers read it (`readers`, each its name
+ * and version), as an opened file's molecules: one molecule in 3D, read from
+ * its geometries as an XYZ file's frames are - its bonds found the same
+ * way - their energies, and what the calculation says of it; showing its
+ * last geometry, an optimisation's end.
+ */
+export function calcResult(out: ReaderOutput, readers: readonly string[], filename?: string): ProcessedFileResult {
+  const [first, ...rest] = readMoleculesFromText(xyzOf(out), "xyz");
+  if (!first?.atoms.length) throw new Error(`No molecule found in ${filename || "the file"}.`);
+  const frames = rest.map((f) => f.atoms.flatMap((a) => [a.x, a.y, a.z]));
+  const energies = out.energies?.length === 1 + frames.length ? out.energies : undefined;
+  return {
+    model: { atoms: [], bonds: [] },
+    centroid: { x: 0, y: 0 },
+    molecules3d: [
+      {
+        atoms: first.atoms,
+        bonds: first.bonds,
+        ...(frames.length ? { frames, frame: frames.length } : {}),
+        ...(energies ? { energies } : {}),
+        ...(filename ? { name: filename } : {}),
+        calc: calcOf(out, readers),
+      },
+    ],
+  };
 }

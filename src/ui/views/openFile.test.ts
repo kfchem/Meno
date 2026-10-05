@@ -34,7 +34,15 @@ describe("openedAs", () => {
     expect(openedAs("notes.abc", "plain words")).toMatchObject({ kind: "text", data: { text: "plain words", language: "abc" } });
   });
 
-  it("offers chemical files and text to Open", () => {
-    for (const ext of [".meno", ".mol", ".sdf", ".rxn", ".xyz", ".txt", ".py"]) expect(OPENABLE.split(",")).toContain(ext);
+  it("offers chemical files, calculations' output and text to Open", () => {
+    for (const ext of [".meno", ".mol", ".sdf", ".rxn", ".xyz", ".out", ".log", ".fchk", ".txt", ".py"]) expect(OPENABLE.split(",")).toContain(ext);
+    // (each once)
+    expect(new Set(OPENABLE.split(",")).size).toBe(OPENABLE.split(",").length);
+  });
+
+  it("opens a calculation's output on a structure canvas, a log of something else as text", () => {
+    expect(openedAs("job.out", "\n                                 * O   R   C   A *\n")).toMatchObject({ kind: "structure", label: "job.out" });
+    expect(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n")).toMatchObject({ kind: "structure" });
+    expect(openedAs("build.log", "compiled in 3 s\n")).toMatchObject({ kind: "text" });
   });
 });
