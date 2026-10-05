@@ -2,9 +2,10 @@ import clsx from "clsx";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isMarked, valueText, type ListResult } from "../../../../lib/calc/results";
 
-/** The list's height at most, in pixels; and at least, near the window's edge - three rows. */
+/** The list's rows' height at most, in pixels; and at least, near the window's edge - three rows; and its heading's, over them. */
 const TALLEST = 176;
 const LEAST = 72;
+const HEAD = 20;
 /** The card kept clear of the canvas's lower edge, in pixels. */
 const MARGIN = 8;
 /** How many frames after it opens it has been placed under its molecule, to ask for room. */
@@ -46,7 +47,12 @@ export default function CalcList3D({
 }) {
   const card = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
-  const [room, setRoom] = useState(TALLEST);
+  // (its heading scrolls with it, held at its top, so that it is laid out
+  // with the rows - their columns its own - however a scroll bar is)
+  const headed = result.columns.some((c) => c.label);
+  const tallest = TALLEST + (headed ? HEAD : 0);
+  const least = LEAST + (headed ? HEAD : 0);
+  const [room, setRoom] = useState(tallest);
   // what its rows reach past it, where its scroll bar takes room it was not
   // given - so a Windows WebView does, the scroll bar come after the columns
   // were laid out - given back as a column of its own at the right, under
@@ -68,9 +74,11 @@ export default function CalcList3D({
       if (el && box) {
         const l = el.getBoundingClientRect();
         const b = box.getBoundingClientRect();
-        if (++frames === PLACED_FRAMES) askRoom.current?.(b.top + box.offsetHeight - el.clientHeight + Math.min(TALLEST, el.scrollHeight));
+        if (++frames === PLACED_FRAMES) askRoom.current?.(b.top + box.offsetHeight - el.clientHeight + Math.min(tallest, el.scrollHeight));
         // (the card clear of the edge, its own padding under the list too)
-        setRoom(Math.round(Math.min(TALLEST, Math.max(LEAST, area.getBoundingClientRect().bottom - l.top - (b.bottom - l.bottom) - MARGIN))));
+        setRoom(
+          Math.round(Math.min(tallest, Math.max(least, area.getBoundingClientRect().bottom - l.top - (b.bottom - l.bottom) - MARGIN))),
+        );
         // (never more than the scroll bar's own width: what reaches past it
         // for any other reason - a card as wide as it may be - stays hidden)
         setSpare(Math.min(el.offsetWidth - el.clientWidth, Math.max(0, el.scrollWidth - el.clientWidth)));
@@ -79,17 +87,20 @@ export default function CalcList3D({
     };
     fit();
     return () => cancelAnimationFrame(id);
-  }, [area, result.id]);
-  // (opened on the row its reader put first in view, in the middle of it)
+  }, [area, result.id, tallest, least]);
+  // (opened on the row its reader put first in view, in the middle of the
+  // rows seen under its heading; or else on its first - another list opened
+  // in its place starts afresh)
   useLayoutEffect(() => {
     const el = list.current;
-    const row = result.focus != null ? el?.querySelector<HTMLElement>(`[data-row="${result.focus}"]`) : null;
-    if (el && row) el.scrollTop = row.offsetTop - (el.clientHeight - row.offsetHeight) / 2;
-  }, [result.id, result.focus]);
+    if (!el) return;
+    const row = result.focus != null ? el.querySelector<HTMLElement>(`[data-row="${result.focus}"]`) : null;
+    const head = headed ? HEAD : 0;
+    el.scrollTop = row ? row.offsetTop - head - (el.clientHeight - head - row.offsetHeight) / 2 : 0;
+  }, [result.id, result.focus, headed]);
 
   const can = (i: number) => !!(result.rows[i].move || result.rows[i].frame != null);
   const some = result.rows.some((_, i) => can(i));
-  const headed = result.columns.some((c) => c.label);
   // (a column of numbers, or of values with a unit, to the right; of texts, to the left)
   const right = result.columns.map((c, k) => !!(c.quantity || c.unit) || result.rows.every((r) => typeof r.cells[k] !== "string"));
   const columns = {
@@ -113,13 +124,24 @@ export default function CalcList3D({
         </button>
       </div>
       <div
-        className="grid gap-x-3"
+        ref={list}
+        role="listbox"
+        aria-label={result.label}
+        className="relative grid gap-x-3 overflow-y-auto overflow-x-hidden"
         style={{
           gridTemplateColumns: `repeat(${result.columns.length}, auto)${spare ? ` ${spare}px` : ""}`,
+          gridAutoRows: "min-content",
+          maxHeight: room,
         }}
+        onPointerLeave={() => onPoint(null)}
       >
         {headed && (
-          <div className="px-3 h-5 items-center text-[10px] text-gh-gray" style={columns} aria-hidden>
+          <div
+            className="sticky top-0 z-10 px-3 h-5 items-center text-[10px] text-gh-gray bg-white"
+            style={columns}
+            aria-hidden
+            onPointerEnter={() => onPoint(null)}
+          >
             {result.columns.map((c, k) => (
               <span key={k} className={clsx("whitespace-nowrap", right[k] && "text-right")}>
                 {c.label}
@@ -127,53 +149,44 @@ export default function CalcList3D({
             ))}
           </div>
         )}
-        <div
-          ref={list}
-          role="listbox"
-          aria-label={result.label}
-          className="relative overflow-y-auto overflow-x-hidden"
-          style={{ ...columns, gridAutoRows: "min-content", maxHeight: room }}
-          onPointerLeave={() => onPoint(null)}
-        >
-          {result.rows.map((r, i) => {
-            const on = chosen === i;
-            return (
-              <div
-                key={i}
-                data-row={i}
-                role="option"
-                aria-selected={on}
-                aria-disabled={!can(i)}
-                onPointerEnter={() => onPoint(r.atoms ? i : null)}
-                onClick={() => can(i) && onChoose(on ? null : i)}
-                className={clsx(
-                  "px-3 h-6 items-center text-[11px] tabular-nums transition-colors duration-150 ease-meno",
-                  on ? "bg-gh-base" : (can(i) || r.atoms) && "hover:bg-gh-base",
-                  can(i) && "cursor-pointer",
-                  some && !can(i) && "opacity-40",
-                )}
-                style={columns}
-              >
-                {r.cells.map((v, k) => (
-                  <span
-                    key={k}
-                    className={clsx(
-                      "whitespace-nowrap",
-                      right[k] && "text-right",
-                      isMarked(v, result.columns[k])
-                        ? "text-accel-accent"
-                        : k === 0 && result.columns.length > 1
-                          ? "text-gh-gray"
-                          : "text-gh-black",
-                    )}
-                  >
-                    {valueText(v, result.columns[k])}
-                  </span>
-                ))}
-              </div>
-            );
-          })}
-        </div>
+        {result.rows.map((r, i) => {
+          const on = chosen === i;
+          return (
+            <div
+              key={i}
+              data-row={i}
+              role="option"
+              aria-selected={on}
+              aria-disabled={!can(i)}
+              onPointerEnter={() => onPoint(r.atoms ? i : null)}
+              onClick={() => can(i) && onChoose(on ? null : i)}
+              className={clsx(
+                "px-3 h-6 items-center text-[11px] tabular-nums transition-colors duration-150 ease-meno",
+                on ? "bg-gh-base" : (can(i) || r.atoms) && "hover:bg-gh-base",
+                can(i) && "cursor-pointer",
+                some && !can(i) && "opacity-40",
+              )}
+              style={columns}
+            >
+              {r.cells.map((v, k) => (
+                <span
+                  key={k}
+                  className={clsx(
+                    "whitespace-nowrap",
+                    right[k] && "text-right",
+                    isMarked(v, result.columns[k])
+                      ? "text-accel-accent"
+                      : k === 0 && result.columns.length > 1
+                        ? "text-gh-gray"
+                        : "text-gh-black",
+                  )}
+                >
+                  {valueText(v, result.columns[k])}
+                </span>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
