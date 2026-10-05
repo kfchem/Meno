@@ -18,7 +18,12 @@ export default tseslint.config(
       "react-refresh": reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // The rules of hooks, as before. Version 7's recommended set adds the
+      // React Compiler's rules - no refs read or written while rendering,
+      // and the like - which the canvas's three.js parts break on purpose;
+      // they are for when Meno takes up the compiler, not before.
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": [
         "warn",
         { allowConstantExport: true },
