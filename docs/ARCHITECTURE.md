@@ -371,6 +371,23 @@ knows no program's format beyond that.
   git ignores - no program's output is committed - and run by hand
   (`scripts/calc/test_reader_cclib.py`); the app's side is tested with the
   plain data written by hand.
+- The PySCF reader (`resources/workers/reader_pyscf.py`, in a pixi
+  environment: PySCF from conda-forge, which has it for Windows; cclib
+  from PyPI) is a plugin of its own, sharing no code with another
+  (the maintainer, 2026-10-06). It gives the molecule - read with cclib as
+  a library, or a Molden file with PySCF - and its orbitals and densities;
+  charges, vibrations and the like are cclib's to give. Where an output
+  holds the basis set and the orbitals' coefficients, cclib writes them as
+  a Molden file (each p shell's functions put in x, y, z order, as ORCA's
+  are not) for PySCF to read back, and the orbitals are checked
+  orthonormal in their basis before any surface is promised - where they
+  are not, it says to open a Molden file the program wrote. Its lists'
+  rows promise each orbital's surface and the densities' (`orbital:<spin>:
+  <index>`, `density:total`, `density:spin`); asked for, it works the grid
+  out from the file sent again: 4 Å past the atoms, points 0.2 Å apart (at
+  most 90 to a side), the basis functions' values a chunk of points at a
+  time. Its tests (`scripts/calc/test_reader_pyscf.py`) run by hand in an
+  environment made from its lock.
 - A reader that comes with Meno (`BuiltinReader` in the catalog) is asked
   as a plugin's worker is - the same `Reader`: what it makes of a file,
   and a promise it gave - but runs in the app, in a web worker of its own
@@ -469,6 +486,24 @@ taking away a version no longer pinned. uv comes from Astral's host
 on GitHub. A new pin is a change to `tools.rs`, its hashes the release's
 own, checked against the archives (`cargo test -- --ignored` fetches and
 runs both for the computer it runs on).
+
+An environment pixi makes (`pixienv.rs`, `py_env_setup_pixi`) comes from a
+manifest and a lock Meno carries, `resources/pixi/<name>/pixi.toml` and
+`pixi.lock` - every package for every platform pinned by its SHA-256 -
+copied into `<data>/pixi/<name>/`, where `pixi install --frozen` makes it
+(`.pixi/envs/default`). pixi keeps its cache and home under `<data>/pixi/`
+and reads no configuration of the user's (`PIXI_NO_CONFIG`). A conda
+environment expects to be activated - on Windows its libraries are found
+only on the PATH activation sets - so what activation sets is asked of
+pixi once, as the environment is made (`shell-hook --json`, the PATH
+standing in as a mark), and kept beside it (`activation.json`): a worker
+started in it (`ext_spawn_sidecar`, which takes an interpreter of
+`<data>/uv` or `<data>/pixi`) is given the variables, and the folders before
+its PATH. The consent says what the lock downloads on the computer - its
+packages, and their size (`lib/pixiLock.ts`) - and from where: pixi, the
+first time, from GitHub; conda-forge (conda.anaconda.org); PyPI. A reader
+plugin says it is made so by `env: "pixi"`; its record of being set up is
+`pixi/stamps/<profile>.json`, and taking it away removes `pixi/<profile>`.
 
 ### What the backend accepts
 
