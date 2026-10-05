@@ -513,6 +513,105 @@ with that data written by hand.
 4. **Later.** Orbitals and densities drawn as surfaces, asked for when
    wanted.
 
+## Stage 3, as built
+
+Stages 3a to 3c, built in #143 and checked on a Mac and on Windows on
+2026-10-05.
+
+- **Readers.** cclib (1.9rc1) is the first. Settings, *Calculation
+  readers*, adds it - asking first for the network - and takes it away
+  again, its environment and its record with it. A kind of output is told
+  by what its file starts with. Where readers overlap, every one added
+  reads the output and what they find is put together; where two find the
+  same thing, the one chosen for that kind gives it.
+- **Opening an output.** It opens on a canvas tab of its own, its last
+  geometry shown, an optimisation's steps as its frames. With no reader
+  added that reads it, Meno says which to add; an output with no geometry
+  says so.
+- **The general form.** What Meno does something with - atoms,
+  geometries, each one's energy, what the calculation was - has a form of
+  its own; everything else is a result belonging to the molecule, each
+  frame, each atom, pairs of atoms or a list, its values quantities Meno
+  writes or values with their own unit. cclib gives partial charges and
+  spin populations, thermochemistry, the dipole moment, the HOMO-LUMO gap,
+  each step's RMS gradient, the vibrations and the orbitals about the
+  frontier.
+- **Seen by pointing.** The chip says what the calculation was, its energy
+  and the results ranked for it; its text pointed at, the molecule's and
+  the frame's results stand above it. An atom or a bond pointed at a moment
+  says its results on a card beside it. The molecule's menu opens each list
+  under it: a row pointed at outlines its atoms, one chosen moves the
+  molecule or shows its frame. A list opened with too little room below it
+  glides the view until the molecule and the list are both seen, and an
+  opened chip rises to stay within the canvas. No colouring.
+- **Vibrations** are a list whose rows move the molecule: the atom that
+  moves most goes 0.3 Å, once every 1.2 s, eased in and out.
+- **Found on Windows** and put right: the reader's tests read the samples
+  in the system's encoding (now UTF-8, as the app does); a list long enough
+  to scroll had its last column cut by its scroll bar, and its heading stood
+  apart from its values (the heading is now the list's first row, held at
+  its top).
+- The wheel over a list zooms the canvas, as over the chip; scrolling a
+  list with it waits until it is missed (the maintainer, 2026-10-05).
+
+## Stage 3d, planned
+
+Orbitals and densities drawn as surfaces. Agreed with the maintainer on
+2026-10-05.
+
+### The tools that make environments
+
+- **Fetched when first needed, both of them.** uv and pixi are each
+  downloaded the first time an environment needs it, the version and its
+  hash pinned in Meno, under the network's consent for that environment.
+  Neither is bundled: either alone does nothing without the network, and
+  bundled, every update of Meno carried it again (uv was 37 MB of a 54 MB
+  app).
+- **uv** makes the environments PyPI fills, as now: the chemistry worker's
+  and cclib's.
+- **pixi** makes those that need conda-forge, which has builds PyPI has
+  not - PySCF for Windows among them - from conda.anaconda.org (free of
+  Anaconda's terms, which cover its own channels). A conda environment
+  is started with its activation, as Windows needs for its libraries.
+
+### Surfaces
+
+- **A grid is a kind of value** a result can carry: an origin, three
+  axes and the number of points along each, and a value at each point. A
+  list's row can carry a surface, as one can carry a motion: chosen, Meno
+  draws it.
+- **Drawn by Meno.** The surface where the grid takes a value (marching
+  cubes, worked out off the main thread), going over to another as the
+  value changes. An orbital's two phases in two colours, a density's in
+  one, seen through. The colours are the chemist's to choose in Settings;
+  at first a muted blue and orange. The value is set by a slider under the
+  list, the surface following it.
+- **Asked for when wanted.** Any result, of whatever kind, can come as a
+  promise: what it is, and a key to ask for it with. Meno asks the plugin
+  for it when it is wanted - its row chosen - sending the output's text
+  again, the plugin keeping nothing between. Saved, a molecule keeps the
+  results it has been given and is showing; a promise not yet given is
+  kept, with where its output was, to be asked for from there.
+
+### Where grids come from
+
+- **Cube files**, which the programs write themselves (Gaussian's cubegen,
+  ORCA's orca_plot and others): read by a reader that comes with Meno - no
+  download - under the same contract as the plugins, and as easily taken
+  out. A cube's molecule comes with its grids as a list of surfaces.
+- **The PySCF plugin** (Apache-2.0), in a pixi environment: orbitals and
+  densities worked out on a grid from a molden file, or from an output
+  that holds the basis set and the orbitals' coefficients - read by cclib,
+  written as molden by cclib, worked out by PySCF - each grid a promise.
+  No GPL library (iodata, gbasis).
+
+### In order
+
+1. **3d-1.** The tools fetched when first needed; pixi beside uv.
+2. **3d-2.** Grids, promises, surfaces, the value's slider, the colours in
+   Settings, and cube files.
+3. **3d-3.** The PySCF plugin.
+
 ## Risks
 
 - **The 2D drawing changing.** The thinnest lines and the place of every
