@@ -111,13 +111,13 @@ describe("what several readers found in one output", () => {
     method: "B3LYP-D3",
     results: [
       { id: "natural", on: "atoms", group: "Partial charges", label: "Natural (NPA)", quantity: "charge", values: [-0.9, 0.45, 0.45] },
-      // (the same as the first reader's: the first's is kept)
+      // (of the same name as one of the first reader's: NBO's own, kept beside it)
       { id: "mulliken", on: "atoms", group: "Partial charges", label: "Mulliken", quantity: "charge", values: [-0.5, 0.25, 0.25] },
       { id: "wiberg", on: "pairs", group: "NBO", label: "Wiberg bond index", pairs: [[0, 1, 0.82]] },
     ],
   };
 
-  it("is put together: the geometries, and what the calculation was, the first's that gives them; every result, the same thing once", () => {
+  it("is put together: the geometries, and what the calculation was, the first's that gives them; every reader's results, each its own", () => {
     const { output, readers } = combine([
       { from: "cclib 1.9rc1", output: water },
       { from: "NBO 7", output: nbo },
@@ -127,15 +127,17 @@ describe("what several readers found in one output", () => {
     expect(output.energies).toEqual(water.energies);
     expect(output.method).toBe("B3LYP");
     const results = calcOf(output, readers).results!;
+    // (a name is its reader's own: NBO's Mulliken is NBO's, beside cclib's)
     expect(results.map((r) => `${r.label} (${r.from})`)).toEqual([
       "Mulliken (cclib 1.9rc1)",
       "Vibrations (cclib 1.9rc1)",
       "Natural (NPA) (NBO 7)",
+      "Mulliken (NBO 7)",
       "Wiberg bond index (NBO 7)",
     ]);
   });
 
-  it("takes the geometries of whichever gives them, the order deciding only what both give", () => {
+  it("takes the geometries of whichever gives them, the order deciding what both give, and whose results come first", () => {
     const { output } = combine([
       { from: "NBO 7", output: nbo },
       { from: "cclib 1.9rc1", output: water },
@@ -143,7 +145,7 @@ describe("what several readers found in one output", () => {
     expect(output.frames).toEqual(water.frames);
     expect(output.method).toBe("B3LYP-D3");
     expect(output.program).toBe("ORCA");
-    expect((output.results as { label: string; from: string }[]).find((r) => r.label === "Mulliken")?.from).toBe("NBO 7");
+    expect((output.results as { label: string; from: string }[]).filter((r) => r.label === "Mulliken").map((r) => r.from)).toEqual(["NBO 7", "cclib 1.9rc1"]);
   });
 
   it("leaves out a reader whose atoms are not the geometries', and what belongs to frames it did not read as many of", () => {

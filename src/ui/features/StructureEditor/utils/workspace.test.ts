@@ -6,7 +6,7 @@ import { createStructureDocument } from "../document";
 import { DEFAULT_STYLE_CHOICE } from "../../../../lib/chem/style";
 import { readWorkspace, workspaceText } from "./workspace";
 import { askFor, rememberOutput } from "../../../../lib/calc/asks";
-import { floatsText } from "../../../../lib/calc/results";
+import { floatsText, resultKey } from "../../../../lib/calc/results";
 
 const water3d = {
   atoms: [
@@ -110,7 +110,7 @@ describe("a workspace file", () => {
     const store = createEditorStore(doc);
     connectStoreToDocument(store, doc);
     store.getState().pasteModel({ atoms: [], bonds: [], molecules3d: [{ ...water3d, at: { x: 0, y: 0 }, calc: calc as never }] });
-    store.getState().openList3d(1, "grids");
+    store.getState().openList3d(1, resultKey({ id: "grids", from: "Cube files" }));
     store.getState().chooseRow3d(1, 0);
     store.getState().setIso3d(1, 0.02);
     const text = workspaceText(store.getState());
@@ -119,7 +119,7 @@ describe("a workspace file", () => {
     const other = createEditorStore(again);
     connectStoreToDocument(other, again);
     other.getState().openWorkspace(readWorkspace(text)!, true);
-    expect(other.getState().lists3d).toEqual({ 1: { list: "grids", row: 0, pointed: null, iso: 0.02 } });
+    expect(other.getState().lists3d).toEqual({ 1: { list: resultKey({ id: "grids", from: "Cube files" }), row: 0, pointed: null, iso: 0.02 } });
     const rows = (other.getState().molecules3d[0].calc!.results![0] as { rows: { surface?: unknown }[] }).rows;
     expect(rows[0].surface).toEqual(grid);
     expect(rows[1].surface).toEqual({ ask: "grid:1" });

@@ -10,7 +10,7 @@ import { create } from "zustand";
 import { READER_PLUGINS, type ReaderPlugin } from "./catalog";
 import type { Reader } from "./client";
 import type { CalcInfo, CalcSource } from "./output";
-import { isAsk, resultsOn, type ListResult } from "./results";
+import { isAsk, resultKey, resultsOn, type ListResult } from "./results";
 import { readerClient } from "./workers";
 
 const outputs = new Map<string, { name: string; text: string }>();
@@ -90,11 +90,12 @@ async function ask(calc: CalcInfo, from: string | undefined, key: string, k: str
 /**
  * A molecule's calculation with the promises of the row its list shows -
  * its motion, its surface - given where they have been: what a workspace
- * saves of it, so that it opens showing what it showed.
+ * saves of it, so that it opens showing what it showed. `list` is the
+ * list's `resultKey`.
  */
 export function calcShowing(calc: CalcInfo, list: string, row: number | null): CalcInfo {
   if (row == null || !calc.results) return calc;
-  const target = resultsOn(calc.results, "list").find((r) => r.id === list);
+  const target = resultsOn(calc.results, "list").find((r) => resultKey(r) === list);
   const shown = target?.rows[row];
   if (!target || !shown) return calc;
   const swap = (v: unknown) => (isAsk(v) && givenValue(calc.source, target.from, v.ask) !== undefined ? givenValue(calc.source, target.from, v.ask) : v);

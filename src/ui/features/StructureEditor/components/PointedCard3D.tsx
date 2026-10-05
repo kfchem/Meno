@@ -1,17 +1,23 @@
 import { forwardRef } from "react";
 
-/** A card's rows, group by group: each row its name and its value, written; `marked`, said in the accent colour. */
+/**
+ * A card's rows, group by group: each row its name and its value, written;
+ * `marked`, said in the accent colour; `source`, the reader the groups from
+ * it on came from - where two readers' stand on the card.
+ */
 export type CardGroups = {
+  source?: string;
   group: string;
   rows: { label: string; text: string; marked?: boolean }[];
 }[];
 
-/** Results said group by group: each group's name, then its rows, each its name and value. */
+/** Results said group by group - under each reader's name, where there are two - each group's name, then its rows, each its name and value. */
 export function ResultGroups({ groups }: { groups: CardGroups }) {
   return (
     <>
-      {groups.map((g) => (
-        <div key={g.group} className="mt-1">
+      {groups.map((g, k) => (
+        <div key={`${k}:${g.group}`} className="mt-1">
+          {g.source && <div className="mt-1.5 text-[10px] font-medium text-gh-black">{g.source}</div>}
           <div className="text-[10px] text-gh-gray">{g.group}</div>
           <div className="grid grid-cols-[auto_auto] gap-x-3">
             {g.rows.map((r, k) => (

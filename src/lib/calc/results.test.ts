@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { chipLine, grouped, isMarked, pairValue, readResults, resultsOn, valueText, type PairsResult } from "./results";
+import { bySource, chipLine, grouped, isMarked, pairValue, readResults, resultKey, resultsOn, valueText, type PairsResult } from "./results";
+import { cardGroupsOf, readerNameOf, titled } from "./sources";
 
 describe("a calculation's results, as a plugin gives them", () => {
   it("are kept where they read as results for the molecule's atoms and frames", () => {
@@ -59,10 +60,14 @@ describe("a calculation's results, as a plugin gives them", () => {
     expect([b.on === "molecule" && b.quantity, b.on === "molecule" && b.unit]).toEqual([undefined, "dB"]);
   });
 
-  it("keep both of two readers' results of one name, one its own plugin's name added", () => {
+  it("keep two readers' results of one name, each its own reader's - but not one reader's twice", () => {
     const one = { id: "q", on: "atoms", group: "Partial charges", label: "Mulliken", values: [0] };
     const r = readResults([{ ...one, from: "cclib" }, { ...one, from: "other" }, { ...one, from: "cclib" }], 1, 1);
-    expect(r.map((x) => x.id)).toEqual(["q", "q@other"]);
+    expect(r.map((x) => [x.id, x.from])).toEqual([
+      ["q", "cclib"],
+      ["q", "other"],
+    ]);
+    expect(resultKey(r[0])).not.toBe(resultKey(r[1]));
   });
 });
 
@@ -134,5 +139,39 @@ describe("where results are said", () => {
     const wbi = resultsOn(results, "pairs")[0];
     expect(pairValue(wbi, 1, 0)).toBe(0.82);
     expect(pairValue(wbi, 0, 2)).toBeUndefined();
+  });
+});
+
+describe("results from two readers", () => {
+  const one = (from: string, id: string, label: string, value: number, rank?: number) => ({ id, on: "molecule", group: "Properties", label, value, from, ...(rank ? { rank } : {}) });
+  const results = readResults(
+    [one("cclib 1.9rc1", "dipole", "Dipole moment", 1.8, 1), one("PySCF 2.14.0", "dipole", "Dipole moment", 1.9, 1), one("PySCF 2.14.0", "s2", "<S²>", 0.75, 2)],
+    1,
+    1,
+  );
+
+  it("stand side by side, each under its reader's name - none where one reader gave them all", () => {
+    expect(bySource(results, readerNameOf).map((p) => [p.source, p.results.length])).toEqual([
+      ["cclib", 1],
+      ["PySCF 2.14.0", 2],
+    ]);
+    expect(bySource(results.slice(0, 1), readerNameOf)).toEqual([{ results: results.slice(0, 1) }]);
+    const groups = cardGroupsOf(resultsOn(results, "molecule"), (r) => ({ text: valueText(r.value, r) }));
+    expect(groups.map((g) => [g.source, g.group, g.rows.map((r) => r.text)])).toEqual([
+      ["cclib", "Properties", ["1.8"]],
+      ["PySCF 2.14.0", "Properties", ["1.9", "0.75"]],
+    ]);
+  });
+
+  it("are named by their reader where another's of the kind stand beside them, a menu's lists", () => {
+    expect(titled({ label: "Molecular orbitals", from: "PySCF" }, [{ from: "cclib 1.9rc1" }, { from: "PySCF" }])).toBe("Molecular orbitals · PySCF");
+    expect(titled({ label: "Molecular orbitals", from: "cclib 1.9rc1" }, [{ from: "cclib 1.9rc1" }])).toBe("Molecular orbitals");
+    expect(readerNameOf("cclib 1.9rc1")).toBe("cclib");
+    expect(readerNameOf("Cube files")).toBe("Cube files");
+  });
+
+  it("fill the chip's line from one reader: the first that ranked any", () => {
+    expect(chipLine(["ORCA"], results, 200)).toBe("ORCA · Dipole moment 1.8");
+    expect(chipLine(["ORCA"], results.slice(1), 200)).toBe("ORCA · Dipole moment 1.9 · <S²> 0.75");
   });
 });

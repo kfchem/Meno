@@ -6,6 +6,10 @@
  * values, each as a quantity Meno knows or with its own unit. Meno places
  * them and writes them: a plugin gives data, never how it looks.
  *
+ * A result belongs to the plugin that gave it: its names are that plugin's
+ * own, never matched against another's - two plugins' results of the same
+ * name are two results, each shown as it says (the maintainer, 2026-10-06).
+ *
  * What Meno does something with besides showing it - the atoms and their
  * geometries, each frame's energy, what the calculation was - has a form of
  * its own (output.ts) and is no result.
@@ -21,12 +25,12 @@ export type Measure = { quantity?: Quantity; unit?: string; digits?: number };
 export type Cell = number | string | null;
 
 type Named = {
-  /** Its plugin's name for it, unique among a molecule's results. */
+  /** Its plugin's name for it, unique among that plugin's results (`resultKey`, among a molecule's). */
   id: string;
   /** What it is grouped under, and called: "Partial charges", "Mulliken". */
   group: string;
   label: string;
-  /** The plugin it came from, its name and version: kept, never shown. */
+  /** The plugin it came from, its name and version: said only where another plugin's results stand beside its own. */
   from?: string;
 };
 /** One value of the whole molecule; `rank`, where it is in the chip's line - lower first - or not there, unset. */
@@ -247,29 +251,37 @@ function resultOf(v: unknown, atoms: number, frames: number, from?: string): Res
   }
 }
 
+/** What a result is known by among a molecule's: the plugin that gave it, and its name with that plugin. */
+export const resultKey = (r: Pick<Named, "id" | "from">): string => (r.from ? `${r.from}\u0000${r.id}` : r.id);
+
 /**
  * A molecule's results as given - by a plugin (`from`, its name and
  * version), or a file - keeping those that read as results for `atoms`
- * atoms and `frames` frames. A result whose name another plugin's has
- * already is kept under its name and its plugin's; one that its own
- * plugin's has already, not at all.
+ * atoms and `frames` frames; but one its own plugin has given already
+ * under its name, not again.
  */
 export function readResults(given: unknown, atoms: number, frames: number, from?: string): Result[] {
   if (!Array.isArray(given)) return [];
   const out: Result[] = [];
-  const seen = new Map<string, string | undefined>();
+  const seen = new Set<string>();
   for (const v of given) {
     const r = resultOf(v, atoms, frames, from);
-    if (!r) continue;
-    if (seen.has(r.id)) {
-      if (seen.get(r.id) === r.from) continue;
-      r.id = `${r.id}@${r.from ?? ""}`;
-      if (seen.has(r.id)) continue;
-    }
-    seen.set(r.id, r.from);
+    if (!r || seen.has(resultKey(r))) continue;
+    seen.add(resultKey(r));
     out.push(r);
   }
   return out;
+}
+
+/**
+ * Results by the plugin they came from, in the order they come: one part
+ * with no name where they all came from one - the plugin said only where
+ * another's stand beside its own - each named by `nameOf` otherwise.
+ */
+export function bySource<R extends Result>(results: readonly R[], nameOf: (from: string | undefined) => string): { source?: string; results: R[] }[] {
+  const froms = [...new Set(results.map((r) => r.from))];
+  if (froms.length < 2) return results.length ? [{ results: [...results] }] : [];
+  return froms.map((f) => ({ source: nameOf(f), results: results.filter((r) => r.from === f) }));
 }
 
 /** The units Meno writes its quantities with, and the decimals it gives them. */
@@ -351,15 +363,16 @@ export const LINE_MOST = 96;
 
 /**
  * The chip's line: what it says first (what the calculation was, its
- * energy), then the molecule's results its plugins ranked, in their order,
- * as many as the line holds - each its name and value.
+ * energy), then the molecule's results its plugin ranked, in their order,
+ * as many as the line holds - each its name and value. The plugin is the
+ * first, of those that ranked any, in the order the results come (the one
+ * chosen for the kind of output first): the line has room for one's.
  */
 export function chipLine(first: readonly string[], results: readonly Result[] | undefined, most = LINE_MOST): string {
   const parts = first.filter(Boolean);
   let length = parts.join(" · ").length;
-  const ranked = resultsOn(results, "molecule")
-    .filter((r) => r.rank != null)
-    .sort((a, b) => a.rank! - b.rank!);
+  const all = resultsOn(results, "molecule").filter((r) => r.rank != null);
+  const ranked = all.filter((r) => r.from === all[0]?.from).sort((a, b) => a.rank! - b.rank!);
   for (const r of ranked) {
     const part = `${r.label} ${valueText(r.value, r)}`;
     const more = (parts.length ? 3 : 0) + part.length;

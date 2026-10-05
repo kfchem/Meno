@@ -30,7 +30,8 @@ export default function CalcReaderSettings() {
       <div>
         <h3 className="text-sm font-semibold text-gh-black">Where readers overlap</h3>
         <p className="mt-0.5 mb-2 text-xs text-gh-gray max-w-2xl">
-          Every reader added reads the kinds of output it reads. Where two find the same thing, the one chosen here gives it; otherwise the first.
+          Every reader added reads the kinds of output it reads, and what each finds is kept. Where two read the same molecule, the one chosen here
+          gives its geometries and what the calculation was, and what it finds comes first; otherwise the first.
         </p>
         <div className="rounded-lg border border-gh-line bg-white divide-y divide-gh-line">
           {OUTPUT_KINDS.map((k) => {

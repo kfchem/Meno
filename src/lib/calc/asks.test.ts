@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { askFor, calcShowing, givenValue, rememberOutput, useAsks, askKey } from "./asks";
 import type { Reader } from "./client";
 import type { CalcInfo } from "./output";
+import { resultKey } from "./results";
 
 vi.mock("./workers", () => ({ readerClient: () => Promise.reject(new Error("no workers in tests")) }));
 
@@ -58,8 +59,9 @@ describe("a promise", () => {
     const calc = calcOf(source);
     await askFor(calc, "Cube files", "grid:0", async () => reader(() => ({ the: "grid" })));
     const rows = (c: CalcInfo) => (c.results![0] as { rows: { surface?: unknown }[] }).rows.map((r) => r.surface);
-    expect(rows(calcShowing(calc, "grids", 0))).toEqual([{ the: "grid" }, { ask: "grid:1" }]);
-    expect(rows(calcShowing(calc, "grids", 1))).toEqual([{ ask: "grid:0" }, { ask: "grid:1" }]);
-    expect(calcShowing(calc, "grids", null)).toBe(calc);
+    const grids = resultKey({ id: "grids", from: "Cube files" });
+    expect(rows(calcShowing(calc, grids, 0))).toEqual([{ the: "grid" }, { ask: "grid:1" }]);
+    expect(rows(calcShowing(calc, grids, 1))).toEqual([{ ask: "grid:0" }, { ask: "grid:1" }]);
+    expect(calcShowing(calc, grids, null)).toBe(calc);
   });
 });

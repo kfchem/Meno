@@ -6,6 +6,7 @@ import type { EditorState, Look3D, Model, Molecule3D, Rising3D, Turn3D } from ".
 import { chosenPath } from "../../utils/molecule3d";
 import { noteTurns } from "../turnJournal";
 import { signatureOf } from "../../utils/drawnLink";
+import { resultKey } from "../../../../../lib/calc/results";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -256,7 +257,7 @@ export function heldOf(prev: EditorState, molecules: Molecule3D[]): Partial<Edit
   const measureStays = !hm || (by.get(hm.id)?.measures ?? []).some((x) => x.id === hm.measure);
   // (a list open for a molecule that has it still, the rows chosen and pointed at among its rows)
   const open = Object.entries(prev.lists3d).filter(([id, l]) => {
-    const list = by.get(Number(id))?.calc?.results?.find((r) => r.on === "list" && r.id === l.list);
+    const list = by.get(Number(id))?.calc?.results?.find((r) => r.on === "list" && resultKey(r) === l.list);
     const rows = list?.on === "list" ? list.rows.length : 0;
     return rows > 0 && (l.row == null || l.row < rows) && (l.pointed == null || l.pointed < rows);
   });
