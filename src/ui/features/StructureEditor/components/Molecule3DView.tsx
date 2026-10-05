@@ -1,4 +1,4 @@
-import { Html } from "@react-three/drei";
+import PageHtml from "./PageHtml";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -802,7 +802,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
             {/* (the pointer goes through it to the molecule: what it is over
                 is found by its box - Molecules3D - for its menu and the
                 Delete key) */}
-            <Html center zIndexRange={[30, 20]} style={{ pointerEvents: "none" }}>
+            <PageHtml center zIndexRange={[30, 20]} style={{ pointerEvents: "none" }}>
               <div
                 ref={(el) => {
                   const l = labels.current.get(x.id) ?? { anchor: null, el: null };
@@ -817,7 +817,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               >
                 {measureTexts[x.id] ?? ""}
               </div>
-            </Html>
+            </PageHtml>
           </group>
         ))}
         {solid.frames.length > 1 && (
@@ -840,7 +840,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               stereoAnchors.current.set(mark.key, l);
             }}
           >
-            <Html center zIndexRange={[30, 20]} style={{ pointerEvents: "none" }}>
+            <PageHtml center zIndexRange={[30, 20]} style={{ pointerEvents: "none" }}>
               <div
                 ref={(el) => {
                   const l = stereoAnchors.current.get(mark.key) ?? { anchor: null, el: null };
@@ -852,7 +852,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               >
                 (<i>{mark.text}</i>)
               </div>
-            </Html>
+            </PageHtml>
           </group>
         ))}
       </group>
@@ -871,11 +871,11 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
             />
           ) : (
             props.onRemake && (
-              <Html zIndexRange={[30, 20]}>
+              <PageHtml zIndexRange={[30, 20]}>
                 <div style={{ transform: "translate(-50%, 10px)" }}>
                   <Changed onRemake={props.onRemake} />
                 </div>
-              </Html>
+              </PageHtml>
             )
           )}
         </group>

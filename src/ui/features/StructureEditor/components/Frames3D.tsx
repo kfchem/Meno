@@ -1,4 +1,4 @@
-import { Html } from "@react-three/drei";
+import PageHtml from "./PageHtml";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 
 /** Kilocalories per mole in a hartree. */
@@ -79,7 +79,7 @@ export default function Frames3D({
     watch.current.observe(el);
   }, []);
   return (
-    <Html zIndexRange={[30, 20]}>
+    <PageHtml zIndexRange={[30, 20]}>
       <div
         className="flex flex-col items-center select-none"
         style={{ transform: "translate(-50%, 10px)" }}
@@ -130,7 +130,7 @@ export default function Frames3D({
         </div>
         {below}
       </div>
-    </Html>
+    </PageHtml>
   );
 }
 
