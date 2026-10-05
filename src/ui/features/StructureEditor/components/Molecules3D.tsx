@@ -14,8 +14,9 @@ import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { eyeOf, pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
 import CalcList3D from "./CalcList3D";
-import { isAsk, readGrid, resultsOn, type Ask, type ListResult } from "../../../../lib/calc/results";
+import { isAsk, readGrid, resultKey, resultsOn, type Ask, type ListResult } from "../../../../lib/calc/results";
 import { askFor, askKey, givenValue, useAsks } from "../../../../lib/calc/asks";
+import { titled } from "../../../../lib/calc/sources";
 import type { CalcInfo } from "../../../../lib/calc/output";
 import Molecule3DView from "./Molecule3DView";
 import { useDrawingStyle } from "../useDrawingStyle";
@@ -451,7 +452,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       {molecules.map((m) => {
         // (one of its lists open under it: the row chosen moves it, the row pointed at - or chosen - marks its atoms)
         const open = lists[m.id];
-        const list = open ? resultsOn(m.calc?.results, "list").find((r) => r.id === open.list) : undefined;
+        const list = open ? resultsOn(m.calc?.results, "list").find((r) => resultKey(r) === open.list) : undefined;
         const row = list && open.row != null ? list.rows[open.row] : undefined;
         const pointed = list && open.pointed != null ? list.rows[open.pointed] : undefined;
         // (the row's motion and surface: given, or asked for)
@@ -496,6 +497,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
               list ? (
                 <CalcList3D
                   list={list}
+                  title={titled(list, resultsOn(m.calc?.results, "list"))}
                   chosen={open.row}
                   onChoose={(i) => {
                     const st = store.getState();

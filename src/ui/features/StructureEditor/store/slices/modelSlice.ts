@@ -8,6 +8,7 @@ import { EditorState, Bond, Arrow, Model, Drawn } from "../types";
 import { turnedOver } from "../../utils/selection";
 import { schemeAmong } from "../../utils/copyPaste";
 import { relinked } from "../../utils/drawnLink";
+import { resultKey } from "../../../../../lib/calc/results";
 import type { Workspace } from "../../utils/workspace";
 import { StoreApi } from "zustand";
 import { DOUBLE_CLICK_MS } from "../../constants";
@@ -463,7 +464,7 @@ function shownLists(scheme: ImportedScheme | undefined, first: number, open: Edi
   const out = { ...open };
   (scheme?.molecules3d ?? []).forEach((m, i) => {
     const list = m.calc?.results?.find((r) => r.on === "list" && r.shown != null);
-    if (list?.on === "list" && list.shown != null) out[first + i] = { list: list.id, row: list.shown, pointed: null };
+    if (list?.on === "list" && list.shown != null) out[first + i] = { list: resultKey(list), row: list.shown, pointed: null };
   });
   return out;
 }

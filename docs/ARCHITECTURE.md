@@ -328,11 +328,16 @@ knows no program's format beyond that.
 - Readers are alike: every one added that reads a kind of output reads it
   (`readersFor`), and what they found is put together (`lib/calc/read.ts`
   `combine`). The geometries are the first's that gives any, a reader whose
-  atoms are not those is left out, and where two give the same thing -
-  each thing the calculation was, a result of the same kind and name - the
-  one chosen in Settings for that kind (`calcReaders.chosen`) gives it, or
-  else the first in the catalog's order. Each result keeps the reader it
-  came from. Where none is added, opening the file says which to add.
+  atoms are not those is left out, and each thing the calculation was is
+  the first's that gives it - the one chosen in Settings for that kind
+  (`calcReaders.chosen`), or else the first in the catalog's order. Every
+  reader's results are kept, the first's first, each with the reader it
+  came from: a result is known by its reader and its name with that reader
+  (`resultKey`), and names are never matched across readers. Where two
+  readers' results stand in one place, each reader's are under its name
+  (`lib/calc/sources.ts`: `cardGroupsOf` for cards and the chip's details,
+  `titled` for the menu's lists); the chip's line is the first's that
+  ranked any. Where none is added, opening the file says which to add.
 - An opened file that is no structure file but a kind of output
   (`openedAs`, `processFileContent`) is read so, and its geometries come in
   as an XYZ file's frames do (`calcResult`), its last shown; what the

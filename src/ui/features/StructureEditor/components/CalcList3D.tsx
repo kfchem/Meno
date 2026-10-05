@@ -40,6 +40,7 @@ const isoText = (iso: number) => (iso >= 0.01 ? iso.toFixed(3) : iso.toPrecision
  */
 export default function CalcList3D({
   list: result,
+  title,
   chosen,
   onChoose,
   onPoint,
@@ -51,6 +52,8 @@ export default function CalcList3D({
   area,
 }: {
   list: ListResult;
+  /** What it is called, where not its own name: its reader's added, where another reader's lists stand beside it. */
+  title?: string;
   chosen: number | null;
   onChoose: (row: number | null) => void;
   onPoint: (row: number | null) => void;
@@ -134,9 +137,9 @@ export default function CalcList3D({
       className="mt-1.5 w-max min-w-52 max-w-[24rem] rounded-2xl border border-gh-line bg-white/90 backdrop-blur shadow-sm py-1 meno-fade-in"
     >
       <div className="flex items-center justify-between gap-3 pl-3 pr-1.5 h-6 text-[11px] text-gh-gray">
-        <span className="truncate">{result.label}</span>
+        <span className="truncate">{title ?? result.label}</span>
         <button
-          aria-label={`Close ${result.label}`}
+          aria-label={`Close ${title ?? result.label}`}
           onClick={onClose}
           className="h-5 w-5 shrink-0 rounded-full flex items-center justify-center hover:bg-gh-base hover:text-gh-black"
         >
@@ -146,7 +149,7 @@ export default function CalcList3D({
       <div
         ref={list}
         role="listbox"
-        aria-label={result.label}
+        aria-label={title ?? result.label}
         className="relative grid gap-x-3 overflow-y-auto overflow-x-hidden"
         style={{
           gridTemplateColumns: `repeat(${result.columns.length}, auto)${spare ? ` ${spare}px` : ""}`,

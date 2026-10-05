@@ -418,12 +418,18 @@ read and attached to its molecule. Agreed with the maintainer on
   put together: an NBO plugin, say, adds NBO's analysis to what cclib read
   from the same Gaussian output. No reader is set above another (the
   maintainer, 2026-10-05).
-- **When readers find the same thing, the chemist chooses.** Settings
-  lists, for each kind of output, the installed readers that read it.
-  Where two find the same thing - the geometries, what the calculation
-  was, a result of the same name - the one chosen gives it, or else the
-  first in Meno's order. What a reader finds of atoms is kept only where
-  its atoms are those of the geometries, in the same order.
+- **Each reader's results are its own.** A result belongs to the reader
+  that gave it, and its name is that reader's own: names are never
+  matched across readers, and two readers' results of the same name are
+  two results, each shown as it says. Where two readers' results stand in
+  one place - a card, the menu's lists - each reader's are under its name;
+  with one reader, no name is said (the maintainer, 2026-10-06).
+- **Where readers overlap, the chemist chooses** what Meno keeps one of:
+  Settings lists, for each kind of output, the installed readers that read
+  it, and the one chosen gives the geometries and what the calculation
+  was, its results coming first - or else the first in Meno's order. What
+  a reader finds of atoms is kept only where its atoms are those of the
+  geometries, in the same order.
 
 ### Where the line is
 
@@ -522,8 +528,8 @@ Stages 3a to 3c, built in #143 and checked on a Mac and on Windows on
   readers*, adds it - asking first for the network - and takes it away
   again, its environment and its record with it. A kind of output is told
   by what its file starts with. Where readers overlap, every one added
-  reads the output and what they find is put together; where two find the
-  same thing, the one chosen for that kind gives it.
+  reads the output and each one's results are kept, its own; the one
+  chosen for that kind gives the geometries and what the calculation was.
 - **Opening an output.** It opens on a canvas tab of its own, its last
   geometry shown, an optimisation's steps as its frames. With no reader
   added that reads it, Meno says which to add; an output with no geometry

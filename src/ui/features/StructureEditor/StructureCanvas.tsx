@@ -83,7 +83,8 @@ import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
 import type { Molecule3D } from "./store/types";
-import { resultsOn } from "../../../lib/calc/results";
+import { resultKey, resultsOn } from "../../../lib/calc/results";
+import { titled } from "../../../lib/calc/sources";
 
 function StructureCanvasContent({
   active,
@@ -444,9 +445,9 @@ function StructureCanvasContent({
         ...(menuLink == null || menuLink === "gone" ? { onDrawFormula: () => void drawFormula(menuMolecule.id) } : {}),
         ...(resultsOn(menuMolecule.calc?.results, "list").length
           ? {
-              lists: resultsOn(menuMolecule.calc?.results, "list").map((l) => ({
-                name: l.label,
-                open: () => store.getState().openList3d(menuMolecule.id, l.id),
+              lists: resultsOn(menuMolecule.calc?.results, "list").map((l, _, all) => ({
+                name: titled(l, all),
+                open: () => store.getState().openList3d(menuMolecule.id, resultKey(l)),
               })),
             }
           : {}),

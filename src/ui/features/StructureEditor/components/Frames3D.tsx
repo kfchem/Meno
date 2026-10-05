@@ -1,6 +1,7 @@
 import PageHtml from "./PageHtml";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { chipLine, grouped, isMarked, resultsOn, valueText, type Result } from "../../../../lib/calc/results";
+import { chipLine, isMarked, resultsOn, valueText, type Result } from "../../../../lib/calc/results";
+import { cardGroupsOf } from "../../../../lib/calc/sources";
 import { ResultGroups, type CardGroups } from "./PointedCard3D";
 
 /** Kilocalories per mole in a hartree. */
@@ -128,13 +129,10 @@ export default function Frames3D({
   }, [open]);
   const shown = !single || open || hovered || lingering;
   // what the calculation found of the molecule, and of the frame told
-  const details: CardGroups = grouped([...resultsOn(results, "molecule"), ...resultsOn(results, "frames")]).map((g) => ({
-    group: g.group,
-    rows: g.results.map((r) => {
-      const v = r.on === "molecule" ? r.value : (r.values[told] ?? null);
-      return { label: r.label, text: valueText(v, r), marked: isMarked(v, r) };
-    }),
-  }));
+  const details: CardGroups = cardGroupsOf([...resultsOn(results, "molecule"), ...resultsOn(results, "frames")], (r) => {
+    const v = r.on === "molecule" ? r.value : (r.values[told] ?? null);
+    return { text: valueText(v, r), marked: isMarked(v, r) };
+  });
   const line = (energy?: number) => chipLine([about ?? "", energy != null ? absolute(energy) : ""], results);
   // how far it has risen to stay within the canvas, followed each frame
   // while it is open, and until it is back down

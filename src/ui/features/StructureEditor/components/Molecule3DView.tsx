@@ -14,7 +14,8 @@ import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
 import StereoText from "./StereoText";
 import { calcLine } from "../../../../lib/calc/output";
-import { grouped, isMarked, pairValue, resultsOn, valueText } from "../../../../lib/calc/results";
+import { isMarked, pairValue, resultsOn, valueText } from "../../../../lib/calc/results";
+import { cardGroupsOf } from "../../../../lib/calc/sources";
 import { VIBRATION_PERIOD, vibrationOffsets } from "../utils/vibration3d";
 import PointedCard3D, { type CardGroups } from "./PointedCard3D";
 import Surface3D from "./Surface3D";
@@ -395,23 +396,17 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     if ("atom" in on) {
       const i = on.atom;
       if (!atomResults.length || i >= n) return null;
-      const groups = grouped(atomResults).map((g) => ({
-        group: g.group,
-        rows: g.results.map((r) => ({ label: r.label, text: valueText(r.values[i], r), marked: isMarked(r.values[i], r) })),
-      }));
+      const groups = cardGroupsOf(atomResults, (r) => ({ text: valueText(r.values[i], r), marked: isMarked(r.values[i], r) }));
       return { title: name(i), groups, atoms: [i] };
     }
     const b = m.bonds[on.bond];
     if (!b || !pairResults.length) return null;
     const known = pairResults.filter((r) => pairValue(r, b.a1, b.a2) !== undefined);
     if (!known.length) return null;
-    const groups = grouped(known).map((g) => ({
-      group: g.group,
-      rows: g.results.map((r) => {
-        const v = pairValue(r, b.a1, b.a2)!;
-        return { label: r.label, text: valueText(v, r), marked: isMarked(v, r) };
-      }),
-    }));
+    const groups = cardGroupsOf(known, (r) => {
+      const v = pairValue(r, b.a1, b.a2)!;
+      return { text: valueText(v, r), marked: isMarked(v, r) };
+    });
     return { title: `${name(b.a1)}\u2013${name(b.a2)}`, groups, atoms: [b.a1, b.a2] };
   };
   const pointedAt = hoverAtom != null ? { atom: hoverAtom } : hoverBond != null ? { bond: hoverBond } : null;

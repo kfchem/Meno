@@ -8,8 +8,10 @@
  * need a way to trust it, and comes later.
  *
  * Readers are alike: every one added that reads a kind of output reads it,
- * and what they find is put together. Where two find the same thing, the
- * one chosen for that kind gives it - or else the first, in Meno's order.
+ * and what each finds is kept, its own. Where two read the same molecule,
+ * the one chosen for that kind gives what Meno keeps one of - the
+ * geometries, what the calculation was - and its findings come first; or
+ * else the first, in Meno's order.
  */
 import { CUBE_MARK } from "./cube";
 

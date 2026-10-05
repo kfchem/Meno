@@ -2,10 +2,10 @@
  * Reading a calculation's output (docs/WORKSPACE.md, stage 3): the kind of
  * output it is, told by its start; every reader added that reads that kind,
  * each reading it; and what they found, put together. Readers are alike:
- * where two find the same thing - the geometries, what the calculation was,
- * a result of the same name - the one chosen in Settings for that kind
- * gives it, or else the first in Meno's order. What no reader added reads
- * says which would.
+ * every one's results are kept, each its own; where two give what Meno
+ * keeps one of - the geometries, what the calculation was - the one chosen
+ * in Settings for that kind gives it, or else the first in Meno's order,
+ * and its results come first. What no reader added reads says which would.
  */
 import { useAppSettings } from "../settings/appSettings";
 import { READER_PLUGINS, readersFor, readersOf, type OutputKind, type ReaderPlugin } from "./catalog";
@@ -44,19 +44,17 @@ export function checked(output: ReaderOutput, kind: OutputKind, name: string): R
 /** What one reader found in an output, and the reader: its name and version. */
 export type Found = { from: string; output: ReaderOutput };
 
-/** What makes two results the same thing: what they belong to, and what they are called. */
-const sameThing = (r: Result) => `${r.on}\u0000${r.group}\u0000${r.label}`;
-
 /**
  * What readers found in one output, put together - `found` in the order
  * their findings count, where two find the same thing. The geometries are
  * the first's that gives any; a reader whose atoms are not those, in that
  * order, is left out, since nothing it says of them could be placed. Each
  * frame's energy, and each thing the calculation was, are the first's
- * that gives them; every result is kept, with the reader it came from, but
- * one of the same name and kind as a result kept already. What belongs to
- * frames is kept only from a reader that read as many as the geometries
- * are. Also: the readers whose findings were put together.
+ * that gives them; every reader's results are kept, each with the reader
+ * it came from - a name is its reader's own, matched against no other's -
+ * the first's first. What belongs to frames is kept only from a reader that
+ * read as many as the geometries are. Also: the readers whose findings
+ * were put together.
  */
 export function combine(found: readonly Found[]): { output: ReaderOutput; readers: string[] } {
   const framesOf = (o: ReaderOutput) =>
@@ -72,15 +70,7 @@ export function combine(found: readonly Found[]): { output: ReaderOutput; reader
   const sameFrames = (o: ReaderOutput) => framesOf(o).length === frames.length;
   const first = <T>(pick: (o: ReaderOutput) => T | null | undefined): T | undefined =>
     taken.map((f) => pick(f.output)).find((v) => v != null && v !== "") ?? undefined;
-  const results: Result[] = [];
-  const seen = new Set<string>();
-  for (const f of taken) {
-    for (const r of readResults(f.output.results, atoms.length, sameFrames(f.output) ? frames.length : 0, f.from)) {
-      if (seen.has(sameThing(r))) continue;
-      seen.add(sameThing(r));
-      results.push(r);
-    }
-  }
+  const results: Result[] = taken.flatMap((f) => readResults(f.output.results, atoms.length, sameFrames(f.output) ? frames.length : 0, f.from));
   return {
     output: {
       schema: OUTPUT_SCHEMA,
