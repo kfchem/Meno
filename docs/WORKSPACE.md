@@ -446,12 +446,14 @@ it:
 
 ### Tests
 
-Small outputs from cclib's repository (BSD-3; its notice is kept beside
-them): ORCA's and xTB's, committed. Gaussian's outputs carry Gaussian's
-own copyright notice, so they are not committed: cclib's Gaussian samples
-are kept on the developer's machine, in a folder git ignores, and the
-tests that read them run where they are there and are skipped where they
-are not, as in CI (the maintainer, 2026-10-05).
+No program's output is committed (the maintainer, 2026-10-05). Gaussian's
+carry Gaussian's own copyright notice, and the rest are kept out the same
+way. Sample outputs - small ones from cclib's repository, ORCA's, xTB's
+and Gaussian's - are kept on the developer's machine, in a folder git
+ignores. The tests that read them run where they are there and are
+skipped where they are not, as in CI. What a reader hands back is Meno's
+own plain data, so CI tests Meno's side of it - opening, saving, showing -
+with that data written by hand.
 
 ### In order
 
