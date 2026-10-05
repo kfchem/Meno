@@ -96,7 +96,9 @@ pub struct Area {
 pub fn catch(area: Area) -> Result<(), String> {
     let app = APP.get().ok_or("not started")?;
     let window = app.get_webview_window("main").ok_or("no window")?;
-    let page = window.hwnd().map_err(|e| e.to_string())?;
+    // (Tauri's handle is of the windows crate Tauri is built on, which need
+    // not be the version this crate uses: the same window, as a pointer)
+    let page = HWND(window.hwnd().map_err(|e| e.to_string())?.0);
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let mut over = OVER.lock().unwrap();
     if over.is_some() {
