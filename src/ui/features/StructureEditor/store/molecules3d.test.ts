@@ -321,3 +321,46 @@ describe("molecules in 3D a file brings", () => {
     expect(state().frames3d).toEqual({ 1: 2, 3: 2 });
   });
 });
+
+describe("a molecule's vibrations, listed", () => {
+  // water read from a calculation: its three vibrations, the last with no displacements given
+  const calc = {
+    reader: "cclib 1.9rc1",
+    vibrations: [
+      { frequency: 1650, displacements: [0, 0, 0.07, 0, -0.43, -0.56, 0, 0.43, -0.56, 0, 0, 0, 0, 0, 0] },
+      { frequency: 3700, displacements: [0, 0, 0.05, 0, 0.58, -0.4, 0, -0.58, -0.4, 0, 0, 0, 0, 0, 0] },
+      { frequency: -120 },
+    ],
+  };
+  function calcEditor() {
+    const doc = createStructureDocument();
+    doc.edit("add", (d) => addMolecule3d(addMolecule3d(d, { ...water, at: { x: 0, y: 0 }, calc }), { ...water, at: { x: 6, y: 0 } }));
+    const store = createEditorStore(doc);
+    connectStoreToDocument(store, doc);
+    return { doc, state: () => store.getState() };
+  }
+
+  it("are opened with none chosen, one chosen, chosen again, and closed", () => {
+    const { state } = calcEditor();
+    state().openVibrations3d(1);
+    expect(state().vibrations3d).toEqual({ 1: null });
+    state().chooseVibration3d(1, 0);
+    expect(state().vibrations3d).toEqual({ 1: 0 });
+    state().chooseVibration3d(1, null);
+    expect(state().vibrations3d).toEqual({ 1: null });
+    state().closeVibrations3d(1);
+    expect(state().vibrations3d).toEqual({});
+  });
+
+  it("are forgotten when their molecule is gone, or has them no more", () => {
+    const { doc, state } = calcEditor();
+    state().openVibrations3d(1);
+    state().chooseVibration3d(1, 1);
+    doc.edit("forget", (d) => ({ ...d, molecules3d: d.molecules3d!.map((m) => (m.id === 1 ? { ...m, calc: { reader: "cclib" } } : m)) }));
+    expect(state().vibrations3d).toEqual({});
+    const again = calcEditor();
+    again.state().openVibrations3d(1);
+    again.doc.edit("delete", (d) => ({ ...d, molecules3d: d.molecules3d!.filter((m) => m.id !== 1) }));
+    expect(again.state().vibrations3d).toEqual({});
+  });
+});

@@ -94,7 +94,8 @@ export default function Frames3D({
   // (a single geometry has nothing to go through: it says what the
   // calculation was, and only while its molecule is pointed at)
   const single = count < 2;
-  if (single && !open) return null;
+  const chip = !single || open;
+  if (!chip && !below) return null;
   return (
     <PageHtml zIndexRange={[30, 20]}>
       <div
@@ -106,62 +107,64 @@ export default function Frames3D({
           setPointed(null);
         }}
       >
-        <div
-          className="rounded-2xl border border-gh-line bg-white/85 backdrop-blur shadow-sm py-1 flex flex-col items-center overflow-hidden transition-[width,opacity] duration-200 ease-out"
-          style={{ opacity: full ? 1 : 0.75, width: (full ? Math.max(width, saidWidth) : saidWidth) + 2 * SIDE }}
-        >
+        {chip && (
           <div
-            className="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
-            style={{ gridTemplateRows: full ? "1fr" : "0fr", opacity: full ? 1 : 0 }}
+            className="rounded-2xl border border-gh-line bg-white/85 backdrop-blur shadow-sm py-1 flex flex-col items-center overflow-hidden transition-[width,opacity] duration-200 ease-out"
+            style={{ opacity: full ? 1 : 0.75, width: (full ? Math.max(width, saidWidth) : saidWidth) + 2 * SIDE }}
           >
-            <div className="overflow-hidden flex flex-col items-center" style={{ width }}>
-              {above && !single && (
-                <Energies
-                  above={above}
-                  highest={highest}
-                  frame={frame}
-                  pointed={pointed}
-                  width={width}
-                  onPoint={setPointed}
-                  onFrame={onFrame}
-                />
-              )}
-              {!single && (
-                <input
-                  type="range"
-                  aria-label="Frame"
-                  min={0}
-                  max={count - 1}
-                  step={1}
-                  value={frame}
-                  onChange={(e) => onFrame(parseInt(e.target.value, 10))}
-                  className="my-1.5 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
-                  style={{ width }}
-                />
-              )}
-              {about && !single && (
-                <div className="mb-1 text-center text-[11px] leading-[16px] text-gh-gray tabular-nums">
+            <div
+              className="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
+              style={{ gridTemplateRows: full ? "1fr" : "0fr", opacity: full ? 1 : 0 }}
+            >
+              <div className="overflow-hidden flex flex-col items-center" style={{ width }}>
+                {above && !single && (
+                  <Energies
+                    above={above}
+                    highest={highest}
+                    frame={frame}
+                    pointed={pointed}
+                    width={width}
+                    onPoint={setPointed}
+                    onFrame={onFrame}
+                  />
+                )}
+                {!single && (
+                  <input
+                    type="range"
+                    aria-label="Frame"
+                    min={0}
+                    max={count - 1}
+                    step={1}
+                    value={frame}
+                    onChange={(e) => onFrame(parseInt(e.target.value, 10))}
+                    className="my-1.5 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
+                    style={{ width }}
+                  />
+                )}
+                {about && !single && (
+                  <div className="mb-1 text-center text-[11px] leading-[16px] text-gh-gray tabular-nums">
+                    {about}
+                    {energies && <span className="text-gh-black"> · {absolute(energies[told])}</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div ref={said} className="w-max text-[11px] leading-[18px] text-gh-gray tabular-nums whitespace-nowrap">
+              {single ? (
+                <>
                   {about}
-                  {energies && <span className="text-gh-black"> · {absolute(energies[told])}</span>}
-                </div>
+                  {energies && <span className="text-gh-black"> · {absolute(energies[0])}</span>}
+                </>
+              ) : (
+                <>
+                  {told + 1} / {count}
+                  {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
+                  {populations?.[told] != null && <span className="text-gh-black"> · {share(populations[told])}</span>}
+                </>
               )}
             </div>
           </div>
-          <div ref={said} className="w-max text-[11px] leading-[18px] text-gh-gray tabular-nums whitespace-nowrap">
-            {single ? (
-              <>
-                {about}
-                {energies && <span className="text-gh-black"> · {absolute(energies[0])}</span>}
-              </>
-            ) : (
-              <>
-                {told + 1} / {count}
-                {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
-                {populations?.[told] != null && <span className="text-gh-black"> · {share(populations[told])}</span>}
-              </>
-            )}
-          </div>
-        </div>
+        )}
         {below}
       </div>
     </PageHtml>

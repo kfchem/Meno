@@ -158,6 +158,16 @@ export type EditorState = {
   overlay3d: Record<number, true>;
   setOverlay3d: (id: number, on: boolean) => void;
   /**
+   * Molecules in 3D with their vibrations listed, by id, and the one each
+   * moves in - its index among them - or null, none.
+   */
+  vibrations3d: Record<number, number | null>;
+  /** Lists a molecule's vibrations, none of them chosen. */
+  openVibrations3d: (id: number) => void;
+  /** The vibration a molecule moves in; null, none - it comes to rest. */
+  chooseVibration3d: (id: number, mode: number | null) => void;
+  closeVibrations3d: (id: number) => void;
+  /**
    * The atoms and bonds chosen in one molecule in 3D, by index, each in the
    * order chosen: what a measurement is of (utils/molecule3d `chosenPath`).
    */

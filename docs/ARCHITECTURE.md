@@ -320,6 +320,16 @@ knows no program's format beyond that.
   (`openedAs`, `processFileContent`) is read so, and its geometries come in
   as an XYZ file's frames do (`calcResult`), its last shown; what the
   calculation was is kept on the molecule (`calc`, saved in `.meno`).
+- Vibrations (3b): a molecule whose calculation gave them has *Vibrations*
+  in its menu, which lists them under it (`Vibrations3D`; the view's
+  `vibrations3d`, by molecule, with the one chosen). One chosen, its atoms
+  move in it each frame (`Molecule3DView`): what the motion added is taken
+  off the atoms' places before the frame is placed and put on again after
+  (`utils/vibration3d` `vibrationOffsets`), so frames, measurements and
+  labels follow as for any motion; its swing eases in and out, and another
+  chosen waits for the one moving to come to rest. The atom that moves most
+  goes 0.3 Å, once every 1.2 s, whatever the frequency. No arrows and no
+  spectrum (the maintainer).
 - The first reader is cclib's (`resources/workers/reader_cclib.py`), cclib
   used as a library, its version pinned in
   `resources/py/requirements.reader-cclib.lock` (1.9rc1: 1.8.1 does not

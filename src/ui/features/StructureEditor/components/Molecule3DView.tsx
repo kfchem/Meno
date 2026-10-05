@@ -1,6 +1,6 @@
 import PageHtml from "./PageHtml";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
@@ -14,6 +14,7 @@ import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
 import StereoText from "./StereoText";
 import { calcLine } from "../../../../lib/calc/output";
+import { VIBRATION_PERIOD, vibrationOffsets } from "../utils/vibration3d";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -53,6 +54,8 @@ const blue = (k: number) => WHITE.clone().lerp(HIGHLIGHT, k);
 const OUTLINE_TAU = 0.07;
 const PLACE_TAU = 0.08;
 const FRAME_TAU = 0.06;
+/** How quickly a vibration's swing eases in, and out as it comes to rest, in seconds. */
+const VIBRATION_TAU = 0.25;
 const LOOK_TAU = 0.08;
 /** How gently the frames' chip follows the molecule's lowest point as it turns, in seconds. */
 const PILL_TAU = 0.12;
@@ -161,6 +164,10 @@ export type Molecule3DViewProps = {
    */
   stereoFont: { size: number; units: "world" | "px"; family: string; parentheses: boolean; gap: number };
   onRisen?: () => void;
+  /** The vibration it moves in: its atoms' displacements, x, y, z of each; none, it rests. */
+  vibration?: number[] | null;
+  /** Its vibrations, listed under it (Vibrations3D). */
+  vibrations?: ReactNode;
 };
 
 /**
@@ -199,6 +206,15 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   // what is drawn now, on its way to what it is to be
   const target = solid.frames[frameOf(solid, frame)];
   const places = useRef<Float32Array>(Float32Array.from(target));
+  // the vibration it moves in: the displacements moving it, how far into
+  // its swing (eased in and out), where in its period, and what it added to
+  // the atoms' places this frame - taken off again before the next
+  const vib = useRef<{ shown: number[] | null; level: number; phase: number; offset: Float32Array | null }>({
+    shown: null,
+    level: 0,
+    phase: 0,
+    offset: null,
+  });
   const fill = useRef(look === "space" ? 1 : 0);
   const swell = useRef(new Map<number, { v: number; vel: number; to: number }>());
   const rings = useRef(new Map<number, { v: number; vel: number; to: number }>());
@@ -347,6 +363,12 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     // another frame: its atoms go there
     let reshaped = dirty.current;
     const p = places.current;
+    // (what a vibration added last frame taken off first: what follows is
+    // of the atoms at rest)
+    const v = vib.current;
+    if (v.offset && v.offset.length === p.length) for (let i = 0; i < p.length; i++) p[i] -= v.offset[i];
+    const offset = v.offset;
+    v.offset = null;
     let far = 0;
     const rising = props.rising;
     const riseT = rising ? (performance.now() - rising.start) / 1000 : 0;
@@ -366,6 +388,27 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       p.set(target);
       reshaped = true;
     }
+    // a vibration chosen: the atoms move in it, its swing eased in and out;
+    // another chosen, the one moving comes to rest before the next begins
+    const wanted = props.vibration?.length === p.length ? props.vibration : null;
+    if (v.shown !== wanted && (!v.shown || v.level < 0.02)) {
+      v.shown = wanted;
+      v.phase = 0;
+    }
+    if (v.shown) {
+      v.level = follow(v.level, v.shown === wanted ? 1 : 0, step, VIBRATION_TAU);
+      if (v.shown !== wanted && v.level < 0.02) {
+        v.shown = wanted;
+        v.level = 0;
+        v.phase = 0;
+      }
+      v.phase += (step / VIBRATION_PERIOD) * 2 * Math.PI;
+      if (v.shown && v.level > 0) {
+        v.offset = vibrationOffsets(v.shown, v.level * Math.sin(v.phase), offset ?? undefined);
+        for (let i = 0; i < p.length; i++) p[i] += v.offset[i];
+      }
+      reshaped = moving = true;
+    } else if (offset) reshaped = true;
     // another look: its atoms grow, or shrink, and its bonds give way
     const f = follow(fill.current, look === "space" ? 1 : 0, step, LOOK_TAU);
     if (f !== fill.current) {
@@ -891,7 +934,14 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               energies={m.energies?.length === solid.frames.length ? m.energies : undefined}
               open={props.framesOpen}
               onFrame={props.onFrame}
-              below={props.onRemake && <Changed onRemake={props.onRemake} />}
+              below={
+                (props.onRemake || props.vibrations) && (
+                  <>
+                    {props.onRemake && <Changed onRemake={props.onRemake} />}
+                    {props.vibrations}
+                  </>
+                )
+              }
               populations={shares}
               about={m.calc ? calcLine(m.calc) : undefined}
             />

@@ -12,6 +12,7 @@ import { linkOf } from "../chem/make3d";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { eyeOf, pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
+import Vibrations3D from "./Vibrations3D";
 import Molecule3DView from "./Molecule3DView";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { editorLayoutOptions } from "../layoutOptions";
@@ -93,6 +94,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const turns = useEditor((s) => s.turns3d);
   const rising = useEditor((s) => s.rising3d);
   const overlay = useEditor((s) => s.overlay3d);
+  const vibrations = useEditor((s) => s.vibrations3d);
   // the drawing's atom under the pointer: lit in the molecules made from it
   const hoveredDrawn = useEditor((s) => s.hovered.atomId);
   // and the drawing each was made from, which may have changed since
@@ -442,6 +444,17 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           linkedAtom={hoveredDrawn != null && m.drawnFrom ? (m.drawnFrom.indexOf(hoveredDrawn) >= 0 ? m.drawnFrom.indexOf(hoveredDrawn) : null) : null}
           onHoverAtom={(atom) => store.getState().setHoveredAtom3d(m.id, atom)}
           onRemake={remake && linkOf(m, drawing) === "changed" ? () => remake(m.id) : undefined}
+          vibration={vibrations[m.id] != null ? (m.calc?.vibrations?.[vibrations[m.id]!]?.displacements ?? null) : null}
+          vibrations={
+            m.id in vibrations && m.calc?.vibrations?.length ? (
+              <Vibrations3D
+                vibrations={m.calc.vibrations}
+                chosen={vibrations[m.id]}
+                onChoose={(mode) => store.getState().chooseVibration3d(m.id, mode)}
+                onClose={() => store.getState().closeVibrations3d(m.id)}
+              />
+            ) : undefined
+          }
         />
       ))}
       {leaving.map(({ m, turn, frame }) => (

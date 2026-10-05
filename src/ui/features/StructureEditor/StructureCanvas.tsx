@@ -441,6 +441,7 @@ function StructureCanvasContent({
         ...(menuLink === "live" || menuLink === "changed" ? { onTurnLikeDrawing: () => turnLikeDrawing(menuMolecule.id) } : {}),
         ...(menuLink === "changed" ? { onRemake: () => remake3d(menuMolecule.id) } : {}),
         ...(menuLink == null || menuLink === "gone" ? { onDrawFormula: () => void drawFormula(menuMolecule.id) } : {}),
+        ...(menuMolecule.calc?.vibrations?.length ? { onVibrations: () => store.getState().openVibrations3d(menuMolecule.id) } : {}),
         ...((menuMolecule.frames?.length ?? 0) > 0
           ? {
               overlay: {
