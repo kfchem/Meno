@@ -9,6 +9,18 @@
  */
 import type { ReaderOutput } from "./output";
 
+/**
+ * A reader, however it runs - a plugin's worker, or one that comes with
+ * Meno: what it makes of a file, and a promise it gave, asked for.
+ */
+export interface Reader {
+  /** Its version, once it has said; a reader that comes with Meno, empty. */
+  version: string | null;
+  read(name: string, text: string): Promise<ReaderOutput>;
+  /** What a promise it gave stands for - by its key - the file's name and text sent again. */
+  ask(key: string, name: string, text: string): Promise<unknown>;
+}
+
 export type ReaderTransport = {
   send(line: string): void;
   /** Hears each line the worker writes; the function returned stops it. */
@@ -20,7 +32,7 @@ const TIMEOUT_MS = 120_000;
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
 
-export class ReaderClient {
+export class ReaderClient implements Reader {
   private next = 1;
   private pending = new Map<number, Pending>();
   private stop: () => void;
@@ -61,14 +73,23 @@ export class ReaderClient {
 
   /** What the reader makes of a file: its name, as given, and its text. */
   read(name: string, text: string): Promise<ReaderOutput> {
+    return this.request({ op: "read", name, text }, `reading ${name}`) as Promise<ReaderOutput>;
+  }
+
+  /** What a promise the reader gave stands for, by its key: the file it read sent again. */
+  ask(key: string, name: string, text: string): Promise<unknown> {
+    return this.request({ op: "ask", key, name, text }, `working out ${key} of ${name}`);
+  }
+
+  private request(question: Record<string, unknown>, what: string): Promise<unknown> {
     const id = this.next++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`${this.name} did not finish reading ${name} in time`));
+        reject(new Error(`${this.name} did not finish ${what} in time`));
       }, this.timeoutMs);
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
-      this.transport.send(JSON.stringify({ id, op: "read", name, text }));
+      this.pending.set(id, { resolve, reject, timer });
+      this.transport.send(JSON.stringify({ id, ...question }));
     });
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { OUTPUT_KINDS, READER_PLUGINS, readerFor, readersOf, type ReaderPlugin } from "../../../lib/calc/catalog";
+import { OUTPUT_KINDS, READER_PLUGINS, readerFor, readersOf, type PythonReader, type ReaderPlugin } from "../../../lib/calc/catalog";
 import { addedReaders, addReader, removeReader, useReaders } from "../../../lib/calc/workers";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 
@@ -65,17 +65,22 @@ export default function CalcReaderSettings() {
   );
 }
 
-/** A reader: what it is and reads, whether it is added, and the button that adds it or takes it away. */
+/**
+ * A reader: what it is and reads, whether it is added, and the button that
+ * adds it or takes it away - or, one that comes with Meno, that it does.
+ */
 function Reader({ plugin: p, state, problem }: { plugin: ReaderPlugin; state?: string; problem?: string }) {
   const [busy, setBusy] = useState(false);
-  const run = (job: (p: ReaderPlugin) => Promise<void>) => {
+  const run = (job: (p: PythonReader) => Promise<void>) => {
+    if (p.builtin) return;
     setBusy(true);
     job(p)
       .catch(() => {}) // (said by the reader's problem)
       .finally(() => setBusy(false));
   };
-  const status =
-    state === "added"
+  const status = p.builtin
+    ? "Comes with Meno"
+    : state === "added"
       ? "Added"
       : state === "adding"
         ? "Adding…"
@@ -88,20 +93,22 @@ function Reader({ plugin: p, state, problem }: { plugin: ReaderPlugin; state?: s
     <div className="rounded-lg border border-gh-line bg-white px-4 py-3 flex items-start gap-4">
       <div className="flex-1">
         <div className="text-sm text-gh-black">
-          {p.name} <span className="text-gh-gray">{p.version}</span>
+          {p.name} {p.version && <span className="text-gh-gray">{p.version}</span>}
         </div>
         <p className="text-xs text-gh-gray mt-0.5">{p.description}</p>
         <p className="text-xs text-gh-gray mt-1">Reads {p.reads.map((k) => KIND_NAME[k]).join(", ")}.</p>
-        <p className="text-xs text-gh-gray mt-1">
-          {p.licence} · {p.homepage.replace(/^https?:\/\//, "")}
-        </p>
+        {!p.builtin && (
+          <p className="text-xs text-gh-gray mt-1">
+            {p.licence} · {p.homepage.replace(/^https?:\/\//, "")}
+          </p>
+        )}
         {problem && <p className="text-xs text-accel-accent mt-1 meno-fade-in">{problem}</p>}
       </div>
       <div className="flex flex-col items-end gap-1.5">
         <span key={status} className="text-xs text-gh-gray meno-fade-in">
           {status}
         </span>
-        {(state === "added" || state === "absent") && (
+        {!p.builtin && (state === "added" || state === "absent") && (
           <button
             disabled={busy}
             onClick={() => run(state === "added" ? removeReader : addReader)}

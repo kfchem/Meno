@@ -10,6 +10,7 @@ import { acceptStyleChoice } from "../../../../lib/chem/styleFields";
 import type { StyleChoice } from "../../../../lib/chem/style";
 import type { Carried3D, Drawn, EditorState } from "../store/types";
 import { readDrawn } from "./copyPaste";
+import { calcShowing } from "../../../../lib/calc/asks";
 
 export const WORKSPACE = "meno-workspace";
 export const WORKSPACE_VERSION = 1;
@@ -25,16 +26,25 @@ export type Workspace = {
 
 type Saved = Pick<
   EditorState,
-  "model" | "arrows" | "pluses" | "molecules3d" | "turns3d" | "frames3d" | "docStyle" | "aromaticEnabled" | "aromaticRings"
+  "model" | "arrows" | "pluses" | "molecules3d" | "turns3d" | "frames3d" | "lists3d" | "docStyle" | "aromaticEnabled" | "aromaticRings"
 >;
 
-/** The canvas's molecules in 3D as a file carries them: each turned, and showing the frame, as it is. */
-export function carriedOf(state: Pick<Saved, "molecules3d" | "turns3d" | "frames3d">): Carried3D[] {
-  return state.molecules3d.map(({ id, ...m }) => ({
-    ...m,
-    ...(state.turns3d[id] ? { turn: state.turns3d[id] } : {}),
-    ...(state.frames3d[id] ? { frame: state.frames3d[id] } : {}),
-  }));
+/**
+ * The canvas's molecules in 3D as a file carries them: each turned, and
+ * showing the frame, as it is - and a calculation's promise it is showing
+ * (a surface, a motion), given, as what it came to (lib/calc/asks).
+ */
+export function carriedOf(state: Pick<Saved, "molecules3d" | "turns3d" | "frames3d"> & Partial<Pick<Saved, "lists3d">>): Carried3D[] {
+  return state.molecules3d.map(({ id, ...m }) => {
+    const open = state.lists3d?.[id];
+    return {
+      ...m,
+      ...(m.calc && open ? { calc: calcShowing(m.calc, open.list, open.row) } : {}),
+      ...(state.turns3d[id] ? { turn: state.turns3d[id] } : {}),
+      ...(state.frames3d[id] ? { frame: state.frames3d[id] } : {}),
+      ...(open ? { list: { id: open.list, row: open.row, ...(open.iso != null ? { iso: open.iso } : {}) } } : {}),
+    };
+  });
 }
 
 /** The canvas as a workspace file. */

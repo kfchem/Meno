@@ -3,8 +3,9 @@ import { listen } from "@tauri-apps/api/event";
 import { resolveResource } from "@tauri-apps/api/path";
 import { create } from "zustand";
 import { ensurePyEnv, pyEnvReady, removePyEnv } from "../pyEnv";
-import { READER_PLUGINS, type ReaderPlugin } from "./catalog";
-import { ReaderClient } from "./client";
+import { READER_PLUGINS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { ReaderClient, type Reader } from "./client";
+import { builtinReader } from "./builtin";
 
 /**
  * The reader plugins on this computer, and their workers: a reader is
@@ -12,7 +13,8 @@ import { ReaderClient } from "./client";
  * Settings, *Calculation readers*, and taken away there; its worker is
  * started the first time it is asked to read, then kept for the session.
  * A worker reads what it is sent and has no business on the network; the
- * app keeps it off it.
+ * app keeps it off it. A reader that comes with Meno is always added, and
+ * runs in the app (./builtin).
  */
 export type ReaderState = "absent" | "adding" | "added" | "removing";
 
@@ -33,11 +35,17 @@ const setState = (id: string, state: ReaderState, problem?: string) =>
 const READY_MS = 60_000;
 
 const running = new Map<string, Promise<{ client: ReaderClient; id: string }>>();
+const builtins = new Map<string, Reader>();
 
 /** The readers added on this computer, looked at afresh. */
 export async function addedReaders(plugins: readonly ReaderPlugin[] = READER_PLUGINS): Promise<Set<string>> {
   const added = new Set<string>();
   for (const p of plugins) {
+    if (p.builtin) {
+      setState(p.id, "added");
+      added.add(p.id);
+      continue;
+    }
     const here = useReaders.getState().state[p.id];
     if (here === "adding" || here === "removing") continue;
     const ready = await pyEnvReady(p.profile);
@@ -48,7 +56,7 @@ export async function addedReaders(plugins: readonly ReaderPlugin[] = READER_PLU
 }
 
 /** Adds a reader: sets its environment up, asking first whether it may download. */
-export async function addReader(p: ReaderPlugin): Promise<void> {
+export async function addReader(p: PythonReader): Promise<void> {
   setState(p.id, "adding");
   try {
     await ensurePyEnv(p.profile);
@@ -60,7 +68,7 @@ export async function addReader(p: ReaderPlugin): Promise<void> {
 }
 
 /** Takes a reader away: its worker stopped, its environment removed. */
-export async function removeReader(p: ReaderPlugin): Promise<void> {
+export async function removeReader(p: PythonReader): Promise<void> {
   setState(p.id, "removing");
   try {
     const worker = running.get(p.id);
@@ -79,7 +87,11 @@ export async function removeReader(p: ReaderPlugin): Promise<void> {
 }
 
 /** A reader's worker, started the first time it is asked for; the reader must be added. */
-export function readerClient(p: ReaderPlugin): Promise<ReaderClient> {
+export function readerClient(p: ReaderPlugin): Promise<Reader> {
+  if (p.builtin) {
+    if (!builtins.has(p.id)) builtins.set(p.id, builtinReader(p.id));
+    return Promise.resolve(builtins.get(p.id)!);
+  }
   let worker = running.get(p.id);
   if (!worker) {
     worker = start(p);
@@ -91,7 +103,7 @@ export function readerClient(p: ReaderPlugin): Promise<ReaderClient> {
 
 type Line = { id: string; line: string };
 
-async function start(p: ReaderPlugin): Promise<{ client: ReaderClient; id: string }> {
+async function start(p: PythonReader): Promise<{ client: ReaderClient; id: string }> {
   if (!(await pyEnvReady(p.profile))) throw new Error(`${p.name} is not added: add it in Settings, Calculation readers.`);
   const python = await ensurePyEnv(p.profile);
   const script = await resolveResource(p.worker);

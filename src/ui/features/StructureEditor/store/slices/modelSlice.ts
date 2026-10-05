@@ -261,7 +261,7 @@ export const createModelSlice = (
     get().forgetInteraction();
     // (each molecule in 3D showing the frame its file says - numbered from
     // the first, in order, as replaceModel left them to be)
-    set((prev: EditorState) => ({ ...prev, frames3d: shownFrames(scheme, 1, {}) }));
+    set((prev: EditorState) => ({ ...prev, frames3d: shownFrames(scheme, 1, {}), lists3d: shownLists(scheme, 1, {}) }));
   },
 
   openWorkspace: (ws: Workspace, start = false) => {
@@ -280,11 +280,14 @@ export const createModelSlice = (
     // numbered from the first, in order, as replaceModel left them to be
     const turns3d: EditorState["turns3d"] = {};
     const frames3d: EditorState["frames3d"] = {};
+    const lists3d: EditorState["lists3d"] = {};
     (drawn.molecules3d ?? []).forEach((m, i) => {
       if (m.turn) turns3d[i + 1] = m.turn;
       if (m.frame) frames3d[i + 1] = m.frame;
+      // (a list open as it was saved, its row chosen and its surface's value)
+      if (m.list) lists3d[i + 1] = { list: m.list.id, row: m.list.row, pointed: null, ...(m.list.iso != null ? { iso: m.list.iso } : {}) };
     });
-    set((prev: EditorState) => ({ ...prev, turns3d, frames3d }));
+    set((prev: EditorState) => ({ ...prev, turns3d, frames3d, lists3d }));
   },
 
   /** A file opened over what the canvas holds: one step, arrow and all. */
@@ -361,7 +364,7 @@ export const createModelSlice = (
     set((prev: EditorState) => ({
       ...prev,
       // (each molecule in 3D added showing the frame its file says)
-      ...(edited ? { frames3d: shownFrames(scheme, start3d, prev.frames3d) } : {}),
+      ...(edited ? { frames3d: shownFrames(scheme, start3d, prev.frames3d), lists3d: shownLists(scheme, start3d, prev.lists3d) } : {}),
       // (selected, as a paste is)
       ...(edited && next.atoms.length ? { sel: added(start, doc.getState().model), selAnchor: null } : {}),
       hovered: { atomId: null, bondId: null },
@@ -447,6 +450,20 @@ function shownFrames(scheme: ImportedScheme | undefined, first: number, shown: E
   const out = { ...shown };
   (scheme?.molecules3d ?? []).forEach((m, i) => {
     if (m.frame) out[first + i] = m.frame;
+  });
+  return out;
+}
+
+/**
+ * Each molecule in 3D added from a file, with a list its reader asked to be
+ * shown as it comes (lib/calc/results `shown`) - a cube file's grids -
+ * opened under it, that row chosen; numbered as `shownFrames` numbers them.
+ */
+function shownLists(scheme: ImportedScheme | undefined, first: number, open: EditorState["lists3d"]): EditorState["lists3d"] {
+  const out = { ...open };
+  (scheme?.molecules3d ?? []).forEach((m, i) => {
+    const list = m.calc?.results?.find((r) => r.on === "list" && r.shown != null);
+    if (list?.on === "list" && list.shown != null) out[first + i] = { list: list.id, row: list.shown, pointed: null };
   });
   return out;
 }

@@ -12,7 +12,7 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Drawn, Look3D, Model, Molecule3D, Plus } from "./store/types";
+import type { Arrow, Atom, Bond, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus } from "./store/types";
 
 export type StructureDocument = {
   model: Model;
@@ -662,7 +662,7 @@ export type ImportedScheme = {
   arrows?: Omit<Arrow, "id">[];
   pluses?: Omit<Plus, "id">[];
   /** Molecules in 3D a file brings, where they are to stand - and, where it says, the frame each shows (an optimisation's last). */
-  molecules3d?: (Omit<Molecule3D, "id"> & { frame?: number })[];
+  molecules3d?: (Omit<Molecule3D, "id"> & { frame?: number; list?: CarriedList })[];
 };
 
 /** The arrows and pluses drawn with a part - a paste, a document's record - as a scheme to add. */
@@ -671,7 +671,7 @@ export function schemeOf(part: Drawn): ImportedScheme {
     arrows: (part.arrows ?? []).map(({ id: _id, ...a }) => a),
     pluses: (part.pluses ?? []).map(({ id: _id, ...p }) => p),
     // (how one was turned, and its frame, are the view's: not the document's)
-    molecules3d: (part.molecules3d ?? []).map(({ turn: _turn, frame: _frame, ...m }) => m),
+    molecules3d: (part.molecules3d ?? []).map(({ turn: _turn, frame: _frame, list: _list, ...m }) => m),
   };
 }
 
@@ -687,7 +687,7 @@ export function withImportedScheme(
   }
   for (const p of scheme?.pluses ?? []) next = addPlus(next, p.x, p.y);
   // (the frame each shows is the canvas's to keep, not the document's)
-  for (const { frame: _frame, ...m } of scheme?.molecules3d ?? []) next = addMolecule3d(next, m);
+  for (const { frame: _frame, list: _list, ...m } of scheme?.molecules3d ?? []) next = addMolecule3d(next, m);
   return next;
 }
 

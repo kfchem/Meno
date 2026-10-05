@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../../../../lib/calc/workers", () => ({ readerClient: () => Promise.reject(new Error("no workers in tests")) }));
 import { connectStoreToDocument, createEditorStore } from "../store";
 import { createStructureDocument } from "../document";
 import { DEFAULT_STYLE_CHOICE } from "../../../../lib/chem/style";
 import { readWorkspace, workspaceText } from "./workspace";
+import { askFor, rememberOutput } from "../../../../lib/calc/asks";
+import { floatsText } from "../../../../lib/calc/results";
 
 const water3d = {
   atoms: [
@@ -89,6 +93,37 @@ describe("a workspace file", () => {
     doc.undo();
     expect(store.getState().molecules3d).toHaveLength(0);
     expect(store.getState().model.atoms.map((a) => a.el)).toEqual(["N"]);
+  });
+
+  it("opens with a calculation's list open as it was, its row's surface - given - kept, at the value it was drawn at", async () => {
+    // a molecule read from a cube file, its first grid shown and given; the
+    // second a promise still
+    const source = await rememberOutput("water.cube", "the cube");
+    const grid = { origin: [0, 0, 0], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], counts: [2, 2, 2], values: floatsText(new Float32Array(8)), signed: true };
+    await askFor({ readers: ["Cube files"], source }, "Cube files", "grid:0", async () => ({ version: "", read: () => Promise.reject(), ask: async () => grid }));
+    const calc = {
+      readers: ["Cube files"],
+      source,
+      results: [{ id: "grids", on: "list", group: "Orbitals", label: "Orbitals", from: "Cube files", columns: [{ label: "Grid" }], rows: [{ cells: ["1"], surface: { ask: "grid:0" } }, { cells: ["2"], surface: { ask: "grid:1" } }] }],
+    };
+    const doc = createStructureDocument();
+    const store = createEditorStore(doc);
+    connectStoreToDocument(store, doc);
+    store.getState().pasteModel({ atoms: [], bonds: [], molecules3d: [{ ...water3d, at: { x: 0, y: 0 }, calc: calc as never }] });
+    store.getState().openList3d(1, "grids");
+    store.getState().chooseRow3d(1, 0);
+    store.getState().setIso3d(1, 0.02);
+    const text = workspaceText(store.getState());
+
+    const again = createStructureDocument();
+    const other = createEditorStore(again);
+    connectStoreToDocument(other, again);
+    other.getState().openWorkspace(readWorkspace(text)!, true);
+    expect(other.getState().lists3d).toEqual({ 1: { list: "grids", row: 0, pointed: null, iso: 0.02 } });
+    const rows = (other.getState().molecules3d[0].calc!.results![0] as { rows: { surface?: unknown }[] }).rows;
+    expect(rows[0].surface).toEqual(grid);
+    expect(rows[1].surface).toEqual({ ask: "grid:1" });
+    expect(other.getState().molecules3d[0].calc!.source).toEqual(source);
   });
 
   it("is not read where it is not one, or of a version this one does not read", () => {

@@ -10,7 +10,7 @@ import { arrowEnds } from "../../../../lib/chem/reactionScheme";
 import { fragmentOf, partOf } from "../chem/cleanUp";
 import { forFlatReaders } from "../chem/drawing";
 import { notOneReaction, reactionFileText } from "../chem/reactionFile";
-import type { Arrow, Atom, Bond, Carried3D, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
+import type { Arrow, Atom, Bond, Carried3D, CarriedList, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
 import { asSeen } from "./molecule3d";
 import { readCalc } from "../../../../lib/calc/output";
 
@@ -177,6 +177,13 @@ export function readDrawn(data: unknown): Drawn | null {
   };
 }
 
+/** A molecule's open list as a file carries it; otherwise none. */
+function listOf(v: unknown): CarriedList | undefined {
+  const l = v as Partial<Record<keyof CarriedList, unknown>> | null | undefined;
+  if (!l || typeof l.id !== "string" || !(l.row === null || (Number.isInteger(l.row) && (l.row as number) >= 0))) return undefined;
+  return { id: l.id, row: l.row as number | null, ...(isNum(l.iso) && l.iso > 0 ? { iso: l.iso } : {}) };
+}
+
 /** A molecule in 3D in Meno's own record, or null where it does not read as one. */
 export function readCarried3D(given: unknown): Carried3D | null {
   const m = given as Partial<Record<keyof Carried3D, unknown>>;
@@ -217,6 +224,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
     ...(typeof m.name === "string" ? { name: m.name } : {}),
     ...(turn ? { turn } : {}),
     ...(Number.isInteger(m.frame) ? { frame: m.frame as number } : {}),
+    ...(listOf(m.list) ? { list: listOf(m.list) } : {}),
     ...(drawnFrom ? { drawnFrom } : {}),
     ...(drawnFrom && typeof m.drawnAs === "string" ? { drawnAs: m.drawnAs } : {}),
     ...(m.conformerSet === true ? { conformerSet: true } : {}),

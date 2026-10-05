@@ -10,6 +10,14 @@ const HEAD = 20;
 const MARGIN = 8;
 /** How many frames after it opens it has been placed under its molecule, to ask for room. */
 const PLACED_FRAMES = 3;
+/** The values a surface's slider goes between, by their logarithms: the slider's steps. */
+const ISO_LEAST = 1e-4;
+const ISO_MOST = 0.5;
+const ISO_STEPS = 1000;
+const sliderOf = (iso: number) => Math.round((ISO_STEPS * Math.log(iso / ISO_LEAST)) / Math.log(ISO_MOST / ISO_LEAST));
+const isoOf = (step: number) => ISO_LEAST * Math.pow(ISO_MOST / ISO_LEAST, step / ISO_STEPS);
+/** A surface's value as it is written: "0.050", "0.0020". */
+const isoText = (iso: number) => (iso >= 0.01 ? iso.toFixed(3) : iso.toPrecision(2));
 
 /**
  * One of a molecule's calculation's lists, under it (lib/calc/results): its
@@ -20,6 +28,10 @@ const PLACED_FRAMES = 3;
  * again let go: the molecule comes to rest. Where some rows can be chosen,
  * one that cannot is shown faint. It opens on the row its reader put
  * first in view.
+ *
+ * A row that shows a surface, chosen, has the value it is drawn at set by
+ * a slider under the list; a row whose motion or surface is still being
+ * worked out says so there - or what went wrong.
  *
  * It keeps within the canvas (`area`). Opened with too little room below
  * it, it asks for room (`onRoom`, where it would end at its full height) -
@@ -33,6 +45,9 @@ export default function CalcList3D({
   onPoint,
   onClose,
   onRoom,
+  asking,
+  iso,
+  onIso,
   area,
 }: {
   list: ListResult;
@@ -40,6 +55,11 @@ export default function CalcList3D({
   onChoose: (row: number | null) => void;
   onPoint: (row: number | null) => void;
   onClose: () => void;
+  /** What is said under it of the row chosen: its motion or surface being worked out, or what went wrong; none, nothing. */
+  asking?: string | null;
+  /** The value the row chosen's surface is drawn at - a slider under it sets it; none, no slider. */
+  iso?: number;
+  onIso?: (iso: number) => void;
   /** Asks for room below it, opened: where its card would end at its full height, in the window's pixels. */
   onRoom?: (bottom: number) => void;
   /** What it keeps within: the canvas. */
@@ -99,7 +119,7 @@ export default function CalcList3D({
     el.scrollTop = row ? row.offsetTop - head - (el.clientHeight - head - row.offsetHeight) / 2 : 0;
   }, [result.id, result.focus, headed]);
 
-  const can = (i: number) => !!(result.rows[i].move || result.rows[i].frame != null);
+  const can = (i: number) => !!(result.rows[i].move || result.rows[i].surface || result.rows[i].frame != null);
   const some = result.rows.some((_, i) => can(i));
   // (a column of numbers, or of values with a unit, to the right; of texts, to the left)
   const right = result.columns.map((c, k) => !!(c.quantity || c.unit) || result.rows.every((r) => typeof r.cells[k] !== "string"));
@@ -188,6 +208,23 @@ export default function CalcList3D({
           );
         })}
       </div>
+      {asking && <div className="px-3 pt-1 text-[11px] text-gh-gray meno-fade-in">{asking}</div>}
+      {iso != null && onIso && (
+        <label className="px-3 pt-1.5 pb-0.5 flex items-center gap-2 text-[11px] text-gh-gray meno-fade-in">
+          <span>Isovalue</span>
+          <input
+            type="range"
+            aria-label="Isovalue"
+            min={0}
+            max={ISO_STEPS}
+            step={1}
+            value={sliderOf(Math.min(ISO_MOST, Math.max(ISO_LEAST, iso)))}
+            onChange={(e) => onIso(isoOf(Number(e.target.value)))}
+            className="flex-1 min-w-24 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
+          />
+          <span className="w-12 text-right tabular-nums text-gh-black">{isoText(iso)}</span>
+        </label>
+      )}
     </div>
   );
 }
