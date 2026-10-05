@@ -277,6 +277,11 @@ Taken while stage 1 was built, on 2026-10-03:
   - measured afresh in whatever frame is shown;
   - the pointer goes through a value to the molecule, but the menu and
     Delete over it are the measurement's.
+  - pictures - SVG, PNG, and the EMF for Office - draw them too, as the
+    canvas does, over the molecules: the line (a distance's dashed) and a
+    faint fan in the measurement's blue, and the value on a white ground,
+    as large as the drawing's R and S (agreed 2026-10-05). The frames chip
+    is not drawn: it is a control.
 - **Frames.**
   - A molecule with frames has a chip under it: which frame, of how many.
     Hovered or selected, the chip opens to a slider.

@@ -431,6 +431,44 @@ export type SolidMark =
   | { kind: "ball"; c: Vec2; r: number; color: string }
   | { kind: "stick"; a: Vec2; b: Vec2; width: number; color: string };
 
+/**
+ * A measurement on a molecule in 3D as a picture shows it, over the
+ * molecules, in `color`: its lines, each `width` wide (a distance's already
+ * cut into dashes); a fan, as triangles, `fanOpacity` strong; and its
+ * value, `text`, `size` high, centred on `label` on a white ground
+ * (`measureLabelBox`).
+ */
+export type MeasureMark = {
+  lines: [Vec2, Vec2][];
+  width: number;
+  fan: [Vec2, Vec2, Vec2][];
+  fanOpacity: number;
+  label: Vec2;
+  text: string;
+  size: number;
+  color: string;
+};
+
+/**
+ * Where a measurement's value is written, in a typeface: the white ground
+ * round it, and the start of its baseline - centred on its point.
+ */
+export function measureLabelBox(
+  m: Pick<MeasureMark, "label" | "text" | "size">,
+  family: string | undefined,
+): { min: Vec2; max: Vec2; baseline: Vec2 } {
+  const font = labelFont(family);
+  const width = [...m.text].reduce((w, ch) => w + font.advance(ch) * m.size, 0);
+  const padX = 0.3 * m.size;
+  const halfHeight = 0.65 * m.size;
+  return {
+    min: { x: m.label.x - width / 2 - padX, y: m.label.y - halfHeight },
+    max: { x: m.label.x + width / 2 + padX, y: m.label.y + halfHeight },
+    // (the letters' middle on the point: the baseline a third of the size below it)
+    baseline: { x: m.label.x - width / 2, y: m.label.y - 0.35 * m.size },
+  };
+}
+
 /** A ball's shading: its colour lightened where the light falls, darkened at its edge away from it. */
 export const BALL_SHADE = { light: 0.4, dark: 0.42, focus: { x: 0.18, y: 0.18 } } as const;
 
@@ -458,6 +496,8 @@ export type Layout = {
    * show balls running into one another.
    */
   solidsImage?: { href: string; bounds: { min: Vec2; max: Vec2 } };
+  /** Measurements on the molecules in 3D, drawn over them. */
+  measures?: MeasureMark[];
   bounds: { min: Vec2; max: Vec2 };
   /**
    * Pixels per coordinate unit this layout was built for. Sizes the layout
@@ -4007,7 +4047,26 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
     ? `<image href="${img.href}" x="${img.bounds.min.x}" y="${-img.bounds.max.y}"` +
       ` width="${img.bounds.max.x - img.bounds.min.x}" height="${img.bounds.max.y - img.bounds.min.y}" preserveAspectRatio="none" />`
     : svgSolids(layout.solids ?? []);
+  for (const m of layout.measures ?? []) s += svgMeasure(m, set.fontFamily);
   s += `</svg>`;
+  return s;
+}
+
+/** A measurement as an SVG draws it: its fan, its lines, and its value on its white ground. */
+function svgMeasure(m: MeasureMark, family: string | undefined): string {
+  let s = "";
+  for (const [a, b, c] of m.fan) {
+    s += `<path d="M${a.x} ${-a.y}L${b.x} ${-b.y}L${c.x} ${-c.y}Z" fill="${m.color}" fill-opacity="${m.fanOpacity}" stroke="none" />`;
+  }
+  for (const [a, b] of m.lines) {
+    s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="${m.color}" stroke-width="${m.width}" stroke-linecap="butt" />`;
+  }
+  const box = measureLabelBox(m, family);
+  s +=
+    `<rect x="${box.min.x}" y="${-box.max.y}" width="${box.max.x - box.min.x}" height="${box.max.y - box.min.y}"` +
+    ` rx="${(box.max.y - box.min.y) / 2}" fill="white" fill-opacity="0.9" stroke="none" />` +
+    `<text x="${box.baseline.x}" y="${-box.baseline.y}" font-family="${fontStack(family ?? "Arial")}"` +
+    ` font-size="${m.size}" fill="${m.color}" stroke="none" text-anchor="start">${escapeXml(m.text)}</text>`;
   return s;
 }
 
