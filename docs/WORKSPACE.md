@@ -151,7 +151,8 @@ for each topic (one pull request per dependent chain).
 - The old viewer: retired, and the workflow's 3D node is a canvas.
 
 Left for later:
-- values of measurements that overlap each other;
+- values of measurements that overlap each other on the canvas (a
+  picture keeps them apart);
 - energies only from XYZ comment lines, until stage 3's readers.
 
 ## Decisions
@@ -278,10 +279,23 @@ Taken while stage 1 was built, on 2026-10-03:
   - the pointer goes through a value to the molecule, but the menu and
     Delete over it are the measurement's.
   - pictures - SVG, PNG, and the EMF for Office - draw them too, as the
-    canvas does, over the molecules: the line (a distance's dashed) and a
-    faint fan in the measurement's blue, and the value on a white ground,
-    as large as the drawing's R and S (agreed 2026-10-05). The frames chip
-    is not drawn: it is a control.
+    canvas does: the line (a distance's dashed) and a faint fan in the
+    measurement's blue, and the value on a white ground, as large as the
+    drawing's R and S (agreed 2026-10-05). The frames chip is not drawn: it
+    is a control.
+  - The lines and fans are drawn into the molecules' image, with Meno's
+    own drawing of them, so that they stand in depth among the atoms as on
+    the canvas: a line running behind a ball is hidden by it (the
+    maintainer, 2026-10-05: drawn over the image, they had come in front of
+    atoms they pass behind). Only the values are written over the image,
+    as text. Without WebGL to draw the image, the molecules are drawn as
+    discs, and the lines over them.
+  - In a picture, a value is written where the canvas writes it, when it
+    covers no atom there. When it would, it moves off: beside its line,
+    on the side away from the molecule's middle, clear of the atoms and of
+    the values written before it. At that size, a value on a short
+    distance - an O and an N across two bonds - covered the very atoms it
+    measured (found on Windows, 2026-10-05).
 - **Frames.**
   - A molecule with frames has a chip under it: which frame, of how many.
     Hovered or selected, the chip opens to a slider.

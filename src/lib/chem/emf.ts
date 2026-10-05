@@ -635,17 +635,23 @@ export function layoutEmf(
 
   // measurements over the molecules in 3D: the fan faint (for EMF+; GDI
   // has no way to fill faintly), the lines as bands, the value on its white
-  // ground
+  // ground. Where the molecules are the bitmap - EMF+'s where `solids` is
+  // given, GDI's where its pixels are - their lines and fans are in it, in
+  // depth among the atoms, and only the values are written over it.
   const measures = layout.measures ?? [];
   if (measures.length) {
+    const inPlus = marks.length > 0 && !!solids;
+    const inGdi = marks.length > 0 && !!solids?.rgba && solids.rgba.length === solids.width * solids.height * 4;
     select(NULL_PEN);
     const brushes = new Map<number, number>();
-    const fill = (pts: readonly (readonly [number, number])[], color: number, alpha = 1, gdi = true) => {
-      w.plus(PLUS.FILL_POLYGON, SOLID, 8 + 8 * pts.length, (v) => {
-        v.setUint32(0, ((Math.round(alpha * 255) << 24) | (argb(color) & 0xffffff)) >>> 0, true);
-        v.setUint32(4, pts.length, true);
-        plusPoints(v, 8, pts);
-      });
+    const fill = (pts: readonly (readonly [number, number])[], color: number, alpha = 1, gdi = true, plus = true) => {
+      if (plus) {
+        w.plus(PLUS.FILL_POLYGON, SOLID, 8 + 8 * pts.length, (v) => {
+          v.setUint32(0, ((Math.round(alpha * 255) << 24) | (argb(color) & 0xffffff)) >>> 0, true);
+          v.setUint32(4, pts.length, true);
+          plusPoints(v, 8, pts);
+        });
+      }
       if (!gdi) return;
       let h = brushes.get(color);
       if (h == null) {
@@ -658,13 +664,13 @@ export function layoutEmf(
     const white = colorRef("#ffffff");
     for (const m of measures) {
       const color = colorRef(m.color);
-      for (const tri of m.fan) fill(points(tri), color, m.fanOpacity, false);
-      for (const [a, b] of m.lines) {
+      if (!inPlus) for (const tri of m.fan) fill(points(tri), color, m.fanOpacity, false);
+      for (const [a, b] of inPlus && inGdi ? [] : m.lines) {
         const len = Math.hypot(b.x - a.x, b.y - a.y);
         if (len < 1e-9) continue;
         const nx = (-(b.y - a.y) / len) * (m.width / 2);
         const ny = ((b.x - a.x) / len) * (m.width / 2);
-        fill(points([{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }, { x: b.x - nx, y: b.y - ny }, { x: a.x - nx, y: a.y - ny }]), color);
+        fill(points([{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }, { x: b.x - nx, y: b.y - ny }, { x: a.x - nx, y: a.y - ny }]), color, 1, !inGdi, !inPlus);
       }
       const box = measureLabelBox(m, family);
       fill(points([box.min, { x: box.max.x, y: box.min.y }, box.max, { x: box.min.x, y: box.max.y }]), white, 0.9);
