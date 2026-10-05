@@ -4,7 +4,6 @@ import {
   writeTextFile,
   BaseDirectory,
   mkdir,
-  remove,
 } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
@@ -225,8 +224,5 @@ export async function ensurePyEnv(
  */
 export async function removePyEnv(profile: PyProfile): Promise<void> {
   if (!readerOf(profile)) throw new Error(`${profile} is not a reader's environment`);
-  const info = await baseInfo(profile, lockOf(profile));
-  await invoke("py_env_remove", { payload: info });
-  if (await exists(info.stampPath, { baseDir: BaseDirectory.AppData }).catch(() => false))
-    await remove(info.stampPath, { baseDir: BaseDirectory.AppData });
+  await invoke("py_env_remove", { payload: await baseInfo(profile, lockOf(profile)) });
 }

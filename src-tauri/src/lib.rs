@@ -238,14 +238,31 @@ fn reader_env_dir(venv_home: &Path) -> Result<PathBuf, String> {
     }
 }
 
-/// Takes a reader plugin's environment away, when it is removed in Settings,
-/// Calculation readers. Its worker is stopped first, by the app.
+/// A reader plugin's record of being set up, beside the others':
+/// `uv/stamps/reader-<id>.json`, for the folder `reader_env_dir` gives.
+fn reader_stamp(dir: &Path) -> Result<PathBuf, String> {
+    let name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("not a reader's environment: {}", dir.display()))?;
+    Ok(Path::new("uv").join("stamps").join(format!("{name}.json")))
+}
+
+/// Takes a reader plugin's environment away, and its record of being set
+/// up, when it is removed in Settings, Calculation readers. Its worker is
+/// stopped first, by the app.
 #[tauri::command]
 async fn py_env_remove(app: AppHandle, payload: PyEnvInfo) -> Result<(), String> {
     let env = validate_env_info(&payload)?;
-    let dir = app_data_dir(&app)?.join(reader_env_dir(&env.venv_home)?);
+    let data = app_data_dir(&app)?;
+    let rel = reader_env_dir(&env.venv_home)?;
+    let dir = data.join(&rel);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).map_err(|e| format!("removing {}: {e}", dir.display()))?;
+    }
+    let stamp = data.join(reader_stamp(&rel)?);
+    if stamp.exists() {
+        std::fs::remove_file(&stamp).map_err(|e| format!("removing {}: {e}", stamp.display()))?;
     }
     Ok(())
 }
@@ -810,6 +827,7 @@ mod tests {
     #[test]
     fn only_a_reader_plugins_environment_is_taken_away() {
         assert_eq!(reader_env_dir(Path::new("uv/reader-cclib/venv")), Ok(PathBuf::from("uv/reader-cclib")));
+        assert_eq!(reader_stamp(Path::new("uv/reader-cclib")), Ok(PathBuf::from("uv/stamps/reader-cclib.json")));
         for bad in ["uv/chem/venv", "uv/console/venv", "uv/reader-/venv", "uv/reader-cclib", "uv/reader-cclib/venv/bin", "uv/reader-a b/venv", "data/reader-cclib/venv"] {
             assert!(reader_env_dir(Path::new(bad)).is_err(), "{bad}");
         }
