@@ -4,10 +4,12 @@ import {
   writeTextFile,
   BaseDirectory,
   mkdir,
+  remove,
 } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
 import { askToConnect } from "./net/network";
+import { READER_PLUGINS } from "./calc/catalog";
 
 async function sha256(s: string) {
   const buf = await crypto.subtle.digest(
@@ -18,7 +20,14 @@ async function sha256(s: string) {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
-export type PyProfile = "console" | "node" | "chem";
+/**
+ * A Python environment of Meno's own: the console's, workflows', RDKit's,
+ * or a calculation reader plugin's (lib/calc/catalog), each from its lock.
+ */
+export type PyProfile = "console" | "node" | "chem" | `reader-${string}`;
+
+/** The reader plugin a profile is the environment of; none, for Meno's own. */
+const readerOf = (profile: PyProfile) => READER_PLUGINS.find((p) => p.profile === profile);
 
 async function ensureDir(rel: string, baseDir: BaseDirectory) {
   const parts = rel.split("/").filter(Boolean);
@@ -60,18 +69,16 @@ type PyEnvInfo = {
 };
 
 /** What each profile is for, in words. */
-const PROFILE_USE: Record<PyProfile, string> = {
+const PROFILE_USE: Record<"console" | "node" | "chem", string> = {
   console: "the console",
   node: "workflows",
   chem: "chemistry",
 };
+const purposeOf = (profile: PyProfile) =>
+  readerOf(profile) ? `reading calculations with ${readerOf(profile)!.name}` : PROFILE_USE[profile as keyof typeof PROFILE_USE];
 
 /** Each profile's lock file, among the app's resources. */
-const PROFILE_LOCK: Record<PyProfile, string> = {
-  console: "resources/py/requirements.console.lock",
-  node: "resources/py/requirements.node.lock",
-  chem: "resources/py/requirements.chem.lock",
-};
+const lockOf = (profile: PyProfile) => readerOf(profile)?.lock ?? `resources/py/requirements.${profile}.lock`;
 
 async function baseInfo(
   profile: PyProfile,
@@ -91,7 +98,9 @@ async function baseInfo(
     label:
       profile === "chem"
         ? "Setting up RDKit for chemistry"
-        : `Setting up Python for ${PROFILE_USE[profile]}`,
+        : readerOf(profile)
+          ? `Setting up ${readerOf(profile)!.name} for reading calculations`
+          : `Setting up Python for ${purposeOf(profile)}`,
   };
 }
 
@@ -99,7 +108,7 @@ type EnvOptions = { lockPath?: string; pythonVersion?: string };
 
 /** Where a profile's environment stands, and whether it needs setting up. */
 async function envState(profile: PyProfile, opts?: EnvOptions) {
-  const defaultLock = PROFILE_LOCK[profile];
+  const defaultLock = lockOf(profile);
   const fallbackLock = "resources/py/requirements.lock";
   const useDefault = await exists(defaultLock, {
     baseDir: BaseDirectory.Resource,
@@ -173,12 +182,17 @@ export async function ensurePyEnv(
       title:
         profile === "chem"
           ? "Download RDKit for chemistry?"
-          : `Download Python for ${PROFILE_USE[profile]}?`,
+          : readerOf(profile)
+            ? `Download ${readerOf(profile)!.name} for reading calculations?`
+            : `Download Python for ${purposeOf(profile)}?`,
       detail:
         (profile === "chem"
           ? "Meno's chemistry - hydrogens and valence, SMILES, clean-up, stereo labels - " +
             `runs on RDKit, in a Python ${info.pythonVersion} of its own `
-          : `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, `) +
+          : readerOf(profile)
+            ? `${readerOf(profile)!.name} reads calculation programs' output for Meno, ` +
+              `in a Python ${info.pythonVersion} of its own `
+            : `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, `) +
         `with the ${packages} packages it needs, in its data folder. ` +
         `uv, which comes with Meno, downloads them - once` +
         (hashed ? ", every file checked against the fingerprint Meno carries for it:" : ":"),
@@ -202,4 +216,17 @@ export async function ensurePyEnv(
   }
 
   return venvPy as string;
+}
+
+/**
+ * Takes a reader plugin's environment away, and its record of being set
+ * up: what Settings' *Calculation readers* removes. Meno's own environments
+ * are not taken away this way.
+ */
+export async function removePyEnv(profile: PyProfile): Promise<void> {
+  if (!readerOf(profile)) throw new Error(`${profile} is not a reader's environment`);
+  const info = await baseInfo(profile, lockOf(profile));
+  await invoke("py_env_remove", { payload: info });
+  if (await exists(info.stampPath, { baseDir: BaseDirectory.AppData }).catch(() => false))
+    await remove(info.stampPath, { baseDir: BaseDirectory.AppData });
 }

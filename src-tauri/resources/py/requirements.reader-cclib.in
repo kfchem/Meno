@@ -1,0 +1,8 @@
+# The cclib reader: cclib, which reads calculation programs' output (ORCA,
+# Gaussian, xTB and others), for the reader worker. A reader plugin's
+# environment, set up only when it is added (docs/WORKSPACE.md, stage 3).
+# Locked for every platform, with hashes, by:
+#   uv pip compile --universal --python-version 3.12 --generate-hashes requirements.reader-cclib.in -o requirements.reader-cclib.lock
+# 1.9rc1, cclib's release candidate: 1.8.1, its last release, cannot read
+# ORCA 6's output. On PyPI, so pinned by its hash as everything else is.
+cclib==1.9rc1

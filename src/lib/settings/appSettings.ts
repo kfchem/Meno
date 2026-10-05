@@ -28,6 +28,13 @@ export type AppSettings = {
   updates: UpdateSettings;
   /** The user's own abbreviations, known as Meno's own are (lib/chem/abbreviations). */
   abbreviations: CustomAbbreviation[];
+  calcReaders: CalcReaderSettings;
+};
+
+/** Which reader plugin reads each kind of calculation output (lib/calc/catalog). */
+export type CalcReaderSettings = {
+  /** The reader chosen for a kind of output, by the kind's id; unset, the first added that reads it. */
+  chosen: Record<string, string>;
 };
 
 /** Meno keeping itself up to date (lib/update). */
@@ -61,6 +68,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   chemistry: { valenceWarnings: true, stereoLabels: false },
   updates: { asked: false },
   abbreviations: [],
+  calcReaders: { chosen: {} },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -77,7 +85,20 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     chemistry: acceptChemistry(r.chemistry),
     updates: acceptUpdates(r.updates),
     abbreviations: acceptAbbreviations(r.abbreviations),
+    calcReaders: acceptCalcReaders(r.calcReaders),
   };
+}
+
+/** The readers chosen that read: a kind's id to a reader's, each a name. */
+function acceptCalcReaders(raw: unknown): CalcReaderSettings {
+  const chosen: Record<string, string> = {};
+  const given = (raw as { chosen?: unknown } | null)?.chosen;
+  if (given && typeof given === "object" && !Array.isArray(given)) {
+    for (const [kind, reader] of Object.entries(given)) {
+      if (/^[a-z0-9-]{1,40}$/.test(kind) && typeof reader === "string" && /^[a-z0-9-]{1,40}$/.test(reader)) chosen[kind] = reader;
+    }
+  }
+  return { chosen };
 }
 
 /** The user's abbreviations the file holds that read: a label, a name, other names and a structure Meno reads. */
@@ -171,6 +192,7 @@ type SettingsState = AppSettings & {
   setChemistry: (chemistry: ChemistrySettings) => void;
   setUpdates: (updates: UpdateSettings) => void;
   setAbbreviations: (abbreviations: CustomAbbreviation[]) => void;
+  setCalcReaders: (calcReaders: CalcReaderSettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -181,9 +203,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, abbreviations } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, abbreviations, calcReaders } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, abbreviations }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, abbreviations, calcReaders }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -208,6 +230,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setChemistry: (chemistry) => {
       set({ chemistry });
+      scheduleSave();
+    },
+    setCalcReaders: (calcReaders) => {
+      set({ calcReaders });
       scheduleSave();
     },
     setUpdates: (updates) => {
