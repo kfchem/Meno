@@ -59,6 +59,9 @@ cargo test    # run Rust tests
 On Windows, compiling the Rust side also needs the MSVC build tools
 ("Desktop development with C++" in Visual Studio Build Tools).
 
+Every text file has LF line endings, on Windows too: `.gitattributes` sees
+to it, so git stores LF whatever an editor writes.
+
 CI (`.github/workflows/ci.yml`) runs all of the above on every pull request:
 typecheck, lint, tests and build on Ubuntu, and `cargo check` / `clippy` /
 `test` on Windows.
