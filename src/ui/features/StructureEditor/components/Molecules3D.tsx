@@ -452,6 +452,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
                 chosen={vibrations[m.id]}
                 onChoose={(mode) => store.getState().chooseVibration3d(m.id, mode)}
                 onClose={() => store.getState().closeVibrations3d(m.id)}
+                area={dom}
               />
             ) : undefined
           }
