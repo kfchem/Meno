@@ -294,6 +294,40 @@ blocks or coordinates out. It runs no code it is sent, and the app keeps it
 off the network. Its tests need RDKit and run by hand
 (`scripts/chem/test_chem_worker.py`).
 
+Calculation readers (stage 3 of docs/WORKSPACE.md) are sidecars too, one
+profile each, named `reader-<id>`: `lib/calc/catalog.ts` lists the readers
+Meno knows of - each one's lock, worker and the kinds of output it reads -
+and the kinds, each told by what its file starts with (ORCA's banner,
+Gaussian's "Entering Gaussian System", ...), never by its name. Meno's core
+knows no program's format beyond that.
+- A reader is added in Settings, *Calculation readers*: `ensurePyEnv`, with
+  the network's consent under `python-env:reader-<id>`. It is taken away
+  there too: `py_env_remove`, which removes only a `uv/reader-<id>`
+  folder.
+- `lib/calc/workers.ts` starts a reader's worker the first time it is asked
+  to read, as `lib/rdkit/worker.ts` does, and asks it through
+  `lib/calc/client.ts`: `{"op": "read", "name", "text"}` - the file's text,
+  never a path - and back Meno's own plain data (`lib/calc/output.ts`
+  `ReaderOutput`): atoms, each geometry, each one's energy in hartrees,
+  program, method, basis, charge and multiplicity, vibrations and partial
+  charges. Like the chemistry worker, it runs no code it is sent and is
+  kept off the network.
+- Which reader reads a kind of output: the one chosen in Settings
+  (`calcReaders.chosen`), where it is added, or else the first added, in
+  the catalog's order (`readerFor`). Where none is added, opening the file
+  says which to add.
+- An opened file that is no structure file but a kind of output
+  (`openedAs`, `processFileContent`) is read so, and its geometries come in
+  as an XYZ file's frames do (`calcResult`), its last shown; what the
+  calculation was is kept on the molecule (`calc`, saved in `.meno`).
+- The first reader is cclib's (`resources/workers/reader_cclib.py`), cclib
+  used as a library, its version pinned in
+  `resources/py/requirements.reader-cclib.lock` (1.9rc1: 1.8.1 does not
+  read ORCA 6). Its tests read sample outputs from `calc-samples/`, which
+  git ignores - no program's output is committed - and run by hand
+  (`scripts/calc/test_reader_cclib.py`); the app's side is tested with the
+  plain data written by hand.
+
 On the 2D canvas (`StructureEditor/chem/`), `analyse` feeds the marks -
 valence problems, R/S and E/Z - which `ChemMarks2D` lays over the drawing
 as HTML, outside the drawing and so outside any export; they run only
