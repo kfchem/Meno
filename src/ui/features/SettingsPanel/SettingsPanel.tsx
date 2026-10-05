@@ -117,8 +117,8 @@ export default function SettingsPanel() {
             <h2 className="text-base font-semibold text-gh-black">Calculation readers</h2>
             <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
               What reads a calculation program's output when it is opened: the molecule's geometries, their
-              energies and what the calculation was. A reader is downloaded when it is added - Meno asks first -
-              and can be taken away again.
+              energies, what the calculation was and what it found. A reader is downloaded when it is added - Meno
+              asks first - and can be taken away again.
             </p>
             <CalcReaderSettings />
           </section>
