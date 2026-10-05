@@ -1,0 +1,6 @@
+# Commits that change only how files are written, for `git blame` to look
+# past. GitHub reads this file by itself; for git blame on a clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# LF line endings in every text file
+f7bf6767e0928701a765d6f387cb367f32746ea0
