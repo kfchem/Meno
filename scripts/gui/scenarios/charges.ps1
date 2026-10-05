@@ -9,20 +9,22 @@
 #   quaternary ammonium, and a 13C.
 #
 # Coordinates are read off the opened shot on a Mac (2560x1720), at the
-# size a file opens at since #56. The SMILES needs RDKit, set up on first use.
+# size a file opens at since #56, and read again on 2026-10-05: the file
+# now opens 25 px further left (v0.1.5 and v0.1.6 alike), which took the
+# pointer off the upper carbons. The SMILES needs RDKit, set up on first use.
 Start-Meno
 Open-MenoFile "$PSScriptRoot/../fixtures/strokes.mol"
 Wait-MenoSettled | Out-Null
 # left ethane's upper carbon: + (a carbocation); its lower carbon: - twice
-Move-MenoPointer -X 772 -Y 877
+Move-MenoPointer -X 747 -Y 877
 Send-MenoText "+"
-Move-MenoPointer -X 686 -Y 925
+Move-MenoPointer -X 661 -Y 925
 Send-MenoText "-"
 Send-MenoText "-"
 Start-Sleep -Milliseconds 400
 Save-Step "keys"
 # the right ethane's upper carbon: typed NH3+
-Move-MenoPointer -X 1924 -Y 877
+Move-MenoPointer -X 1899 -Y 877
 Send-MenoText "n"
 Start-Sleep -Milliseconds 300
 Send-MenoText "H3+"
@@ -30,7 +32,7 @@ Send-MenoKey Enter
 Start-Sleep -Milliseconds 400
 Save-Step "typed"
 # a ring atom's menu
-Invoke-MenoClick -X 1347 -Y 948 -Right
+Invoke-MenoClick -X 1322 -Y 948 -Right
 Start-Sleep -Milliseconds 400
 Save-Step "menu"
 Send-MenoKey Escape
