@@ -416,33 +416,77 @@ read and attached to its molecule. Agreed with the maintainer on
 - **When readers overlap, the chemist chooses.** Settings lists, for each
   kind of output, the installed readers that read it; the first in Meno's
   order reads it, unless another is chosen.
+- **Several plugins can read one output.** One reader reads the molecule
+  from it - its atoms, its geometries and what the calculation was -
+  chosen as above. Every other plugin installed that reads that kind of
+  output adds what it found to the same molecule: an NBO plugin, say,
+  adds NBO's analysis to what cclib read from the same Gaussian output.
+  What a plugin adds is kept only where its atoms are the reader's, in
+  the same order.
 
-### What is read
+### Where the line is
 
-Kept on the molecule, whichever reader found it, and saved in `.meno`:
+Agreed with the maintainer on 2026-10-05, so that what comes later - NBO,
+orbitals, programs and analyses not yet thought of - needs a plugin, not
+a change to Meno.
 
-- its geometries: an optimisation's steps as its frames;
-- each frame's energy (hartrees);
-- the program and its version, the method and basis, the total charge and
-  the multiplicity;
-- its vibrations: each one's frequency (an imaginary one negative) and
-  its atoms' displacements;
-- its atoms' partial charges, by scheme (Mulliken, Löwdin, Hirshfeld,
-  and so on), for its final geometry.
+- **A plugin knows the file.** It reads the format, says what each thing
+  it found is, in the terms chemists use for it (a Mulliken charge, a
+  donor-acceptor interaction's E(2)), and gives it in Meno's units.
+- **Meno knows where it shows, how, and what can be done with it:** where
+  it goes, how it looks, how it shows when pointed at, how numbers are
+  written, the motion, saving, and the link to the drawing.
+- **What Meno does something with has a form of its own; what it only
+  shows comes in one general form.**
+  - Meno's own forms: the atoms and their geometries (the frames), each
+    frame's energy (the bars, a conformer set's shares), and what the
+    calculation was - program, method, basis, charge and multiplicity,
+    which a procedure run again needs.
+  - Everything else is a *result*, in the general form below: partial
+    charges, spin densities, NBO's charges, bond indices and
+    interactions, the dipole moment, thermochemistry, orbital energies,
+    vibrations.
+- **A plugin gives data, never code.** Nothing it gives is run, or shown
+  as markup. A molecule's results are saved in `.meno` with it, and open,
+  shown as they were, where the plugin is not installed.
 
-### How it shows
+### Results
 
-The look stays as it is. What a calculation adds is seen by pointing at
-it:
+Each result says what it belongs to, and Meno puts it there:
 
-- **An atom:** its element and number, and its partial charges, scheme by
-  scheme.
-- **The molecule's frames chip:** the program, method and basis, the
-  energy, the charge and multiplicity. An optimisation's steps are its
-  frames, their energies the bars above the slider.
-- **Vibrations,** from the molecule's menu: a list of the frequencies,
-  imaginary ones marked; one chosen, the molecule moves in it, and moves
-  no more when it is let go. No arrows and no spectrum.
+| Belongs to | For instance | Shown |
+|---|---|---|
+| The molecule | the dipole moment, ΔG, ⟨S²⟩ | its chip: in its line, and all of them when pointed at |
+| Each frame | an optimisation step's gradient | its chip, for the frame shown |
+| Each atom | partial charges by scheme, spin densities, shieldings | pointing at the atom, under its element and number |
+| Pairs of atoms | bond indices, couplings | pointing at the bond |
+| A list | vibrations, orbitals, NBO's interactions | from the molecule's menu, under the molecule |
+
+- **A value says what quantity it is,** in Meno's unit for it - an energy
+  in hartrees, a charge in e, a wavenumber in cm⁻¹ (an imaginary one
+  negative), a length in ångströms, a dipole in debye, a number, a text -
+  and Meno writes it, the same way whichever plugin gave it. Any other
+  gives its unit, and is written with it.
+- **A list's row can point at atoms, a frame or a motion.** Pointed at,
+  its atoms are marked; chosen, its frame is shown, or the molecule moves
+  in it. Vibrations are a list whose rows move the molecule - no arrows
+  and no spectrum. These are what Meno can do with a row, and more come
+  as Meno learns them: a surface, for an orbital's row.
+- **What the chip's line says:** a plugin ranks which of a molecule's
+  results it says; Meno fits as many as the line holds, in that order,
+  after what the calculation was and its energy.
+- **No colouring.** Results are seen by pointing at them; the look stays
+  as it is.
+- **Grouped and named by the plugin:** "Partial charges", "NBO".
+
+### Asked for when wanted
+
+A result can be too big to send with the rest - an orbital's values on a
+grid, say. Any result, of whatever kind, can then be sent as a promise:
+what it is, and a key to ask the plugin for it with. Meno asks for it when
+it is wanted - its row chosen - and keeps it once it has it. Saved, a
+molecule keeps every result it has, and every promise it has not yet been
+given with where its output was, to be asked for from there.
 
 ### Tests
 
@@ -461,8 +505,12 @@ with that data written by hand.
    *Calculation readers* with the choice where they overlap, and cclib's.
    Geometries, an optimisation's steps, energies, and what the chip says.
 2. **3b.** Vibrations.
-3. **3c.** Partial charges, pointed at.
-4. **Later.** Orbitals and densities (cube files) drawn as surfaces.
+3. **3c.** Results in the general form: what the calculation was in
+   Meno's own, and everything else as results - partial charges pointed
+   at, the dipole moment and thermochemistry on the chip, vibrations and
+   orbitals as lists - with several plugins reading one output.
+4. **Later.** Orbitals and densities drawn as surfaces, asked for when
+   wanted.
 
 ## Risks
 
