@@ -79,7 +79,7 @@ Known limitations (pre-alpha):
 
 This repository is licensed under the **Apache License 2.0**. See [`LICENSE`](./LICENSE).
 
-Meno's typefaces, IBM Plex Sans, IBM Plex Sans JP and IBM Plex Mono (`src/assets/fonts/`), are © IBM Corp. and licensed under the SIL Open Font License 1.1; see [`src-tauri/resources/licenses/IBM-Plex-OFL.txt`](./src-tauri/resources/licenses/IBM-Plex-OFL.txt), which the app carries with it. The font files are bundled unchanged, and carry the same notice in their own metadata.
+Meno's typefaces, IBM Plex Sans (upright and italic), IBM Plex Sans JP and IBM Plex Mono (`src/assets/fonts/`), are © IBM Corp. and licensed under the SIL Open Font License 1.1; see [`src-tauri/resources/licenses/IBM-Plex-OFL.txt`](./src-tauri/resources/licenses/IBM-Plex-OFL.txt), which the app carries with it. The font files are bundled unchanged, and carry the same notice in their own metadata.
 
 The outlines Meno places Arial labels by before the system's own Arial has been read (`src/lib/chem/arial.ts`) are worked out from Arimo, © The Arimo Project Authors, licensed under the SIL Open Font License 1.1; see [`src-tauri/resources/licenses/Arimo-OFL.txt`](./src-tauri/resources/licenses/Arimo-OFL.txt). No font file is taken from Arial.
 
