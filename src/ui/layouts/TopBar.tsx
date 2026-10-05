@@ -1,5 +1,5 @@
 import { AnimatePresence, Reorder, motion } from "motion/react";
-import { DURATION, EASE, FADE, RISE } from "../theme/motion";
+import { DURATION, EASE, FADE, LEAVE, RISE } from "../theme/motion";
 import {
   XMarkIcon,
   PlusIcon,
@@ -109,7 +109,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
               value={id}
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0, transition: { duration: DURATION.base, ease: EASE } }}
-              exit={{ opacity: 0, y: 20, transition: { duration: DURATION.base, ease: EASE } }}
+              exit={{ opacity: 0, y: 20, transition: LEAVE }}
               // Chosen or not, a tab goes over in the same time and the same
               // way as its curved corners, which are drawn beside it: the
               // two change together, never one ahead of the other.

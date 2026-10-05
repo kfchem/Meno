@@ -19,6 +19,16 @@ export const DURATION = {
 export const EASE: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
 
 /**
+ * The easing of something going out of view - a menu closing, a card or a
+ * mark going - as gentle out of its start as into its end (CSS's
+ * `--ease-meno-leave`). Quick out of the start, as `EASE` is, a menu fading
+ * out had lost half of itself in its first frame and most of it in the
+ * next, and read as gone at once (found on Windows, 2026-10-05); this way
+ * its first frames still show it going.
+ */
+export const EASE_LEAVE: [number, number, number, number] = [0.4, 0, 0.6, 1];
+
+/**
  * The easing of a panel sliding open or shut beside the canvas, which moves
  * the drawing with it: as gentle out of the start as into the end, so that
  * neither way does the drawing set off at a jump.
@@ -45,17 +55,23 @@ export function easeOut(u: number): number {
   return 1 - (1 - t) ** 3;
 }
 
-/** For motion's components: a fade, and a fade with a small rise, in `DURATION.base`. */
+/** How long something takes to go out of view, and how: `DURATION.base`, with `EASE_LEAVE`. */
+export const LEAVE = { duration: DURATION.base, ease: EASE_LEAVE } as const;
+
+/**
+ * For motion's components: a fade, and a fade with a small rise, in
+ * `DURATION.base` - coming with `EASE`, going with `EASE_LEAVE`.
+ */
 export const FADE = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
-  exit: { opacity: 0 },
+  exit: { opacity: 0, transition: LEAVE },
   transition: { duration: DURATION.base, ease: EASE },
 } as const;
 export const RISE = {
   initial: { opacity: 0, y: 4, scale: 0.985 },
   animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: 4, scale: 0.985 },
+  exit: { opacity: 0, y: 4, scale: 0.985, transition: LEAVE },
   transition: { duration: DURATION.base, ease: EASE },
 } as const;
 

@@ -77,8 +77,10 @@
   --color-gh-line: rgb(209, 217, 224);
   --color-gh-gray: rgb(89, 99, 110);
 
-  /* How things move (src/ui/theme/motion.ts): the easing of every transition. */
+  /* How things move (src/ui/theme/motion.ts): the easing of every transition,
+     and of something going out of view (EASE_LEAVE). */
   --ease-meno: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-meno-leave: cubic-bezier(0.4, 0, 0.6, 1);
 }
 
 /* Coming into view: a tab's body as the tab is chosen, a settings section,
@@ -104,7 +106,7 @@
   }
 }
 .meno-fade-out {
-  animation: meno-fade-out 120ms var(--ease-meno) both;
+  animation: meno-fade-out 120ms var(--ease-meno-leave) both;
 }
 
 input[type="range"]::-webkit-slider-thumb {
