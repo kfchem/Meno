@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { DURATION, EASE, FADE } from "../theme/motion";
+import { DURATION, EASE, FADE, LEAVE } from "../theme/motion";
 import { GlobeAltIcon, SignalSlashIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import { setOffline, useNetwork } from "../../lib/net/network";
@@ -42,7 +42,7 @@ export default function OfflineToggle() {
             key="offline"
             initial={{ opacity: 0, width: 0 }}
             animate={{ opacity: 1, width: "auto" }}
-            exit={{ opacity: 0, width: 0 }}
+            exit={{ opacity: 0, width: 0, transition: LEAVE }}
             transition={{ duration: DURATION.base, ease: EASE }}
             className="overflow-hidden whitespace-nowrap"
           >

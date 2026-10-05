@@ -133,8 +133,12 @@ moves together, in the same time and the same way.
   (quick 0.12 s for colours and highlights, base 0.16 s for things coming
   and going, move 0.22 s for the drawing and the view), one easing (CSS's
   `--ease-meno`) - save a panel sliding beside the canvas, which moves the
-  drawing and so starts as gently as it ends (`EASE_SLIDE`) - `TAU` for
-  following a moving target, the spring, and motion's `FADE` and `RISE`.
+  drawing and so starts as gently as it ends (`EASE_SLIDE`), and anything
+  going out of view, which starts as gently too (`EASE_LEAVE`, CSS's
+  `--ease-meno-leave`: quick out of the start, a closing menu was half
+  gone in its first frame and read as gone at once) - `TAU` for following
+  a moving target, the spring, and motion's `FADE` and `RISE`, whose exits
+  go with `LEAVE`.
 - **The page's elements**: motion's `AnimatePresence` for what mounts and
   unmounts (menus, dialogs, notices, cards, panels, tabs); CSS
   `meno-fade-in` for what comes into view as a class goes on, and

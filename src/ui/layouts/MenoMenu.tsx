@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { DURATION, EASE, LEAVE } from "../theme/motion";
 import logo from "../../assets/icon.png";
 import { menuGroups, useTabCommands, type CommandGroup } from "./commands";
 
@@ -59,8 +60,8 @@ export default function MenoMenu({ own }: { own: CommandGroup[] }) {
             aria-label="Meno"
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
+            exit={{ opacity: 0, y: -4, transition: LEAVE }}
+            transition={{ duration: DURATION.base, ease: EASE }}
             className="absolute left-0 top-9 z-50 min-w-60 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
           >
             {groups.map((g, i) => (
