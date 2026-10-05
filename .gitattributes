@@ -1,0 +1,14 @@
+# Every text file is kept with LF line endings, and checked out with them
+# on Windows as everywhere else: npm, cargo and the editors write LF, and a
+# file never comes out with two kinds of line ending.
+* text=auto eol=lf
+
+# Binary files, named rather than left to git's guess.
+*.png binary
+*.ico binary
+*.icns binary
+*.ttf binary
+*.woff2 binary
+*.exe binary
+*.cfb binary
+src-tauri/resources/py/uv binary
