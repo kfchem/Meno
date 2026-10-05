@@ -97,9 +97,16 @@ public static class NativeGui {
   public static void RightUp(int x, int y) { Send(new[] { Mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_RIGHTUP, x, y, 0) }); }
   public static void Wheel(int x, int y, int notches) { Send(new[] { Mouse(MOUSEEVENTF_WHEEL, x, y, (uint)(notches * 120)) }); }
   // Two fingers on a precision touchpad reach a page as wheel messages of a
-  // fraction of a notch each, sideways ones too.
+  // fraction of a notch each, sideways ones too - beginning with a step of
+  // a pixel or two, however fast the stroke, which is how Meno tells them
+  // from a wheel's notch (lib/input/wheel.ts reads a run by its first
+  // step): so a stroke begins with one such step, 2 units, about 1.7 px.
   const uint MOUSEEVENTF_HWHEEL = 0x1000;
   public static void Swipe(int x, int y, int dx, int dy, int steps) {
+    const int first = 2;
+    if (dy != 0) Send(new[] { Mouse(MOUSEEVENTF_WHEEL, x, y, (uint)(dy > 0 ? -first : first)) });
+    else if (dx != 0) Send(new[] { Mouse(MOUSEEVENTF_HWHEEL, x, y, (uint)(dx > 0 ? first : -first)) });
+    Sleep(16);
     for (int i = 0; i < steps; i++) {
       int wy = -(dy / steps) * 120 / 100, wx = (dx / steps) * 120 / 100;
       if (wy != 0) Send(new[] { Mouse(MOUSEEVENTF_WHEEL, x, y, (uint)wy) });

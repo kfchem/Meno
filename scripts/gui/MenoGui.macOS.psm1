@@ -292,13 +292,17 @@ public static class MacGui {
   }
 
   // Two fingers on a trackpad: a stroke of small continuous steps, begun,
-  // carried on and ended as the trackpad's own are. The page sees the
-  // opposite sign to the wheel's: a positive dy scrolls down.
+  // carried on and ended as the trackpad's own are - its first step a
+  // pixel or two, however fast the stroke, which is how Meno tells it from
+  // a wheel's notch (lib/input/wheel.ts reads a run by its first step).
+  // The page sees the opposite sign to the wheel's: a positive dy scrolls
+  // down.
   const uint ScrollIsContinuous = 88, ScrollPhase = 99;
   public static void Swipe(double x, double y, int dx, int dy, int steps) {
     for (int i = 0; i <= steps + 1; i++) {
       long phase = i == 0 ? 1 : i > steps ? 4 : 2;   // began, changed, ended
       int sx = phase == 4 ? 0 : dx / steps, sy = phase == 4 ? 0 : dy / steps;
+      if (phase == 1) { sx = Math.Sign(dx) * 2; sy = Math.Sign(dy) * 2; }
       IntPtr e = CGEventCreateScrollWheelEvent2(IntPtr.Zero, PixelUnits, 2, -sy, -sx, 0);
       if (e == IntPtr.Zero) continue;
       CGEventSetLocation(e, new CGPoint { X = x, Y = y });
