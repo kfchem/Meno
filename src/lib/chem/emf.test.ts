@@ -301,4 +301,36 @@ describe("measurements in a picture", () => {
     expect(emfPlusRecords(emf).filter((r) => r.type === 0x4036).length).toBeGreaterThanOrEqual(1);
     expect(emf.length % 4).toBe(0);
   });
+
+  // the molecules as a picture made with WebGL has them: an image, their
+  // measurements' lines and fans drawn into it, in depth among the atoms
+  const bounds = { min: { x: 5, y: -1 }, max: { x: 7, y: 1 } };
+  const imaged = { ...layout, solidsImage: { href: "data:image/png;base64,AAAA", bounds } };
+
+  it("leave their lines to the molecules' image, in an SVG, and write only the values over it", () => {
+    const svg = createSVG(imaged, opts);
+    expect(svg).not.toMatch(/<line [^>]*stroke="#1e90ff"/);
+    expect(svg).toContain(`>${text}</text>`);
+    expect(svg).toContain('fill="white" fill-opacity="0.9"');
+    expect(svg.indexOf(`>${text}</text>`)).toBeGreaterThan(svg.indexOf("<image"));
+  });
+
+  it("leave their lines to the molecules' bitmap, in an EMF - EMF+'s and GDI's both - and write only the values over it", () => {
+    const solids = { png: new Uint8Array([137, 80, 78, 71]), rgba: new Uint8Array(2 * 2 * 4), width: 2, height: 2, bounds };
+    const polygons = (emf: Uint8Array) => emfRecords(emf)!.filter((r) => r.type === 3).length;
+    const fills = (emf: Uint8Array) => emfPlusRecords(emf).filter((r) => r.type === 0x400c).length;
+    const vector = layoutEmf(layout, opts).emf;
+    const bitmap = layoutEmf(layout, opts, undefined, solids).emf;
+    // (the same picture with no measurement: what the rest of it fills)
+    const none = layoutEmf({ ...layout, measures: [] }, opts, undefined, solids).emf;
+    // the value's white ground is all the measurement adds: one in each
+    expect(fills(bitmap) - fills(none)).toBe(1);
+    expect(polygons(bitmap) - polygons(none)).toBe(1);
+    expect(fills(vector)).toBeGreaterThan(fills(bitmap));
+    expect(polygons(vector)).toBeGreaterThan(polygons(bitmap));
+    // (given the PNG alone, GDI keeps its discs, and the lines with them)
+    const plusOnly = layoutEmf(layout, opts, undefined, { ...solids, rgba: undefined }).emf;
+    expect(fills(plusOnly) - fills(none)).toBe(1);
+    expect(polygons(plusOnly)).toBeGreaterThan(polygons(bitmap));
+  });
 });

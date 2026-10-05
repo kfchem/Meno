@@ -3,6 +3,8 @@ import { atomColour, KEY_LIGHT_FROM, type Style3D } from "../../../lib/chem/styl
 import { solidsBounds } from "../../../lib/chem/layout2d";
 import { EYE_HEIGHT } from "./utils/page";
 import { bondLines, frameOf, heightOf, lookOf, pictureMarks, solidOf, WORLD_PER_ANGSTROM } from "./utils/molecule3d";
+import { MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, piecesOf } from "./utils/measure3d";
+import { COLORS } from "../../theme/colors";
 import type { Carried3D, Molecule3D } from "./store/types";
 
 /** How smooth a ball and a stick are in a picture: finer than on the canvas, a picture being looked at closely. */
@@ -13,8 +15,8 @@ type Bounds = { min: { x: number; y: number }; max: { x: number; y: number } };
 
 /**
  * Molecules in 3D drawn as the canvas draws them - lit, in depth, so that
- * where balls run into one another only what is nearer shows - for a
- * picture: each seen as the canvas sees it, straight from above - or, given
+ * where balls run into one another only what is nearer shows, their
+ * measurements' lines and fans among them - for a picture: each seen as the canvas sees it, straight from above - or, given
  * `eyeHeight`, in perspective from that far straight above its centre - as
  * a picture lays them out (utils/molecule3d's pictureMarks), on a canvas
  * covering where they all reach on the page, `pxPerWorld` pixels to the
@@ -57,6 +59,17 @@ export function rendered3d(
   const ball = new THREE.SphereGeometry(1, BALL_SEGMENTS, BALL_SEGMENTS);
   const stick = new THREE.CylinderGeometry(1, 1, 1, BOND_SEGMENTS);
   const materials = new Map<string, THREE.MeshStandardMaterial>();
+  // (a measurement's lines and fan as the canvas's: unlit, in its blue)
+  const measureLine = new THREE.MeshBasicMaterial({ color: COLORS.highlight, toneMapped: false });
+  const measureFan = new THREE.MeshBasicMaterial({
+    color: COLORS.highlight,
+    transparent: true,
+    opacity: MEASURE_FAN_OPACITY,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const fans: THREE.BufferGeometry[] = [];
   const material = (color: string) => {
     let mat = materials.get(color);
     if (!mat) {
@@ -101,6 +114,29 @@ export function rendered3d(
           mesh.quaternion.setFromUnitVectors(up, along.divideScalar(length));
           mesh.scale.set(line.r, length, line.r);
           group.add(mesh);
+        }
+      }
+      // its measurements, as the canvas draws them: lines - a distance's
+      // dashed - and an angle's faint fan, in depth among its atoms, so that
+      // a line running behind a ball is hidden by it
+      for (const x of m.measures ?? []) {
+        if (x.atoms.length < 2 || !x.atoms.every((i) => i >= 0 && i < m.atoms.length)) continue;
+        const marks = measureMarks(places, x.atoms);
+        const r = MEASURE_RADIUS * WORLD_PER_ANGSTROM;
+        for (const [a, b] of piecesOf(marks)) {
+          const along = b.clone().sub(a);
+          const length = along.length();
+          if (length < 1e-9) continue;
+          const mesh = new THREE.Mesh(stick, measureLine);
+          mesh.position.copy(a).add(b).multiplyScalar(0.5);
+          mesh.quaternion.setFromUnitVectors(up, along.divideScalar(length));
+          mesh.scale.set(r, length, r);
+          group.add(mesh);
+        }
+        if (marks.fan.length) {
+          const geometry = new THREE.BufferGeometry().setFromPoints(marks.fan);
+          fans.push(geometry);
+          group.add(new THREE.Mesh(geometry, measureFan));
         }
       }
       scene.add(group);
@@ -149,6 +185,9 @@ export function rendered3d(
     ball.dispose();
     stick.dispose();
     for (const mat of materials.values()) mat.dispose();
+    measureLine.dispose();
+    measureFan.dispose();
+    for (const g of fans) g.dispose();
     renderer.dispose();
     renderer.forceContextLoss();
   }

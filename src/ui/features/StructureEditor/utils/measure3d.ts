@@ -133,6 +133,20 @@ export function dashesOf(a: THREE.Vector3, b: THREE.Vector3): [THREE.Vector3, TH
 const VALUE_GAP = 0.25;
 
 /**
+ * A measurement's lines as they are drawn, in the molecule's own frame: each
+ * piece's two ends - a distance's line cut into its dashes, an arc into its
+ * steps - on the canvas and in a picture alike.
+ */
+export function piecesOf(marks: MeasureMarks): [THREE.Vector3, THREE.Vector3][] {
+  const pieces: [THREE.Vector3, THREE.Vector3][] = [];
+  for (let k = 0; k + 1 < marks.lines.length; k += 2) {
+    if (marks.dashed) pieces.push(...dashesOf(marks.lines[k], marks.lines[k + 1]));
+    else pieces.push([marks.lines[k], marks.lines[k + 1]]);
+  }
+  return pieces;
+}
+
+/**
  * A molecule in 3D's measurements as a picture shows them (`MeasureMark`):
  * in the frame it shows, turned as it is, seen as the canvas sees it -
  * straight from above, or from an `eye` in perspective - their values
@@ -178,11 +192,7 @@ export function measurePictureMarks(m: Carried3D, style: Style3D, size: number, 
     .filter((x) => x.atoms.length >= 2 && x.atoms.every((i) => i >= 0 && i < n))
     .map((x) => {
       const marks = measureMarks(places, x.atoms);
-      const lines: [THREE.Vector3, THREE.Vector3][] = [];
-      for (let k = 0; k + 1 < marks.lines.length; k += 2) {
-        if (marks.dashed) lines.push(...dashesOf(marks.lines[k], marks.lines[k + 1]));
-        else lines.push([marks.lines[k], marks.lines[k + 1]]);
-      }
+      const lines = piecesOf(marks);
       const fan: MeasureMark["fan"] = [];
       for (let k = 0; k + 2 < marks.fan.length; k += 3) fan.push([seen(marks.fan[k]), seen(marks.fan[k + 1]), seen(marks.fan[k + 2])]);
       const mark: MeasureMark = {

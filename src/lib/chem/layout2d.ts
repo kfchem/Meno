@@ -4047,18 +4047,20 @@ export function createSVG(layout: Layout, opts: LayoutOptions): string {
     ? `<image href="${img.href}" x="${img.bounds.min.x}" y="${-img.bounds.max.y}"` +
       ` width="${img.bounds.max.x - img.bounds.min.x}" height="${img.bounds.max.y - img.bounds.min.y}" preserveAspectRatio="none" />`
     : svgSolids(layout.solids ?? []);
-  for (const m of layout.measures ?? []) s += svgMeasure(m, set.fontFamily);
+  // (with the molecules an image, their measurements' lines and fans are in
+  // it, in depth among the atoms: only the values are written over it)
+  for (const m of layout.measures ?? []) s += svgMeasure(m, set.fontFamily, !img);
   s += `</svg>`;
   return s;
 }
 
 /** A measurement as an SVG draws it: its fan, its lines, and its value on its white ground. */
-function svgMeasure(m: MeasureMark, family: string | undefined): string {
+function svgMeasure(m: MeasureMark, family: string | undefined, lines = true): string {
   let s = "";
-  for (const [a, b, c] of m.fan) {
+  for (const [a, b, c] of lines ? m.fan : []) {
     s += `<path d="M${a.x} ${-a.y}L${b.x} ${-b.y}L${c.x} ${-c.y}Z" fill="${m.color}" fill-opacity="${m.fanOpacity}" stroke="none" />`;
   }
-  for (const [a, b] of m.lines) {
+  for (const [a, b] of lines ? m.lines : []) {
     s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="${m.color}" stroke-width="${m.width}" stroke-linecap="butt" />`;
   }
   const box = measureLabelBox(m, family);

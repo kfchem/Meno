@@ -8,7 +8,7 @@ import type { Look3D, Measure3D, Molecule3D, Rising3D, Turn3D } from "../store/t
 import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine, type LabelBox } from "../utils/molecule3d";
 import { MARK_MIN_PX } from "../chem/marks";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
-import { dashesOf, kindOf, MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, measureText, measureValue } from "../utils/measure3d";
+import { kindOf, MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, measureText, measureValue, piecesOf } from "../utils/measure3d";
 import { eyeOf, FRAME_ORDER, seenAt } from "../utils/page";
 import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
@@ -646,20 +646,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     const fanPoints: number[] = [];
     let used = 0;
     const texts: Record<number, string> = {};
-    const a = new THREE.Vector3();
-    const b = new THREE.Vector3();
     for (const [id, l] of measureLevels.current) {
       const marks = measureMarks(p, l.m.atoms);
       const r = MEASURE_RADIUS * WORLD_PER_ANGSTROM * l.v;
-      for (let k = 0; k + 1 < marks.lines.length; k += 2) {
-        a.copy(marks.lines[k]);
-        b.copy(marks.lines[k + 1]);
-        if (!marks.dashed) {
-          if (used < MEASURE_PIECES) placePiece(mesh, used++, a, b, r);
-          continue;
-        }
-        for (const [s, e] of dashesOf(a, b)) if (used < MEASURE_PIECES) placePiece(mesh, used++, s, e, r);
-      }
+      for (const [s, e] of piecesOf(marks)) if (used < MEASURE_PIECES) placePiece(mesh, used++, s, e, r);
       for (const v of marks.fan) fanPoints.push(v.x, v.y, v.z);
       texts[id] = measureText(kindOf(l.m.atoms), measureValue(p, l.m.atoms));
       const label = labels.current.get(id);
