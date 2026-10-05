@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { outputExtensions, outputKindOf, READER_PLUGINS, readerFor, readersOf, type ReaderPlugin } from "./catalog";
+import { outputExtensions, outputKindOf, READER_PLUGINS, readerFor, readersFor, readersOf, type ReaderPlugin } from "./catalog";
 
 describe("a calculation output's kind", () => {
   it("is told by what its file starts with, whatever it is called", () => {
@@ -38,6 +38,13 @@ describe("which reader reads what", () => {
     expect(readerFor("orca", new Set(["cclib"]), { orca: "orca-own" }, plugins)?.id).toBe("cclib");
     // (a choice for one kind is no choice for another)
     expect(readerFor("gaussian", both, { orca: "orca-own" }, plugins)?.id).toBe("cclib");
+  });
+
+  it("is every one added that reads it, the one chosen first, then Meno's order", () => {
+    const both = new Set(["cclib", "orca-own"]);
+    expect(readersFor("orca", both, {}, plugins).map((p) => p.id)).toEqual(["cclib", "orca-own"]);
+    expect(readersFor("orca", both, { orca: "orca-own" }, plugins).map((p) => p.id)).toEqual(["orca-own", "cclib"]);
+    expect(readersFor("orca", new Set(["orca-own"]), { orca: "cclib" }, plugins).map((p) => p.id)).toEqual(["orca-own"]);
   });
 
   it("is none where no reader that reads it is added", () => {

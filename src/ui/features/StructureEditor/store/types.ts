@@ -158,15 +158,19 @@ export type EditorState = {
   overlay3d: Record<number, true>;
   setOverlay3d: (id: number, on: boolean) => void;
   /**
-   * Molecules in 3D with their vibrations listed, by id, and the one each
-   * moves in - its index among them - or null, none.
+   * Molecules in 3D with one of their calculation's lists open under them
+   * (lib/calc/results), by id: the list, by its result's id; the row chosen
+   * in it - the molecule moving in it, or showing its frame - and the row
+   * pointed at, its atoms marked; or null, none.
    */
-  vibrations3d: Record<number, number | null>;
-  /** Lists a molecule's vibrations, none of them chosen. */
-  openVibrations3d: (id: number) => void;
-  /** The vibration a molecule moves in; null, none - it comes to rest. */
-  chooseVibration3d: (id: number, mode: number | null) => void;
-  closeVibrations3d: (id: number) => void;
+  lists3d: Record<number, { list: string; row: number | null; pointed: number | null }>;
+  /** Opens one of a molecule's lists under it, in place of one open, none of its rows chosen. */
+  openList3d: (id: number, list: string) => void;
+  /** The row chosen in a molecule's open list; null, none - its motion comes to rest. */
+  chooseRow3d: (id: number, row: number | null) => void;
+  /** The row pointed at in a molecule's open list; null, none. */
+  pointRow3d: (id: number, row: number | null) => void;
+  closeList3d: (id: number) => void;
   /**
    * The atoms and bonds chosen in one molecule in 3D, by index, each in the
    * order chosen: what a measurement is of (utils/molecule3d `chosenPath`).

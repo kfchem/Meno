@@ -1,0 +1,138 @@
+import { describe, expect, it } from "vitest";
+import { chipLine, grouped, isMarked, pairValue, readResults, resultsOn, valueText, type PairsResult } from "./results";
+
+describe("a calculation's results, as a plugin gives them", () => {
+  it("are kept where they read as results for the molecule's atoms and frames", () => {
+    const given = [
+      { id: "dipole", on: "molecule", group: "Properties", label: "Dipole moment", quantity: "dipole", value: 1.85, rank: 2 },
+      { id: "grad", on: "frames", group: "Optimisation", label: "RMS gradient", unit: "Eh/bohr", digits: 6, values: [0.01, 0.001] },
+      { id: "q", on: "atoms", group: "Partial charges", label: "Mulliken", quantity: "charge", values: [-0.4, 0.2, 0.2] },
+      { id: "wbi", on: "pairs", group: "NBO", label: "Wiberg bond index", pairs: [[0, 1, 0.82], [0, 2, 0.82], [0, 9, 1], [1, 1, 1]] },
+      {
+        id: "e2",
+        on: "list",
+        group: "NBO",
+        label: "Donor-acceptor interactions",
+        columns: [{ label: "Donor" }, { label: "Acceptor" }, { label: "E(2)", unit: "kcal/mol", digits: 2 }],
+        rows: [{ cells: ["LP(1) O 1", "BD*(1) O 1-H 2", 1.23], atoms: [0, 1, 7], frame: 1 }],
+        focus: 0,
+      },
+    ];
+    const r = readResults(given, 3, 2, "NBO 7");
+    expect(r.map((x) => x.id)).toEqual(["dipole", "grad", "q", "wbi", "e2"]);
+    expect(r.every((x) => x.from === "NBO 7")).toBe(true);
+    // (pairs of atoms it has not, or of one atom with itself, left out)
+    expect((r[3] as PairsResult).pairs).toEqual([
+      [0, 1, 0.82],
+      [0, 2, 0.82],
+    ]);
+    // (a row's atoms, one of which the molecule has not, left out; its frame, which it has, kept)
+    const row = r[4].on === "list" ? r[4].rows[0] : null;
+    expect(row).toEqual({ cells: ["LP(1) O 1", "BD*(1) O 1-H 2", 1.23], frame: 1 });
+  });
+
+  it("are not kept where they do not read: the wrong count, an unknown kind, no name, values that are no values", () => {
+    const bad = [
+      { id: "q", on: "atoms", group: "Partial charges", label: "Mulliken", values: [1, 2] },
+      { id: "x", on: "somewhere", group: "G", label: "L", value: 1 },
+      { id: "y", on: "molecule", group: "G", value: 1 },
+      { id: "z", on: "molecule", group: "G", label: "L", value: { a: 1 } },
+      { id: "w", on: "frames", group: "G", label: "L", values: [1, Infinity] },
+      { id: "v", on: "list", group: "G", label: "L", columns: [{ label: "A" }], rows: [{ cells: [1, 2] }] },
+      "text",
+      null,
+    ];
+    expect(readResults(bad, 3, 2)).toEqual([]);
+    expect(readResults("not a list", 3, 2)).toEqual([]);
+  });
+
+  it("keep a quantity Meno knows, or else the unit given, and no other", () => {
+    const [a, b] = readResults(
+      [
+        { id: "a", on: "molecule", group: "G", label: "A", quantity: "energy", unit: "kJ/mol", value: -1 },
+        { id: "b", on: "molecule", group: "G", label: "B", quantity: "loudness", unit: "dB", value: 3 },
+      ],
+      1,
+      1,
+    );
+    expect([a.on === "molecule" && a.quantity, a.on === "molecule" && a.unit]).toEqual(["energy", undefined]);
+    expect([b.on === "molecule" && b.quantity, b.on === "molecule" && b.unit]).toEqual([undefined, "dB"]);
+  });
+
+  it("keep both of two readers' results of one name, one its own plugin's name added", () => {
+    const one = { id: "q", on: "atoms", group: "Partial charges", label: "Mulliken", values: [0] };
+    const r = readResults([{ ...one, from: "cclib" }, { ...one, from: "other" }, { ...one, from: "cclib" }], 1, 1);
+    expect(r.map((x) => x.id)).toEqual(["q", "q@other"]);
+  });
+});
+
+describe("a result's values, as Meno writes them", () => {
+  it("in the quantity's unit, to its decimals, with a true minus", () => {
+    expect(valueText(-382.0550901, { quantity: "energy" })).toBe("−382.055090 Eh");
+    expect(valueText(0.2134, { quantity: "charge" })).toBe("+0.213");
+    expect(valueText(-0.4128, { quantity: "charge" })).toBe("−0.413");
+    expect(valueText(0.0001, { quantity: "charge" })).toBe("0.000");
+    expect(valueText(1650.24, { quantity: "wavenumber" })).toBe("1650.2 cm⁻¹");
+    expect(valueText(-120.46, { quantity: "wavenumber" })).toBe("120.5i cm⁻¹");
+    expect(valueText(1.85, { quantity: "dipole" })).toBe("1.85 D");
+    expect(valueText(109.47, { quantity: "angle" })).toBe("109.5°");
+    expect(valueText(0.96, { quantity: "length" })).toBe("0.960 Å");
+    expect(valueText(-0.0000001, { quantity: "number" })).toBe("0.0000");
+  });
+
+  it("with the unit given, at most four decimals, none trailing; or as many as given", () => {
+    expect(valueText(298.15, { unit: "K" })).toBe("298.15 K");
+    expect(valueText(90.3141, { unit: "cal/(mol·K)", digits: 2 })).toBe("90.31 cal/(mol·K)");
+    expect(valueText(3, {})).toBe("3");
+    expect(valueText(7, { quantity: "number", digits: 0 })).toBe("7");
+  });
+
+  it("a text as it is; none, a dash", () => {
+    expect(valueText("HOMO", {})).toBe("HOMO");
+    expect(valueText(null, { quantity: "energy" })).toBe("–");
+  });
+
+  it("marked where an imaginary frequency", () => {
+    expect(isMarked(-120, { quantity: "wavenumber" })).toBe(true);
+    expect(isMarked(120, { quantity: "wavenumber" })).toBe(false);
+    expect(isMarked(-1, { quantity: "energy" })).toBe(false);
+  });
+});
+
+describe("where results are said", () => {
+  const results = readResults(
+    [
+      { id: "g", on: "molecule", group: "Thermochemistry", label: "Gibbs free energy", quantity: "energy", value: -381.911145, rank: 1 },
+      { id: "h", on: "molecule", group: "Thermochemistry", label: "Enthalpy", quantity: "energy", value: -381.868235 },
+      { id: "d", on: "molecule", group: "Properties", label: "Dipole moment", quantity: "dipole", value: 0, rank: 2 },
+      { id: "q", on: "atoms", group: "Partial charges", label: "Mulliken", quantity: "charge", values: [0] },
+      { id: "s", on: "molecule", group: "Thermochemistry", label: "Temperature", unit: "K", value: 298.15 },
+      { id: "wbi", on: "pairs", group: "NBO", label: "Wiberg bond index", pairs: [[0, 1, 0.82]] },
+    ],
+    2,
+    1,
+  );
+
+  it("in the chip's line: what it says first, then the ranked, as many as the line holds", () => {
+    expect(chipLine(["ORCA 6.0.1 · DFT/STO-3G", "−382.055090 Eh"], results, 110)).toBe(
+      "ORCA 6.0.1 · DFT/STO-3G · −382.055090 Eh · Gibbs free energy −381.911145 Eh · Dipole moment 0.00 D",
+    );
+    expect(chipLine(["ORCA 6.0.1 · DFT/STO-3G", "−382.055090 Eh"], results, 80)).toBe(
+      "ORCA 6.0.1 · DFT/STO-3G · −382.055090 Eh · Gibbs free energy −381.911145 Eh",
+    );
+    expect(chipLine(["", "−1.000000 Eh"], undefined)).toBe("−1.000000 Eh");
+  });
+
+  it("by their groups, in the order the groups first come", () => {
+    expect(grouped(resultsOn(results, "molecule")).map((g) => [g.group, g.results.map((r) => r.id)])).toEqual([
+      ["Thermochemistry", ["g", "h", "s"]],
+      ["Properties", ["d"]],
+    ]);
+  });
+
+  it("a pair's, whichever way round it is asked for", () => {
+    const wbi = resultsOn(results, "pairs")[0];
+    expect(pairValue(wbi, 1, 0)).toBe(0.82);
+    expect(pairValue(wbi, 0, 2)).toBeUndefined();
+  });
+});

@@ -31,7 +31,7 @@ export type AppSettings = {
   calcReaders: CalcReaderSettings;
 };
 
-/** Which reader plugin reads each kind of calculation output (lib/calc/catalog). */
+/** Where reader plugins overlap (lib/calc/catalog): which gives what they both find in each kind of calculation output. */
 export type CalcReaderSettings = {
   /** The reader chosen for a kind of output, by the kind's id; unset, the first added that reads it. */
   chosen: Record<string, string>;

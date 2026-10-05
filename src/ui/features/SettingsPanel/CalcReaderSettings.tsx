@@ -7,8 +7,8 @@ const KIND_NAME = Object.fromEntries(OUTPUT_KINDS.map((k) => [k.id, k.name]));
 
 /**
  * Calculation readers in Settings: the readers Meno knows of, each added or
- * taken away here; and, where more than one added reads a kind of output,
- * which of them reads it.
+ * taken away here; and, where more than one added reads a kind of output -
+ * each reads it - which of them gives what they both find.
  */
 export default function CalcReaderSettings() {
   const states = useReaders((s) => s.state);
@@ -28,9 +28,9 @@ export default function CalcReaderSettings() {
         ))}
       </div>
       <div>
-        <h3 className="text-sm font-semibold text-gh-black">Which reader reads what</h3>
+        <h3 className="text-sm font-semibold text-gh-black">Where readers overlap</h3>
         <p className="mt-0.5 mb-2 text-xs text-gh-gray max-w-2xl">
-          Where more than one reader added reads a kind of output, the one chosen here reads it; otherwise the first.
+          Every reader added reads the kinds of output it reads. Where two find the same thing, the one chosen here gives it; otherwise the first.
         </p>
         <div className="rounded-lg border border-gh-line bg-white divide-y divide-gh-line">
           {OUTPUT_KINDS.map((k) => {
@@ -41,7 +41,7 @@ export default function CalcReaderSettings() {
                 <span className="flex-1 text-sm text-gh-black">{k.name}</span>
                 {can.length ? (
                   <select
-                    aria-label={`Reader of ${k.name}`}
+                    aria-label={`Reader chosen for ${k.name}`}
                     value={reads?.id ?? ""}
                     disabled={can.length < 2}
                     onChange={(e) => setCalcReaders({ chosen: { ...chosen, [k.id]: e.target.value } })}

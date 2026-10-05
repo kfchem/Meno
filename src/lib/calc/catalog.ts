@@ -5,6 +5,10 @@
  * says, and is read by a reader running in a Python environment of its
  * own. Which readers there are is Meno's own list for now; a list fetched
  * online would need a way to trust it, and comes later.
+ *
+ * Readers are alike: every one added that reads a kind of output reads it,
+ * and what they find is put together. Where two find the same thing, the
+ * one chosen for that kind gives it - or else the first, in Meno's order.
  */
 
 /** A kind of calculation output: one program's, and how its file is told. */
@@ -107,16 +111,27 @@ export function readersOf(kind: string, plugins: readonly ReaderPlugin[] = READE
 }
 
 /**
- * The reader a kind of output is read by: the one chosen for it, where it
- * is added and reads it; or else the first added that reads it, in Meno's
- * order; or none, where no reader added reads it.
+ * The readers added that read a kind of output, the one whose finding
+ * counts where they find the same thing first: the one chosen for it,
+ * where it is added; then the rest, in Meno's order.
  */
+export function readersFor(
+  kind: string,
+  added: ReadonlySet<string>,
+  chosen: Readonly<Record<string, string>>,
+  plugins: readonly ReaderPlugin[] = READER_PLUGINS,
+): ReaderPlugin[] {
+  const can = readersOf(kind, plugins).filter((p) => added.has(p.id));
+  const first = can.find((p) => p.id === chosen[kind]);
+  return first ? [first, ...can.filter((p) => p !== first)] : can;
+}
+
+/** The reader whose finding counts first for a kind of output (`readersFor`); none, where no reader added reads it. */
 export function readerFor(
   kind: string,
   added: ReadonlySet<string>,
   chosen: Readonly<Record<string, string>>,
   plugins: readonly ReaderPlugin[] = READER_PLUGINS,
 ): ReaderPlugin | null {
-  const can = readersOf(kind, plugins).filter((p) => added.has(p.id));
-  return can.find((p) => p.id === chosen[kind]) ?? can[0] ?? null;
+  return readersFor(kind, added, chosen, plugins)[0] ?? null;
 }

@@ -205,7 +205,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
       ? (m.drawnFrom as (number | null)[])
       : undefined;
   const stereo = readStereo(m.stereo, n, bonds.length);
-  const calc = readCalc(m.calc, n);
+  const calc = readCalc(m.calc, n, 1 + frames.length);
   return {
     atoms: atoms as Carried3D["atoms"],
     bonds: bonds as Carried3D["bonds"],

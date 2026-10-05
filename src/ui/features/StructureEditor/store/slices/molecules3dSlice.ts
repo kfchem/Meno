@@ -73,15 +73,25 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
       if (after !== before) noteTurns(doc, `made-${++kept}`, before, after, turnsBefore, turnsAfter);
       return ids;
     },
-    openVibrations3d: (id: number) =>
-      set((prev) => (id in prev.vibrations3d ? prev : { ...prev, vibrations3d: { ...prev.vibrations3d, [id]: null } })),
-    chooseVibration3d: (id: number, mode: number | null) =>
-      set((prev) => (prev.vibrations3d[id] === mode ? prev : { ...prev, vibrations3d: { ...prev.vibrations3d, [id]: mode } })),
-    closeVibrations3d: (id: number) =>
+    openList3d: (id: number, list: string) =>
+      set((prev) =>
+        prev.lists3d[id]?.list === list ? prev : { ...prev, lists3d: { ...prev.lists3d, [id]: { list, row: null, pointed: null } } },
+      ),
+    chooseRow3d: (id: number, row: number | null) =>
       set((prev) => {
-        if (!(id in prev.vibrations3d)) return prev;
-        const { [id]: _, ...rest } = prev.vibrations3d;
-        return { ...prev, vibrations3d: rest };
+        const l = prev.lists3d[id];
+        return !l || l.row === row ? prev : { ...prev, lists3d: { ...prev.lists3d, [id]: { ...l, row } } };
+      }),
+    pointRow3d: (id: number, row: number | null) =>
+      set((prev) => {
+        const l = prev.lists3d[id];
+        return !l || l.pointed === row ? prev : { ...prev, lists3d: { ...prev.lists3d, [id]: { ...l, pointed: row } } };
+      }),
+    closeList3d: (id: number) =>
+      set((prev) => {
+        if (!(id in prev.lists3d)) return prev;
+        const { [id]: _, ...rest } = prev.lists3d;
+        return { ...prev, lists3d: rest };
       }),
     setOverlay3d: (id: number, on: boolean) =>
       set((prev) => {
@@ -236,15 +246,16 @@ export function heldOf(prev: EditorState, molecules: Molecule3D[]): Partial<Edit
     !c || (by.has(c.id) && c.atoms.every((a) => a < by.get(c.id)!.atoms.length) && c.bonds.every((b) => b < by.get(c.id)!.bonds.length));
   const hm = prev.hoveredMeasure3d;
   const measureStays = !hm || (by.get(hm.id)?.measures ?? []).some((x) => x.id === hm.measure);
-  // (vibrations listed for a molecule that has them still, the one chosen among them)
-  const vibrating = Object.entries(prev.vibrations3d).filter(([id, mode]) => {
-    const count = by.get(Number(id))?.calc?.vibrations?.length ?? 0;
-    return count > 0 && (mode == null || mode < count);
+  // (a list open for a molecule that has it still, the rows chosen and pointed at among its rows)
+  const open = Object.entries(prev.lists3d).filter(([id, l]) => {
+    const list = by.get(Number(id))?.calc?.results?.find((r) => r.on === "list" && r.id === l.list);
+    const rows = list?.on === "list" ? list.rows.length : 0;
+    return rows > 0 && (l.row == null || l.row < rows) && (l.pointed == null || l.pointed < rows);
   });
-  const vibrations3d = vibrating.length === Object.keys(prev.vibrations3d).length ? prev.vibrations3d : Object.fromEntries(vibrating);
+  const lists3d = open.length === Object.keys(prev.lists3d).length ? prev.lists3d : Object.fromEntries(open);
   return {
     hoveredMeasure3d: measureStays ? hm : null,
-    vibrations3d,
+    lists3d,
     turns3d: keep(prev.turns3d),
     frames3d: keep(prev.frames3d),
     sel3d,

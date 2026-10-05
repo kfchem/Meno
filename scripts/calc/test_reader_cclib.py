@@ -33,6 +33,11 @@ def read(path):
     return worker.answer(line)
 
 
+def result(r, id_):
+    """One of what it found, by its id, in Meno's general form."""
+    return next((x for x in r["results"] if x["id"] == id_), None)
+
+
 def sample(rel):
     path = SAMPLES / rel
     if not path.exists():
@@ -70,17 +75,50 @@ class Orca(unittest.TestCase):
         self.assertTrue(all(-400 < e < -370 for e in r["energies"]))
         self.assertLessEqual(r["energies"][-1], r["energies"][0])
         self.assertTrue(r["optimised"])
+        self.assertEqual(r["schema"], 1)
 
-    def test_vibrations_with_their_displacements(self):
+    def test_vibrations_a_list_whose_rows_move_the_molecule(self):
         r = read(sample("ORCA/dvb_ir.out"))["result"]
-        self.assertEqual(len(r["vibrations"]), 54)
-        self.assertTrue(all(len(v["displacements"]) == 60 for v in r["vibrations"]))
+        v = result(r, "vibrations")
+        self.assertEqual((v["on"], v["label"]), ("list", "Vibrations"))
+        self.assertEqual([c["label"] for c in v["columns"]], ["Mode", "Frequency", "IR intensity"])
+        self.assertEqual(v["columns"][1]["quantity"], "wavenumber")
+        self.assertEqual(len(v["rows"]), 54)
+        self.assertTrue(all(len(row["move"]) == 60 and len(row["cells"]) == 3 for row in v["rows"]))
+        self.assertEqual(v["rows"][0]["cells"][0], 1)
 
-    def test_partial_charges_by_scheme(self):
+    def test_thermochemistry_and_the_dipole_on_the_molecule_its_free_energy_first(self):
+        r = read(sample("ORCA/dvb_ir.out"))["result"]
+        g = result(r, "thermo.free-energy")
+        self.assertEqual((g["on"], g["quantity"], g["rank"]), ("molecule", "energy", 1))
+        # (hartrees, a little above the electronic energy)
+        self.assertTrue(-382 < g["value"] < -381.8)
+        s = result(r, "thermo.entropy")
+        self.assertEqual(s["unit"], "cal/(mol·K)")
+        self.assertTrue(80 < s["value"] < 100)
+        self.assertEqual(result(r, "dipole")["quantity"], "dipole")
+
+    def test_partial_charges_by_scheme_on_the_atoms(self):
         r = read(sample("ORCA/dvb_sp_hf.out"))["result"]
-        self.assertTrue({"mulliken", "lowdin", "hirshfeld"} <= set(r["charges"]))
-        self.assertTrue(all(len(q) == 20 for q in r["charges"].values()))
-        self.assertAlmostEqual(sum(r["charges"]["mulliken"]), 0, places=3)
+        charges = [x for x in r["results"] if x["group"] == "Partial charges"]
+        self.assertEqual([x["label"] for x in charges], ["Mulliken", "Löwdin", "Hirshfeld"])
+        self.assertTrue(all(x["on"] == "atoms" and x["quantity"] == "charge" and len(x["values"]) == 20 for x in charges))
+        self.assertAlmostEqual(sum(charges[0]["values"]), 0, places=3)
+
+    def test_orbitals_about_the_frontier_a_list_opening_on_the_lumo(self):
+        r = read(sample("ORCA/dvb_sp_hf.out"))["result"]
+        o = result(r, "orbitals")
+        self.assertEqual((o["columns"][0]["label"], o["columns"][-1]["label"], o["columns"][-1]["unit"]), ("Orbital", "Energy", "eV"))
+        names = [row["cells"][0] for row in o["rows"]]
+        self.assertEqual(len(names), 20)
+        self.assertEqual(names[0], "LUMO+9")
+        self.assertEqual(names[o["focus"]], "LUMO")
+        self.assertEqual(names[o["focus"] + 1], "HOMO")
+        self.assertEqual(names[-1], "HOMO\u22129")
+        energies = [row["cells"][-1] for row in o["rows"]]
+        self.assertEqual(energies, sorted(energies, reverse=True))
+        gap = result(r, "homo-lumo-gap")
+        self.assertAlmostEqual(gap["value"], energies[o["focus"]] - energies[o["focus"] + 1])
 
 
 class Gaussian(unittest.TestCase):
@@ -90,7 +128,16 @@ class Gaussian(unittest.TestCase):
         self.assertEqual(len(r["frames"]), len(r["energies"]))
         self.assertGreater(len(r["frames"]), 1)
         # (the sums of charges are not charges of atoms)
-        self.assertNotIn("mulliken_sum", r["charges"])
+        self.assertIsNone(result(r, "charges.mulliken_sum"))
+        self.assertIsNotNone(result(r, "charges.mulliken"))
+        # (each step's RMS gradient, where there is one a step)
+        g = result(r, "rms-gradient")
+        self.assertEqual((g["on"], len(g["values"])), ("frames", len(r["frames"])))
+
+    def test_vibrations_with_their_symmetries(self):
+        r = read(sample("Gaussian/dvb_ir.out"))["result"]
+        v = result(r, "vibrations")
+        self.assertEqual([c["label"] for c in v["columns"]], ["Mode", "Symmetry", "Frequency", "IR intensity"])
 
     def test_a_correlated_energy_over_the_scf(self):
         r = read(sample("Gaussian/water_mp2.log"))["result"]
@@ -109,6 +156,11 @@ class XTB(unittest.TestCase):
         r = read(sample("XTB/dvb_sp.out"))["result"]
         self.assertEqual(r["frames"], [])
         self.assertIsNone(r["energies"])
+
+    def test_no_orbitals_where_their_frontier_is_not_read(self):
+        # (cclib reads xTB's HOMO as many numbers: no orbitals are said rather than wrong ones)
+        r = read(sample("XTB/dvb_opt.out"))["result"]
+        self.assertIsNone(result(r, "orbitals"))
 
 
 if __name__ == "__main__":

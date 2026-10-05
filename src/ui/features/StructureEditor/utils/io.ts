@@ -88,8 +88,8 @@ export async function processFileContent(
   // (lib/calc), whatever it is called
   const kind = format ? null : outputKindOf(content);
   if (kind) {
-    const { output, reader, version } = await readOutput(name, content, kind);
-    return calcResult(output, `${reader.name} ${version}`, filename);
+    const { output, readers } = await readOutput(name, content, kind);
+    return calcResult(output, readers, filename);
   }
   const noMolecules = () =>
     new Error(
@@ -217,13 +217,13 @@ function inRow(ms: Omit<Molecule3D, "id" | "at">[]): Carried3D[] {
 }
 
 /**
- * A calculation's output, as a reader read it (`reader`, its name and
- * version), as an opened file's molecules: one molecule in 3D, read from
+ * A calculation's output, as its readers read it (`readers`, each its name
+ * and version), as an opened file's molecules: one molecule in 3D, read from
  * its geometries as an XYZ file's frames are - its bonds found the same
  * way - their energies, and what the calculation says of it; showing its
  * last geometry, an optimisation's end.
  */
-export function calcResult(out: ReaderOutput, reader: string, filename?: string): ProcessedFileResult {
+export function calcResult(out: ReaderOutput, readers: readonly string[], filename?: string): ProcessedFileResult {
   const [first, ...rest] = readMoleculesFromText(xyzOf(out), "xyz");
   if (!first?.atoms.length) throw new Error(`No molecule found in ${filename || "the file"}.`);
   const frames = rest.map((f) => f.atoms.flatMap((a) => [a.x, a.y, a.z]));
@@ -238,7 +238,7 @@ export function calcResult(out: ReaderOutput, reader: string, filename?: string)
         ...(frames.length ? { frames, frame: frames.length } : {}),
         ...(energies ? { energies } : {}),
         ...(filename ? { name: filename } : {}),
-        calc: calcOf(out, reader),
+        calc: calcOf(out, readers),
       },
     ],
   };

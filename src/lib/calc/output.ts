@@ -1,11 +1,20 @@
 /**
  * What a reader plugin hands back from a calculation's output, and what a
  * molecule keeps of it (docs/WORKSPACE.md, stage 3). Plain data, the same
- * whichever reader read it and whatever program wrote it.
+ * whichever reader read it and whatever program wrote it: what Meno does
+ * something with in forms of its own - the atoms, their geometries, each
+ * one's energy, what the calculation was - and everything else as results,
+ * in the one general form (results.ts).
  */
+import { readResults, type Result } from "./results";
+
+/** The form of a plugin's answer this Meno reads. */
+export const OUTPUT_SCHEMA = 1;
 
 /** A reader's answer, as its worker writes it (resources/workers/reader_*.py). */
 export type ReaderOutput = {
+  /** The form it is in: `OUTPUT_SCHEMA`, or unsaid. */
+  schema?: number;
   program?: string | null;
   version?: string | null;
   method?: string | null;
@@ -20,19 +29,18 @@ export type ReaderOutput = {
   energies?: number[] | null;
   /** Whether an optimisation came to an end, where it was one. */
   optimised?: boolean | null;
-  vibrations?: { frequency: number; displacements: number[] | null }[];
-  /** Its atoms' partial charges, by scheme (mulliken, lowdin, hirshfeld, ...). */
-  charges?: Record<string, number[]>;
+  /** Everything else it found, in the general form (results.ts) - read, and those that do not read as results left out. */
+  results?: unknown[];
 };
 
 /**
  * What a molecule keeps of the calculation it was read from, besides its
- * geometries and energies: what the calculation was, which reader read it,
- * and what it found of its vibrations and its atoms' charges.
+ * geometries and energies: what the calculation was, the readers that read
+ * it, and its results - every reader's, each kept with the one it came from.
  */
 export type CalcInfo = {
-  /** The reader that read it: its id and version, "cclib 1.9rc1". */
-  reader: string;
+  /** The readers that read it, each its name and version: "cclib 1.9rc1". */
+  readers: string[];
   program?: string;
   version?: string;
   method?: string;
@@ -40,10 +48,7 @@ export type CalcInfo = {
   charge?: number;
   multiplicity?: number;
   optimised?: boolean;
-  /** Each vibration's frequency, in cm⁻¹ (an imaginary one negative), and its atoms' displacements, x, y, z of each, where given. */
-  vibrations?: { frequency: number; displacements?: number[] }[];
-  /** Its atoms' partial charges, by scheme, for the last geometry. */
-  charges?: Record<string, number[]>;
+  results?: Result[];
 };
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -65,23 +70,21 @@ export function xyzOf(out: ReaderOutput): string {
     .join("\n");
 }
 
-/** What a molecule keeps of an output, read by `reader`. */
-export function calcOf(out: ReaderOutput, reader: string): CalcInfo {
-  const n = out.atoms.length;
-  const vibrations = (out.vibrations ?? [])
-    .filter((v) => isNum(v.frequency))
-    .map((v) => ({
-      frequency: v.frequency,
-      ...(Array.isArray(v.displacements) && v.displacements.length === 3 * n && v.displacements.every(isNum)
-        ? { displacements: v.displacements }
-        : {}),
-    }));
-  const charges = Object.fromEntries(
-    Object.entries(out.charges ?? {}).filter(([, q]) => Array.isArray(q) && q.length === n && q.every(isNum)),
-  );
+/** The geometries an output gives for its atoms: those an XYZ file of it has (`xyzOf`). */
+export function framesOf(out: ReaderOutput): number {
+  return out.frames.filter((f) => f.length === 3 * out.atoms.length).length;
+}
+
+/**
+ * What a molecule keeps of an output, read by `readers` (each its name and
+ * version): its results each kept with the reader it came from - the first,
+ * unless it says another.
+ */
+export function calcOf(out: ReaderOutput, readers: readonly string[]): CalcInfo {
+  const results = readResults(out.results, out.atoms.length, framesOf(out), readers[0]);
   const said = (k: "program" | "version" | "method" | "basis") => text(out[k]);
   return {
-    reader,
+    readers: [...readers],
     ...(said("program") ? { program: said("program") } : {}),
     ...(said("version") ? { version: said("version") } : {}),
     ...(said("method") ? { method: said("method") } : {}),
@@ -89,18 +92,19 @@ export function calcOf(out: ReaderOutput, reader: string): CalcInfo {
     ...(Number.isInteger(out.charge) ? { charge: out.charge! } : {}),
     ...(Number.isInteger(out.multiplicity) && out.multiplicity! > 0 ? { multiplicity: out.multiplicity! } : {}),
     ...(typeof out.optimised === "boolean" ? { optimised: out.optimised } : {}),
-    ...(vibrations.length ? { vibrations } : {}),
-    ...(Object.keys(charges).length ? { charges } : {}),
+    ...(results.length ? { results } : {}),
   };
 }
 
-/** A molecule's calculation as a file carries it, where it reads as one for `atoms` atoms; otherwise nothing. */
-export function readCalc(given: unknown, atoms: number): CalcInfo | undefined {
+/**
+ * A molecule's calculation as a file carries it, where it reads as one for
+ * `atoms` atoms in `frames` frames; otherwise nothing. Its results are read
+ * as a plugin's are, and those that are no longer this molecule's left out.
+ */
+export function readCalc(given: unknown, atoms: number, frames: number): CalcInfo | undefined {
   const c = given as Record<string, unknown> | null | undefined;
-  if (!c || typeof c !== "object" || typeof c.reader !== "string") return undefined;
-  const vibrations = Array.isArray(c.vibrations)
-    ? (c.vibrations as { frequency?: unknown; displacements?: unknown }[]).filter((v) => v && isNum(v.frequency))
-    : [];
+  const readers = Array.isArray(c?.readers) ? c.readers.filter((r): r is string => typeof r === "string" && !!r.trim()) : [];
+  if (!c || typeof c !== "object" || !readers.length) return undefined;
   return calcOf(
     {
       program: text(c.program),
@@ -111,14 +115,10 @@ export function readCalc(given: unknown, atoms: number): CalcInfo | undefined {
       multiplicity: isNum(c.multiplicity) ? c.multiplicity : null,
       optimised: typeof c.optimised === "boolean" ? c.optimised : null,
       atoms: new Array(atoms).fill(""),
-      frames: [],
-      vibrations: vibrations.map((v) => ({
-        frequency: v.frequency as number,
-        displacements: Array.isArray(v.displacements) ? (v.displacements as number[]) : null,
-      })),
-      charges: c.charges && typeof c.charges === "object" && !Array.isArray(c.charges) ? (c.charges as Record<string, number[]>) : undefined,
+      frames: new Array(frames).fill(new Array(3 * atoms).fill(0)),
+      results: Array.isArray(c.results) ? c.results : [],
     },
-    c.reader,
+    readers,
   );
 }
 

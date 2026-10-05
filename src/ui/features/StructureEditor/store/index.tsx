@@ -93,7 +93,7 @@ export function createEditorStore(
     turns3d: {},
     rising3d: {},
     overlay3d: {},
-    vibrations3d: {},
+    lists3d: {},
     frames3d: {},
     sel3d: new Set<number>(),
     chosen3d: null,
