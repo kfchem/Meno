@@ -28,8 +28,9 @@ spec.loader.exec_module(worker)
 
 
 def read(path):
-    """The worker's answer to reading a sample, as the app asks for it."""
-    line = json.dumps({"id": 1, "op": "read", "name": path.name, "text": path.read_text()})
+    """The worker's answer to reading a sample, as the app asks for it (the
+    app reads a file as UTF-8, whatever the system's own encoding)."""
+    line = json.dumps({"id": 1, "op": "read", "name": path.name, "text": path.read_text(encoding="utf-8")})
     return worker.answer(line)
 
 
