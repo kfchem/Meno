@@ -6,6 +6,8 @@ import {
   marksOf,
   placeMark,
   segmentHitsRect,
+  stereoTextEms,
+  stereoWaysOut,
   valenceMessage,
   waysOut,
 } from "./marks";
@@ -136,5 +138,31 @@ describe("where marks go", () => {
     expect(exitDistance(box, { x: 1, y: 0 })).toBe(1);
     expect(exitDistance(box, { x: -1, y: 0 })).toBe(0.2);
     expect(exitDistance(box, { x: 0, y: -1 })).toBe(0.5);
+  });
+});
+
+describe("R and S as the canvas writes them", () => {
+  // butan-2-ol: its stereocentre, two chain bonds below it and the OH wedged up
+  const butanol: Model = {
+    atoms: [atom(1, 0, 0), atom(2, -1.3, -0.75), atom(3, 1.3, -0.75), atom(4, 0, 1.5, "O")],
+    bonds: [bond(10, 1, 2), bond(11, 1, 3), { ...bond(12, 1, 4), stereo: "up" as const }],
+  };
+
+  it("stands opposite a wedge first, as IUPAC's recommendations for diagrams put it", () => {
+    const [first] = stereoWaysOut(butanol, 1);
+    expect(first.x).toBeCloseTo(0, 9);
+    expect(first.y).toBeCloseTo(-1, 9);
+    // then the ways out between its bonds, as any mark's
+    expect(stereoWaysOut(butanol, 1).slice(1)).toEqual(waysOut(butanol, 1));
+  });
+
+  it("goes the ways out between its bonds when it has no wedge", () => {
+    expect(stereoWaysOut(butene, 11)).toEqual(waysOut(butene, 11));
+  });
+
+  it("is as wide as its letters and its parentheses", () => {
+    expect(stereoTextEms("R", true)).toBeGreaterThan(stereoTextEms("R", false));
+    expect(stereoTextEms("r", false)).toBeLessThan(stereoTextEms("R", false));
+    expect(stereoTextEms("Ra", false)).toBeGreaterThan(stereoTextEms("R", false));
   });
 });

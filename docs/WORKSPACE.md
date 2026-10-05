@@ -357,9 +357,14 @@ Taken on 2026-10-04:
   Several rise one after another, in a row.
 - **Told apart.** A stereoisomer's centres that were left open carry
   their R and S always, every centre's while R and S are shown. They are
-  as large as the drawing's R and S, set clear of their atom in the widest
-  gap between its bonds as it is seen - or the nearest way round that
-  covers no other atom - and clear of each other.
+  as large as the drawing's R and S, and written as the drawing's style
+  writes them (bare, or in parentheses), in blue. Each is set clear of
+  its atom - beyond its ball by as much as the drawing's style sets them
+  off - in the widest gap between its bonds as it is seen - or the
+  nearest way round that covers no other atom, no measurement's value
+  and no bond (an atom hidden counts for more than a bond covered) - and
+  a little way off the others (2026-10-05: on Windows, an (S) sat on a
+  value or on a bond in some frames as the molecule turned).
 - **Tied to the drawing.** An atom hovered in either lights in the other.
   Drawn otherwise since - atoms, bonds or wedges, not where they are - the
   molecule stays as it is and says so under its frames, with *Make

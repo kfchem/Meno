@@ -422,6 +422,28 @@ export const STYLE_FIELDS: StyleField[] = [
       ],
     },
   },
+  {
+    key: "stereoDescriptors",
+    group: "Labels",
+    label: "R, S, E and Z",
+    description:
+      "How R and S at stereocentres, and E and Z at double bonds, are written when they are shown: plainly, or in parentheses. Either way in italics.",
+    kind: {
+      type: "choice",
+      options: [
+        { value: "plain", label: "R" },
+        { value: "parentheses", label: "(R)" },
+      ],
+    },
+  },
+  {
+    key: "stereoDescriptorGap",
+    group: "Labels",
+    label: "R and S: distance from the atom",
+    description:
+      "How far R or S stands off its stereocentre, from the atom to the nearest of its letters. About half a capital's height is IUPAC's; written bare, they can come nearer.",
+    kind: share("font size", 0, 1, 0.01),
+  },
 
   // --- Aromatic rings --------------------------------------------------------
   {

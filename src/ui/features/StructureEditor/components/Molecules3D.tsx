@@ -16,6 +16,7 @@ import Molecule3DView from "./Molecule3DView";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { editorLayoutOptions } from "../layoutOptions";
 import { MARK_SCALE } from "../chem/marks";
+import { fontStack, labelSetOf } from "../../../../lib/chem/layout2d";
 
 /** A turn left to itself stops below this speed, in radians a second. */
 const STILL = 0.02;
@@ -99,11 +100,17 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const remake = useContext(Remake3D);
   // (R and S on, every molecule's labels; off, a stereoisomer's own, which tell it from the others)
   const stereoLabels = useAppSettings((s) => s.chemistry.stereoLabels);
-  // (R and S on them as large as on the drawing)
+  // (R and S on them as large as on the drawing, and written as it writes them)
   const drawingStyle = useDrawingStyle();
   const stereoFont = useMemo(() => {
     const opts = editorLayoutOptions(drawingStyle);
-    return { size: opts.fontPx * MARK_SCALE, units: opts.units === "px" ? ("px" as const) : ("world" as const) };
+    return {
+      size: opts.fontPx * MARK_SCALE,
+      units: opts.units === "px" ? ("px" as const) : ("world" as const),
+      family: fontStack(labelSetOf(opts).fontFamily ?? "Arial"),
+      parentheses: !!opts.stereoParentheses,
+      gap: opts.stereoGap ?? 0.35,
+    };
   }, [drawingStyle]);
   const frames = useEditor((s) => s.frames3d);
   const hovered = useEditor((s) => s.hovered3d);

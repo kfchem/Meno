@@ -384,6 +384,28 @@ All hover-based, as above.
   an atom with too many bonds, saying what is wrong under the pointer; R/S
   and E/Z from a button on the canvas; both in Settings › Chemistry, and
   never in an exported picture.)
+  - How R, S, E and Z are written (2026-10-05, the maintainer: the
+    parentheses looked clumsy, and a drawing's needs no colour; Meno's own
+    style without parentheses, the journals' after IUPAC or their own
+    rules). In the drawing's typeface and colour, in italics - r and s at
+    a pseudo-asymmetric centre; an axis's a upright and set below, Ra and
+    Sa (IUPAC 2013, P-91.2.1.1). Bare in Meno's style, and in RSC's,
+    Wiley's and Nature's, as IUPAC's recommendations for structure
+    diagrams draw them (Brecher 2008, GR-11; the journals say nothing of
+    them in drawings, and Wiley's point to those recommendations). In
+    parentheses, (R), in ACS 1996's, as ACS writes them in names. A
+    setting of the drawing style: *R, S, E and Z*.
+  - Where: opposite the stereocentre's wedge or hash where it has one,
+    in the widest gap between its bonds (GR-11.1); an E or Z beside its
+    bond's middle (GR-11.2); and each a little way off the others, so that
+    two side by side do not read as one.
+  - How far off its atom: a setting of the drawing style, *R and S:
+    distance from the atom*, from the atom to the nearest of the letters,
+    as a share of the labels' size. IUPAC puts them about half a capital's
+    height off (35%), as ACS 1996 keeps them in parentheses; written bare
+    they look further off at that, and the maintainer asked for them
+    nearer (2026-10-05): 15% in Meno's style and the other bare ones. On a
+    molecule in 3D, the same share beyond its ball.
 - Everything a molfile, SDfile or Rxnfile can hold, read after CTfile Formats
   and drawn after IUPAC's recommendations: docs/CTFILE.md, step by step.
 - Abbreviations: Meno's own, those put together by rule (OTBS, 2,6-diMeBz)

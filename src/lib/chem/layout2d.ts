@@ -146,6 +146,10 @@ export type LayoutOptions = {
   circleCharges?: boolean;
   /** A charged carbon, or one with an unpaired electron, drawn with its C; unset, as a bare vertex, the charge beside it. */
   showChargedCarbons?: boolean;
+  /** R, S, E and Z written in parentheses, (R), rather than plainly; unset, plainly. */
+  stereoParentheses?: boolean;
+  /** How far R or S stands off its atom, to its nearest letter, as a fraction of the font size; unset, half a capital's height (0.35). */
+  stereoGap?: number;
   /** Draw the hydrogens a labelled atom carries, e.g. OH, NH2. Default: on. */
   showImplicitHydrogens?: boolean;
   /**

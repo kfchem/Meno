@@ -98,6 +98,27 @@ export function waysOut(model: Model, atomId: number): Vec[] {
   ];
 }
 
+/**
+ * The ways out from a stereocentre for its R or S, best first: opposite
+ * each of its wedged and hashed bonds, as IUPAC's recommendations for
+ * structure diagrams put it (GR-11.1), then its ways out (waysOut).
+ */
+export function stereoWaysOut(model: Model, atomId: number): Vec[] {
+  const at = new Map(model.atoms.map((a) => [a.id, a]));
+  const atom = at.get(atomId);
+  if (!atom) return waysOut(model, atomId);
+  const opposite: Vec[] = [];
+  for (const b of model.bonds) {
+    if (b.order !== 1 || (b.stereo !== "up" && b.stereo !== "down")) continue;
+    const other = b.a === atomId ? b.b : b.b === atomId ? b.a : null;
+    const o = other != null ? at.get(other) : undefined;
+    const len = o ? Math.hypot(o.x - atom.x, o.y - atom.y) : 0;
+    if (!o || len < 1e-9) continue;
+    opposite.push({ x: -(o.x - atom.x) / len, y: -(o.y - atom.y) / len });
+  }
+  return [...opposite, ...waysOut(model, atomId)];
+}
+
 export type Rect = { minX: number; minY: number; maxX: number; maxY: number };
 type Segment = [Vec, Vec];
 
@@ -211,4 +232,20 @@ export function exitDistance(
     dir.y > 1e-9 ? box.top / dir.y : dir.y < -1e-9 ? box.bottom / -dir.y : Infinity;
   const t = Math.min(tx, ty);
   return Number.isFinite(t) ? t : 0;
+}
+
+/** A descriptor's letter, and an axis's a after it (or nothing). */
+export function stereoParts(cip: string): [string, string] {
+  return [cip.slice(0, 1), cip.slice(1)];
+}
+
+/**
+ * How wide a descriptor is as written, in ems of its size - near enough to
+ * place it by: a capital or a lower-case letter, an axis's smaller a, and
+ * the parentheses about it.
+ */
+export function stereoTextEms(cip: string, parentheses: boolean): number {
+  const [letter, axis] = stereoParts(cip);
+  const letterEms = letter === letter.toLowerCase() ? 0.5 : 0.68;
+  return letterEms + (axis ? 0.38 : 0) + (parentheses ? 0.66 : 0);
 }

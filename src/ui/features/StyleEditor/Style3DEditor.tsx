@@ -383,5 +383,5 @@ function Turnable({ style }: { style: Style3D }) {
   );
 }
 
-const NO_STEREO_FONT = { size: 0, units: "px" as const };
+const NO_STEREO_FONT = { size: 0, units: "px" as const, family: "", parentheses: false, gap: 0 };
 const NONE: number[] = [];

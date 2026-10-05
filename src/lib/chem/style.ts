@@ -153,6 +153,21 @@ export type DrawingStyle = {
    */
   chargedCarbonLabel: "hidden" | "shown";
 
+  // --- Stereodescriptors ----------------------------------------------------
+  /**
+   * R, S, E and Z as the canvas writes them beside stereocentres and double
+   * bonds when they are shown: plainly, R, or in parentheses, (R) - in
+   * italics either way, as IUPAC sets them.
+   */
+  stereoDescriptors: "plain" | "parentheses";
+  /**
+   * How far R or S stands off its stereocentre, from the atom to the nearest
+   * of its letters, as a fraction of the labels' font size. IUPAC's
+   * recommendations for structure diagrams put it about half a capital's
+   * height off (GR-11.1); written bare, it can come nearer.
+   */
+  stereoDescriptorGap: number;
+
   // --- Aromatic rings ------------------------------------------------------
   /** The circle drawn in an aromatic ring, as a fraction of the ring's radius. */
   aromaticCircleSize: number;
@@ -194,6 +209,10 @@ const RULES = {
   labelShareMax: 0.9,
   chargeCircles: "single",
   chargedCarbonLabel: "hidden",
+  // (bare, as IUPAC's recommendations for structure diagrams draw them,
+  // GR-11; the journals below say nothing of them in drawings)
+  stereoDescriptors: "plain",
+  stereoDescriptorGap: 0.15,
   aromaticCircleSize: 0.5,
   reactionArrowHeadInset: 0,
 } satisfies Partial<DrawingStyle>;
@@ -207,6 +226,10 @@ const RULES = {
  */
 export const ACS_1996: DrawingStyle = {
   ...RULES,
+  // (in parentheses, as ACS writes them in names - its guide says nothing
+  // of them in drawings - and as drawings made for ACS journals have them)
+  stereoDescriptors: "parentheses",
+  stereoDescriptorGap: 0.35,
   bondLengthPt: 14.4,
   lineThickness: pt(0.6),
   ends: "square",
@@ -320,6 +343,8 @@ export const MENO: DrawingStyle = {
   ...ACS_1996,
   ends: "round",
   fontFamily: "IBM Plex Sans",
+  stereoDescriptors: "plain",
+  stereoDescriptorGap: 0.15,
 };
 
 /** A style that can be picked by name. */
@@ -474,6 +499,8 @@ export function layoutOptionsFor(
     paddingPx: 48,
     showCarbonLabels: false,
     circleCharges: style.chargeCircles !== "none",
+    stereoParentheses: style.stereoDescriptors === "parentheses",
+    stereoGap: style.stereoDescriptorGap,
     showChargedCarbons: style.chargedCarbonLabel === "shown",
     units: "world",
     minLinePx: 1,

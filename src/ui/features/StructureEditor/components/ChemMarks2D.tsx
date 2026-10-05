@@ -3,6 +3,7 @@ import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import {
+  fontStack,
   labelBox,
   labelSetOf,
   type LabelBox,
@@ -13,8 +14,9 @@ import {
   MARK_MIN_PX,
   MARK_SCALE,
   placeMark,
+  stereoTextEms,
+  stereoWaysOut,
   valenceMessage,
-  waysOut,
   type ChemMarks,
   type Rect,
 } from "../chem/marks";
@@ -22,17 +24,28 @@ import { useEditor } from "../store";
 import type { Model } from "../store/types";
 import { useDrawnLayout } from "./drawnLayoutContext";
 import { usePresence } from "../../../theme/presence";
+import StereoText from "./StereoText";
 
 /** Marks sit over the drawing, and under the canvas's buttons and cards. */
 const Z_RANGE = [20, 10];
+
+/** Half a capital letter's height, as a share of the labels' size: how far R or S stands off its atom where the style does not say. */
+const HALF_CAPITAL = 0.35;
+
+/** Half the height of a mark's letters, in ems of their size: a capital's, and a little round it. */
+const MARK_HALF_HEIGHT = 0.42;
+
+/** How far apart two of R, S, E and Z keep at the least, in ems of their size. */
+const MARKS_APART = 0.6;
 
 /**
  * RDKit's marks on the structure: a ring round each atom with more bonds
  * than it can have - saying what is wrong while the pointer is on it - and
  * R, S, E and Z beside stereocentres and double bonds, each placed clear of
- * the bonds and labels. They are the
- * editor's, laid over the drawing where it stands this frame; they are not
- * part of it, and no picture of it has them.
+ * the bonds and labels, and written as the drawing's labels are - in its
+ * typeface and its colour, in italics, in parentheses if its style says
+ * so. They are the editor's, laid over the drawing where it stands this
+ * frame; they are not part of it, and no picture of it has them.
  */
 export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
   const { atoms, layout, opts, zoom } = useDrawnLayout();
@@ -67,6 +80,10 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
   const z = Math.max(zoom, 1e-6);
   const labelFont = opts.units === "px" ? opts.fontPx / z : opts.fontPx;
   const fontPx = Math.max(MARK_MIN_PX, labelFont * MARK_SCALE * z);
+  // (R, S, E and Z as the drawing's style writes them)
+  const parentheses = !!opts.stereoParentheses;
+  const gap = opts.stereoGap ?? HALF_CAPITAL;
+  const writing = { family: fontStack(labelSetOf(opts).fontFamily ?? "Arial"), color: opts.labelColor ?? "#000000" };
 
   // R, S, E and Z, each placed clear of the bonds, the labels and the
   // marks placed before it
@@ -90,24 +107,30 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
         maxY: a.y + box.top,
       });
     }
-    const half = (text: string) => ({
-      x: (fontPx * 0.55 * text.length) / 2 / z,
-      y: (fontPx * 0.6) / z,
+    const half = (cip: string) => ({
+      x: (fontPx * stereoTextEms(cip, parentheses)) / 2 / z,
+      y: (fontPx * MARK_HALF_HEIGHT) / z,
     });
     const out: { key: string; x: number; y: number; text: string }[] = [];
+    // (a mark placed keeps the next a little way off, not just clear of
+    // it: two side by side read as one, and as either atom's)
+    const apart = (MARKS_APART * fontPx) / z;
     const put = (key: string, text: string, r: Rect) => {
-      rects.push(r);
+      rects.push({ minX: r.minX - apart, maxX: r.maxX + apart, minY: r.minY - apart, maxY: r.maxY + apart });
       out.push({ key, text, x: (r.minX + r.maxX) / 2, y: (r.minY + r.maxY) / 2 });
     };
     for (const [id, cip] of marks.centres) {
       const a = at.get(id);
       if (!a) continue;
       const box = boxes.get(id);
+      // (opposite a wedge where it has one, as IUPAC's recommendations for
+      // structure diagrams place it - GR-11.1 - as far off its atom as the
+      // style says, or as far beyond its label)
       const r = placeMark({
         from: a,
-        dirs: waysOut(drawn, id),
-        start: (dir) => (box ? exitDistance(box, dir) : 0) + 0.12 * L,
-        half: half(`(${cip})`),
+        dirs: stereoWaysOut(drawn, id),
+        start: (dir) => (box ? exitDistance(box, dir) : 0) + gap * labelFont,
+        half: half(cip),
         step: 0.15 * L,
         segments,
         rects,
@@ -122,7 +145,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
         dirs: [side.out, side.back],
         // clear of the second line, which is not among the segments
         start: () => 0.3 * L,
-        half: half(`(${cip})`),
+        half: half(cip),
         step: 0.15 * L,
         segments,
         rects,
@@ -130,7 +153,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
       put(`bond-${id}`, cip, r);
     }
     return out;
-  }, [marks, drawn, boxes, fontPx, z]);
+  }, [marks, drawn, boxes, fontPx, z, parentheses, labelFont, gap]);
 
   // Each mark where it goes: a valence problem's box round its atom's label
   // (or a ring round its atom), and the stereodescriptors.
@@ -182,7 +205,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
       {stereoShown.map(({ key, item: m, leaving }) => (
         <PageHtml key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
           <div className={leaving ? "meno-fade-out" : "meno-fade-in"}>
-            <StereoMark text={m.text} fontPx={fontPx} />
+            <StereoMark text={m.text} fontPx={fontPx} parentheses={parentheses} {...writing} />
           </div>
         </PageHtml>
       ))}
@@ -190,14 +213,11 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
   );
 }
 
-/** A stereodescriptor as it is written: (R), the letter in italics. */
-function StereoMark({ text, fontPx }: { text: string; fontPx: number }) {
+/** A stereodescriptor as the drawing writes it (StereoText), in its typeface and colour. */
+function StereoMark({ text, fontPx, parentheses, family, color }: { text: string; fontPx: number; parentheses: boolean; family: string; color: string }) {
   return (
-    <span
-      className="whitespace-nowrap text-accel-blue select-none"
-      style={{ fontSize: fontPx, lineHeight: 1 }}
-    >
-      (<i>{text}</i>)
+    <span className="whitespace-nowrap select-none" style={{ fontSize: fontPx, lineHeight: 1, fontFamily: family, color }}>
+      <StereoText cip={text} parentheses={parentheses} />
     </span>
   );
 }
