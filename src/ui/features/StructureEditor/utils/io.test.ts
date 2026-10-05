@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editorModelOf, processFileContent, xyzComments } from "./io";
+import { calcResult, editorModelOf, processFileContent, xyzComments } from "./io";
 import sampleSdf from "../../../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../../../samples/esterification.rxn?raw";
 import sampleXyz from "../../../../samples/cholesterol.xyz?raw";
@@ -121,5 +121,46 @@ describe("files of 3D structures", () => {
     const r = await processFileContent("water.mol", water("2D", [0, 0, 0]));
     expect(r.molecules3d).toBeUndefined();
     expect(r.model.atoms).toHaveLength(3);
+  });
+});
+
+describe("a calculation's output, as a reader read it", () => {
+  // an optimisation of water, in the reader's plain data, written by hand
+  const out = {
+    program: "ORCA",
+    method: "B3LYP",
+    charge: 0,
+    multiplicity: 1,
+    atoms: ["O", "H", "H"],
+    frames: [
+      [0, 0, 0.1, 0, 0.8, -0.5, 0, -0.8, -0.5],
+      [0, 0, 0.11, 0, 0.78, -0.48, 0, -0.78, -0.48],
+      [0, 0, 0.12, 0, 0.76, -0.47, 0, -0.76, -0.47],
+    ],
+    energies: [-76.30, -76.31, -76.32],
+    optimised: true,
+  };
+
+  it("stands on the page as one molecule in 3D: its steps the frames, the last shown, its bonds found as an XYZ file's are", () => {
+    const [m] = calcResult(out, "cclib 1.9rc1", "water_opt.out").molecules3d!;
+    expect(m.atoms.map((a) => a.el)).toEqual(["O", "H", "H"]);
+    expect(m.bonds).toHaveLength(2);
+    expect(m.frames).toHaveLength(2);
+    expect(m.frame).toBe(2);
+    expect(m.energies).toEqual([-76.30, -76.31, -76.32]);
+    expect(m.name).toBe("water_opt.out");
+    expect(m.calc).toMatchObject({ reader: "cclib 1.9rc1", program: "ORCA", method: "B3LYP", optimised: true });
+  });
+
+  it("keeps no energies that are not one a frame", () => {
+    const [m] = calcResult({ ...out, energies: [-76.32] }, "cclib", "x.out").molecules3d!;
+    expect(m.energies).toBeUndefined();
+  });
+
+  it("is one frame, shown, for a single point", () => {
+    const [m] = calcResult({ ...out, frames: [out.frames[2]], energies: [-76.32] }, "cclib", "sp.out").molecules3d!;
+    expect(m.frames).toBeUndefined();
+    expect(m.frame).toBeUndefined();
+    expect(m.energies).toEqual([-76.32]);
   });
 });

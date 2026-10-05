@@ -22,6 +22,11 @@ function relative(e: number): string {
   return `${e < 10 ? e.toFixed(2) : e.toFixed(1)} kcal/mol`;
 }
 
+/** An energy as a calculation gives it, as it is written: "−382.055117 Eh". */
+function absolute(e: number): string {
+  return `${e.toFixed(6).replace(/^-/, "\u2212")} Eh`;
+}
+
 /**
  * A molecule's frames, just below it on the page: which one it shows, of
  * how many, and - hovered or selected - a slider through them. Where its
@@ -30,6 +35,11 @@ function relative(e: number): string {
  * frames one profile through them all - and the frame shown says how far
  * above the lowest it is. Pressed, the energies show that frame, and a drag
  * along them goes through the frames.
+ *
+ * Read from a calculation (`about`, what it was), it says so too, opened:
+ * the calculation, and the frame's energy as the calculation gave it. A
+ * single geometry's - nothing to go through - is only that, and only while
+ * its molecule is pointed at or selected.
  */
 export default function Frames3D({
   count,
@@ -39,6 +49,7 @@ export default function Frames3D({
   onFrame,
   below,
   populations,
+  about,
 }: {
   count: number;
   frame: number;
@@ -51,6 +62,8 @@ export default function Frames3D({
   below?: ReactNode;
   /** A conformer set's: how much of it each conformer is, at room temperature. */
   populations?: number[];
+  /** What the calculation it was read from was, in a line (lib/calc `calcLine`). */
+  about?: string;
 }) {
   const [hovered, setHovered] = useState(false);
   const [pointed, setPointed] = useState<number | null>(null);
@@ -78,6 +91,10 @@ export default function Frames3D({
     watch.current = new ResizeObserver(measure);
     watch.current.observe(el);
   }, []);
+  // (a single geometry has nothing to go through: it says what the
+  // calculation was, and only while its molecule is pointed at)
+  const single = count < 2;
+  if (single && !open) return null;
   return (
     <PageHtml zIndexRange={[30, 20]}>
       <div
@@ -98,7 +115,7 @@ export default function Frames3D({
             style={{ gridTemplateRows: full ? "1fr" : "0fr", opacity: full ? 1 : 0 }}
           >
             <div className="overflow-hidden flex flex-col items-center" style={{ width }}>
-              {above && (
+              {above && !single && (
                 <Energies
                   above={above}
                   highest={highest}
@@ -109,23 +126,40 @@ export default function Frames3D({
                   onFrame={onFrame}
                 />
               )}
-              <input
-                type="range"
-                aria-label="Frame"
-                min={0}
-                max={count - 1}
-                step={1}
-                value={frame}
-                onChange={(e) => onFrame(parseInt(e.target.value, 10))}
-                className="my-1.5 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
-                style={{ width }}
-              />
+              {!single && (
+                <input
+                  type="range"
+                  aria-label="Frame"
+                  min={0}
+                  max={count - 1}
+                  step={1}
+                  value={frame}
+                  onChange={(e) => onFrame(parseInt(e.target.value, 10))}
+                  className="my-1.5 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
+                  style={{ width }}
+                />
+              )}
+              {about && !single && (
+                <div className="mb-1 text-center text-[11px] leading-[16px] text-gh-gray tabular-nums">
+                  {about}
+                  {energies && <span className="text-gh-black"> · {absolute(energies[told])}</span>}
+                </div>
+              )}
             </div>
           </div>
           <div ref={said} className="w-max text-[11px] leading-[18px] text-gh-gray tabular-nums whitespace-nowrap">
-            {told + 1} / {count}
-            {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
-            {populations?.[told] != null && <span className="text-gh-black"> · {share(populations[told])}</span>}
+            {single ? (
+              <>
+                {about}
+                {energies && <span className="text-gh-black"> · {absolute(energies[0])}</span>}
+              </>
+            ) : (
+              <>
+                {told + 1} / {count}
+                {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
+                {populations?.[told] != null && <span className="text-gh-black"> · {share(populations[told])}</span>}
+              </>
+            )}
           </div>
         </div>
         {below}

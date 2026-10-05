@@ -5,6 +5,7 @@ import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
 import type { BondChem, ParsedAtom, ParsedBond } from "../../../../lib/chem/molecule";
 import type { Workspace } from "../utils/workspace";
+import type { CalcInfo } from "../../../../lib/calc/output";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
 export type Atom = EditorAtom & {
@@ -105,6 +106,8 @@ export type Molecule3D = {
    * made from it - so that it is told apart from the others.
    */
   stereo?: { atoms: Record<number, string>; bonds: Record<number, string>; chosen?: { atoms: number[]; bonds: number[] } };
+  /** What the calculation it was read from says of it, besides its geometries and energies (lib/calc). */
+  calc?: CalcInfo;
 };
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];

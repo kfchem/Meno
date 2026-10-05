@@ -12,6 +12,7 @@ import { forFlatReaders } from "../chem/drawing";
 import { notOneReaction, reactionFileText } from "../chem/reactionFile";
 import type { Arrow, Atom, Bond, Carried3D, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
 import { asSeen } from "./molecule3d";
+import { readCalc } from "../../../../lib/calc/output";
 
 type Pt = { x: number; y: number };
 
@@ -204,6 +205,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
       ? (m.drawnFrom as (number | null)[])
       : undefined;
   const stereo = readStereo(m.stereo, n, bonds.length);
+  const calc = readCalc(m.calc, n);
   return {
     atoms: atoms as Carried3D["atoms"],
     bonds: bonds as Carried3D["bonds"],
@@ -219,6 +221,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
     ...(drawnFrom && typeof m.drawnAs === "string" ? { drawnAs: m.drawnAs } : {}),
     ...(m.conformerSet === true ? { conformerSet: true } : {}),
     ...(stereo ? { stereo } : {}),
+    ...(calc ? { calc } : {}),
   };
 }
 

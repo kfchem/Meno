@@ -13,6 +13,7 @@ import { eyeOf, FRAME_ORDER, seenAt } from "../utils/page";
 import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
 import StereoText from "./StereoText";
+import { calcLine } from "../../../../lib/calc/output";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -879,9 +880,11 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         ))}
       </group>
       {/* (rising out of its drawing, it shows its frames once it has risen) */}
-      {(solid.frames.length > 1 || props.onRemake) && !props.rising && (
+      {/* (read from a calculation, it says what the calculation was - a
+          single geometry's only when it is pointed at) */}
+      {(solid.frames.length > 1 || props.onRemake || m.calc) && !props.rising && (
         <group ref={pill}>
-          {solid.frames.length > 1 ? (
+          {solid.frames.length > 1 || m.calc ? (
             <Frames3D
               count={solid.frames.length}
               frame={frameOf(solid, frame)}
@@ -890,6 +893,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               onFrame={props.onFrame}
               below={props.onRemake && <Changed onRemake={props.onRemake} />}
               populations={shares}
+              about={m.calc ? calcLine(m.calc) : undefined}
             />
           ) : (
             props.onRemake && (
