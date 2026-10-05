@@ -11,7 +11,8 @@ import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, solidOf } from "./molecule3d";
 import { energiesOf } from "../../../../lib/calc/readers";
 import { outputKindOf } from "../../../../lib/calc/catalog";
-import { calcOf, xyzOf, type ReaderOutput } from "../../../../lib/calc/output";
+import { calcOf, xyzOf, type CalcSource, type ReaderOutput } from "../../../../lib/calc/output";
+import { rememberOutput } from "../../../../lib/calc/asks";
 import { readOutput } from "../../../../lib/calc/read";
 
 /** Extensions the file pickers offer that have no parser yet. */
@@ -89,7 +90,8 @@ export async function processFileContent(
   const kind = format ? null : outputKindOf(content);
   if (kind) {
     const { output, readers } = await readOutput(name, content, kind);
-    return calcResult(output, readers, filename);
+    // (kept for the session: what its promises are asked for from)
+    return calcResult(output, readers, filename, await rememberOutput(name, content));
   }
   const noMolecules = () =>
     new Error(
@@ -223,7 +225,7 @@ function inRow(ms: Omit<Molecule3D, "id" | "at">[]): Carried3D[] {
  * way - their energies, and what the calculation says of it; showing its
  * last geometry, an optimisation's end.
  */
-export function calcResult(out: ReaderOutput, readers: readonly string[], filename?: string): ProcessedFileResult {
+export function calcResult(out: ReaderOutput, readers: readonly string[], filename?: string, source?: CalcSource): ProcessedFileResult {
   const [first, ...rest] = readMoleculesFromText(xyzOf(out), "xyz");
   if (!first?.atoms.length) throw new Error(`No molecule found in ${filename || "the file"}.`);
   const frames = rest.map((f) => f.atoms.flatMap((a) => [a.x, a.y, a.z]));
@@ -238,7 +240,7 @@ export function calcResult(out: ReaderOutput, readers: readonly string[], filena
         ...(frames.length ? { frames, frame: frames.length } : {}),
         ...(energies ? { energies } : {}),
         ...(filename ? { name: filename } : {}),
-        calc: calcOf(out, readers),
+        calc: calcOf(out, readers, source),
       },
     ],
   };

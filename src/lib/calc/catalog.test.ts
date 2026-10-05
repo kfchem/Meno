@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { outputExtensions, outputKindOf, READER_PLUGINS, readerFor, readersFor, readersOf, type ReaderPlugin } from "./catalog";
+import { outputExtensions, outputKindOf, READER_PLUGINS, readerFor, readersFor, readersOf, type PythonReader, type ReaderPlugin } from "./catalog";
 
 describe("a calculation output's kind", () => {
   it("is told by what its file starts with, whatever it is called", () => {
@@ -22,7 +22,7 @@ describe("a calculation output's kind", () => {
 
 describe("which reader reads what", () => {
   // two readers of ORCA's output: cclib's, and another
-  const other: ReaderPlugin = { ...READER_PLUGINS[0], id: "orca-own", name: "Meno's ORCA reader", reads: ["orca"], profile: "reader-orca-own" };
+  const other: ReaderPlugin = { ...(READER_PLUGINS[0] as PythonReader), id: "orca-own", name: "Meno's ORCA reader", reads: ["orca"], profile: "reader-orca-own" };
   const plugins = [...READER_PLUGINS, other];
 
   it("are, for a kind, every reader that reads it, in Meno's order", () => {

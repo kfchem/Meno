@@ -49,7 +49,11 @@ export type CalcInfo = {
   multiplicity?: number;
   optimised?: boolean;
   results?: Result[];
+  /** The output it was read from: its name, and its SHA-256 - what a promise is asked for again from (./asks). */
+  source?: CalcSource;
 };
+
+export type CalcSource = { name: string; sha256: string };
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const text = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
@@ -80,7 +84,7 @@ export function framesOf(out: ReaderOutput): number {
  * version): its results each kept with the reader it came from - the first,
  * unless it says another.
  */
-export function calcOf(out: ReaderOutput, readers: readonly string[]): CalcInfo {
+export function calcOf(out: ReaderOutput, readers: readonly string[], source?: CalcSource): CalcInfo {
   const results = readResults(out.results, out.atoms.length, framesOf(out), readers[0]);
   const said = (k: "program" | "version" | "method" | "basis") => text(out[k]);
   return {
@@ -93,7 +97,16 @@ export function calcOf(out: ReaderOutput, readers: readonly string[]): CalcInfo 
     ...(Number.isInteger(out.multiplicity) && out.multiplicity! > 0 ? { multiplicity: out.multiplicity! } : {}),
     ...(typeof out.optimised === "boolean" ? { optimised: out.optimised } : {}),
     ...(results.length ? { results } : {}),
+    ...(source ? { source: { name: source.name, sha256: source.sha256 } } : {}),
   };
+}
+
+/** An output's name and SHA-256 as a file carries them; otherwise none. */
+function sourceOf(v: unknown): CalcSource | undefined {
+  const s = v as Record<string, unknown> | null | undefined;
+  return s && typeof s.name === "string" && typeof s.sha256 === "string" && /^[0-9a-f]{64}$/.test(s.sha256)
+    ? { name: s.name.slice(0, 260), sha256: s.sha256 }
+    : undefined;
 }
 
 /**
@@ -119,6 +132,7 @@ export function readCalc(given: unknown, atoms: number, frames: number): CalcInf
       results: Array.isArray(c.results) ? c.results : [],
     },
     readers,
+    sourceOf(c.source),
   );
 }
 

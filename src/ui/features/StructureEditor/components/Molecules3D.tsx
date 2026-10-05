@@ -14,7 +14,9 @@ import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { eyeOf, pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
 import CalcList3D from "./CalcList3D";
-import { resultsOn } from "../../../../lib/calc/results";
+import { isAsk, readGrid, resultsOn, type Ask, type ListResult } from "../../../../lib/calc/results";
+import { askFor, askKey, givenValue, useAsks } from "../../../../lib/calc/asks";
+import type { CalcInfo } from "../../../../lib/calc/output";
 import Molecule3DView from "./Molecule3DView";
 import { useDrawingStyle } from "../useDrawingStyle";
 import { editorLayoutOptions } from "../layoutOptions";
@@ -97,6 +99,14 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   const rising = useEditor((s) => s.rising3d);
   const overlay = useEditor((s) => s.overlay3d);
   const lists = useEditor((s) => s.lists3d);
+  // promises asked for: what each came to, or is coming to - and those
+  // wanted in this render, asked for once it is done (asking sets state)
+  const asks = useAsks((s) => s.state);
+  const wantAsked = useRef<(() => void)[]>([]);
+  wantAsked.current = [];
+  useEffect(() => {
+    for (const ask of wantAsked.current.splice(0)) ask();
+  });
   // the drawing's atom under the pointer: lit in the molecules made from it
   const hoveredDrawn = useEditor((s) => s.hovered.atomId);
   // and the drawing each was made from, which may have changed since
@@ -444,6 +454,15 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
         const list = open ? resultsOn(m.calc?.results, "list").find((r) => r.id === open.list) : undefined;
         const row = list && open.row != null ? list.rows[open.row] : undefined;
         const pointed = list && open.pointed != null ? list.rows[open.pointed] : undefined;
+        // (the row's motion and surface: given, or asked for)
+        const motion =
+          list && row?.move
+            ? held(m.calc, list, row.move, asks, wantAsked.current, (v) =>
+                Array.isArray(v) && v.length === 3 * m.atoms.length && v.every(Number.isFinite) ? (v as number[]) : undefined,
+              )
+            : undefined;
+        const surface = list && row?.surface ? held(m.calc, list, row.surface, asks, wantAsked.current, readGrid) : undefined;
+        const asking = [motion, surface].find((h) => h?.state && h.state !== "given")?.state;
         return (
           <Molecule3DView
             key={m.id}
@@ -469,7 +488,9 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
             linkedAtom={hoveredDrawn != null && m.drawnFrom ? (m.drawnFrom.indexOf(hoveredDrawn) >= 0 ? m.drawnFrom.indexOf(hoveredDrawn) : null) : null}
             onHoverAtom={(atom) => store.getState().setHoveredAtom3d(m.id, atom)}
             onRemake={remake && linkOf(m, drawing) === "changed" ? () => remake(m.id) : undefined}
-            motion={row?.move ?? null}
+            motion={motion?.value ?? null}
+            surface={surface?.value ?? null}
+            surfaceIso={open?.iso}
             marked={pointed?.atoms ?? row?.atoms ?? NONE}
             list={
               list ? (
@@ -483,6 +504,9 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
                     if (f != null) st.setFrame3d(m.id, f);
                   }}
                   onPoint={(i) => store.getState().pointRow3d(m.id, i)}
+                  asking={asking === "asking" ? "Working it out…" : asking && typeof asking === "object" ? asking.error : null}
+                  iso={surface?.value ? (open.iso ?? surface.value.iso ?? DEFAULT_ISO) : undefined}
+                  onIso={(iso) => store.getState().setIso3d(m.id, iso)}
                   onClose={() => store.getState().closeList3d(m.id)}
                   onRoom={(bottom) => makeRoom(m, bottom)}
                   area={dom}
@@ -519,6 +543,35 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
 }
 
 const NONE: number[] = [];
+/** The value a surface is drawn at where its grid says none. */
+const DEFAULT_ISO = 0.05;
+
+/**
+ * A row's motion or surface (`v`), as it can be shown: given in the row,
+ * or a promise's value once given - asked for the first time it is wanted,
+ * once the render is done (`toAsk`) - read by `read`; and the promise's
+ * state, where it is one.
+ */
+function held<T>(
+  calc: CalcInfo | undefined,
+  list: ListResult,
+  v: T | Ask,
+  asks: ReturnType<typeof useAsks.getState>["state"],
+  toAsk: (() => void)[],
+  read: (v: unknown) => T | undefined,
+): { value?: T; state?: "asking" | "given" | { error: string } } {
+  if (!isAsk(v)) return { value: read(v) };
+  if (!calc) return {};
+  const key = askKey(calc.source, list.from, v.ask);
+  const state = asks[key];
+  if (state === "given") {
+    const value = read(givenValue(calc.source, list.from, v.ask));
+    return value === undefined ? { state: { error: "The reader gave nothing that can be shown." } } : { value, state };
+  }
+  // (asked for once: an answer, or a failure, stands)
+  if (state === undefined) toAsk.push(() => void askFor(calc, list.from, v.ask).catch(() => {}));
+  return { state: state ?? "asking" };
+}
 /** What a list opened under a molecule is kept clear of the canvas's edges by, and the molecule too, in pixels. */
 const ROOM_PX = 24;
 

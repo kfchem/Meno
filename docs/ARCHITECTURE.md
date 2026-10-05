@@ -366,6 +366,36 @@ knows no program's format beyond that.
   git ignores - no program's output is committed - and run by hand
   (`scripts/calc/test_reader_cclib.py`); the app's side is tested with the
   plain data written by hand.
+- A reader that comes with Meno (`BuiltinReader` in the catalog) is asked
+  as a plugin's worker is - the same `Reader`: what it makes of a file,
+  and a promise it gave - but runs in the app, in a web worker of its own
+  (`lib/calc/builtin.ts`, `builtinWorker.ts`): always added, nothing
+  downloaded, and taken out by taking it out of the catalog and the
+  worker. The first is the cube reader (`lib/calc/cube.ts`), from the
+  layout Gaussian's documentation gives: a cube's molecule, in ångströms,
+  and its grids as a list, each a promise, shown as it comes (a list's
+  `shown`, opened by `shownLists` as a file is opened).
+- Promises (stage 3d): a row's motion or surface may be `{ "ask": key }`.
+  Chosen, it is asked for of the reader that gave it (`lib/calc/asks.ts`
+  `askFor`), the output's text sent again - each opened output is kept for
+  the session by its SHA-256, which the molecule keeps as its `source` -
+  and kept once given; a promise whose output is not open says to open it
+  again. A workspace saves the shown row's promise given, as what it came
+  to (`calcShowing`, from `carriedOf`), and the open list - its row and its
+  surface's value - with the molecule (`Carried3D.list`).
+- Surfaces (stage 3d): a grid (`lib/calc/results.ts` `Grid`) is an origin,
+  three axes and counts in ångströms, and its values as little-endian
+  32-bit floats in base 64; `signed`, drawn at the value and at its
+  negative. `Surface3D`, in its molecule, asks the surfaces' worker
+  (`utils/surfaces.ts`, `surfaceWorker.ts`) for the surface at the value:
+  marching cubes over axes that may lean (`utils/isosurface.ts`, three.js's
+  tables), each point's normal down the values' slope; the grid sent once,
+  the value as often as it changes, one at a time, the last value asked
+  for winning. Placed about the shown frame's centre, as the atoms are; in
+  the 3D style's two colours (`surfacePlus`, `surfaceMinus`; at first a
+  muted blue and orange), seen through, fading in and out. The value is
+  set by a slider under the list (from 0.0001 to 0.5, by its logarithm),
+  kept in `lists3d` as `iso`.
 
 On the 2D canvas (`StructureEditor/chem/`), `analyse` feeds the marks -
 valence problems, R/S and E/Z - which `ChemMarks2D` lays over the drawing

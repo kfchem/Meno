@@ -3,13 +3,15 @@
  * (docs/WORKSPACE.md, stage 3). Meno's core knows no program's format: a
  * kind of output is told by what its file starts with, as the list below
  * says, and is read by a reader running in a Python environment of its
- * own. Which readers there are is Meno's own list for now; a list fetched
- * online would need a way to trust it, and comes later.
+ * own - or one that comes with Meno, for a file as plain as a cube. Which
+ * readers there are is Meno's own list for now; a list fetched online would
+ * need a way to trust it, and comes later.
  *
  * Readers are alike: every one added that reads a kind of output reads it,
  * and what they find is put together. Where two find the same thing, the
  * one chosen for that kind gives it - or else the first, in Meno's order.
  */
+import { CUBE_MARK } from "./cube";
 
 /** A kind of calculation output: one program's, and how its file is told. */
 export type OutputKind = {
@@ -24,11 +26,10 @@ export type OutputKind = {
   marks: readonly RegExp[];
 };
 
-/** A reader plugin: what it is, what it reads, and what it runs. */
-export type ReaderPlugin = {
+type ReaderBase = {
   id: string;
   name: string;
-  /** The version its environment's lock pins. */
+  /** The version its environment's lock pins; or a reader that comes with Meno, Meno's own. */
   version: string;
   /** One line on what it is. */
   description: string;
@@ -36,16 +37,34 @@ export type ReaderPlugin = {
   homepage: string;
   /** The kinds of output it reads, by id, as it reads them best first. */
   reads: readonly string[];
+};
+/** A reader plugin: what it is, what it reads, and what it runs - a worker in a Python environment of its own. */
+export type PythonReader = ReaderBase & {
+  builtin?: undefined;
   /** Its Python environment's profile, lock and worker, among Meno's resources. */
   profile: `reader-${string}`;
   lock: string;
   worker: string;
 };
+/**
+ * A reader that comes with Meno: nothing to add or take away, nothing
+ * downloaded - but read under the plugins' contract all the same, and as
+ * easily taken out (lib/calc/builtin).
+ */
+export type BuiltinReader = ReaderBase & { builtin: true };
+export type ReaderPlugin = PythonReader | BuiltinReader;
 
 /** How much of a file's start is looked at to tell what kind of output it is. */
 export const MARK_REACH = 64 * 1024;
 
 export const OUTPUT_KINDS: readonly OutputKind[] = [
+  {
+    id: "cube",
+    name: "Cube file",
+    program: "the program",
+    extensions: [".cube", ".cub"],
+    marks: [CUBE_MARK],
+  },
   {
     id: "orca",
     name: "ORCA output",
@@ -88,6 +107,16 @@ export const READER_PLUGINS: readonly ReaderPlugin[] = [
     profile: "reader-cclib",
     lock: "resources/py/requirements.reader-cclib.lock",
     worker: "resources/workers/reader_cclib.py",
+  },
+  {
+    id: "cube",
+    name: "Cube files",
+    builtin: true,
+    version: "",
+    description: "Reads cube files: a molecule, with its orbitals or densities on a grid.",
+    licence: "Comes with Meno",
+    homepage: "",
+    reads: ["cube"],
   },
 ];
 

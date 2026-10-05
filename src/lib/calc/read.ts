@@ -112,7 +112,8 @@ export async function readOutput(name: string, text: string, kind: OutputKind): 
   const tries = await Promise.allSettled(
     readers.map(async (p) => {
       const client = await readerClient(p);
-      return { from: `${p.name} ${client.version ?? p.version}`, output: await client.read(name, text) };
+      const version = client.version ?? p.version;
+      return { from: version ? `${p.name} ${version}` : p.name, output: await client.read(name, text) };
     }),
   );
   const found = tries.flatMap((t) => (t.status === "fulfilled" ? [t.value] : []));

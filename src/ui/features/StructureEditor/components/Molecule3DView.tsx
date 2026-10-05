@@ -17,6 +17,8 @@ import { calcLine } from "../../../../lib/calc/output";
 import { grouped, isMarked, pairValue, resultsOn, valueText } from "../../../../lib/calc/results";
 import { VIBRATION_PERIOD, vibrationOffsets } from "../utils/vibration3d";
 import PointedCard3D, { type CardGroups } from "./PointedCard3D";
+import Surface3D from "./Surface3D";
+import type { Grid } from "../../../../lib/calc/results";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -175,6 +177,9 @@ export type Molecule3DViewProps = {
   marked?: number[];
   /** One of its calculation's lists, open under it (CalcList3D). */
   list?: ReactNode;
+  /** The surface it shows - a list's row chosen - and the value it is drawn at; none, none (or one fading out). */
+  surface?: Grid | null;
+  surfaceIso?: number;
 };
 
 /**
@@ -287,6 +292,15 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     [m.conformerSet, m.energies, solid.frames.length],
   );
   const els = useMemo(() => m.atoms.map((a) => a.el), [m.atoms]);
+  // where the frame shown is centred, in ångströms: what a surface on it is placed about
+  const shownFrame = frameOf(solid, frame);
+  const centre = useMemo((): [number, number, number] => {
+    const xyz = shownFrame === 0 ? m.atoms.flatMap((a) => [a.x, a.y, a.z]) : (m.frames?.[shownFrame - 1] ?? []);
+    const c: [number, number, number] = [0, 0, 0];
+    const count = Math.floor(xyz.length / 3) || 1;
+    for (let i = 0; i + 2 < xyz.length; i += 3) for (let x = 0; x < 3; x++) c[x] += xyz[i + x] / count;
+    return c;
+  }, [m.atoms, m.frames, shownFrame]);
   // its stereocentres' and double bonds' labels: all, or those its drawing left open
   const stereoMarks = useMemo(() => {
     const st = m.stereo;
@@ -1051,6 +1065,14 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
             weights={shares}
           />
         )}
+        <Surface3D
+          grid={props.surface ?? null}
+          centre={centre}
+          iso={props.surfaceIso ?? props.surface?.iso ?? 0.05}
+          plus={style.surfacePlus}
+          minus={style.surfaceMinus}
+          renderOrder={OVER_PAGE + 2}
+        />
         {stereoMarks.map((mark) => (
           <group
             key={mark.key}

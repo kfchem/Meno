@@ -27,6 +27,9 @@ export type Style3D = {
   /** How smooth a ball and a bond are: the segments round them. */
   ballSegments: number;
   bondSegments: number;
+  /** A surface's colours (an orbital's, a density's): an orbital's positive phase - a density's one - and its negative one. */
+  surfacePlus: string;
+  surfaceMinus: string;
 };
 
 /** The 3D viewer's look. */
@@ -43,6 +46,9 @@ export const STYLE_3D: Style3D = {
   turnDamping: 0.1,
   ballSegments: 32,
   bondSegments: 8,
+  // (a muted blue and orange: the maintainer's, 2026-10-05)
+  surfacePlus: "#4f7cc4",
+  surfaceMinus: "#d98a4b",
 };
 
 /** Where the key light comes from, as seen: above right, in front. */
@@ -115,7 +121,7 @@ export function with3dSetting<K extends keyof Style3D>(choice: Style3DChoice, ke
 
 export type Style3DField = {
   key: keyof Style3D;
-  group: "Atoms and bonds" | "Surface and light" | "Turning";
+  group: "Atoms and bonds" | "Surface and light" | "Orbitals and densities" | "Turning";
   label: string;
   description: string;
 } & (
@@ -215,6 +221,20 @@ export const STYLE_3D_FIELDS: Style3DField[] = [
     max: 3,
     step: 0.05,
     digits: 2,
+  },
+  {
+    key: "surfacePlus",
+    group: "Orbitals and densities",
+    label: "Positive phase",
+    description: "An orbital's surface where its values are positive, and a density's surface.",
+    kind: "colour",
+  },
+  {
+    key: "surfaceMinus",
+    group: "Orbitals and densities",
+    label: "Negative phase",
+    description: "An orbital's surface where its values are negative.",
+    kind: "colour",
   },
   {
     key: "turnPerHalfWidth",

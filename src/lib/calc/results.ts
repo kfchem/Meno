@@ -39,22 +39,42 @@ export type AtomsResult = Named & Measure & { on: "atoms"; values: Cell[] };
 export type PairsResult = Named & Measure & { on: "pairs"; pairs: [number, number, Cell][] };
 export type Column = Measure & { label: string };
 /**
+ * A promise: a value not sent with the rest - too big to, or worked out
+ * only when wanted - and the key its plugin is asked for it by. It can stand
+ * where a row's motion or surface would.
+ */
+export type Ask = { ask: string };
+type Vec3 = [number, number, number];
+/**
+ * Values on a grid in space - an orbital, a density: its origin; its three
+ * axes, each the step from one point to the next along it; in ångströms, as
+ * the output's geometries are; how many points along each; and the value at
+ * each point, the last axis running fastest, as little-endian 32-bit floats
+ * in base 64. `signed`: its values go both ways - an orbital's two phases -
+ * and its surface is drawn at the value and at its negative, in two
+ * colours. `iso`: the value it is drawn at, at first.
+ */
+export type Grid = { origin: Vec3; axes: [Vec3, Vec3, Vec3]; counts: Vec3; values: string; signed?: boolean; iso?: number };
+/**
  * A list's row: its values, column by column, and what Meno can do with
- * it - the atoms it is of, marked as it is pointed at; a frame, or a
- * motion (each atom's displacement, x, y, z), shown as it is chosen.
+ * it - the atoms it is of, marked as it is pointed at; a frame, a motion
+ * (each atom's displacement, x, y, z) or a surface (a grid's), shown as it
+ * is chosen. A motion or a surface may be a promise, asked for then.
  */
 export type Row = {
   cells: Cell[];
   atoms?: number[];
   frame?: number;
-  move?: number[];
+  move?: number[] | Ask;
+  surface?: Grid | Ask;
 };
-/** A list of rows; `focus`, the row it opens on. */
+/** A list of rows; `focus`, the row it opens on; `shown`, the row chosen as it comes - the list opened at once. */
 export type ListResult = Named & {
   on: "list";
   columns: Column[];
   rows: Row[];
   focus?: number;
+  shown?: number;
 };
 export type Result = MoleculeResult | FramesResult | AtomsResult | PairsResult | ListResult;
 
@@ -64,6 +84,10 @@ const TEXT_MOST = 120;
 const UNIT_MOST = 24;
 const COLUMNS_MOST = 12;
 const ROWS_MOST = 5000;
+/** How long a promise's key may be; how many points a grid may have along an axis, and in all. */
+const KEY_MOST = 200;
+const GRID_SIDE_MOST = 400;
+const GRID_POINTS_MOST = 16_000_000;
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isIndex = (v: unknown, below: number): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < below;
@@ -101,7 +125,57 @@ function rowOf(v: unknown, columns: number, atoms: number, frames: number): Row 
   if (Array.isArray(r.atoms) && r.atoms.length && r.atoms.every((a) => isIndex(a, atoms))) row.atoms = [...new Set(r.atoms as number[])];
   if (isIndex(r.frame, frames)) row.frame = r.frame;
   if (Array.isArray(r.move) && r.move.length === 3 * atoms && r.move.every(isNum)) row.move = r.move as number[];
+  else if (askOf(r.move)) row.move = askOf(r.move);
+  const surface = askOf(r.surface) ?? readGrid(r.surface);
+  if (surface) row.surface = surface;
   return row;
+}
+
+/** A promise as given; otherwise none. */
+export function askOf(v: unknown): Ask | undefined {
+  const key = v && typeof v === "object" ? (v as { ask?: unknown }).ask : undefined;
+  return typeof key === "string" && key && key.length <= KEY_MOST ? { ask: key } : undefined;
+}
+
+/** Whether a value is a promise. */
+export const isAsk = (v: unknown): v is Ask => !!askOf(v);
+
+const vec3 = (v: unknown): v is Vec3 => Array.isArray(v) && v.length === 3 && v.every(isNum);
+
+/** A grid as given - its values as many as its points - otherwise none. */
+export function readGrid(v: unknown): Grid | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const g = v as Record<string, unknown>;
+  if (!vec3(g.origin) || !Array.isArray(g.axes) || g.axes.length !== 3 || !g.axes.every(vec3) || !Array.isArray(g.counts)) return undefined;
+  const counts = g.counts;
+  if (counts.length !== 3 || !counts.every((c) => Number.isInteger(c) && c >= 2 && c <= GRID_SIDE_MOST)) return undefined;
+  const points = counts[0] * counts[1] * counts[2];
+  if (points > GRID_POINTS_MOST || typeof g.values !== "string" || g.values.length !== 4 * Math.ceil((4 * points) / 3)) return undefined;
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(g.values)) return undefined;
+  return {
+    origin: g.origin as Vec3,
+    axes: g.axes as Grid["axes"],
+    counts: counts as Vec3,
+    values: g.values,
+    ...(g.signed === true ? { signed: true } : {}),
+    ...(isNum(g.iso) && g.iso > 0 ? { iso: g.iso } : {}),
+  };
+}
+
+/** Values as a grid carries them: little-endian 32-bit floats, in base 64. */
+export function floatsText(values: Float32Array): string {
+  const bytes = new Uint8Array(values.buffer, values.byteOffset, values.byteLength);
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(out);
+}
+
+/** A grid's values, read from what it carries (every machine Meno runs on is little-endian). */
+export function floatsOf(text: string): Float32Array {
+  const bin = atob(text);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Float32Array(bytes.buffer, 0, Math.floor(bytes.length / 4));
 }
 
 /** One result as given - by a plugin, or a file - where it reads as one for `atoms` atoms and `frames` frames; otherwise none. */
@@ -165,6 +239,7 @@ function resultOf(v: unknown, atoms: number, frames: number, from?: string): Res
         columns: columns as Column[],
         rows: rows as Row[],
         ...(isIndex(r.focus, rows.length) ? { focus: r.focus } : {}),
+        ...(isIndex(r.shown, rows.length) ? { shown: r.shown } : {}),
       };
     }
     default:

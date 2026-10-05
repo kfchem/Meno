@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calcLine, calcOf, multiplicityName, readCalc, xyzOf, type ReaderOutput } from "./output";
 import { combine, whoReads, checked } from "./read";
-import { OUTPUT_KINDS, READER_PLUGINS, type ReaderPlugin } from "./catalog";
+import { OUTPUT_KINDS, READER_PLUGINS, type PythonReader, type ReaderPlugin } from "./catalog";
 
 // water, as a reader hands back an optimisation of it: written by hand,
 // in Meno's own form - no program's output is in the repository
@@ -79,7 +79,7 @@ describe("what a reader hands back", () => {
 describe("reading an output", () => {
   const orca = OUTPUT_KINDS.find((k) => k.id === "orca")!;
   // a second reader of ORCA's output
-  const other: ReaderPlugin = { ...READER_PLUGINS[0], id: "orca-own", name: "Meno's ORCA reader", reads: ["orca"], profile: "reader-orca-own" };
+  const other: ReaderPlugin = { ...(READER_PLUGINS[0] as PythonReader), id: "orca-own", name: "Meno's ORCA reader", reads: ["orca"], profile: "reader-orca-own" };
 
   it("is every added reader's that reads it, the one chosen first", () => {
     const plugins = [...READER_PLUGINS, other];

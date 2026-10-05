@@ -121,7 +121,9 @@ export type Rising3D = { from: { x: number; y: number }; start: number; flat?: n
  * A molecule in 3D as a copy carries it: as the document has it, and how it
  * was turned and which frame it showed, so that a paste shows it the same.
  */
-export type Carried3D = Omit<Molecule3D, "id"> & { turn?: Turn3D; frame?: number };
+/** One of its calculation's lists, open, as a file carries it: the list, the row chosen, and the value its surface is drawn at. */
+export type CarriedList = { id: string; row: number | null; iso?: number };
+export type Carried3D = Omit<Molecule3D, "id"> & { turn?: Turn3D; frame?: number; list?: CarriedList };
 export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[]; molecules3d?: Carried3D[] };
 
 export type EditorState = {
@@ -160,16 +162,19 @@ export type EditorState = {
   /**
    * Molecules in 3D with one of their calculation's lists open under them
    * (lib/calc/results), by id: the list, by its result's id; the row chosen
-   * in it - the molecule moving in it, or showing its frame - and the row
-   * pointed at, its atoms marked; or null, none.
+   * in it - the molecule moving in it, showing its frame or its surface -
+   * and the row pointed at, its atoms marked; or null, none; and the value
+   * a surface is drawn at, where it has been set (unset: the grid's own).
    */
-  lists3d: Record<number, { list: string; row: number | null; pointed: number | null }>;
+  lists3d: Record<number, { list: string; row: number | null; pointed: number | null; iso?: number }>;
   /** Opens one of a molecule's lists under it, in place of one open, none of its rows chosen. */
   openList3d: (id: number, list: string) => void;
   /** The row chosen in a molecule's open list; null, none - its motion comes to rest. */
   chooseRow3d: (id: number, row: number | null) => void;
   /** The row pointed at in a molecule's open list; null, none. */
   pointRow3d: (id: number, row: number | null) => void;
+  /** The value the surface of a molecule's open list is drawn at. */
+  setIso3d: (id: number, iso: number) => void;
   closeList3d: (id: number) => void;
   /**
    * The atoms and bonds chosen in one molecule in 3D, by index, each in the

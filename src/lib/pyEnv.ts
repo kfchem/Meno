@@ -8,7 +8,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
 import { askToConnect } from "./net/network";
-import { READER_PLUGINS } from "./calc/catalog";
+import { READER_PLUGINS, type PythonReader } from "./calc/catalog";
 
 async function sha256(s: string) {
   const buf = await crypto.subtle.digest(
@@ -26,7 +26,7 @@ async function sha256(s: string) {
 export type PyProfile = "console" | "node" | "chem" | `reader-${string}`;
 
 /** The reader plugin a profile is the environment of; none, for Meno's own. */
-const readerOf = (profile: PyProfile) => READER_PLUGINS.find((p) => p.profile === profile);
+const readerOf = (profile: PyProfile) => READER_PLUGINS.find((p): p is PythonReader => !p.builtin && p.profile === profile);
 
 async function ensureDir(rel: string, baseDir: BaseDirectory) {
   const parts = rel.split("/").filter(Boolean);

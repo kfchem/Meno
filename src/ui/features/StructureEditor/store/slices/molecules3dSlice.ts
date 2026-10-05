@@ -80,7 +80,15 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
     chooseRow3d: (id: number, row: number | null) =>
       set((prev) => {
         const l = prev.lists3d[id];
-        return !l || l.row === row ? prev : { ...prev, lists3d: { ...prev.lists3d, [id]: { ...l, row } } };
+        // (another row's surface drawn at its own value, not the last one's)
+        if (!l || l.row === row) return prev;
+        const { iso: _, ...rest } = l;
+        return { ...prev, lists3d: { ...prev.lists3d, [id]: { ...rest, row } } };
+      }),
+    setIso3d: (id: number, iso: number) =>
+      set((prev) => {
+        const l = prev.lists3d[id];
+        return !l || l.iso === iso ? prev : { ...prev, lists3d: { ...prev.lists3d, [id]: { ...l, iso } } };
       }),
     pointRow3d: (id: number, row: number | null) =>
       set((prev) => {
