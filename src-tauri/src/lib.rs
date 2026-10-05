@@ -238,6 +238,20 @@ fn uv_command(uv: &Path, data: &Path) -> Command {
     cmd
 }
 
+/// `uv venv` for a setup, made afresh over whatever is there. A setup runs
+/// when the environment is missing or its lock has changed, and uv will not
+/// make one over an environment already there unless told to replace it: a
+/// changed lock otherwise left Meno without its Python for good.
+fn uv_venv_command(uv: &Path, data: &Path, venv_dir: &Path, python: &str) -> Command {
+    let mut cmd = uv_command(uv, data);
+    cmd.arg("venv")
+        .arg(venv_dir)
+        .arg("--python")
+        .arg(python)
+        .arg("--clear");
+    cmd
+}
+
 #[tauri::command]
 async fn py_env_setup_uv(
     app: AppHandle,
@@ -259,14 +273,9 @@ async fn py_env_setup_uv(
     let venv_dir = data.join(&env.venv_home);
     std::fs::create_dir_all(&venv_dir).map_err(|e| e.to_string())?;
 
-    // 1) uv venv <venv_dir> --python <version>
-    let mut cmd1 = uv_command(&uv, &data);
-    cmd1.arg("venv")
-        .arg(&venv_dir)
-        .arg("--python")
-        .arg(&payload.python_version)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    // 1) uv venv <venv_dir> --python <version> --clear
+    let mut cmd1 = uv_venv_command(&uv, &data, &venv_dir, &payload.python_version);
+    cmd1.stdout(Stdio::piped()).stderr(Stdio::piped());
     no_window(&mut cmd1);
     task.route(&mut cmd1);
     let mut child1 = cmd1.spawn().map_err(|e| format!("spawn uv venv: {}", e))?;
@@ -733,6 +742,14 @@ mod tests {
         assert_eq!(get("UV_CACHE_DIR"), under("cache"));
         assert_eq!(get("UV_PYTHON_PREFERENCE"), Some("only-managed".into()));
         assert_eq!(get("UV_NO_CONFIG"), Some("1".into()));
+    }
+
+    #[test]
+    fn a_setup_makes_its_environment_afresh_over_one_already_there() {
+        let venv = Path::new("/data/Meno/uv/chem/venv");
+        let cmd = uv_venv_command(Path::new("/app/uv"), Path::new("/data/Meno"), venv, "3.12");
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert_eq!(args, ["venv", "/data/Meno/uv/chem/venv", "--python", "3.12", "--clear"]);
     }
 
     fn env_info(uv: &str, lock: &str, venv: &str, py: &str) -> PyEnvInfo {
