@@ -56,7 +56,6 @@ async function writeJsonSafe(
 
 type PyEnvInfo = {
   os: "windows" | "macos" | "linux";
-  uv: string;
   lockPath: string;
   venvHome: string;
   venvPythonRel: string;
@@ -87,7 +86,6 @@ async function baseInfo(
   const os = await platform();
   return {
     os: os as any,
-    uv: os === "windows" ? "resources/py/uv.exe" : "resources/py/uv",
     lockPath,
     venvHome: `uv/${profile}/venv`,
     venvPythonRel: os === "windows" ? "Scripts/python.exe" : "bin/python",
@@ -193,10 +191,10 @@ export async function ensurePyEnv(
               `in a Python ${info.pythonVersion} of its own `
             : `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, `) +
         `with the ${packages} packages it needs, in its data folder. ` +
-        `uv, which comes with Meno, downloads them - once` +
+        `Astral's uv, fetched the first time it is needed, downloads them - once` +
         (hashed ? ", every file checked against the fingerprint Meno carries for it:" : ":"),
       sources: [
-        "Python itself, from Astral, who make uv (releases.astral.sh)",
+        "uv the first time, and Python itself, from Astral, who make uv (releases.astral.sh)",
         "the packages, from the Python Package Index (pypi.org, files.pythonhosted.org)",
       ],
     });

@@ -11,4 +11,3 @@
 *.woff2 binary
 *.exe binary
 *.cfb binary
-src-tauri/resources/py/uv binary
