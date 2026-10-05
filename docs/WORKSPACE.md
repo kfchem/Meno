@@ -413,16 +413,17 @@ read and attached to its molecule. Agreed with the maintainer on
   library. Meno does not copy its code, and a reader Meno writes itself is
   written from the programs' outputs and documentation, not from cclib's
   parsers.
-- **When readers overlap, the chemist chooses.** Settings lists, for each
-  kind of output, the installed readers that read it; the first in Meno's
-  order reads it, unless another is chosen.
-- **Several plugins can read one output.** One reader reads the molecule
-  from it - its atoms, its geometries and what the calculation was -
-  chosen as above. Every other plugin installed that reads that kind of
-  output adds what it found to the same molecule: an NBO plugin, say,
-  adds NBO's analysis to what cclib read from the same Gaussian output.
-  What a plugin adds is kept only where its atoms are the reader's, in
-  the same order.
+- **Readers are alike, and several can read one output.** Every reader
+  installed that reads a kind of output reads it, and what they find is
+  put together: an NBO plugin, say, adds NBO's analysis to what cclib read
+  from the same Gaussian output. No reader is set above another (the
+  maintainer, 2026-10-05).
+- **When readers find the same thing, the chemist chooses.** Settings
+  lists, for each kind of output, the installed readers that read it.
+  Where two find the same thing - the geometries, what the calculation
+  was, a result of the same name - the one chosen gives it, or else the
+  first in Meno's order. What a reader finds of atoms is kept only where
+  its atoms are those of the geometries, in the same order.
 
 ### Where the line is
 
