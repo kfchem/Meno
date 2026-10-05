@@ -108,16 +108,21 @@ describe("style presets", () => {
     expect(presetById("nonsense")).toBe(STYLE_PRESETS[0]);
   });
 
-  it("makes Meno's own ACS 1996 with round ends in IBM Plex Sans", () => {
+  it("makes Meno's own ACS 1996 with round ends in IBM Plex Sans, and R and S written bare", () => {
     const { style } = presetById("meno");
     expect(DEFAULT_STYLE_CHOICE.preset).toBe("meno");
-    const { ends, fontFamily, ...rest } = style;
-    const { ends: e, fontFamily: f, ...acs } = ACS_1996;
+    const { ends, fontFamily, stereoDescriptors, ...rest } = style;
+    const { ends: e, fontFamily: f, stereoDescriptors: d, ...acs } = ACS_1996;
     expect(rest).toEqual(acs);
-    expect([ends, fontFamily]).toEqual(["round", "IBM Plex Sans"]);
-    expect([e, f]).toEqual(["square", "Arial"]);
+    expect([ends, fontFamily, stereoDescriptors]).toEqual(["round", "IBM Plex Sans", "plain"]);
+    expect([e, f, d]).toEqual(["square", "Arial", "parentheses"]);
     // the baseline follows the typeface
     expect(style.labelBaseline).toBeUndefined();
+  });
+
+  it("writes R and S bare, as IUPAC's recommendations for diagrams do, but for ACS 1996's parentheses", () => {
+    const written = Object.fromEntries(STYLE_PRESETS.map((p) => [p.id, p.style.stereoDescriptors]));
+    expect(written).toEqual({ meno: "plain", acs1996: "parentheses", rsc: "plain", wiley: "plain", nature: "plain" });
   });
 
   it("sets a capital on its atom as ACS 1996 sets Arial's, whatever the typeface", () => {

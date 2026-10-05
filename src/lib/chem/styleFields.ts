@@ -422,6 +422,20 @@ export const STYLE_FIELDS: StyleField[] = [
       ],
     },
   },
+  {
+    key: "stereoDescriptors",
+    group: "Labels",
+    label: "R, S, E and Z",
+    description:
+      "How R and S at stereocentres, and E and Z at double bonds, are written when they are shown: plainly, or in parentheses. Either way in italics.",
+    kind: {
+      type: "choice",
+      options: [
+        { value: "plain", label: "R" },
+        { value: "parentheses", label: "(R)" },
+      ],
+    },
+  },
 
   // --- Aromatic rings --------------------------------------------------------
   {

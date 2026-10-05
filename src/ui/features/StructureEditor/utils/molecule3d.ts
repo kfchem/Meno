@@ -52,14 +52,51 @@ function standOff(u: { x: number; y: number }, half: { x: number; y: number }, r
   return hi;
 }
 
+/** A bond as a label keeps clear of it on the screen: its ends, and how far either side of its line it is drawn. */
+export type Stick = { a: { x: number; y: number }; b: { x: number; y: number }; r: number };
+
+/**
+ * How much a label lying over a bond counts against its place, for each
+ * pixel of the bond it covers: an atom hidden counts for far more, but a
+ * label over a stick is still in the way of reading the molecule.
+ */
+const STICK_WEIGHT = 0.25;
+
+/** How much of a stick's line lies within a box, the box grown by the stick's half width. */
+export function coveredLength(box: LabelBox, s: Stick): number {
+  const dx = s.b.x - s.a.x;
+  const dy = s.b.y - s.a.y;
+  let t0 = 0;
+  let t1 = 1;
+  // (the line clipped to the box, one side at a time)
+  const sides: [number, number][] = [
+    [-dx, s.a.x - (box.x - box.hx - s.r)],
+    [dx, box.x + box.hx + s.r - s.a.x],
+    [-dy, s.a.y - (box.y - box.hy - s.r)],
+    [dy, box.y + box.hy + s.r - s.a.y],
+  ];
+  for (const [p, q] of sides) {
+    if (Math.abs(p) < 1e-12) {
+      if (q < 0) return 0;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 >= t1) return 0;
+  }
+  return (t1 - t0) * Math.hypot(dx, dy);
+}
+
 /**
  * Where a label of half size `half` stands off a point `o` on the screen - an
  * atom, or a bond's middle - its nearest edge `reach` from it, and clear of
- * the balls (atoms, as circles) and the labels already placed about it
- * where it can be: the way `preferred` - the widest gap between its bonds -
- * when that is clear, or else the clear way nearest it; or a little further
- * out, the same way round; or else where it hides least. A ball hidden
- * outright counts for more than two touched at their edges.
+ * the balls (atoms, as circles), the labels already placed about it and the
+ * sticks (bonds) where it can be: the way `preferred` - the widest gap
+ * between its bonds - when that is clear, or else the clear way nearest it;
+ * or a little further out, the same way round; or else where it hides
+ * least. A ball hidden outright counts for more than two touched at their
+ * edges, and either for more than a bond covered.
  */
 export function labelSpot(
   o: { x: number; y: number },
@@ -68,6 +105,7 @@ export function labelSpot(
   preferred: { x: number; y: number },
   balls: readonly { x: number; y: number; r: number }[],
   placed: readonly LabelBox[],
+  sticks: readonly Stick[] = [],
 ): LabelBox {
   const start = Math.atan2(preferred.y, preferred.x);
   let best: { box: LabelBox; hides: number } | null = null;
@@ -92,6 +130,7 @@ export function labelSpot(
         const oy = box.hy + p.hy - Math.abs(box.y - p.y);
         if (ox > 0 && oy > 0) hides += 2 * Math.min(ox, oy);
       }
+      for (const st of sticks) hides += STICK_WEIGHT * coveredLength(box, st);
       if (hides < 0.05) return box;
       if (!best || hides < best.hides) best = { box, hides };
     }

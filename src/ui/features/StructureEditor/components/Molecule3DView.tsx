@@ -5,13 +5,14 @@ import * as THREE from "three";
 import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
 import type { Look3D, Measure3D, Molecule3D, Rising3D, Turn3D } from "../store/types";
-import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine, type LabelBox } from "../utils/molecule3d";
-import { MARK_MIN_PX } from "../chem/marks";
+import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine, type LabelBox, type Stick } from "../utils/molecule3d";
+import { MARK_MIN_PX, stereoTextEms } from "../chem/marks";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { dashesOf, kindOf, MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, measureText, measureValue } from "../utils/measure3d";
 import { eyeOf, FRAME_ORDER, seenAt } from "../utils/page";
 import Frames3D from "./Frames3D";
 import Overlay3D from "./Overlay3D";
+import StereoText from "./StereoText";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -65,6 +66,8 @@ const ATOM_SWELL = 1.1;
 const STEREO_OFFSET = "translate(0.95em, -0.95em)";
 const STEREO_HALO = "0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff";
 const STEREO_GAP_PX = 2;
+/** How far apart two stereo labels keep at the least, in ems of their size. */
+const STEREO_APART = 0.6;
 /**
  * A molecule rising out of its drawing, in seconds: its atoms grow out of the
  * drawing's, where they lie on the page, and go over to their places in 3D as
@@ -151,8 +154,8 @@ export type Molecule3DViewProps = {
   overlay?: boolean;
   /** Its stereocentres' and double bonds' labels shown: all, only those its drawing left open, or none. */
   stereoShown: "all" | "chosen" | null;
-  /** How large their letters are: as the drawing's R and S are, on the page or on the screen. */
-  stereoFont: { size: number; units: "world" | "px" };
+  /** R and S as the drawing writes them: as large as its R and S, on the page or on the screen; in its typeface; in parentheses or not. */
+  stereoFont: { size: number; units: "world" | "px"; family: string; parentheses: boolean };
   onRisen?: () => void;
 };
 
@@ -240,6 +243,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   // measurements on their way in or out: how far in, and the last drawn of one gone
   const measureLevels = useRef(new Map<number, { v: number; m: Measure3D }>());
   const labels = useRef(new Map<number, { anchor: THREE.Group | null; el: HTMLDivElement | null }>());
+  // each value's size on the screen, with the text it was read for: read
+  // again only when its text changes, not every frame - what the stereo
+  // labels keep clear of
+  const valueSizes = useRef(new Map<number, { text: string; w: number; h: number }>());
   const [measureTexts, setMeasureTexts] = useState<Record<number, string>>({});
   const [shownMeasures, setShownMeasures] = useState<Measure3D[]>(m.measures ?? []);
   const dirty = useRef(true);
@@ -578,8 +585,9 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     // the stereo labels, on their atom - a double bond's, at its middle - and
     // set off from it on the screen, as the drawing's are: clear of its ball,
     // the widest way out between its bonds as it is seen now - or the
-    // nearest way that keeps clear of the other atoms and of the labels
-    // already placed - and as large as the drawing's letters
+    // nearest way that keeps clear of the other atoms, the bonds, the
+    // measurements' values and the labels already placed - and as large as
+    // the drawing's letters
     if (stereoMarks.length) {
       const g = Math.max(grown.current.v, 1e-3);
       const font = Math.max(MARK_MIN_PX, props.stereoFont.units === "px" ? props.stereoFont.size : props.stereoFont.size / px);
@@ -589,8 +597,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         return { x: ((v.x + 1) / 2) * size.width, y: ((1 - v.y) / 2) * size.height };
       };
       const placedLabels: LabelBox[] = [];
-      // (every atom's ball on the screen, once for all the labels)
+      // (every atom's ball on the screen, once for all the labels; and every
+      // bond as drawn - none when space-filling)
       let balls: { x: number; y: number; r: number }[] | null = null;
+      const sticks: Stick[] = [];
       for (const mark of stereoMarks) {
         const l = stereoAnchors.current.get(mark.key);
         if (!l?.anchor) continue;
@@ -604,17 +614,34 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         if (!balls) {
           balls = [];
           for (let i = 0; i < n; i++) balls.push({ ...onScreen(parent, p[3 * i], p[3 * i + 1], p[3 * i + 2]), r: (radius(i) * g) / px });
+          if (bondR > 0) for (const b of m.bonds) if (balls[b.a1] && balls[b.a2]) sticks.push({ a: balls[b.a1], b: balls[b.a2], r: (bondR * g) / px });
+          // (the measurements' values, where they are written now - each
+          // value's size read when its text is new: it is written in a
+          // root of its own, after this one's, so not before it shows)
+          for (const [id, v] of labels.current) {
+            if (!v.anchor?.parent || !v.el || (measureLevels.current.get(id)?.v ?? 0) < 0.5) continue;
+            const text = v.el.textContent ?? "";
+            let size = valueSizes.current.get(id);
+            if (!size || size.text !== text) {
+              size = { text, w: v.el.offsetWidth, h: v.el.offsetHeight };
+              valueSizes.current.set(id, size);
+            }
+            const c = onScreen(v.anchor.parent, v.anchor.position.x, v.anchor.position.y, v.anchor.position.z);
+            placedLabels.push({ x: c.x, y: c.y, hx: size.w / 2, hy: size.h / 2 });
+          }
         }
         const o = onScreen(parent, at.x, at.y, at.z);
         const way = widestWay(mark.around.map((i) => Math.atan2(balls![i].y - o.y, balls![i].x - o.x)));
         // (out past the ball - or the bond - by a little more than half the label)
         const reach = ((mark.atoms.length === 1 ? radius(mark.atoms[0]) : bondR) * g) / px + STEREO_GAP_PX;
-        const half = { x: font * 0.3 * (mark.text.length + 2), y: font * 0.55 };
+        const half = { x: font * (stereoTextEms(mark.text, props.stereoFont.parentheses) / 2 + 0.15), y: font * 0.55 };
         // (every atom near it but its own - a double bond's two among them)
         const own = mark.atoms.length === 1 ? mark.atoms[0] : -1;
         const others = balls.filter((b, i) => i !== own && Math.hypot(b.x - o.x, b.y - o.y) < reach + 4 * half.x + b.r);
-        const spot = labelSpot(o, reach, half, way, others, placedLabels);
-        placedLabels.push(spot);
+        const spot = labelSpot(o, reach, half, way, others, placedLabels, sticks);
+        // (the next keeps a little way off it, not just clear: two side by
+        // side read as one, and as either atom's)
+        placedLabels.push({ ...spot, hx: spot.hx + STEREO_APART * font, hy: spot.hy + STEREO_APART * font });
         l.el.style.transform = `translate(${(spot.x - o.x).toFixed(1)}px, ${(spot.y - o.y).toFixed(1)}px)`;
         l.el.style.fontSize = `${font.toFixed(1)}px`;
       }
@@ -848,9 +875,9 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
                   stereoAnchors.current.set(mark.key, l);
                 }}
                 className="pointer-events-none select-none whitespace-nowrap text-accel-blue text-[12px] leading-none"
-                style={{ opacity: 0, transform: STEREO_OFFSET, textShadow: STEREO_HALO }}
+                style={{ opacity: 0, transform: STEREO_OFFSET, textShadow: STEREO_HALO, fontFamily: props.stereoFont.family }}
               >
-                (<i>{mark.text}</i>)
+                <StereoText cip={mark.text} parentheses={props.stereoFont.parentheses} />
               </div>
             </PageHtml>
           </group>

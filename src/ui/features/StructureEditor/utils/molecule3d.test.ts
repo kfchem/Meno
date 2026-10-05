@@ -21,6 +21,7 @@ import {
   turnedInPlane,
   turnedTogether,
   WORLD_PER_ANGSTROM,
+  coveredLength,
   labelSpot,
   populations,
   widestWay,
@@ -402,6 +403,38 @@ describe("labelSpot", () => {
     // (the small one is straight down, on a screen)
     expect(spot.y).toBeGreaterThan(o.y);
     expect(Math.abs(spot.x - o.x)).toBeLessThan(1e-9);
+  });
+
+  it("keeps off a bond in the way - one running past where it would stand - when another way is clear", () => {
+    // (a bond up and down the screen, just right of the atom, through the preferred place)
+    const bond = { a: { x: 120, y: 60 }, b: { x: 120, y: 140 }, r: 2 };
+    const spot = labelSpot(o, 10, half, right, [], [], [bond]);
+    expect(coveredLength(spot, bond)).toBe(0);
+    // without it, the label stands across it
+    expect(coveredLength(labelSpot(o, 10, half, right, [], []), bond)).toBeGreaterThan(0);
+  });
+
+  it("would sooner lie over a bond than hide an atom", () => {
+    // (every way out has a bond across it but the one blocked by an atom)
+    const spokes = Array.from({ length: 24 }, (_, k) => {
+      const a = (k * Math.PI) / 12 + Math.PI / 24;
+      return { a: { x: 100 + 14 * Math.cos(a), y: 100 + 14 * Math.sin(a) }, b: { x: 100 + 40 * Math.cos(a), y: 100 + 40 * Math.sin(a) }, r: 1.5 };
+    });
+    const atom = { x: 122, y: 100, r: 8 };
+    const spot = labelSpot(o, 10, half, right, [atom], [], spokes);
+    expect(gapTo(atom, spot)).toBeGreaterThanOrEqual(atom.r);
+  });
+});
+
+describe("coveredLength", () => {
+  const box = { x: 0, y: 0, hx: 10, hy: 5 };
+  it("is how much of a bond's line lies within a box, grown by the bond's half width", () => {
+    expect(coveredLength(box, { a: { x: -20, y: 0 }, b: { x: 20, y: 0 }, r: 0 })).toBeCloseTo(20);
+    expect(coveredLength(box, { a: { x: -20, y: 0 }, b: { x: 20, y: 0 }, r: 1 })).toBeCloseTo(22);
+    expect(coveredLength(box, { a: { x: 0, y: -20 }, b: { x: 0, y: 0 }, r: 0 })).toBeCloseTo(5);
+    // (past it, or beside it beyond its half width: none)
+    expect(coveredLength(box, { a: { x: 11, y: -20 }, b: { x: 11, y: 20 }, r: 0.5 })).toBe(0);
+    expect(coveredLength(box, { a: { x: -20, y: 9 }, b: { x: 20, y: 9 }, r: 1 })).toBe(0);
   });
 });
 
