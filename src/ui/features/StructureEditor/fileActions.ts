@@ -173,12 +173,12 @@ export function drawingLayout(
     take(xs, ys);
   }
   // and their measurements, over them: their values as large as the
-  // drawing's R and S
+  // drawing's R and S, and clear of the atoms
   const markSize = (opts.units === "px" ? opts.fontPx / layout.zoom : opts.fontPx) * MARK_SCALE;
-  const measures = (model.molecules3d ?? []).flatMap((m) => measurePictureMarks(m, currentStyle3D(), markSize));
+  const family = labelSetOf(opts).fontFamily;
+  const measures = (model.molecules3d ?? []).flatMap((m) => measurePictureMarks(m, currentStyle3D(), markSize, undefined, family));
   if (measures.length) {
     layout.measures = measures;
-    const family = labelSetOf(opts).fontFamily;
     const xs: number[] = [];
     const ys: number[] = [];
     for (const m of measures) {

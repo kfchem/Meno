@@ -3,11 +3,11 @@
  * show them - pure, over atoms' places in the molecule's own frame.
  */
 import * as THREE from "three";
-import type { MeasureMark } from "../../../../lib/chem/layout2d";
+import { measureLabelBox, type MeasureMark } from "../../../../lib/chem/layout2d";
 import type { Style3D } from "../../../../lib/chem/style3d";
 import { COLORS } from "../../../theme/colors";
 import type { Carried3D, Molecule3D } from "../store/types";
-import { frameOf, heightOf, lookOf, solidOf, WORLD_PER_ANGSTROM } from "./molecule3d";
+import { frameOf, heightOf, labelSpot, lookOf, solidOf, WORLD_PER_ANGSTROM, type LabelBox } from "./molecule3d";
 import { seenAt, type Eye } from "./page";
 
 /**
@@ -129,26 +129,51 @@ export function dashesOf(a: THREE.Vector3, b: THREE.Vector3): [THREE.Vector3, TH
   return out;
 }
 
+/** How far a value moved off its line stands from it, as a share of the value's size. */
+const VALUE_GAP = 0.25;
+
 /**
  * A molecule in 3D's measurements as a picture shows them (`MeasureMark`):
  * in the frame it shows, turned as it is, seen as the canvas sees it -
  * straight from above, or from an `eye` in perspective - their values
- * `size` high (world units).
+ * `size` high (world units), in `family`.
+ *
+ * A value is written where the canvas writes it - a distance's on the
+ * middle of its line - when it covers no atom there. A value is as large as
+ * the drawing's R and S, so on a short distance it would cover the atoms it
+ * measures. Then it moves off: beside its line, on the side away from the
+ * molecule's middle, or the nearest way round from there that covers no atom
+ * and no value written before it.
  */
-export function measurePictureMarks(m: Carried3D, style: Style3D, size: number, eye?: Eye): MeasureMark[] {
+export function measurePictureMarks(m: Carried3D, style: Style3D, size: number, eye?: Eye, family?: string): MeasureMark[] {
   const measures = m.measures ?? [];
   if (!measures.length) return [];
   const molecule = { ...m, id: 0 } as Molecule3D;
   const solid = solidOf(molecule, style);
   const places = solid.frames[frameOf(solid, m.frame)];
-  const height = heightOf(m, solid, lookOf(molecule, style));
+  const look = lookOf(molecule, style);
+  const height = heightOf(m, solid, look);
   const q = m.turn ? new THREE.Quaternion(...m.turn) : new THREE.Quaternion();
-  const seen = (v: THREE.Vector3) => {
+  const seenK = (v: THREE.Vector3) => {
     const p = v.clone().applyQuaternion(q);
-    const at = seenAt(m.at.x + p.x, m.at.y + p.y, height + p.z, eye);
+    return seenAt(m.at.x + p.x, m.at.y + p.y, height + p.z, eye);
+  };
+  const seen = (v: THREE.Vector3) => {
+    const at = seenK(v);
     return { x: at.x, y: at.y };
   };
   const n = m.atoms.length;
+  // every atom's ball as the picture shows it, and the molecule's middle
+  const radii = solid.radii[look];
+  const balls = Array.from({ length: n }, (_, i) => {
+    const s = seenK(at(places, i));
+    return { x: s.x, y: s.y, r: radii[i] * s.k };
+  });
+  const middle = {
+    x: balls.reduce((t, b) => t + b.x, 0) / Math.max(n, 1),
+    y: balls.reduce((t, b) => t + b.y, 0) / Math.max(n, 1),
+  };
+  const placed: LabelBox[] = [];
   return measures
     .filter((x) => x.atoms.length >= 2 && x.atoms.every((i) => i >= 0 && i < n))
     .map((x) => {
@@ -160,7 +185,7 @@ export function measurePictureMarks(m: Carried3D, style: Style3D, size: number, 
       }
       const fan: MeasureMark["fan"] = [];
       for (let k = 0; k + 2 < marks.fan.length; k += 3) fan.push([seen(marks.fan[k]), seen(marks.fan[k + 1]), seen(marks.fan[k + 2])]);
-      return {
+      const mark: MeasureMark = {
         lines: lines.map(([a, b]) => [seen(a), seen(b)] as [{ x: number; y: number }, { x: number; y: number }]),
         width: 2 * MEASURE_RADIUS * WORLD_PER_ANGSTROM,
         fan,
@@ -170,5 +195,41 @@ export function measurePictureMarks(m: Carried3D, style: Style3D, size: number, 
         size,
         color: COLORS.highlight,
       };
+      const spot = valueSpot(mark, x.atoms.map((i) => balls[i]), middle, balls, placed, family);
+      placed.push(spot);
+      return { ...mark, label: { x: spot.x, y: spot.y } };
     });
+}
+
+/**
+ * Where a measurement's value is written in a picture: on its point, when
+ * it covers no atom and no value placed before it there; or else off it,
+ * clear of them (labelSpot) - a distance's square to its line, an angle's
+ * out from its atoms - on the side away from the molecule's `middle`.
+ */
+function valueSpot(
+  mark: MeasureMark,
+  own: readonly { x: number; y: number }[],
+  middle: { x: number; y: number },
+  balls: readonly { x: number; y: number; r: number }[],
+  placed: readonly LabelBox[],
+  family: string | undefined,
+): LabelBox {
+  const box = measureLabelBox(mark, family);
+  const o = mark.label;
+  const here: LabelBox = { x: o.x, y: o.y, hx: (box.max.x - box.min.x) / 2, hy: (box.max.y - box.min.y) / 2 };
+  const covers = (b: { x: number; y: number; r: number }) =>
+    Math.hypot(Math.max(Math.abs(b.x - here.x) - here.hx, 0), Math.max(Math.abs(b.y - here.y) - here.hy, 0)) < b.r;
+  const crowds = (p: LabelBox) => Math.abs(p.x - here.x) < p.hx + here.hx && Math.abs(p.y - here.y) < p.hy + here.hy;
+  if (!balls.some(covers) && !placed.some(crowds)) return here;
+  // the way off: square to a distance's line, out from an angle's atoms
+  let way =
+    own.length === 2
+      ? { x: own[0].y - own[1].y, y: own[1].x - own[0].x }
+      : { x: o.x - own.reduce((t, p) => t + p.x, 0) / own.length, y: o.y - own.reduce((t, p) => t + p.y, 0) / own.length };
+  if (Math.hypot(way.x, way.y) < 1e-9) way = { x: o.x - middle.x, y: o.y - middle.y };
+  if (Math.hypot(way.x, way.y) < 1e-9) way = { x: 0, y: 1 };
+  // (away from the molecule's middle)
+  if (way.x * (o.x - middle.x) + way.y * (o.y - middle.y) < 0) way = { x: -way.x, y: -way.y };
+  return labelSpot(o, VALUE_GAP * mark.size, { x: here.hx, y: here.hy }, way, balls, placed);
 }

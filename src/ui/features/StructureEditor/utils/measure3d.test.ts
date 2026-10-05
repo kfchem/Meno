@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { WORLD_PER_ANGSTROM } from "./molecule3d";
+import { solidOf, WORLD_PER_ANGSTROM } from "./molecule3d";
+import { measureLabelBox } from "../../../../lib/chem/layout2d";
+import type { Molecule3D } from "../store/types";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
 import { dashesOf, kindOf, measureMarks, measurePictureMarks, measureText, measureValue, MEASURE_RADIUS } from "./measure3d";
 import * as THREE from "three";
@@ -105,5 +107,58 @@ describe("a measurement in a picture", () => {
     const turned = measurePictureMarks({ ...water, turn: [0, 1, 0, 0] }, STYLE_3D, 0.75)[0];
     expect(turned.label.x).toBeCloseTo(10, 6);
     expect(turned.lines[0][0].x).toBeCloseTo(2 * 10 - distance.lines[0][0].x, 6);
+  });
+
+  // an O and an N 2.87 Å apart, as in an amino alcohol, and a carbon off to one side
+  const pair = (d: number) => ({
+    atoms: [
+      { el: "O", x: 0, y: 0, z: 0 },
+      { el: "N", x: d, y: 0, z: 0 },
+      { el: "C", x: d / 2, y: -1.2, z: 0 },
+    ],
+    bonds: [],
+    at: { x: 0, y: 0 },
+    measures: [{ id: 1, atoms: [0, 1] }],
+  });
+  /** Whether a value's box, as a picture writes it, covers any of the atoms' balls. */
+  const coversAnAtom = (m: ReturnType<typeof pair>, mark: ReturnType<typeof measurePictureMarks>[number]) => {
+    const solid = solidOf({ ...m, id: 0 } as unknown as Molecule3D, STYLE_3D);
+    const box = measureLabelBox(mark, undefined);
+    return Array.from({ length: m.atoms.length }, (_, i) => i).some((i) => {
+      const x = solid.frames[0][3 * i] + m.at.x;
+      const y = solid.frames[0][3 * i + 1] + m.at.y;
+      const dx = Math.max(box.min.x - x, x - box.max.x, 0);
+      const dy = Math.max(box.min.y - y, y - box.max.y, 0);
+      return Math.hypot(dx, dy) < solid.radii.balls[i];
+    });
+  };
+
+  it("writes a value on its line's middle when it covers no atom there", () => {
+    const long = pair(9);
+    const [mark] = measurePictureMarks(long, STYLE_3D, 0.75);
+    const [a, b] = [mark.lines[0][0], mark.lines[mark.lines.length - 1][1]];
+    expect(mark.label.x).toBeCloseTo((a.x + b.x) / 2, 1);
+    expect(mark.label.y).toBeCloseTo((a.y + b.y) / 2, 6);
+    expect(coversAnAtom(long, mark)).toBe(false);
+  });
+
+  it("moves a value off a short distance's line, away from the molecule, rather than cover the atoms it measures", () => {
+    const short = pair(2.87);
+    const [mark] = measurePictureMarks(short, STYLE_3D, 0.75);
+    const lineY = mark.lines[0][0].y;
+    // (the carbon is below the line: the value goes above it, clear of the balls)
+    expect(mark.label.y).toBeGreaterThan(lineY);
+    expect(coversAnAtom(short, mark)).toBe(false);
+    // on the middle, it would have covered them
+    expect(coversAnAtom(short, { ...mark, label: { x: mark.label.x, y: lineY } })).toBe(true);
+  });
+
+  it("keeps two values from covering each other", () => {
+    const m = { ...pair(2.87), measures: [{ id: 1, atoms: [0, 1] }, { id: 2, atoms: [1, 0] }] };
+    const [one, two] = measurePictureMarks(m, STYLE_3D, 0.75);
+    const a = measureLabelBox(one, undefined);
+    const b = measureLabelBox(two, undefined);
+    const overlap = Math.min(a.max.x, b.max.x) > Math.max(a.min.x, b.min.x) && Math.min(a.max.y, b.max.y) > Math.max(a.min.y, b.min.y);
+    expect(overlap).toBe(false);
   });
 });

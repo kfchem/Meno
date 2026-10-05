@@ -151,7 +151,8 @@ for each topic (one pull request per dependent chain).
 - The old viewer: retired, and the workflow's 3D node is a canvas.
 
 Left for later:
-- values of measurements that overlap each other;
+- values of measurements that overlap each other on the canvas (a
+  picture keeps them apart);
 - energies only from XYZ comment lines, until stage 3's readers.
 
 ## Decisions
@@ -282,6 +283,12 @@ Taken while stage 1 was built, on 2026-10-03:
     faint fan in the measurement's blue, and the value on a white ground,
     as large as the drawing's R and S (agreed 2026-10-05). The frames chip
     is not drawn: it is a control.
+  - In a picture, a value is written where the canvas writes it, when it
+    covers no atom there. When it would, it moves off: beside its line,
+    on the side away from the molecule's middle, clear of the atoms and of
+    the values written before it. At that size, a value on a short
+    distance - an O and an N across two bonds - covered the very atoms it
+    measured (found on Windows, 2026-10-05).
 - **Frames.**
   - A molecule with frames has a chip under it: which frame, of how many.
     Hovered or selected, the chip opens to a slider.
