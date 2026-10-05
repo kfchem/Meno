@@ -1,4 +1,4 @@
-import { Html } from "@react-three/drei";
+import PageHtml from "./PageHtml";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
@@ -197,7 +197,7 @@ export default function LabelEditor2D() {
   const wrapperOpacity = labelEdit.active && entered ? 1 : 0;
 
   return (
-    <Html
+    <PageHtml
       position={[
         alignCenter
           ? pos.x
@@ -312,6 +312,6 @@ export default function LabelEditor2D() {
           }}
         />
       </div>
-    </Html>
+    </PageHtml>
   );
 }

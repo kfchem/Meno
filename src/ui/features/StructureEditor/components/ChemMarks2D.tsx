@@ -1,4 +1,4 @@
-import { Html } from "@react-three/drei";
+import PageHtml from "./PageHtml";
 import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
@@ -164,7 +164,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
   return (
     <group>
       {valenceShown.map(({ key, item: m, leaving }) => (
-        <Html key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
+        <PageHtml key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
           <div
             role="img"
             aria-label={m.message}
@@ -177,14 +177,14 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
               </div>
             )}
           </div>
-        </Html>
+        </PageHtml>
       ))}
       {stereoShown.map(({ key, item: m, leaving }) => (
-        <Html key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
+        <PageHtml key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
           <div className={leaving ? "meno-fade-out" : "meno-fade-in"}>
             <StereoMark text={m.text} fontPx={fontPx} />
           </div>
-        </Html>
+        </PageHtml>
       ))}
     </group>
   );
