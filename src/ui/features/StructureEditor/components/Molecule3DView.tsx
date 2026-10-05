@@ -209,7 +209,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const pillAt = useRef<number | null>(null);
   const [hoverAtom, setHoverAtom] = useState<number | null>(null);
   const [hoverBond, setHoverBond] = useState<number | null>(null);
-  const { invalidate, camera, size } = useThree();
+  const { invalidate, camera, size, gl } = useThree();
   const quaternion = useMemo(() => (turn ? new THREE.Quaternion(...turn) : new THREE.Quaternion()), [turn]);
   // how it is turned as drawn: following a drag at once, going over to a turn set afresh
   const shownTurn = useRef<THREE.Quaternion | null>(null);
@@ -1099,6 +1099,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               populations={shares}
               about={m.calc ? calcLine(m.calc) : undefined}
               results={m.calc?.results}
+              area={gl.domElement}
             />
           ) : (
             props.onRemake && (

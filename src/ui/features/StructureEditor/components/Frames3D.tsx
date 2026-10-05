@@ -15,6 +15,8 @@ const WIDE = 300;
 const LEAST_BAR = 3;
 /** How long a single geometry's chip stays once its molecule is let go - time to reach it - in milliseconds. */
 const LINGER_MS = 400;
+/** The chip kept clear of the canvas's lower edge, in pixels. */
+const EDGE = 8;
 
 /** A conformer's share of its set, as it is written: "62%", "<1%". */
 function share(p: number): string {
@@ -47,6 +49,10 @@ function absolute(e: number): string {
  * single geometry's - nothing to go through - is only that, and only while
  * its molecule is pointed at or selected, or it is: it fades in and out,
  * keeping its place, so that what is under it stays where it is.
+ *
+ * Opened with its molecule low on the page - filling the window, as one
+ * opened from its file does - it rises as far as it must to stay within
+ * the canvas (`area`), over its molecule, and goes back down as it shuts.
  */
 export default function Frames3D({
   count,
@@ -58,6 +64,7 @@ export default function Frames3D({
   populations,
   about,
   results,
+  area,
 }: {
   count: number;
   frame: number;
@@ -74,6 +81,8 @@ export default function Frames3D({
   about?: string;
   /** What the calculation found (lib/calc/results): the molecule's and each frame's are said here. */
   results?: Result[];
+  /** What it keeps within: the canvas. */
+  area?: Element;
 }) {
   const [hovered, setHovered] = useState(false);
   // (what it says pointed at: the details above it - not its bars or its
@@ -127,11 +136,34 @@ export default function Frames3D({
     }),
   }));
   const line = (energy?: number) => chipLine([about ?? "", energy != null ? absolute(energy) : ""], results);
+  // how far it has risen to stay within the canvas, followed each frame
+  // while it is open, and until it is back down
+  const chipEl = useRef<HTMLDivElement>(null);
+  const [lift, setLift] = useState(0);
+  const lifted = useRef(0);
+  useEffect(() => {
+    if (!area || (!full && lifted.current === 0)) return;
+    let id = 0;
+    const fit = () => {
+      const el = chipEl.current;
+      if (el) {
+        const over = el.getBoundingClientRect().bottom + EDGE - area.getBoundingClientRect().bottom;
+        const next = Math.max(0, Math.round(lifted.current + over));
+        if (next !== lifted.current) {
+          lifted.current = next;
+          setLift(next);
+        }
+      }
+      if (full || lifted.current > 0) id = requestAnimationFrame(fit);
+    };
+    fit();
+    return () => cancelAnimationFrame(id);
+  }, [area, full]);
   return (
     <PageHtml zIndexRange={[30, 20]}>
       <div
         className="flex flex-col items-center select-none"
-        style={{ transform: "translate(-50%, 10px)" }}
+        style={{ transform: `translate(-50%, ${10 - lift}px)` }}
         onPointerEnter={() => setHovered(true)}
         onPointerLeave={() => {
           setHovered(false);
@@ -149,6 +181,7 @@ export default function Frames3D({
               </div>
             )}
             <div
+              ref={chipEl}
               className="rounded-2xl border border-gh-line bg-white/85 backdrop-blur shadow-sm py-1 flex flex-col items-center overflow-hidden transition-[width,opacity] duration-200 ease-out"
               style={{
                 opacity: shown ? (full ? 1 : 0.75) : 0,
