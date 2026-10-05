@@ -389,6 +389,79 @@ Taken on 2026-10-04, for stage 2:
 - Stereo left open is asked about before anything is made, and *all the
   stereoisomers* is one of the answers.
 
+## Stage 3, planned
+
+Calculation output: what a program's output says besides the geometry,
+read and attached to its molecule. Agreed with the maintainer on
+2026-10-05.
+
+### Readers are plugins
+
+- **Meno's core knows no program's format.** It reads geometry itself -
+  XYZ frames, MOL and SDF - and the energies CREST, xtb and ORCA write on
+  an XYZ file's comment lines, needing nothing else. Everything else is
+  handed to a reader, and comes back as plain data on the molecule.
+- **A reader is a plugin.** Each runs as a worker in a Python environment
+  of its own, as RDKit does: set up from a lock that Meno carries, every
+  package pinned by its hash, and only when asked for, with the network's
+  consent. Readers are added and removed in Settings, *Calculation
+  readers*; opening a file that no installed reader reads says which
+  would. Which readers there are is Meno's own list for now. A list
+  fetched online needs a way to trust it (signing), and comes later.
+- **The first reader is cclib** (BSD-3), which reads ORCA, Gaussian, xTB
+  and others. It is installed into its plugin's environment as a
+  library. Meno does not copy its code, and a reader Meno writes itself is
+  written from the programs' outputs and documentation, not from cclib's
+  parsers.
+- **When readers overlap, the chemist chooses.** Settings lists, for each
+  kind of output, the installed readers that read it; the first in Meno's
+  order reads it, unless another is chosen.
+
+### What is read
+
+Kept on the molecule, whichever reader found it, and saved in `.meno`:
+
+- its geometries: an optimisation's steps as its frames;
+- each frame's energy (hartrees);
+- the program and its version, the method and basis, the total charge and
+  the multiplicity;
+- its vibrations: each one's frequency (an imaginary one negative) and
+  its atoms' displacements;
+- its atoms' partial charges, by scheme (Mulliken, Löwdin, Hirshfeld,
+  and so on), for its final geometry.
+
+### How it shows
+
+The look stays as it is. What a calculation adds is seen by pointing at
+it:
+
+- **An atom:** its element and number, and its partial charges, scheme by
+  scheme.
+- **The molecule's frames chip:** the program, method and basis, the
+  energy, the charge and multiplicity. An optimisation's steps are its
+  frames, their energies the bars above the slider.
+- **Vibrations,** from the molecule's menu: a list of the frequencies,
+  imaginary ones marked; one chosen, the molecule moves in it, and moves
+  no more when it is let go. No arrows and no spectrum.
+
+### Tests
+
+Small outputs from cclib's repository (BSD-3; its notice is kept beside
+them): ORCA's and xTB's, committed. Gaussian's outputs carry Gaussian's
+own copyright notice, so they are not committed: cclib's Gaussian samples
+are kept on the developer's machine, in a folder git ignores, and the
+tests that read them run where they are there and are skipped where they
+are not, as in CI (the maintainer, 2026-10-05).
+
+### In order
+
+1. **3a.** The reader plugins: the worker, the environment, Settings'
+   *Calculation readers* with the choice where they overlap, and cclib's.
+   Geometries, an optimisation's steps, energies, and what the chip says.
+2. **3b.** Vibrations.
+3. **3c.** Partial charges, pointed at.
+4. **Later.** Orbitals and densities (cube files) drawn as surfaces.
+
 ## Risks
 
 - **The 2D drawing changing.** The thinnest lines and the place of every
