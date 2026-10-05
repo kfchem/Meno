@@ -345,7 +345,8 @@ Taken on 2026-10-04:
   their R and S always, every centre's while R and S are shown. They are
   as large as the drawing's R and S, and written as the drawing's style
   writes them (bare, or in parentheses), in blue. Each is set clear of
-  its atom in the widest gap between its bonds as it is seen - or the
+  its atom - beyond its ball by as much as the drawing's style sets them
+  off - in the widest gap between its bonds as it is seen - or the
   nearest way round that covers no other atom, no measurement's value
   and no bond (an atom hidden counts for more than a bond covered) - and
   a little way off the others (2026-10-05: on Windows, an (S) sat on a

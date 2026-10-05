@@ -29,8 +29,11 @@ import StereoText from "./StereoText";
 /** Marks sit over the drawing, and under the canvas's buttons and cards. */
 const Z_RANGE = [20, 10];
 
-/** Half a capital letter's height, as a share of the labels' size: how far R or S stands off a bare stereocentre. */
+/** Half a capital letter's height, as a share of the labels' size: how far R or S stands off its atom where the style does not say. */
 const HALF_CAPITAL = 0.35;
+
+/** Half the height of a mark's letters, in ems of their size: a capital's, and a little round it. */
+const MARK_HALF_HEIGHT = 0.42;
 
 /** How far apart two of R, S, E and Z keep at the least, in ems of their size. */
 const MARKS_APART = 0.6;
@@ -79,6 +82,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
   const fontPx = Math.max(MARK_MIN_PX, labelFont * MARK_SCALE * z);
   // (R, S, E and Z as the drawing's style writes them)
   const parentheses = !!opts.stereoParentheses;
+  const gap = opts.stereoGap ?? HALF_CAPITAL;
   const writing = { family: fontStack(labelSetOf(opts).fontFamily ?? "Arial"), color: opts.labelColor ?? "#000000" };
 
   // R, S, E and Z, each placed clear of the bonds, the labels and the
@@ -105,7 +109,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
     }
     const half = (cip: string) => ({
       x: (fontPx * stereoTextEms(cip, parentheses)) / 2 / z,
-      y: (fontPx * 0.6) / z,
+      y: (fontPx * MARK_HALF_HEIGHT) / z,
     });
     const out: { key: string; x: number; y: number; text: string }[] = [];
     // (a mark placed keeps the next a little way off, not just clear of
@@ -119,13 +123,13 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
       const a = at.get(id);
       if (!a) continue;
       const box = boxes.get(id);
-      // (opposite a wedge where it has one, about half a capital's height
-      // off its atom, as IUPAC's recommendations for structure diagrams
-      // place it - GR-11.1 - or as far beyond its label)
+      // (opposite a wedge where it has one, as IUPAC's recommendations for
+      // structure diagrams place it - GR-11.1 - as far off its atom as the
+      // style says, or as far beyond its label)
       const r = placeMark({
         from: a,
         dirs: stereoWaysOut(drawn, id),
-        start: (dir) => (box ? exitDistance(box, dir) + 0.12 * L : HALF_CAPITAL * labelFont),
+        start: (dir) => (box ? exitDistance(box, dir) : 0) + gap * labelFont,
         half: half(cip),
         step: 0.15 * L,
         segments,
@@ -149,7 +153,7 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
       put(`bond-${id}`, cip, r);
     }
     return out;
-  }, [marks, drawn, boxes, fontPx, z, parentheses, labelFont]);
+  }, [marks, drawn, boxes, fontPx, z, parentheses, labelFont, gap]);
 
   // Each mark where it goes: a valence problem's box round its atom's label
   // (or a ring round its atom), and the stereodescriptors.

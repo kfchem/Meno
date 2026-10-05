@@ -6,7 +6,7 @@ import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
 import type { Look3D, Measure3D, Molecule3D, Rising3D, Turn3D } from "../store/types";
 import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine, type LabelBox, type Stick } from "../utils/molecule3d";
-import { MARK_MIN_PX, stereoTextEms } from "../chem/marks";
+import { MARK_MIN_PX, MARK_SCALE, stereoTextEms } from "../chem/marks";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { dashesOf, kindOf, MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, measureText, measureValue } from "../utils/measure3d";
 import { eyeOf, FRAME_ORDER, seenAt } from "../utils/page";
@@ -65,7 +65,6 @@ const ATOM_SWELL = 1.1;
  */
 const STEREO_OFFSET = "translate(0.95em, -0.95em)";
 const STEREO_HALO = "0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff";
-const STEREO_GAP_PX = 2;
 /** How far apart two stereo labels keep at the least, in ems of their size. */
 const STEREO_APART = 0.6;
 /**
@@ -154,8 +153,12 @@ export type Molecule3DViewProps = {
   overlay?: boolean;
   /** Its stereocentres' and double bonds' labels shown: all, only those its drawing left open, or none. */
   stereoShown: "all" | "chosen" | null;
-  /** R and S as the drawing writes them: as large as its R and S, on the page or on the screen; in its typeface; in parentheses or not. */
-  stereoFont: { size: number; units: "world" | "px"; family: string; parentheses: boolean };
+  /**
+   * R and S as the drawing writes them: as large as its R and S, on the
+   * page or on the screen; in its typeface; in parentheses or not; and how
+   * far off its ball, as a share of the drawing's label size.
+   */
+  stereoFont: { size: number; units: "world" | "px"; family: string; parentheses: boolean; gap: number };
   onRisen?: () => void;
 };
 
@@ -632,9 +635,11 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         }
         const o = onScreen(parent, at.x, at.y, at.z);
         const way = widestWay(mark.around.map((i) => Math.atan2(balls![i].y - o.y, balls![i].x - o.x)));
-        // (out past the ball - or the bond - by a little more than half the label)
-        const reach = ((mark.atoms.length === 1 ? radius(mark.atoms[0]) : bondR) * g) / px + STEREO_GAP_PX;
-        const half = { x: font * (stereoTextEms(mark.text, props.stereoFont.parentheses) / 2 + 0.15), y: font * 0.55 };
+        // (out past the ball - or the bond - as far as the drawing's style
+        // sets its R and S off its atoms, of its labels' size; the letters'
+        // box a capital's height, and a little for the halo)
+        const reach = ((mark.atoms.length === 1 ? radius(mark.atoms[0]) : bondR) * g) / px + (props.stereoFont.gap * font) / MARK_SCALE;
+        const half = { x: font * (stereoTextEms(mark.text, props.stereoFont.parentheses) / 2 + 0.1), y: font * 0.45 };
         // (every atom near it but its own - a double bond's two among them)
         const own = mark.atoms.length === 1 ? mark.atoms[0] : -1;
         const others = balls.filter((b, i) => i !== own && Math.hypot(b.x - o.x, b.y - o.y) < reach + 4 * half.x + b.r);
