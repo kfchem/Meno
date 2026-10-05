@@ -307,3 +307,17 @@ describe("molecules in 3D and their drawings", () => {
     expect(state().overlay3d).toEqual({});
   });
 });
+
+describe("molecules in 3D a file brings", () => {
+  // an optimisation's three steps, read from a calculation: the file says to show its last
+  const steps = { ...water, frames: [water.atoms.flatMap((a) => [a.x, a.y, a.z]), water.atoms.flatMap((a) => [a.x, a.y, a.z + 0.1])], frame: 2 };
+
+  it("show the frame the file says, opened or added beside what is there - and the document keeps no frame of its own", () => {
+    const { doc, state } = editor();
+    state().openModel({ atoms: [], bonds: [] }, { molecules3d: [{ ...steps, at: { x: 0, y: 0 } }] });
+    expect(state().frames3d).toEqual({ 1: 2 });
+    expect("frame" in doc.getState().molecules3d![0]).toBe(false);
+    state().appendModel({ atoms: [], bonds: [] }, { molecules3d: [{ ...water, at: { x: 9, y: 0 } }, { ...steps, at: { x: 18, y: 0 } }] });
+    expect(state().frames3d).toEqual({ 1: 2, 3: 2 });
+  });
+});
