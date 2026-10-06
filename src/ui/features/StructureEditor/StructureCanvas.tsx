@@ -92,6 +92,7 @@ function StructureCanvasContent({
   tabId,
   initialPayload,
   initialFilename,
+  initialKind,
   officeId,
   ownTab,
   nameTab,
@@ -104,6 +105,8 @@ function StructureCanvasContent({
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
+  /** What the payload is, where whoever opened it said (lib/io/kinds). */
+  initialKind?: string;
   /** The object in a document this canvas was opened from (lib/ole). */
   officeId?: number;
   /** Whether the canvas is a tab's own, which offers the app's menu its commands. */
@@ -139,7 +142,7 @@ function StructureCanvasContent({
     handleMouseDownCapture,
     clientToWorld,
     pasteTarget,
-  } = useStructureEvents(initialPayload, initialFilename, officeId == null);
+  } = useStructureEvents(initialPayload, initialFilename, officeId == null, initialKind);
   useOfficeLink(officeId);
 
   const onCreated = useCanvasSetup(camRef, domRef);
@@ -889,6 +892,7 @@ export default function StructureCanvas({
   tabId,
   initialPayload,
   initialFilename,
+  initialKind,
   officeId,
   active = true,
   document,
@@ -897,6 +901,8 @@ export default function StructureCanvas({
   tabId: string;
   initialPayload?: string;
   initialFilename?: string;
+  /** What the payload is, where whoever opened it said (lib/io/kinds). */
+  initialKind?: string;
   /** The object in a document it was opened from, when it was (lib/ole). */
   officeId?: number;
   /** False while the owning tab is hidden: pauses the render loop. */
@@ -921,6 +927,7 @@ export default function StructureCanvas({
           tabId={tabId}
           initialPayload={initialPayload}
           initialFilename={initialFilename}
+          initialKind={initialKind}
           officeId={officeId}
           ownTab={document != null}
           nameTab={nameTab}

@@ -43,7 +43,7 @@ function draw({ atoms, bonds }: Structure): string {
 }
 
 /** A structure file, read the way the app reads it. */
-function fromFile(path: string, format: string): Structure {
+function fromFile(path: string, format: "mol" | "sdf" | "xyz"): Structure {
   const text = readFileSync(resolve(root, path), "utf8");
   const { model } = moleculesToEditorModel(readMoleculesFromText(text, format));
   const index = new Map<number, number>();

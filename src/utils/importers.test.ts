@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  detectFormat,
   parseRXNGroups,
   readMoleculesFromText,
   buildEditorModelFromRXN,
@@ -12,7 +11,6 @@ import { layoutOptionsFor, MENO } from "../lib/chem/style";
 import sampleSdf from "../samples/cholesterol.sdf?raw";
 import sampleRxn from "../samples/diels-alder.rxn?raw";
 import sampleRxn2 from "../samples/esterification.rxn?raw";
-import sampleXyz from "../samples/cholesterol.xyz?raw";
 
 // Ethane (CH3-CH3) as a V2000 molfile. The title line is a bare number, as in
 // PubChem SDF downloads where it holds the compound id.
@@ -27,43 +25,9 @@ const numericTitleMol = [
   "M  END",
 ].join("\n");
 
-describe("detectFormat", () => {
-  it("detects the samples", () => {
-    expect(detectFormat("cholesterol.sdf", sampleSdf)).toBe("sdf");
-    expect(detectFormat("diels-alder.rxn", sampleRxn)).toBe("rxn");
-    expect(detectFormat("cholesterol.xyz", sampleXyz)).toBe("xyz");
-  });
-
-  it("does not mistake a MOL/SDF with a numeric title for XYZ", () => {
-    expect(detectFormat("6324.sdf", numericTitleMol)).toBe("sdf");
-    expect(detectFormat("6324.mol", numericTitleMol)).toBe("mol");
-    expect(detectFormat("", numericTitleMol)).toBe("mol");
-    expect(detectFormat("download.txt", numericTitleMol + "\n$$$$\n")).toBe(
-      "mol"
-    );
-  });
-
-  it("recognises XYZ by content when the extension is unknown", () => {
-    expect(detectFormat("frame.txt", sampleXyz)).toBe("xyz");
-    expect(detectFormat("", "1\ncomment\n6 0.0 0.0 0.0")).toBe("xyz");
-    expect(detectFormat("", "0\nempty frame")).toBe("xyz");
-  });
-
-  it("does not treat arbitrary text starting with a number as XYZ", () => {
-    expect(detectFormat("notes.txt", "42\nthe answer\nis not a molecule")).toBe(
-      null
-    );
-  });
-
-  it("trusts the .xyz extension", () => {
-    expect(detectFormat("x.xyz", "2\n\nC 0 0 0\nC 1.5 0 0")).toBe("xyz");
-  });
-});
-
 describe("readMoleculesFromText", () => {
   it("parses a numeric-title molfile as a molfile", () => {
-    const fmt = detectFormat("6324.sdf", numericTitleMol);
-    const mols = readMoleculesFromText(numericTitleMol, fmt);
+    const mols = readMoleculesFromText(numericTitleMol, "sdf");
     expect(mols).toHaveLength(1);
     expect(mols[0].atoms.map((a) => a.el)).toEqual(["C", "C"]);
     expect(mols[0].bonds).toEqual([

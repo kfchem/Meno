@@ -300,6 +300,6 @@ export const files = [
       "way, labels of four widths, and a wedge meeting a double and a triple " +
       "bond.",
     path: "scripts/gui/fixtures/depiction-check.mol",
-    format: "mol",
+    format: "mol" as const,
   },
 ];

@@ -30,13 +30,15 @@ src/
                           labelFonts.ts (label typefaces, letter by letter), ctfile.ts (molfiles,
                           SDfiles and Rxnfiles read as CTfile Formats has them: docs/CTFILE.md)
   lib/net/                network.ts: the network's record, consent, offline mode
+  lib/io/                 kinds.ts: every kind of file Meno takes in, and what a file is - one
+                          decision, by content, for Open, a drop and pasted text (docs/FILE-IO.md)
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
   lib/rdkit/              the chemistry worker: client, sidecar, the MOL blocks it is asked about
   lib/calc/               readers of calculation programs' output (to be plugins): energies, for now
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
-  utils/importers         detectFormat, readMoleculesFromText, RXN grouping/layout, EditorModel conversion
+  utils/importers         readMoleculesFromText, RXN grouping/layout, EditorModel conversion
   utils/atomUtils         element table (radii, colours)
   samples/                textbook structures and reactions for the tests and the workflow's 3D node
                           (see samples/README.md)
@@ -85,10 +87,11 @@ src-tauri/
 - Meno starts on a structure canvas, and "+" makes another: the canvas is
   the workspace (docs/WORKSPACE.md), so there is no start page.
 - **Open** (Ctrl/Cmd+O, or the menu) reads the files picked in the system's
-  dialog and opens each in a tab of its own, by what it is
-  (`ui/views/openFile`): in place of the tab in front if that is a canvas
-  nothing is drawn on (`REPLACE_TAB`). A structure from an Office document
-  opens the same way.
+  dialog - Tauri's, which gives their paths - and opens each in a tab of its
+  own, by what it is (`ui/views/openFile`, `lib/io/kinds`), told to the tab
+  so that it is not asked again: in place of the tab in front if that is a
+  canvas nothing is drawn on (`REPLACE_TAB`). A structure from an Office
+  document opens the same way, as Meno's own record.
 - **Closing the last tab quits Meno.**
 - **Commands.** The canvas carries nothing but the drawing. Every command
   is in Meno's menu, which its logo opens, with its key; the app's own
@@ -213,7 +216,9 @@ What is left before the editor counts as finished, and in what order, is in
 - **Long presses**: a press held still is `pressHold` in the store, which
   `HoldProgress2D` shows; `Atoms2D`, `BondsPick2D` and `Selection2D` time it
   (`LONG_PRESS_MS`) and select the structure, or begin a box.
-- **Import**: `utils/io.ts#processFileContent` → `utils/importers.ts`.
+- **Import**: what a file is, `lib/io/kinds.ts#kindOf` (once, by whoever
+  takes it in) → `utils/io.ts#processFileContent` → `utils/importers.ts`, or
+  the calculation readers (`lib/calc`).
 - **Chemistry**: RDKit's marks on the structure, in `chem/` and
   `ChemMarks2D` (see the chemistry worker below); clean-up and a SMILES's
   layout by Meno's own engine (`src/lib/layout`), run in a web worker
@@ -610,7 +615,7 @@ do beyond files, and which are kept running: [`PLUGINS.md`](./PLUGINS.md)
 | RXN (V2000) | Structure canvas | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
 | XYZ (multi-frame) | Structure canvas, in 3D | `parseXYZ` | Bonds inferred from covalent radii. Frames kept; each frame's energy where a calculation reader (`lib/calc`) finds one on its comment line. |
 | Meno workspace (`.meno`) | Structure canvas | `readWorkspace` | Everything on the canvas, as it was saved: what Save and Save As write. MOL, SDF, RXN and SVG are written by Export. |
-| PDB, KET | — | none | Accepted by the file picker; the 2D editor reports "not supported yet". |
+| PDB, KET | — | none | Not offered by Open (nothing reads them yet); one dropped is reported "not supported yet". |
 | Text files | Text editor | — | By extension, or anything that is not recognised. |
 
 ## Verification commands

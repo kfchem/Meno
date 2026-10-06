@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CUBE_MARK, cubeGrid, readCube } from "./cube";
-import { outputKindOf } from "./catalog";
+import { kindOf } from "../io/kinds";
 import { floatsOf, readGrid, readResults } from "./results";
 
 const BOHR = 0.529177210903;
@@ -41,8 +41,8 @@ const density = [
 describe("a cube file", () => {
   it("is told by its layout, whatever it is called", () => {
     expect(CUBE_MARK.test(twoOrbitals)).toBe(true);
-    expect(outputKindOf(density)?.id).toBe("cube");
-    expect(outputKindOf("3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n")).toBeNull();
+    expect(kindOf("", density)?.id).toBe("cube");
+    expect(kindOf("", "3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n")?.id).toBe("xyz");
   });
 
   it("reads as its molecule, in ångströms, and a list of its grids - each a promise - shown as it comes", () => {

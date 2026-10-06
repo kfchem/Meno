@@ -1,5 +1,4 @@
 import {
-  detectFormat,
   readMoleculesFromText,
   moleculesToEditorModel,
   buildEditorModelFromRXN,
@@ -10,13 +9,13 @@ import type { Carried3D, Drawn, Model, Molecule3D } from "../store/types";
 import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, solidOf } from "./molecule3d";
 import { energiesOf } from "../../../../lib/calc/readers";
-import { outputKindOf } from "../../../../lib/calc/catalog";
+import { extensionOf, kindOf, MENO_KINDS, type Kind } from "../../../../lib/io/kinds";
 import { calcOf, xyzOf, type CalcSource, type ReaderOutput } from "../../../../lib/calc/output";
 import { rememberOutput } from "../../../../lib/calc/asks";
 import { readOutput } from "../../../../lib/calc/read";
 
-/** Extensions the file pickers offer that have no parser yet. */
-const UNSUPPORTED_EXTENSIONS = new Set(["pdb", "ket"]);
+/** Extensions of kinds nothing reads yet, said so when such a file is dropped. */
+const UNSUPPORTED_EXTENSIONS = new Set([".pdb", ".ket"]);
 
 export type ProcessedFileResult = {
   model: EditorModel;
@@ -64,39 +63,40 @@ function depthOf(m: Molecule): number {
 }
 
 /**
- * Process file content and return a standardized result.
+ * A file read as what it is (lib/io/kinds) - told once, by whoever took it
+ * in; asked here where they did not say - into the drawing and the
+ * molecules in 3D it holds. Meno's own records are not read here: a
+ * workspace is opened (`readWorkspace`), a record pasted (`readRecord`).
  *
- * Detects file format, parses the content, and returns the model with centroid and optional arrow.
- * The caller is responsible for:
- * - Centering (subtract centroid from all atoms) for replace operations
- * - Shifting by drop point for append operations
- * - Adding the arrow to the store (for RXN files)
+ * The caller places it: centred for a file opened, at the drop for one
+ * dropped, with an RXN file's arrow and pluses.
  */
 export async function processFileContent(
   filename: string,
   content: string,
+  kind: Kind | null = kindOf(filename, content),
 ): Promise<ProcessedFileResult> {
-  const format = detectFormat(filename, content);
-  const ext = (filename.split(".").pop() || "").toLowerCase();
   const name = filename || "the file";
   // Errors are shown to the user as-is, so keep the messages readable.
-  if (!format && UNSUPPORTED_EXTENSIONS.has(ext)) {
-    throw new Error(
-      `${ext.toUpperCase()} files are not supported yet (${name}).`,
-    );
-  }
-  // a calculation's output: read by the reader plugin that reads its kind
-  // (lib/calc), whatever it is called
-  const kind = format ? null : outputKindOf(content);
-  if (kind) {
-    const { output, readers } = await readOutput(name, content, kind);
-    // (kept for the session: what its promises are asked for from)
-    return calcResult(output, readers, filename, await rememberOutput(name, content));
-  }
   const noMolecules = () =>
     new Error(
       `No molecules found in ${name}. Supported formats: MOL, SDF, RXN, XYZ.`,
     );
+  if (!kind) {
+    const ext = extensionOf(filename);
+    if (UNSUPPORTED_EXTENSIONS.has(ext)) throw new Error(`${ext.slice(1).toUpperCase()} files are not supported yet (${name}).`);
+    throw noMolecules();
+  }
+  // a calculation's output: read by the reader plugins that read its kind (lib/calc)
+  if (kind.output) {
+    const { output, readers } = await readOutput(name, content, kind.output);
+    // (kept for the session: what its promises are asked for from)
+    return calcResult(output, readers, filename, await rememberOutput(name, content));
+  }
+  if (kind.id === MENO_KINDS.workspace.id || kind.id === MENO_KINDS.record.id) {
+    throw new Error(`${name} is a ${kind.name}: it is opened as one, not read as a structure's file.`);
+  }
+  const format = kind.id as "rxn" | "mol" | "sdf" | "xyz";
 
   if (format === "rxn") {
     // RXN format: uses pre-computed layout with arrow
@@ -111,8 +111,7 @@ export async function processFileContent(
   }
 
   // MOL, SDF, XYZ formats: parse molecules and convert to editor model
-  // If no format detected, try to parse as MOL anyway (or fail gracefully)
-  const molecules = readMoleculesFromText(content, format || "mol");
+  const molecules = readMoleculesFromText(content, format);
 
   // 3D structures stand on the page as they are: an XYZ file's frames are
   // one molecule's, a MOL or SD file's records each a molecule of its own -
