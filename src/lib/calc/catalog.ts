@@ -14,6 +14,7 @@
 import type { Manifest } from "../plugins/manifest";
 import { MANIFESTS } from "../plugins/known";
 import { MENO_READS } from "./menoReads";
+import { MENO_KINDS } from "../io/kinds";
 
 type ReaderBase = {
   id: string;
@@ -58,7 +59,12 @@ const readerOf = (m: Manifest): PythonReader => ({
 /** The reader plugins Meno knows of, in Meno's order. */
 export const READER_PLUGINS: readonly PythonReader[] = MANIFESTS.map(readerOf);
 
-/** Meno's own reading, as a reader. */
+/**
+ * Meno's own reading, as a reader: the structure files it reads on the page
+ * (a workspace, RXN, MOL, SD and XYZ files - into the readers' contract in
+ * step 4 of docs/FILE-IO.md), and what it reads under the contract already
+ * (./menoReads).
+ */
 export const MENO: MenoReader = {
   id: "meno",
   name: "Meno",
@@ -66,7 +72,10 @@ export const MENO: MenoReader = {
   description: "",
   licence: "",
   homepage: "",
-  reads: Object.keys(MENO_READS),
+  reads: [
+    ...[MENO_KINDS.workspace, MENO_KINDS.rxn, MENO_KINDS.mol, MENO_KINDS.sdf, MENO_KINDS.xyz].map((k) => k.id),
+    ...Object.keys(MENO_READS),
+  ],
   builtin: true,
 };
 
