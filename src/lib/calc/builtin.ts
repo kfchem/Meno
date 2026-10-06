@@ -55,5 +55,9 @@ export function menoReader(): Reader {
     read: (kind, name, text) => ask({ kind, op: "read", name, text }) as Promise<ReaderOutput>,
     ask: (kind, key, name, text) => ask({ kind, op: "ask", key, name, text }),
     probe: async () => false,
+    // (Meno writes its own kinds itself, on the page: lib/io/writers)
+    write: async (kind) => {
+      throw new Error(`Meno does not write ${kind} through its reader`);
+    },
   };
 }

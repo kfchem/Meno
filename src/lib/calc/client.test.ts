@@ -33,6 +33,23 @@ describe("a reader's worker, asked", () => {
     expect(await reading).toEqual({ atoms: ["H", "H"], frames: [[0, 0, 0, 0, 0, 0.74]] });
   });
 
+  it("is given, to write a file, its kind, its name, the molecules and the options chosen, and answers with its text", async () => {
+    const w = fakeWorker();
+    const client = new ReaderClient("Gaussian input", w.transport);
+    const molecule = { name: "water", atoms: [{ el: "O", x: 0, y: 0, z: 0 }], bonds: [] };
+    const writing = client.write("gaussian-input", "water.gjf", [molecule], { job: "sp" });
+    expect(w.sent).toEqual([{ id: 1, op: "write", kind: "gaussian-input", name: "water.gjf", molecules: [molecule], options: { job: "sp" } }]);
+    w.say({ id: 1, ok: true, result: { text: "# SP\n" } });
+    expect(await writing).toBe("# SP\n");
+    // (an answer that holds no text is no file)
+    const empty = client.write("gaussian-input", "x.gjf", [molecule], {});
+    w.say({ id: 2, ok: true, result: {} });
+    await expect(empty).rejects.toThrow(/Gaussian input wrote nothing for x.gjf/);
+    const refused = client.write("gaussian-input", "y.gjf", [molecule], {});
+    w.say({ id: 3, ok: false, error: "The Gaussian input could not be written: no atoms." });
+    await expect(refused).rejects.toThrow(/no atoms/);
+  });
+
   it("says why, when it cannot read a file, or stops before it has", async () => {
     const w = fakeWorker();
     const client = new ReaderClient("cclib", w.transport);

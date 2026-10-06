@@ -11,7 +11,7 @@
  * molecule was read by - keeps the id; its name is looked up only to show
  * it.
  */
-import type { Manifest } from "../plugins/manifest";
+import type { Manifest, WriteDecl } from "../plugins/manifest";
 import { MANIFESTS, PLUGINS_ROOT } from "../plugins/known";
 import { isRole, type RoleId } from "../plugins/roles";
 import { MENO_READS } from "./menoReads";
@@ -29,11 +29,13 @@ type ReaderBase = {
   /** The kinds it reads, by id. */
   reads: readonly string[];
 };
-/** A plugin: what it is, what it reads, the roles it fills besides, and what it runs - a worker in a Python environment of its own. */
+/** A plugin: what it is, what it reads and writes, the roles it fills besides, and what it runs - a worker in a Python environment of its own. */
 export type PythonPlugin = ReaderBase & {
   builtin?: undefined;
   /** The roles it fills besides reading files (lib/plugins/roles). */
   roles: readonly RoleId[];
+  /** The kinds it writes (lib/io/writers): none of Meno's, which Meno writes itself. */
+  writes: readonly WriteDecl[];
   /** Its Python environment's profile, and its lock and worker, in its folder among Meno's resources. */
   profile: `plugin-${string}`;
   lock: string;
@@ -59,17 +61,21 @@ export const pluginOf = (m: Manifest): PythonPlugin => ({
   reads: m.reads.filter((id) => MENO_IDS.has(id) || m.kinds.some((k) => k.id === id)),
   // (the roles Meno defines, of those it says it fills)
   roles: m.roles.filter(isRole),
+  writes: m.writes.filter((w) => !MENO_IDS.has(w.id)),
   profile: `plugin-${m.id}`,
   lock: `${PLUGINS_ROOT}/${m.id}/${m.environment.lock}`,
   worker: `${PLUGINS_ROOT}/${m.id}/${m.worker}`,
   ...(m.environment.maker === "pixi" ? { env: "pixi" as const } : {}),
 });
 
-/** The plugins Meno knows of, in Meno's order: each that reads something, or fills a role. */
-export const PLUGINS: readonly PythonPlugin[] = MANIFESTS.map(pluginOf).filter((p) => p.reads.length || p.roles.length);
+/** The plugins Meno knows of, in Meno's order: each that reads or writes something, or fills a role. */
+export const PLUGINS: readonly PythonPlugin[] = MANIFESTS.map(pluginOf).filter((p) => p.reads.length || p.roles.length || p.writes.length);
 
 /** The plugins that read files. */
 export const READER_PLUGINS: readonly PythonPlugin[] = PLUGINS.filter((p) => p.reads.length);
+
+/** The plugins that write files. */
+export const WRITER_PLUGINS: readonly PythonPlugin[] = PLUGINS.filter((p) => p.writes.length);
 
 /** The plugin of that id. */
 export const pluginById = (id: string): PythonPlugin | undefined => PLUGINS.find((p) => p.id === id);

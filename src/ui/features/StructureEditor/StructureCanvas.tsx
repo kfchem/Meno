@@ -34,11 +34,15 @@ import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
-import ExportCard from "./ExportCard";
+import ExportCard, { type Offered3D } from "./ExportCard";
 import { findOutput, outputOf } from "../../../lib/calc/asks";
 import type { CalcSource } from "../../../lib/calc/output";
 import { openInTab } from "../../views/tabOpener";
-import type { WriterId } from "../../../lib/io/writers";
+import { knownOf, pluginWriters, WRITERS, type Writer } from "../../../lib/io/writers";
+import { WRITER_PLUGINS } from "../../../lib/calc/catalog";
+import { useReaders } from "../../../lib/calc/workers";
+import { offeredNames, writtenOf } from "./utils/written";
+import { carriedOf } from "./utils/workspace";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { currentStyle3D, useStyle3D } from "./style3d";
 import { offerCommands, type CommandGroup } from "../../layouts/commands";
@@ -635,7 +639,7 @@ function StructureCanvasContent({
   // SMILES in and out, by a plugin, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
   // Export: the kind and its options asked in a card over the canvas, then the file's name
-  const [exporting, setExporting] = useState<{ kinds: WriterId[]; from?: WriterId; what: Holds } | null>(null);
+  const [exporting, setExporting] = useState<{ writers: Writer[]; from?: string; what: Holds; molecules: Offered3D[]; selected: number[] } | null>(null);
 
   // What the canvas does besides drawing - saving, fitting, R and S, its
   // style - offered to the app's menu while its tab is in front, and on
@@ -652,7 +656,13 @@ function StructureCanvasContent({
           run: () => {
             const state = store.getState();
             const what = holdsOf(state);
-            setExporting({ kinds: exportKinds(what), from: exportKindOf(state, what), what });
+            // (Meno's own, and the plugins' added that write molecules in 3D, where the page holds any)
+            const added = useReaders.getState().state;
+            const theirs = what.solid ? pluginWriters(WRITER_PLUGINS.filter((p) => added[p.id] === "added")) : [];
+            const names = offeredNames(state.molecules3d);
+            const molecules = state.molecules3d.map((m, i) => ({ id: m.id, name: names[i] }));
+            const selected = state.molecules3d.filter((m) => state.sel3d.has(m.id)).map((m) => m.id);
+            setExporting({ writers: [...exportKinds(what).map((k) => WRITERS[k]), ...theirs], from: exportKindOf(state, what), what, molecules, selected });
           },
         },
       ],
@@ -778,13 +788,20 @@ function StructureCanvasContent({
         {exporting && (
           <ExportCard
             key="export"
-            kinds={exporting.kinds}
+            writers={exporting.writers}
             from={exporting.from}
             what={exporting.what}
+            molecules={exporting.molecules}
+            selected={exporting.selected}
+            known={(ids) => {
+              const state = store.getState();
+              const chosen = carriedOf(state).filter((_, i) => ids.includes(state.molecules3d[i].id));
+              return chosen.length ? knownOf(writtenOf(chosen)) : {};
+            }}
             onCancel={() => setExporting(null)}
-            onExport={(kind, options) => {
+            onExport={(writer, options, molecules) => {
               setExporting(null);
-              void files.exportAs(kind, options);
+              void files.exportAs(writer, options, molecules);
             }}
           />
         )}

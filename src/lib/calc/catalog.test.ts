@@ -9,6 +9,7 @@ import {
   READER_PLUGINS,
   pluginOf,
   READERS,
+  WRITER_PLUGINS,
   readerFor,
   readerIdOfLine,
   readerNameOf,
@@ -47,13 +48,16 @@ describe("the readers Meno knows of", () => {
   });
 
   it("are every plugin - those that read files, and those that fill roles, as RDKit does - each in an environment named for it", () => {
-    expect(PLUGINS.map((p) => p.id)).toEqual(["cclib", "pyscf", "rdkit"]);
+    expect(PLUGINS.map((p) => p.id)).toEqual(["cclib", "gaussian-input", "pyscf", "rdkit"]);
     const rdkit = PLUGINS.find((p) => p.id === "rdkit")!;
     expect(rdkit).toMatchObject({ reads: [], profile: "plugin-rdkit", lock: "resources/plugins/rdkit/requirements.lock", worker: "resources/plugins/rdkit/worker.py" });
     expect(rdkit.roles).toEqual(["smiles", "checks", "stereo-labels", "stereoisomers", "conformers", "drawing"]);
     expect(READER_PLUGINS.map((p) => p.id)).toEqual(["cclib", "pyscf"]);
     expect(pluginsFilling("smiles").map((p) => p.id)).toEqual(["rdkit"]);
     expect(pluginsFilling("conformers").map((p) => p.id)).toEqual(["rdkit"]);
+    // (and those that write files: Gaussian's input, its plugin set up as any is)
+    expect(WRITER_PLUGINS.map((p) => p.id)).toEqual(["gaussian-input"]);
+    expect(WRITER_PLUGINS[0]).toMatchObject({ reads: [], roles: [], profile: "plugin-gaussian-input", worker: "resources/plugins/gaussian-input/worker.py" });
   });
 
   it("each reads the kinds it brings, and Meno's: none a kind only another plugin brings, which it does not know", () => {
@@ -68,6 +72,7 @@ describe("the readers Meno knows of", () => {
       worker: "worker.py",
       reads: ["nbo-47", "xyz", "gaussian"],
       roles: [],
+      writes: [],
       kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO" }] }],
     });
     expect(nbo).toMatchObject({ reads: ["nbo-47", "xyz"], lock: "resources/plugins/nbo/requirements.lock", worker: "resources/plugins/nbo/worker.py" });

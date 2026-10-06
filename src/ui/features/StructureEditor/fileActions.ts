@@ -20,7 +20,10 @@ import { withSolidsImage } from "./render3d";
 import { chemistry } from "../../../lib/chem/molecule";
 import { schemeOutlines } from "../../../lib/chem/reactionScheme";
 import type { OptionValues } from "../../../lib/options";
-import { WRITERS, type WriterId } from "../../../lib/io/writers";
+import { extensionOf, type Writer, type WriterId } from "../../../lib/io/writers";
+import { pluginById } from "../../../lib/calc/catalog";
+import { readerClient } from "../../../lib/calc/workers";
+import { writtenOf } from "./utils/written";
 
 /** A file's name without its folder. */
 export function fileNameOf(path: string): string {
@@ -78,19 +81,20 @@ export function exportKindOf(state: Pick<EditorState, "savedPath" | "openedName"
 }
 
 /**
- * Where Export suggests writing the canvas as `kind` - unless said, the kind
- * of the file it came from, or else the first it can be exported as: the
- * canvas's name - where it was saved, or the file opened over it - as that
- * kind; else a name for what is on it.
+ * Where Export suggests writing the canvas as a kind, by its extension
+ * `ext` - unless said, the kind of the file it came from, or else the first
+ * it can be exported as: the canvas's name - where it was saved, or the file
+ * opened over it - as that kind; else a name for what is on it.
  */
 export function suggestedExportPath(
   state: Pick<EditorState, "savedPath" | "openedName">,
   what: Holds,
-  kind = exportKindOf(state, what) ?? exportKinds(what)[0],
+  /** The kind's extension, without its dot: Meno's kinds go by their ids. */
+  ext: string = exportKindOf(state, what) ?? exportKinds(what)[0],
 ): string {
   const from = state.savedPath ?? state.openedName;
-  if (from) return from.toLowerCase().endsWith(`.${kind}`) ? from : withExtension(from, kind);
-  return `${what.reaction ? "reaction" : what.solid && !what.drawn ? "molecules" : "structure"}.${kind}`;
+  if (from) return from.toLowerCase().endsWith(`.${ext}`) ? from : withExtension(from, ext);
+  return `${what.reaction ? "reaction" : what.solid && !what.drawn ? "molecules" : "structure"}.${ext}`;
 }
 
 /**
@@ -318,19 +322,35 @@ export function useFileActions(nameTab?: (label: string) => void) {
     return saveAs();
   }, [attempt, saveAs, saveTo, store]);
 
-  /** The canvas written as `kind` - a MOL, SD or RXN file, a picture - with `options`, where the chemist says. */
+  /**
+   * The canvas written by `writer` with `options`, where the chemist says:
+   * by Meno - a MOL, SD or RXN file, a picture - or by a plugin, given the
+   * molecules in 3D `molecules` (by id) as one molecule (utils/written) and
+   * giving back the file's text, which Meno writes.
+   */
   const exportAs = useCallback(
-    (kind: WriterId, options: OptionValues) =>
+    (writer: Writer, options: OptionValues, molecules: readonly number[] = []) =>
       attempt("Export", async () => {
         const state = store.getState();
+        const ext = extensionOf(writer);
         const picked = await saveDialog({
           title: "Export",
-          defaultPath: suggestedExportPath(state, holdsOf(state), kind),
-          filters: [{ name: WRITERS[kind].name, extensions: [kind] }],
+          defaultPath: suggestedExportPath(state, holdsOf(state), ext),
+          filters: [{ name: writer.name, extensions: writer.extensions.map((e) => e.slice(1)) }],
         });
         if (!picked) return;
         // (that kind, whatever it was called)
-        const path = picked.toLowerCase().endsWith(`.${kind}`) ? picked : `${picked}.${kind}`;
+        const path = writer.extensions.some((e) => picked.toLowerCase().endsWith(e)) ? picked : `${picked}.${ext}`;
+        if (writer.by !== "meno") {
+          const plugin = pluginById(writer.by);
+          if (!plugin) throw new Error(`${writer.name} is written by a plugin Meno does not know of.`);
+          const chosen = carriedOf(state).filter((_, i) => molecules.includes(state.molecules3d[i].id));
+          if (!chosen.length) throw new Error(`There is no molecule in 3D to write as ${writer.name}.`);
+          const text = await (await readerClient(plugin)).write(writer.id, fileNameOf(path), [writtenOf(chosen)], options);
+          await writeTextFile(path, text);
+          return;
+        }
+        const kind = writer.id as WriterId;
         // (everything on the canvas, the molecules in 3D as they are seen)
         const drawn = { ...drawnOf(state), molecules3d: carriedOf(state) };
         if (kind === "svg") {

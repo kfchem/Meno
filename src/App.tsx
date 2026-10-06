@@ -26,6 +26,7 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { MENO_KINDS } from "./lib/io/kinds";
 import { kindOfFile } from "./lib/calc/probe";
 import { addedReaders } from "./lib/calc/workers";
+import { READERS, WRITER_PLUGINS } from "./lib/calc/catalog";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
 import {
@@ -83,9 +84,9 @@ export default function App() {
 
   // The plugins added on this computer, looked at once as Meno starts: the
   // kinds they bring registered (lib/io/kinds), for whatever is opened,
-  // dropped or pasted.
+  // dropped or pasted, and those they write offered by Export.
   useEffect(() => {
-    if (isTauri()) void addedReaders().catch(() => {});
+    if (isTauri()) void addedReaders([...READERS, ...WRITER_PLUGINS.filter((p) => !READERS.includes(p))]).catch(() => {});
   }, []);
 
   // The application's settings - the drawing style among them - read once,

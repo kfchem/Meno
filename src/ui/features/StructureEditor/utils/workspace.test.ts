@@ -102,7 +102,7 @@ describe("a workspace file", () => {
     // second a promise still
     const source = await rememberOutput("water.cube", "the cube", "cube");
     const grid = { origin: [0, 0, 0], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], counts: [2, 2, 2], values: floatsText(new Float32Array(8)), signed: true };
-    await askFor({ readers: ["meno"], source }, "meno", "grid:0", async () => ({ version: "", read: () => Promise.reject(), ask: async () => grid, probe: async () => false }));
+    await askFor({ readers: ["meno"], source }, "meno", "grid:0", async () => ({ version: "", read: () => Promise.reject(), ask: async () => grid, probe: async () => false, write: () => Promise.reject() }));
     const calc = {
       readers: ["meno"],
       source,

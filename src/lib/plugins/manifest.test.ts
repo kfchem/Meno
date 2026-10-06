@@ -14,19 +14,50 @@ const good = {
   reads: ["gaussian", "nbo-47"],
   roles: [],
   kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO", at: "line-start" }] }],
+  writes: [],
 };
 
 describe("a plugin's manifest", () => {
   it("is read as data: what it is, what makes its environment and runs its worker, what it reads, and the kinds it brings", () => {
     expect(acceptManifest(good)).toEqual(good);
     // (each plugin Meno carries, from its folder: Meno names none of them)
-    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "pyscf", "rdkit"]);
+    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "gaussian-input", "pyscf", "rdkit"]);
+  });
+
+  it("may write kinds rather than read them: each named, its files' names, what it is given, and its options as data", () => {
+    const writer = {
+      ...good,
+      reads: [],
+      kinds: [],
+      writes: [
+        {
+          id: "nbo-input",
+          name: "NBO input",
+          extensions: [".47", "47", ".NOT/AN/EXT"],
+          takes: "molecule",
+          options: [
+            { id: "charge", label: "Charge", type: "number", default: 0, from: "charge" },
+            { id: "bad", label: "Bad", type: "choice", choices: [{ value: "a", label: "A" }], default: "b" },
+            { id: "run", label: "Run", type: "code", default: "rm -rf /" },
+          ],
+        },
+        { id: "no-takes", name: "No takes", extensions: [".x"] },
+        { id: "no-extension", name: "No extension", extensions: [], takes: "molecule" },
+      ],
+    };
+    expect(acceptManifest(writer)?.writes).toEqual([
+      { id: "nbo-input", name: "NBO input", extensions: [".47"], takes: "molecule", options: [{ id: "charge", label: "Charge", type: "number", default: 0, from: "charge" }] },
+    ]);
+    // (the plugin Meno carries that writes Gaussian's input: read as any would be)
+    const gaussian = MANIFESTS.find((m) => m.id === "gaussian-input")!;
+    expect(gaussian.writes.map((w) => [w.id, w.extensions, w.takes])).toEqual([["gaussian-input", [".gjf", ".com"], "molecule"]]);
+    expect(gaussian.writes[0].options.map((o) => o.id)).toEqual(["job", "method", "basis", "dispersion", "keywords", "charge", "multiplicity", "title", "checkpoint", "processors", "memory"]);
   });
 
   it("may fill roles rather than read files - but a plugin that does neither is none", () => {
     const roles = { ...good, reads: [], kinds: [], roles: ["smiles", "checks", "Not A Role"] };
     expect(acceptManifest(roles)?.roles).toEqual(["smiles", "checks"]);
-    expect(acceptManifest({ ...good, reads: [], kinds: [], roles: [] })).toBeNull();
+    expect(acceptManifest({ ...good, reads: [], kinds: [], roles: [], writes: [] })).toBeNull();
   });
 
   it("is none where it cannot be used: no id, a lock or worker outside its folder, nothing it reads", () => {

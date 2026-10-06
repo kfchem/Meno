@@ -31,6 +31,7 @@ const reader = (answer: (key: string, text: string) => unknown): Reader & { aske
     read: () => Promise.reject(new Error("not here")),
     ask: async (kind, key, _name, text) => (asked.push(`${kind} ${key}`), answer(key, text)),
     probe: async () => false,
+    write: () => Promise.reject(new Error("not here")),
   };
 };
 // a cube file's start, as one told by its layout

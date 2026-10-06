@@ -1,13 +1,16 @@
 /**
- * Asking a reader plugin's worker (resources/plugins/<id>/worker.py): one
- * JSON object a line each way, answers matched to questions by id, as the
- * worker of a plugin that fills a role is asked (lib/roles/client). It reads what it is sent,
- * and nothing else.
+ * Asking a plugin's worker that reads or writes files
+ * (resources/plugins/<id>/worker.py): one JSON object a line each way,
+ * answers matched to questions by id, as the worker of a plugin that fills
+ * a role is asked (lib/roles/client). It reads what it is sent, and writes
+ * what it is given, and nothing else.
  *
  * The transport is handed in, so that the client knows nothing of how the
  * worker runs (a sidecar, here; anything that carries lines, in tests).
  */
 import type { ReaderOutput } from "./output";
+import type { OptionValues } from "../options";
+import type { WrittenMolecule } from "../io/writers";
 
 /**
  * A reader, however it runs - a plugin's worker, or Meno's own: what it
@@ -23,6 +26,12 @@ export interface Reader {
   ask(kind: string, key: string, name: string, text: string): Promise<unknown>;
   /** Whether a file - by its name and its start - is of `kind`, one the reader tells itself (`probe` in its manifest). */
   probe(kind: string, name: string, head: string): Promise<boolean>;
+  /**
+   * A file of `kind`, one it writes (`writes` in its manifest), named
+   * `name`: what it holds, made of the molecules given with the options
+   * chosen. Meno writes it where the chemist said.
+   */
+  write(kind: string, name: string, molecules: readonly WrittenMolecule[], options: OptionValues): Promise<string>;
 }
 
 export type ReaderTransport = {
@@ -89,6 +98,13 @@ export class ReaderClient implements Reader {
   async probe(kind: string, name: string, head: string): Promise<boolean> {
     const said = (await this.request({ op: "probe", kind, name, head }, `looking at ${name}`)) as { yes?: unknown } | null;
     return said?.yes === true;
+  }
+
+  /** A file of `kind`, as the plugin writes it: its text. */
+  async write(kind: string, name: string, molecules: readonly WrittenMolecule[], options: OptionValues): Promise<string> {
+    const made = (await this.request({ op: "write", kind, name, molecules, options }, `writing ${name}`)) as { text?: unknown } | null;
+    if (typeof made?.text !== "string") throw new Error(`${this.name} wrote nothing for ${name}`);
+    return made.text;
   }
 
   private request(question: Record<string, unknown>, what: string): Promise<unknown> {
