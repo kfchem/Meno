@@ -24,7 +24,7 @@ describe("the readers Meno knows of", () => {
   it("are Meno's own, then each plugin from its manifest in its folder", () => {
     expect(READERS.map((r) => r.id)).toEqual(["meno", "cclib", "pyscf"]);
     // (the structure files Meno reads on the page, and the cube, under the readers' contract)
-    expect(MENO.reads).toEqual(["meno-workspace", "rxn", "mol", "sdf", "xyz", "cube"]);
+    expect(MENO.reads).toEqual(["meno-workspace", "rxn", "mol", "sdf", "xyz", "pdb", "cube"]);
     const [cclib, pyscf] = READER_PLUGINS;
     expect(cclib).toMatchObject({
       name: "cclib",

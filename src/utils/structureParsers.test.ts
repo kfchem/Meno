@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSDF, parseXYZ } from "./structureParsers";
+import { bondsByDistance, parseSDF, parseXYZ } from "./structureParsers";
 import sampleXyz from "../samples/cholesterol.xyz?raw";
 
 describe("parseXYZ", () => {
@@ -15,6 +15,30 @@ describe("parseXYZ", () => {
     const frames = parseXYZ(`${frame}\n${frame}`);
     expect(frames).toHaveLength(2);
     expect(frames[1].bonds).toEqual([{ a1: 0, a2: 1, order: 1 }]);
+  });
+});
+
+describe("bondsByDistance", () => {
+  it("finds the same bonds, in the same order, cube by cube in a big structure as pair by pair", () => {
+    // (a lattice of carbons, oxygens and hydrogens 1 to 1.6 apart, shaken)
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const els = ["C", "O", "H", "N", "S"];
+    const atoms = Array.from({ length: 1200 }, (_, i) => ({
+      el: els[i % els.length],
+      x: (i % 12) * 1.3 + rand() * 0.4 - 50,
+      y: (Math.floor(i / 12) % 10) * 1.3 + rand() * 0.4,
+      z: Math.floor(i / 120) * 1.3 + rand() * 0.4,
+    }));
+    const byPairs: { a1: number; a2: number; order: number }[] = [];
+    for (let m = 0; m < atoms.length; m++) {
+      for (let n = m + 1; n < atoms.length; n++) {
+        if (bondsByDistance([atoms[m], atoms[n]]).length) byPairs.push({ a1: m, a2: n, order: 1 });
+      }
+    }
+    const found = bondsByDistance(atoms);
+    expect(found.length).toBeGreaterThan(1000);
+    expect(found).toEqual(byPairs);
   });
 });
 

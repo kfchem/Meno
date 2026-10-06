@@ -70,6 +70,27 @@ export const WRITERS = {
     ],
   },
   rxn: { id: "rxn", name: "RXN file", extensions: [".rxn"], takes: "page", by: "meno", options: [VERSION] },
+  // (molecules in 3D only: the format holds no drawing)
+  pdb: {
+    id: "pdb",
+    name: "PDB file",
+    extensions: [".pdb"],
+    takes: "page",
+    by: "meno",
+    options: [
+      {
+        id: "frames",
+        about: "molecules3d",
+        label: "Molecules in 3D",
+        type: "choice",
+        choices: [
+          { value: "shown", label: "The frame shown" },
+          { value: "all", label: "Every frame, a model each" },
+        ],
+        default: "shown",
+      },
+    ],
+  },
   svg: { id: "svg", name: "SVG picture", extensions: [".svg"], takes: "page", by: "meno", options: [] },
 } as const satisfies Record<string, Writer>;
 

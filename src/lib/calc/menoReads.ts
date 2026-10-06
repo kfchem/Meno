@@ -28,6 +28,7 @@ export const MENO_READS: Record<string, MenoRead> = {
   mol: structures("mol"),
   sdf: structures("sdf"),
   xyz: structures("xyz"),
+  pdb: structures("pdb"),
   cube: { read: readCube, ask: (key, name, text) => cubeGrid(name, text, key) },
 };
 

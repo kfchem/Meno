@@ -12,7 +12,7 @@ import { readOutput, readStructureFile } from "../../../../lib/calc/read";
 export { xyzComments } from "../../../../lib/io/structures";
 
 /** Extensions of kinds nothing reads yet, said so when such a file is dropped. */
-const UNSUPPORTED_EXTENSIONS = new Set([".pdb", ".ket"]);
+const UNSUPPORTED_EXTENSIONS = new Set([".ket"]);
 
 export type ProcessedFileResult = {
   model: EditorModel;
@@ -48,7 +48,7 @@ export async function processFileContent(
   // Errors are shown to the user as-is, so keep the messages readable.
   const noMolecules = () =>
     new Error(
-      `No molecules found in ${name}. Supported formats: MOL, SDF, RXN, XYZ.`,
+      `No molecules found in ${name}. Supported formats: MOL, SDF, RXN, XYZ, PDB.`,
     );
   if (!kind) {
     const ext = extensionOf(filename);
