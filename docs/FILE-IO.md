@@ -342,6 +342,47 @@ How these behave:
 - **Copy stays as it is**: the record and the clipboard's flavours, not
   Export. The SMILES panel copies through the same clipboard as the menu.
 
+As this part of step 5 was built (#155, from main beside step 3):
+
+- **A workspace opened from its `.meno` is saved back to it.** Open hands
+  the canvas the file's path, and Save writes there. The dialog put the
+  file in the write scope as it was picked. Anything else opened is
+  saved nowhere yet, and Save As suggests its name in its folder.
+- **Export asks first, in a card over the canvas**, for the kind and its
+  options, then for the file's name.
+  - The kinds offered are those the canvas can be written as. The first
+    is the kind of the file it came from, else the one chosen last time.
+  - Each kind's options are declared by its writer in the general form
+    (`lib/io/writers.ts`, `lib/options.ts`) and drawn by `OptionsForm`.
+    An option about the drawing, or about the molecules in 3D, is shown
+    only where the page holds them.
+  - The last choices are remembered in the settings, by role
+    (`options`: `export`, `write:sdf`, ...).
+  - **MOL, SD and RXN files** may be written in V3000. Otherwise they are
+    written in V2000, or in V3000 where V2000 cannot hold them, as before.
+  - **An SD file** may hold every frame of each molecule in 3D, a record
+    each, numbered, with its energy where it is known
+    (`> <Energy (Eh)>`).
+  - **SVG** takes no options yet.
+- **What a writer takes** - the page, the molecules, or one molecule - is
+  not asked yet. Each writes the whole canvas as it did.
+- **Outputs are found again by path.**
+  - A molecule read from an output keeps where the output was, where
+    Open said (its `source.path`), with its SHA-256. A workspace saves it.
+  - A promise asked for when the output is not open this session is
+    asked for from the file there - read only where Meno may read it, and
+    taken only if its SHA-256 is the same.
+  - **Where it cannot be had** - Meno may no longer read it there after a
+    restart, it has moved, or it has changed - the list says to open it
+    again, with *Find it…*. That opens the system's dialog at where the
+    output was, and the file chosen is taken only if it is the same output.
+    Once taken, the promises that waited on it are asked for again.
+  - A saved workspace now holds the outputs' paths: where the files were
+    on the computer that saved it.
+- **Meno's writers behind the contract** come with the first writer that
+  is not Meno's - a calculation's input, in step 7 - so that the contract
+  is shaped by both.
+
 ### Response
 
 The maintainer's condition: Meno's own readers go behind the contract, in
@@ -451,7 +492,7 @@ Each step is a pull request from main.
    - `readers.ts` into the XYZ reader, and geometries made directly.
 4. **Meno's readers in the worker:** all of them behind the contract,
    in a web worker, giving back coordinates in buffers (*Response*).
-5. **Save and Export** (in part in #151 - Save writing `.meno`, Save when closing, one SMILES copy, the write scope; the rest to come):
+5. **Save and Export** (in part in #151 - Save writing `.meno`, Save when closing, one SMILES copy, the write scope - and #155 - Save back to the file it came from, Export with the writer's options; the rest to come):
    - Save writing `.meno` only, back to the file it came from;
    - Save offered when closing;
    - Export with the writer's options;

@@ -47,6 +47,7 @@ export default function CalcList3D({
   onClose,
   onRoom,
   asking,
+  onFind,
   iso,
   onIso,
   area,
@@ -60,6 +61,8 @@ export default function CalcList3D({
   onClose: () => void;
   /** What is said under it of the row chosen: its motion or surface being worked out, or what went wrong; none, nothing. */
   asking?: string | null;
+  /** Where what went wrong is that its output is not to be had: the chemist finding it, by what it is called. */
+  onFind?: { name: string; find: () => void };
   /** The value the row chosen's surface is drawn at - a slider under it sets it; none, no slider. */
   iso?: number;
   onIso?: (iso: number) => void;
@@ -211,7 +214,16 @@ export default function CalcList3D({
           );
         })}
       </div>
-      {asking && <div className="px-3 pt-1 text-[11px] text-gh-gray meno-fade-in">{asking}</div>}
+      {asking && (
+        <div className="px-3 pt-1 text-[11px] text-gh-gray meno-fade-in">
+          {asking}
+          {onFind && (
+            <button onClick={onFind.find} className="ml-1.5 underline decoration-gh-line underline-offset-2 hover:text-gh-black">
+              Find {onFind.name}…
+            </button>
+          )}
+        </div>
+      )}
       {iso != null && onIso && (
         <label className="px-3 pt-1.5 pb-0.5 flex items-center gap-2 text-[11px] text-gh-gray meno-fade-in">
           <span>Isovalue</span>

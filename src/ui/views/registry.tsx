@@ -119,6 +119,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
         initialKind={(content as any)?.data?.kind}
+        initialPath={(content as any)?.data?.path}
         officeId={(content as any)?.data?.officeId}
         nameTab={renameTab}
       />

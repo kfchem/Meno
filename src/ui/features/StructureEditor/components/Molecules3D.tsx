@@ -15,7 +15,7 @@ import { eyeOf, pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
 import CalcList3D from "./CalcList3D";
 import { isAsk, readGrid, resultKey, resultsOn, type Ask, type ListResult } from "../../../../lib/calc/results";
-import { askFor, askKey, givenValue, useAsks } from "../../../../lib/calc/asks";
+import { askFor, askKey, findOutput, givenValue, useAsks, type AskError } from "../../../../lib/calc/asks";
 import { titled } from "../../../../lib/calc/sources";
 import type { CalcInfo } from "../../../../lib/calc/output";
 import Molecule3DView from "./Molecule3DView";
@@ -513,6 +513,11 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
                   }}
                   onPoint={(i) => store.getState().pointRow3d(m.id, i)}
                   asking={asking === "asking" ? "Working it out…" : asking && typeof asking === "object" ? asking.error : null}
+                  onFind={
+                    asking && typeof asking === "object" && asking.missing && m.calc?.source
+                      ? { name: m.calc.source.name, find: () => void findOutput(m.calc!.source!).catch(() => {}) }
+                      : undefined
+                  }
                   iso={surface?.value ? (open.iso ?? surface.value.iso ?? DEFAULT_ISO) : undefined}
                   onIso={(iso) => store.getState().setIso3d(m.id, iso)}
                   onClose={() => store.getState().closeList3d(m.id)}
@@ -567,7 +572,7 @@ function held<T>(
   asks: ReturnType<typeof useAsks.getState>["state"],
   toAsk: (() => void)[],
   read: (v: unknown) => T | undefined,
-): { value?: T; state?: "asking" | "given" | { error: string } } {
+): { value?: T; state?: "asking" | "given" | AskError } {
   if (!isAsk(v)) return { value: read(v) };
   if (!calc) return {};
   const key = askKey(calc.source, list.from, v.ask);

@@ -50,14 +50,18 @@ export type CalcInfo = {
   multiplicity?: number;
   optimised?: boolean;
   results?: Result[];
-  /** The output it was read from: its name, kind and SHA-256 - what a promise is asked for again from (./asks). */
+  /** The output it was read from: its name, kind and SHA-256, and where it was - what a promise is asked for again from (./asks). */
   source?: CalcSource;
   /** The readers chosen to read it as well that could not, each by id, and why (lib/calc/read). */
   unread?: { from: string; why: string }[];
 };
 
-/** An output as a molecule keeps it: its name, its kind (lib/io/kinds) - unsaid in a workspace saved before kinds were - and its SHA-256. */
-export type CalcSource = { name: string; sha256: string; kind?: string };
+/**
+ * An output as a molecule keeps it: its name, its kind (lib/io/kinds), its
+ * SHA-256, and where it was when it was opened, where Open said - so that a
+ * workspace opened later can find it again there, unchanged (./asks).
+ */
+export type CalcSource = { name: string; sha256: string; kind?: string; path?: string };
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const text = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
@@ -85,17 +89,21 @@ export function calcOf(out: ReaderOutput, readers: readonly string[], source?: C
     ...(Number.isInteger(out.multiplicity) && out.multiplicity! > 0 ? { multiplicity: out.multiplicity! } : {}),
     ...(typeof out.optimised === "boolean" ? { optimised: out.optimised } : {}),
     ...(results.length ? { results } : {}),
-    ...(source ? { source: { name: source.name, sha256: source.sha256, ...(source.kind ? { kind: source.kind } : {}) } } : {}),
+    ...(source
+      ? { source: { name: source.name, sha256: source.sha256, ...(source.kind ? { kind: source.kind } : {}), ...(source.path ? { path: source.path } : {}) } }
+      : {}),
     ...(unread?.length ? { unread: unread.map((u) => ({ from: u.from, why: u.why })) } : {}),
   };
 }
 
-/** An output's name, kind and SHA-256 as a file carries them; otherwise none. */
+/** An output's name, kind, SHA-256 and place as a file carries them; otherwise none. */
 function sourceOf(v: unknown): CalcSource | undefined {
   const s = v as Record<string, unknown> | null | undefined;
   if (!s || typeof s.name !== "string" || typeof s.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(s.sha256)) return undefined;
   const kind = typeof s.kind === "string" && /^[a-z0-9-]{1,40}$/.test(s.kind) ? s.kind : undefined;
-  return { name: s.name.slice(0, 260), sha256: s.sha256, ...(kind ? { kind } : {}) };
+  // (a place is only ever looked at: read where Meno may read it, and taken only where its SHA-256 matches)
+  const path = typeof s.path === "string" && s.path.length <= 4096 && !s.path.includes("\0") ? s.path : undefined;
+  return { name: s.name.slice(0, 260), sha256: s.sha256, ...(kind ? { kind } : {}), ...(path ? { path } : {}) };
 }
 
 /**

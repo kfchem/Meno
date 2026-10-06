@@ -64,6 +64,14 @@ describe("what a reader hands back", () => {
     expect(other?.[0].on === "list" && other[0].rows.some((r) => r.move)).toBe(false);
   });
 
+  it("keeps the output it was read from - its name, kind, SHA-256, and where it was - and not a place that does not read", () => {
+    const source = { name: "water.out", sha256: "a".repeat(64), kind: "orca", path: "/data/run 3/water.out" };
+    const kept = calcOf(water, ["cclib 1.9rc1"], source);
+    expect(readCalc(JSON.parse(JSON.stringify(kept)), 3, 2)?.source).toEqual(source);
+    expect(readCalc({ ...kept, source: { ...source, path: 7 } }, 3, 2)?.source).toEqual({ name: "water.out", sha256: "a".repeat(64), kind: "orca" });
+    expect(readCalc({ ...kept, source: { ...source, path: "x".repeat(5000) } }, 3, 2)?.source?.path).toBeUndefined();
+  });
+
   it("keeps the readers that could not read it, and why", () => {
     const c = calcOf(water, ["cclib 1.9rc1"], undefined, [{ from: "pyscf", why: "no basis" }]);
     expect(c.unread).toEqual([{ from: "pyscf", why: "no basis" }]);
