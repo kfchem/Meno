@@ -139,6 +139,7 @@ export function useStructureEvents(
           initialFilename || "",
           initialPayload,
           kind,
+          initialPath,
         );
         const shifted = {
           atoms: result.model.atoms.map((a) => ({
