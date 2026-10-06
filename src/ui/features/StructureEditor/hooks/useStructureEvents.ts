@@ -11,7 +11,7 @@ import { editorModelOf, processFileContent, type ProcessedFileResult } from "../
 import { schemeOf, type ImportedScheme } from "../document";
 import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
-import { readWorkspace } from "../utils/workspace";
+import { isWorkspaceFile, readWorkspace } from "../utils/workspace";
 import type { Drawn } from "../store/types";
 import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, rowAfter, solidOf } from "../utils/molecule3d";
@@ -29,6 +29,8 @@ export function useStructureEvents(
   openedFile?: boolean,
   /** What the payload is, where whoever opened it said (lib/io/kinds); otherwise told here. */
   initialKind?: string,
+  /** Where the file opened is, where Open said: a workspace's is where Save writes it back. */
+  initialPath?: string,
 ) {
   const store = useEditorStore();
 
@@ -118,7 +120,9 @@ export function useStructureEvents(
         const ws = readWorkspace(initialPayload);
         if (ws) {
           store.getState().openWorkspace(ws, true);
-          if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
+          // (opened from its own file, it is saved back to it; else Save asks where)
+          if (openedFile && initialPath && isWorkspaceFile(initialPath)) store.getState().markSavedAs(initialPath);
+          else if (openedFile && initialFilename) store.getState().markOpenedOver(initialPath ?? initialFilename);
         } else reportImportError("initial payload", new Error("The workspace could not be read."));
         return;
       }
@@ -151,7 +155,7 @@ export function useStructureEvents(
             toModel(shifted),
             importedScheme(result, -result.centroid.x, -result.centroid.y),
           );
-        if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
+        if (openedFile && initialFilename) store.getState().markOpenedOver(initialPath ?? initialFilename);
       } catch (e) {
         reportImportError("initial payload", e);
       }

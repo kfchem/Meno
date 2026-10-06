@@ -15,6 +15,7 @@ describe("the settings file", () => {
       network: { offline: true, granted: ["python-env:console"] },
       chemistry: { valenceWarnings: false, stereoLabels: true },
       updates: { asked: true },
+      options: { "write:sdf": { version: "V3000", frames: "all" }, export: { kind: "sdf" } },
       abbreviations: [{ label: "Mmt", name: "4-methoxytrityl", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1", also: ["MMTr"] }],
       calcReaders: { chosen: { orca: "cclib" } },
     };
@@ -41,6 +42,11 @@ describe("the settings file", () => {
     expect(acceptAppSettings({ calcReaders: { chosen: { orca: "cclib", gaussian: 3, "x y": "cclib" } } }).calcReaders).toEqual({ chosen: { orca: "cclib" } });
     // a file from before molecules in 3D had a look of their own: Meno's
     expect(acceptAppSettings({ drawingStyle: { preset: "rsc", changes: {} } }).style3d).toEqual(DEFAULT_APP_SETTINGS.style3d);
+    // the options remembered: by a role, each value a string, a number or a switch; whether it fits is asked when drawn
+    expect(acceptAppSettings({}).options).toEqual({});
+    expect(
+      acceptAppSettings({ options: { "write:mol": { version: "V3000", scale: 2, x: null, "a b": 1 }, "Bad Role": { a: 1 }, export: "sdf" } }).options,
+    ).toEqual({ "write:mol": { version: "V3000", scale: 2 } });
     // a file from before Meno updated itself: not asked yet
     expect(acceptAppSettings({ updates: { asked: "yes" } }).updates).toEqual({ asked: false });
     // the user's abbreviations: those with a label and a structure that reads

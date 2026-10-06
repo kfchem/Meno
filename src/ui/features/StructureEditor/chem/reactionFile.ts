@@ -16,10 +16,11 @@ export function notOneReaction(drawn: Drawn): string | null {
 /**
  * The drawing as an RXN file: each molecule a reactant, a product or a
  * reagent by where it is drawn against the arrow (lib/chem/reactionScheme),
- * a cage drawn in perspective given its wedges as a MOL file is. Throws,
- * saying why, where the drawing is not one reaction.
+ * a cage drawn in perspective given its wedges as a MOL file is; in V3000
+ * where `version` asks, else in V2000 where V2000 holds it. Throws, saying
+ * why, where the drawing is not one reaction.
  */
-export function reactionFileText(drawn: Drawn, title?: string): string {
+export function reactionFileText(drawn: Drawn, title?: string, version: "V3000" | "auto" = "auto"): string {
   const why = notOneReaction(drawn);
   if (why) throw new Error(why);
   const flat = forFlatReaders(drawn);
@@ -37,6 +38,6 @@ export function reactionFileText(drawn: Drawn, title?: string): string {
       products: roles.products.map(molecule),
       reagents: roles.reagents.map(molecule),
     },
-    { title },
+    { title, version },
   );
 }

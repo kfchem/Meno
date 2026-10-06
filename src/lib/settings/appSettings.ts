@@ -12,6 +12,7 @@ import { DEFAULT_STYLE_CHOICE, type StyleChoice } from "../chem/style";
 import { acceptStyleChoice } from "../chem/styleFields";
 import { acceptStyle3dChoice, DEFAULT_STYLE_3D_CHOICE, type Style3DChoice } from "../chem/style3d";
 import { setCustomAbbreviations, structureProblem, type CustomAbbreviation } from "../chem/abbreviations";
+import type { OptionValues } from "../options";
 
 /**
  * The application's own settings: what applies to every tab unless a tab
@@ -26,6 +27,8 @@ export type AppSettings = {
   network: NetworkSettings;
   chemistry: ChemistrySettings;
   updates: UpdateSettings;
+  /** The options last chosen for each role, by the role ("write:sdf"): what is drawn first next time (lib/options). */
+  options: Record<string, OptionValues>;
   /** The user's own abbreviations, known as Meno's own are (lib/chem/abbreviations). */
   abbreviations: CustomAbbreviation[];
   calcReaders: CalcReaderSettings;
@@ -67,6 +70,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   network: { offline: false, granted: [] },
   chemistry: { valenceWarnings: true, stereoLabels: false },
   updates: { asked: false },
+  options: {},
   abbreviations: [],
   calcReaders: { chosen: {} },
 };
@@ -84,6 +88,7 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     network: acceptNetwork(r.network),
     chemistry: acceptChemistry(r.chemistry),
     updates: acceptUpdates(r.updates),
+    options: acceptOptions(r.options),
     abbreviations: acceptAbbreviations(r.abbreviations),
     calcReaders: acceptCalcReaders(r.calcReaders),
   };
@@ -99,6 +104,22 @@ function acceptCalcReaders(raw: unknown): CalcReaderSettings {
     }
   }
   return { chosen };
+}
+
+/** The options remembered that read: by a role's name, each a value that is a string, a number or a switch. Whether each still fits its option is asked when it is drawn (lib/options `valuesOf`). */
+function acceptOptions(raw: unknown): Record<string, OptionValues> {
+  const out: Record<string, OptionValues> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [role, given] of Object.entries(raw)) {
+    if (!/^[a-z0-9:-]{1,60}$/.test(role) || !given || typeof given !== "object" || Array.isArray(given)) continue;
+    const values: OptionValues = {};
+    for (const [id, v] of Object.entries(given)) {
+      const fits = typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v.length <= 500);
+      if (/^[a-zA-Z0-9_-]{1,40}$/.test(id) && fits) values[id] = v;
+    }
+    out[role] = values;
+  }
+  return out;
 }
 
 /** The user's abbreviations the file holds that read: a label, a name, other names and a structure Meno reads. */
@@ -191,6 +212,8 @@ type SettingsState = AppSettings & {
   setNetwork: (network: NetworkSettings) => void;
   setChemistry: (chemistry: ChemistrySettings) => void;
   setUpdates: (updates: UpdateSettings) => void;
+  /** Remembers the options chosen for a role. */
+  rememberOptions: (role: string, values: OptionValues) => void;
   setAbbreviations: (abbreviations: CustomAbbreviation[]) => void;
   setCalcReaders: (calcReaders: CalcReaderSettings) => void;
 };
@@ -203,9 +226,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, abbreviations, calcReaders } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, calcReaders } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, abbreviations, calcReaders }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, calcReaders }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -238,6 +261,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setUpdates: (updates) => {
       set({ updates });
+      scheduleSave();
+    },
+    rememberOptions: (role, values) => {
+      set({ options: { ...get().options, [role]: values } });
       scheduleSave();
     },
     setAbbreviations: (abbreviations) => {
