@@ -14,6 +14,7 @@ import { currentStyle3D } from "../style3d";
 import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
 import { eyeOf } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
+import { opensWith } from "./openingFit";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -32,27 +33,32 @@ export default function FitToContent2D({
   // first bond on an empty canvas is drawn where it was put, at the zoom
   // the canvas opened at, and the view stays.
   const lastTriggerRef = useRef(trigger);
-  // What a canvas holds as its view first comes up - a file it was opened
-  // with, read before the view was there to ask for a fit - is shown whole:
-  // on its middle, at the zoom the canvas opens at or as far out as it
-  // needs, never further in. (Molecules in 3D stand beside a drawing, where
-  // the opening zoom alone may not reach.)
+  // What a canvas opens with is shown whole: on its middle, at the zoom the
+  // canvas opens at or as far out as it needs, never further in (./openingFit
+  // `opensWith`). (Molecules in 3D stand beside a drawing, where the opening
+  // zoom alone may not reach.)
   const opened = useRef(false);
   // (the first fit, of a canvas that has shown nothing yet, is where its
   // view starts; after that a fit goes there)
   const fitted = useRef(false);
+  // (whether it has held anything yet: what it is first given is opened)
+  const held = useRef(false);
   useEffect(() => {
     const cam = camera as THREE.OrthographicCamera;
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
-    const first = !opened.current;
+    const empty = atoms.length === 0 && molecules3d.length === 0;
+    const firstView = !opened.current;
     opened.current = true;
-    if (first && atoms.length === 0 && molecules3d.length === 0) return;
-    if (!first && trigger === lastTriggerRef.current) return;
-    if (atoms.length === 0 && molecules3d.length === 0) {
+    const firstContent = !held.current && !empty;
+    if (!empty) held.current = true;
+    if (firstView && empty) return;
+    if (!firstView && trigger === lastTriggerRef.current) return;
+    if (empty) {
       lastTriggerRef.current = trigger;
       return;
     }
+    const first = opensWith({ firstView, firstContent, asked: trigger !== lastTriggerRef.current, fittedBefore: fitted.current });
     // What the drawing reaches, not where the atoms are: a label hangs off
     // its atom - the H of an OH, the 2 of an NH2 - and fitting to the atoms
     // alone cuts it off at the edge. The layout already works this out.
