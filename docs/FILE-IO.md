@@ -366,8 +366,22 @@ As this part of step 5 was built (#155, from main beside step 3):
   - **SVG** takes no options yet.
 - **What a writer takes** - the page, the molecules, or one molecule - is
   not asked yet. Each writes the whole canvas as it did.
-- **Outputs found again by path, and Meno's writers behind the contract,**
-  come next, on step 3, which they build on.
+- **Outputs are found again by path.**
+  - A molecule read from an output keeps where the output was, where
+    Open said (its `source.path`), with its SHA-256. A workspace saves it.
+  - A promise asked for when the output is not open this session is
+    asked for from the file there - read only where Meno may read it, and
+    taken only if its SHA-256 is the same.
+  - **Where it cannot be had** - Meno may no longer read it there after a
+    restart, it has moved, or it has changed - the list says to open it
+    again, with *Find it…*. That opens the system's dialog at where the
+    output was, and the file chosen is taken only if it is the same output.
+    Once taken, the promises that waited on it are asked for again.
+  - A saved workspace now holds the outputs' paths: where the files were
+    on the computer that saved it.
+- **Meno's writers behind the contract** come with the first writer that
+  is not Meno's - a calculation's input, in step 7 - so that the contract
+  is shaped by both.
 
 ### Response
 
