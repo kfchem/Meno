@@ -91,22 +91,52 @@ export function bondsByDistance(atoms: readonly { el: string; x: number; y: numb
   // (each atom's covalent radius looked up once, not once for every pair:
   // a trajectory of hundreds of frames is read quickly)
   const radii = atoms.map((a) => covalentRadius(a.el));
-  const bonds: Bond[] = [];
-  for (let m = 0; m < atoms.length; m++) {
+  const bonded = (m: number, n: number) => {
     const a1 = atoms[m];
-    for (let n = m + 1; n < atoms.length; n++) {
-      const a2 = atoms[n];
-      const threshold = (radii[m] + radii[n]) * 1.1;
-      const dx = a1.x - a2.x;
-      const dy = a1.y - a2.y;
-      const dz = a1.z - a2.z;
-      if (dx * dx + dy * dy + dz * dz < threshold * threshold) {
-        bonds.push({ a1: m, a2: n, order: 1 });
-      }
+    const a2 = atoms[n];
+    const threshold = (radii[m] + radii[n]) * 1.1;
+    const dx = a1.x - a2.x;
+    const dy = a1.y - a2.y;
+    const dz = a1.z - a2.z;
+    return dx * dx + dy * dy + dz * dz < threshold * threshold;
+  };
+  const bonds: Bond[] = [];
+  if (atoms.length <= GRID_FROM) {
+    for (let m = 0; m < atoms.length; m++) {
+      for (let n = m + 1; n < atoms.length; n++) if (bonded(m, n)) bonds.push({ a1: m, a2: n, order: 1 });
     }
+    return bonds;
+  }
+  // A big structure - a protein's thousands of atoms - is cut into cubes as
+  // wide as the longest bond there can be, and each atom tried only against
+  // those in its cube and the cubes about it: the same bonds, in the same
+  // order, without trying every pair.
+  // (the widest radius by a loop: spread over tens of thousands of atoms, Math.max overruns a web worker's stack)
+  const side = 2 * radii.reduce((most, r) => Math.max(most, r), 0) * 1.1;
+  const cell = (v: number) => Math.floor(v / side);
+  const key = (i: number, j: number, k: number) => `${i} ${j} ${k}`;
+  const cells = new Map<string, number[]>();
+  atoms.forEach((a, n) => {
+    const k = key(cell(a.x), cell(a.y), cell(a.z));
+    const c = cells.get(k);
+    if (c) c.push(n);
+    else cells.set(k, [n]);
+  });
+  for (let m = 0; m < atoms.length; m++) {
+    const a = atoms[m];
+    const [i, j, k] = [cell(a.x), cell(a.y), cell(a.z)];
+    const near: number[] = [];
+    for (let di = -1; di <= 1; di++)
+      for (let dj = -1; dj <= 1; dj++)
+        for (let dk = -1; dk <= 1; dk++) for (const n of cells.get(key(i + di, j + dj, k + dk)) ?? []) if (n > m && bonded(m, n)) near.push(n);
+    near.sort((p, q) => p - q);
+    for (const n of near) bonds.push({ a1: m, a2: n, order: 1 });
   }
   return bonds;
 }
+
+/** How many atoms a structure has before its bonds are found cube by cube rather than pair by pair. */
+const GRID_FROM = 400;
 
 export function parseXYZ(xyz: string): Molecule[] {
   const lines = xyz.trim().split("\n");

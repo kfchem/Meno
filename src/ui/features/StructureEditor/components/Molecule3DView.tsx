@@ -266,7 +266,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     }
     // (atoms not bonded to it - a salt's other ion - last)
     for (let i = 0; i < n; i++) if (level[i] < 0) level[i] = deepest + 1;
-    return { level, deepest: Math.max(...level) };
+    // (by a loop: spread over a protein's atoms, Math.max overruns the stack)
+    return { level, deepest: level.reduce((most, l) => Math.max(most, l), 0) };
   }, [holding, m.atoms, m.bonds, n]);
   // each bond's lines, by bond
   const lineBond = useMemo(() => m.bonds.flatMap((b, i) => Array.from({ length: linesOf(b.order) }, () => i)), [m.bonds]);
