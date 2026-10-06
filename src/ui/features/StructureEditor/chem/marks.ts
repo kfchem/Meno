@@ -67,12 +67,39 @@ export function valenceMessage(el: string, p: ValenceProblem): string {
 type Vec = { x: number; y: number };
 
 /**
+ * A structure looked up the way placing its marks needs: its atoms by id,
+ * each atom's bonds in their order, and its bonds by id. Made once for all
+ * the marks on it - a mark at each of a thousand stereocentres does not
+ * each go through every atom and bond.
+ */
+export type MarkIndex = {
+  at: Map<number, Model["atoms"][number]>;
+  bondsAt: Map<number, Model["bonds"]>;
+  bondById: Map<number, Model["bonds"][number]>;
+};
+
+export function markIndex(model: Model): MarkIndex {
+  const at = new Map(model.atoms.map((a) => [a.id, a]));
+  const bondsAt = new Map<number, Model["bonds"]>();
+  const bondById = new Map<number, Model["bonds"][number]>();
+  for (const b of model.bonds) {
+    if (!bondById.has(b.id)) bondById.set(b.id, b);
+    for (const e of b.a === b.b ? [b.a] : [b.a, b.b]) {
+      const here = bondsAt.get(e);
+      if (here) here.push(b);
+      else bondsAt.set(e, [b]);
+    }
+  }
+  return { at, bondsAt, bondById };
+}
+
+/**
  * The ways out from an atom, best first: halfway across each gap between
  * its bonds, the widest first, then round the compass. Straight down, first,
  * from an atom with no bonds.
  */
-export function waysOut(model: Model, atomId: number): Vec[] {
-  const at = new Map(model.atoms.map((a) => [a.id, a]));
+export function waysOut(model: Model, atomId: number, index: MarkIndex = markIndex(model)): Vec[] {
+  const { at } = index;
   const atom = at.get(atomId);
   const compass = Array.from({ length: 12 }, (_, i) => {
     const t = -Math.PI / 2 + (i * Math.PI) / 6;
@@ -80,7 +107,7 @@ export function waysOut(model: Model, atomId: number): Vec[] {
   });
   if (!atom) return compass;
   const angles: number[] = [];
-  for (const b of model.bonds) {
+  for (const b of index.bondsAt.get(atomId) ?? []) {
     const other = b.a === atomId ? b.b : b.b === atomId ? b.a : null;
     const o = other != null ? at.get(other) : undefined;
     if (!o || (o.x === atom.x && o.y === atom.y)) continue;
@@ -103,12 +130,12 @@ export function waysOut(model: Model, atomId: number): Vec[] {
  * each of its wedged and hashed bonds, as IUPAC's recommendations for
  * structure diagrams put it (GR-11.1), then its ways out (waysOut).
  */
-export function stereoWaysOut(model: Model, atomId: number): Vec[] {
-  const at = new Map(model.atoms.map((a) => [a.id, a]));
+export function stereoWaysOut(model: Model, atomId: number, index: MarkIndex = markIndex(model)): Vec[] {
+  const { at } = index;
   const atom = at.get(atomId);
-  if (!atom) return waysOut(model, atomId);
+  if (!atom) return waysOut(model, atomId, index);
   const opposite: Vec[] = [];
-  for (const b of model.bonds) {
+  for (const b of index.bondsAt.get(atomId) ?? []) {
     if (b.order !== 1 || (b.stereo !== "up" && b.stereo !== "down")) continue;
     const other = b.a === atomId ? b.b : b.b === atomId ? b.a : null;
     const o = other != null ? at.get(other) : undefined;
@@ -116,7 +143,7 @@ export function stereoWaysOut(model: Model, atomId: number): Vec[] {
     if (!o || len < 1e-9) continue;
     opposite.push({ x: -(o.x - atom.x) / len, y: -(o.y - atom.y) / len });
   }
-  return [...opposite, ...waysOut(model, atomId)];
+  return [...opposite, ...waysOut(model, atomId, index)];
 }
 
 export type Rect = { minX: number; minY: number; maxX: number; maxY: number };
@@ -148,6 +175,137 @@ function overlaps(r: Rect, o: Rect): boolean {
   return r.minX < o.maxX && o.minX < r.maxX && r.minY < o.maxY && o.minY < r.maxY;
 }
 
+/** More cells than this and a thing is checked against every box instead. */
+const MOST_CELLS = 256;
+
+/**
+ * What a mark must keep off - the bonds as segments, the labels and the
+ * marks already placed as boxes - kept in a grid of square cells `cell`
+ * across, so that a box is checked against the things near it rather than
+ * against everything on the page; and the same segment or box twice over -
+ * records drawn on top of one another, and the marks they push to the same
+ * places - kept once, with how many times it is there. It counts exactly
+ * what checking every one would: a thing is only left out where its bounds
+ * and the box's do not meet, and nothing that misses those can touch the
+ * box.
+ */
+export class MarkObstacles {
+  private readonly segments: Segment[] = [];
+  private readonly rects: Rect[] = [];
+  // (how many times each is there, and where each is kept, by where it is)
+  private readonly segmentTimes: number[] = [];
+  private readonly rectTimes: number[] = [];
+  private readonly segmentAt = new Map<string, number>();
+  private readonly rectAt = new Map<string, number>();
+  private readonly segmentCells = new Map<string, number[]>();
+  private readonly rectCells = new Map<string, number[]>();
+  // (those too big, or too far out, for the grid: checked every time)
+  private readonly segmentsEverywhere: number[] = [];
+  private readonly rectsEverywhere: number[] = [];
+  private segmentSeen: Int32Array = new Int32Array(0);
+  private rectSeen: Int32Array = new Int32Array(0);
+  private asked = 0;
+
+  constructor(
+    segments: Segment[],
+    rects: Rect[],
+    private readonly cell = 1,
+  ) {
+    for (const s of segments) this.addSegment(s);
+    for (const r of rects) this.add(r);
+  }
+
+  /** The cells a box's bounds cover, or null where they are too many to list. */
+  private cellsOf(minX: number, minY: number, maxX: number, maxY: number): string[] | null {
+    const x0 = Math.floor(minX / this.cell);
+    const x1 = Math.floor(maxX / this.cell);
+    const y0 = Math.floor(minY / this.cell);
+    const y1 = Math.floor(maxY / this.cell);
+    if (![x0, x1, y0, y1].every(Number.isFinite)) return null;
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > MOST_CELLS) return null;
+    const out: string[] = [];
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) out.push(`${x},${y}`);
+    return out;
+  }
+
+  private file(cells: Map<string, number[]>, everywhere: number[], k: number, keys: string[] | null) {
+    if (!keys) {
+      everywhere.push(k);
+      return;
+    }
+    for (const key of keys) {
+      const here = cells.get(key);
+      if (here) here.push(k);
+      else cells.set(key, [k]);
+    }
+  }
+
+  private addSegment(s: Segment) {
+    const [p, q] = s;
+    const where = `${p.x},${p.y},${q.x},${q.y}`;
+    const was = this.segmentAt.get(where);
+    if (was != null) {
+      this.segmentTimes[was]++;
+      return;
+    }
+    const k = this.segments.push(s) - 1;
+    this.segmentTimes.push(1);
+    this.segmentAt.set(where, k);
+    this.file(this.segmentCells, this.segmentsEverywhere, k, this.cellsOf(Math.min(p.x, q.x), Math.min(p.y, q.y), Math.max(p.x, q.x), Math.max(p.y, q.y)));
+  }
+
+  /** A box to keep off from now on: a mark just placed. */
+  add(r: Rect) {
+    const where = `${r.minX},${r.minY},${r.maxX},${r.maxY}`;
+    const was = this.rectAt.get(where);
+    if (was != null) {
+      this.rectTimes[was]++;
+      return;
+    }
+    const k = this.rects.push(r) - 1;
+    this.rectTimes.push(1);
+    this.rectAt.set(where, k);
+    this.file(this.rectCells, this.rectsEverywhere, k, this.cellsOf(r.minX, r.minY, r.maxX, r.maxY));
+  }
+
+  /** How many of the segments pass through a box, and how many of the boxes overlap it. */
+  count(rect: Rect): number {
+    this.asked++;
+    if (this.segmentSeen.length < this.segments.length) this.segmentSeen = grown(this.segmentSeen, this.segments.length);
+    if (this.rectSeen.length < this.rects.length) this.rectSeen = grown(this.rectSeen, this.rects.length);
+    const keys = this.cellsOf(rect.minX, rect.minY, rect.maxX, rect.maxY);
+    let hits = 0;
+    const segment = (k: number) => {
+      if (this.segmentSeen[k] === this.asked) return;
+      this.segmentSeen[k] = this.asked;
+      if (segmentHitsRect(this.segments[k], rect)) hits += this.segmentTimes[k];
+    };
+    const box = (k: number) => {
+      if (this.rectSeen[k] === this.asked) return;
+      this.rectSeen[k] = this.asked;
+      if (overlaps(rect, this.rects[k])) hits += this.rectTimes[k];
+    };
+    if (!keys) {
+      this.segments.forEach((_, k) => segment(k));
+      this.rects.forEach((_, k) => box(k));
+      return hits;
+    }
+    for (const key of keys) {
+      for (const k of this.segmentCells.get(key) ?? []) segment(k);
+      for (const k of this.rectCells.get(key) ?? []) box(k);
+    }
+    for (const k of this.segmentsEverywhere) segment(k);
+    for (const k of this.rectsEverywhere) box(k);
+    return hits;
+  }
+}
+
+function grown(a: Int32Array, n: number): Int32Array {
+  const out = new Int32Array(Math.max(n, a.length * 2, 64));
+  out.set(a);
+  return out;
+}
+
 /**
  * Where a mark half `half` wide and high goes: out from `from` along the
  * first of `dirs` - past `start(dir)`, and a little further if it must -
@@ -160,10 +318,9 @@ export function placeMark(opts: {
   start: (dir: Vec) => number;
   half: Vec;
   step: number;
-  segments: Segment[];
-  rects: Rect[];
+  obstacles: MarkObstacles;
 }): Rect {
-  const { from, dirs, start, half, step, segments, rects } = opts;
+  const { from, dirs, start, half, step, obstacles } = opts;
   let best: { score: number; rect: Rect } | null = null;
   dirs.forEach((dir, rank) => {
     const reach = Math.abs(dir.x) * half.x + Math.abs(dir.y) * half.y;
@@ -176,9 +333,7 @@ export function placeMark(opts: {
         minY: c.y - half.y,
         maxY: c.y + half.y,
       };
-      const hits =
-        segments.filter((s) => segmentHitsRect(s, rect)).length +
-        rects.filter((o) => overlaps(rect, o)).length;
+      const hits = obstacles.count(rect);
       const score = hits * 100 + k * 3 + rank;
       if (!best || score < best.score) best = { score, rect };
     }
@@ -194,9 +349,10 @@ export function placeMark(opts: {
 export function bondSide(
   model: Model,
   bondId: number,
+  index: MarkIndex = markIndex(model),
 ): { at: Vec; out: Vec; back: Vec } | null {
-  const at = new Map(model.atoms.map((a) => [a.id, a]));
-  const bond = model.bonds.find((b) => b.id === bondId);
+  const { at } = index;
+  const bond = index.bondById.get(bondId);
   const p = bond && at.get(bond.a);
   const q = bond && at.get(bond.b);
   if (!bond || !p || !q) return null;
@@ -206,7 +362,9 @@ export function bondSide(
   let n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
   if (n.y < 0 || (n.y === 0 && n.x < 0)) n = { x: -n.x, y: -n.y };
   let side = 0;
-  for (const b of model.bonds) {
+  // (the bonds at either end, each once)
+  const near = new Set([...(index.bondsAt.get(bond.a) ?? []), ...(index.bondsAt.get(bond.b) ?? [])]);
+  for (const b of near) {
     if (b.id === bondId) continue;
     const ends = [b.a, b.b];
     if (!ends.includes(bond.a) && !ends.includes(bond.b)) continue;
@@ -216,6 +374,87 @@ export function bondSide(
   }
   const out = side > 0 ? { x: -n.x, y: -n.y } : n;
   return { at: mid, out, back: { x: -out.x, y: -out.y } };
+}
+
+/** An R, S, E or Z placed: what it says, and where its middle is. */
+export type StereoPlace = { key: string; x: number; y: number; text: string };
+
+/**
+ * Where each R, S, E and Z on a structure goes, each placed clear of the
+ * bonds, the labels and the marks placed before it: a stereocentre's
+ * opposite a wedge where it has one, as IUPAC's recommendations for
+ * structure diagrams place it (GR-11.1), `off` from its atom or as far
+ * beyond its label; a double bond's to the side of it with fewer of its
+ * neighbours on. `half` is how far a mark reaches across and up from its
+ * middle; a mark placed keeps the next `apart` off; `bond` is a bond's
+ * length.
+ */
+export function stereoPlaces(o: {
+  model: Model;
+  centres: ReadonlyMap<number, string>;
+  doubleBonds: ReadonlyMap<number, string>;
+  boxes: ReadonlyMap<number, { left: number; right: number; top: number; bottom: number }>;
+  half: (cip: string) => Vec;
+  apart: number;
+  off: number;
+  bond: number;
+}): StereoPlace[] {
+  const { model, boxes, half, apart, off, bond: L } = o;
+  const index = markIndex(model);
+  const { at } = index;
+  const segments: Segment[] = [];
+  for (const b of model.bonds) {
+    const p = at.get(b.a);
+    const q = at.get(b.b);
+    if (p && q) segments.push([p, q]);
+  }
+  const rects: Rect[] = [];
+  for (const [id, box] of boxes) {
+    const a = at.get(id);
+    if (!a) continue;
+    rects.push({
+      minX: a.x - box.left,
+      maxX: a.x + box.right,
+      minY: a.y - box.bottom,
+      maxY: a.y + box.top,
+    });
+  }
+  const out: StereoPlace[] = [];
+  // (what each is kept off, looked for near it, not all over the page)
+  const obstacles = new MarkObstacles(segments, rects, L);
+  const put = (key: string, text: string, r: Rect) => {
+    obstacles.add({ minX: r.minX - apart, maxX: r.maxX + apart, minY: r.minY - apart, maxY: r.maxY + apart });
+    out.push({ key, text, x: (r.minX + r.maxX) / 2, y: (r.minY + r.maxY) / 2 });
+  };
+  for (const [id, cip] of o.centres) {
+    const a = at.get(id);
+    if (!a) continue;
+    const box = boxes.get(id);
+    const r = placeMark({
+      from: a,
+      dirs: stereoWaysOut(model, id, index),
+      start: (dir) => (box ? exitDistance(box, dir) : 0) + off,
+      half: half(cip),
+      step: 0.15 * L,
+      obstacles,
+    });
+    put(`centre-${id}`, cip, r);
+  }
+  for (const [id, cip] of o.doubleBonds) {
+    const side = bondSide(model, id, index);
+    if (!side) continue;
+    const r = placeMark({
+      from: side.at,
+      dirs: [side.out, side.back],
+      // clear of the second line, which is not among the segments
+      start: () => 0.3 * L,
+      half: half(cip),
+      step: 0.15 * L,
+      obstacles,
+    });
+    put(`bond-${id}`, cip, r);
+  }
+  return out;
 }
 
 /**
