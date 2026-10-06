@@ -31,7 +31,9 @@ src/
                           SDfiles and Rxnfiles read as CTfile Formats has them: docs/CTFILE.md)
   lib/net/                network.ts: the network's record, consent, offline mode
   lib/io/                 kinds.ts: every kind of file Meno takes in, and what a file is - one
-                          decision, by content, for Open, a drop and pasted text (docs/FILE-IO.md)
+                          decision, by content, for Open, a drop and pasted text (docs/FILE-IO.md);
+                          structures.ts: Meno's own reading of MOL, SD, RXN and XYZ files, run in
+                          its worker, and the page's checks of what comes back
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
@@ -196,6 +198,19 @@ What is left before the editor counts as finished, and in what order, is in
   (`moveDrag.preview`, `extend.preview`); they draw nothing of the molecule
   themselves, so a gesture looks exactly as its result will. Model bonds
   reach the layout through `layoutBond(s)` in `layoutOptions.ts`.
+  A drawing of tens of thousands of atoms - an SD file of a thousand
+  records - has to come up in well under a second, so nothing in the
+  layout or the layers goes over every atom or bond for each atom or bond:
+  rings are found ring system by ring system (`lib/layout/rings.ts`), a
+  bond's neighbours from its atoms' own bonds. A zoom does not lay the
+  drawing out again while the layout made at the zoom it was laid out at
+  is the same drawing at this one (`sameAtZooms`: world units, lines wider
+  than the least they are kept at, a wave's turns in as many steps). The
+  round caps are one instanced mesh; the hit areas of atoms and bonds are
+  never drawn (picking does not ask whether a material is); the ring
+  circles the canvas offers are found without a second layout
+  (`ringCircles`), when the pointer looks for one; R, S, E and Z are placed
+  against what is near them (`MarkObstacles`) and shown in one HTML layer.
 - **Depiction**: `lib/chem/layout2d.ts` turns atoms/bonds into line segments,
   polygons, text and circles. How big everything is comes from a drawing
   style (`lib/chem/style.ts`): each length in points or as a fraction of the
@@ -426,11 +441,24 @@ which plugin would read a file no plugin added reads
   plugin's worker is - the same `Reader`: what it makes of a file, and a
   promise it gave - but runs in the app, in a web worker of its own
   (`lib/calc/builtin.ts`, `builtinWorker.ts`, which reads that list): always
-  there, nothing downloaded. The first it reads so is the cube
-  (`lib/calc/cube.ts`), from the
-  layout Gaussian's documentation gives: a cube's molecule, in ångströms,
-  and its grids as a list, each a promise, shown as it comes (a list's
-  `shown`, opened by `shownLists` as a file is opened).
+  there, nothing downloaded. It reads every file Meno reads but its own
+  workspace and record, which are Meno's core's (docs/FILE-IO.md, step 4):
+  - MOL, SD, RXN and XYZ files (`lib/io/structures.ts`): what each holds -
+    the drawing, laid out, a reaction's arrow and "+" signs, and the
+    molecules in 3D with their frames and energies - as `structures` in its
+    answer. The page checks it (`checkedStructures`) as it would a plugin's.
+  - The cube (`lib/calc/cube.ts`), from the layout Gaussian's documentation
+    gives: a cube's molecule, in ångströms, and its grids as a list, each a
+    promise, shown as it comes (a list's `shown`, opened by `shownLists` as
+    a file is opened).
+
+  Its answers come back with their runs of numbers - frames, atoms'
+  coordinates - in buffers handed over, not copied (`lib/calc/packed.ts`),
+  as measured (docs/FILE-IO.md, *Response*). Where there is no worker - the
+  tests - it answers in place, carried the same way. The worker has the
+  label typefaces' ASCII tables only, not those the page reads from font
+  files: an RXN file's reaction laid out round a label of other letters is
+  spaced by a capital's box for them.
 - Promises (stage 3d): a row's motion or surface may be `{ "ask": key }`.
   Chosen, it is asked for of the reader that gave it (`lib/calc/asks.ts`
   `askFor`), the output's text and kind sent again - each opened output is
@@ -458,6 +486,10 @@ On the 2D canvas (`StructureEditor/chem/`), `analyse` feeds the marks -
 valence problems, R/S and E/Z - which `ChemMarks2D` lays over the drawing
 as HTML, outside the drawing and so outside any export; they run only
 while RDKit is set up (`pyEnvReady`), so drawing never starts a download.
+`analyse` makes sense of each fragment on its own only where something is
+wrong somewhere; otherwise of the whole at once, which comes out the same:
+RDKit takes fragments out of a molecule by removing atoms one at a time,
+and for a thousand records that ran on for most of an hour.
 `clean` lays each fragment out afresh and then over the drawing - turned,
 turned over, and its chains turned over their single bonds, whichever
 lies closest - keeping the drawn wedges when they still say the same

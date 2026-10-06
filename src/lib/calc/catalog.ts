@@ -80,10 +80,10 @@ export const OFFERED = { kinds: offered.kinds as readonly Kind[], refused: offer
 export const anyKindById = (id: string): Kind | undefined => kindById(id) ?? kindById(id, OFFERED.kinds);
 
 /**
- * Meno's own reading, as a reader: the structure files it reads on the page
- * (a workspace, RXN, MOL, SD and XYZ files - into the readers' contract in
- * step 4 of docs/FILE-IO.md), and what it reads under the contract already
- * (./menoReads): the cube.
+ * Meno's own reading, as a reader: what it reads under the contract, in its
+ * worker (./menoReads) - RXN, MOL, SD and XYZ files, and the cube - and,
+ * besides, its own workspace, which is no reader's to read but Meno's
+ * core's (docs/FILE-IO.md, *The line*).
  */
 export const MENO: MenoReader = {
   id: "meno",
@@ -92,10 +92,7 @@ export const MENO: MenoReader = {
   description: "",
   licence: "",
   homepage: "",
-  reads: [
-    ...[MENO_KINDS.workspace, MENO_KINDS.rxn, MENO_KINDS.mol, MENO_KINDS.sdf, MENO_KINDS.xyz].map((k) => k.id),
-    ...Object.keys(MENO_READS),
-  ],
+  reads: [MENO_KINDS.workspace.id, ...Object.keys(MENO_READS)],
   builtin: true,
 };
 

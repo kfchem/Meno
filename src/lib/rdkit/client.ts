@@ -82,8 +82,6 @@ export type Analysis = {
   }[];
   /** A bond's CIP descriptor: E or Z, or an axis of chirality's M or P. */
   bonds: { index: number; aromatic?: boolean; cip?: "E" | "Z" | "M" | "P" }[];
-  /** Canonical SMILES, or null when RDKit cannot make sense of the structure. */
-  smiles: string | null;
 };
 
 /** What carries lines to the worker and back. */

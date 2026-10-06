@@ -8,6 +8,7 @@
  */
 import { readResults, type Result } from "./results";
 import { readerIdOfLine } from "./catalog";
+import type { StructureRead } from "../io/structures";
 
 /** The form of a plugin's answer this Meno reads. */
 export const OUTPUT_SCHEMA = 1;
@@ -32,6 +33,8 @@ export type ReaderOutput = {
   optimised?: boolean | null;
   /** Everything else it found, in the general form (results.ts) - read, and those that do not read as results left out. */
   results?: unknown[];
+  /** What a structure's file holds - its drawing, and its molecules in 3D - where the reader read one (lib/io/structures); checked as the page takes it. */
+  structures?: StructureRead;
 };
 
 /**

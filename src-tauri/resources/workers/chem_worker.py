@@ -89,7 +89,14 @@ def op_analyse(m):
     """What a chemist checks by eye: hydrogens, valence, aromatic rings,
     stereo labels - per atom and bond, in the order they came in. Each
     fragment is made sense of on its own, so that a carbon with five bonds
-    in one does not keep another's stereocentres from being labelled."""
+    in one does not keep another's stereocentres from being labelled.
+
+    Where nothing is wrong anywhere, the whole is made sense of at once.
+    Nothing worked out here reaches past a fragment, so it comes out as each
+    fragment would on its own - and a drawing of a thousand fragments is not
+    taken apart into them: RDKit takes a fragment out by removing every
+    other atom, one at a time, which for a thousand records ran on for most
+    of an hour."""
     mol = read(m["molblock"], sanitize=False)
     mol.UpdatePropertyCache(strict=False)
     atoms = [{"index": a.GetIdx(), "hydrogens": a.GetTotalNumHs()} for a in mol.GetAtoms()]
@@ -98,15 +105,20 @@ def op_analyse(m):
         if p.GetType() == "AtomValenceException":
             atoms[p.GetAtomIdx()]["valenceError"] = too_many(mol.GetAtomWithIdx(p.GetAtomIdx()))
 
-    mapping = []
-    frags = Chem.GetMolFrags(
-        mol, asMols=True, sanitizeFrags=False, fragsMolAtomMapping=mapping
-    )
-    sane = True
-    for frag, index in zip(frags, mapping):
-        if Chem.SanitizeMol(frag, catchErrors=True) != Chem.SanitizeFlags.SANITIZE_NONE:
-            sane = False
-            continue
+    whole = Chem.Mol(mol)
+    if Chem.SanitizeMol(whole, catchErrors=True) == Chem.SanitizeFlags.SANITIZE_NONE:
+        parts = [(whole, range(whole.GetNumAtoms()))]
+    else:
+        mapping = []
+        frags = Chem.GetMolFrags(
+            mol, asMols=True, sanitizeFrags=False, fragsMolAtomMapping=mapping
+        )
+        parts = [
+            (frag, index)
+            for frag, index in zip(frags, mapping)
+            if Chem.SanitizeMol(frag, catchErrors=True) == Chem.SanitizeFlags.SANITIZE_NONE
+        ]
+    for frag, index in parts:
         Chem.AssignChiralTypesFromBondDirs(frag)
         Chem.AssignStereochemistry(frag, cleanIt=True, force=True)
         rdCIPLabeler.AssignCIPLabels(frag)
@@ -118,19 +130,15 @@ def op_analyse(m):
             if a.GetIsAromatic():
                 entry["aromatic"] = True
         for b in frag.GetBonds():
-            whole = mol.GetBondBetweenAtoms(
+            drawn = mol.GetBondBetweenAtoms(
                 index[b.GetBeginAtomIdx()], index[b.GetEndAtomIdx()]
             )
-            entry = bonds[whole.GetIdx()]
+            entry = bonds[drawn.GetIdx()]
             if b.GetIsAromatic():
                 entry["aromatic"] = True
             if b.HasProp("_CIPCode"):
                 entry["cip"] = b.GetProp("_CIPCode")
-    return {
-        "atoms": atoms,
-        "bonds": bonds,
-        "smiles": Chem.MolToSmiles(read(m["molblock"])) if sane else None,
-    }
+    return {"atoms": atoms, "bonds": bonds}
 
 
 # --- 3D structures -----------------------------------------------------------
