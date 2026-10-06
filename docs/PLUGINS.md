@@ -142,8 +142,8 @@ The same for every plugin and for Meno's own parts:
 - **Gives data, never code or markup**, in Meno's units, checked by Meno.
 - **Runs apart from the page:**
   - a plugin in its own process and environment;
-  - Meno's own parts all one way - in a web worker, or on the page -
-    chosen by the maintainer once the measurements are seen (FILE-IO.md,
+  - Meno's own parts all in a web worker, giving coordinates back in
+    buffers - decided once the measurements were seen (FILE-IO.md,
     *Response*).
 
 ## Settings

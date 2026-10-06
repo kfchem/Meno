@@ -177,10 +177,9 @@ Each point is resolved by the plan below (see *Every point resolved*).
 - **A plugin's drawing comes in the record's form.** A writer's options
   are declared in a general form and drawn by Meno.
 - **Save and Save As write `.meno` only.** Everything else is Export.
-- **Meno's own readers sit behind the contract.** Whether they run in a
-  worker or on the page is decided once, for all of them alike, after the
-  maintainer has seen the measurements; a mix is not wanted (see
-  *Response*).
+- **Meno's own readers sit behind the contract, all in a web worker.**
+  What they give is handed back compactly, its coordinates in buffers -
+  decided once the measurements were seen (see *Response*).
 - **RDKit is a plugin.** No plugin is kept running ahead of need: each
   starts when first needed and stays for the session, as RDKit does now
   (PLUGINS.md).
@@ -340,20 +339,45 @@ The maintainer's condition: Meno's own readers go behind the contract, in
 a web worker, only if the response does not suffer - and all of them the
 same way, never some in the worker and some on the page.
 
-- **Measured first**, before and after, for four cases:
-  - a small molfile (as from a paste);
-  - an SDF of a thousand records;
-  - an XYZ trajectory of two thousand frames;
-  - a large calculation output.
+**Measured on 2026-10-06**, in the built app on a Mac (WKWebView) and on
+Windows (WebView2). The branch `agent/reader-bench` holds the measurement
+and is not to be merged. Four cases were each run five times after a
+first run:
+- a small molfile, as from a paste;
+- an SDF of 1000 records, laid out as a drawing;
+- an XYZ file of 2000 frames;
+- a cube's grid of 80³ points.
 
-  Two things are measured: the time from the file read to its first frame
-  shown, and the longest the page is held up meanwhile.
-- **Shown to the maintainer, then decided.**
-  - The measurements are put before the maintainer, each case both ways.
-  - The maintainer then chooses one way for all of Meno's readers and
-    writers: the worker, or the page.
-  - Either way they answer the same contract, so nothing else in Meno
-    depends on the choice.
+The figures are medians. Each cell gives the time until the result is in
+hand / the longest the page went without a frame. A frame is about 17 ms
+on the Mac and 10 ms on the Windows machine.
+
+| Case | On the page | Worker, objects back | Worker, JSON back | Worker, coordinates in a buffer |
+| --- | --- | --- | --- | --- |
+| small MOL (Mac / Win) | 0 / -, 0.2 / - | 1-2 / -, 0.4 / - | 2 / -, 0.2 / - | |
+| SDF, 1000 (Mac) | 37 / 37 | 61 / 18 | 52 / 18 | |
+| SDF, 1000 (Win) | 20 / 10-20 | 43 / 10 | 32 / 10 | |
+| XYZ, 2000 (Mac) | 41 / 41 | 124 / 24 | 78 / 28 | 48 / 17 |
+| XYZ, 2000 (Win) | 38 / 30 | 129 / 50 | 76 / 10 | 38 / 10 |
+| cube, 80³ (Mac) | 47 / 48 | 45-51 / 17 | 45 / 17 | |
+| cube, 80³ (Win) | 47 / 40 | 50 / 10 | 51 / 10 | |
+
+- **Read on the page,** a large file holds the page 20 to 48 ms.
+- **Sent back as objects,** the worker is worst. The page rebuilds every
+  object it is sent, and on Windows that held the page 50 ms for the XYZ
+  file.
+- **With the coordinates handed over in a buffer,** the worker takes as
+  long as the page and holds nothing up. A small file costs at most 2 ms
+  more.
+
+**Decided by the maintainer, 2026-10-06:** all of Meno's readers run in a
+web worker.
+- What they give is handed back compactly: coordinates and other runs of
+  numbers in buffers, handed over rather than copied, and the rest as
+  small plain data.
+- The content is the record's, as decided; only how Meno carries it
+  inside itself differs.
+- Plugins' answers stay JSON lines.
 
 ### Every point resolved
 
@@ -413,8 +437,8 @@ Each step is a pull request from main.
      once;
    - failures said;
    - `readers.ts` into the XYZ reader, and geometries made directly.
-4. **Response:** the measurements, shown to the maintainer. Then Meno's
-   readers go behind the contract, all of them the way chosen.
+4. **Meno's readers in the worker:** all of them behind the contract,
+   in a web worker, giving back coordinates in buffers (*Response*).
 5. **Save and Export:**
    - Save writing `.meno` only, back to the file it came from;
    - Save offered when closing;
