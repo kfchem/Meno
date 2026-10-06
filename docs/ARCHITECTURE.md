@@ -94,7 +94,7 @@ src-tauri/
   is in Meno's menu, which its logo opens, with its key; the app's own
   (Open…) and those the tab in front offers through `offerCommands`
   (`ui/layouts/commands.ts`), asked for as the menu opens. A structure
-  canvas offers Save, Save As, Export as SVG, SMILES, Clean up all, Fit to
+  canvas offers Save, Save As, Export, SMILES, Clean up all, Fit to
   content (Ctrl/Cmd+1), R and S, and Drawing style, and puts the same on its
   right-click menu on empty space. The system's own menu bar is left as the
   system has it.
@@ -495,6 +495,13 @@ Adding a new worker or interpreter flag means extending these rules
 (`PYTHON_FLAGS`, the workers directory) together with the unit tests in
 `lib.rs`.
 
+Files the chemist's own: the webview's file scope (`capabilities/main.json`)
+reaches only the app's data and resources. A file is written elsewhere only
+where the system's save dialog was answered - Save, Save As, Export - since
+the dialog plugin adds the path it gives back to the file scope, for that
+path alone and for the session; nothing else outside the app's own folders
+can be written.
+
 ## The network
 
 Every connection Meno makes is seen, recorded and answerable for. It is a
@@ -557,10 +564,10 @@ network another way.
 | Format | Where it opens | Parser | Notes |
 | --- | --- | --- | --- |
 | MOL (V2000/V3000) | Structure canvas | `parseSDF` | Stereo codes 1/6/4 → up/down/wavy. A molfile that says it is 3D, or whose atoms spread in depth, stands in 3D. |
-| SDF | Structure canvas | `parseSDF` | Flat records merged into one drawing; 3D records each a molecule in 3D beside it. Saved, each molecule in 3D is a 3D record. |
+| SDF | Structure canvas | `parseSDF` | Flat records merged into one drawing; 3D records each a molecule in 3D beside it. Exported, each molecule in 3D is a 3D record. |
 | RXN (V2000) | Structure canvas | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
 | XYZ (multi-frame) | Structure canvas, in 3D | `parseXYZ` | Bonds inferred from covalent radii. Frames kept; each frame's energy where a calculation reader (`lib/calc`) finds one on its comment line. |
-| Meno workspace (`.meno`) | Structure canvas | `readWorkspace` | Everything on the canvas, as it was saved. |
+| Meno workspace (`.meno`) | Structure canvas | `readWorkspace` | Everything on the canvas, as it was saved: what Save and Save As write. MOL, SDF, RXN and SVG are written by Export. |
 | PDB, KET | — | none | Accepted by the file picker; the 2D editor reports "not supported yet". |
 | Text files | Text editor | — | By extension, or anything that is not recognised. |
 

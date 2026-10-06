@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { chemMolblock } from "../../../lib/rdkit/molblock";
 import { chemWorker, useChem } from "../../../lib/rdkit/worker";
+import { writeClipboard } from "../../../lib/clipboard";
 import { forFlatReaders } from "./chem/drawing";
 import { structureFromSmiles } from "./chem/fromSmiles";
 import { useEditor } from "./store";
@@ -158,7 +159,8 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
             aria-label="Copy SMILES"
             title="Copy"
             onClick={() => {
-              void navigator.clipboard.writeText(smiles).then(() => {
+              // (through Meno's clipboard, as Copy as SMILES does)
+              void writeClipboard([{ flavor: "text", text: smiles }]).then(() => {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1200);
               });

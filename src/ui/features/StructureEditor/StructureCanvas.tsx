@@ -65,6 +65,7 @@ import { useAppSettings } from "../../../lib/settings/appSettings";
 import { cleanUp } from "./chem/cleanUp";
 import { useChemMarks } from "./chem/useChemMarks";
 import { useFileActions } from "./fileActions";
+import { setSaver } from "../../../lib/doc/savers";
 import { CANVAS_DPR } from "./constants";
 import { startingZoom } from "./layoutOptions";
 import { useDrawingStyle } from "./useDrawingStyle";
@@ -146,6 +147,8 @@ function StructureCanvasContent({
   // Save and export. Ctrl/Cmd+S belongs to the tab in front, like undo.
   const files = useFileActions(named);
   const { save, saveAs } = files;
+  // (a tab's own canvas can be saved as its tab is closed)
+  useEffect(() => (ownTab ? setSaver(tabId, save) : undefined), [ownTab, tabId, save]);
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -609,7 +612,7 @@ function StructureCanvasContent({
       items: [
         { name: "Save", keys: shortcutLabel("S"), run: () => void save() },
         { name: "Save As…", keys: shortcutLabel("S", true), run: () => void saveAs() },
-        { name: "Export as SVG…", run: () => void files.exportSvg() },
+        { name: "Export…", run: () => void files.exportAs() },
       ],
     },
     {

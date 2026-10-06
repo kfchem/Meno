@@ -127,10 +127,10 @@ function Invoke-MenoMenu {
       not move with its size. Three dots stand for the ellipsis.
     #>
     param([Parameter(Mandatory)] [ValidateSet(
-        "Open...", "Save", "Save As...", "Export as SVG...", "SMILES...", "Clean up all",
+        "Open...", "Save", "Save As...", "Export...", "SMILES...", "Clean up all",
         "3D structures", "Fit to content", "Show R and S", "Drawing style...")] [string] $Item)
     $at = @{
-        "Open..." = 170; "Save" = 234; "Save As..." = 298; "Export as SVG..." = 362
+        "Open..." = 170; "Save" = 234; "Save As..." = 298; "Export..." = 362
         "SMILES..." = 486; "Clean up all" = 550; "3D structures" = 614; "Fit to content" = 740
         "Show R and S" = 804; "Drawing style..." = 930
     }
