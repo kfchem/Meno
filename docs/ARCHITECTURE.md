@@ -554,6 +554,9 @@ network another way.
 
 ## File format support
 
+Every way into Meno and out of it - files, the clipboard, Office - and
+where calculation readers stand among them: [`FILE-IO.md`](./FILE-IO.md).
+
 | Format | Where it opens | Parser | Notes |
 | --- | --- | --- | --- |
 | MOL (V2000/V3000) | Structure canvas | `parseSDF` | Stereo codes 1/6/4 → up/down/wavy. A molfile that says it is 3D, or whose atoms spread in depth, stands in 3D. |
