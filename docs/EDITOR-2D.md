@@ -530,7 +530,9 @@ traced from reference drawings.
 ### 5. Files, clipboard and export
 
 - Save and Save As (MOL/SDF), Ctrl+S, and closing asks when there is
-  something to lose. (PR #43)
+  something to lose. (PR #43) Since 2026-10-06 (docs/FILE-IO.md), Save and
+  Save As write the workspace (`.meno`) alone; MOL, SDF, RXN and SVG are
+  written by Export; and closing offers Save beside Close without saving.
 - Open (Ctrl/Cmd+O, or Meno's menu) puts a file in a tab of its own - or
   in place of a blank canvas - named for the file. The canvas is saved
   nowhere then: Save asks where, suggesting that name. A save names the
@@ -543,7 +545,7 @@ traced from reference drawings.
   drawn in - and PNG. The SVG export draws what the canvas draws (PR #36),
   at ACS 1996's own size (PR #43); PNG to come.
 - No buttons on the canvas (2026-10-04): Open (Ctrl/Cmd+O), Save, Save As,
-  Export as SVG, SMILES, Clean up all, Fit to content (Ctrl/Cmd+1), R and
+  Export, SMILES, Clean up all, Fit to content (Ctrl/Cmd+1), R and
   S, and Drawing style are in Meno's menu, from its logo, and - all but the
   files - on the right-click menu on empty space. Open puts a file in a tab
   of its own, never over what is drawn; a file dropped on the drawing is
