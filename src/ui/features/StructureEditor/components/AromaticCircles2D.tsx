@@ -5,7 +5,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { useEditor } from "../store";
 import {
   circlePoints,
-  layoutMolecule,
+  ringCircles,
   type LayoutOptions,
 } from "../../../../lib/chem/layout2d";
 import CapJoinLine from "./CapJoinLine";
@@ -72,31 +72,35 @@ export default function AromaticCircles2D() {
   } | null>(null);
   const [hoverStart, setHoverStart] = useState<number | null>(null);
 
-  // Separate preview layout to discover ring centers even when enabled=false
+  // Every ring's circle, as it would be drawn turned on, to discover ring
+  // centers even when enabled=false: the circles alone, not the drawing
+  // laid out again with them, and the same at any zoom - worked out when
+  // the pointer looks for one, for the drawing as it stands then, rather
+  // than at every frame the drawing moves (a drag, a glide)
   const prevOpts: LayoutOptions = useMemo(
     () =>
       editorLayoutOptions(style, { aromaticCircle: true }),
     [style]
   );
-  const previewLayout = useMemo(
-    () => layoutMolecule(atoms, bonds, prevOpts, zoom),
-    [atoms, bonds, prevOpts, zoom]
-  );
-
+  const drawing = useRef({ atoms, bonds, prevOpts });
+  drawing.current = { atoms, bonds, prevOpts };
+  const ringsFound = useRef<{
+    of: typeof drawing.current;
+    centers: Array<{ x: number; y: number; r: number; key?: string }>;
+  } | null>(null);
   // Detect approximate ring centers to use as hover targets
-  const previewCenters = useMemo(() => {
-    const cs: Array<{ x: number; y: number; r: number; key?: string }> = [];
-    const circles = (previewLayout as any)?.circles as
-      | Array<
-          { c: { x: number; y: number }; r: number; key?: string } | undefined
-        >
-      | undefined;
-    if (circles && circles.length > 0) {
-      for (const c of circles)
-        if (c) cs.push({ x: c.c.x, y: c.c.y, r: c.r, key: (c as any).key });
+  const previewCenters = () => {
+    const now = drawing.current;
+    const was = ringsFound.current;
+    if (was && was.of.atoms === now.atoms && was.of.bonds === now.bonds && was.of.prevOpts === now.prevOpts) {
+      return was.centers;
     }
+    const cs: Array<{ x: number; y: number; r: number; key?: string }> = [];
+    for (const c of ringCircles(now.atoms, now.bonds, now.prevOpts).circles)
+      if (c) cs.push({ x: c.c.x, y: c.c.y, r: c.r, key: c.key });
+    ringsFound.current = { of: now, centers: cs };
     return cs;
-  }, [previewLayout]);
+  };
 
   const { gl } = useThree();
 
@@ -124,7 +128,7 @@ export default function AromaticCircles2D() {
       const ch = el.clientHeight || 1;
       let found: { x: number; y: number; r: number; key?: string } | null = null;
       let minD = Infinity;
-      for (const c of previewCenters) {
+      for (const c of previewCenters()) {
         const v = new THREE.Vector3(c.x, c.y, 0).project(camera as THREE.Camera);
         const d = Math.hypot(cx - ((v.x + 1) / 2) * cw, cy - ((-v.y + 1) / 2) * ch);
         if (d < 40 && d < minD) {
@@ -183,7 +187,7 @@ export default function AromaticCircles2D() {
         capture: true,
       } as any);
     };
-  }, [gl, previewCenters, camera, toggleRing, toggleAromatic]);
+  }, [gl, camera, toggleRing, toggleAromatic]);
 
   // Each circle comes into view as it is turned on - opening out a little
   // as it fades in - and goes out of it as it is turned off; the preview of

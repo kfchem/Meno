@@ -486,7 +486,11 @@ export function Atoms2D() {
     >
       <circleGeometry args={[1, 48]} />
       {/* In 2D we don’t fill atoms (keep them transparent). Only keep the hit area for events. */}
+      {/* (not drawn at all, then - a pointer still finds it: picking does not
+          ask whether a material is drawn - so that a drawing of thousands
+          of atoms is not painted over with as many unseen discs every frame) */}
       <meshBasicMaterial
+        visible={false}
         transparent
         opacity={0}
         depthWrite={false}
