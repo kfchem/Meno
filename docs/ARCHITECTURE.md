@@ -40,6 +40,7 @@ src/
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
+  lib/options.ts          options in a general form: drawn by Meno, declared by Meno or a plugin
   lib/doc/                documents and undo; savers.ts; menoFile.ts: the workspace file, a zip
                           (mimetype, workspace.json, files kept by SHA-256), written off the page
                           (menoFileWorker.ts) - docs/FILE-IO.md, *The workspace file*
@@ -64,16 +65,16 @@ src/
     PythonConsole/        UI for the Python sidecar
     TextEditor/           plain textarea with line numbers
     StyleEditor/          every drawing setting, with a preview
-    SettingsPanel/        Settings: drawing style, chemistry, network
+    SettingsPanel/        Settings: drawing style, molecules in 3D, chemistry, files, plugins,
+                          dictionary, network
 src-tauri/
   src/lib.rs              Tauri commands (see table below)
   src/fonts.rs            the system's typefaces
   src/net.rs              the network: tasks, the proxy, the record
   capabilities/           permission sets for the main window
-  resources/py/           uv (macOS, Apple silicon) and uv.exe (Windows), uv
-                          0.12.19, and requirements lock files per profile;
-                          tauri.<platform>.conf.json bundles only that
-                          platform's uv
+  resources/py/           the lock files of Meno's own Python profiles (the console's, workflows');
+                          uv and pixi are not bundled but fetched the first time an environment
+                          needs one, pinned by version and SHA-256 (src/tools.rs)
   resources/workers/      Meno's own Python worker scripts
   resources/plugins/<id>/ a plugin, a folder of its own: manifest.json, its worker, its lock
                           (uv's requirements.lock, or pixi's pixi.toml and pixi.lock);
@@ -688,19 +689,31 @@ network another way.
 
 Every way into Meno and out of it - files, the clipboard, Office - and
 who reads and writes each kind: [`FILE-IO.md`](./FILE-IO.md); what plugins
-do beyond files, and which are kept running: [`PLUGINS.md`](./PLUGINS.md)
-(both plans, 2026-10-06).
+do beyond files, and which are kept running: [`PLUGINS.md`](./PLUGINS.md).
 
-| Format | Where it opens | Parser | Notes |
-| --- | --- | --- | --- |
-| MOL (V2000/V3000) | Structure canvas | `parseSDF` | Stereo codes 1/6/4 → up/down/wavy. A molfile that says it is 3D, or whose atoms spread in depth, stands in 3D. |
-| SDF | Structure canvas | `parseSDF` | Flat records merged into one drawing; 3D records each a molecule in 3D beside it. Exported, each molecule in 3D is a 3D record. |
-| RXN (V2000) | Structure canvas | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
-| XYZ (multi-frame) | Structure canvas, in 3D | `parseXYZ` | Bonds inferred from covalent radii (`bondsByDistance`, as a calculation's geometries are given theirs). Frames kept; each frame's energy as CREST, xtb and ORCA write it on the comment lines (`utils/xyzEnergies.ts`). |
-| PDB | Structure canvas, in 3D | `readPdb` (`lib/chem/pdb.ts`) | Every atom; MODELs as frames; bonds from CONECT, and from distances where CONECT does not speak for both atoms; an atom given in more than one place in its residue's first. Exported, molecules in 3D are HETATM records and CONECT (docs/FILE-IO.md, *As step 7 was built*). |
-| Meno workspace (`.meno`) | Structure canvas | `readWorkspace` | Everything on the canvas, as it was saved: what Save and Save As write. MOL, SDF, RXN, PDB and SVG are written by Export. |
-| KET | — | none | Not offered by Open (nothing reads it yet); one dropped is reported "not supported yet". |
-| Text files | Text editor | — | By extension, or anything that is not recognised. |
+The kinds, as the table of kinds has them (`lib/io/kinds.ts`, `MENO_KINDS`),
+with the kinds Meno writes (`lib/io/writers.ts`, `WRITERS`) and those the
+plugins Meno carries bring and write (their manifests,
+`src-tauri/resources/plugins/*/manifest.json`). A plugin's kinds are
+registered only while it is added. `src/lib/io/architecture.test.ts` checks
+that every kind of these is in this table, by its id, and no other.
+
+| Kind | Id | Files | Told by | Read by | Written by | Becomes |
+| --- | --- | --- | --- | --- | --- | --- |
+| Meno workspace | `meno-workspace` | `.meno` | a zip whose first entry is its mimetype (`isMenoFile`) | Meno's core (`readMenoFile`, `readWorkspace`) | Save, Save As (`menoFileWorker.ts`) | the workspace, outputs it keeps held for the session |
+| Meno structure | `meno-record` | none: the clipboard, a picture, an Office object | its JSON's `format` | Meno's core (`readRecord`) | Copy, Office | pasted |
+| RXN file | `rxn` | `.rxn` | `$RXN` | Meno, in its worker (`readStructures`) | Export (`reactionFileText`), Copy | a drawing with its arrow and "+" signs |
+| MOL file | `mol` | `.mol` | `V2000` / `V3000`, `M  END` | Meno, in its worker | Export, Copy (`molWriter.ts`) | a drawing; a molecule in 3D where it says it is 3D or spreads in depth |
+| SD file | `sdf` | `.sdf` | the same, and its name | Meno, in its worker | Export: the drawing as one record, each molecule in 3D as one, or each frame | a drawing, and each 3D record a molecule in 3D beside it |
+| XYZ file | `xyz` | `.xyz` | its layout: an atom count, a comment, atoms | Meno, in its worker | never | a molecule in 3D, its frames and their energies (`utils/xyzEnergies.ts`); bonds from covalent radii (`bondsByDistance`) |
+| PDB file | `pdb` | `.pdb` | its records (`RECORD_NAMES`), an atom's coordinates in their columns | Meno, in its worker (`lib/chem/pdb.ts`) | Export: molecules in 3D as HETATM and CONECT records, a MODEL for each frame where asked | a molecule in 3D: every atom, MODELs as frames, bonds from CONECT and distances (FILE-IO.md, *As step 7 was built*) |
+| Cube file | `cube` | `.cube`, `.cub` | its layout (`CUBE_MARK`) | Meno, under the readers' contract, in its worker (`lib/calc/cube.ts`) | never | a molecule in 3D, its grids promises drawn as surfaces |
+| SVG picture | `svg` | `.svg` | - | never | Export (`drawingSvg`) | - |
+| Calculation programs' outputs (cclib's) | `adf`, `cfour`, `dalton`, `gamess`, `gamess-uk`, `gaussian`, `gaussian-fchk`, `jaguar`, `molcas`, `molpro`, `mopac`, `nwchem`, `orca`, `psi4`, `qchem`, `turbomole`, `xtb` | each its own: `.out`, `.log`, `.fchk`... | each program's banner, as cclib's manifest brings it | cclib (plugin, uv); `orca`, `gaussian` and `gaussian-fchk` also PySCF | never | a molecule in 3D, each geometry a frame, and what the calculation found |
+| Molden file | `molden` | `.molden`, `.mld` | `[Molden Format]`, as PySCF's manifest brings it | PySCF (plugin, pixi) | never | a molecule in 3D, its orbitals and densities promises |
+| Gaussian input | `gaussian-input` | `.gjf`, `.com` | - | never | Export, by the Gaussian input plugin (uv, Python alone) | - |
+| KET | - | `.ket` | - | not read | never | Open does not offer it; one dropped says "not supported yet" |
+| Text | - | anything not told otherwise | its name, or nothing else telling it | the text editor | the text editor | a text tab |
 
 ## Verification commands
 
