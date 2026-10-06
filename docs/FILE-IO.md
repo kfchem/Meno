@@ -1,10 +1,12 @@
 # File input and output
 
 What comes into Meno and what goes out of it - files, the clipboard,
-Office - and where a *reader* stands among them. Written on 2026-10-06 at
-the maintainer's request ("整理して、reader の位置づけを明確化"), from main
-at #147 with the PySCF reader of #148. The first half is how things are;
-the second is a proposal, its decisions the maintainer's.
+Office - and where readers, writers and plugins stand among them. Written
+on 2026-10-06 at the maintainer's request ("整理して、reader の位置づけを
+明確化"), from main at #147 with the PySCF reader of #148. The first half
+is how things are. The second is a proposal along the maintainer's
+direction of the same day; its open points are the maintainer's to decide,
+and nothing in it is built yet.
 
 ## Words
 
@@ -12,18 +14,17 @@ the second is a proposal, its decisions the maintainer's.
   file, a Meno record on the clipboard. Told by what it holds; a file's
   name is a hint.
 - **Structure format** - a program-independent description of molecules
-  or a drawing: MOL, SDF, RXN, XYZ, SMILES, and Meno's own (`.meno`, the
-  record). Meno reads these itself.
+  or a drawing: MOL, SDF, RXN, XYZ, PDB, SMILES.
 - **Calculation output** - what a program wrote about a calculation:
   ORCA, Gaussian and xTB output, Gaussian's formatted checkpoint, Molden
-  and cube files. Meno only reads these, through readers.
-- **Reader** - what reads a kind of calculation output for Meno, under
-  one contract (below).
-- **Plugin** - a reader that is downloaded into an environment of its own
-  and can be added and taken away (cclib; PySCF in #148).
-- **Built-in reader** - a reader that comes with Meno, under the same
-  contract (cube).
-- **Writer** - what writes a kind. Only Meno writes; no plugin does.
+  and cube files. **Calculation input** - what a program is given to run
+  one.
+- **Plugin** (as proposed) - what reads or writes kinds for Meno, under
+  one contract. Some are downloaded into an environment of their own
+  (cclib, PySCF); Meno is one too, the one that comes with it.
+- **Reader, writer** - what a plugin does for one kind.
+- **Meno's own formats** - `.meno` and the record (on the clipboard, in a
+  picture, in an Office object): Meno's alone, never a plugin's.
 
 ## What comes in, as built
 
@@ -129,118 +130,209 @@ reader that gave them, added.
 
 ## Proposal
 
+The maintainer's direction (2026-10-06):
+
+- PDB and other formats are to be read too, by a plugin or by Meno.
+- Plugins write as well, a calculation's input among the rest.
+- Settings has one place for plugins and Meno, not only for
+  calculations. cclib reads XYZ as Meno does, so whether Meno's parser or
+  cclib reads an XYZ file is the chemist's to choose.
+
 ### The line
 
-- **Meno reads and writes structure formats itself**, in its core: MOL,
-  SDF, RXN, XYZ, SMILES, `.meno`, the record. These are never plugins and
-  never listed in Settings. Reading and writing a format belong together;
-  a format Meno writes, it reads back.
-- **Calculation output is read by readers**, and only by readers. Meno's
-  core knows no program's format - with the one exception agreed on
-  2026-10-05: the energies CREST, xtb and ORCA write on an XYZ file's
-  comment lines, which are part of reading XYZ and so of the core, not a
-  reader.
-- **Only Meno writes.** A reader gives data to Meno, and Meno decides what
-  is saved, copied or exported.
+- **Meno's core keeps what is Meno's own.** That is:
+  - the drawing, the molecules in 3D, and what is known of them;
+  - how these show;
+  - `.meno` and the record;
+  - the table of kinds;
+  - putting plugins' answers together and checking them;
+  - the files themselves: opening, saving, the clipboard, Office.
+- **Every other format is read and written by plugins**, structure
+  formats and calculation output alike, and Meno is one of those plugins.
+  - Meno's own reading of MOL, SDF, RXN, XYZ, SMILES and cube comes with
+    Meno under the same contract as cclib and PySCF.
+  - So does its writing of MOL, SDF, RXN and SVG.
+- **The chemist chooses, for each kind**, among the plugins that read it -
+  for XYZ, Meno or cclib - and among those that write it.
+- **Only Meno touches files.** A writer gives a file's content, and Meno
+  writes it where the chemist chose. A reader is given a file's content
+  and never its path.
 
-### Readers, one contract
+### One contract
 
-The same for every reader, plugin or built-in:
+The same for every plugin, Meno's included:
 
-- **Known by its id.** It also has a version and a shown name, and it says
-  which kinds it reads, by their ids in the table of kinds. Results keep
-  the id and the version; the name is looked up only to show it. A
-  workspace saved before keeps names, and they are read as ids.
-- **Asked, never trusted to decide.** Meno decides the kind before any
-  reader is asked, and sends it with each request. A reader may answer
-  that it cannot read the file; it does not detect kinds for Meno.
-- **Three requests**, one answer each, an error an answer:
+- **Known by its id.** It also has a version and a shown name. It says,
+  by their ids in the table of kinds, which kinds it reads and which it
+  writes, and each writer's options (below). Results keep the plugin's id
+  and version; the name is looked up only to show it. Names in
+  workspaces saved before are read as ids.
+- **Meno decides the kind** before any plugin is asked, and sends it with
+  each request. A plugin may answer that it cannot read a file; it does
+  not detect kinds for Meno.
+- **Four requests**, one answer each, an error an answer:
   - `ping` - its name and version;
-  - `read {kind, name, text}` - the molecule in Meno's own forms (atoms,
-    geometries, each one's energy, what the calculation was), and results
-    in the general form, any of them a promise;
-  - `ask {kind, key, name, text}` - a promise's value.
-- **Keeps nothing between requests**; the output is sent again.
+  - `read {kind, name, text}` - what the file holds (below);
+  - `ask {kind, key, name, text}` - a promise's value;
+  - `write {kind, molecules, options}` - the file's content.
+- **What `read` gives**, any of:
+  - **molecules in 3D** - atoms, geometries, each one's energy, what the
+    calculation was, as now, and bonds where the file says them (an SDF's
+    bond block, a PDB's `CONECT`). Where it does not say them, Meno finds
+    them as for an XYZ file;
+  - **a drawing**, in the record's form - atoms, bonds, arrows, pluses -
+    read by Meno's own record reader with its checks;
+  - **results** in the general form, any of them a promise.
+- **What `write` is given:**
+  - the molecules chosen, in Meno's forms: atoms, bonds, the geometry
+    shown, charge and multiplicity, and what a calculation was, where
+    known;
+  - the chemist's options.
+
+  It gives back text, or bytes for a binary kind.
+- **A writer's options** are declared in a general form, as results are:
+  a choice, a number, a text or a switch, each with a label and a
+  default. Meno draws them as a form - a calculation's input: program
+  keywords, method, basis, charge, multiplicity, the job. It fills them
+  from what is known, a molecule's calculation conditions among them, so
+  that a calculation can be run again as it was. It remembers the
+  chemist's last choices for each writer.
+- **Keeps nothing between requests.** A file is sent again each time.
 - **Gives data, never code or markup**, in Meno's units, checked by Meno
   on the way in and again when a workspace is opened.
-- **Runs apart from the page:** a plugin in its own process and
-  environment, a built-in in a web worker; never on the main thread.
-- **Several read one kind.** Each one's results are its own; where they
-  overlap, the chemist's choice for that kind gives Meno's own forms and
-  orders the results (the maintainer, 2026-10-05/06).
+- **Runs apart from the page:**
+  - a downloaded plugin in its own process and environment;
+  - Meno's in a web worker, and SMILES in its chemistry worker, as now.
 
-**Plugin or built-in** differ only in how a reader gets there:
+  Never on the main thread.
 
-- A plugin is downloaded into an environment from a lock Meno carries,
-  with the network's consent. It is added and taken away in Settings.
-- A built-in comes with Meno: nothing to add, nothing downloaded. It is
-  not listed among the readers, and it appears only where it overlaps
-  another reader, in that kind's row, named "Meno".
-- Either can become the other, or be taken out, with nothing else in Meno
-  changing; the built-in readers are listed once, and the worker that
-  runs them reads that list.
+### Meno among the plugins
+
+- **Meno's readers and writers answer the same requests** with the same
+  forms; nothing in Meno's core calls a parser or a writer directly. A
+  kind can move from Meno to a plugin, or the other way, with nothing
+  else changing.
+- **Meno is listed with the plugins:** first, as the one that comes with
+  Meno, with nothing to add or take away.
+- **What is Meno's alone** is never offered to plugins: `.meno` and the
+  record, however they arrive.
+
+### Several plugins for one kind
+
+- **Reading,** as calculation outputs are read now:
+  - every plugin added that reads the kind reads the file;
+  - each one's results are its own;
+  - the one chosen gives Meno's own forms: the geometries, the drawing,
+    what the calculation was.
+- **The one chosen shows as soon as it answers**, and the others' results
+  join it as they come, so that a slow plugin never holds up a file
+  opening. Today an output waits for every reader.
+- **Writing:** only the one chosen writes.
+
+### Settings: one place
+
+- **One tab** for plugins and Meno together, named for neither reading
+  nor calculations ("Plugins" proposed).
+- **Its list:** Meno first, then each plugin, added or not. Each says
+  what it reads and what it writes, by kind.
+- **Below the list, a row for each kind that two or more read or write.**
+  The row says who reads it and who writes it, with the chemist's choice
+  for each; a kind only one reads or writes has no row.
+- **What, never how** (the maintainer's rule): nothing in it says how a
+  file is read.
+
+### Saving and exporting
+
+- **Save and Save As** offer `.meno` and the kinds that are written and
+  read back by the plugins added: MOL, SDF, RXN, and PDB once a plugin
+  does both. A file saved opens again as it is.
+- **Export** offers the kinds that are only written: SVG, a calculation's
+  input.
+- **The writer's options**, where it has any, come between the choice of
+  kind and the file's name.
 
 ### One table of kinds
 
-- **One table** (`lib/io/kinds.ts`) holds every kind Meno takes in or
-  gives out:
+- **One table** (`lib/io/kinds.ts`) holds every kind any plugin reads or
+  writes:
   - its id, name and marks;
-  - its file extensions;
-  - who reads it - Meno, or the readers - and whether Meno writes it.
-- **Its users.** Open, drop and paste all ask this table, and so do Open's
-  filter, Save's choices and ARCHITECTURE.md's format table.
+  - its file extensions.
+
+  Plugins name kinds by their ids. A kind a new plugin brings comes into
+  the table with the plugin: Meno's own list, for now. A list fetched
+  online later needs its marks checked as data too, so that no pattern
+  can hold the page up.
+- **Its users.** Open, drop and paste ask this table, and so do Open's
+  filter, Save's and Export's choices and ARCHITECTURE.md's format table.
 - **Decided once, by content, strongest evidence first:**
   1. Meno's own records;
   2. a program's banner;
   3. CTfile and RXN markers;
-  4. a cube's layout;
-  5. an XYZ file's layout.
+  4. a PDB's records;
+  5. a cube's layout;
+  6. an XYZ file's layout.
 
   The extension decides only where the content does not; where neither
-  does, the file opens as text.
-- **The way in decides only what it must.** The tab is decided by what
-  the file is; a drop's extension no longer decides first; the
-  clipboard's flavours stay an order of their own, since a flavour is
-  already a kind.
+  does, the file opens as text. The clipboard's flavours stay an order of
+  their own, since a flavour is already a kind.
 
 ### Smaller things, with it
 
-- `lib/calc/readers.ts` becomes what it is - XYZ's comment-line energies,
-  beside the XYZ reader - and "reader" is said of readers only.
-- A calculation's geometries become molecules in 3D directly, with bonds
-  found by the same function XYZ uses, not through XYZ text.
-- The cube reader leaves Settings' list.
-- The gaps above, each where it is cheap:
-  - XYZ text on the clipboard;
-  - RXN dragged in on Windows;
-  - PDB and KET no longer offered by Open until something reads them.
+- `lib/calc/readers.ts` - the energies CREST, xtb and ORCA write on an XYZ
+  file's comment lines - becomes part of Meno's XYZ reader.
+- A calculation's geometries become molecules in 3D directly, without
+  passing through XYZ text.
+- The cube reader is Meno's, like the rest, and no longer a plugin of its
+  own in Settings.
+- The gaps above, where they are cheap: XYZ text on the clipboard, an RXN
+  dragged in on Windows, and PDB and KET no longer offered by Open until
+  something reads them.
 
 ## Decisions wanted
 
-1. **The line**, as above: structure formats in Meno's core, calculation
-   output through readers. The other way would make every format a reader
-   under one contract, MOL and XYZ included. That is one path, but it
-   would need bonds and drawings in the contract and a larger change for
-   little gain now. Recommended: the line above.
-2. **Built-in readers out of Settings' list**, shown only where they
-   overlap a plugin. Recommended.
-3. **What a file is, decided once, by content, strongest evidence first**;
-   the extension only where the content does not decide. Recommended.
-4. **Structure formats from plugins later** - PDB, mmCIF and the like.
-   Not now. The contract stays open to it: an optional `bonds` field
-   could be added without breaking a reader.
+Decided by the maintainer on 2026-10-06:
+
+- Structure formats too are read by plugins, Meno one of them, and the
+  chemist chooses who reads each kind.
+- Plugins write, a calculation's input among the rest.
+- Settings has one place for plugins and Meno.
+
+Still to decide, each with what is recommended:
+
+1. **The tab's name:** "Plugins", Meno first in its list.
+2. **Several readers of one kind:** all read, the chosen one shown at
+   once, the others' results joining as they come. The other way - only
+   the chosen one reads - is cheaper: opening an XYZ file would not start
+   cclib. But it gives up what one reader adds to another's, as an NBO
+   plugin to cclib. Recommended: all read.
+3. **A plugin's drawing** comes in the record's form. Recommended.
+4. **A writer's options** are declared in a general form, drawn by Meno
+   and filled from a molecule's calculation conditions. Recommended.
+5. **Save As and Export:** Save As offers what is read back as well, and
+   Export what is only written. Recommended.
+6. **Meno's readers and writers behind the contract**, in a worker,
+   nothing calling a parser directly. Recommended.
+7. **RDKit's place:** part of Meno for now, SMILES being one of Meno's
+   kinds. It could become a plugin of its own later, reading and writing
+   what RDKit does. Recommended: part of Meno for now.
 
 ## In order, once agreed
 
-1. This document.
-2. The table of kinds and the one decision. This covers Open, drop,
-   paste, Open's filter and Save's choices, with tests for the misread
-   cases above.
-3. Readers by id, with names in saved workspaces read as ids. In the same
-   step: the kind sent with each request, the built-in readers listed
-   once, the cube reader out of Settings' list, and `readers.ts` renamed.
-4. A calculation's geometries without XYZ text; the cheap gaps.
-5. ARCHITECTURE.md's format table drawn from the table of kinds.
+Nothing is started until the maintainer says so.
 
-Steps 2 to 5 depend on one another little. Each is a pull request from
-main.
+1. This document.
+2. The contract and the table of kinds:
+   - `read` with bonds and drawings, `write` with options;
+   - Meno's readers (MOL, SDF, RXN, XYZ, SMILES, cube) behind the
+     contract, in a worker, with tests that each reads as before;
+   - one decision of what a file is, for Open, drop and paste.
+3. Plugins by id, with the kind sent in each request. Settings gets its
+   one place, and the one chosen shows first.
+4. Writers behind the contract: Meno's MOL, SDF, RXN and SVG, with
+   Save As and Export drawn from the table.
+5. The first new plugin kinds: reading PDB, and a calculation's input
+   written for one program. Which program, and whether Meno or a plugin
+   reads PDB, are decided then.
+6. ARCHITECTURE.md's format table drawn from the table of kinds.
+
+Each is a pull request from main.
