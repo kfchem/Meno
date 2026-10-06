@@ -10,6 +10,11 @@ describe("a calculation output's kind", () => {
     expect(outputKindOf("   * xtb version 6.6.1 (8d0f1dd)\n")?.id).toBe("xtb");
   });
 
+  it("is a Molden file by its first section, whatever it is called", () => {
+    expect(outputKindOf("[Molden Format]\n[Atoms] AU\nO 1 8 0 0 0\n")?.id).toBe("molden");
+    expect(outputKindOf("  [MOLDEN FORMAT]\n")?.id).toBe("molden");
+  });
+
   it("is none for what no reader reads: a structure file, or text", () => {
     expect(outputKindOf("3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n")).toBeNull();
     expect(outputKindOf("Saturday: ran the column\n")).toBeNull();
@@ -26,8 +31,9 @@ describe("which reader reads what", () => {
   const plugins = [...READER_PLUGINS, other];
 
   it("are, for a kind, every reader that reads it, in Meno's order", () => {
-    expect(readersOf("orca", plugins).map((p) => p.id)).toEqual(["cclib", "orca-own"]);
-    expect(readersOf("gaussian", plugins).map((p) => p.id)).toEqual(["cclib"]);
+    expect(readersOf("orca", plugins).map((p) => p.id)).toEqual(["cclib", "pyscf", "orca-own"]);
+    expect(readersOf("gaussian", plugins).map((p) => p.id)).toEqual(["cclib", "pyscf"]);
+    expect(readersOf("molden", plugins).map((p) => p.id)).toEqual(["pyscf"]);
   });
 
   it("is the one chosen, where it is added; or else the first added", () => {

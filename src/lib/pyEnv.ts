@@ -6,7 +6,8 @@ import {
   mkdir,
 } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
-import { platform } from "@tauri-apps/plugin-os";
+import { arch, platform } from "@tauri-apps/plugin-os";
+import { pixiDownload, pixiPlatform } from "./pixiLock";
 import { askToConnect } from "./net/network";
 import { READER_PLUGINS, type PythonReader } from "./calc/catalog";
 
@@ -56,6 +57,8 @@ async function writeJsonSafe(
 
 type PyEnvInfo = {
   os: "windows" | "macos" | "linux";
+  /** What makes it: uv, or pixi - a reader's whose environment needs conda-forge. */
+  host: "uv" | "pixi";
   lockPath: string;
   venvHome: string;
   venvPythonRel: string;
@@ -84,12 +87,21 @@ async function baseInfo(
   pyVer = "3.12"
 ): Promise<PyEnvInfo> {
   const os = await platform();
+  const pixi = readerOf(profile)?.env === "pixi";
   return {
     os: os as any,
+    host: pixi ? "pixi" : "uv",
     lockPath,
-    venvHome: `uv/${profile}/venv`,
-    venvPythonRel: os === "windows" ? "Scripts/python.exe" : "bin/python",
-    stampPath: `uv/stamps/${profile}.json`,
+    // (pixi's environments kept where pixi makes them: `.pixi/envs/default` beside the manifest)
+    venvHome: pixi ? `pixi/${profile}` : `uv/${profile}/venv`,
+    venvPythonRel: pixi
+      ? os === "windows"
+        ? ".pixi/envs/default/python.exe"
+        : ".pixi/envs/default/bin/python"
+      : os === "windows"
+        ? "Scripts/python.exe"
+        : "bin/python",
+    stampPath: pixi ? `pixi/stamps/${profile}.json` : `uv/stamps/${profile}.json`,
     pythonVersion: pyVer,
     purpose: `python-env:${profile}`,
     label:
@@ -136,8 +148,12 @@ async function envState(profile: PyProfile, opts?: EnvOptions) {
     payload: info,
   });
 
+  // (made: its interpreter there - or, for pixi's, the activation kept once
+  // it is made; the interpreter there is a link the webview's file scope
+  // cannot follow, and in a folder whose name starts with a dot)
+  const made = info.host === "pixi" ? `${info.venvHome}/activation.json` : `${info.venvHome}/${info.venvPythonRel}`;
   const needSetup =
-    !(await exists(info.venvHome + "/" + info.venvPythonRel, {
+    !(await exists(made, {
       baseDir: BaseDirectory.AppData,
     })) ||
     stamp.lockSha !== lockSha ||
@@ -166,9 +182,34 @@ export async function ensurePyEnv(
     profile,
     opts
   );
-  await ensureDir("uv/stamps", BaseDirectory.AppData);
+  await ensureDir(info.host === "pixi" ? "pixi/stamps" : "uv/stamps", BaseDirectory.AppData);
 
-  if (needSetup) {
+  if (needSetup && info.host === "pixi") {
+    // (a conda-forge environment: what pixi downloads on this computer, from its lock)
+    const reader = readerOf(profile)!;
+    const download = pixiDownload(lockText, pixiPlatform(info.os, arch()));
+    const mb = Math.round(download.bytes / 1e6 / 10) * 10;
+    const allowed = await askToConnect({
+      purpose: info.purpose,
+      title: `Download ${reader.name} for reading calculations?`,
+      detail:
+        `${reader.name} reads calculation programs' output for Meno, in a Python of its own ` +
+        `with the ${download.packages} packages it needs` +
+        (mb ? ` (about ${mb} MB)` : "") +
+        `, in its data folder. pixi, fetched the first time it is needed, downloads them - once, ` +
+        `every file checked against the fingerprint Meno carries for it:`,
+      sources: [
+        "pixi the first time, from its makers' releases (github.com)",
+        "the packages, from conda-forge (conda.anaconda.org)",
+        ...(download.pypi ? ["the rest, from the Python Package Index (pypi.org, files.pythonhosted.org)"] : []),
+      ],
+    });
+    if (!allowed) {
+      throw new Error(`${info.label} needs the network, and was not allowed it (Meno is offline, or the download was declined).`);
+    }
+    await invoke("py_env_setup_pixi", { payload: info });
+    await writeJsonSafe(info.stampPath, { lockSha, py: info.pythonVersion }, BaseDirectory.AppData);
+  } else if (needSetup) {
     // The first time, the user says whether it may download at all.
     const packages = lockText
       .split(/\r?\n/)
