@@ -35,6 +35,9 @@ import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
 import ExportCard from "./ExportCard";
+import { findOutput, outputOf } from "../../../lib/calc/asks";
+import type { CalcSource } from "../../../lib/calc/output";
+import { openInTab } from "../../views/tabOpener";
 import type { WriterId } from "../../../lib/io/writers";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { currentStyle3D, useStyle3D } from "./style3d";
@@ -450,6 +453,16 @@ function StructureCanvasContent({
   const chosen3d = useEditor((s) => s.chosen3d);
   const style3d = useStyle3D();
   const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
+  // a molecule's output shown in a tab of its own: held this session or in
+  // its workspace, read again where it was, or else found by the chemist
+  const showOutput = async (source: CalcSource) => {
+    try {
+      const out = (await outputOf(source)) ?? ((await findOutput(source)) ? await outputOf(source) : undefined);
+      if (out) openInTab({ kind: "text", label: out.name, data: { text: out.text, language: "txt", filename: out.name } });
+    } catch (e) {
+      setChemError(e instanceof Error ? e.message : String(e));
+    }
+  };
   const menuLink = menuMolecule ? linkOf(menuMolecule, model) : null;
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
@@ -470,6 +483,9 @@ function StructureCanvasContent({
                 open: () => store.getState().openList3d(menuMolecule.id, resultKey(l)),
               })),
             }
+          : {}),
+        ...(menuMolecule.calc?.source
+          ? { output: { name: menuMolecule.calc.source.name, show: () => void showOutput(menuMolecule.calc!.source!) } }
           : {}),
         ...((menuMolecule.frames?.length ?? 0) > 0
           ? {

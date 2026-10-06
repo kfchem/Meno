@@ -1,16 +1,19 @@
 /**
- * The workspace file, `.meno`: everything on the canvas, as it is - the
- * drawing, its arrows and pluses, the molecules in 3D with their frames,
- * energies, looks and measurements, how each is turned and which frame it
- * shows, and the document's own drawing style - so that it opens again
- * just as it was saved. JSON, versioned; a reader keeps what it reads and
- * leaves out what it does not.
+ * The workspace: everything on the canvas, as it is - the drawing, its
+ * arrows and pluses, the molecules in 3D with their frames, energies, looks
+ * and measurements, how each is turned and which frame it shows, and the
+ * document's own drawing style - so that it opens again just as it was
+ * saved. JSON, versioned; a reader keeps what it reads and leaves out what
+ * it does not. Its file, `.meno`, is a zip (lib/doc/menoFile) holding it
+ * and the calculations' outputs its molecules were read from.
  */
 import { acceptStyleChoice } from "../../../../lib/chem/styleFields";
 import type { StyleChoice } from "../../../../lib/chem/style";
 import type { Carried3D, Drawn, EditorState } from "../store/types";
 import { readDrawn } from "./copyPaste";
-import { calcShowing } from "../../../../lib/calc/asks";
+import { calcShowing, outputsToKeep } from "../../../../lib/calc/asks";
+import { writeMenoFile } from "../../../../lib/doc/menoFileWriter";
+import type { CalcSource } from "../../../../lib/calc/output";
 
 export const WORKSPACE = "meno-workspace";
 export const WORKSPACE_VERSION = 1;
@@ -47,9 +50,16 @@ export function carriedOf(state: Pick<Saved, "molecules3d" | "turns3d" | "frames
   });
 }
 
-/** The canvas as a workspace file. */
-export function workspaceText(state: Saved): string {
-  const molecules3d = carriedOf(state);
+/**
+ * The canvas as a workspace's JSON. An output its file keeps (`kept`, by
+ * SHA-256) is not said to be anywhere else: where it was is left out.
+ */
+export function workspaceText(state: Saved, kept: ReadonlySet<string> = new Set()): string {
+  const molecules3d = carriedOf(state).map((m) => {
+    if (!m.calc?.source?.path || !kept.has(m.calc.source.sha256)) return m;
+    const { path: _, ...source } = m.calc.source;
+    return { ...m, calc: { ...m.calc, source } };
+  });
   return (
     JSON.stringify({
       format: WORKSPACE,
@@ -66,7 +76,14 @@ export function workspaceText(state: Saved): string {
   );
 }
 
-/** A workspace file read, or null where `text` is not one this version reads. */
+/** The canvas as its workspace file: its JSON, and every output its molecules were read from that is held this session. */
+export async function workspaceFile(state: Saved): Promise<Uint8Array> {
+  const sources = state.molecules3d.flatMap((m): CalcSource[] => (m.calc?.source ? [m.calc.source] : []));
+  const kept = await outputsToKeep(sources);
+  return writeMenoFile(workspaceText(state, new Set(kept.map((k) => k.sha256))), kept);
+}
+
+/** A workspace's JSON read, or null where `text` is not one this version reads. */
 export function readWorkspace(text: string): Workspace | null {
   let data: unknown;
   try {

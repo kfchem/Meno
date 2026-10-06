@@ -377,11 +377,59 @@ As this part of step 5 was built (#155, from main beside step 3):
     again, with *Find it…*. That opens the system's dialog at where the
     output was, and the file chosen is taken only if it is the same output.
     Once taken, the promises that waited on it are asked for again.
-  - A saved workspace now holds the outputs' paths: where the files were
-    on the computer that saved it.
+  - A saved workspace holds an output's path only where it does not
+    keep the output itself (*The workspace file*): where the file was on
+    the computer that saved it.
 - **Meno's writers behind the contract** come with the first writer that
   is not Meno's - a calculation's input, in step 7 - so that the contract
   is shaped by both.
+
+### The workspace file
+
+Decided by the maintainer, 2026-10-06, with PDFs to be pasted later in
+mind: `.meno` is a zip, laid out as EPUB and ODF lay theirs out - not
+Word's OPC, whose content types and relationships Meno has no use for.
+
+```
+work.meno (zip)
+  mimetype          first, stored: application/vnd.kfchem.meno+zip
+  workspace.json    stored: the workspace, the JSON `.meno` was before
+  files.json        stored: each file kept - name, kind, media type, size
+  files/<sha256>    each file kept, as it was: text deflated, the rest stored
+```
+
+- **The workspace stays JSON, uncompressed.** Measured in Node before the
+  decision (median of nine, with a 2.5 MB cube, a 0.4 MB output and 5 MB of
+  PDF-like bytes kept beside it):
+
+  | Workspace | As JSON | Zip, JSON stored | Zip, JSON deflated |
+  | --- | --- | --- | --- |
+  | 2000 atoms, 200 frames (0.55 MB) | 1.4 ms | 1.4 ms | 3.5 ms |
+  | 2000 atoms, 2000 frames (3.2 MB) | 8.0 ms | 8.0 ms | 22.3 ms |
+
+  Stored, it opens as fast as before and reads as it is once unzipped.
+  Deflating it would cost 4 to 5 ms a megabyte to save a little room.
+- **Files kept are read only when wanted**, each by its SHA-256 - the cube
+  above in 9 ms - and taken only if they are what it says. Text (a
+  calculation's output, a cube) is deflated; a PDF or a picture is kept as
+  it was.
+- **A calculation's output opened is kept in the workspace** (the
+  maintainer: kept, and seen as needed). Saved, the workspace keeps every
+  output its molecules were read from that is held this session - opened,
+  or kept in a workspace opened. Opened, a workspace holds what it keeps
+  for the session. A molecule's menu shows its output in a tab of its own
+  (*Show <name>*); where it is held nowhere, it is read again where it
+  was, or found (*Find…*).
+- **Written off the page.** The files kept are compressed in a worker of
+  their own as the workspace is saved (`lib/doc/menoFileWorker.ts`), so a
+  long output never holds the canvas up.
+- **Nothing is unpacked to the disk.** What the file says of its sizes is
+  held to limits before anything is inflated (`lib/doc/menoFile.ts`).
+- **The JSON `.meno` of before is not looked for** (the maintainer: not
+  needed). One still opens, the JSON being the same as `workspace.json`;
+  nothing was added for it, and it is saved as a zip.
+- **The clipboard and Office keep the record**, JSON as before: a copy
+  carries no file.
 
 ### Response
 

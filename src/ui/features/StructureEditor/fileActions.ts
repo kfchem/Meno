@@ -1,5 +1,5 @@
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { useCallback, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { createSVG, labelSetOf, layoutMolecule, measureLabelBox, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
@@ -11,7 +11,7 @@ import { useAppSettings } from "../../../lib/settings/appSettings";
 import { editorLayoutOptions, layoutBonds } from "./layoutOptions";
 import { useEditorStore } from "./store";
 import type { Carried3D, Drawn, EditorState } from "./store/types";
-import { carriedOf, isWorkspaceFile, workspaceText } from "./utils/workspace";
+import { carriedOf, isWorkspaceFile, workspaceFile } from "./utils/workspace";
 import { pictureMarks } from "./utils/molecule3d";
 import { measurePictureMarks } from "./utils/measure3d";
 import { MARK_SCALE } from "./chem/marks";
@@ -286,7 +286,7 @@ export function useFileActions(nameTab?: (label: string) => void) {
 
   const saveTo = useCallback(
     async (path: string) => {
-      await writeTextFile(path, workspaceText(store.getState()));
+      await writeFile(path, await workspaceFile(store.getState()));
       store.getState().markSavedAs(path);
       naming.current?.(fileNameOf(path));
     },
