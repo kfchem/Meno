@@ -36,7 +36,7 @@ const MARK_HALF_HEIGHT = 0.42;
 const MARKS_APART = 0.6;
 
 /**
- * RDKit's marks on the structure: a ring round each atom with more bonds
+ * The plugin's marks on the structure: a ring round each atom with more bonds
  * than it can have - saying what is wrong while the pointer is on it - and
  * R, S, E and Z beside stereocentres and double bonds, each placed clear of
  * the bonds and labels, and written as the drawing's labels are - in its

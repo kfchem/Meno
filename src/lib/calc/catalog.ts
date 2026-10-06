@@ -13,6 +13,7 @@
  */
 import type { Manifest } from "../plugins/manifest";
 import { MANIFESTS, PLUGINS_ROOT } from "../plugins/known";
+import { isRole, type RoleId } from "../plugins/roles";
 import { MENO_READS } from "./menoReads";
 import { kindById, MENO_KINDS, registered, type Kind } from "../io/kinds";
 
@@ -28,11 +29,13 @@ type ReaderBase = {
   /** The kinds it reads, by id. */
   reads: readonly string[];
 };
-/** A reader plugin: what it is, what it reads, and what it runs - a worker in a Python environment of its own. */
-export type PythonReader = ReaderBase & {
+/** A plugin: what it is, what it reads, the roles it fills besides, and what it runs - a worker in a Python environment of its own. */
+export type PythonPlugin = ReaderBase & {
   builtin?: undefined;
+  /** The roles it fills besides reading files (lib/plugins/roles). */
+  roles: readonly RoleId[];
   /** Its Python environment's profile, and its lock and worker, in its folder among Meno's resources. */
-  profile: `reader-${string}`;
+  profile: `plugin-${string}`;
   lock: string;
   worker: string;
   /** What makes its environment: uv from PyPI (unsaid), or pixi - its lock a pixi.lock - where it needs conda-forge. */
@@ -40,12 +43,12 @@ export type PythonReader = ReaderBase & {
 };
 /** Meno itself, reading what it reads under the readers' contract: nothing to add or take away, nothing downloaded. */
 export type MenoReader = ReaderBase & { builtin: true };
-export type ReaderPlugin = PythonReader | MenoReader;
+export type ReaderPlugin = PythonPlugin | MenoReader;
 
 const MENO_IDS: ReadonlySet<string> = new Set(Object.values(MENO_KINDS).map((k) => k.id));
 
-/** A plugin, as a reader, from its manifest. */
-export const readerOf = (m: Manifest): PythonReader => ({
+/** A plugin, from its manifest. */
+export const pluginOf = (m: Manifest): PythonPlugin => ({
   id: m.id,
   name: m.name,
   version: m.version,
@@ -54,14 +57,25 @@ export const readerOf = (m: Manifest): PythonReader => ({
   homepage: m.homepage,
   // (its own kinds, and Meno's: never another plugin's, which it does not know)
   reads: m.reads.filter((id) => MENO_IDS.has(id) || m.kinds.some((k) => k.id === id)),
-  profile: `reader-${m.id}`,
+  // (the roles Meno defines, of those it says it fills)
+  roles: m.roles.filter(isRole),
+  profile: `plugin-${m.id}`,
   lock: `${PLUGINS_ROOT}/${m.id}/${m.environment.lock}`,
   worker: `${PLUGINS_ROOT}/${m.id}/${m.worker}`,
   ...(m.environment.maker === "pixi" ? { env: "pixi" as const } : {}),
 });
 
-/** The reader plugins Meno knows of, in Meno's order: each that reads something. */
-export const READER_PLUGINS: readonly PythonReader[] = MANIFESTS.map(readerOf).filter((p) => p.reads.length);
+/** The plugins Meno knows of, in Meno's order: each that reads something, or fills a role. */
+export const PLUGINS: readonly PythonPlugin[] = MANIFESTS.map(pluginOf).filter((p) => p.reads.length || p.roles.length);
+
+/** The plugins that read files. */
+export const READER_PLUGINS: readonly PythonPlugin[] = PLUGINS.filter((p) => p.reads.length);
+
+/** The plugin of that id. */
+export const pluginById = (id: string): PythonPlugin | undefined => PLUGINS.find((p) => p.id === id);
+
+/** The plugins that fill a role, in Meno's order. */
+export const pluginsFilling = (role: RoleId): PythonPlugin[] => PLUGINS.filter((p) => p.roles.includes(role));
 
 /** The manifest of a plugin Meno knows of. */
 export const manifestOf = (id: string): Manifest | undefined => MANIFESTS.find((m) => m.id === id);

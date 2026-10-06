@@ -10,6 +10,7 @@ import AbbreviationSettings from "./AbbreviationSettings";
 import ChemistrySettings from "./ChemistrySettings";
 import FileSettings from "./FileSettings";
 import PluginSettings from "./PluginSettings";
+import RoleChoices from "./RoleChoices";
 import { useSettingsSection, type SettingsSection } from "./section";
 
 const SECTIONS: { id: SettingsSection; name: string }[] = [
@@ -25,7 +26,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
 /**
  * The application's settings: the drawing style every structure is drawn
  * in unless its document has its own, how molecules in 3D look and turn,
- * what RDKit points out on a structure, who reads and writes each kind
+ * what is pointed out on a structure, who reads and writes each kind
  * of file, the plugins, what the labels Meno reads stand for, and what Meno
  * may do on the network.
  */
@@ -104,13 +105,17 @@ export default function SettingsPanel() {
               choice={style3d}
               onChange={(next) => setStyle3d(next)}
             />
+            <div className="mt-6 max-w-2xl">
+              <RoleChoices where="molecules3d" />
+            </div>
           </section>
         ) : section === "chemistry" ? (
           <section className="mt-6 max-w-4xl">
             <h2 className="text-base font-semibold text-gh-black">Chemistry</h2>
             <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
-              What RDKit points out on a structure as it is drawn. The marks
-              are Meno's, not the drawing's: no exported picture has them.
+              What is pointed out on a structure as it is drawn, and who does
+              it. The marks are Meno's, not the drawing's: no exported picture
+              has them.
             </p>
             <ChemistrySettings />
           </section>
@@ -128,8 +133,8 @@ export default function SettingsPanel() {
           <section className="mt-6 max-w-4xl">
             <h2 className="text-base font-semibold text-gh-black">Plugins</h2>
             <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
-              Programs that read what Meno does not read itself. A plugin is downloaded when it is added - Meno asks
-              first - and can be taken away again.
+              Programs that do for Meno what it does not do itself: read files, make sense of a structure, make it in 3D.
+              A plugin is downloaded when it is added, or first needed - Meno asks first - and can be taken away again.
             </p>
             <PluginSettings />
           </section>

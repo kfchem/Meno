@@ -8,8 +8,8 @@ Runs in the environment of the chem lock (RDKit):
 
     <chem python> scripts/layout/baselines.py     # writes .layout/baselines.json
 
-The app's own chem environment will do: it is under the app's data folder,
-at uv/chem/venv.
+The app's environment for the RDKit plugin will do: it is under the app's
+data folder, at uv/plugin-rdkit/venv.
 """
 
 import json

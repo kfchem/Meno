@@ -3,18 +3,18 @@ import { RISE } from "../../theme/motion";
 import { ClipboardDocumentIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
-import { chemMolblock } from "../../../lib/rdkit/molblock";
-import { chemWorker, useChem } from "../../../lib/rdkit/worker";
+import { chemMolblock } from "../../../lib/roles/molblock";
+import { chemWorker, useChem } from "../../../lib/roles/worker";
 import { writeClipboard } from "../../../lib/clipboard";
 import { forFlatReaders } from "./chem/drawing";
 import { structureFromSmiles } from "./chem/fromSmiles";
 import { useEditor } from "./store";
 
 /**
- * SMILES in and out, by RDKit: a structure from a SMILES, laid out by Meno's
- * own engine and added beside what is drawn, and the canonical SMILES of
- * what is drawn. The first use sets RDKit up - asking before it downloads -
- * and starts it.
+ * SMILES in and out, by the plugin that fills that role (lib/plugins/roles):
+ * a structure from a SMILES, laid out by Meno's own engine and added beside
+ * what is drawn, and the canonical SMILES of what is drawn. The first use
+ * sets the plugin up - asking before it downloads - and starts it.
  */
 export default function SmilesPanel({ onClose }: { onClose: () => void }) {
   const model = useEditor((s) => s.model);
@@ -42,7 +42,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // What is drawn, as RDKit writes it; a moment after it stops changing.
+  // What is drawn, as the plugin writes it; a moment after it stops changing.
   useEffect(() => {
     if (model.atoms.length === 0) {
       setSmiles(null);
@@ -50,7 +50,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
     }
     let live = true;
     const t = setTimeout(() => {
-      void chemWorker()
+      void chemWorker("smiles")
         .then((c) => c.request("to_smiles", { molblock: chemMolblock(forFlatReaders(model)) }))
         .then((r) => {
           if (live) setSmiles(r.smiles);
@@ -72,7 +72,7 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
     if (!text) return;
     setError(null);
     try {
-      // RDKit's drawing says what the SMILES does; the engine draws it
+      // the plugin's drawing says what the SMILES does; the engine draws it
       const next = await structureFromSmiles(text);
       const mid = {
         x: next.atoms.reduce((n, a) => n + a.x, 0) / (next.atoms.length || 1),
@@ -173,15 +173,10 @@ export default function SmilesPanel({ onClose }: { onClose: () => void }) {
         )}
       </div>
       <div className="mt-3 text-[11px] text-gh-gray">
-        {chem.state === "setting-up" && "Setting up RDKit…"}
-        {chem.state === "starting" &&
-          "Starting RDKit - the first time takes a little while…"}
-        {chem.state === "ready" && `RDKit ${chem.rdkit}`}
-        {chem.state === "failed" && (
-          <span className="text-accel-accent">
-            RDKit could not start: {chem.message}
-          </span>
-        )}
+        {chem.state === "setting-up" && `Setting up ${chem.plugin}…`}
+        {chem.state === "starting" && `Starting ${chem.plugin} - the first time takes a little while…`}
+        {chem.state === "ready" && `${chem.plugin} ${chem.version}`}
+        {chem.state === "failed" && <span className="text-accel-accent">{chem.message}</span>}
       </div>
       {error && (
         <div className="mt-1 text-[11px] text-accel-accent break-words">

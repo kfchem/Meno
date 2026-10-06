@@ -1,11 +1,11 @@
 /**
- * What RDKit says about a structure, as marks on it: atoms with more bonds
- * than they can have, R and S at stereocentres, E and Z at double bonds,
- * Ra and Sa at axes of chirality (BINAP's).
+ * What the plugin that does the checks says about a structure, as marks on
+ * it: atoms with more bonds than they can have, R and S at stereocentres, E
+ * and Z at double bonds, Ra and Sa at axes of chirality (BINAP's).
  * Marks are the editor's, not the drawing's: they are never exported.
  */
-import type { Analysis } from "../../../../lib/rdkit/client";
-import { molIndex } from "../../../../lib/rdkit/molblock";
+import type { Analysis } from "../../../../lib/roles/client";
+import { molIndex } from "../../../../lib/roles/molblock";
 import { elements } from "../../../../utils/atomUtils";
 import type { Model } from "../store/types";
 
@@ -31,7 +31,7 @@ export const NO_MARKS: ChemMarks = {
   doubleBonds: new Map(),
 };
 
-/** RDKit's answer about `model`, by the ids of its atoms and bonds. */
+/** The plugin's answer about `model`, by the ids of its atoms and bonds. */
 export function marksOf(model: Model, analysis: Analysis): ChemMarks {
   const { atoms, bonds } = molIndex(model);
   const marks: ChemMarks = {

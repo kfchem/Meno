@@ -18,6 +18,7 @@ describe("the settings file", () => {
       options: { "write:sdf": { version: "V3000", frames: "all" }, export: { kind: "sdf" } },
       abbreviations: [{ label: "Mmt", name: "4-methoxytrityl", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1", also: ["MMTr"] }],
       files: { read: { orca: "cclib" }, also: { orca: ["pyscf"] } },
+      plugins: { removed: ["rdkit"], roles: { smiles: "rdkit" } },
     };
     const text = settingsFileText(settings);
     expect(JSON.parse(text).format).toBe(1);
@@ -51,6 +52,9 @@ describe("the settings file", () => {
     expect(
       acceptAppSettings({ options: { "write:mol": { version: "V3000", scale: 2, x: null, "a b": 1 }, "Bad Role": { a: 1 }, export: "sdf" } }).options,
     ).toEqual({ "write:mol": { version: "V3000", scale: 2 } });
+    // the plugins taken away and the roles chosen: ids only
+    expect(acceptAppSettings({ plugins: { removed: ["rdkit", "rdkit", "Not An Id", 3], roles: { smiles: "rdkit", checks: 4 } } }).plugins).toEqual({ removed: ["rdkit"], roles: { smiles: "rdkit" } });
+    expect(acceptAppSettings({}).plugins).toEqual({ removed: [], roles: {} });
     // a file from before Meno updated itself: not asked yet
     expect(acceptAppSettings({ updates: { asked: "yes" } }).updates).toEqual({ asked: false });
     // the user's abbreviations: those with a label and a structure that reads

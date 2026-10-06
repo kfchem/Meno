@@ -4,7 +4,7 @@ import type { StructureDocument } from "../../document";
 import { EditorState } from "../types";
 import { StoreApi } from "zustand";
 import type { StyleChoice } from "../../../../../lib/chem/style";
-import { isElementSymbol } from "../../../../../lib/rdkit/molblock";
+import { isElementSymbol } from "../../../../../lib/roles/molblock";
 import { labelTextOf, readLabel } from "../../utils/labelTyping";
 
 type SetState = StoreApi<EditorState>["setState"];

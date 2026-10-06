@@ -151,7 +151,7 @@ fn plugin_file(path: &Path) -> Option<(String, String)> {
 
 /// A pixi environment's paths: its lock must be a plugin's
 /// `resources/plugins/<id>/pixi.lock` (its manifest beside it), its home
-/// `pixi/reader-<id>` in the app data, and its interpreter where pixi puts it.
+/// `pixi/plugin-<id>` in the app data, and its interpreter where pixi puts it.
 fn validate_pixi_env(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
     let lock = safe_relative(&info.lock_path)?;
     let id = match plugin_file(&lock) {
@@ -159,7 +159,7 @@ fn validate_pixi_env(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
         _ => return Err(format!("unexpected lock file: {}", info.lock_path)),
     };
     let venv_home = safe_relative(&info.venv_home)?;
-    if venv_home != Path::new("pixi").join(format!("reader-{id}")) {
+    if venv_home != Path::new("pixi").join(format!("plugin-{id}")) {
         return Err(format!("unexpected environment location: {}", info.venv_home));
     }
     let venv_python_rel = safe_relative(&info.venv_python_rel)?;
@@ -256,37 +256,37 @@ fn no_window(cmd: &mut Command) {
 #[cfg(not(windows))]
 fn no_window(_cmd: &mut Command) {}
 
-/// The folder a reader plugin's environment lives in - `uv/reader-<id>`,
-/// its `venv` within, or pixi's `pixi/reader-<id>` - and nothing else:
-/// Meno's own environments are not taken away from Settings.
-fn reader_env_dir(venv_home: &Path) -> Result<PathBuf, String> {
+/// The folder a plugin's environment lives in - `uv/plugin-<id>`, its `venv`
+/// within, or pixi's `pixi/plugin-<id>` - and nothing else: Meno's own
+/// environments are not taken away from Settings.
+fn plugin_env_dir(venv_home: &Path) -> Result<PathBuf, String> {
     let parts: Vec<String> = venv_home
         .components()
         .map(|c| c.as_os_str().to_string_lossy().into_owned())
         .collect();
-    let reader = |name: &str| {
-        name.len() > "reader-".len() && name.starts_with("reader-") && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    let plugin = |name: &str| {
+        name.len() > "plugin-".len() && name.starts_with("plugin-") && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
     };
     match parts.as_slice() {
-        [uv, name, venv] if uv == "uv" && venv == "venv" && reader(name) => Ok(Path::new("uv").join(name)),
-        [pixi, name] if pixi == "pixi" && reader(name) => Ok(Path::new("pixi").join(name)),
-        _ => Err(format!("not a reader's environment: {}", venv_home.display())),
+        [uv, name, venv] if uv == "uv" && venv == "venv" && plugin(name) => Ok(Path::new("uv").join(name)),
+        [pixi, name] if pixi == "pixi" && plugin(name) => Ok(Path::new("pixi").join(name)),
+        _ => Err(format!("not a plugin's environment: {}", venv_home.display())),
     }
 }
 
-/// A reader plugin's record of being set up, beside the others' of its
-/// maker: `uv/stamps/reader-<id>.json`, or `pixi/stamps/...`, for the
-/// folder `reader_env_dir` gives.
-fn reader_stamp(dir: &Path) -> Result<PathBuf, String> {
+/// A plugin's record of being set up, beside the others' of its maker:
+/// `uv/stamps/plugin-<id>.json`, or `pixi/stamps/...`, for the folder
+/// `plugin_env_dir` gives.
+fn plugin_stamp(dir: &Path) -> Result<PathBuf, String> {
     let name = dir
         .file_name()
         .and_then(|n| n.to_str())
-        .ok_or_else(|| format!("not a reader's environment: {}", dir.display()))?;
+        .ok_or_else(|| format!("not a plugin's environment: {}", dir.display()))?;
     let maker = dir.components().next().map(|c| c.as_os_str().to_owned()).unwrap_or_default();
     Ok(Path::new(&maker).join("stamps").join(format!("{name}.json")))
 }
 
-/// Takes a reader plugin's environment away, and its record of being set
+/// Takes a plugin's environment away, and its record of being set
 /// up, when it is removed in Settings, Plugins - and, with the
 /// last of pixi's, what pixi keeps for them. Its worker is stopped first,
 /// by the app.
@@ -294,12 +294,12 @@ fn reader_stamp(dir: &Path) -> Result<PathBuf, String> {
 async fn py_env_remove(app: AppHandle, payload: PyEnvInfo) -> Result<(), String> {
     let env = validate_env_info(&payload)?;
     let data = app_data_dir(&app)?;
-    let rel = reader_env_dir(&env.venv_home)?;
+    let rel = plugin_env_dir(&env.venv_home)?;
     let dir = data.join(&rel);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).map_err(|e| format!("removing {}: {e}", dir.display()))?;
     }
-    let stamp = data.join(reader_stamp(&rel)?);
+    let stamp = data.join(plugin_stamp(&rel)?);
     if stamp.exists() {
         std::fs::remove_file(&stamp).map_err(|e| format!("removing {}: {e}", stamp.display()))?;
     }
@@ -943,7 +943,7 @@ mod tests {
             lock_path: lock.into(),
             venv_home: home.into(),
             venv_python_rel: python.into(),
-            purpose: "python-env:reader-pyscf".into(),
+            purpose: "python-env:plugin-pyscf".into(),
             host: "pixi".into(),
             ..env_info(LOCK, "uv/console/venv", "3.12")
         }
@@ -951,20 +951,20 @@ mod tests {
 
     #[test]
     fn a_pixi_environment_is_one_meno_carries_the_lock_of_made_in_the_app_data() {
-        let env = validate_env_info(&pixi_info("resources/plugins/pyscf/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python")).unwrap();
+        let env = validate_env_info(&pixi_info("resources/plugins/pyscf/pixi.lock", "pixi/plugin-pyscf", ".pixi/envs/default/bin/python")).unwrap();
         assert!(env.pixi);
-        assert_eq!(env.venv_home, Path::new("pixi/reader-pyscf"));
-        assert!(validate_env_info(&pixi_info("resources/plugins/pyscf/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/python.exe")).is_ok());
+        assert_eq!(env.venv_home, Path::new("pixi/plugin-pyscf"));
+        assert!(validate_env_info(&pixi_info("resources/plugins/pyscf/pixi.lock", "pixi/plugin-pyscf", ".pixi/envs/default/python.exe")).is_ok());
         for (lock, home, python) in [
-            ("resources/py/requirements.chem.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/plugins/pyscf/pixi.toml", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/plugins/../py/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/plugins/pyscf/x/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/plugins/PySCF/pixi.lock", "pixi/reader-PySCF", ".pixi/envs/default/bin/python"),
+            ("resources/py/requirements.chem.lock", "pixi/plugin-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/pixi.toml", "pixi/plugin-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/../py/pixi.lock", "pixi/plugin-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/x/pixi.lock", "pixi/plugin-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/PySCF/pixi.lock", "pixi/plugin-PySCF", ".pixi/envs/default/bin/python"),
             ("resources/plugins/pyscf/pixi.lock", "pixi/pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/plugins/pyscf/pixi.lock", "pixi/reader-other", ".pixi/envs/default/bin/python"),
-            ("resources/plugins/pyscf/pixi.lock", "uv/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/plugins/pyscf/pixi.lock", "pixi/reader-pyscf", "bin/sh"),
+            ("resources/plugins/pyscf/pixi.lock", "pixi/plugin-other", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/pixi.lock", "uv/plugin-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/pixi.lock", "pixi/plugin-pyscf", "bin/sh"),
         ] {
             assert!(validate_env_info(&pixi_info(lock, home, python)).is_err(), "{lock} {home} {python}");
         }
@@ -976,16 +976,16 @@ mod tests {
     const LOCK: &str = "resources/py/requirements.console.lock";
 
     #[test]
-    fn only_a_reader_plugins_environment_is_taken_away() {
-        assert_eq!(reader_env_dir(Path::new("uv/reader-cclib/venv")), Ok(PathBuf::from("uv/reader-cclib")));
-        assert_eq!(reader_stamp(Path::new("uv/reader-cclib")), Ok(PathBuf::from("uv/stamps/reader-cclib.json")));
-        assert_eq!(reader_env_dir(Path::new("pixi/reader-pyscf")), Ok(PathBuf::from("pixi/reader-pyscf")));
-        assert_eq!(reader_stamp(Path::new("pixi/reader-pyscf")), Ok(PathBuf::from("pixi/stamps/reader-pyscf.json")));
-        for bad in ["pixi/cache", "pixi/home", "pixi/reader-pyscf/.pixi", "pixi"] {
-            assert!(reader_env_dir(Path::new(bad)).is_err(), "{bad}");
+    fn only_a_plugins_environment_is_taken_away() {
+        assert_eq!(plugin_env_dir(Path::new("uv/plugin-cclib/venv")), Ok(PathBuf::from("uv/plugin-cclib")));
+        assert_eq!(plugin_stamp(Path::new("uv/plugin-cclib")), Ok(PathBuf::from("uv/stamps/plugin-cclib.json")));
+        assert_eq!(plugin_env_dir(Path::new("pixi/plugin-pyscf")), Ok(PathBuf::from("pixi/plugin-pyscf")));
+        assert_eq!(plugin_stamp(Path::new("pixi/plugin-pyscf")), Ok(PathBuf::from("pixi/stamps/plugin-pyscf.json")));
+        for bad in ["pixi/cache", "pixi/home", "pixi/plugin-pyscf/.pixi", "pixi"] {
+            assert!(plugin_env_dir(Path::new(bad)).is_err(), "{bad}");
         }
-        for bad in ["uv/chem/venv", "uv/console/venv", "uv/reader-/venv", "uv/reader-cclib", "uv/reader-cclib/venv/bin", "uv/reader-a b/venv", "data/reader-cclib/venv"] {
-            assert!(reader_env_dir(Path::new(bad)).is_err(), "{bad}");
+        for bad in ["uv/chem/venv", "uv/console/venv", "uv/plugin-/venv", "uv/plugin-cclib", "uv/plugin-cclib/venv/bin", "uv/plugin-a b/venv", "data/plugin-cclib/venv"] {
+            assert!(plugin_env_dir(Path::new(bad)).is_err(), "{bad}");
         }
     }
 
@@ -1027,15 +1027,15 @@ mod tests {
         ))
         .is_ok());
         // a plugin's, from its folder
-        assert!(validate_env_info(&env_info("resources/plugins/cclib/requirements.lock", "uv/reader-cclib/venv", "3.12")).is_ok());
+        assert!(validate_env_info(&env_info("resources/plugins/cclib/requirements.lock", "uv/plugin-cclib/venv", "3.12")).is_ok());
     }
 
     #[test]
     fn env_info_rejects_foreign_paths() {
         let cases = [
             env_info("resources/py/notes.txt", "uv/console/venv", "3.12"),
-            env_info("resources/plugins/cclib/manifest.json", "uv/reader-cclib/venv", "3.12"),
-            env_info("resources/plugins/cclib/x/requirements.lock", "uv/reader-cclib/venv", "3.12"),
+            env_info("resources/plugins/cclib/manifest.json", "uv/plugin-cclib/venv", "3.12"),
+            env_info("resources/plugins/cclib/x/requirements.lock", "uv/plugin-cclib/venv", "3.12"),
             env_info("resources/workers/requirements.lock", "uv/console/venv", "3.12"),
             env_info("../outside.lock", "uv/console/venv", "3.12"),
             env_info(LOCK, "../../elsewhere", "3.12"),

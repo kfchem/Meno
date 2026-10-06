@@ -175,7 +175,7 @@ export async function cleanUp(
 /**
  * `model` laid out afresh by the engine as a whole - a salt's ions set out
  * together - for a structure that has only just arrived, before it is
- * added: RDKit's drawing of a SMILES.
+ * added: a plugin's drawing of a SMILES.
  */
 export async function laidOut(model: Model): Promise<Model> {
   if (!model.bonds.length) return model;

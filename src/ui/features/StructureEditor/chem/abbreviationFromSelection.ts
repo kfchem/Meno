@@ -1,5 +1,5 @@
 import { implicitHydrogens } from "../../../../lib/chem/molecule";
-import { isElementSymbol } from "../../../../lib/rdkit/molblock";
+import { isElementSymbol } from "../../../../lib/roles/molblock";
 import { writeSmiles, type SmilesAtomOut } from "../../../../lib/chem/smiles";
 import type { Model } from "../store/types";
 

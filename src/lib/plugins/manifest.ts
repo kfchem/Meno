@@ -3,7 +3,8 @@
  * plugin's folder of its own, beside its worker and its lock, saying what it
  * is, what makes its environment and runs its worker, the kinds of file it
  * brings - their names, the names their files go by, and how a file of one
- * is told - and which kinds it reads, by their ids: its own, or Meno's.
+ * is told - which kinds it reads, by their ids: its own, or Meno's - and the
+ * roles it fills besides, by the ids Meno gives them (lib/plugins/roles).
  *
  * A plugin stands alone: it knows of no other, and Meno of no program. Two
  * plugins that read the same kind each bring it, by the same id; Meno puts
@@ -59,6 +60,8 @@ export type Manifest = {
   worker: string;
   /** The kinds it reads, by id: its own (`kinds`), or Meno's. */
   reads: string[];
+  /** The roles it fills besides reading files, by the ids Meno gives them: "smiles", "checks"... */
+  roles: string[];
   /** The kinds it brings. */
   kinds: KindDecl[];
 };
@@ -108,8 +111,11 @@ export function acceptManifest(raw: unknown): Manifest | null {
   const workerFits = worker != null && /^[A-Za-z0-9_]+\.py$/.test(worker);
   if (!id || !name || !version || !maker || !lockFits || !workerFits) return null;
   const kinds = Array.isArray(m.kinds) ? m.kinds.map(kindOf).filter((k): k is KindDecl => k != null) : [];
-  const reads = Array.isArray(m.reads) ? m.reads.filter((r): r is string => typeof r === "string" && ID.test(r)) : [];
-  if (!reads.length) return null;
+  const ids = (v: unknown) => (Array.isArray(v) ? v.filter((r): r is string => typeof r === "string" && ID.test(r)) : []);
+  const reads = ids(m.reads);
+  const roles = ids(m.roles);
+  // (a plugin that does nothing is none)
+  if (!reads.length && !roles.length) return null;
   return {
     id,
     name,
@@ -120,6 +126,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
     environment: { maker, lock: lock! },
     worker: worker!,
     reads,
+    roles,
     kinds,
   };
 }

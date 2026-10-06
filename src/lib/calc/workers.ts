@@ -3,21 +3,25 @@ import { listen } from "@tauri-apps/api/event";
 import { resolveResource } from "@tauri-apps/api/path";
 import { create } from "zustand";
 import { ensurePyEnv, pyEnvReady, removePyEnv } from "../pyEnv";
-import { manifestOf, READERS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { manifestOf, READERS, type PythonPlugin, type ReaderPlugin } from "./catalog";
 import { registerKinds } from "../io/kinds";
 import type { Manifest } from "../plugins/manifest";
 import { ReaderClient, type Reader } from "./client";
 import { menoReader } from "./builtin";
+import { stopRoleWorker } from "../roles/worker";
+import { useAppSettings } from "../settings/appSettings";
 
 /**
- * The reader plugins on this computer, and their workers: a plugin is
- * added - its environment set up, asking first for the network - only in
- * Settings, *Plugins*, and taken away there; its worker is started the
- * first time it is asked to read, then kept for the session. A worker reads
- * what it is sent and has no business on the network; the app keeps it off
- * it. Meno's own reading is always there, and runs in the app (./builtin).
- * The kinds a plugin brings are registered while it is added, and only
- * then (lib/io/kinds).
+ * The plugins on this computer, and the readers' workers: a plugin is added
+ * - its environment set up, asking first for the network - in Settings,
+ * *Plugins*, and taken away there; a plugin that fills a role is set up as
+ * well the first time the role is needed, unless it was taken away
+ * (lib/roles/worker). A reader's worker is started the first time it is
+ * asked to read, then kept for the session. A worker reads what it is sent
+ * and has no business on the network; the app keeps it off it. Meno's own
+ * reading is always there, and runs in the app (./builtin). The kinds a
+ * plugin brings are registered while it is added, and only then
+ * (lib/io/kinds).
  */
 export type ReaderState = "absent" | "adding" | "added" | "removing";
 
@@ -67,11 +71,19 @@ export async function addedReaders(plugins: readonly ReaderPlugin[] = READERS): 
   return added;
 }
 
-/** Adds a reader: sets its environment up, asking first whether it may download. */
-export async function addReader(p: PythonReader): Promise<void> {
+/** Whether the chemist took a plugin away, or brought it back: what sets it up again of itself (lib/roles/worker). */
+function markTakenAway(p: PythonPlugin, away: boolean) {
+  const settings = useAppSettings.getState();
+  const removed = settings.plugins.removed.filter((id) => id !== p.id);
+  settings.setPlugins({ ...settings.plugins, removed: away ? [...removed, p.id] : removed });
+}
+
+/** Adds a plugin: sets its environment up, asking first whether it may download. */
+export async function addPlugin(p: PythonPlugin): Promise<void> {
   setState(p.id, "adding");
   try {
     await ensurePyEnv(p.profile);
+    markTakenAway(p, false);
     setState(p.id, "added");
   } catch (e) {
     setState(p.id, "absent", e instanceof Error ? e.message : String(e));
@@ -79,8 +91,8 @@ export async function addReader(p: PythonReader): Promise<void> {
   }
 }
 
-/** Takes a reader away: its worker stopped, its environment removed. */
-export async function removeReader(p: PythonReader): Promise<void> {
+/** Takes a plugin away: its workers stopped, its environment removed - and, where it fills a role, not set up again of itself. */
+export async function removePlugin(p: PythonPlugin): Promise<void> {
   setState(p.id, "removing");
   try {
     const worker = running.get(p.id);
@@ -90,7 +102,9 @@ export async function removeReader(p: PythonReader): Promise<void> {
       client?.close();
       if (id) await invoke("ext_kill", { id }).catch(() => {});
     }
+    await stopRoleWorker(p.id);
     await removePyEnv(p.profile);
+    markTakenAway(p, true);
     setState(p.id, "absent");
   } catch (e) {
     setState(p.id, "added", e instanceof Error ? e.message : String(e));
@@ -112,7 +126,7 @@ export function readerClient(p: ReaderPlugin): Promise<Reader> {
 
 type Line = { id: string; line: string };
 
-async function start(p: PythonReader): Promise<{ client: ReaderClient; id: string }> {
+async function start(p: PythonPlugin): Promise<{ client: ReaderClient; id: string }> {
   if (!(await pyEnvReady(p.profile))) throw new Error(`${p.name} is not added: add it in Settings, Plugins.`);
   const python = await ensurePyEnv(p.profile);
   const script = await resolveResource(p.worker);
