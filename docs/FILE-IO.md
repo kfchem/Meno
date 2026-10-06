@@ -32,6 +32,11 @@ beyond files - SMILES, R/S, conformers, what comes later - are in
 
 ## What comes in, as built
 
+The inventory as it was when this plan was written (2026-10-06), before
+any of its steps, and kept as it was: what is built now is in
+ARCHITECTURE.md (*File format support*) and in each step's *As step ... was
+built* below.
+
 | Way in | Kind decided by | Read by, where | Becomes |
 | --- | --- | --- | --- |
 | **Open** (Cmd/Ctrl+O; `<input type=file>`, `App.tsx`) | `openedAs` (`ui/views/openFile.ts`) picks the tab - structure canvas or text - from the extension, `detectFormat` and `outputKindOf`; the canvas then decides again (`processFileContent`, `StructureEditor/utils/io.ts`) | see the formats below | a new tab |
@@ -562,7 +567,10 @@ Each step is a pull request from main.
    request, *As step 7 was built*), and Gaussian's input comes first,
    written by a plugin, with the writer contract (built with its second,
    *As step 7's writer was built*).
-8. **ARCHITECTURE.md** drawn from the table of kinds.
+8. **ARCHITECTURE.md** drawn from the table of kinds (built with this
+   step's pull request): its table of kinds of file lists every kind
+   Meno has, writes, and the plugins it carries bring and write, by id,
+   and a test (`src/lib/io/architecture.test.ts`) fails where the two part.
 
 As step 7 was built - decided with the maintainer on 2026-10-06:
 
