@@ -12,7 +12,8 @@ import {
 } from "./lib/core";
 import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
-import { openedAs, OPENABLE, type Opened } from "./ui/views/openFile";
+import { openedAs, OPENABLE, workspaceOfFile, type Opened } from "./ui/views/openFile";
+import { setTabOpener } from "./ui/views/tabOpener";
 import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
 import { keepClipboard, keepPageUnselected, openIntent, undoIntent } from "./lib/doc/shortcuts";
@@ -210,7 +211,14 @@ export default function App() {
     for (const path of picked ?? []) {
       const name = path.split(/[\\/]/).pop() || path;
       try {
-        const text = new TextDecoder().decode(await readFile(path));
+        const bytes = await readFile(path);
+        // (a workspace file: its workspace, and the outputs it keeps held)
+        const workspace = workspaceOfFile(bytes);
+        if (workspace != null) {
+          openTab(openedAs(name, workspace, path, MENO_KINDS.workspace));
+          continue;
+        }
+        const text = new TextDecoder().decode(bytes);
         // (what it is: told by what it holds - or, where nothing tells it, by a plugin asked)
         openTab(openedAs(name, text, path, await kindOfFile(name, text)));
       } catch (e) {
@@ -239,11 +247,18 @@ export default function App() {
     else void getCurrentWindow().destroy();
   };
   const openFiles = async (files: File[]) => {
-    for (const f of files) openTab(openedAs(f.name, await f.text()));
+    for (const f of files) {
+      const workspace = workspaceOfFile(new Uint8Array(await f.arrayBuffer()));
+      openTab(workspace != null ? openedAs(f.name, workspace, undefined, MENO_KINDS.workspace) : openedAs(f.name, await f.text()));
+    }
   };
   // (the key listened for once; what it does is this render's)
   const pickRef = useRef(pickFiles);
   pickRef.current = pickFiles;
+  // Tabs opened from inside others (ui/views/tabOpener): as a file opened is
+  const openRef = useRef(openTab);
+  openRef.current = openTab;
+  useEffect(() => setTabOpener((o) => openRef.current(o)), []);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!openIntent(e)) return;

@@ -1,6 +1,8 @@
 import type { TabKind } from "../../lib/core";
 import { extensionOf, kindOf, type Kind } from "../../lib/io/kinds";
 import { OFFERED } from "../../lib/calc/catalog";
+import { holdOutputsOf } from "../../lib/calc/asks";
+import { isMenoFile, readMenoFile } from "../../lib/doc/menoFile";
 
 /** What a file opens as: a tab of `kind`, named for the file, holding `data`. */
 export type Opened = { kind: TabKind; label: string; data: Record<string, unknown> };
@@ -12,6 +14,19 @@ const EXT_TEXT = new Set([
 
 /** The files Open offers: every kind Meno takes in (lib/io/kinds) - its own, and those the plugins on offer bring, added or not, so that one not added can be named - and text. */
 export const OPENABLE = [...new Set([...OFFERED.kinds.flatMap((k) => k.extensions), ...[...EXT_TEXT].map((ext) => `.${ext}`)])];
+
+/**
+ * A workspace file's workspace, its JSON - where `bytes` are one - with the
+ * outputs it keeps held for the session, each read from it when wanted
+ * (lib/calc/asks). None where they are no workspace file; throws, saying
+ * why, where they are one that does not read.
+ */
+export function workspaceOfFile(bytes: Uint8Array): string | null {
+  if (!isMenoFile(bytes)) return null;
+  const file = readMenoFile(bytes);
+  holdOutputsOf(file);
+  return file.workspace;
+}
 
 /**
  * The tab a file opens in, by what it is (lib/io/kinds): a Meno workspace,

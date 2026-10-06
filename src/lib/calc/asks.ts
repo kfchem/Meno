@@ -4,15 +4,18 @@
  * promise when it is wanted - readers keep nothing between - and what each
  * promise came to, once given. None of it is saved: a workspace saves the
  * values a molecule is showing (`calcShowing`), and a promise not yet given
- * is asked for from its output. Where that is not open this session, it is
- * read again where it was (its source's `path`) - where Meno may still read
- * it, and only if it is unchanged - and else the chemist is asked for it
+ * is asked for from its output. The outputs are kept in the workspace file
+ * as it is saved (`outputsToKeep`), and held again as it is opened, each
+ * read from it only when wanted (`holdOutputsOf`). One held nowhere is read
+ * again where it was (its source's `path`) - where Meno may still read it,
+ * and only if it is unchanged - and else the chemist is asked for it
  * (`findOutput`), the file chosen taken only if it is the same.
  */
 import { create } from "zustand";
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
+import type { KeptData, MenoFile } from "../doc/menoFile";
 import { readerById, readerIdOfLine, type ReaderPlugin } from "./catalog";
 import { kindOf } from "../io/kinds";
 import type { Reader } from "./client";
@@ -20,7 +23,8 @@ import type { CalcInfo, CalcSource } from "./output";
 import { isAsk, resultKey, resultsOn, type ListResult } from "./results";
 import { readerClient } from "./workers";
 
-const outputs = new Map<string, { name: string; text: string }>();
+/** The outputs held this session, by SHA-256: each its name and text - or, held in a workspace file opened, how to read its text. */
+const outputs = new Map<string, { name: string; text?: string; kind?: string; read?: () => string | null }>();
 const given = new Map<string, unknown>();
 const underWay = new Map<string, Promise<unknown>>();
 
@@ -38,8 +42,50 @@ async function sha256(text: string): Promise<string> {
 /** Keeps an opened output for the session: what its promises are asked for from - its name, its kind, its SHA-256, and where it is, where Open said. */
 export async function rememberOutput(name: string, text: string, kind: string, path?: string): Promise<CalcSource> {
   const hash = await sha256(text);
-  outputs.set(hash, { name, text });
+  outputs.set(hash, { name, text, kind });
   return { name, sha256: hash, kind, ...(path ? { path } : {}) };
+}
+
+/** An output held this session, its text read where it was held in a file - and taken only if it is what its SHA-256 says. */
+export async function heldOutput(hash: string): Promise<{ name: string; text: string } | undefined> {
+  const held = outputs.get(hash);
+  if (!held) return undefined;
+  if (held.text != null) return { name: held.name, text: held.text };
+  const text = held.read?.() ?? null;
+  if (text == null || (await sha256(text)) !== hash) {
+    outputs.delete(hash);
+    return undefined;
+  }
+  held.text = text;
+  delete held.read;
+  return { name: held.name, text };
+}
+
+/** The outputs a workspace file keeps, held for the session as it is opened - each read from it only when wanted. */
+export function holdOutputsOf(file: MenoFile): void {
+  const decoder = new TextDecoder();
+  for (const f of file.files) {
+    if (!f.media.startsWith("text/") || outputs.has(f.sha256)) continue;
+    outputs.set(f.sha256, {
+      name: f.name,
+      ...(f.kind ? { kind: f.kind } : {}),
+      read: () => {
+        const bytes = file.data(f.sha256);
+        return bytes ? decoder.decode(bytes) : null;
+      },
+    });
+  }
+}
+
+/** The outputs a workspace's molecules were read from, held this session, as its file keeps them: each once, as text. */
+export async function outputsToKeep(sources: readonly CalcSource[]): Promise<KeptData[]> {
+  const encoder = new TextEncoder();
+  const kept: KeptData[] = [];
+  for (const s of new Map(sources.map((x) => [x.sha256, x])).values()) {
+    const held = await heldOutput(s.sha256);
+    if (held) kept.push({ sha256: s.sha256, name: held.name, ...(s.kind ? { kind: s.kind } : {}), media: "text/plain", data: encoder.encode(held.text) });
+  }
+  return kept;
 }
 
 /** A file's text, read where it is: none where Meno may not read it there, or it is not there. */
@@ -57,8 +103,17 @@ async function foundAt(source: CalcSource, read: ReadAt): Promise<{ name: string
   const text = await read(source.path);
   if (text == null || (await sha256(text)) !== source.sha256) return null;
   const output = { name: source.name, text };
-  outputs.set(source.sha256, output);
+  outputs.set(source.sha256, { ...output, ...(source.kind ? { kind: source.kind } : {}) });
   return output;
+}
+
+/**
+ * An output a molecule was read from, as it can be had now: held this
+ * session - opened, or kept in a workspace opened - or read again where it
+ * was; none where it cannot be had.
+ */
+export async function outputOf(source: CalcSource, read: ReadAt = readAt): Promise<{ name: string; text: string } | undefined> {
+  return (await heldOutput(source.sha256)) ?? (await foundAt(source, read)) ?? undefined;
 }
 
 /** The chosen file, as asked for: its path and its text; none where none was chosen. */
@@ -89,7 +144,7 @@ export async function findOutput(source: CalcSource, pick: Pick = pickWithDialog
     useAsks.setState((was) => ({ state: Object.fromEntries(Object.entries(was.state).map(([k, s]) => [k, waiting([k, s]) ? { error, missing: true as const } : s])) }));
     throw new Error(error);
   }
-  outputs.set(source.sha256, { name: source.name, text: chosen.text });
+  outputs.set(source.sha256, { name: source.name, text: chosen.text, ...(source.kind ? { kind: source.kind } : {}) });
   useAsks.setState((was) => ({ state: Object.fromEntries(Object.entries(was.state).filter((e) => !waiting(e))) }));
   return true;
 }
@@ -134,7 +189,7 @@ async function ask(
   readerOf: (p: ReaderPlugin) => Promise<Reader>,
   read: ReadAt,
 ): Promise<unknown> {
-  const output = calc.source ? (outputs.get(calc.source.sha256) ?? (await foundAt(calc.source, read))) : undefined;
+  const output = calc.source ? await outputOf(calc.source, read) : undefined;
   if (!calc.source || !output) {
     const error = `Open ${calc.source?.name ?? "the calculation's output"} again to show this.`;
     setState(k, { error, ...(calc.source ? { missing: true as const } : {}) });

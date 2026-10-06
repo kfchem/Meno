@@ -37,6 +37,9 @@ src/
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
+  lib/doc/                documents and undo; savers.ts; menoFile.ts: the workspace file, a zip
+                          (mimetype, workspace.json, files kept by SHA-256), written off the page
+                          (menoFileWorker.ts) - docs/FILE-IO.md, *The workspace file*
   lib/rdkit/              the chemistry worker: client, sidecar, the MOL blocks it is asked about
   lib/calc/               readers of calculation output: the catalog, reading, promises, Meno's own reading
   lib/plugins/            plugins' manifests (data), read and checked; the plugins Meno carries, found in their folders

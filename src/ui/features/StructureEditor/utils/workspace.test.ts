@@ -4,8 +4,10 @@ vi.mock("../../../../lib/calc/workers", () => ({ readerClient: () => Promise.rej
 import { connectStoreToDocument, createEditorStore } from "../store";
 import { createStructureDocument } from "../document";
 import { DEFAULT_STYLE_CHOICE } from "../../../../lib/chem/style";
-import { readWorkspace, workspaceText } from "./workspace";
-import { askFor, rememberOutput } from "../../../../lib/calc/asks";
+import { readWorkspace, workspaceFile, workspaceText } from "./workspace";
+import { askFor, heldOutput, outputOf, rememberOutput } from "../../../../lib/calc/asks";
+import { readMenoFile } from "../../../../lib/doc/menoFile";
+import { workspaceOfFile } from "../../../views/openFile";
 import { floatsText, resultKey } from "../../../../lib/calc/results";
 
 const water3d = {
@@ -124,6 +126,38 @@ describe("a workspace file", () => {
     expect(rows[0].surface).toEqual(grid);
     expect(rows[1].surface).toEqual({ ask: "grid:1" });
     expect(other.getState().molecules3d[0].calc!.source).toEqual(source);
+  });
+
+  it("is a file that keeps the outputs its molecules were read from, said to be nowhere else, read again from it when wanted", async () => {
+    const text = "a cube's text, opened from /data/run/water.cube";
+    const source = await rememberOutput("water.cube", text, "cube", "/data/run/water.cube");
+    const doc = createStructureDocument();
+    const store = createEditorStore(doc);
+    connectStoreToDocument(store, doc);
+    store.getState().pasteModel({ atoms: [], bonds: [], molecules3d: [{ ...water3d, at: { x: 0, y: 0 }, calc: { readers: ["meno"], source } as never }] });
+    const bytes = await workspaceFile(store.getState());
+    // (the output in it, once; where it was, no longer said)
+    const file = readMenoFile(bytes);
+    expect(file.files).toEqual([{ sha256: source.sha256, name: "water.cube", kind: "cube", media: "text/plain", size: new TextEncoder().encode(text).length }]);
+    expect(file.workspace).not.toContain("/data/run");
+    const json = workspaceOfFile(bytes)!;
+    expect(readWorkspace(json)!.drawn.molecules3d![0].calc!.source).toEqual({ name: "water.cube", sha256: source.sha256, kind: "cube" });
+    expect((await outputOf(readWorkspace(json)!.drawn.molecules3d![0].calc!.source!))?.text).toBe(text);
+    // (one not held this session is not kept, and keeps where it was)
+    const gone = { name: "gone.out", sha256: "e".repeat(64), kind: "orca", path: "/data/gone.out" };
+    store.getState().pasteModel({ atoms: [], bonds: [], molecules3d: [{ ...water3d, at: { x: 9, y: 0 }, calc: { readers: ["cclib"], source: gone } as never }] });
+    const both = readMenoFile(await workspaceFile(store.getState()));
+    expect(both.files.map((f) => f.name)).toEqual(["water.cube"]);
+    expect(both.workspace).toContain("/data/gone.out");
+  });
+
+  it("holds an output it keeps only if it is what its SHA-256 says", async () => {
+    const { menoFileBytes } = await import("../../../../lib/doc/menoFile");
+    const bytes = menoFileBytes('{"format":"meno-workspace","version":1,"atoms":[],"bonds":[]}', [
+      { sha256: "f".repeat(64), name: "forged.out", media: "text/plain", data: new TextEncoder().encode("not what it says") },
+    ]);
+    workspaceOfFile(bytes);
+    expect(await heldOutput("f".repeat(64))).toBeUndefined();
   });
 
   it("is not read where it is not one, or of a version this one does not read", () => {
