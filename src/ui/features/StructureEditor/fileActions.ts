@@ -31,37 +31,51 @@ function stem(path: string): string {
   return name.replace(/\.[^.]*$/, "");
 }
 
-/** The kinds of file a canvas is saved as, by extension, with their names. */
-const FILE_KINDS = { meno: "Meno workspace", sdf: "SD file", mol: "MOL file", rxn: "RXN file" } as const;
-type FileKind = keyof typeof FILE_KINDS;
+/** The kinds of file a canvas is exported as, by extension, with their names. */
+const EXPORT_KINDS = { mol: "MOL file", sdf: "SD file", rxn: "RXN file", svg: "SVG picture" } as const;
+type ExportKind = keyof typeof EXPORT_KINDS;
+
+/** What is on a canvas, as far as what it can be exported as goes. */
+type Holds = { solid: boolean; reaction: boolean; drawn: boolean };
 
 /**
- * What a canvas can be saved as, the one suggested first: with molecules in
- * 3D, only what keeps them - a workspace, or an SD file; a reaction, as an
- * RXN file first; a structure, as a MOL file first.
+ * What a canvas can be exported as, the one suggested first (docs/FILE-IO.md:
+ * Save writes a workspace, everything else is Export): a reaction, as an
+ * RXN file first; molecules in 3D with nothing drawn beside them, as an SD
+ * file, which keeps them; a structure, as a MOL file first. Always as a
+ * picture too.
  */
-export function saveKinds(what: { solid: boolean; reaction: boolean }): FileKind[] {
-  if (what.solid) return ["meno", "sdf"];
-  return what.reaction ? ["rxn", "mol", "sdf", "meno"] : ["mol", "sdf", "rxn", "meno"];
+export function exportKinds(what: Holds): ExportKind[] {
+  if (what.reaction) return ["rxn", "mol", "sdf", "svg"];
+  if (what.solid && !what.drawn) return ["sdf", "svg"];
+  return ["mol", "sdf", "svg"];
+}
+
+/** `path` with the extension `ext` in place of its own. */
+function withExtension(path: string, ext: string): string {
+  return `${path.replace(/\.[^.\\/]*$/, "")}.${ext}`;
 }
 
 /**
- * Where Save As suggests saving: where the canvas was last saved; else the
- * name of the file last opened over it - either as the first kind it can be
- * saved as (`saveKinds`), if it is none of them; else a name for what is
- * drawn.
+ * Where Save As suggests saving the workspace: where the canvas was last
+ * saved; else beside the file last opened over it, by its name; else
+ * "workspace.meno".
  */
-export function suggestedSavePath(
-  state: Pick<EditorState, "savedPath" | "openedName">,
-  what: { solid: boolean; reaction: boolean },
-): string {
-  const kinds = saveKinds(what);
+export function suggestedSavePath(state: Pick<EditorState, "savedPath" | "openedName">): string {
   const from = state.savedPath ?? state.openedName;
-  if (from) {
-    const fits = kinds.some((k) => from.toLowerCase().endsWith(`.${k}`));
-    return fits ? from : `${from.replace(/\.[^.\\/]*$/, "")}.${kinds[0]}`;
-  }
-  return `${what.solid ? "workspace" : what.reaction ? "reaction" : "structure"}.${kinds[0]}`;
+  return from ? withExtension(from, "meno") : "workspace.meno";
+}
+
+/**
+ * Where Export suggests: the canvas's name - where it was saved, or the file
+ * opened over it - as the first kind it can be exported as, unless it is of
+ * one already; else a name for what is on it.
+ */
+export function suggestedExportPath(state: Pick<EditorState, "savedPath" | "openedName">, what: Holds): string {
+  const kinds = exportKinds(what);
+  const from = state.savedPath ?? state.openedName;
+  if (from) return kinds.some((k) => from.toLowerCase().endsWith(`.${k}`)) ? from : withExtension(from, kinds[0]);
+  return `${what.reaction ? "reaction" : what.solid && !what.drawn ? "molecules" : "structure"}.${kinds[0]}`;
 }
 
 /**
@@ -218,10 +232,11 @@ export function drawingSvg(
 }
 
 /**
- * Save, Save As and Export SVG for the canvas this is called in. Save writes
- * where the canvas was last saved, or asks where the first time; either way
- * the document is then saved, and the tab's unsaved mark goes. An export is
- * a copy, and leaves that alone. `error` says what went wrong, if anything.
+ * Save, Save As and Export for the canvas this is called in. Save writes the
+ * workspace - all of it, as it is - where the canvas was last saved, or asks
+ * where the first time; either way the document is then saved, and the
+ * tab's unsaved mark goes. Export writes another kind of file, a copy, and
+ * leaves that alone. `error` says what went wrong, if anything.
  */
 export function useFileActions(nameTab?: (label: string) => void) {
   const store = useEditorStore();
@@ -230,74 +245,75 @@ export function useFileActions(nameTab?: (label: string) => void) {
   const naming = useRef(nameTab);
   naming.current = nameTab;
 
-  const attempt = useCallback(async (what: string, run: () => Promise<void>) => {
+  // (what `run` gives; nothing, where it failed - and then says why)
+  const attempt = useCallback(async <T,>(what: string, run: () => Promise<T>): Promise<T | undefined> => {
     try {
       setError(null);
-      await run();
+      return await run();
     } catch (e) {
       setError(`${what} failed: ${e instanceof Error ? e.message : String(e)}`);
+      return undefined;
     }
   }, []);
 
   const saveTo = useCallback(
     async (path: string) => {
-      const state = store.getState();
-      await writeTextFile(
-        path,
-        isWorkspaceFile(path)
-          ? workspaceText(state)
-          : structureFileText({ ...drawnOf(state), molecules3d: carriedOf(state) }, path),
-      );
+      await writeTextFile(path, workspaceText(store.getState()));
       store.getState().markSavedAs(path);
       naming.current?.(fileNameOf(path));
     },
     [store],
   );
 
+  /** The canvas saved as a workspace, where the chemist says; whether it was. */
   const saveAs = useCallback(
-    () =>
-      attempt("Save", async () => {
-        const state = store.getState();
-        const solid = state.molecules3d.length > 0;
-        const reaction = state.arrows.length > 0;
-        const path = await saveDialog({
-          title: solid ? "Save workspace" : reaction ? "Save reaction" : "Save structure",
-          defaultPath: suggestedSavePath(state, { solid, reaction }),
-          filters: saveKinds({ solid, reaction }).map((k) => ({ name: FILE_KINDS[k], extensions: [k] })),
+    async () =>
+      (await attempt("Save", async () => {
+        const picked = await saveDialog({
+          title: "Save workspace",
+          defaultPath: suggestedSavePath(store.getState()),
+          filters: [{ name: "Meno workspace", extensions: ["meno"] }],
         });
-        if (path) await saveTo(path);
-      }),
+        if (!picked) return false;
+        // (a workspace, whatever it was called)
+        const path = isWorkspaceFile(picked) ? picked : `${picked}.meno`;
+        await saveTo(path);
+        return true;
+      })) === true,
     [attempt, saveTo, store],
   );
 
-  const save = useCallback(() => {
-    const { savedPath: path, molecules3d } = store.getState();
-    // (a MOL or RXN file cannot keep molecules in 3D: asked where, then)
-    const keeps = path && (!molecules3d.length || /\.(meno|sdf)$/i.test(path));
-    return keeps ? attempt("Save", () => saveTo(path)) : saveAs();
+  /** The canvas saved where it was saved last, or else where the chemist says; whether it was. */
+  const save = useCallback(async () => {
+    const { savedPath: path } = store.getState();
+    if (path && isWorkspaceFile(path)) return (await attempt("Save", async () => (await saveTo(path), true))) === true;
+    return saveAs();
   }, [attempt, saveAs, saveTo, store]);
 
-  const exportSvg = useCallback(
+  /** The canvas written as another kind of file - a MOL, SD or RXN file, a picture - where the chemist says. */
+  const exportAs = useCallback(
     () =>
       attempt("Export", async () => {
-        const { savedPath, openedName } = store.getState();
-        const named = savedPath ?? openedName;
+        const state = store.getState();
+        const what = { solid: state.molecules3d.length > 0, reaction: state.arrows.length > 0, drawn: state.model.atoms.length > 0 };
         const path = await saveDialog({
-          title: "Export as SVG",
-          defaultPath: named ? `${stem(named)}.svg` : "structure.svg",
-          filters: [{ name: "SVG picture", extensions: ["svg"] }],
+          title: "Export",
+          defaultPath: suggestedExportPath(state, what),
+          filters: exportKinds(what).map((k) => ({ name: EXPORT_KINDS[k], extensions: [k] })),
         });
         if (!path) return;
-        const state = store.getState();
-        // The style the canvas is drawn in: the document's own, or the app's.
-        const style = styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle);
         // (everything on the canvas, the molecules in 3D as they are seen)
-        await writeTextFile(path, drawingSvg({ ...drawnOf(state), molecules3d: carriedOf(state) }, state, style, true));
+        const drawn = { ...drawnOf(state), molecules3d: carriedOf(state) };
+        if (/\.svg$/i.test(path)) {
+          // The style the canvas is drawn in: the document's own, or the app's.
+          const style = styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle);
+          await writeTextFile(path, drawingSvg(drawn, state, style, true));
+        } else await writeTextFile(path, structureFileText(drawn, path));
       }),
     [attempt, store],
   );
 
-  return { save, saveAs, exportSvg, error, dismissError: () => setError(null) };
+  return { save, saveAs, exportAs, error, dismissError: () => setError(null) };
 }
 
 /** Everything the canvas draws: its structures, arrows and "+" signs. */

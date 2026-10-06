@@ -7,8 +7,8 @@ import { useEffect, useRef } from "react";
  * rather than as a system dialog, so it looks the same on every platform and
  * shows up in a window capture.
  *
- * Nothing here can be saved yet, so the choice is to keep it open or to let
- * the changes go; a Save button joins these once saving exists.
+ * The choice is to keep it open, to let the changes go, or - where what has
+ * them can be saved - to save them first.
  */
 export default function ConfirmDiscard({
   title,
@@ -16,12 +16,15 @@ export default function ConfirmDiscard({
   discardLabel,
   onCancel,
   onDiscard,
+  onSave,
 }: {
   title: string;
   message: string;
   discardLabel: string;
   onCancel: () => void;
   onDiscard: () => void;
+  /** Saves first, where what has the changes can be saved. */
+  onSave?: () => void;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -71,6 +74,14 @@ export default function ConfirmDiscard({
           >
             {discardLabel}
           </button>
+          {onSave && (
+            <button
+              onClick={onSave}
+              className="rounded-md border border-gh-line bg-gh-black px-3 py-1.5 text-white transition-colors duration-150 ease-meno hover:bg-gray-800"
+            >
+              Save
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>

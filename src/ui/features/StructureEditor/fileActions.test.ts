@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drawingSvg, exportPxPerWorld, fileNameOf, saveKinds, structureFileText, suggestedSavePath } from "./fileActions";
+import { drawingSvg, exportKinds, exportPxPerWorld, fileNameOf, structureFileText, suggestedExportPath, suggestedSavePath } from "./fileActions";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { ACS_1996, RSC } from "../../../lib/chem/style";
 import type { Model } from "./store/types";
@@ -32,29 +32,35 @@ describe("structureFileText", () => {
 });
 
 describe("suggestedSavePath", () => {
-  const structure = { solid: false, reaction: false };
-  const reaction = { solid: false, reaction: true };
-  const solid = { solid: true, reaction: false };
+  it("saves a workspace: where the canvas was saved; else beside the file opened over it, by its name; else workspace.meno", () => {
+    expect(suggestedSavePath({ savedPath: "/work/a.meno", openedName: null })).toBe("/work/a.meno");
+    expect(suggestedSavePath({ savedPath: null, openedName: "b.sdf" })).toBe("b.meno");
+    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" })).toBe("conformers.meno");
+    expect(suggestedSavePath({ savedPath: null, openedName: null })).toBe("workspace.meno");
+  });
+});
 
-  it("suggests where the canvas was saved; else the file opened over it; else a name for what is drawn", () => {
-    expect(suggestedSavePath({ savedPath: "/work/a.mol", openedName: null }, structure)).toBe("/work/a.mol");
-    expect(suggestedSavePath({ savedPath: null, openedName: "b.sdf" }, structure)).toBe("b.sdf");
-    expect(suggestedSavePath({ savedPath: null, openedName: null }, structure)).toBe("structure.mol");
-    expect(suggestedSavePath({ savedPath: null, openedName: null }, reaction)).toBe("reaction.rxn");
-    expect(suggestedSavePath({ savedPath: null, openedName: null }, solid)).toBe("workspace.meno");
+describe("Export", () => {
+  const structure = { solid: false, reaction: false, drawn: true };
+  const reaction = { solid: false, reaction: true, drawn: true };
+  const solid = { solid: true, reaction: false, drawn: false };
+  const both = { solid: true, reaction: false, drawn: true };
+
+  it("offers what the canvas can be written as, the fittest first, and always a picture", () => {
+    expect(exportKinds(structure)).toEqual(["mol", "sdf", "svg"]);
+    expect(exportKinds(reaction)).toEqual(["rxn", "mol", "sdf", "svg"]);
+    // (molecules in 3D alone: an SD file keeps them; a drawing beside them is a MOL file's too)
+    expect(exportKinds(solid)).toEqual(["sdf", "svg"]);
+    expect(exportKinds(both)).toEqual(["mol", "sdf", "svg"]);
   });
 
-  it("suggests a file Meno does not write as a MOL file of that name, or an RXN file for a reaction", () => {
-    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, structure)).toBe("conformers.mol");
-    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, reaction)).toBe("conformers.rxn");
-  });
-
-  it("with molecules in 3D, suggests only what keeps them: the same name, in the same folder, as a workspace", () => {
-    expect(suggestedSavePath({ savedPath: "/work/a.mol", openedName: null }, solid)).toBe("/work/a.meno");
-    expect(suggestedSavePath({ savedPath: "/work/a.sdf", openedName: null }, solid)).toBe("/work/a.sdf");
-    expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" }, solid)).toBe("conformers.meno");
-    expect(saveKinds(solid)).toEqual(["meno", "sdf"]);
-    expect(saveKinds(reaction)[0]).toBe("rxn");
+  it("suggests the canvas's name as the first kind it can be written as, unless it is of one already", () => {
+    expect(suggestedExportPath({ savedPath: "/work/a.meno", openedName: null }, structure)).toBe("/work/a.mol");
+    expect(suggestedExportPath({ savedPath: null, openedName: "b.sdf" }, structure)).toBe("b.sdf");
+    expect(suggestedExportPath({ savedPath: null, openedName: "conformers.xyz" }, reaction)).toBe("conformers.rxn");
+    expect(suggestedExportPath({ savedPath: null, openedName: null }, structure)).toBe("structure.mol");
+    expect(suggestedExportPath({ savedPath: null, openedName: null }, reaction)).toBe("reaction.rxn");
+    expect(suggestedExportPath({ savedPath: null, openedName: null }, solid)).toBe("molecules.sdf");
   });
 });
 

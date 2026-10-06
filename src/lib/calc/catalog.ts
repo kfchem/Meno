@@ -52,6 +52,8 @@ export type PythonReader = ReaderBase & {
   profile: `reader-${string}`;
   lock: string;
   worker: string;
+  /** What makes its environment: uv from PyPI (unsaid), or pixi - its lock a pixi.lock - where it needs conda-forge. */
+  env?: "pixi";
 };
 /**
  * A reader that comes with Meno: nothing to add or take away, nothing
@@ -65,6 +67,13 @@ export type ReaderPlugin = PythonReader | BuiltinReader;
 export const MARK_REACH = 64 * 1024;
 
 export const OUTPUT_KINDS: readonly OutputKind[] = [
+  {
+    id: "molden",
+    name: "Molden file",
+    program: "the program",
+    extensions: [".molden", ".mld"],
+    marks: [/^\s*\[Molden Format\]/i],
+  },
   {
     id: "cube",
     name: "Cube file",
@@ -115,6 +124,19 @@ export const READER_PLUGINS: readonly ReaderPlugin[] = [
     profile: "reader-cclib",
     lock: "resources/py/requirements.reader-cclib.lock",
     worker: "resources/workers/reader_cclib.py",
+  },
+  {
+    id: "pyscf",
+    name: "PySCF",
+    version: "2.14.0",
+    description: "Works out orbitals and densities on a grid, from a calculation's output (read with cclib) or a Molden file.",
+    licence: "Apache-2.0",
+    homepage: "https://pyscf.org",
+    reads: ["orca", "gaussian", "gaussian-fchk", "molden"],
+    profile: "reader-pyscf",
+    lock: "resources/pixi/reader-pyscf/pixi.lock",
+    worker: "resources/workers/reader_pyscf.py",
+    env: "pixi",
   },
   {
     id: "cube",

@@ -93,7 +93,7 @@ describe("reading an output", () => {
   it("says which reader to add, where none that reads it is", () => {
     const why = whoReads(orca, "job.out", new Set(), {});
     expect(why).toBeInstanceOf(Error);
-    expect((why as Error).message).toBe("To read job.out (ORCA output), add cclib in Settings, Calculation readers.");
+    expect((why as Error).message).toBe("To read job.out (ORCA output), add cclib or PySCF in Settings, Calculation readers.");
   });
 
   it("says so where the output holds no geometry, as an xTB single point's does not", () => {

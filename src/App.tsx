@@ -16,6 +16,7 @@ import { openedAs, OPENABLE, type Opened } from "./ui/views/openFile";
 import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
 import { keepClipboard, keepPageUnselected, openIntent, undoIntent } from "./lib/doc/shortcuts";
+import { saverOf } from "./lib/doc/savers";
 import { isBlankDocument, type StructureDocument } from "./ui/features/StructureEditor/document";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "@tauri-apps/api/core";
@@ -205,6 +206,26 @@ export default function App() {
         setNotice(`${name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
+  };
+  // Closing with unsaved changes: the tabs that hold them, and whether
+  // each can be saved (lib/doc/savers) - a text tab cannot, yet.
+  const unsavedOf = (p: { kind: "tab"; id: string } | { kind: "window" }): string[] =>
+    p.kind === "tab"
+      ? [p.id]
+      : Object.values(stateRef.current.tabsById)
+          .filter((t) => t.meta.dirty && officeIdOf(t) == null)
+          .map((t) => t.meta.id);
+  const savable = (p: { kind: "tab"; id: string } | { kind: "window" }) => unsavedOf(p).every((id) => saverOf(id));
+  // Each saved in turn - its tab brought forward, so that it is seen which
+  // is being saved - and then closed; kept open if one is not saved.
+  const saveThenClose = async (p: { kind: "tab"; id: string } | { kind: "window" }) => {
+    setPendingClose(null);
+    for (const id of unsavedOf(p)) {
+      dispatch({ type: "SELECT_TAB", id });
+      if (!(await saverOf(id)?.())) return;
+    }
+    if (p.kind === "tab") closeTab(p.id);
+    else void getCurrentWindow().destroy();
   };
   const openFiles = async (files: File[]) => {
     for (const f of files) openTab(openedAs(f.name, await f.text()));
@@ -421,6 +442,7 @@ export default function App() {
             // destroy, not close: close would only ask again.
             else void getCurrentWindow().destroy();
           }}
+          onSave={savable(pendingClose) ? () => void saveThenClose(pendingClose) : undefined}
         />
       )}
       </AnimatePresence>

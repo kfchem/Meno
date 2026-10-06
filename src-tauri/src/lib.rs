@@ -16,6 +16,7 @@ mod fonts;
 #[cfg(windows)]
 mod drop;
 mod net;
+mod pixienv;
 mod tools;
 mod update;
 #[cfg(windows)]
@@ -42,6 +43,9 @@ struct PyEnvInfo {
     purpose: String,
     #[serde(default)]
     label: String,
+    /// What makes it: "uv" (or unsaid), or "pixi" - an environment that needs conda-forge.
+    #[serde(default)]
+    host: String,
 }
 
 /// Whether a lock file pins its packages by hash as well as by version.
@@ -98,12 +102,20 @@ fn valid_python_version(v: &str) -> bool {
 /// `PyEnvInfo` paths after validation; all relative to their base directory.
 #[derive(Debug)]
 struct ValidatedEnv {
+    /// Made by pixi (pixienv.rs), not by uv.
+    pixi: bool,
     lock: PathBuf,
     venv_home: PathBuf,
     venv_python_rel: PathBuf,
 }
 
 fn validate_env_info(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
+    if info.host == "pixi" {
+        return validate_pixi_env(info);
+    }
+    if !info.host.is_empty() && info.host != "uv" {
+        return Err(format!("unexpected host: {}", info.host));
+    }
     let lock = safe_relative(&info.lock_path)?;
     if !lock.starts_with("resources/py")
         || lock.extension().and_then(|e| e.to_str()) != Some("lock")
@@ -119,6 +131,37 @@ fn validate_env_info(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
         return Err(format!("invalid Python version: {}", info.python_version));
     }
     Ok(ValidatedEnv {
+        pixi: false,
+        lock,
+        venv_home,
+        venv_python_rel,
+    })
+}
+
+/// A pixi environment's paths: its lock must be a bundled
+/// `resources/pixi/<name>/pixi.lock` (its manifest beside it), its home
+/// `pixi/<name>` in the app data, and its interpreter where pixi puts it.
+fn validate_pixi_env(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
+    let name_ok = |n: &str| !n.is_empty() && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    let lock = safe_relative(&info.lock_path)?;
+    let parts: Vec<String> = lock.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+    let name = match parts.as_slice() {
+        [r, p, name, file] if r == "resources" && p == "pixi" && file == "pixi.lock" && name_ok(name) => name.clone(),
+        _ => return Err(format!("unexpected lock file: {}", info.lock_path)),
+    };
+    let venv_home = safe_relative(&info.venv_home)?;
+    if venv_home != Path::new("pixi").join(&name) {
+        return Err(format!("unexpected environment location: {}", info.venv_home));
+    }
+    let venv_python_rel = safe_relative(&info.venv_python_rel)?;
+    let python_ok = [Path::new(".pixi/envs/default/bin/python"), Path::new(".pixi/envs/default/python.exe")]
+        .iter()
+        .any(|p| venv_python_rel == p.components().collect::<PathBuf>());
+    if !python_ok {
+        return Err(format!("unexpected interpreter: {}", info.venv_python_rel));
+    }
+    Ok(ValidatedEnv {
+        pixi: true,
         lock,
         venv_home,
         venv_python_rel,
@@ -204,40 +247,39 @@ fn no_window(cmd: &mut Command) {
 fn no_window(_cmd: &mut Command) {}
 
 /// The folder a reader plugin's environment lives in - `uv/reader-<id>`,
-/// its `venv` within - and nothing else: Meno's own environments are not
-/// taken away from Settings.
+/// its `venv` within, or pixi's `pixi/reader-<id>` - and nothing else:
+/// Meno's own environments are not taken away from Settings.
 fn reader_env_dir(venv_home: &Path) -> Result<PathBuf, String> {
     let parts: Vec<String> = venv_home
         .components()
         .map(|c| c.as_os_str().to_string_lossy().into_owned())
         .collect();
+    let reader = |name: &str| {
+        name.len() > "reader-".len() && name.starts_with("reader-") && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    };
     match parts.as_slice() {
-        [uv, name, venv]
-            if uv == "uv"
-                && venv == "venv"
-                && name.len() > "reader-".len()
-                && name.starts_with("reader-")
-                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') =>
-        {
-            Ok(Path::new("uv").join(name))
-        }
+        [uv, name, venv] if uv == "uv" && venv == "venv" && reader(name) => Ok(Path::new("uv").join(name)),
+        [pixi, name] if pixi == "pixi" && reader(name) => Ok(Path::new("pixi").join(name)),
         _ => Err(format!("not a reader's environment: {}", venv_home.display())),
     }
 }
 
-/// A reader plugin's record of being set up, beside the others':
-/// `uv/stamps/reader-<id>.json`, for the folder `reader_env_dir` gives.
+/// A reader plugin's record of being set up, beside the others' of its
+/// maker: `uv/stamps/reader-<id>.json`, or `pixi/stamps/...`, for the
+/// folder `reader_env_dir` gives.
 fn reader_stamp(dir: &Path) -> Result<PathBuf, String> {
     let name = dir
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| format!("not a reader's environment: {}", dir.display()))?;
-    Ok(Path::new("uv").join("stamps").join(format!("{name}.json")))
+    let maker = dir.components().next().map(|c| c.as_os_str().to_owned()).unwrap_or_default();
+    Ok(Path::new(&maker).join("stamps").join(format!("{name}.json")))
 }
 
 /// Takes a reader plugin's environment away, and its record of being set
-/// up, when it is removed in Settings, Calculation readers. Its worker is
-/// stopped first, by the app.
+/// up, when it is removed in Settings, Calculation readers - and, with the
+/// last of pixi's, what pixi keeps for them. Its worker is stopped first,
+/// by the app.
 #[tauri::command]
 async fn py_env_remove(app: AppHandle, payload: PyEnvInfo) -> Result<(), String> {
     let env = validate_env_info(&payload)?;
@@ -250,6 +292,13 @@ async fn py_env_remove(app: AppHandle, payload: PyEnvInfo) -> Result<(), String>
     let stamp = data.join(reader_stamp(&rel)?);
     if stamp.exists() {
         std::fs::remove_file(&stamp).map_err(|e| format!("removing {}: {e}", stamp.display()))?;
+    }
+    if env.pixi {
+        // (the environment is gone either way: a cache not taken away is
+        // only room not given back, and pixi finds it again if needed)
+        for kept in pixienv::unused_keeping(&data.join("pixi")) {
+            let _ = std::fs::remove_dir_all(kept);
+        }
     }
     Ok(())
 }
@@ -356,6 +405,56 @@ async fn py_env_setup_uv(
     Ok(())
 }
 
+/// Makes a pixi environment (pixienv.rs): pixi itself first, where it is
+/// not here; the manifest and lock Meno carries copied into its folder;
+/// `pixi install` from the lock as it is; and what activation sets, kept.
+#[tauri::command]
+async fn py_env_setup_pixi(app: AppHandle, payload: PyEnvInfo, net: State<'_, net::Net>) -> Result<(), String> {
+    let env = validate_env_info(&payload)?;
+    if !env.pixi {
+        return Err("not a pixi environment".into());
+    }
+    let label = if payload.label.is_empty() { "Setting up Python".to_string() } else { payload.label.clone() };
+    let task = net.begin(&setup_purpose(&payload)?, &label)?;
+    let data = app_data_dir(&app)?;
+    let lock = resource_path(&app, &env.lock)?;
+    let manifest_from = lock.with_file_name("pixi.toml");
+    let dir = data.join(&env.venv_home);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::copy(&manifest_from, dir.join("pixi.toml")).map_err(|e| format!("copying the manifest: {e}"))?;
+    std::fs::copy(&lock, dir.join("pixi.lock")).map_err(|e| format!("copying the lock: {e}"))?;
+    let manifest = dir.join("pixi.toml");
+    // (pixi itself, the first time: under the same task, the same consent)
+    let pixi = tools::ensure(&data, tools::Tool::Pixi, task.proxy_url()).await?;
+
+    let mut install = pixienv::install_command(&pixi, &data, &manifest);
+    install.stdout(Stdio::piped()).stderr(Stdio::piped());
+    no_window(&mut install);
+    task.route(&mut install);
+    let mut child = install.spawn().map_err(|e| format!("spawn pixi install: {e}"))?;
+    pipe_logs(&app, child.stdout.take().unwrap(), "uv:log");
+    pipe_logs(&app, child.stderr.take().unwrap(), "uv:err");
+    if !child.wait().map_err(|e| e.to_string())?.success() {
+        return Err("pixi install failed".into());
+    }
+
+    let mut hook = pixienv::activation_command(&pixi, &data, &manifest);
+    no_window(&mut hook);
+    task.route(&mut hook);
+    let out = hook.output().map_err(|e| format!("spawn pixi shell-hook: {e}"))?;
+    if !out.status.success() {
+        for line in String::from_utf8_lossy(&out.stderr).lines() {
+            let _ = app.emit("uv:err", line.to_string());
+        }
+        return Err("pixi shell-hook failed".into());
+    }
+    let activation = pixienv::read_activation(&String::from_utf8_lossy(&out.stdout))?;
+    let text = serde_json::to_string_pretty(&activation).map_err(|e| e.to_string())?;
+    std::fs::write(pixienv::activation_path(&dir), text).map_err(|e| format!("keeping the activation: {e}"))?;
+    task.finish(true);
+    Ok(())
+}
+
 // Pipe stdout/stderr from child processes to Tauri events. Reading is
 // blocking, so it runs on a dedicated OS thread rather than an async worker
 // (which it would otherwise tie up for the lifetime of the child).
@@ -419,19 +518,32 @@ async fn ext_spawn_sidecar(
     state: State<'_, ProcState>,
     net: State<'_, net::Net>,
 ) -> Result<String, String> {
-    let venv_root = app_data_dir(&app)?
-        .join("uv")
-        .canonicalize()
-        .map_err(|_| "the Python environment is not set up".to_string())?;
+    // (an interpreter of uv's environments, or of pixi's)
+    let data = app_data_dir(&app)?;
+    let roots: Vec<PathBuf> = ["uv", "pixi"].iter().filter_map(|r| data.join(r).canonicalize().ok()).collect();
+    if roots.is_empty() {
+        return Err("the Python environment is not set up".to_string());
+    }
     let workers_root = resource_path(&app, Path::new("resources/workers"))?
         .canonicalize()
         .map_err(|e| format!("worker directory: {e}"))?;
     let entry = PathBuf::from(&payload.entry);
-    let cwd = validate_sidecar(&entry, &payload.args, &venv_root, &workers_root)?;
+    let (cwd, root) = roots
+        .iter()
+        .find_map(|root| validate_sidecar(&entry, &payload.args, root, &workers_root).ok().map(|cwd| (cwd, root.clone())))
+        .ok_or_else(|| validate_sidecar(&entry, &payload.args, &roots[0], &workers_root).err().unwrap_or_default())?;
 
     let mut cmd = Command::new(&entry);
     cmd.args(&payload.args).current_dir(cwd);
     no_window(&mut cmd);
+    // a pixi environment's worker, activated as the environment was made to be
+    if root.file_name().and_then(|n| n.to_str()) == Some("pixi") {
+        let dir = entry.parent().and_then(|p| p.canonicalize().ok()).and_then(|p| pixienv::env_dir_of(&p, &root));
+        let kept = dir.and_then(|d| std::fs::read_to_string(pixienv::activation_path(&d)).ok());
+        if let Some(activation) = kept.and_then(|t| serde_json::from_str::<pixienv::Activation>(&t).ok()) {
+            pixienv::activate(&mut cmd, &activation);
+        }
+    }
     // Whatever the code run in the console reaches for goes through the
     // proxy, seen and logged, as a task that lasts as long as the sidecar.
     // The other workers run no one's code and need no network; nor may the
@@ -707,6 +819,7 @@ pub fn run() {
             // uv + env
             py_env_python_path_uv,
             py_env_setup_uv,
+            py_env_setup_pixi,
             py_env_remove,
             // the network: what goes out, and whether it may
             net::net_state,
@@ -806,7 +919,40 @@ mod tests {
             python_version: py.into(),
             purpose: "python-env:console".into(),
             label: String::new(),
+            host: String::new(),
         }
+    }
+
+    fn pixi_info(lock: &str, home: &str, python: &str) -> PyEnvInfo {
+        PyEnvInfo {
+            lock_path: lock.into(),
+            venv_home: home.into(),
+            venv_python_rel: python.into(),
+            purpose: "python-env:reader-pyscf".into(),
+            host: "pixi".into(),
+            ..env_info(LOCK, "uv/console/venv", "3.12")
+        }
+    }
+
+    #[test]
+    fn a_pixi_environment_is_one_meno_carries_the_lock_of_made_in_the_app_data() {
+        let env = validate_env_info(&pixi_info("resources/pixi/reader-pyscf/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python")).unwrap();
+        assert!(env.pixi);
+        assert_eq!(env.venv_home, Path::new("pixi/reader-pyscf"));
+        assert!(validate_env_info(&pixi_info("resources/pixi/reader-pyscf/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/python.exe")).is_ok());
+        for (lock, home, python) in [
+            ("resources/py/requirements.chem.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/pixi/reader-pyscf/pixi.toml", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/pixi/../py/x/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/pixi/reader-pyscf/pixi.lock", "pixi/other", ".pixi/envs/default/bin/python"),
+            ("resources/pixi/reader-pyscf/pixi.lock", "uv/reader-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/pixi/reader-pyscf/pixi.lock", "pixi/reader-pyscf", "bin/sh"),
+        ] {
+            assert!(validate_env_info(&pixi_info(lock, home, python)).is_err(), "{lock} {home} {python}");
+        }
+        let mut odd = env_info(LOCK, "uv/console/venv", "3.12");
+        odd.host = "conda".into();
+        assert!(validate_env_info(&odd).is_err());
     }
 
     const LOCK: &str = "resources/py/requirements.console.lock";
@@ -815,6 +961,11 @@ mod tests {
     fn only_a_reader_plugins_environment_is_taken_away() {
         assert_eq!(reader_env_dir(Path::new("uv/reader-cclib/venv")), Ok(PathBuf::from("uv/reader-cclib")));
         assert_eq!(reader_stamp(Path::new("uv/reader-cclib")), Ok(PathBuf::from("uv/stamps/reader-cclib.json")));
+        assert_eq!(reader_env_dir(Path::new("pixi/reader-pyscf")), Ok(PathBuf::from("pixi/reader-pyscf")));
+        assert_eq!(reader_stamp(Path::new("pixi/reader-pyscf")), Ok(PathBuf::from("pixi/stamps/reader-pyscf.json")));
+        for bad in ["pixi/cache", "pixi/home", "pixi/reader-pyscf/.pixi", "pixi"] {
+            assert!(reader_env_dir(Path::new(bad)).is_err(), "{bad}");
+        }
         for bad in ["uv/chem/venv", "uv/console/venv", "uv/reader-/venv", "uv/reader-cclib", "uv/reader-cclib/venv/bin", "uv/reader-a b/venv", "data/reader-cclib/venv"] {
             assert!(reader_env_dir(Path::new(bad)).is_err(), "{bad}");
         }

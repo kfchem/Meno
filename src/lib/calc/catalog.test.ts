@@ -13,8 +13,9 @@ describe("which reader reads what", () => {
   const plugins = [...READER_PLUGINS, other];
 
   it("are, for a kind, every reader that reads it, in Meno's order", () => {
-    expect(readersOf("orca", plugins).map((p) => p.id)).toEqual(["cclib", "orca-own"]);
-    expect(readersOf("gaussian", plugins).map((p) => p.id)).toEqual(["cclib"]);
+    expect(readersOf("orca", plugins).map((p) => p.id)).toEqual(["cclib", "pyscf", "orca-own"]);
+    expect(readersOf("gaussian", plugins).map((p) => p.id)).toEqual(["cclib", "pyscf"]);
+    expect(readersOf("molden", plugins).map((p) => p.id)).toEqual(["pyscf"]);
   });
 
   it("is the one chosen, where it is added; or else the first added", () => {

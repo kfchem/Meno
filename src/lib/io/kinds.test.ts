@@ -44,6 +44,9 @@ describe("what a file is", () => {
     expect(id("", "title\nSP        RB3LYP     STO-3G\nNumber of atoms                            I               20\n")).toBe("gaussian-fchk");
     expect(id("", "     |                           x T B                           |     \n")).toBe("xtb");
     expect(id("", "   * xtb version 6.6.1 (8d0f1dd)\n")).toBe("xtb");
+    // (a Molden file, by its first section)
+    expect(id("", "[Molden Format]\n[Atoms] AU\nO 1 8 0 0 0\n")).toBe("molden");
+    expect(id("water.txt", "  [MOLDEN FORMAT]\n")).toBe("molden");
   });
 
   it("is Meno's own record by what it says it is", () => {
@@ -81,7 +84,7 @@ describe("what a file is", () => {
 describe("the kinds", () => {
   it("are each named, Meno's own and the readers' alike, every one once", () => {
     const ids = KINDS.map((k) => k.id);
-    expect(ids).toEqual(expect.arrayContaining(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "orca", "gaussian", "gaussian-fchk", "xtb", "cube"]));
+    expect(ids).toEqual(expect.arrayContaining(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "orca", "gaussian", "gaussian-fchk", "xtb", "molden", "cube"]));
     expect(new Set(ids).size).toBe(ids.length);
     expect(KINDS.filter((k) => k.output).map((k) => k.id)).not.toContain("xyz");
   });

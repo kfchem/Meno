@@ -153,13 +153,13 @@ describe("results from two readers", () => {
   it("stand side by side, each under its reader's name - none where one reader gave them all", () => {
     expect(bySource(results, readerNameOf).map((p) => [p.source, p.results.length])).toEqual([
       ["cclib", 1],
-      ["PySCF 2.14.0", 2],
+      ["PySCF", 2],
     ]);
     expect(bySource(results.slice(0, 1), readerNameOf)).toEqual([{ results: results.slice(0, 1) }]);
     const groups = cardGroupsOf(resultsOn(results, "molecule"), (r) => ({ text: valueText(r.value, r) }));
     expect(groups.map((g) => [g.source, g.group, g.rows.map((r) => r.text)])).toEqual([
       ["cclib", "Properties", ["1.8"]],
-      ["PySCF 2.14.0", "Properties", ["1.9", "0.75"]],
+      ["PySCF", "Properties", ["1.9", "0.75"]],
     ]);
   });
 
