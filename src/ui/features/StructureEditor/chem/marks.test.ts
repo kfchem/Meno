@@ -42,7 +42,6 @@ describe("marksOf", () => {
         { index: 3, hydrogens: 3 },
       ],
       bonds: [{ index: 1, cip: "E" }],
-      smiles: null,
     });
     expect([...marks.centres]).toEqual([[11, "R"]]);
     expect([...marks.valence]).toEqual([[12, { valence: 5, most: 4 }]]);
@@ -50,7 +49,7 @@ describe("marksOf", () => {
   });
 
   it("says an axis of chirality's M or P as Ra or Sa, as a label says (R)-BINAP", () => {
-    const axis = (cip: "M" | "P") => marksOf(butene, { atoms: [], bonds: [{ index: 0, cip }], smiles: null }).doubleBonds.get(20);
+    const axis = (cip: "M" | "P") => marksOf(butene, { atoms: [], bonds: [{ index: 0, cip }] }).doubleBonds.get(20);
     expect(axis("M")).toBe("Ra");
     expect(axis("P")).toBe("Sa");
   });
