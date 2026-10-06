@@ -37,7 +37,7 @@ src/
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
   lib/rdkit/              the chemistry worker: client, sidecar, the MOL blocks it is asked about
   lib/calc/               readers of calculation output: the catalog, reading, promises, Meno's own reading
-  lib/plugins/            plugins' manifests (data), read and checked; the plugins Meno knows of
+  lib/plugins/            plugins' manifests (data), read and checked; the plugins Meno carries, found in their folders
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
   utils/importers         readMoleculesFromText, RXN grouping/layout, EditorModel conversion
   utils/atomUtils         element table (radii, colours)
@@ -66,7 +66,10 @@ src-tauri/
                           0.12.19, and requirements lock files per profile;
                           tauri.<platform>.conf.json bundles only that
                           platform's uv
-  resources/workers/      Python worker scripts
+  resources/workers/      Meno's own Python worker scripts
+  resources/plugins/<id>/ a plugin, a folder of its own: manifest.json, its worker, its lock
+                          (uv's requirements.lock, or pixi's pixi.toml and pixi.lock);
+                          Meno names none of them (docs/PLUGINS.md)
 ```
 
 ## Tabs and views
@@ -302,16 +305,21 @@ off the network. Its tests need RDKit and run by hand
 (`scripts/chem/test_chem_worker.py`).
 
 Reader plugins (docs/FILE-IO.md, docs/PLUGINS.md) are sidecars too, one
-profile each, named `reader-<id>`. Each is known from its manifest
-(`lib/plugins/manifest.ts`; those Meno knows of in `lib/plugins/manifests/`,
-listed by `lib/plugins/known.ts`): data saying what it is, its lock and
-worker, the kinds it reads by id, and the kinds it brings, each told by
-marks - text, never a pattern - and checked as data however it came.
+profile each, named `reader-<id>`. Each is a folder of its own,
+`resources/plugins/<id>/`, and stands alone: it knows of no other plugin,
+and Meno names none of them. Its manifest (`lib/plugins/manifest.ts`;
+the folders found by `lib/plugins/known.ts`, the plugins Meno carries for
+now) is data saying what it is, its lock and worker in its folder, the
+kinds it brings - each told by marks, text, never a pattern - and the kinds
+it reads by id, its own or Meno's; it is checked as data however it came.
 `lib/calc/catalog.ts` makes the readers of the manifests, with Meno's own
-reading (`MENO`) first; `lib/io/kinds.ts` registers the plugins' kinds with
-Meno's own and the well-known ones, refusing a mark that one of Meno's own
-sample files holds. Meno's core knows no program's format beyond the kinds'
-marks.
+reading (`MENO`) first. Meno's core knows no program (the maintainer,
+2026-10-06): `lib/io/kinds.ts` knows Meno's own kinds only, and registers
+the kinds of the plugins added - while they are added (`lib/calc/workers.ts`)
+- refusing a mark that one of Meno's own sample files holds. The kinds of
+the plugins on offer, added or not (`OFFERED`), are looked at only to say
+which plugin would read a file no plugin added reads
+(`lib/calc/probe.ts` `kindOfFile`).
 - A plugin is added in Settings, *Plugins*: `ensurePyEnv`, with the
   network's consent under `python-env:reader-<id>`. It is taken away there
   too: `py_env_remove`, which removes only its own folder.
@@ -385,19 +393,20 @@ marks.
   chosen waits for the one moving to come to rest. The atom that moves most
   goes 0.3 Å, once every 1.2 s, whatever the frequency. No arrows and no
   spectrum (the maintainer).
-- The first reader is cclib's (`resources/workers/reader_cclib.py`), cclib
-  used as a library, its version pinned in
-  `resources/py/requirements.reader-cclib.lock` (1.9rc1: 1.8.1 does not
-  read ORCA 6). Its tests read sample outputs from `calc-samples/`, which
+- The first reader is cclib's (`resources/plugins/cclib/worker.py`), cclib
+  used as a library, its version pinned in its folder's
+  `requirements.lock` (1.9rc1: 1.8.1 does not read ORCA 6). Its manifest
+  brings every program cclib reads, each told by its own banner as cclib
+  tells it. Its tests read sample outputs from `calc-samples/`, which
   git ignores - no program's output is committed - and run by hand
   (`scripts/calc/test_reader_cclib.py`); the app's side is tested with the
   plain data written by hand.
-- The PySCF reader (`resources/workers/reader_pyscf.py`, in a pixi
+- The PySCF reader (`resources/plugins/pyscf/worker.py`, in a pixi
   environment: PySCF from conda-forge, which has it for Windows; cclib
   from PyPI) is a plugin of its own, sharing no code with another
   (the maintainer, 2026-10-06). It gives the molecule - read with cclib as
   a library, or a Molden file with PySCF - and its orbitals and densities;
-  charges, vibrations and the like are cclib's to give. Where an output
+  charges, vibrations and the like it leaves to other readers. Where an output
   holds the basis set and the orbitals' coefficients, cclib writes them as
   a Molden file (each p shell's functions put in x, y, z order, as ORCA's
   are not) for PySCF to read back, and the orbitals are checked
@@ -510,10 +519,10 @@ on GitHub. A new pin is a change to `tools.rs`, its hashes the release's
 own, checked against the archives (`cargo test -- --ignored` fetches and
 runs both for the computer it runs on).
 
-An environment pixi makes (`pixienv.rs`, `py_env_setup_pixi`) comes from a
-manifest and a lock Meno carries, `resources/pixi/<name>/pixi.toml` and
-`pixi.lock` - every package for every platform pinned by its SHA-256 -
-copied into `<data>/pixi/<name>/`, where `pixi install --frozen` makes it
+An environment pixi makes (`pixienv.rs`, `py_env_setup_pixi`) comes from the
+manifest and the lock in a plugin's folder, `resources/plugins/<id>/pixi.toml`
+and `pixi.lock` - every package for every platform pinned by its SHA-256 -
+copied into `<data>/pixi/reader-<id>/`, where `pixi install --frozen` makes it
 (`.pixi/envs/default`). pixi keeps its cache and home under `<data>/pixi/`
 and reads no configuration of the user's (`PIXI_NO_CONFIG`). A conda
 environment expects to be activated - on Windows its libraries are found
@@ -536,13 +545,15 @@ The webview is not trusted with process execution, so `lib.rs` validates every
 path it is given:
 
 - `py_env_*`: the webview names no tool - uv is the one `tools.rs` pins;
-  `lockPath` must be a `.lock` file under `resources/py/`; `venvHome` must be under `uv/` in the
+  `lockPath` must be a `.lock` file under `resources/py/`, or in a plugin's
+  folder, `resources/plugins/<id>/` - for pixi, that folder's `pixi.lock`,
+  made in `<app data>/pixi/reader-<id>`; `venvHome` must be under `uv/` in the
   app data dir; relative paths may not contain `..`, `.` or absolute/drive
   prefixes; `pythonVersion` must look like `3.12` or `3.12.4`; `purpose` must
   be `python-env:<name>` - never a purpose that needs no asking.
 - `ext_spawn_sidecar`: `entry` must be an absolute `python`/`python3`/`python.exe`
-  inside `<app data>/uv/`; `args` may start with `-u` / `-B`, followed by an
-  absolute `.py` script inside `resources/workers/`; later arguments go to the
+  inside `<app data>/uv/` or `<app data>/pixi/`; `args` may start with `-u` / `-B`, followed by an
+  absolute `.py` script inside `resources/workers/` or `resources/plugins/`; later arguments go to the
   script unchanged.
 - A sidecar running the console's worker is a `python-code` task on the
   network; any other worker is pointed at the proxy with no task, so what it
