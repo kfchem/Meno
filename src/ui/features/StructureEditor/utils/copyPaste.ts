@@ -13,7 +13,6 @@ import { notOneReaction, reactionFileText } from "../chem/reactionFile";
 import type { Arrow, Atom, Bond, Carried3D, CarriedList, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
 import { asSeen } from "./molecule3d";
 import { readCalc } from "../../../../lib/calc/output";
-import { readerIdOf } from "../../../../lib/calc/catalog";
 
 type Pt = { x: number; y: number };
 
@@ -182,10 +181,7 @@ export function readDrawn(data: unknown): Drawn | null {
 function listOf(v: unknown): CarriedList | undefined {
   const l = v as Partial<Record<keyof CarriedList, unknown>> | null | undefined;
   if (!l || typeof l.id !== "string" || !(l.row === null || (Number.isInteger(l.row) && (l.row as number) >= 0))) return undefined;
-  // (a list of a reader known by its name, as kept before readers were known by id: known by its id)
-  const [from, ...rest] = l.id.split("\u0000");
-  const id = rest.length ? [readerIdOf(from), ...rest].join("\u0000") : l.id;
-  return { id, row: l.row as number | null, ...(isNum(l.iso) && l.iso > 0 ? { iso: l.iso } : {}) };
+  return { id: l.id, row: l.row as number | null, ...(isNum(l.iso) && l.iso > 0 ? { iso: l.iso } : {}) };
 }
 
 /** A molecule in 3D in Meno's own record, or null where it does not read as one. */

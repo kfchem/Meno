@@ -62,13 +62,12 @@ describe("a promise", () => {
     expect(useAsks.getState().state[askKey(calc.source, "meno", "grid:0")]).toEqual({ error: "Open gone.cube again to show this." });
   });
 
-  it("kept before readers were known by id, or kinds kept, is asked of the reader by its id, the kind told again", async () => {
+  it("kept without its kind, as before kinds were kept, is asked for with its kind told again", async () => {
     const source = await rememberOutput("old.cube", CUBE, "cube");
     const { kind: _kind, ...before } = source;
     const r = reader((key) => key);
-    await askFor(calcOf(before, "Cube files"), "Cube files", "grid:0", async (p) => (expect(p.id).toBe("meno"), r));
+    await askFor(calcOf(before), "meno", "grid:0", async () => r);
     expect(r.asked).toEqual(["cube grid:0"]);
-    expect(givenValue(before, "meno", "grid:0")).toBe("grid:0");
   });
 
   it("given and shown, is saved as what it came to; one not shown, or not given, stays a promise", async () => {

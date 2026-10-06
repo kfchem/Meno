@@ -327,8 +327,7 @@ marks.
   promise, `probe` for a kind its plugin tells itself (`lib/calc/probe.ts`).
   Like the chemistry worker, it runs no code it is sent and is kept off the
   network. A reader is known by its id: a molecule keeps its readers as
-  "id version", its results their reader's id; names kept by workspaces
-  saved before are read as ids (`readerIdOf`, `readerLineOf`).
+  "id version" (`readerIdOfLine`), its results their reader's id.
 - Where the line is between a plugin and Meno: a plugin knows the file,
   Meno where and how what it found shows, and what can be done with it.
   What Meno does something with has a form of its own in `ReaderOutput` -

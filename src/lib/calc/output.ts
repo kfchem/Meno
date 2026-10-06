@@ -7,7 +7,7 @@
  * in the one general form (results.ts).
  */
 import { readResults, type Result } from "./results";
-import { readerIdOf, readerLineOf } from "./catalog";
+import { readerIdOfLine } from "./catalog";
 
 /** The form of a plugin's answer this Meno reads. */
 export const OUTPUT_SCHEMA = 1;
@@ -73,7 +73,7 @@ export function framesOf(out: ReaderOutput): number {
  * unless it says another.
  */
 export function calcOf(out: ReaderOutput, readers: readonly string[], source?: CalcSource, unread?: CalcInfo["unread"]): CalcInfo {
-  const results = readResults(out.results, out.atoms.length, framesOf(out), readers[0] ? readerIdOf(readers[0]) : undefined);
+  const results = readResults(out.results, out.atoms.length, framesOf(out), readers[0] ? readerIdOfLine(readers[0]) : undefined);
   const said = (k: "program" | "version" | "method" | "basis") => text(out[k]);
   return {
     readers: [...readers],
@@ -105,19 +105,13 @@ function sourceOf(v: unknown): CalcSource | undefined {
  */
 export function readCalc(given: unknown, atoms: number, frames: number): CalcInfo | undefined {
   const c = given as Record<string, unknown> | null | undefined;
-  // (readers known by name, as kept before readers were known by id: known by id)
-  const readers = Array.isArray(c?.readers) ? c.readers.filter((r): r is string => typeof r === "string" && !!r.trim()).map((r) => readerLineOf(r)) : [];
+  const readers = Array.isArray(c?.readers) ? c.readers.filter((r): r is string => typeof r === "string" && !!r.trim()) : [];
   if (!c || typeof c !== "object" || !readers.length) return undefined;
-  const results = Array.isArray(c.results)
-    ? c.results.map((r: unknown) => {
-        const from = (r as { from?: unknown } | null)?.from;
-        return typeof from === "string" ? { ...(r as object), from: readerIdOf(from) } : r;
-      })
-    : [];
+  const results = Array.isArray(c.results) ? c.results : [];
   const unread = Array.isArray(c.unread)
     ? c.unread.flatMap((u: unknown) => {
         const v = u as { from?: unknown; why?: unknown } | null;
-        return typeof v?.from === "string" && typeof v.why === "string" ? [{ from: readerIdOf(v.from), why: v.why.slice(0, 500) }] : [];
+        return typeof v?.from === "string" && typeof v.why === "string" ? [{ from: v.from, why: v.why.slice(0, 500) }] : [];
       })
     : [];
   return calcOf(

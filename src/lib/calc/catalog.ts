@@ -8,8 +8,7 @@
  *
  * A reader is known by its id. What it gave - results, the readers a
  * molecule was read by - keeps the id; its name is looked up only to show
- * it. A workspace saved before kept names ("cclib 1.9rc1", "Cube files"),
- * and they are read as ids.
+ * it.
  */
 import type { Manifest } from "../plugins/manifest";
 import { MANIFESTS } from "../plugins/known";
@@ -87,37 +86,15 @@ export function readerById(id: string, readers: readonly ReaderPlugin[] = READER
   return readers.find((r) => r.id === id);
 }
 
-/** Names a reader went by in workspaces saved before readers were known by id. */
-const FORMER_NAMES: Record<string, string> = { "Cube files": "meno" };
-
-/**
- * A reader's id from what a result or a molecule kept of it: its id - or, as
- * kept before, its name and version ("cclib 1.9rc1"), or a name it went by.
- * One Meno does not know, as kept.
- */
-export function readerIdOf(from: string, readers: readonly ReaderPlugin[] = READERS): string {
-  if (readers.some((r) => r.id === from)) return from;
-  // (a reader as a molecule keeps it now: its id and version)
-  const own = readers.find((r) => from.startsWith(`${r.id} `));
-  if (own) return own.id;
-  if (FORMER_NAMES[from]) return FORMER_NAMES[from];
-  const named = readers.find((r) => from === r.name || from.startsWith(`${r.name} `));
-  return named?.id ?? from;
+/** A reader's id, from a reader as a molecule keeps it: its id and version, "cclib 1.9rc1"; Meno's own, "meno". */
+export function readerIdOfLine(line: string): string {
+  return line.split(" ")[0];
 }
 
-/** A reader as a molecule keeps it - its id and version, "cclib 1.9rc1" - from what was kept of it, as before ("PySCF 2.14.0", "Cube files") or now. */
-export function readerLineOf(kept: string, readers: readonly ReaderPlugin[] = READERS): string {
-  const id = readerIdOf(kept, readers);
-  if (id === kept || kept.startsWith(`${id} `)) return kept;
-  const named = readerById(id, readers);
-  const version = named && kept.startsWith(named.name) ? kept.slice(named.name.length).trim() : "";
-  return version ? `${id} ${version}` : id;
-}
-
-/** A reader's name, as the chemist knows it, from what was kept of it; one Meno does not know, as kept. */
-export function readerNameOf(from: string | undefined, readers: readonly ReaderPlugin[] = READERS): string {
-  if (!from) return "";
-  return readerById(readerIdOf(from, readers), readers)?.name ?? from;
+/** A reader's name, as the chemist knows it, by its id; one Meno does not know, by its id. */
+export function readerNameOf(id: string | undefined, readers: readonly ReaderPlugin[] = READERS): string {
+  if (!id) return "";
+  return readerById(id, readers)?.name ?? id;
 }
 
 /** The readers that read a kind, in Meno's order: Meno first, where it reads it. */

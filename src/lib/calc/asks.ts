@@ -7,7 +7,7 @@
  * is asked for from its output - opened again, where it is not open now.
  */
 import { create } from "zustand";
-import { readerById, readerIdOf, type ReaderPlugin } from "./catalog";
+import { readerById, readerIdOfLine, type ReaderPlugin } from "./catalog";
 import { kindOf } from "../io/kinds";
 import type { Reader } from "./client";
 import type { CalcInfo, CalcSource } from "./output";
@@ -34,8 +34,7 @@ export async function rememberOutput(name: string, text: string, kind: string): 
 }
 
 /** What a promise is known by, among every molecule's: its output, the reader that gave it - by id - and its key. */
-export const askKey = (source: CalcSource | undefined, from: string | undefined, key: string) =>
-  `${source?.sha256 ?? "-"}\u0000${from ? readerIdOf(from) : ""}\u0000${key}`;
+export const askKey = (source: CalcSource | undefined, from: string | undefined, key: string) => `${source?.sha256 ?? "-"}\u0000${from ?? ""}\u0000${key}`;
 
 /** What a promise came to, where it has been given. */
 export function givenValue(source: CalcSource | undefined, from: string | undefined, key: string): unknown {
@@ -70,7 +69,7 @@ async function ask(calc: CalcInfo, from: string | undefined, key: string, k: str
     setState(k, { error });
     throw new Error(error);
   }
-  const who = readerIdOf(from ?? calc.readers[0] ?? "");
+  const who = from ?? readerIdOfLine(calc.readers[0] ?? "");
   const plugin = readerById(who);
   // (its kind as it was told; or, kept before kinds were, told again)
   const kind = calc.source.kind ?? kindOf(output.name, output.text)?.id;

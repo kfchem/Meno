@@ -5,8 +5,7 @@ import {
   READER_PLUGINS,
   READERS,
   readerFor,
-  readerIdOf,
-  readerLineOf,
+  readerIdOfLine,
   readerNameOf,
   readersOf,
   type PythonReader,
@@ -33,20 +32,12 @@ describe("the readers Meno knows of", () => {
     expect(pyscf).toMatchObject({ name: "PySCF", profile: "reader-pyscf", lock: "resources/pixi/reader-pyscf/pixi.lock", env: "pixi" });
   });
 
-  it("are known by id; what was kept of one before - its name and version, a name it went by - is read as its id", () => {
-    expect(readerIdOf("cclib")).toBe("cclib");
-    expect(readerIdOf("cclib 1.9rc1")).toBe("cclib");
-    expect(readerIdOf("pyscf 2.14.0")).toBe("pyscf");
-    expect(readerIdOf("PySCF 2.14.0")).toBe("pyscf");
-    expect(readerIdOf("Cube files")).toBe("meno");
-    expect(readerIdOf("NBO 7")).toBe("NBO 7");
-    expect(readerLineOf("PySCF 2.14.0")).toBe("pyscf 2.14.0");
-    expect(readerLineOf("Cube files")).toBe("meno");
-    expect(readerLineOf("cclib 1.9rc1")).toBe("cclib 1.9rc1");
+  it("are known by id - a molecule keeps each as its id and version - and named by it", () => {
+    expect(readerIdOfLine("cclib 1.9rc1")).toBe("cclib");
+    expect(readerIdOfLine("meno")).toBe("meno");
     expect(readerNameOf("pyscf")).toBe("PySCF");
-    expect(readerNameOf("PySCF 2.14.0")).toBe("PySCF");
     expect(readerNameOf("meno")).toBe("Meno");
-    expect(readerNameOf("NBO 7")).toBe("NBO 7");
+    expect(readerNameOf("nbo")).toBe("nbo");
   });
 });
 

@@ -219,8 +219,9 @@ In each:
 - **`data`** is text for a text kind and bytes for a binary one.
 - **The kind is decided by Meno** before anyone is asked; a reader may
   answer that it cannot read the file.
-- **Each reader and writer is known by its id.** Names in workspaces saved
-  before are read as ids.
+- **Each reader and writer is known by its id.** Names kept by
+  workspaces saved before are not read as ids: no reading of what was
+  saved before, for now (the maintainer, 2026-10-06).
 
 ### Who reads and writes each kind
 
@@ -386,7 +387,7 @@ web worker.
 | 1 | "Reader" means two things | XYZ's comment-line energies become part of Meno's XYZ reader; `lib/calc/readers.ts` goes; "reader" means only a reader | 3 |
 | 2 | Five places decide what a file is | one table of kinds, one decision by content, strongest evidence first, used by Open, drop and pasted text | 2 |
 | 3 | Built-in readers listed twice | one list of Meno's readers and writers; the worker reads it | 3 |
-| 4 | Readers found by name | known by id; names in old workspaces read as ids | 3 |
+| 4 | Readers found by name | known by id | 3 |
 | 5 | Cube beside the plugins | Meno's parts show only in the tab for files, as "Meno"; the Plugins tab lists plugins only | 3 |
 | 6 | Geometries through XYZ text | molecules in 3D made directly, bonds found by the function XYZ uses | 3 |
 | 7 | Every reader reads; opening waits | one reader assigned per kind, others only where added; the first answer shows at once | 3 |
@@ -460,9 +461,8 @@ As step 3 was built:
   registers Molden with the well-known kinds, so no plugin Meno knows of
   brings a kind of its own yet. Registration, the samples' check and
   `probe` are in place, and tested with made-up plugins.
-- **The cube reader became Meno's own reading.** It is the reader `meno`
-  under the same contract; a workspace that kept it as "Cube files" reads
-  it so.
+- **The cube reader became Meno's own reading.** It is the reader `meno`,
+  under the same contract.
 - **A reader's late findings join every molecule read from the output,**
   by its SHA-256 - opened, dropped or pasted, in any tab. They join
   through the document's `amend`, which writes them into the history too,

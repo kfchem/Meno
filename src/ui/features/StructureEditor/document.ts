@@ -14,7 +14,6 @@ import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
 import type { Arrow, Atom, Bond, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus } from "./store/types";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
-import { readerIdOf } from "../../../lib/calc/catalog";
 import { readResults } from "../../../lib/calc/results";
 
 export type StructureDocument = {
@@ -717,7 +716,7 @@ export function withReadings(doc: StructureDocument, bySource: Readonly<Record<s
     let calc = m.calc;
     for (const r of readings) {
       // (a reader as a molecule keeps it: its id, then its version)
-      const has = calc.readers.some((x) => x === r.from || x.startsWith(`${r.from} `) || readerIdOf(x) === r.from) || calc.unread?.some((u) => u.from === r.from);
+      const has = calc.readers.some((x) => x === r.from || x.startsWith(`${r.from} `)) || calc.unread?.some((u) => u.from === r.from);
       if (has) continue;
       const atoms = m.atoms.map((a) => a.el);
       if ("why" in r || !sameAtoms(r.output.atoms, atoms)) {

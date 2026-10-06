@@ -64,22 +64,6 @@ describe("what a reader hands back", () => {
     expect(other?.[0].on === "list" && other[0].rows.some((r) => r.move)).toBe(false);
   });
 
-  it("reads one kept before readers were known by id as kept by id: its readers, its results', its source's kind unsaid", () => {
-    const before = {
-      readers: ["PySCF 2.14.0"],
-      results: [{ id: "orbitals", on: "molecule", group: "Orbitals", label: "HOMO", value: 1, from: "PySCF 2.14.0" }],
-      source: { name: "job.out", sha256: "a".repeat(64) },
-    };
-    const read = readCalc(before, 3, 1)!;
-    expect(read.readers).toEqual(["pyscf 2.14.0"]);
-    expect(read.results!.map((r) => r.from)).toEqual(["pyscf"]);
-    expect(read.source).toEqual({ name: "job.out", sha256: "a".repeat(64) });
-    expect(readCalc({ readers: ["Cube files"], source: { name: "x.cube", sha256: "b".repeat(64), kind: "cube" } }, 3, 1)).toMatchObject({
-      readers: ["meno"],
-      source: { kind: "cube" },
-    });
-  });
-
   it("keeps the readers that could not read it, and why", () => {
     const c = calcOf(water, ["cclib 1.9rc1"], undefined, [{ from: "pyscf", why: "no basis" }]);
     expect(c.unread).toEqual([{ from: "pyscf", why: "no basis" }]);
