@@ -148,8 +148,12 @@ async function envState(profile: PyProfile, opts?: EnvOptions) {
     payload: info,
   });
 
+  // (made: its interpreter there - or, for pixi's, the activation kept once
+  // it is made; the interpreter there is a link the webview's file scope
+  // cannot follow, and in a folder whose name starts with a dot)
+  const made = info.host === "pixi" ? `${info.venvHome}/activation.json` : `${info.venvHome}/${info.venvPythonRel}`;
   const needSetup =
-    !(await exists(info.venvHome + "/" + info.venvPythonRel, {
+    !(await exists(made, {
       baseDir: BaseDirectory.AppData,
     })) ||
     stamp.lockSha !== lockSha ||

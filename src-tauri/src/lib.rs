@@ -277,8 +277,9 @@ fn reader_stamp(dir: &Path) -> Result<PathBuf, String> {
 }
 
 /// Takes a reader plugin's environment away, and its record of being set
-/// up, when it is removed in Settings, Calculation readers. Its worker is
-/// stopped first, by the app.
+/// up, when it is removed in Settings, Calculation readers - and, with the
+/// last of pixi's, what pixi keeps for them. Its worker is stopped first,
+/// by the app.
 #[tauri::command]
 async fn py_env_remove(app: AppHandle, payload: PyEnvInfo) -> Result<(), String> {
     let env = validate_env_info(&payload)?;
@@ -291,6 +292,13 @@ async fn py_env_remove(app: AppHandle, payload: PyEnvInfo) -> Result<(), String>
     let stamp = data.join(reader_stamp(&rel)?);
     if stamp.exists() {
         std::fs::remove_file(&stamp).map_err(|e| format!("removing {}: {e}", stamp.display()))?;
+    }
+    if env.pixi {
+        // (the environment is gone either way: a cache not taken away is
+        // only room not given back, and pixi finds it again if needed)
+        for kept in pixienv::unused_keeping(&data.join("pixi")) {
+            let _ = std::fs::remove_dir_all(kept);
+        }
     }
     Ok(())
 }
@@ -435,6 +443,9 @@ async fn py_env_setup_pixi(app: AppHandle, payload: PyEnvInfo, net: State<'_, ne
     task.route(&mut hook);
     let out = hook.output().map_err(|e| format!("spawn pixi shell-hook: {e}"))?;
     if !out.status.success() {
+        for line in String::from_utf8_lossy(&out.stderr).lines() {
+            let _ = app.emit("uv:err", line.to_string());
+        }
         return Err("pixi shell-hook failed".into());
     }
     let activation = pixienv::read_activation(&String::from_utf8_lossy(&out.stdout))?;

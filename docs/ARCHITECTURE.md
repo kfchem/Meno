@@ -495,15 +495,17 @@ copied into `<data>/pixi/<name>/`, where `pixi install --frozen` makes it
 and reads no configuration of the user's (`PIXI_NO_CONFIG`). A conda
 environment expects to be activated - on Windows its libraries are found
 only on the PATH activation sets - so what activation sets is asked of
-pixi once, as the environment is made (`shell-hook --json`, the PATH
-standing in as a mark), and kept beside it (`activation.json`): a worker
+pixi once, as the environment is made (`shell-hook --json`, a mark put
+before the PATH), and kept beside it (`activation.json`): a worker
 started in it (`ext_spawn_sidecar`, which takes an interpreter of
 `<data>/uv` or `<data>/pixi`) is given the variables, and the folders before
 its PATH. The consent says what the lock downloads on the computer - its
 packages, and their size (`lib/pixiLock.ts`) - and from where: pixi, the
 first time, from GitHub; conda-forge (conda.anaconda.org); PyPI. A reader
 plugin says it is made so by `env: "pixi"`; its record of being set up is
-`pixi/stamps/<profile>.json`, and taking it away removes `pixi/<profile>`.
+`pixi/stamps/<profile>.json`, and taking it away removes `pixi/<profile>` -
+and, with the last environment pixi made, its cache and home, which nothing
+else uses (pixi itself stays, in `tools/`).
 
 ### What the backend accepts
 

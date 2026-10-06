@@ -47,15 +47,22 @@ pub fn install_command(pixi: &Path, data: &Path, manifest: &Path) -> Command {
     cmd
 }
 
-/// `pixi shell-hook --json` for an environment, the PATH standing in as `PATH_MARK`.
+/// `pixi shell-hook --json` for an environment, `PATH_MARK` put before the
+/// PATH - not in its place: pixi runs the activation scripts in a shell it
+/// finds on the PATH.
 pub fn activation_command(pixi: &Path, data: &Path, manifest: &Path) -> Command {
     let mut cmd = pixi_command(pixi, data);
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    let path = match std::env::var("PATH") {
+        Ok(was) if !was.is_empty() => format!("{PATH_MARK}{sep}{was}"),
+        _ => PATH_MARK.to_string(),
+    };
     cmd.arg("shell-hook")
         .arg("--json")
         .arg("--frozen")
         .arg("--manifest-path")
         .arg(manifest)
-        .env("PATH", PATH_MARK);
+        .env("PATH", path);
     cmd
 }
 
@@ -114,6 +121,25 @@ pub fn env_dir_of(entry: &Path, root: &Path) -> Option<PathBuf> {
     Some(root.join(name))
 }
 
+/// What pixi keeps for the environments it makes under `root`
+/// (`<data>/pixi`) - its cache, its home - where none is left there:
+/// nothing else uses them.
+pub fn unused_keeping(root: &Path) -> Vec<PathBuf> {
+    const KEEPING: [&str; 2] = ["cache", "home"];
+    let env_left = std::fs::read_dir(root)
+        .map(|entries| {
+            entries.filter_map(Result::ok).any(|e| {
+                let name = e.file_name();
+                e.path().is_dir() && !KEEPING.iter().chain(&["stamps"]).any(|k| name == *k)
+            })
+        })
+        .unwrap_or(false);
+    if env_left {
+        return Vec::new();
+    }
+    KEEPING.iter().map(|k| root.join(k)).filter(|p| p.exists()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,6 +156,16 @@ mod tests {
         assert_eq!(get("PIXI_NO_CONFIG"), Some("1".into()));
         let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert_eq!(args, ["install", "--frozen", "--manifest-path", "/data/Meno/pixi/reader-pyscf/pixi.toml"]);
+    }
+
+    #[test]
+    fn activation_is_asked_for_with_the_mark_before_the_path_pixi_finds_its_shell_on() {
+        let cmd = activation_command(Path::new("pixi"), Path::new("/data/Meno"), Path::new("/data/Meno/pixi/x/pixi.toml"));
+        let path = cmd.get_envs().find(|(k, _)| *k == "PATH").and_then(|(_, v)| v).unwrap().to_string_lossy().into_owned();
+        assert!(path.starts_with(PATH_MARK));
+        if let Ok(was) = std::env::var("PATH") {
+            assert!(path.ends_with(&was));
+        }
     }
 
     #[test]
@@ -158,6 +194,24 @@ mod tests {
         let envs: HashMap<_, _> = cmd.get_envs().map(|(k, v)| (k.to_string_lossy().into_owned(), v.map(|v| v.to_string_lossy().into_owned()))).collect();
         assert_eq!(envs.get("CONDA_PREFIX").cloned().flatten().as_deref(), Some("/env"));
         assert!(envs.get("PATH").cloned().flatten().unwrap().starts_with("/env/bin"));
+    }
+
+    #[test]
+    fn what_pixi_keeps_goes_with_the_last_environment() {
+        let root = std::env::temp_dir().join(format!("meno-pixi-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for d in ["cache", "home", "stamps", "reader-a", "reader-b"] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+        }
+        assert!(unused_keeping(&root).is_empty());
+        std::fs::remove_dir_all(root.join("reader-a")).unwrap();
+        assert!(unused_keeping(&root).is_empty());
+        std::fs::remove_dir_all(root.join("reader-b")).unwrap();
+        assert_eq!(unused_keeping(&root), [root.join("cache"), root.join("home")]);
+        std::fs::remove_dir_all(root.join("home")).unwrap();
+        assert_eq!(unused_keeping(&root), [root.join("cache")]);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(unused_keeping(&root).is_empty());
     }
 
     #[test]
