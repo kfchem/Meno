@@ -18,8 +18,9 @@ import { lookOf, rowAbout, rowAfter, solidOf } from "../utils/molecule3d";
 import type { DropZone, Dropped } from "../../../../lib/drop";
 
 import { readRecord } from "../utils/copyPaste";
-import { kindById, kindOf, MENO_KINDS } from "../../../../lib/io/kinds";
-import { MARK_REACH } from "../../../../lib/calc/catalog";
+import { kindOf, MARK_REACH, MENO_KINDS } from "../../../../lib/io/kinds";
+import { kindOfFile } from "../../../../lib/calc/probe";
+import { anyKindById } from "../../../../lib/calc/catalog";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
 export function useStructureEvents(
@@ -114,7 +115,7 @@ export function useStructureEvents(
       // importing twice would leave two undo steps for a single file.
       importedInitial.current = true;
       // what it is, as whoever opened it said (lib/io/kinds) - or told now
-      const kind = (initialKind ? kindById(initialKind) : undefined) ?? kindOf(initialFilename ?? "", initialPayload);
+      const kind = (initialKind ? anyKindById(initialKind) : undefined) ?? kindOf(initialFilename ?? "", initialPayload);
       // A workspace file, as it was saved
       if (kind?.id === MENO_KINDS.workspace.id) {
         const ws = readWorkspace(initialPayload);
@@ -388,7 +389,8 @@ export function useStructureEvents(
     const at = clientToWorld(x, y) || { x: 0, y: 0 };
     // What a file dropped is, from its start (lib/io/kinds): nothing need be
     // read of a large picture to know it is none of Meno's kinds
-    const kind = dropped ? kindOf(dropped.name, await dropped.slice(0, MARK_REACH).text()) : null;
+    const head = dropped ? await dropped.slice(0, MARK_REACH).text() : "";
+    const kind = dropped ? await kindOfFile(dropped.name, head) : null;
     // None of them: a picture or an object dragged out of Word or
     // PowerPoint, perhaps, whose structure goes where it was dropped,
     // selected - as a paste would

@@ -1,8 +1,8 @@
-"""Meno's PySCF reader: a calculation's orbitals and densities, on a grid.
+"""The PySCF plugin's worker: a calculation's orbitals and densities, on a grid.
 
-A reader plugin's worker (docs/WORKSPACE.md, stage 3d), run in a pixi
-environment of its own - PySCF from conda-forge, cclib from PyPI. One JSON
-object per line each way, as cclib's reader (reader_cclib.py):
+A reader plugin's worker (docs/PLUGINS.md), run in a pixi environment of
+its own - PySCF from conda-forge, cclib from PyPI. One JSON object per line
+each way, as every reader's:
 
     {"id": 7, "op": "read", "name": "job.out", "text": "..."}
     {"id": 8, "op": "ask", "key": "orbital:0:34", "name": "job.out", "text": "..."}
@@ -12,7 +12,7 @@ A plugin of its own, sharing no code with any other (the maintainer,
 2026-10-06): what it gives is the molecule - its atoms, its geometries and
 what the calculation was, read with cclib as a library, or a Molden file
 with PySCF - and its orbitals and densities. Partial charges, vibrations and
-the like are the cclib reader's to give. Where the output holds the basis
+the like it leaves to other readers. Where the output holds the basis
 set and the orbitals' coefficients - cclib writing them as a Molden file
 for PySCF to read, or a Molden file itself - its orbitals' list carries each
 orbital's surface, and a list of densities theirs, as promises (Meno's

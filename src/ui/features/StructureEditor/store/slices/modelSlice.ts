@@ -1,6 +1,7 @@
 import { NOMINAL_BOND_LENGTH } from "../../../../../lib/chem/acs";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
+import { useReadings } from "../../../../../lib/calc/readings";
 import type { ImportedScheme, StructureDocument } from "../../document";
 import type { ArrowLook } from "../../../../../lib/chem/reactionArrow";
 import { ARROW_LENGTH_BONDS } from "../../../../../lib/chem/reactionScheme";
@@ -263,6 +264,10 @@ export const createModelSlice = (
     // (each molecule in 3D showing the frame its file says - numbered from
     // the first, in order, as replaceModel left them to be)
     set((prev: EditorState) => ({ ...prev, frames3d: shownFrames(scheme, 1, {}), lists3d: shownLists(scheme, 1, {}) }));
+  },
+
+  joinReadings: () => {
+    doc.amend((d) => ops.withReadings(d, useReadings.getState().bySource));
   },
 
   openWorkspace: (ws: Workspace, start = false) => {

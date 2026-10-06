@@ -31,13 +31,14 @@ export type AppSettings = {
   options: Record<string, OptionValues>;
   /** The user's own abbreviations, known as Meno's own are (lib/chem/abbreviations). */
   abbreviations: CustomAbbreviation[];
-  calcReaders: CalcReaderSettings;
+  /** Who reads each kind of file (Settings, Files): its reader, and those that read it as well (lib/calc/catalog `readerFor`). */
+  files: FileSettings;
 };
 
-/** Where reader plugins overlap (lib/calc/catalog): which gives what they both find in each kind of calculation output. */
-export type CalcReaderSettings = {
-  /** The reader chosen for a kind of output, by the kind's id; unset, the first added that reads it. */
-  chosen: Record<string, string>;
+/** Who reads each kind of file, by the kind's id: its reader - unset, Meno where Meno reads it, or else the first added that reads it - and the readers that read it as well. */
+export type FileSettings = {
+  read: Record<string, string>;
+  also: Record<string, string[]>;
 };
 
 /** Meno keeping itself up to date (lib/update). */
@@ -72,7 +73,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   updates: { asked: false },
   options: {},
   abbreviations: [],
-  calcReaders: { chosen: {} },
+  files: { read: {}, also: {} },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -90,20 +91,33 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     updates: acceptUpdates(r.updates),
     options: acceptOptions(r.options),
     abbreviations: acceptAbbreviations(r.abbreviations),
-    calcReaders: acceptCalcReaders(r.calcReaders),
+    files: acceptFiles(r.files, r.calcReaders),
   };
 }
 
-/** The readers chosen that read: a kind's id to a reader's, each a name. */
-function acceptCalcReaders(raw: unknown): CalcReaderSettings {
-  const chosen: Record<string, string> = {};
-  const given = (raw as { chosen?: unknown } | null)?.chosen;
-  if (given && typeof given === "object" && !Array.isArray(given)) {
-    for (const [kind, reader] of Object.entries(given)) {
-      if (/^[a-z0-9-]{1,40}$/.test(kind) && typeof reader === "string" && /^[a-z0-9-]{1,40}$/.test(reader)) chosen[kind] = reader;
-    }
+const ID = /^[a-z0-9-]{1,40}$/;
+
+/**
+ * Who reads each kind, as the file holds it: a kind's id to a reader's, and
+ * to the readers that read it as well. A file from before (`calcReaders`,
+ * a kind's id to the reader chosen for it) is read as the readers chosen.
+ */
+function acceptFiles(raw: unknown, before: unknown): FileSettings {
+  const read: Record<string, string> = {};
+  const also: Record<string, string[]> = {};
+  const entries = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? Object.entries(v) : []);
+  for (const [kind, reader] of entries((before as { chosen?: unknown } | null)?.chosen)) {
+    if (ID.test(kind) && typeof reader === "string" && ID.test(reader)) read[kind] = reader;
   }
-  return { chosen };
+  const f = raw as { read?: unknown; also?: unknown } | null;
+  for (const [kind, reader] of entries(f?.read)) {
+    if (ID.test(kind) && typeof reader === "string" && ID.test(reader)) read[kind] = reader;
+  }
+  for (const [kind, readers] of entries(f?.also)) {
+    const ids = Array.isArray(readers) ? [...new Set(readers.filter((r): r is string => typeof r === "string" && ID.test(r)))] : [];
+    if (ID.test(kind) && ids.length) also[kind] = ids;
+  }
+  return { read, also };
 }
 
 /** The options remembered that read: by a role's name, each a value that is a string, a number or a switch. Whether each still fits its option is asked when it is drawn (lib/options `valuesOf`). */
@@ -215,7 +229,7 @@ type SettingsState = AppSettings & {
   /** Remembers the options chosen for a role. */
   rememberOptions: (role: string, values: OptionValues) => void;
   setAbbreviations: (abbreviations: CustomAbbreviation[]) => void;
-  setCalcReaders: (calcReaders: CalcReaderSettings) => void;
+  setFiles: (files: FileSettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -226,9 +240,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, calcReaders } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, calcReaders }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -255,8 +269,8 @@ export const useAppSettings = create<SettingsState>((set, get) => {
       set({ chemistry });
       scheduleSave();
     },
-    setCalcReaders: (calcReaders) => {
-      set({ calcReaders });
+    setFiles: (files) => {
+      set({ files });
       scheduleSave();
     },
     setUpdates: (updates) => {

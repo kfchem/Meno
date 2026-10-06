@@ -1,16 +1,17 @@
-"""Tests for the cclib reader (src-tauri/resources/workers/reader_cclib.py).
+"""Tests for the cclib plugin's worker (src-tauri/resources/plugins/cclib/worker.py).
 
 They need cclib, so they run in an environment built from its lock:
 
     uv venv .venv-cclib --python 3.12
     uv pip install --python .venv-cclib/bin/python --require-hashes --no-deps \
-        -r src-tauri/resources/py/requirements.reader-cclib.lock
+        -r src-tauri/resources/plugins/cclib/requirements.lock
     .venv-cclib/bin/python -m unittest scripts/calc/test_reader_cclib.py
 
 The programs' outputs they read are not in the repository
 (docs/WORKSPACE.md, stage 3): put small ones - cclib's own samples, from
 its repository's data folder - in calc-samples/, as
-calc-samples/ORCA/dvb_gopt.out and so on. Those tests are skipped where
+calc-samples/ORCA/dvb_gopt.out and so on; scripts/calc/samples.json says
+where each of one per program comes from. Those tests are skipped where
 the files are not there.
 """
 
@@ -20,7 +21,7 @@ import pathlib
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-WORKER = ROOT / "src-tauri/resources/workers/reader_cclib.py"
+WORKER = ROOT / "src-tauri/resources/plugins/cclib/worker.py"
 SAMPLES = ROOT / "calc-samples"
 spec = importlib.util.spec_from_file_location("reader_cclib", WORKER)
 worker = importlib.util.module_from_spec(spec)
@@ -162,6 +163,27 @@ class XTB(unittest.TestCase):
         # (cclib reads xTB's HOMO as many numbers: no orbitals are said rather than wrong ones)
         r = read(sample("XTB/dvb_opt.out"))["result"]
         self.assertIsNone(result(r, "orbitals"))
+
+
+class EveryProgram(unittest.TestCase):
+    """Each program whose kind cclib's manifest brings, from a real output of
+    it (scripts/calc/samples.json says which, and where each comes from)."""
+
+    def test_each_gives_its_molecule_named_by_its_program(self):
+        table = json.loads((ROOT / "scripts/calc/samples.json").read_text(encoding="utf-8"))
+        manifest = json.loads((WORKER.parent / "manifest.json").read_text(encoding="utf-8"))
+        read_by_cclib = set(manifest["reads"])
+        for s in table["samples"]:
+            with self.subTest(s["file"]):
+                self.assertIn(s["kind"], read_by_cclib)
+                a = read(sample(s["file"]))
+                self.assertTrue(a["ok"], a.get("error"))
+                r = a["result"]
+                self.assertTrue(r["atoms"])
+                self.assertTrue(r["program"])
+                if s.get("geometry", True):
+                    self.assertTrue(r["frames"])
+                    self.assertTrue(all(len(f) == 3 * len(r["atoms"]) for f in r["frames"]))
 
 
 if __name__ == "__main__":

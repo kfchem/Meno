@@ -8,14 +8,16 @@ import StyleEditor from "../StyleEditor";
 import Style3DEditor from "../StyleEditor/Style3DEditor";
 import AbbreviationSettings from "./AbbreviationSettings";
 import ChemistrySettings from "./ChemistrySettings";
-import CalcReaderSettings from "./CalcReaderSettings";
+import FileSettings from "./FileSettings";
+import PluginSettings from "./PluginSettings";
 import { useSettingsSection, type SettingsSection } from "./section";
 
 const SECTIONS: { id: SettingsSection; name: string }[] = [
   { id: "style", name: "Drawing style" },
   { id: "style3d", name: "Molecules in 3D" },
   { id: "chemistry", name: "Chemistry" },
-  { id: "readers", name: "Calculation readers" },
+  { id: "files", name: "Files" },
+  { id: "plugins", name: "Plugins" },
   { id: "abbreviations", name: "Dictionary" },
   { id: "network", name: "Network" },
 ];
@@ -23,9 +25,9 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
 /**
  * The application's settings: the drawing style every structure is drawn
  * in unless its document has its own, how molecules in 3D look and turn,
- * what RDKit points out on a structure, what reads calculations' output,
- * what the labels Meno reads stand for, and what Meno may do on the
- * network.
+ * what RDKit points out on a structure, who reads and writes each kind
+ * of file, the plugins, what the labels Meno reads stand for, and what Meno
+ * may do on the network.
  */
 export default function SettingsPanel() {
   const drawingStyle = useAppSettings((s) => s.drawingStyle);
@@ -112,15 +114,24 @@ export default function SettingsPanel() {
             </p>
             <ChemistrySettings />
           </section>
-        ) : section === "readers" ? (
-          <section className="mt-6 max-w-4xl">
-            <h2 className="text-base font-semibold text-gh-black">Calculation readers</h2>
+        ) : section === "files" ? (
+          <section className="mt-6 max-w-5xl">
+            <h2 className="text-base font-semibold text-gh-black">Files</h2>
             <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
-              What reads a calculation program's output when it is opened: the molecule's geometries, their
-              energies, what the calculation was and what it found. A reader is downloaded when it is added - Meno
-              asks first - and can be taken away again.
+              Who reads each kind of file Meno opens, and who writes it. Where more than one can read a kind, one
+              reads it - the molecule, and what the calculation was, are its - and those ticked read it as well,
+              what they find added beside it.
             </p>
-            <CalcReaderSettings />
+            <FileSettings />
+          </section>
+        ) : section === "plugins" ? (
+          <section className="mt-6 max-w-4xl">
+            <h2 className="text-base font-semibold text-gh-black">Plugins</h2>
+            <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
+              Programs that read what Meno does not read itself. A plugin is downloaded when it is added - Meno asks
+              first - and can be taken away again.
+            </p>
+            <PluginSettings />
           </section>
         ) : section === "abbreviations" ? (
           <section className="mt-6">

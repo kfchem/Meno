@@ -61,8 +61,8 @@ beyond files - SMILES, R/S, conformers, what comes later - are in
 
 | Kind | Told by | Read by |
 | --- | --- | --- |
-| ORCA, Gaussian, xTB output; Gaussian formatted checkpoint | each program's banner (`OUTPUT_KINDS`) | cclib (plugin, uv); PySCF (plugin, pixi; not xTB) |
-| Molden file | `[Molden Format]` | PySCF |
+| ORCA, Gaussian, xTB output; Gaussian formatted checkpoint; since step 3, every program cclib reads | each program's banner, as the plugins added that read it bring it in their manifests | cclib (plugin, uv); PySCF (plugin, pixi; ORCA, Gaussian and the checkpoint only) |
+| Molden file | `[Molden Format]`, as PySCF's manifest brings it | PySCF |
 | Cube file | its layout: two comment lines, four lines of a count and three numbers (`CUBE_MARK`) | cube (built in, web worker) |
 
 A reader is a process of its own - a Python sidecar for a plugin, a web
@@ -219,8 +219,9 @@ In each:
 - **`data`** is text for a text kind and bytes for a binary one.
 - **The kind is decided by Meno** before anyone is asked; a reader may
   answer that it cannot read the file.
-- **Each reader and writer is known by its id.** Names in workspaces saved
-  before are read as ids.
+- **Each reader and writer is known by its id.** Names kept by
+  workspaces saved before are not read as ids: no reading of what was
+  saved before, for now (the maintainer, 2026-10-06).
 
 ### Who reads and writes each kind
 
@@ -261,21 +262,29 @@ How these behave:
 - **Kinds are registered, not only listed by Meno** (the maintainer,
   2026-10-06), so that a plugin can read a program Meno has never heard
   of:
-  - **Meno registers its own kinds** by id: the workspace, the record,
-    MOL, SDF, RXN, XYZ and cube. It also registers the well-known kinds of
-    calculation output: ORCA, Gaussian, the formatted checkpoint, xTB,
-    Molden.
-  - **A plugin registers its kinds in its manifest.** That is data it
-    carries beside its lock and its worker, and it lists the kinds the
+  - **Meno registers its own kinds only**, by id: the workspace, the
+    record, MOL, SDF, RXN, XYZ and cube. **It knows no program** (the
+    maintainer, 2026-10-06, on seeing Gaussian and ORCA listed with no
+    plugin added): every kind of a program's output comes from the
+    plugins that read it.
+  - **A plugin registers its kinds in its manifest.** That is data in its
+    folder, beside its worker and its lock, and it lists the kinds the
     plugin reads and writes:
-    - a well-known kind by its id;
-    - a new kind with its id, name, extensions and marks.
+    - one of Meno's own kinds by its id;
+    - a kind it brings, with its id, name, extensions and marks. A plugin
+      knows of no other: two that read the same kind each bring it, by
+      the same id. cclib brings every program it reads.
   - **The manifest is read when the plugin is added**, never asked of the
     running plugin, so nothing is started to learn what a plugin reads.
     Its kinds join the table then, and leave it when the plugin is taken
-    away, unless Meno or another plugin registered them too.
-  - **Two plugins that register the same new id** give one kind, its marks
-    put together, with both in its row in Files.
+    away, unless another plugin added registers them too.
+  - **Two plugins that register the same id** give one kind - the first's
+    name, their marks put together - with both in its row in Files.
+  - **A file no plugin added reads** opens as text - unless a plugin on
+    offer, added or not, would read it: then Meno says which plugin to
+    add (the maintainer, 2026-10-06: against the ideal, but needed for
+    those new to Meno). The kinds of the plugins on offer are looked at
+    for this only.
 - **Marks are data.** A mark is text that a file's first 64 KiB holds,
   anywhere or at a line's start, with runs of spaces counted as one.
   - No code, and no regular expression, is taken from a plugin: a pattern
@@ -291,7 +300,8 @@ How these behave:
 - **What a file is is decided once, by content, strongest evidence
   first:**
   1. Meno's own records;
-  2. a program's banner, Meno's or a plugin's;
+  2. a program's banner, as a plugin brings it - the first in the file,
+     where an output quotes another program's;
   3. CTfile and RXN markers;
   4. a PDB's records;
   5. a cube's layout;
@@ -304,9 +314,8 @@ How these behave:
   flavour is already a kind.
 - **Open uses the system's dialog through Tauri**, so Meno has the file's
   path. It reads bytes, and decodes the text kinds. It offers `.meno`,
-  text, and the kinds something reads: Meno, or a plugin Meno knows of,
-  added or not. A file whose reader is not added says which plugin to
-  add, as now.
+  text, and the kinds something reads: Meno, or a plugin on offer, added
+  or not. A file whose reader is not added says which plugin to add.
 - **Office's record is handed to the canvas as the record**, not under a
   made-up name.
 
@@ -333,7 +342,7 @@ How these behave:
 - **Copy stays as it is**: the record and the clipboard's flavours, not
   Export. The SMILES panel copies through the same clipboard as the menu.
 
-As this part of step 5 was built (from main, beside step 3):
+As this part of step 5 was built (#155, from main beside step 3):
 
 - **A workspace opened from its `.meno` is saved back to it.** Open hands
   the canvas the file's path, and Save writes there. The dialog put the
@@ -358,7 +367,7 @@ As this part of step 5 was built (from main, beside step 3):
 - **What a writer takes** - the page, the molecules, or one molecule - is
   not asked yet. Each writes the whole canvas as it did.
 - **Outputs found again by path, and Meno's writers behind the contract,**
-  come once step 3 is in main, since they touch what it changes.
+  come next, on step 3, which they build on.
 
 ### Response
 
@@ -413,7 +422,7 @@ web worker.
 | 1 | "Reader" means two things | XYZ's comment-line energies become part of Meno's XYZ reader; `lib/calc/readers.ts` goes; "reader" means only a reader | 3 |
 | 2 | Five places decide what a file is | one table of kinds, one decision by content, strongest evidence first, used by Open, drop and pasted text | 2 |
 | 3 | Built-in readers listed twice | one list of Meno's readers and writers; the worker reads it | 3 |
-| 4 | Readers found by name | known by id; names in old workspaces read as ids | 3 |
+| 4 | Readers found by name | known by id | 3 |
 | 5 | Cube beside the plugins | Meno's parts show only in the tab for files, as "Meno"; the Plugins tab lists plugins only | 3 |
 | 6 | Geometries through XYZ text | molecules in 3D made directly, bonds found by the function XYZ uses | 3 |
 | 7 | Every reader reads; opening waits | one reader assigned per kind, others only where added; the first answer shows at once | 3 |
@@ -432,8 +441,9 @@ web worker.
 
 ### Also decided
 
-1. **The tab for files is named "Files"**, and every kind Meno knows of
-   has a row in it, so who reads what can always be seen.
+1. **The tab for files is named "Files"**, and every kind Meno reads -
+   its own, and those of the plugins added - has a row in it, so who
+   reads what can always be seen.
 2. **The defaults when a plugin is added:** Meno keeps its kinds, and a
    kind nothing read goes to the new plugin.
 3. **"Also read with…" for one file** - from the molecule's menu, without
@@ -443,8 +453,8 @@ web worker.
 
 Each step is a pull request from main.
 
-1. **These documents.**
-2. **Kinds and Open:**
+1. **These documents** (#149).
+2. **Kinds and Open** (built in #150):
    - the table of kinds and the one decision;
    - Open through Tauri's dialog;
    - the record from Office as the record;
@@ -453,10 +463,12 @@ Each step is a pull request from main.
    - Open offering only what is read;
    - the dead branch removed;
    - tests for each misread case.
-3. **Readers by the table:**
-   - kinds registered: Meno's own and the well-known ones, and each
-     plugin's from its manifest; marks as data, tried on Meno's samples
-     when a plugin is added; `probe`;
+3. **Readers by the table** (built with this step's pull request):
+   - kinds registered: Meno's own, and each added plugin's from its
+     manifest while it is added; marks as data, tried on Meno's samples;
+     `probe`; a file no plugin added reads naming the plugin that would;
+   - each plugin a folder of its own, found by Meno and named by none of
+     its code;
    - ids, and the kind sent with each request;
    - one list of Meno's parts;
    - the Files and Plugins tabs;
@@ -466,7 +478,7 @@ Each step is a pull request from main.
    - `readers.ts` into the XYZ reader, and geometries made directly.
 4. **Meno's readers in the worker:** all of them behind the contract,
    in a web worker, giving back coordinates in buffers (*Response*).
-5. **Save and Export:**
+5. **Save and Export** (in part in #151 - Save writing `.meno`, Save when closing, one SMILES copy, the write scope - and #155 - Save back to the file it came from, Export with the writer's options; the rest to come):
    - Save writing `.meno` only, back to the file it came from;
    - Save offered when closing;
    - Export with the writer's options;
@@ -479,3 +491,36 @@ Each step is a pull request from main.
 7. **New kinds:** reading PDB, and a first calculation's input. Which
    program, and whether Meno or a plugin reads PDB, are decided then.
 8. **ARCHITECTURE.md** drawn from the table of kinds.
+
+As step 3 was built:
+
+- **Each plugin is a folder of its own**, `src-tauri/resources/plugins/<id>/`:
+  its manifest, its worker and its lock (uv's `requirements.lock`, or
+  pixi's `pixi.toml` and `pixi.lock`). Meno finds the folders it carries
+  and reads each manifest as data, by the same check a fetched one would
+  meet; no code of Meno's names a plugin. Plugins fetched over the
+  internet later will be folders of the same kind. The backend allows a
+  lock and a worker in such a folder only (`src-tauri/src/lib.rs`).
+- **Meno knows no program.** cclib's manifest brings every program cclib
+  reads and has outputs of to test with - ADF, CFOUR, Dalton, GAMESS
+  (Firefly too), GAMESS-UK, Gaussian and its formatted checkpoint,
+  Jaguar, Molcas, Molpro, MOPAC, NWChem, ORCA, Psi4, Q-Chem, Turbomole,
+  xTB - each told by its banner as cclib tells it; PySCF's brings the
+  four it reads, Molden among them. With no plugin added, *Files* lists
+  Meno's own kinds only.
+  - Each program's banner is checked on a real output of it, one per
+    program from cclib's regression data (`scripts/calc/samples.json`;
+    kept out of the repository in `calc-samples/`), and cclib's worker
+    gives each one's molecule. The tests skip a file that is not there.
+  - Psi3 is left out: cclib has no output of it to test with.
+  - `probe` is in place, and tested with made-up plugins.
+- **One exception stays in Meno:** the energies on an XYZ file's comment
+  lines (`utils/xyzEnergies.ts`), as agreed on 2026-10-05 - part of
+  reading XYZ, which Meno does itself.
+- **The cube reader became Meno's own reading.** It is the reader `meno`,
+  under the same contract.
+- **A reader's late findings join every molecule read from the output,**
+  by its SHA-256 - opened, dropped or pasted, in any tab. They join
+  through the document's `amend`, which writes them into the history too,
+  so undo does not take them back.
+

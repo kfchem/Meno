@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openedAs, OPENABLE } from "./openFile";
+import { registerKinds } from "../../lib/io/kinds";
+import { MANIFESTS } from "../../lib/plugins/known";
 
 const MOL = `ethanol
   Meno
@@ -36,16 +38,25 @@ describe("openedAs", () => {
     expect(openedAs("notes.abc", "plain words")).toMatchObject({ kind: "text", data: { text: "plain words", language: "abc" } });
   });
 
-  it("offers chemical files, calculations' output and text to Open - and no kind nothing reads", () => {
+  it("offers chemical files, calculations' output - of the plugins on offer, added or not - and text to Open, and no kind nothing reads", () => {
     for (const ext of [".meno", ".mol", ".sdf", ".rxn", ".xyz", ".out", ".log", ".fchk", ".cube", ".txt", ".py"]) expect(OPENABLE).toContain(ext);
     for (const ext of [".pdb", ".ket"]) expect(OPENABLE).not.toContain(ext);
     // (each once)
     expect(new Set(OPENABLE).size).toBe(OPENABLE.length);
   });
 
-  it("opens a calculation's output on a structure canvas, a log of something else as text", () => {
-    expect(openedAs("job.out", "\n                                 * O   R   C   A *\n")).toMatchObject({ kind: "structure", label: "job.out" });
-    expect(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n")).toMatchObject({ kind: "structure" });
-    expect(openedAs("build.log", "compiled in 3 s\n")).toMatchObject({ kind: "text" });
+  describe("with plugins added that read calculations' output", () => {
+    beforeEach(() => registerKinds(MANIFESTS));
+    afterEach(() => registerKinds([]));
+
+    it("opens a calculation's output on a structure canvas, a log of something else as text", () => {
+      expect(openedAs("job.out", "\n                                 * O   R   C   A *\n")).toMatchObject({ kind: "structure", label: "job.out" });
+      expect(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n")).toMatchObject({ kind: "structure" });
+      expect(openedAs("build.log", "compiled in 3 s\n")).toMatchObject({ kind: "text" });
+    });
+  });
+
+  it("opens a calculation's output as text where no plugin added reads it: Meno knows no program", () => {
+    expect(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n")).toMatchObject({ kind: "text" });
   });
 });

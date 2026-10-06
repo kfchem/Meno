@@ -10,15 +10,19 @@
 import type { ReaderOutput } from "./output";
 
 /**
- * A reader, however it runs - a plugin's worker, or one that comes with
- * Meno: what it makes of a file, and a promise it gave, asked for.
+ * A reader, however it runs - a plugin's worker, or Meno's own: what it
+ * makes of a file of a kind - Meno says which, having told what the file is
+ * (lib/io/kinds) - a promise it gave, asked for, and whether a file is of a
+ * kind it told Meno it tells itself.
  */
 export interface Reader {
-  /** Its version, once it has said; a reader that comes with Meno, empty. */
+  /** Its version, once it has said; Meno's own, empty. */
   version: string | null;
-  read(name: string, text: string): Promise<ReaderOutput>;
+  read(kind: string, name: string, text: string): Promise<ReaderOutput>;
   /** What a promise it gave stands for - by its key - the file's name and text sent again. */
-  ask(key: string, name: string, text: string): Promise<unknown>;
+  ask(kind: string, key: string, name: string, text: string): Promise<unknown>;
+  /** Whether a file - by its name and its start - is of `kind`, one the reader tells itself (`probe` in its manifest). */
+  probe(kind: string, name: string, head: string): Promise<boolean>;
 }
 
 export type ReaderTransport = {
@@ -71,14 +75,20 @@ export class ReaderClient implements Reader {
     else p.reject(new Error(m.error ?? `${this.name} could not read it`));
   }
 
-  /** What the reader makes of a file: its name, as given, and its text. */
-  read(name: string, text: string): Promise<ReaderOutput> {
-    return this.request({ op: "read", name, text }, `reading ${name}`) as Promise<ReaderOutput>;
+  /** What the reader makes of a file of `kind`: its name, as given, and its text. */
+  read(kind: string, name: string, text: string): Promise<ReaderOutput> {
+    return this.request({ op: "read", kind, name, text }, `reading ${name}`) as Promise<ReaderOutput>;
   }
 
   /** What a promise the reader gave stands for, by its key: the file it read sent again. */
-  ask(key: string, name: string, text: string): Promise<unknown> {
-    return this.request({ op: "ask", key, name, text }, `working out ${key} of ${name}`);
+  ask(kind: string, key: string, name: string, text: string): Promise<unknown> {
+    return this.request({ op: "ask", kind, key, name, text }, `working out ${key} of ${name}`);
+  }
+
+  /** Whether a file is of `kind`, by its name and its start: the reader's own answer, yes only where it says so. */
+  async probe(kind: string, name: string, head: string): Promise<boolean> {
+    const said = (await this.request({ op: "probe", kind, name, head }, `looking at ${name}`)) as { yes?: unknown } | null;
+    return said?.yes === true;
   }
 
   private request(question: Record<string, unknown>, what: string): Promise<unknown> {

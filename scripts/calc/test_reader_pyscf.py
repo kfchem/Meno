@@ -1,9 +1,9 @@
-"""Tests for the PySCF reader (src-tauri/resources/workers/reader_pyscf.py).
+"""Tests for the PySCF plugin's worker (src-tauri/resources/plugins/pyscf/worker.py).
 
 They need PySCF and cclib, so they run in an environment pixi makes from the
 plugin's lock:
 
-    cp src-tauri/resources/pixi/reader-pyscf/pixi.* /tmp/pyscf-env/
+    cp src-tauri/resources/plugins/pyscf/pixi.* /tmp/pyscf-env/
     pixi install --frozen --manifest-path /tmp/pyscf-env/pixi.toml
     /tmp/pyscf-env/.pixi/envs/default/bin/python -m unittest scripts/calc/test_reader_pyscf.py
 
@@ -22,7 +22,7 @@ import unittest
 import numpy
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-WORKER = ROOT / "src-tauri/resources/workers/reader_pyscf.py"
+WORKER = ROOT / "src-tauri/resources/plugins/pyscf/worker.py"
 SAMPLES = ROOT / "calc-samples"
 spec = importlib.util.spec_from_file_location("reader_pyscf", WORKER)
 worker = importlib.util.module_from_spec(spec)

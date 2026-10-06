@@ -17,7 +17,7 @@ describe("the settings file", () => {
       updates: { asked: true },
       options: { "write:sdf": { version: "V3000", frames: "all" }, export: { kind: "sdf" } },
       abbreviations: [{ label: "Mmt", name: "4-methoxytrityl", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1", also: ["MMTr"] }],
-      calcReaders: { chosen: { orca: "cclib" } },
+      files: { read: { orca: "cclib" }, also: { orca: ["pyscf"] } },
     };
     const text = settingsFileText(settings);
     expect(JSON.parse(text).format).toBe(1);
@@ -37,9 +37,13 @@ describe("the settings file", () => {
     expect(
       acceptAppSettings({ chemistry: { stereoLabels: "on" } }).chemistry,
     ).toEqual({ valenceWarnings: true, stereoLabels: false });
-    // a file from before calculation readers: none chosen; a choice that is not a name, left out
-    expect(acceptAppSettings({}).calcReaders).toEqual({ chosen: {} });
-    expect(acceptAppSettings({ calcReaders: { chosen: { orca: "cclib", gaussian: 3, "x y": "cclib" } } }).calcReaders).toEqual({ chosen: { orca: "cclib" } });
+    // a file from before readers were chosen: none chosen; one from before Files, its readers chosen as they were;
+    // a choice that is not an id, left out
+    expect(acceptAppSettings({}).files).toEqual({ read: {}, also: {} });
+    expect(acceptAppSettings({ calcReaders: { chosen: { orca: "cclib", gaussian: 3, "x y": "cclib" } } }).files).toEqual({ read: { orca: "cclib" }, also: {} });
+    expect(
+      acceptAppSettings({ calcReaders: { chosen: { orca: "cclib" } }, files: { read: { orca: "pyscf" }, also: { orca: ["cclib", "cclib", 4], xtb: [] } } }).files,
+    ).toEqual({ read: { orca: "pyscf" }, also: { orca: ["cclib"] } });
     // a file from before molecules in 3D had a look of their own: Meno's
     expect(acceptAppSettings({ drawingStyle: { preset: "rsc", changes: {} } }).style3d).toEqual(DEFAULT_APP_SETTINGS.style3d);
     // the options remembered: by a role, each value a string, a number or a switch; whether it fits is asked when drawn

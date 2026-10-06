@@ -1,191 +1,159 @@
 /**
- * The reader plugins Meno knows of, and the kinds of output they read
- * (docs/WORKSPACE.md, stage 3). Meno's core knows no program's format: a
- * kind of output is told by what its file starts with, as the list below
- * says, and is read by a reader running in a Python environment of its
- * own - or one that comes with Meno, for a file as plain as a cube. Which
- * readers there are is Meno's own list for now; a list fetched online would
- * need a way to trust it, and comes later.
+ * The readers Meno knows of (docs/PLUGINS.md, docs/FILE-IO.md): the plugins
+ * on offer, each from its manifest in its folder (lib/plugins/known) - those
+ * Meno carries, for now; a list fetched online needs a way to trust it, and
+ * comes later - and Meno itself, which reads some kinds under the same
+ * contract (./menoReads). The kinds a plugin brings are registered while it
+ * is added (lib/io/kinds, ./workers); those of every plugin on offer are
+ * looked at only to say which plugin would read a file nothing added reads.
  *
- * Readers are alike: every one added that reads a kind of output reads it,
- * and what each finds is kept, its own. Where two read the same molecule,
- * the one chosen for that kind gives what Meno keeps one of - the
- * geometries, what the calculation was - and its findings come first; or
- * else the first, in Meno's order.
+ * A reader is known by its id. What it gave - results, the readers a
+ * molecule was read by - keeps the id; its name is looked up only to show
+ * it.
  */
-import { CUBE_MARK } from "./cube";
-
-/** A kind of calculation output: one program's, and how its file is told. */
-export type OutputKind = {
-  id: string;
-  /** What it is called, in Settings and in messages: "ORCA output". */
-  name: string;
-  /** The program, as a molecule read from it names it. */
-  program: string;
-  /** The file names it goes by, lower case, with their dot. */
-  extensions: readonly string[];
-  /** What the start of such a file says, one of them at least. */
-  marks: readonly RegExp[];
-  /**
-   * Told by how it is laid out, not by a program's banner: weaker evidence,
-   * so asked after a molfile's markers (lib/io/kinds).
-   */
-  layout?: true;
-};
+import type { Manifest } from "../plugins/manifest";
+import { MANIFESTS, PLUGINS_ROOT } from "../plugins/known";
+import { MENO_READS } from "./menoReads";
+import { kindById, MENO_KINDS, registered, type Kind } from "../io/kinds";
 
 type ReaderBase = {
   id: string;
   name: string;
-  /** The version its environment's lock pins; or a reader that comes with Meno, Meno's own. */
+  /** The version its environment's lock pins; Meno's own, none. */
   version: string;
   /** One line on what it is. */
   description: string;
   licence: string;
   homepage: string;
-  /** The kinds of output it reads, by id, as it reads them best first. */
+  /** The kinds it reads, by id. */
   reads: readonly string[];
 };
 /** A reader plugin: what it is, what it reads, and what it runs - a worker in a Python environment of its own. */
 export type PythonReader = ReaderBase & {
   builtin?: undefined;
-  /** Its Python environment's profile, lock and worker, among Meno's resources. */
+  /** Its Python environment's profile, and its lock and worker, in its folder among Meno's resources. */
   profile: `reader-${string}`;
   lock: string;
   worker: string;
   /** What makes its environment: uv from PyPI (unsaid), or pixi - its lock a pixi.lock - where it needs conda-forge. */
   env?: "pixi";
 };
-/**
- * A reader that comes with Meno: nothing to add or take away, nothing
- * downloaded - but read under the plugins' contract all the same, and as
- * easily taken out (lib/calc/builtin).
- */
-export type BuiltinReader = ReaderBase & { builtin: true };
-export type ReaderPlugin = PythonReader | BuiltinReader;
+/** Meno itself, reading what it reads under the readers' contract: nothing to add or take away, nothing downloaded. */
+export type MenoReader = ReaderBase & { builtin: true };
+export type ReaderPlugin = PythonReader | MenoReader;
 
-/** How much of a file's start is looked at to tell what kind of output it is. */
-export const MARK_REACH = 64 * 1024;
+const MENO_IDS: ReadonlySet<string> = new Set(Object.values(MENO_KINDS).map((k) => k.id));
 
-export const OUTPUT_KINDS: readonly OutputKind[] = [
-  {
-    id: "molden",
-    name: "Molden file",
-    program: "the program",
-    extensions: [".molden", ".mld"],
-    marks: [/^\s*\[Molden Format\]/i],
-  },
-  {
-    id: "cube",
-    name: "Cube file",
-    program: "the program",
-    extensions: [".cube", ".cub"],
-    marks: [CUBE_MARK],
-    layout: true,
-  },
-  {
-    id: "orca",
-    name: "ORCA output",
-    program: "ORCA",
-    extensions: [".out", ".log"],
-    marks: [/\*\s+O\s{3}R\s{3}C\s{3}A\s+\*/],
-  },
-  {
-    id: "gaussian",
-    name: "Gaussian output",
-    program: "Gaussian",
-    extensions: [".log", ".out"],
-    marks: [/^\s*Entering Gaussian System/m],
-  },
-  {
-    id: "gaussian-fchk",
-    name: "Gaussian formatted checkpoint",
-    program: "Gaussian",
-    extensions: [".fchk", ".fch"],
-    marks: [/^Number of atoms\s+I\s+\d+/m],
-  },
-  {
-    id: "xtb",
-    name: "xTB output",
-    program: "xTB",
-    extensions: [".out", ".log"],
-    marks: [/\|\s+x T B\s+\|/, /^\s*\*\s*xtb version\s/m],
-  },
-];
+/** A plugin, as a reader, from its manifest. */
+export const readerOf = (m: Manifest): PythonReader => ({
+  id: m.id,
+  name: m.name,
+  version: m.version,
+  description: m.description,
+  licence: m.licence,
+  homepage: m.homepage,
+  // (its own kinds, and Meno's: never another plugin's, which it does not know)
+  reads: m.reads.filter((id) => MENO_IDS.has(id) || m.kinds.some((k) => k.id === id)),
+  profile: `reader-${m.id}`,
+  lock: `${PLUGINS_ROOT}/${m.id}/${m.environment.lock}`,
+  worker: `${PLUGINS_ROOT}/${m.id}/${m.worker}`,
+  ...(m.environment.maker === "pixi" ? { env: "pixi" as const } : {}),
+});
 
-export const READER_PLUGINS: readonly ReaderPlugin[] = [
-  {
-    id: "cclib",
-    name: "cclib",
-    version: "1.9rc1",
-    description: "Reads the output of ORCA, Gaussian, xTB and other programs.",
-    licence: "BSD-3-Clause",
-    homepage: "https://cclib.github.io",
-    reads: ["orca", "gaussian", "gaussian-fchk", "xtb"],
-    profile: "reader-cclib",
-    lock: "resources/py/requirements.reader-cclib.lock",
-    worker: "resources/workers/reader_cclib.py",
-  },
-  {
-    id: "pyscf",
-    name: "PySCF",
-    version: "2.14.0",
-    description: "Works out orbitals and densities on a grid, from a calculation's output (read with cclib) or a Molden file.",
-    licence: "Apache-2.0",
-    homepage: "https://pyscf.org",
-    reads: ["orca", "gaussian", "gaussian-fchk", "molden"],
-    profile: "reader-pyscf",
-    lock: "resources/pixi/reader-pyscf/pixi.lock",
-    worker: "resources/workers/reader_pyscf.py",
-    env: "pixi",
-  },
-  {
-    id: "cube",
-    name: "Cube files",
-    builtin: true,
-    version: "",
-    description: "Reads cube files: a molecule, with its orbitals or densities on a grid.",
-    licence: "Comes with Meno",
-    homepage: "",
-    reads: ["cube"],
-  },
-];
+/** The reader plugins Meno knows of, in Meno's order: each that reads something. */
+export const READER_PLUGINS: readonly PythonReader[] = MANIFESTS.map(readerOf).filter((p) => p.reads.length);
+
+/** The manifest of a plugin Meno knows of. */
+export const manifestOf = (id: string): Manifest | undefined => MANIFESTS.find((m) => m.id === id);
+
+const offered = registered(MANIFESTS);
 
 /**
- * The kind of output a file is, by what its start says - not by its name: a
- * program's output goes by many - or null, none Meno knows.
+ * The kinds the plugins on offer bring, added or not, with Meno's own: what
+ * a file nothing added reads would be read as, by which plugin - said, so
+ * that the plugin can be added. Also the marks refused as they were
+ * registered, each of which would have claimed one of Meno's own files.
  */
-/** The file names Meno opens as calculation output: every kind's, with their dot. */
-export function outputExtensions(kinds: readonly OutputKind[] = OUTPUT_KINDS): string[] {
-  return [...new Set(kinds.flatMap((k) => k.extensions))];
-}
+export const OFFERED = { kinds: offered.kinds as readonly Kind[], refused: offered.refused };
 
-/** The readers that read a kind of output, in Meno's order. */
-export function readersOf(kind: string, plugins: readonly ReaderPlugin[] = READER_PLUGINS): ReaderPlugin[] {
-  return plugins.filter((p) => p.reads.includes(kind));
-}
+/** The kind of that id: registered, or else one a plugin on offer brings. */
+export const anyKindById = (id: string): Kind | undefined => kindById(id) ?? kindById(id, OFFERED.kinds);
 
 /**
- * The readers added that read a kind of output, the one whose finding
- * counts where they find the same thing first: the one chosen for it,
- * where it is added; then the rest, in Meno's order.
+ * Meno's own reading, as a reader: the structure files it reads on the page
+ * (a workspace, RXN, MOL, SD and XYZ files - into the readers' contract in
+ * step 4 of docs/FILE-IO.md), and what it reads under the contract already
+ * (./menoReads): the cube.
  */
-export function readersFor(
-  kind: string,
-  added: ReadonlySet<string>,
-  chosen: Readonly<Record<string, string>>,
-  plugins: readonly ReaderPlugin[] = READER_PLUGINS,
-): ReaderPlugin[] {
-  const can = readersOf(kind, plugins).filter((p) => added.has(p.id));
-  const first = can.find((p) => p.id === chosen[kind]);
-  return first ? [first, ...can.filter((p) => p !== first)] : can;
+export const MENO: MenoReader = {
+  id: "meno",
+  name: "Meno",
+  version: "",
+  description: "",
+  licence: "",
+  homepage: "",
+  reads: [
+    ...[MENO_KINDS.workspace, MENO_KINDS.rxn, MENO_KINDS.mol, MENO_KINDS.sdf, MENO_KINDS.xyz].map((k) => k.id),
+    ...Object.keys(MENO_READS),
+  ],
+  builtin: true,
+};
+
+/** Every reader: Meno's own, then the plugins, in Meno's order. */
+export const READERS: readonly ReaderPlugin[] = [MENO, ...READER_PLUGINS];
+
+/** The reader of that id. */
+export function readerById(id: string, readers: readonly ReaderPlugin[] = READERS): ReaderPlugin | undefined {
+  return readers.find((r) => r.id === id);
 }
 
-/** The reader whose finding counts first for a kind of output (`readersFor`); none, where no reader added reads it. */
+/** A reader's id, from a reader as a molecule keeps it: its id and version, "cclib 1.9rc1"; Meno's own, "meno". */
+export function readerIdOfLine(line: string): string {
+  return line.split(" ")[0];
+}
+
+/** A reader's name, as the chemist knows it, by its id; one Meno does not know, by its id. */
+export function readerNameOf(id: string | undefined, readers: readonly ReaderPlugin[] = READERS): string {
+  if (!id) return "";
+  return readerById(id, readers)?.name ?? id;
+}
+
+/** The readers that read a kind, in Meno's order: Meno first, where it reads it. */
+export function readersOf(kind: string, readers: readonly ReaderPlugin[] = READERS): ReaderPlugin[] {
+  return readers.filter((p) => p.reads.includes(kind));
+}
+
+/** Who reads a kind, as the chemist has it in Settings, Files: its reader, and the readers that add to it. */
+export type FileChoices = {
+  /** The reader chosen for a kind, by the kind's id. */
+  read: Record<string, string>;
+  /** The readers that read a kind as well, their results added, by the kind's id. */
+  also: Record<string, string[]>;
+};
+
+/**
+ * The reader of a kind: the one chosen for it, where it is added and reads
+ * it; else Meno, where Meno reads it - Meno keeps its kinds; else the first
+ * added that reads it, in Meno's order. None, where nothing added reads it.
+ */
 export function readerFor(
   kind: string,
   added: ReadonlySet<string>,
-  chosen: Readonly<Record<string, string>>,
-  plugins: readonly ReaderPlugin[] = READER_PLUGINS,
+  choices: FileChoices,
+  readers: readonly ReaderPlugin[] = READERS,
 ): ReaderPlugin | null {
-  return readersFor(kind, added, chosen, plugins)[0] ?? null;
+  const can = readersOf(kind, readers).filter((p) => p.builtin || added.has(p.id));
+  return can.find((p) => p.id === choices.read[kind]) ?? can.find((p) => p.builtin) ?? can[0] ?? null;
+}
+
+/** The readers that read a kind as well as its reader, as chosen: each added, each reading it, the reader itself not again. */
+export function alsoReadersFor(
+  kind: string,
+  added: ReadonlySet<string>,
+  choices: FileChoices,
+  readers: readonly ReaderPlugin[] = READERS,
+): ReaderPlugin[] {
+  const reader = readerFor(kind, added, choices, readers);
+  const wanted = new Set(choices.also[kind] ?? []);
+  return readersOf(kind, readers).filter((p) => p !== reader && wanted.has(p.id) && (p.builtin || added.has(p.id)));
 }

@@ -1,6 +1,6 @@
-# The PySCF reader plugin's environment (src/lib/calc/catalog.ts), made by
-# pixi from the lock beside this file - every package pinned by its hash -
-# when the reader is added in Settings, Calculation readers. PySCF and its
+# The PySCF plugin's environment, made by pixi from the lock beside this
+# file - every package pinned by its hash - when the plugin is added in
+# Settings, Plugins (docs/PLUGINS.md). PySCF and its
 # libraries come from conda-forge, which has them for Windows too; cclib,
 # which reads the programs' output for it, from PyPI.
 [workspace]

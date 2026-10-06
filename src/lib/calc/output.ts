@@ -7,6 +7,7 @@
  * in the one general form (results.ts).
  */
 import { readResults, type Result } from "./results";
+import { readerIdOfLine } from "./catalog";
 
 /** The form of a plugin's answer this Meno reads. */
 export const OUTPUT_SCHEMA = 1;
@@ -39,7 +40,7 @@ export type ReaderOutput = {
  * it, and its results - every reader's, each kept with the one it came from.
  */
 export type CalcInfo = {
-  /** The readers that read it, each its name and version: "cclib 1.9rc1". */
+  /** The readers that read it, each its id and version: "cclib 1.9rc1"; Meno's own, "meno". */
   readers: string[];
   program?: string;
   version?: string;
@@ -49,32 +50,19 @@ export type CalcInfo = {
   multiplicity?: number;
   optimised?: boolean;
   results?: Result[];
-  /** The output it was read from: its name, and its SHA-256 - what a promise is asked for again from (./asks). */
+  /** The output it was read from: its name, kind and SHA-256 - what a promise is asked for again from (./asks). */
   source?: CalcSource;
+  /** The readers chosen to read it as well that could not, each by id, and why (lib/calc/read). */
+  unread?: { from: string; why: string }[];
 };
 
-export type CalcSource = { name: string; sha256: string };
+/** An output as a molecule keeps it: its name, its kind (lib/io/kinds) - unsaid in a workspace saved before kinds were - and its SHA-256. */
+export type CalcSource = { name: string; sha256: string; kind?: string };
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const text = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
-/**
- * The output's geometries as an XYZ file's text, frame by frame: the form
- * Meno reads any molecule in 3D in, so that a calculation's comes in as
- * every other does, its bonds found the same way.
- */
-export function xyzOf(out: ReaderOutput): string {
-  const n = out.atoms.length;
-  return out.frames
-    .filter((f) => f.length === 3 * n)
-    .map((f, k) => {
-      const lines = out.atoms.map((el, i) => `${el} ${f[3 * i]} ${f[3 * i + 1]} ${f[3 * i + 2]}`);
-      return [String(n), `frame ${k + 1}`, ...lines].join("\n");
-    })
-    .join("\n");
-}
-
-/** The geometries an output gives for its atoms: those an XYZ file of it has (`xyzOf`). */
+/** The geometries an output gives for its atoms: those of as many numbers as its atoms have coordinates. */
 export function framesOf(out: ReaderOutput): number {
   return out.frames.filter((f) => f.length === 3 * out.atoms.length).length;
 }
@@ -84,8 +72,8 @@ export function framesOf(out: ReaderOutput): number {
  * version): its results each kept with the reader it came from - the first,
  * unless it says another.
  */
-export function calcOf(out: ReaderOutput, readers: readonly string[], source?: CalcSource): CalcInfo {
-  const results = readResults(out.results, out.atoms.length, framesOf(out), readers[0]);
+export function calcOf(out: ReaderOutput, readers: readonly string[], source?: CalcSource, unread?: CalcInfo["unread"]): CalcInfo {
+  const results = readResults(out.results, out.atoms.length, framesOf(out), readers[0] ? readerIdOfLine(readers[0]) : undefined);
   const said = (k: "program" | "version" | "method" | "basis") => text(out[k]);
   return {
     readers: [...readers],
@@ -97,16 +85,17 @@ export function calcOf(out: ReaderOutput, readers: readonly string[], source?: C
     ...(Number.isInteger(out.multiplicity) && out.multiplicity! > 0 ? { multiplicity: out.multiplicity! } : {}),
     ...(typeof out.optimised === "boolean" ? { optimised: out.optimised } : {}),
     ...(results.length ? { results } : {}),
-    ...(source ? { source: { name: source.name, sha256: source.sha256 } } : {}),
+    ...(source ? { source: { name: source.name, sha256: source.sha256, ...(source.kind ? { kind: source.kind } : {}) } } : {}),
+    ...(unread?.length ? { unread: unread.map((u) => ({ from: u.from, why: u.why })) } : {}),
   };
 }
 
-/** An output's name and SHA-256 as a file carries them; otherwise none. */
+/** An output's name, kind and SHA-256 as a file carries them; otherwise none. */
 function sourceOf(v: unknown): CalcSource | undefined {
   const s = v as Record<string, unknown> | null | undefined;
-  return s && typeof s.name === "string" && typeof s.sha256 === "string" && /^[0-9a-f]{64}$/.test(s.sha256)
-    ? { name: s.name.slice(0, 260), sha256: s.sha256 }
-    : undefined;
+  if (!s || typeof s.name !== "string" || typeof s.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(s.sha256)) return undefined;
+  const kind = typeof s.kind === "string" && /^[a-z0-9-]{1,40}$/.test(s.kind) ? s.kind : undefined;
+  return { name: s.name.slice(0, 260), sha256: s.sha256, ...(kind ? { kind } : {}) };
 }
 
 /**
@@ -118,6 +107,13 @@ export function readCalc(given: unknown, atoms: number, frames: number): CalcInf
   const c = given as Record<string, unknown> | null | undefined;
   const readers = Array.isArray(c?.readers) ? c.readers.filter((r): r is string => typeof r === "string" && !!r.trim()) : [];
   if (!c || typeof c !== "object" || !readers.length) return undefined;
+  const results = Array.isArray(c.results) ? c.results : [];
+  const unread = Array.isArray(c.unread)
+    ? c.unread.flatMap((u: unknown) => {
+        const v = u as { from?: unknown; why?: unknown } | null;
+        return typeof v?.from === "string" && typeof v.why === "string" ? [{ from: v.from, why: v.why.slice(0, 500) }] : [];
+      })
+    : [];
   return calcOf(
     {
       program: text(c.program),
@@ -129,10 +125,11 @@ export function readCalc(given: unknown, atoms: number, frames: number): CalcInf
       optimised: typeof c.optimised === "boolean" ? c.optimised : null,
       atoms: new Array(atoms).fill(""),
       frames: new Array(frames).fill(new Array(3 * atoms).fill(0)),
-      results: Array.isArray(c.results) ? c.results : [],
+      results,
     },
     readers,
     sourceOf(c.source),
+    unread,
   );
 }
 
