@@ -31,7 +31,9 @@ src/
                           SDfiles and Rxnfiles read as CTfile Formats has them: docs/CTFILE.md)
   lib/net/                network.ts: the network's record, consent, offline mode
   lib/io/                 kinds.ts: every kind of file Meno takes in, and what a file is - one
-                          decision, by content, for Open, a drop and pasted text (docs/FILE-IO.md)
+                          decision, by content, for Open, a drop and pasted text (docs/FILE-IO.md);
+                          structures.ts: Meno's own reading of MOL, SD, RXN and XYZ files, run in
+                          its worker, and the page's checks of what comes back
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
@@ -423,11 +425,24 @@ which plugin would read a file no plugin added reads
   plugin's worker is - the same `Reader`: what it makes of a file, and a
   promise it gave - but runs in the app, in a web worker of its own
   (`lib/calc/builtin.ts`, `builtinWorker.ts`, which reads that list): always
-  there, nothing downloaded. The first it reads so is the cube
-  (`lib/calc/cube.ts`), from the
-  layout Gaussian's documentation gives: a cube's molecule, in ångströms,
-  and its grids as a list, each a promise, shown as it comes (a list's
-  `shown`, opened by `shownLists` as a file is opened).
+  there, nothing downloaded. It reads every file Meno reads but its own
+  workspace and record, which are Meno's core's (docs/FILE-IO.md, step 4):
+  - MOL, SD, RXN and XYZ files (`lib/io/structures.ts`): what each holds -
+    the drawing, laid out, a reaction's arrow and "+" signs, and the
+    molecules in 3D with their frames and energies - as `structures` in its
+    answer. The page checks it (`checkedStructures`) as it would a plugin's.
+  - The cube (`lib/calc/cube.ts`), from the layout Gaussian's documentation
+    gives: a cube's molecule, in ångströms, and its grids as a list, each a
+    promise, shown as it comes (a list's `shown`, opened by `shownLists` as
+    a file is opened).
+
+  Its answers come back with their runs of numbers - frames, atoms'
+  coordinates - in buffers handed over, not copied (`lib/calc/packed.ts`),
+  as measured (docs/FILE-IO.md, *Response*). Where there is no worker - the
+  tests - it answers in place, carried the same way. The worker has the
+  label typefaces' ASCII tables only, not those the page reads from font
+  files: an RXN file's reaction laid out round a label of other letters is
+  spaced by a capital's box for them.
 - Promises (stage 3d): a row's motion or surface may be `{ "ask": key }`.
   Chosen, it is asked for of the reader that gave it (`lib/calc/asks.ts`
   `askFor`), the output's text and kind sent again - each opened output is

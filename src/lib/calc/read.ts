@@ -14,8 +14,9 @@ import { useAppSettings } from "../settings/appSettings";
 import { alsoReadersFor, READERS, readerFor, readersOf, type FileChoices, type ReaderPlugin } from "./catalog";
 import { OUTPUT_SCHEMA, type ReaderOutput } from "./output";
 import { readResults, type Result } from "./results";
-import { addedReaders, readerClient } from "./workers";
+import { addedReaders, readerClient, useReaders } from "./workers";
 import { publishReading } from "./readings";
+import { checkedStructures, type StructureRead } from "../io/structures";
 
 /** Who reads a file of `kind`: its reader, and those that read it as well; or why no one can - no reader added reads it. */
 export function whoReads(
@@ -128,4 +129,21 @@ export async function readOutput(
   }
   const { output, readers } = combine([await readWith(who.reader)]);
   return { output: checked(output, kind, name), readers };
+}
+
+/**
+ * Reads a structure's file - a MOL, SD, RXN or XYZ file - with its reader,
+ * Meno's own unless a plugin added is chosen for its kind, run off the page:
+ * what it holds, checked as the page takes any reader's answer.
+ */
+export async function readStructureFile(name: string, text: string, kind: Kind): Promise<StructureRead> {
+  const called = name || "the file";
+  // (the plugins added as last looked at: Meno's own reads these without asking)
+  const now = useReaders.getState().state;
+  const added = new Set(Object.keys(now).filter((id) => now[id] === "added"));
+  const who = whoReads(kind, called, added, useAppSettings.getState().files);
+  if (who instanceof Error) throw who;
+  const out = await (await readerClient(who.reader)).read(kind.id, name, text);
+  if (!out?.structures) throw new Error(`${who.reader.name} found no structure in ${called}.`);
+  return checkedStructures(out.structures, called);
 }

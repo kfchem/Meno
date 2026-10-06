@@ -490,7 +490,7 @@ Each step is a pull request from main.
      once;
    - failures said;
    - `readers.ts` into the XYZ reader, and geometries made directly.
-4. **Meno's readers in the worker:** all of them behind the contract,
+4. **Meno's readers in the worker** (built in #156): all of them behind the contract,
    in a web worker, giving back coordinates in buffers (*Response*).
 5. **Save and Export** (in part in #151 - Save writing `.meno`, Save when closing, one SMILES copy, the write scope - and #155 - Save back to the file it came from, Export with the writer's options; the rest to come):
    - Save writing `.meno` only, back to the file it came from;
@@ -537,4 +537,30 @@ As step 3 was built:
   by its SHA-256 - opened, dropped or pasted, in any tab. They join
   through the document's `amend`, which writes them into the history too,
   so undo does not take them back.
+
+As step 4 was built:
+
+- **Every file Meno reads itself is read in its worker**, under the
+  contract: MOL, SD, RXN and XYZ files (`lib/io/structures.ts`) beside the
+  cube, in the one list (`lib/calc/menoReads.ts`).
+  - What a structure's file holds comes back as `structures` in the
+    reader's answer: the drawing, laid out, a reaction's arrow and "+"
+    signs, and the molecules in 3D with their frames and energies.
+  - The page checks it (`checkedStructures`), as it would a plugin's.
+  - A structure's file goes to its reader through `whoReads`, as a
+    calculation's output does: Meno's own, unless a plugin added is chosen
+    for its kind. None is, yet.
+- **The workspace and the record stay with Meno's core**, read on the
+  page: they are Meno's own formats, no reader's (*The line*).
+- **Answers come back compactly** (`lib/calc/packed.ts`). A list of
+  numbers - a frame - goes as one buffer. A list of points - atoms, "+"
+  signs - goes as its coordinates in one buffer and the rest of each as
+  it is. Buffers are handed over, not copied. Short lists go as they are.
+- **Everything that read a molfile on the page now asks the worker**: a
+  SMILES made into a drawing (RDKit's molfile), and a molecule in 3D drawn
+  as a formula, as well as Open, a drop and a paste.
+- **The worker knows the label typefaces' ASCII tables only**, not the
+  fonts the page reads. An RXN file's reaction laid out round a label of
+  other letters is spaced by a capital's box for them. Nothing else it
+  reads depends on letters.
 

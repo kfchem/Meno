@@ -1,19 +1,15 @@
-import {
-  readMoleculesFromText,
-  moleculesToEditorModel,
-  buildEditorModelFromRXN,
-  type EditorModel,
-} from "../../../../utils/importers";
-import { bondChem, chemistry, type Molecule } from "../../../../lib/chem/molecule";
+import type { EditorModel } from "../../../../utils/importers";
+import { bondChem, chemistry } from "../../../../lib/chem/molecule";
 import type { Carried3D, Drawn, Model, Molecule3D } from "../store/types";
 import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, solidOf } from "./molecule3d";
-import { energiesOf } from "../../../../utils/xyzEnergies";
 import { extensionOf, kindOf, MENO_KINDS, type Kind } from "../../../../lib/io/kinds";
 import { calcOf, type CalcSource, type ReaderOutput } from "../../../../lib/calc/output";
 import { bondsByDistance } from "../../../../utils/structureParsers";
 import { rememberOutput } from "../../../../lib/calc/asks";
-import { readOutput } from "../../../../lib/calc/read";
+import { readOutput, readStructureFile } from "../../../../lib/calc/read";
+
+export { xyzComments } from "../../../../lib/io/structures";
 
 /** Extensions of kinds nothing reads yet, said so when such a file is dropped. */
 const UNSUPPORTED_EXTENSIONS = new Set([".pdb", ".ket"]);
@@ -30,44 +26,13 @@ export type ProcessedFileResult = {
 };
 
 /**
- * Whether each molfile of a MOL or SD file says it is 3D: its header's
- * second line, columns 21 and 22 (CTfile Formats).
- */
-function saysThreeD(text: string): boolean[] {
-  return text
-    .split(/^\$\$\$\$[ \t]*\r?$/m)
-    .filter((rec) => rec.trim())
-    // (each record after the first begins with the line break that ended "$$$$";
-    // a molfile's name line may itself be blank)
-    .map((rec) => rec.replace(/^\r?\n/, "").split(/\r?\n/)[1]?.substring(20, 22).toUpperCase() === "3D");
-}
-
-/** An XYZ file's comment lines, one for each frame: what is left of it once its geometry is read. */
-export function xyzComments(text: string): string[] {
-  const lines = text.replace(/^\s+/, "").split(/\r?\n/);
-  const comments: string[] = [];
-  let i = 0;
-  while (i < lines.length) {
-    const n = parseInt(lines[i].trim(), 10);
-    if (!Number.isFinite(n) || n <= 0) break;
-    comments.push(lines[i + 1] ?? "");
-    i += 2 + n;
-  }
-  return comments;
-}
-
-/** How far a molecule's atoms spread in depth, in its file's units. */
-function depthOf(m: Molecule): number {
-  if (!m.atoms.length) return 0;
-  const zs = m.atoms.map((a) => a.z);
-  return Math.max(...zs) - Math.min(...zs);
-}
-
-/**
  * A file read as what it is (lib/io/kinds) - told once, by whoever took it
  * in; asked here where they did not say - into the drawing and the
- * molecules in 3D it holds. Meno's own records are not read here: a
- * workspace is opened (`readWorkspace`), a record pasted (`readRecord`).
+ * molecules in 3D it holds, by its reader under the contract, off the page:
+ * a calculation's output by the readers that read its kind, a structure's
+ * file by Meno's own reading in its worker (lib/io/structures). Meno's own
+ * records are not read here: a workspace is opened (`readWorkspace`), a
+ * record pasted (`readRecord`).
  *
  * The caller places it: centred for a file opened, at the drop for one
  * dropped, with an RXN file's arrow and pluses.
@@ -100,64 +65,8 @@ export async function processFileContent(
   if (kind.id === MENO_KINDS.workspace.id || kind.id === MENO_KINDS.record.id) {
     throw new Error(`${name} is a ${kind.name}: it is opened as one, not read as a structure's file.`);
   }
-  const format = kind.id as "rxn" | "mol" | "sdf" | "xyz";
-
-  if (format === "rxn") {
-    // RXN format: uses pre-computed layout with arrow
-    const rxnLayout = buildEditorModelFromRXN(content);
-    if (!rxnLayout.model.atoms.length) throw noMolecules();
-    return {
-      model: rxnLayout.model,
-      centroid: rxnLayout.centroid,
-      arrow: rxnLayout.arrow ?? undefined,
-      pluses: rxnLayout.pluses,
-    };
-  }
-
-  // MOL, SDF, XYZ formats: parse molecules and convert to editor model
-  const molecules = readMoleculesFromText(content, format);
-
-  // 3D structures stand on the page as they are: an XYZ file's frames are
-  // one molecule's, a MOL or SD file's records each a molecule of its own -
-  // where the file says it is 3D, or its atoms spread in depth.
-  if (format === "xyz" && molecules.length && molecules[0].atoms.length) {
-    const [first, ...rest] = molecules;
-    // (and each frame's energy, as programs write it on the comment lines)
-    const energies = rest.length ? energiesOf(xyzComments(content)) : undefined;
-    return {
-      model: { atoms: [], bonds: [] },
-      centroid: { x: 0, y: 0 },
-      molecules3d: [
-        {
-          atoms: first.atoms,
-          bonds: first.bonds,
-          ...(rest.length ? { frames: rest.map((f) => f.atoms.flatMap((a) => [a.x, a.y, a.z])) } : {}),
-          ...(energies?.length === molecules.length ? { energies } : {}),
-          ...(filename ? { name: filename } : {}),
-        },
-      ],
-    };
-  }
-  // (in a MOL or SD file, each record is a drawing or a molecule in 3D)
-  const said = format === "sdf" || format === "mol" ? saysThreeD(content) : [];
-  const inDepth = (m: Molecule, i: number) => m.atoms.length > 0 && (said[i] || depthOf(m) > 0.1);
-  const molecules3d = molecules
-    .filter(inDepth)
-    .map((m) => ({ atoms: m.atoms, bonds: m.bonds, ...(filename ? { name: filename } : {}) }));
-  const flat = molecules.filter((m, i) => !inDepth(m, i));
-  if (molecules3d.length && !flat.some((m) => m.atoms.length)) {
-    return { model: { atoms: [], bonds: [] }, centroid: { x: 0, y: 0 }, molecules3d };
-  }
-  const { model, centroid } = moleculesToEditorModel(flat);
-  // The MOL parser returns an empty molecule rather than nothing for
-  // unrecognised text, so check atoms, not molecules.
-  if (!model.atoms.length) throw noMolecules();
-
-  return {
-    model,
-    centroid,
-    ...(molecules3d.length ? { molecules3d } : {}),
-  };
+  // a structure's file: what it holds, as its reader gives it, checked
+  return readStructureFile(filename, content, kind);
 }
 
 /**
