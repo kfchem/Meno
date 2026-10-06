@@ -252,20 +252,52 @@ How these behave:
 
 ### Open, drop, paste
 
-- **One table of kinds** (`lib/io/kinds.ts`) holds, for every kind:
+- **One table of kinds** (`lib/io/kinds.ts`, built in #150) holds, for
+  every kind:
   - its id, name and marks;
   - its extensions;
   - whether it is text or bytes.
 
   Readers and writers name kinds by these ids.
+- **Kinds are registered, not only listed by Meno** (the maintainer,
+  2026-10-06), so that a plugin can read a program Meno has never heard
+  of:
+  - **Meno registers its own kinds** by id: the workspace, the record,
+    MOL, SDF, RXN, XYZ and cube. It also registers the well-known kinds of
+    calculation output: ORCA, Gaussian, the formatted checkpoint, xTB,
+    Molden.
+  - **A plugin registers its kinds in its manifest.** That is data it
+    carries beside its lock and its worker, and it lists the kinds the
+    plugin reads and writes:
+    - a well-known kind by its id;
+    - a new kind with its id, name, extensions and marks.
+  - **The manifest is read when the plugin is added**, never asked of the
+    running plugin, so nothing is started to learn what a plugin reads.
+    Its kinds join the table then, and leave it when the plugin is taken
+    away, unless Meno or another plugin registered them too.
+  - **Two plugins that register the same new id** give one kind, its marks
+    put together, with both in its row in Files.
+- **Marks are data.** A mark is text that a file's first 64 KiB holds,
+  anywhere or at a line's start, with runs of spaces counted as one.
+  - No code, and no regular expression, is taken from a plugin: a pattern
+    can be written so that matching it never ends, and holds the page up.
+  - **A kind told only by how it is laid out** is told by its plugin when
+    asked: `probe {kind, name, head}`. Meno asks only where nothing
+    stronger decided and the file's extension is one of the kind's.
+    Asking starts the plugin, as opening the file needs it anyway.
+  - **No plugin claims what is not its own.** When a plugin is added, each
+    of its marks is tried on samples of Meno's own kinds, which Meno
+    carries. A mark one of them would match is refused, and the plugin is
+    added without it, as Settings says.
 - **What a file is is decided once, by content, strongest evidence
   first:**
   1. Meno's own records;
-  2. a program's banner;
+  2. a program's banner, Meno's or a plugin's;
   3. CTfile and RXN markers;
   4. a PDB's records;
   5. a cube's layout;
-  6. an XYZ file's layout.
+  6. an XYZ file's layout;
+  7. a plugin's `probe`.
 
   The extension decides only where the content does not; where neither
   does, the file opens as text. Open, a drop and pasted text all ask this
@@ -371,6 +403,9 @@ Each step is a pull request from main.
    - the dead branch removed;
    - tests for each misread case.
 3. **Readers by the table:**
+   - kinds registered: Meno's own and the well-known ones, and each
+     plugin's from its manifest; marks as data, tried on Meno's samples
+     when a plugin is added; `probe`;
    - ids, and the kind sent with each request;
    - one list of Meno's parts;
    - the Files and Plugins tabs;

@@ -26,8 +26,9 @@ written on 2026-10-06 with the maintainer, and its decisions are made. How files
   in Meno's forms. Examples: read a kind of file, write one, parse
   SMILES, assign R/S, make conformers, make a fingerprint.
 - **Plugin** - an independent package that fills roles. It has an
-  environment of its own, made from a lock Meno carries with the
-  network's consent, and a worker. It shares no code with another plugin
+  environment of its own, made from a lock with the network's consent, a
+  worker, and a manifest: data saying which roles it fills and which kinds
+  of file it reads and writes, read when it is added (FILE-IO.md). It shares no code with another plugin
   (the maintainer, 2026-10-06). Examples: RDKit, cclib, PySCF.
 - **Meno's own parts** - what comes with Meno and fills roles too: its
   readers and writers of MOL, SDF, RXN, XYZ and cube, its SVG, its 2D
@@ -129,7 +130,8 @@ The same for every plugin and for Meno's own parts:
   looked up only to show it.
 - **Requests, one answer each, an error an answer:**
   - `ping` - its name and version;
-  - `read`, `ask`, `write` - the file roles (FILE-IO.md);
+  - `read`, `ask`, `write` - the file roles, and `probe` - whether a file
+    is of a kind it registered (FILE-IO.md);
   - `run {role, input, options}` - every other role.
 - **Molecules cross it in one form, the record's.** That is atoms,
   bonds, coordinates in 2D or 3D, charge, isotope, stereo,
@@ -178,6 +180,8 @@ By the maintainer, 2026-10-06:
 4. **Molecules cross the contract in the record's form**, RDKit
    included.
 5. **The tabs are named "Plugins", and "Files"** for the per-kind choices.
+6. **Kinds of file are registered by plugins** in their manifests, so that
+   a plugin can read a program Meno does not know (FILE-IO.md).
 
 ## In order
 
