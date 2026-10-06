@@ -1,0 +1,44 @@
+{
+  "id": "gaussian-input",
+  "name": "Gaussian input",
+  "version": "0.1.0",
+  "description": "Writes a molecule in 3D as input for Gaussian 16 - its method, basis set and job, its charge and spin multiplicity, and the commands that name its checkpoint file and say what the run may use.",
+  "licence": "Apache-2.0",
+  "homepage": "https://gaussian.com/input/",
+  "environment": {"maker": "uv", "lock": "requirements.lock"},
+  "worker": "worker.py",
+  "reads": [],
+  "roles": [],
+  "kinds": [],
+  "writes": [
+    {
+      "id": "gaussian-input",
+      "name": "Gaussian input",
+      "extensions": [".gjf", ".com"],
+      "takes": "molecule",
+      "options": [
+        {"id": "job", "label": "Job", "type": "choice", "choices": [
+          {"value": "opt freq", "label": "Optimisation, then frequencies (Opt Freq)"},
+          {"value": "opt", "label": "Optimisation (Opt)"},
+          {"value": "freq", "label": "Frequencies (Freq)"},
+          {"value": "sp", "label": "Single-point energy (SP)"}
+        ], "default": "opt freq"},
+        {"id": "method", "label": "Method", "type": "text", "default": "B3LYP"},
+        {"id": "basis", "label": "Basis set", "type": "text", "default": "6-31G(d)"},
+        {"id": "dispersion", "label": "Empirical dispersion", "type": "choice", "choices": [
+          {"value": "none", "label": "None"},
+          {"value": "GD2", "label": "Grimme's D2 (GD2)"},
+          {"value": "GD3", "label": "Grimme's D3 (GD3)"},
+          {"value": "GD3BJ", "label": "Grimme's D3 with Becke-Johnson damping (GD3BJ)"}
+        ], "default": "GD3BJ"},
+        {"id": "keywords", "label": "More keywords for the route section", "type": "text", "default": ""},
+        {"id": "charge", "label": "Charge", "type": "number", "default": 0, "step": 1, "from": "charge"},
+        {"id": "multiplicity", "label": "Spin multiplicity", "type": "number", "default": 1, "min": 1, "step": 1, "from": "multiplicity"},
+        {"id": "title", "label": "Title", "type": "text", "default": "", "from": "name"},
+        {"id": "checkpoint", "label": "A checkpoint file named after the input (%Chk)", "type": "switch", "default": true},
+        {"id": "processors", "label": "Processors (%NProcShared; 0 leaves it to Gaussian)", "type": "number", "default": 0, "min": 0, "step": 1},
+        {"id": "memory", "label": "Memory (%Mem, as 8GB; empty leaves it to Gaussian)", "type": "text", "default": ""}
+      ]
+    }
+  ]
+}
