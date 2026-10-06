@@ -136,9 +136,21 @@ Each point is resolved by the plan below (see *Every point resolved*).
     `ConfirmDiscard` still says that nothing can be saved yet.
 12. **SMILES is copied two ways.** The menu goes through Meno's clipboard
     (Rust); the SMILES panel's button goes through the browser's.
-13. **SMILES is parsed two ways.** What the chemist types or pastes goes to
-    RDKit. The SMILES of abbreviations, ligands and reagents go to Meno's
-    own parser (`lib/chem/smiles.ts`).
+13. **SMILES is parsed two ways.**
+    - What the chemist types or pastes goes to RDKit.
+    - The SMILES of abbreviations, ligands, reagents and counter-ions go to
+      Meno's own parser (`lib/chem/smiles.ts`). It is a reader for part of
+      OpenSMILES, made for the groups Meno's dictionary stands for:
+      - the organic subset, and atoms in brackets (isotope, hydrogens,
+        charge);
+      - aromatic atoms, branches, ring closures and bonds;
+      - `*`, and atom classes;
+      - `@` and `@@` kept for the layout engine. Other stereo marks are
+        read past.
+    - The chemist's own abbreviations, typed in Settings, go to Meno's
+      parser too.
+    - Meno also writes SMILES itself, for an abbreviation made from a
+      selection.
 14. **The clipboard has gaps.** XYZ text is not recognised. The EMF and DIB
     flavours are written but never read.
 15. **An RXN cannot be dragged in on Windows** (`drop.rs`'s kinds).
@@ -164,8 +176,10 @@ Each point is resolved by the plan below (see *Every point resolved*).
 - **A plugin's drawing comes in the record's form.** A writer's options
   are declared in a general form and drawn by Meno.
 - **Save and Save As write `.meno` only.** Everything else is Export.
-- **Meno's own readers sit behind the contract**, in a worker, as long as
-  the response does not suffer (see *Response*).
+- **Meno's own readers sit behind the contract.** Whether they run in a
+  worker or on the page is decided once, for all of them alike, after the
+  maintainer has seen the measurements; a mix is not wanted (see
+  *Response*).
 - **RDKit is a plugin**, and it is kept running as part of Meno's core
   (PLUGINS.md).
 
@@ -287,7 +301,8 @@ How these behave:
 ### Response
 
 The maintainer's condition: Meno's own readers go behind the contract, in
-a web worker, only where the response does not suffer.
+a web worker, only if the response does not suffer - and all of them the
+same way, never some in the worker and some on the page.
 
 - **Measured first**, before and after, for four cases:
   - a small molfile (as from a paste);
@@ -297,13 +312,12 @@ a web worker, only where the response does not suffer.
 
   Two things are measured: the time from the file read to its first frame
   shown, and the longest the page is held up meanwhile.
-- **The rule.** A reader moves into the worker where showing a file takes
-  no longer than now by more than one frame (16 ms), at every size.
-  - Where the message's round trip would cost more than that - small files
-    if anything - the reader stays on the main thread, behind the same
-    contract, called as a function. Nothing else in Meno knows the
-    difference.
-  - Large files should gain: the page is not held up while they are read.
+- **Shown to the maintainer, then decided.**
+  - The measurements are put before the maintainer, each case both ways.
+  - The maintainer then chooses one way for all of Meno's readers and
+    writers: the worker, or the page.
+  - Either way they answer the same contract, so nothing else in Meno
+    depends on the choice.
 
 ### Every point resolved
 
@@ -360,8 +374,8 @@ Each step is a pull request from main.
      once;
    - failures said;
    - `readers.ts` into the XYZ reader, and geometries made directly.
-4. **Response:** the measurements, then Meno's readers behind the
-   contract, in the worker where the rule allows.
+4. **Response:** the measurements, shown to the maintainer. Then Meno's
+   readers go behind the contract, all of them the way chosen.
 5. **Save and Export:**
    - Save writing `.meno` only, back to the file it came from;
    - Save offered when closing;

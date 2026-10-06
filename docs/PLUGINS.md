@@ -73,6 +73,25 @@ new plugin for an existing role needs no change to Meno.
 
 ## Kept running
 
+**As things are** (`lib/rdkit/worker.ts`):
+
+- **Setting it up.** RDKit's environment (the `chem` profile, from a lock,
+  made by uv) is set up the first time something needs it - SMILES, a
+  structure in 3D, R and S - asking first for the network.
+- **Starting it.** Once set up, the worker starts the first time it is
+  asked for, not when Meno starts. In practice that is as soon as a
+  structure is drawn, since the chemical checks run by themselves once
+  RDKit is at hand (`useChemMarks`, `chemAtHand`). Its first import may
+  take a while; up to 90 s is allowed.
+- **Keeping it.** It is then kept for the session. If it stops, the next
+  request starts it again.
+- **In Settings.** *Chemistry* says whether it is running, set up and to
+  start when a structure is drawn, or not set up. It is not listed as a
+  plugin and cannot be taken away.
+
+The calculation readers start the same way, on first use, and are stopped
+only when taken away or when Meno quits.
+
 This is the answer to whether RDKit should be two things at once. It
 should not, as RDKit. Being kept running belongs to the core roles, not
 to any one plugin:
@@ -124,8 +143,9 @@ The same for every plugin and for Meno's own parts:
 - **Gives data, never code or markup**, in Meno's units, checked by Meno.
 - **Runs apart from the page:**
   - a plugin in its own process and environment;
-  - Meno's own parts in a web worker, where that costs no speed (see
-    FILE-IO.md, *Response*).
+  - Meno's own parts all one way - in a web worker, or on the page -
+    chosen by the maintainer once the measurements are seen (FILE-IO.md,
+    *Response*).
 
 ## Settings
 
