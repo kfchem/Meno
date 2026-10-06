@@ -359,8 +359,10 @@ export function circlePoints(c: Circle, n = 64): Vec2[] {
  * make a ring by bonds of their own.
  */
 export function hapticRings(atoms: readonly Atom[], bonds: readonly Bond[]): number[][] {
-  const indexOf = new Map(atoms.map((a, i) => [a.id, i]));
   const out: number[][] = [];
+  // (most drawings have none)
+  if (!bonds.some((b) => (b.endpoints?.length ?? 0) >= 3 && b.attach !== "any")) return out;
+  const indexOf = new Map(atoms.map((a, i) => [a.id, i]));
   for (const b of bonds) {
     if ((b.endpoints?.length ?? 0) < 3 || b.attach === "any") continue;
     const ring = b.endpoints!.map((id) => indexOf.get(id)).filter((i): i is number => i != null);
@@ -402,6 +404,8 @@ export function cumulatedShown(atoms: Atom[], bonds: readonly Bond[]): Atom[] {
 }
 
 function chargesAsDrawn(atoms: Atom[], bonds: readonly Bond[]): Atom[] {
+  // (most drawings have no bond with more ends than two, and nothing to change)
+  if (!bonds.some((b) => b.endpoints?.length)) return atoms;
   const rings = hapticRings(atoms, bonds);
   const indexOf = new Map(atoms.map((a, i) => [a.id, i]));
   // (an unpaired electron of any pi system bound so - an allyl's - is its
@@ -570,6 +574,27 @@ export function bondReach(
     return { left1: left, right1: right, left2: left, right2: right };
   }
   return even(line);
+}
+
+/**
+ * Whether a layout made at zoom `a` is the drawing at zoom `b` as well. In
+ * world units the zoom comes into it only where a line is kept from getting
+ * thinner on screen than the least it is drawn at, and in the steps a wavy
+ * bond's turns are drawn in: with the lines wider than that at both zooms,
+ * and a turn drawn in as many steps at both (or nothing wavy), the two
+ * layouts are the same, number for number but for the last bit or two of
+ * rounding - a line's width, kept in pixels at the zoom it was laid out
+ * for, scaled with it. So a view can be zoomed without its drawing being
+ * laid out again at every step.
+ */
+export function sameAtZooms(opts: LayoutOptions, bonds: readonly Bond[], a: number, b: number): boolean {
+  if ((opts.units ?? "px") !== "world") return false;
+  const least = Math.max(0.5, opts.minLinePx ?? 1);
+  if (!(opts.lineWidthPx * a >= least && opts.lineWidthPx * b >= least)) return false;
+  // (a bond next to a double bond whose stereo is not known is drawn wavy)
+  if (!bonds.some((x) => x.stereo === "wavy" || x.stereo === "either")) return true;
+  const half = opts.wavyPeriodPx / 2;
+  return waveSteps(opts.wavyAmpPx, half, a) === waveSteps(opts.wavyAmpPx, half, b);
 }
 
 export function pxToWorld(px: number, zoom: number): number {
@@ -1834,6 +1859,14 @@ function wavyFromA1(bond: Bond, deg?: Map<number, number>): boolean {
 }
 
 /**
+ * How many steps a wavy bond's turn is drawn in: even in angle, so a turn
+ * stays round - about 2 px each on screen.
+ */
+function waveSteps(amp: number, half: number, zoom: number): number {
+  return Math.max(12, Math.min(64, Math.ceil((Math.PI * Math.max(amp, half / 2) * zoom) / 2)));
+}
+
+/**
  * A wavy bond, as ACS 1996 draws it: half circles alternately either side of
  * the line - half ellipses, if the amplitude is not a quarter of the period -
  * starting on the line at `from`, the stereocentre, and swinging first to the
@@ -1871,11 +1904,7 @@ function buildWavySegments(
     const side = (k % 2 === 0 ? 1 : -1) * amp * Math.sin(phi);
     return vadd(from, vadd(vscale(dir, along), vscale(right, side)));
   };
-  // Steps even in angle, so a turn stays round: about 2 px each on screen.
-  const perTurn = Math.max(
-    12,
-    Math.min(64, Math.ceil((Math.PI * Math.max(amp, half / 2) * zoom) / 2)),
-  );
+  const perTurn = waveSteps(amp, half, zoom);
   const points: Vec2[] = [at(start)];
   const firstTurn = Math.floor(start / half);
   for (let k = firstTurn; k * half < last; k++) {
@@ -2107,7 +2136,10 @@ export function buildTextLabels(
     const to = atoms[j];
     if (!from || !to) return;
     const d = vnorm(vsub({ x: to.x, y: to.y }, { x: from.x, y: from.y }));
-    ways.set(i, [...(ways.get(i) ?? []), { dir: d, len: vlen(vsub({ x: to.x, y: to.y }, { x: from.x, y: from.y })), order }]);
+    const way = { dir: d, len: vlen(vsub({ x: to.x, y: to.y }, { x: from.x, y: from.y })), order };
+    const here = ways.get(i);
+    if (here) here.push(way);
+    else ways.set(i, [way]);
     const acc = away.get(i) ?? { x: 0, y: 0 };
     away.set(i, { x: acc.x + d.x, y: acc.y + d.y });
     if (d.x < -band) leftward.add(i);
@@ -2901,12 +2933,13 @@ export function joinsAtAtoms(
     const q = { x: atoms[b.a2].x, y: atoms[b.a2].y };
     for (const e of ends) plainEnds.add(e);
     if (vlen(vsub(q, p)) < 1e-9) continue;
-    if (ends.includes(b.a1)) {
-      plainDirs.set(b.a1, [...(plainDirs.get(b.a1) ?? []), vnorm(vsub(q, p))]);
-    }
-    if (ends.includes(b.a2)) {
-      plainDirs.set(b.a2, [...(plainDirs.get(b.a2) ?? []), vnorm(vsub(p, q))]);
-    }
+    const dirTo = (e: number, d: Vec2) => {
+      const here = plainDirs.get(e);
+      if (here) here.push(d);
+      else plainDirs.set(e, [d]);
+    };
+    if (ends.includes(b.a1)) dirTo(b.a1, vnorm(vsub(q, p)));
+    if (ends.includes(b.a2)) dirTo(b.a2, vnorm(vsub(p, q)));
   }
   // The wide end of a solid wedge covers the join at its atom itself, either
   // by reaching past it or by being cut along the bonds there; a cap on top of
@@ -2933,11 +2966,203 @@ export function joinsAtAtoms(
   return { caps, mitres };
 }
 
+/** Each atom's bonds (by index), in their order - a bond to itself twice. */
+function bondsByAtom(bonds: Bond[]): Map<number, Bond[]> {
+  const adjBonds = new Map<number, Bond[]>();
+  const add = (k: number, b: Bond) => {
+    const here = adjBonds.get(k);
+    if (here) here.push(b);
+    else adjBonds.set(k, [b]);
+  };
+  for (const b of bonds) {
+    add(b.a1, b);
+    add(b.a2, b);
+  }
+  return adjBonds;
+}
+
+/**
+ * The circles a drawing's rings are drawn with, as the layout draws them -
+ * a ring bound face-on to a metal through all its atoms always, and a
+ * six-membered ring with three double bonds where `opts.aromaticCircle`
+ * asks for its circle - with the bonds they stand in for, by the ids of
+ * their atoms ("3-7"). They depend only on where the atoms are and how they
+ * are bonded, not on the zoom: what the canvas offers a circle at is found
+ * without laying the drawing out.
+ */
+export function ringCircles(
+  atoms: Atom[],
+  bonds: Bond[],
+  opts: LayoutOptions,
+  adjBonds: Map<number, Bond[]> = bondsByAtom(bonds),
+): { circles: Circle[]; edges: Set<string> } {
+  const circles: Circle[] = [];
+  // Every six-membered cycle, as found walking out from each atom in turn
+  // (each once from each of its atoms, either way round), its atoms in
+  // order: a path of six led back to where it started.
+  const sixCycles = (found: (cycle: number[]) => void) => {
+    const adj = new Map<number, number[]>();
+    for (const b of bonds) {
+      for (const [k, v] of [[b.a1, b.a2], [b.a2, b.a1]]) {
+        const here = adj.get(k);
+        if (here) here.push(v);
+        else adj.set(k, [v]);
+      }
+    }
+    const n = atoms.length;
+    const path: number[] = [];
+    const visited = new Set<number>();
+    // How many bonds each atom is from the one walked out from, up to three
+    // (no atom of a six-membered ring is further from another): a step to
+    // an atom too far out to get back from in the steps left is not taken,
+    // which finds the same cycles in the same order without walking every
+    // chain and ring system out to six atoms. (Not where a bond names an
+    // atom that is not there: then every step is taken.)
+    const near = bonds.every((b) => Number.isInteger(b.a1) && Number.isInteger(b.a2) && b.a1 >= 0 && b.a2 >= 0 && b.a1 < n && b.a2 < n);
+    const from = new Int32Array(near ? n : 0).fill(-1);
+    const dist = new Int8Array(near ? n : 0);
+    const reach = (start: number) => {
+      from[start] = start;
+      dist[start] = 0;
+      const q = [start];
+      for (let h = 0; h < q.length; h++) {
+        const u = q[h];
+        if (dist[u] === 3) continue;
+        for (const v of adj.get(u) || []) {
+          if (from[v] === start) continue;
+          from[v] = start;
+          dist[v] = dist[u] + 1;
+          q.push(v);
+        }
+      }
+    };
+    // (a cycle's k-th atom is at most 7 - k bonds from its first)
+    const canReturn = (a: number, start: number, length: number) =>
+      !near || (from[a] === start && dist[a] <= 7 - length);
+    const walk = (startIdx: number, currIdx: number) => {
+      if (path.length === 6) {
+        if ((adj.get(currIdx) || []).includes(startIdx)) found([...path]);
+        return;
+      }
+      for (const nxt of adj.get(currIdx) || []) {
+        if (nxt === startIdx && path.length >= 3) continue;
+        if (visited.has(nxt)) continue;
+        if (!canReturn(nxt, startIdx, path.length + 1)) continue;
+        visited.add(nxt);
+        path.push(nxt);
+        walk(startIdx, nxt);
+        path.pop();
+        visited.delete(nxt);
+      }
+    };
+    for (let i = 0; i < n; i++) {
+      if (near) reach(i);
+      path.push(i);
+      visited.add(i);
+      walk(i, i);
+      path.pop();
+      visited.delete(i);
+    }
+  };
+  // optional aromatic circle detection (6-cycle with >=3 double bonds)
+  const aromaticEdges = new Set<string>();
+  // and a ring bound face-on to a metal through all its atoms, always: its
+  // pi system the circle's - an ellipse where it is seen in perspective -
+  // not double bonds (Cp, an arene), the circle fitted to its atoms
+  for (const ring of hapticRings(atoms, bonds)) {
+    const pts = ring.map((i) => atoms[i]);
+    const c = { x: pts.reduce((t, p) => t + p.x, 0) / pts.length, y: pts.reduce((t, p) => t + p.y, 0) / pts.length };
+    let xx = 0;
+    let yy = 0;
+    let xy = 0;
+    for (const p of pts) {
+      xx += (p.x - c.x) ** 2;
+      yy += (p.y - c.y) ** 2;
+      xy += (p.x - c.x) * (p.y - c.y);
+    }
+    xx /= pts.length;
+    yy /= pts.length;
+    xy /= pts.length;
+    // (a regular ring's corners spread as an ellipse's points do: its
+    // half-axes the root of twice the spread along each)
+    const mid = (xx + yy) / 2;
+    const span = Math.sqrt(((xx - yy) / 2) ** 2 + xy * xy);
+    const long = Math.sqrt(2 * (mid + span));
+    const short = Math.sqrt(2 * Math.max(0, mid - span));
+    const angle = 0.5 * Math.atan2(2 * xy, xx - yy);
+    circles.push({ c, r: long * (opts.aromaticCircleSize ?? 0.5), squash: long ? short / long : 1, angle });
+    for (const e of bonds) {
+      if (e.endpoints?.length || !ring.includes(e.a1) || !ring.includes(e.a2)) continue;
+      const u = atoms[e.a1].id;
+      const v = atoms[e.a2].id;
+      aromaticEdges.add(u < v ? `${u}-${v}` : `${v}-${u}`);
+    }
+  }
+  const enableAll = opts.aromaticCircle === true;
+  const enabledSet: Set<string> | null =
+    typeof opts.aromaticCircle === "object" &&
+    opts.aromaticCircle &&
+    (opts.aromaticCircle as any).enabled
+      ? (opts.aromaticCircle as any).enabled
+      : null;
+  if (enableAll || enabledSet) {
+    const seen = new Set<string>();
+    sixCycles((cycle) => {
+      // ringKey: concatenation of atom.id in ascending order
+      const ids = cycle.map((i) => atoms[i].id).sort((a, b) => a - b);
+      const ringKey = ids.join("-");
+      if (seen.has(ringKey)) return;
+      seen.add(ringKey);
+      let doubles = 0;
+      const pts: Vec2[] = [];
+      for (let i = 0; i < 6; i++) {
+        const u = cycle[i];
+        const v = cycle[(i + 1) % 6];
+        // (the first bond between them, as in the whole list: the first at u)
+        const be = (adjBonds.get(u) ?? []).find(
+          (bb) =>
+            (bb.a1 === u && bb.a2 === v) || (bb.a1 === v && bb.a2 === u)
+        );
+        if (be && be.order === 2) doubles++;
+        pts.push({ x: atoms[u].x, y: atoms[u].y });
+        // Edge-key calculation is deferred to demotion time; skip here
+      }
+      const isAromatic = doubles >= 3;
+      const isEnabled =
+        enableAll || (!!enabledSet && enabledSet.has(ringKey));
+      if (isAromatic && isEnabled) {
+        const c = pts.reduce(
+          (acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }),
+          { x: 0, y: 0 }
+        );
+        c.x /= 6;
+        c.y /= 6;
+        let r = 0;
+        for (const p of pts) r += Math.hypot(p.x - c.x, p.y - c.y);
+        r /= 6;
+        circles.push({ c, r: r * (opts.aromaticCircleSize ?? 0.5), key: ringKey });
+        // Demote these 6 edges (belonging to this ring)
+        for (let i = 0; i < 6; i++) {
+          const u = cycle[i];
+          const v = cycle[(i + 1) % 6];
+          const idu = atoms[u].id,
+            idv = atoms[v].id;
+          const ekey = idu < idv ? `${idu}-${idv}` : `${idv}-${idu}`;
+          aromaticEdges.add(ekey);
+        }
+      }
+    });
+  }
+  return { circles, edges: aromaticEdges };
+}
+
 export function buildAllPrimitives(
   atoms: Atom[],
   bonds: Bond[],
   opts: LayoutOptions,
-  zoom: number
+  zoom: number,
+  // (the labels, where the caller has them already)
+  labels: TextItem[] = buildTextLabels(atoms, opts, bonds),
 ): {
   lines: LineSeg[];
   polys: Poly[];
@@ -2963,6 +3188,16 @@ export function buildAllPrimitives(
     bonds,
     atoms.map((a) => a.el),
   );
+  // each atom's bonds, in their order, each once: what a bond's neighbours
+  // are read from, rather than from every bond in the drawing
+  const bondsAtAtom = new Map<number, Bond[]>();
+  for (const b of bonds) {
+    for (const e of b.a1 === b.a2 ? [b.a1] : [b.a1, b.a2]) {
+      const here = bondsAtAtom.get(e);
+      if (here) here.push(b);
+      else bondsAtAtom.set(e, [b]);
+    }
+  }
   bonds.forEach((b, i) => {
     if (b.order !== 2) return;
     if (b.doubleMode !== undefined && b.doubleMode !== "auto") return;
@@ -2984,11 +3219,11 @@ export function buildAllPrimitives(
         return;
       }
     }
-    const neigh1 = bonds
-      .filter((o) => o !== b && (o.a1 === b.a1 || o.a2 === b.a1))
+    const neigh1 = (bondsAtAtom.get(b.a1) ?? [])
+      .filter((o) => o !== b)
       .map((o) => (o.a1 === b.a1 ? o.a2 : o.a1));
-    const neigh2 = bonds
-      .filter((o) => o !== b && (o.a1 === b.a2 || o.a2 === b.a2))
+    const neigh2 = (bondsAtAtom.get(b.a2) ?? [])
+      .filter((o) => o !== b)
       .map((o) => (o.a1 === b.a2 ? o.a2 : o.a1));
     // Ignore neighbours near the axis, so a small nudge does not flip the side
     const EPS = Math.max(1e-4, L0 * (opts.doubleSideThreshold ?? 0.06));
@@ -3042,185 +3277,20 @@ export function buildAllPrimitives(
     doubleSides.set(b, sgn);
   });
 
-  // bonds at each atom, and just the neighbours, which the ring search uses
   // measure the labels once: the bonds are trimmed to them
   const fontWorld = toWorld(opts.fontPx, zoom, opts.units);
   const labelShapes = new Map<number, Vec2[][]>();
-  for (const tx of buildTextLabels(atoms, opts, bonds)) {
+  for (const tx of labels) {
     if (tx.atom != null) {
       labelShapes.set(tx.atom, labelHulls(tx, fontWorld, labelSetOf(opts), false));
     }
   }
-  const adjBonds = new Map<number, Bond[]>();
-  for (const b of bonds) {
-    adjBonds.set(b.a1, [...(adjBonds.get(b.a1) || []), b]);
-    adjBonds.set(b.a2, [...(adjBonds.get(b.a2) || []), b]);
-  }
-  const adj = new Map<number, number[]>();
-  for (const b of bonds) {
-    adj.set(b.a1, [...(adj.get(b.a1) || []), b.a2]);
-    adj.set(b.a2, [...(adj.get(b.a2) || []), b.a1]);
-  }
-  // detect 6-cycle ring edges
-  const ringEdges = new Set<string>();
-  // For each 6-cycle ring, store its center and the set of edges belonging only to that ring
-  const ringCenters: Array<{ c: Vec2; edges: Set<string> }> = [];
-  {
-    const seen = new Set<string>();
-    function dfs6(
-      startIdx: number,
-      currIdx: number,
-      path: number[],
-      visited: Set<number>
-    ) {
-      if (path.length === 6) {
-        if ((adj.get(currIdx) || []).includes(startIdx)) {
-          const cycle = [...path];
-          const key = [...cycle].sort((a, b) => a - b).join("-");
-          if (!seen.has(key)) {
-            seen.add(key);
-            const pts: Vec2[] = [];
-            const edgesLocal = new Set<string>();
-            for (let i = 0; i < 6; i++) {
-              const u = cycle[i];
-              const v = cycle[(i + 1) % 6];
-              const idu = atoms[u].id,
-                idv = atoms[v].id;
-              const ekey = idu < idv ? `${idu}-${idv}` : `${idv}-${idu}`;
-              ringEdges.add(ekey); // Global set (for inRing checks)
-              edgesLocal.add(ekey); // Per-ring set
-              pts.push({ x: atoms[u].x, y: atoms[u].y });
-            }
-            // Ring center (simple average)
-            const c = pts.reduce(
-              (acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }),
-              { x: 0, y: 0 }
-            );
-            const cx = c.x / 6,
-              cy = c.y / 6;
-            ringCenters.push({ c: { x: cx, y: cy }, edges: edgesLocal });
-          }
-        }
-        return;
-      }
-      for (const nxt of adj.get(currIdx) || []) {
-        if (nxt === startIdx && path.length >= 3) continue;
-        if (visited.has(nxt)) continue;
-        visited.add(nxt);
-        dfs6(startIdx, nxt, [...path, nxt], visited);
-        visited.delete(nxt);
-      }
-    }
-    for (let i = 0; i < atoms.length; i++) dfs6(i, i, [i], new Set([i]));
-  }
-  // optional aromatic circle detection (6-cycle with >=3 double bonds)
-  const aromaticEdges = new Set<string>();
-  // and a ring bound face-on to a metal through all its atoms, always: its
-  // pi system the circle's - an ellipse where it is seen in perspective -
-  // not double bonds (Cp, an arene), the circle fitted to its atoms
-  for (const ring of hapticRings(atoms, bonds)) {
-    const pts = ring.map((i) => atoms[i]);
-    const c = { x: pts.reduce((t, p) => t + p.x, 0) / pts.length, y: pts.reduce((t, p) => t + p.y, 0) / pts.length };
-    let xx = 0;
-    let yy = 0;
-    let xy = 0;
-    for (const p of pts) {
-      xx += (p.x - c.x) ** 2;
-      yy += (p.y - c.y) ** 2;
-      xy += (p.x - c.x) * (p.y - c.y);
-    }
-    xx /= pts.length;
-    yy /= pts.length;
-    xy /= pts.length;
-    // (a regular ring's corners spread as an ellipse's points do: its
-    // half-axes the root of twice the spread along each)
-    const mid = (xx + yy) / 2;
-    const span = Math.sqrt(((xx - yy) / 2) ** 2 + xy * xy);
-    const long = Math.sqrt(2 * (mid + span));
-    const short = Math.sqrt(2 * Math.max(0, mid - span));
-    const angle = 0.5 * Math.atan2(2 * xy, xx - yy);
-    circles.push({ c, r: long * (opts.aromaticCircleSize ?? 0.5), squash: long ? short / long : 1, angle });
-    for (const e of bonds) {
-      if (e.endpoints?.length || !ring.includes(e.a1) || !ring.includes(e.a2)) continue;
-      const u = atoms[e.a1].id;
-      const v = atoms[e.a2].id;
-      aromaticEdges.add(u < v ? `${u}-${v}` : `${v}-${u}`);
-    }
-  }
-  const enableAll = opts.aromaticCircle === true;
-  const enabledSet: Set<string> | null =
-    typeof opts.aromaticCircle === "object" &&
-    opts.aromaticCircle &&
-    (opts.aromaticCircle as any).enabled
-      ? (opts.aromaticCircle as any).enabled
-      : null;
-  if (enableAll || enabledSet) {
-    const seen = new Set<string>();
-    function dfs(
-      startIdx: number,
-      currIdx: number,
-      path: number[],
-      visited: Set<number>
-    ) {
-      if (path.length === 6) {
-        if ((adj.get(currIdx) || []).includes(startIdx)) {
-          const cycle = [...path];
-          // ringKey: concatenation of atom.id in ascending order
-          const ids = cycle.map((i) => atoms[i].id).sort((a, b) => a - b);
-          const ringKey = ids.join("-");
-          if (!seen.has(ringKey)) {
-            seen.add(ringKey);
-            let doubles = 0;
-            const pts: Vec2[] = [];
-            for (let i = 0; i < 6; i++) {
-              const u = cycle[i];
-              const v = cycle[(i + 1) % 6];
-              const be = bonds.find(
-                (bb) =>
-                  (bb.a1 === u && bb.a2 === v) || (bb.a1 === v && bb.a2 === u)
-              );
-              if (be && be.order === 2) doubles++;
-              pts.push({ x: atoms[u].x, y: atoms[u].y });
-              // Edge-key calculation is deferred to demotion time; skip here
-            }
-            const isAromatic = doubles >= 3;
-            const isEnabled =
-              enableAll || (!!enabledSet && enabledSet.has(ringKey));
-            if (isAromatic && isEnabled) {
-              const c = pts.reduce(
-                (acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }),
-                { x: 0, y: 0 }
-              );
-              c.x /= 6;
-              c.y /= 6;
-              let r = 0;
-              for (const p of pts) r += Math.hypot(p.x - c.x, p.y - c.y);
-              r /= 6;
-              circles.push({ c, r: r * (opts.aromaticCircleSize ?? 0.5), key: ringKey });
-              // Demote these 6 edges (belonging to this ring)
-              for (let i = 0; i < 6; i++) {
-                const u = cycle[i];
-                const v = cycle[(i + 1) % 6];
-                const idu = atoms[u].id,
-                  idv = atoms[v].id;
-                const ekey = idu < idv ? `${idu}-${idv}` : `${idv}-${idu}`;
-                aromaticEdges.add(ekey);
-              }
-            }
-          }
-        }
-        return;
-      }
-      for (const nxt of adj.get(currIdx) || []) {
-        if (nxt === startIdx && path.length >= 3) continue;
-        if (visited.has(nxt)) continue;
-        visited.add(nxt);
-        dfs(startIdx, nxt, [...path, nxt], visited);
-        visited.delete(nxt);
-      }
-    }
-    for (let i = 0; i < atoms.length; i++) dfs(i, i, [i], new Set([i]));
-  }
+  // bonds at each atom
+  const adjBonds = bondsByAtom(bonds);
+  // the rings' circles, and the bonds they stand in for
+  const ringed = ringCircles(atoms, bonds, opts, adjBonds);
+  for (const c of ringed.circles) circles.push(c);
+  const aromaticEdges = ringed.edges;
   // join fill caps for degree==2 to avoid wedge gaps at ~120°
   const widthPx =
     opts.units === "world" ? opts.lineWidthPx * zoom : opts.lineWidthPx;
@@ -3252,7 +3322,6 @@ export function buildAllPrimitives(
     const u = atoms[b.a1].id,
       v = atoms[b.a2].id;
     const key = u < v ? `${u}-${v}` : `${v}-${u}`;
-    const inRing = ringEdges.has(key);
     const beff: Bond = aromaticEdges.has(key) ? { ...b, order: 1 } : b;
     // which side the second line of a double bond takes, worked out for every
     // one of them first so that each knows what its neighbours are doing
@@ -3263,7 +3332,7 @@ export function buildAllPrimitives(
       opts,
       zoom,
       deg,
-      inRing,
+      undefined,
       autoSgn,
       adjBonds,
       labelShapes,
@@ -3325,7 +3394,11 @@ function perspectiveCorners(atoms: Atom[], bonds: Bond[], opts: LayoutOptions, z
   for (const b of bonds) {
     if (!inPerspective(b)) continue;
     const ends = b.display === "bold" ? [b.a1, b.a2] : [wedgeBaseAtom(b, deg)];
-    for (const e of ends) broadAt.set(e, [...(broadAt.get(e) ?? []), b]);
+    for (const e of ends) {
+      const here = broadAt.get(e);
+      if (here) here.push(b);
+      else broadAt.set(e, [b]);
+    }
   }
   for (const [at, here] of broadAt) {
     if (here.length < 2) continue;
@@ -3484,6 +3557,15 @@ export function unspecifiedDoubles(atoms: Atom[], bonds: Bond[]): Bond[] {
     if (b.stereo === "up" || b.stereo === "down") centres.add(wedgeNarrowAtom(b, deg));
   }
   const out = bonds.map((b) => (b.order === 2 && b.stereo === "either" ? { ...b, stereo: "none" as const } : b));
+  // each atom's bonds, by index, in their order
+  const at = new Map<number, number[]>();
+  bonds.forEach((b, k) => {
+    for (const e of b.a1 === b.a2 ? [b.a1] : [b.a1, b.a2]) {
+      const here = at.get(e);
+      if (here) here.push(k);
+      else at.set(e, [k]);
+    }
+  });
   const plain = (b: Bond) =>
     b.order === 1 &&
     (b.stereo ?? "none") === "none" &&
@@ -3498,10 +3580,7 @@ export function unspecifiedDoubles(atoms: Atom[], bonds: Bond[]): Bond[] {
       [d.a1, d.a2],
       [d.a2, d.a1],
     ].map(([end, other]) => {
-      const subs: number[] = [];
-      bonds.forEach((b, k) => {
-        if (k !== i && (b.a1 === end || b.a2 === end)) subs.push(k);
-      });
+      const subs = (at.get(end) ?? []).filter((k) => k !== i);
       const far = (k: number) => (bonds[k].a1 === end ? bonds[k].a2 : bonds[k].a1);
       // straight on from the double bond: within ten degrees of it
       const straight =
@@ -3550,11 +3629,18 @@ const groupText = (g: StereoGroup) => (g.kind === "abs" ? "abs" : `${g.kind}${g.
 function centresLabelled(atoms: Atom[], bonds: Bond[]): { atoms: Set<number>; bonds: Set<number>; notes: { atoms: number[]; text: string }[] } {
   const parts = components(atoms.length, bonds);
   const out = { atoms: new Set<number>(), bonds: new Set<number>(), notes: [] as { atoms: number[]; text: string }[] };
-  for (const part of parts) {
-    const inPart = new Set(part);
+  // (each part's bonds in a group, by the part their first atom is in)
+  const partOf = new Map<number, number>();
+  parts.forEach((part, p) => part.forEach((i) => partOf.set(i, p)));
+  const grouped: number[][] = parts.map(() => []);
+  bonds.forEach((b, k) => {
+    const p = b.stereoGroup ? partOf.get(b.a1) : undefined;
+    if (p != null) grouped[p].push(k);
+  });
+  for (const [p, part] of parts.entries()) {
     const groups = new Set<string>();
     const ats = part.filter((i) => atoms[i].stereoGroup);
-    const bds = bonds.flatMap((b, k) => (b.stereoGroup && inPart.has(b.a1) ? [k] : []));
+    const bds = grouped[p];
     for (const i of ats) groups.add(groupText(atoms[i].stereoGroup!));
     for (const k of bds) groups.add(groupText(bonds[k].stereoGroup!));
     if (!groups.size) continue;
@@ -3573,10 +3659,21 @@ function centresLabelled(atoms: Atom[], bonds: Bond[]): { atoms: Set<number>; bo
 /** The drawing's connected parts, as atom indices. */
 function components(n: number, bonds: Bond[]): number[][] {
   const parent = Array.from({ length: n }, (_, i) => i);
-  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  // (without recursion: a long chain would overflow the stack)
+  const find = (i: number): number => {
+    let root = i;
+    while (parent[root] !== root) root = parent[root];
+    while (parent[i] !== root) [parent[i], i] = [root, parent[i]];
+    return root;
+  };
   for (const b of bonds) parent[find(b.a1)] = find(b.a2);
   const parts = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) parts.set(find(i), [...(parts.get(find(i)) ?? []), i]);
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    const part = parts.get(r);
+    if (part) part.push(i);
+    else parts.set(r, [i]);
+  }
   return [...parts.values()];
 }
 
@@ -3689,7 +3786,12 @@ function atomNotes(
     ]) {
       const d = vsub({ x: atoms[j].x, y: atoms[j].y }, { x: atoms[i].x, y: atoms[i].y });
       const len = vlen(d);
-      if (len > 1e-9) ways.set(i, [...(ways.get(i) ?? []), { dir: vscale(d, 1 / len), len }]);
+      if (len > 1e-9) {
+        const way = { dir: vscale(d, 1 / len), len };
+        const here = ways.get(i);
+        if (here) here.push(way);
+        else ways.set(i, [way]);
+      }
     }
   }
   atoms.forEach((a, i) => {
@@ -3888,8 +3990,8 @@ export function layoutMolecule(
 ): Layout {
   const bonds = unspecifiedDoubles(drawn, given);
   const atoms = cumulatedShown(chargesAsDrawn(drawn, bonds), bonds);
-  const prim = buildAllPrimitives(atoms, bonds, opts, zoom);
   const labels = buildTextLabels(atoms, opts, bonds);
+  const prim = buildAllPrimitives(atoms, bonds, opts, zoom, labels);
   // what is said about bonds, atoms and whole structures (IUPAC GR-11)
   const groups = centresLabelled(atoms, bonds);
   prim.lines.push(...centreStrokes(atoms, bonds, opts, zoom));
