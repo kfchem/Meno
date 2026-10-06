@@ -4,6 +4,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor } from "../store";
 import {
   layoutMolecule,
+  sameAtZooms,
   type Atom as LAtom,
   type Bond as LBond,
 } from "../../../../lib/chem/layout2d";
@@ -217,10 +218,19 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
   );
   // (a label is read by the abbreviations Meno knows, the user's among them)
   const abbreviations = useAppSettings((s) => s.abbreviations);
+  // The zoom it is laid out at: the view's - or, where the layout made at
+  // the zoom it was last laid out at is the drawing at this one as well
+  // (sameAtZooms), that one. A zoom then moves the view and leaves the
+  // drawing as it is, rather than laying a drawing of thousands of atoms out
+  // again at every frame of it.
+  const laidAt = useRef<number | null>(null);
+  const layoutZoom =
+    laidAt.current != null && sameAtZooms(opts, bonds, laidAt.current, zoom) ? laidAt.current : zoom;
+  laidAt.current = layoutZoom;
   const layout = useMemo(
-    () => layoutMolecule(drawnAtoms, bonds, opts, zoom),
+    () => layoutMolecule(drawnAtoms, bonds, opts, layoutZoom),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fonts, abbreviations: see above
-    [drawnAtoms, bonds, opts, zoom, fonts, abbreviations],
+    [drawnAtoms, bonds, opts, layoutZoom, fonts, abbreviations],
   );
   const value = useMemo(
     () => ({ atoms: drawnAtoms, bonds, opts, layout, zoom }),

@@ -1,6 +1,6 @@
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { TAU, follow } from "../../../theme/motion";
 import { labelSetOf, placeLabel } from "../../../../lib/chem/layout2d";
@@ -42,51 +42,59 @@ export default function Labels2D() {
   useEffect(() => {
     if (font !== null) noteUncovered(family, key.split("\n"));
   }, [font, family, key]);
-  // Once the font is in, the labels fade in (TAU.quick) rather than appear.
+  // Once the font is in, the labels fade in (TAU.quick) rather than appear:
+  // each label's own opacity brought up a frame at a time, not the labels
+  // drawn again - a drawing can have thousands.
   const seen = useRef<{ font: string | null; level: number }>({ font: null, level: 0 });
   if (seen.current.font !== font) seen.current = { font, level: 0 };
-  const [, setFrame] = useState(0);
+  const group = useRef<THREE.Group>(null);
   const invalidate = useThree((st) => st.invalidate);
   useFrame((_, dt) => {
     const s = seen.current;
     if (s.font === null || s.level === 1) return;
     const n = follow(s.level, 1, Math.min(dt, 1 / 20), TAU.quick);
     s.level = n > 0.99 ? 1 : n;
-    setFrame((f) => f + 1);
+    group.current?.traverse((o) => {
+      if ("fillOpacity" in o) (o as unknown as { fillOpacity: number }).fillOpacity = s.level;
+    });
     invalidate();
   });
+  // (labels sized in the drawing's own units are the same at any zoom: the
+  // view zooming leaves them as they are)
+  const labelZoom = opts.units === "px" ? zoom : null;
+  const labelColor = opts.labelColor ?? "black";
+  const labels = useMemo(() => {
+    if (font === null) return null;
+    const set = labelSetOf(opts);
+    const fill = seen.current.level;
+    return layout.texts.map((t, i) => {
+      const fontWorld = labelZoom != null ? t.fontPx / Math.max(labelZoom, 1e-6) : t.fontPx;
+      return (
+        <group key={`txt-${i}`}>
+          {/* (a mark - a charge's circle, a radical's dot - is drawn with the lines) */}
+          {placeLabel(t, fontWorld, set).map((run, k) => run.mark ? null : (
+            // (an italic run - the t of t-Bu - slanted about its baseline)
+            <group key={`run-${k}`} position={[run.x, run.y, 0]} matrixAutoUpdate={!run.italic} matrix={run.italic ? slanted(run.x, run.y) : undefined}>
+              <Text
+                font={font}
+                fontSize={run.size}
+                color={labelColor}
+                fillOpacity={fill}
+                anchorX="left"
+                anchorY="top-baseline"
+                renderOrder={30}
+                material-toneMapped={false}
+                material-depthTest={false}
+                material-depthWrite={false}
+              >
+                {run.text}
+              </Text>
+            </group>
+          ))}
+        </group>
+      );
+    });
+  }, [layout, opts, labelZoom, labelColor, font]);
   if (font === null) return null;
-  const fill = seen.current.level;
-  return (
-    <group>
-      {layout.texts.map((t, i) => {
-        const fontWorld =
-          opts.units === "px" ? t.fontPx / Math.max(zoom, 1e-6) : t.fontPx;
-        return (
-          <group key={`txt-${i}`}>
-            {/* (a mark - a charge's circle, a radical's dot - is drawn with the lines) */}
-            {placeLabel(t, fontWorld, labelSetOf(opts)).map((run, k) => run.mark ? null : (
-              // (an italic run - the t of t-Bu - slanted about its baseline)
-              <group key={`run-${k}`} position={[run.x, run.y, 0]} matrixAutoUpdate={!run.italic} matrix={run.italic ? slanted(run.x, run.y) : undefined}>
-                <Text
-                  font={font}
-                  fontSize={run.size}
-                  color={opts.labelColor ?? "black"}
-                  fillOpacity={fill}
-                  anchorX="left"
-                  anchorY="top-baseline"
-                  renderOrder={30}
-                  material-toneMapped={false}
-                  material-depthTest={false}
-                  material-depthWrite={false}
-                >
-                  {run.text}
-                </Text>
-              </group>
-            ))}
-          </group>
-        );
-      })}
-    </group>
-  );
+  return <group ref={group}>{labels}</group>;
 }

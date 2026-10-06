@@ -11,6 +11,7 @@ They need RDKit, so they run in an environment built from the chem lock:
 import importlib.util
 import json
 import pathlib
+import time
 import unittest
 
 WORKER = pathlib.Path(__file__).resolve().parents[2] / "src-tauri/resources/workers/chem_worker.py"
@@ -56,6 +57,21 @@ M  END
 
 def ask(op, **args):
     return worker.answer(json.dumps({"id": 1, "op": op, **args}))
+
+
+def v3000(atoms, bonds):
+    """A V3000 block, for more atoms than V2000 counts: as v2000 takes them."""
+    stereo = {None: 0, "up": 1, "down": 3}
+    lines = ["", "  test", "", "  0  0  0     0  0            999 V3000",
+             "M  V30 BEGIN CTAB", f"M  V30 COUNTS {len(atoms)} {len(bonds)} 0 0 0", "M  V30 BEGIN ATOM"]
+    for i, (el, x, y) in enumerate(atoms):
+        lines.append(f"M  V30 {i + 1} {el} {x:.4f} {y:.4f} 0 0")
+    lines.append("M  V30 END ATOM")
+    lines.append("M  V30 BEGIN BOND")
+    for i, (a, b, order, s) in enumerate(bonds):
+        lines.append(f"M  V30 {i + 1} {order} {a + 1} {b + 1}" + (f" CFG={stereo[s]}" if s else ""))
+    lines += ["M  V30 END BOND", "M  V30 END CTAB", "M  END"]
+    return "\n".join(lines) + "\n"
 
 
 def v2000(atoms, bonds):
@@ -105,7 +121,6 @@ class ChemWorkerTest(unittest.TestCase):
         bad = PCPA.replace("  9 10  2  0", "  9 10  3  0")  # C#O on a carboxyl carbon
         r = ask("analyse", molblock=bad)["result"]
         self.assertEqual(r["atoms"][8]["valenceError"], {"valence": 5, "most": 4})
-        self.assertIsNone(r["smiles"])
 
     def test_labels_one_fragment_when_another_makes_no_sense(self):
         # (S)-CHFClBr beside a carbon with five bonds
@@ -118,7 +133,52 @@ class ChemWorkerTest(unittest.TestCase):
         r = ask("analyse", molblock=block)["result"]
         self.assertEqual(r["atoms"][0].get("cip"), "S")
         self.assertIn("valenceError", r["atoms"][4])
-        self.assertIsNone(r["smiles"])
+
+    def test_analyses_a_page_of_many_records_as_each_alone_and_quickly(self):
+        # PCPA and trans-but-2-ene, 400 of each side by side - and the same
+        # page with a carbon of five bonds on it, made sense of fragment by
+        # fragment: every record labelled as it is alone, either way
+        trans = (
+            [("C", 0, 0), ("C", 1.3, 0.75), ("C", 2.6, 0), ("C", 3.9, 0.75)],
+            [(0, 1, 1, None), (1, 2, 2, None), (2, 3, 1, None)],
+        )
+        pcpa = worker.read(PCPA, sanitize=False)
+        records = [
+            ([(a.GetSymbol(), pcpa.GetConformer().GetAtomPosition(a.GetIdx()).x,
+               pcpa.GetConformer().GetAtomPosition(a.GetIdx()).y) for a in pcpa.GetAtoms()],
+             [(b.GetBeginAtomIdx(), b.GetEndAtomIdx(), int(b.GetBondTypeAsDouble()),
+               "up" if b.GetBondDir() == worker.Chem.BondDir.BEGINWEDGE else None) for b in pcpa.GetBonds()]),
+            trans,
+        ]
+        alone = [ask("analyse", molblock=v2000(*r))["result"] for r in records]
+        five = ([("C", 0, 0), ("C", 1.5, 0), ("C", -1.5, 0), ("C", 0, 1.5), ("C", 0, -1.5), ("C", 1, 1)],
+                [(0, j, 1, None) for j in range(1, 6)])
+
+        def page(copies, extra=None):
+            atoms, bonds = [], []
+            for k in range(copies):
+                for r in records + ([extra] if extra and k == 0 else []):
+                    first = len(atoms)
+                    atoms += [(el, x + 20 * k, y) for el, x, y in r[0]]
+                    bonds += [(a + first, b + first, o, s) for a, b, o, s in r[1]]
+            return v2000(atoms, bonds) if len(atoms) < 1000 else v3000(atoms, bonds)
+
+        for extra in (None, five):
+            started = time.time()
+            r = ask("analyse", molblock=page(400, extra))["result"]
+            if extra is None:
+                self.assertLess(time.time() - started, 5)
+            at = 0
+            for k in range(400):
+                for one in alone:
+                    n = len(one["atoms"])
+                    got = [{**a, "index": a["index"] - at} for a in r["atoms"][at:at + n]]
+                    self.assertEqual(got, one["atoms"])
+                    at += n
+                if extra and k == 0:
+                    self.assertIn("valenceError", r["atoms"][at])
+                    at += len(five[0])
+            self.assertEqual(at, len(r["atoms"]))
 
     def test_labels_double_bonds_e_and_z(self):
         trans = v2000(

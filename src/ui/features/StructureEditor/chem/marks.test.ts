@@ -3,9 +3,12 @@ import type { Model } from "../store/types";
 import {
   bondSide,
   exitDistance,
+  markIndex,
+  MarkObstacles,
   marksOf,
   placeMark,
   segmentHitsRect,
+  type Rect,
   stereoTextEms,
   stereoWaysOut,
   valenceMessage,
@@ -42,7 +45,6 @@ describe("marksOf", () => {
         { index: 3, hydrogens: 3 },
       ],
       bonds: [{ index: 1, cip: "E" }],
-      smiles: null,
     });
     expect([...marks.centres]).toEqual([[11, "R"]]);
     expect([...marks.valence]).toEqual([[12, { valence: 5, most: 4 }]]);
@@ -50,7 +52,7 @@ describe("marksOf", () => {
   });
 
   it("says an axis of chirality's M or P as Ra or Sa, as a label says (R)-BINAP", () => {
-    const axis = (cip: "M" | "P") => marksOf(butene, { atoms: [], bonds: [{ index: 0, cip }], smiles: null }).doubleBonds.get(20);
+    const axis = (cip: "M" | "P") => marksOf(butene, { atoms: [], bonds: [{ index: 0, cip }] }).doubleBonds.get(20);
     expect(axis("M")).toBe("Ra");
     expect(axis("P")).toBe("Sa");
   });
@@ -92,18 +94,67 @@ describe("where marks go", () => {
     const up = placeMark({
       ...common,
       dirs: [{ x: 0, y: 1 }, { x: 0, y: -1 }],
-      segments: [],
-      rects: [],
+      obstacles: new MarkObstacles([], []),
     });
     expect(up.minY).toBeCloseTo(0.1, 9);
     // a bond across the way up: down instead
     const down = placeMark({
       ...common,
       dirs: [{ x: 0, y: 1 }, { x: 0, y: -1 }],
-      segments: [[{ x: -2, y: 0.4 }, { x: 2, y: 0.4 }]],
-      rects: [{ minX: -1, maxX: 1, minY: -1.5, maxY: -1.2 }],
+      obstacles: new MarkObstacles([[{ x: -2, y: 0.4 }, { x: 2, y: 0.4 }]], [{ minX: -1, maxX: 1, minY: -1.5, maxY: -1.2 }]),
     });
     expect(down.maxY).toBeCloseTo(-0.1, 9);
+  });
+
+  it("counts what is in a mark's way as checking every bond, label and mark would", () => {
+    // a page of bonds and boxes, some huge, some far out, some not numbers
+    let seed = 7;
+    const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+    const pt = () => ({ x: rnd() * 40 - 20, y: rnd() * 40 - 20 });
+    const box = (w = 2): Rect => {
+      const c = pt();
+      return { minX: c.x - rnd() * w, maxX: c.x + rnd() * w, minY: c.y - rnd() * w, maxY: c.y + rnd() * w };
+    };
+    const segments: [{ x: number; y: number }, { x: number; y: number }][] = [];
+    for (let i = 0; i < 400; i++) {
+      const p = pt();
+      segments.push([p, { x: p.x + rnd() * 3 - 1.5, y: p.y + rnd() * 3 - 1.5 }]);
+    }
+    // (records drawn on top of one another: the same bonds again)
+    for (let i = 0; i < 300; i++) segments.push(segments[i % 40]);
+    segments.push([{ x: -500, y: -3 }, { x: 500, y: 4 }]); // across the page
+    segments.push([{ x: NaN, y: 0 }, { x: 1, y: 1 }]);
+    segments.push([{ x: 0, y: 0 }, { x: Infinity, y: 2 }]);
+    const rects: Rect[] = Array.from({ length: 60 }, () => box());
+    rects.push({ minX: -1e9, maxX: 1e9, minY: -1, maxY: 1 });
+    const obstacles = new MarkObstacles(segments, rects, 1.5);
+    const all = [...rects];
+    for (let k = 0; k < 500; k++) {
+      const r = k % 50 === 0 ? { minX: -Infinity, maxX: 0, minY: 0, maxY: 1 } : box(k % 7 === 0 ? 30 : 1.5);
+      const expected =
+        segments.filter((s) => segmentHitsRect(s, r)).length +
+        all.filter((o) => r.minX < o.maxX && o.minX < r.maxX && r.minY < o.maxY && o.minY < r.maxY).length;
+      expect(obstacles.count(r), `box ${k}`).toBe(expected);
+      // (and the marks placed as they go, some in the same place again)
+      if (k % 3 === 0) {
+        obstacles.add(r);
+        all.push(r);
+      }
+      if (k % 5 === 0) {
+        const again = all[(k * 7) % all.length];
+        obstacles.add({ ...again });
+        all.push(again);
+      }
+    }
+  });
+
+  it("finds the same ways out with one index of the structure for every mark", () => {
+    const index = markIndex(butene);
+    for (const a of butene.atoms) {
+      expect(waysOut(butene, a.id, index)).toEqual(waysOut(butene, a.id));
+      expect(stereoWaysOut(butene, a.id, index)).toEqual(stereoWaysOut(butene, a.id));
+    }
+    for (const b of butene.bonds) expect(bondSide(butene, b.id, index)).toEqual(bondSide(butene, b.id));
   });
 
   it("knows when a line passes through a box", () => {

@@ -200,10 +200,13 @@ export default function BondsPick2D() {
     if (!m) return;
     m.count = bonds.length;
     const thickWorld = PICK_THICKNESS_RATIO * NOMINAL_BOND_LENGTH;
+    // (each atom by its id, looked up once rather than searched for at each bond)
+    const byId = new Map<number, (typeof atoms)[number]>();
+    for (const a of atoms) if (!byId.has(a.id)) byId.set(a.id, a);
     for (let i = 0; i < bonds.length; i++) {
       const b = bonds[i];
-      const a1 = atoms.find((a) => a.id === b.a);
-      const a2 = atoms.find((a) => a.id === b.b);
+      const a1 = byId.get(b.a);
+      const a2 = byId.get(b.b);
       if (!a1 || !a2) continue;
       const dx = a2.x - a1.x,
         dy = a2.y - a1.y;
@@ -474,7 +477,11 @@ export default function BondsPick2D() {
       onPointerOut={() => clearBondHover()}
     >
       <planeGeometry args={[1, 1]} />
+      {/* (a hit area only, never drawn - a pointer still finds it: picking
+          does not ask whether a material is drawn - so that thousands of
+          bonds are not painted over with as many unseen strips every frame) */}
       <meshBasicMaterial
+        visible={false}
         color={"black"}
         transparent
         opacity={0.001}

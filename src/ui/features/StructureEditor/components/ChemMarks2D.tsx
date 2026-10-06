@@ -1,6 +1,7 @@
+import * as THREE from "three";
 import PageHtml from "./PageHtml";
-import { useThree } from "@react-three/fiber";
-import { useEffect, useMemo } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import {
   fontStack,
@@ -9,16 +10,12 @@ import {
   type LabelBox,
 } from "../../../../lib/chem/layout2d";
 import {
-  bondSide,
-  exitDistance,
   MARK_MIN_PX,
   MARK_SCALE,
-  placeMark,
+  stereoPlaces,
   stereoTextEms,
-  stereoWaysOut,
   valenceMessage,
   type ChemMarks,
-  type Rect,
 } from "../chem/marks";
 import { useEditor } from "../store";
 import type { Model } from "../store/types";
@@ -65,17 +62,20 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
       bonds: model.bonds,
     };
   }, [atoms, model]);
+  // (labels sized in the drawing's units are as big at any zoom: their boxes
+  // are not worked out again as the view zooms)
+  const labelZoom = opts.units === "px" ? zoom : null;
   const boxes = useMemo(() => {
     const set = labelSetOf(opts);
     const out = new Map<number, LabelBox>();
     for (const t of layout.texts) {
       const id = t.atom != null ? atoms[t.atom]?.id : undefined;
       if (id == null) continue;
-      const size = opts.units === "px" ? t.fontPx / Math.max(zoom, 1e-6) : t.fontPx;
+      const size = labelZoom != null ? t.fontPx / Math.max(labelZoom, 1e-6) : t.fontPx;
       out.set(id, labelBox(t, size, set));
     }
     return out;
-  }, [layout, atoms, opts, zoom]);
+  }, [layout, atoms, opts, labelZoom]);
 
   const z = Math.max(zoom, 1e-6);
   const labelFont = opts.units === "px" ? opts.fontPx / z : opts.fontPx;
@@ -87,77 +87,34 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
 
   // R, S, E and Z, each placed clear of the bonds, the labels and the
   // marks placed before it
+  // (the marks as big on the page as before - the letters grown with the
+  // view, as they are once past their least size - go where they went: a
+  // zoom does not place them all again)
+  const markSize = (fontPx / z).toPrecision(12);
   const stereo = useMemo(() => {
-    if (!marks) return [];
-    const L = NOMINAL_BOND_LENGTH;
-    const at = new Map(drawn.atoms.map((a) => [a.id, a]));
-    const segments = drawn.bonds.flatMap((b) => {
-      const p = at.get(b.a);
-      const q = at.get(b.b);
-      return p && q ? [[p, q] as [typeof p, typeof q]] : [];
+    // (none to place: nothing to keep them off)
+    if (!marks || (!marks.centres.size && !marks.doubleBonds.size)) return [];
+    return stereoPlaces({
+      model: drawn,
+      centres: marks.centres,
+      doubleBonds: marks.doubleBonds,
+      boxes,
+      half: (cip) => ({
+        x: (fontPx * stereoTextEms(cip, parentheses)) / 2 / z,
+        y: (fontPx * MARK_HALF_HEIGHT) / z,
+      }),
+      // (a mark placed keeps the next a little way off, not just clear of
+      // it: two side by side read as one, and as either atom's)
+      apart: (MARKS_APART * fontPx) / z,
+      off: gap * labelFont,
+      bond: NOMINAL_BOND_LENGTH,
     });
-    const rects: Rect[] = [];
-    for (const [id, box] of boxes) {
-      const a = at.get(id);
-      if (!a) continue;
-      rects.push({
-        minX: a.x - box.left,
-        maxX: a.x + box.right,
-        minY: a.y - box.bottom,
-        maxY: a.y + box.top,
-      });
-    }
-    const half = (cip: string) => ({
-      x: (fontPx * stereoTextEms(cip, parentheses)) / 2 / z,
-      y: (fontPx * MARK_HALF_HEIGHT) / z,
-    });
-    const out: { key: string; x: number; y: number; text: string }[] = [];
-    // (a mark placed keeps the next a little way off, not just clear of
-    // it: two side by side read as one, and as either atom's)
-    const apart = (MARKS_APART * fontPx) / z;
-    const put = (key: string, text: string, r: Rect) => {
-      rects.push({ minX: r.minX - apart, maxX: r.maxX + apart, minY: r.minY - apart, maxY: r.maxY + apart });
-      out.push({ key, text, x: (r.minX + r.maxX) / 2, y: (r.minY + r.maxY) / 2 });
-    };
-    for (const [id, cip] of marks.centres) {
-      const a = at.get(id);
-      if (!a) continue;
-      const box = boxes.get(id);
-      // (opposite a wedge where it has one, as IUPAC's recommendations for
-      // structure diagrams place it - GR-11.1 - as far off its atom as the
-      // style says, or as far beyond its label)
-      const r = placeMark({
-        from: a,
-        dirs: stereoWaysOut(drawn, id),
-        start: (dir) => (box ? exitDistance(box, dir) : 0) + gap * labelFont,
-        half: half(cip),
-        step: 0.15 * L,
-        segments,
-        rects,
-      });
-      put(`centre-${id}`, cip, r);
-    }
-    for (const [id, cip] of marks.doubleBonds) {
-      const side = bondSide(drawn, id);
-      if (!side) continue;
-      const r = placeMark({
-        from: side.at,
-        dirs: [side.out, side.back],
-        // clear of the second line, which is not among the segments
-        start: () => 0.3 * L,
-        half: half(cip),
-        step: 0.15 * L,
-        segments,
-        rects,
-      });
-      put(`bond-${id}`, cip, r);
-    }
-    return out;
-  }, [marks, drawn, boxes, fontPx, z, parentheses, labelFont, gap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fontPx, z: as far as they make markSize
+  }, [marks, drawn, boxes, markSize, parentheses, labelFont, gap]);
 
   // Each mark where it goes: a valence problem's box round its atom's label
   // (or a ring round its atom), and the stereodescriptors.
-  const at = new Map(drawn.atoms.map((a) => [a.id, a]));
+  const at = useMemo(() => new Map(drawn.atoms.map((a) => [a.id, a])), [drawn]);
   const boxesOf: { key: string; id: number; x: number; y: number; w: number; h: number; round: boolean; message: string }[] = [];
   for (const [id, problem] of marks ? [...marks.valence] : []) {
     const a = at.get(id);
@@ -182,6 +139,45 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
   // vanishing as the marks are worked out again after an edit)
   const valenceShown = usePresence(boxesOf, (m) => m.key);
   const stereoShown = usePresence(marks ? stereo : [], (m) => m.key);
+
+  // R, S, E and Z, all in one layer over the canvas, each moved to where its
+  // point is seen as the view moves: a layer of its own for each - its own
+  // root, moved by its own frame callback - made a structure of thousands
+  // of stereocentres take seconds to show them. Each sits where a layer of
+  // its own put it: its middle on its point (as Html's `center` does).
+  const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
+  const markEls = useRef(new Map<string, HTMLDivElement>());
+  const shownNow = useRef(stereoShown);
+  shownNow.current = stereoShown;
+  const seenFrom = useRef("");
+  const seen = (x: number, y: number) => {
+    const v = new THREE.Vector3(x, y, 0).project(camera);
+    return [v.x * (size.width / 2) + size.width / 2, -(v.y * (size.height / 2)) + size.height / 2];
+  };
+  const placeOne = (el: HTMLDivElement, m: { x: number; y: number }, [ox, oy] = seen(0, 0)) => {
+    const [x, y] = seen(m.x, m.y);
+    el.style.transform = `translate3d(${x - ox}px,${y - oy}px,0) translate3d(-50%,-50%,0)`;
+  };
+  const placeAll = () => {
+    camera.updateMatrixWorld();
+    const origin = seen(0, 0);
+    for (const { key, item: m } of shownNow.current) {
+      const el = markEls.current.get(key);
+      if (el) placeOne(el, m, origin);
+    }
+  };
+  useFrame(() => {
+    // (only when the view has moved; what is shown changing is seen to below)
+    const view = `${camera.projectionMatrix.elements.join()},${camera.matrixWorld.elements.join()},${size.width},${size.height}`;
+    if (view === seenFrom.current) return;
+    seenFrom.current = view;
+    placeAll();
+  });
+  useEffect(() => {
+    placeAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- placeAll: the view as it is now
+  }, [stereoShown]);
   if (!valenceShown.length && !stereoShown.length) return null;
 
   return (
@@ -202,13 +198,30 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
           </div>
         </PageHtml>
       ))}
-      {stereoShown.map(({ key, item: m, leaving }) => (
-        <PageHtml key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
-          <div className={leaving ? "meno-fade-out" : "meno-fade-in"}>
-            <StereoMark text={m.text} fontPx={fontPx} parentheses={parentheses} {...writing} />
-          </div>
+      {stereoShown.length > 0 && (
+        <PageHtml position={[0, 0, 0]} zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
+          {stereoShown.map(({ key, item: m, leaving }) => (
+            <div
+              key={key}
+              ref={(el) => {
+                if (!el) {
+                  markEls.current.delete(key);
+                  return;
+                }
+                markEls.current.set(key, el);
+                // (put where it goes as it comes: this layer is drawn by
+                // a root of its own, after this one's effects have run)
+                placeOne(el, m);
+              }}
+              style={{ position: "absolute", top: 0, left: 0, transform: "translate3d(-50%,-50%,0)" }}
+            >
+              <div className={leaving ? "meno-fade-out" : "meno-fade-in"}>
+                <StereoMark text={m.text} fontPx={fontPx} parentheses={parentheses} {...writing} />
+              </div>
+            </div>
+          ))}
         </PageHtml>
-      ))}
+      )}
     </group>
   );
 }

@@ -64,13 +64,14 @@ export function aromaticRingSides(
   atomCount: number,
   bonds: readonly RingBond[],
   elements: readonly string[],
+  // (the bonds' smallest rings, where the caller has them already)
+  rings: number[][] = smallestRings(
+    atomCount,
+    bonds.map((b) => [b.a1, b.a2] as const),
+  ),
 ): Map<number, number[]> {
   const bondAt = new Map<string, number>();
   bonds.forEach((b, i) => bondAt.set(key(b.a1, b.a2), i));
-  const rings = smallestRings(
-    atomCount,
-    bonds.map((b) => [b.a1, b.a2] as const),
-  );
   const aromatic = rings
     .map((ring) => ({ ring, doubles: aromaticRing(ring, bondAt, bonds, elements) }))
     .filter((r): r is { ring: number[]; doubles: number[] } => r.doubles != null);
@@ -80,7 +81,11 @@ export function aromaticRingSides(
   // the aromatic rings each double bond is in
   const ringsOf = new Map<number, number[]>();
   aromatic.forEach((r, i) => {
-    for (const e of r.doubles) ringsOf.set(e, [...(ringsOf.get(e) ?? []), i]);
+    for (const e of r.doubles) {
+      const here = ringsOf.get(e);
+      if (here) here.push(i);
+      else ringsOf.set(e, [i]);
+    }
   });
   const shared = [...ringsOf].filter(([, rs]) => rs.length > 1).map(([e]) => e);
   for (const [e, rs] of ringsOf) if (rs.length === 1) out.set(e, aromatic[rs[0]].ring);
@@ -152,22 +157,30 @@ export function ringSides(
   bonds: readonly RingBond[],
   elements: readonly string[],
 ): Map<number, number[]> {
-  const out = aromaticRingSides(atomCount, bonds, elements);
   const rings = smallestRings(
     atomCount,
     bonds.map((b) => [b.a1, b.a2] as const),
   );
+  const out = aromaticRingSides(atomCount, bonds, elements, rings);
   const bondAt = new Map<string, number>();
   bonds.forEach((b, i) => bondAt.set(key(b.a1, b.a2), i));
   const ringBonds = rings.map((ring) =>
     ring.map((a, i) => bondAt.get(key(a, ring[(i + 1) % ring.length]))!),
   );
   const doublesIn = ringBonds.map((es) => es.filter((e) => bonds[e]?.order === 2).length);
+  // the rings each bond is in, in their order
+  const ringsOf = new Map<number, number[]>();
+  ringBonds.forEach((es, r) => {
+    for (const e of new Set(es)) {
+      const here = ringsOf.get(e);
+      if (here) here.push(r);
+      else ringsOf.set(e, [r]);
+    }
+  });
   bonds.forEach((b, e) => {
     if (b.order !== 2 || out.has(e)) return;
     let best = -1;
-    ringBonds.forEach((es, r) => {
-      if (!es.includes(e)) return;
+    (ringsOf.get(e) ?? []).forEach((r) => {
       if (
         best < 0 ||
         rings[r].length < rings[best].length ||

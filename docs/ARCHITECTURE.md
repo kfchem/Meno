@@ -195,6 +195,19 @@ What is left before the editor counts as finished, and in what order, is in
   (`moveDrag.preview`, `extend.preview`); they draw nothing of the molecule
   themselves, so a gesture looks exactly as its result will. Model bonds
   reach the layout through `layoutBond(s)` in `layoutOptions.ts`.
+  A drawing of tens of thousands of atoms - an SD file of a thousand
+  records - has to come up in well under a second, so nothing in the
+  layout or the layers goes over every atom or bond for each atom or bond:
+  rings are found ring system by ring system (`lib/layout/rings.ts`), a
+  bond's neighbours from its atoms' own bonds. A zoom does not lay the
+  drawing out again while the layout made at the zoom it was laid out at
+  is the same drawing at this one (`sameAtZooms`: world units, lines wider
+  than the least they are kept at, a wave's turns in as many steps). The
+  round caps are one instanced mesh; the hit areas of atoms and bonds are
+  never drawn (picking does not ask whether a material is); the ring
+  circles the canvas offers are found without a second layout
+  (`ringCircles`), when the pointer looks for one; R, S, E and Z are placed
+  against what is near them (`MarkObstacles`) and shown in one HTML layer.
 - **Depiction**: `lib/chem/layout2d.ts` turns atoms/bonds into line segments,
   polygons, text and circles. How big everything is comes from a drawing
   style (`lib/chem/style.ts`): each length in points or as a fraction of the
@@ -470,6 +483,10 @@ On the 2D canvas (`StructureEditor/chem/`), `analyse` feeds the marks -
 valence problems, R/S and E/Z - which `ChemMarks2D` lays over the drawing
 as HTML, outside the drawing and so outside any export; they run only
 while RDKit is set up (`pyEnvReady`), so drawing never starts a download.
+`analyse` makes sense of each fragment on its own only where something is
+wrong somewhere; otherwise of the whole at once, which comes out the same:
+RDKit takes fragments out of a molecule by removing atoms one at a time,
+and for a thousand records that ran on for most of an hour.
 `clean` lays each fragment out afresh and then over the drawing - turned,
 turned over, and its chains turned over their single bonds, whichever
 lies closest - keeping the drawn wedges when they still say the same
