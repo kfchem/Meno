@@ -475,14 +475,18 @@ As step 3 was built:
   internet later will be folders of the same kind. The backend allows a
   lock and a worker in such a folder only (`src-tauri/src/lib.rs`).
 - **Meno knows no program.** cclib's manifest brings every program cclib
-  reads - ADF, CFOUR, Dalton, GAMESS, GAMESS-UK, Gaussian and its
-  formatted checkpoint, Jaguar, Molcas, Molpro, MOPAC, NWChem, ORCA, Psi3,
-  Psi4, Q-Chem, Turbomole, xTB - each told by its banner as cclib tells
-  it; PySCF's brings the four it reads, Molden among them. With no plugin
-  added, *Files* lists Meno's own kinds only. The banners of ORCA,
-  Gaussian, the checkpoint and xTB are checked against real outputs;
-  the others are cclib's own, not yet tried on a file. `probe` is in
-  place, and tested with made-up plugins.
+  reads and has outputs of to test with - ADF, CFOUR, Dalton, GAMESS
+  (Firefly too), GAMESS-UK, Gaussian and its formatted checkpoint,
+  Jaguar, Molcas, Molpro, MOPAC, NWChem, ORCA, Psi4, Q-Chem, Turbomole,
+  xTB - each told by its banner as cclib tells it; PySCF's brings the
+  four it reads, Molden among them. With no plugin added, *Files* lists
+  Meno's own kinds only.
+  - Each program's banner is checked on a real output of it, one per
+    program from cclib's regression data (`scripts/calc/samples.json`;
+    kept out of the repository in `calc-samples/`), and cclib's worker
+    gives each one's molecule. The tests skip a file that is not there.
+  - Psi3 is left out: cclib has no output of it to test with.
+  - `probe` is in place, and tested with made-up plugins.
 - **One exception stays in Meno:** the energies on an XYZ file's comment
   lines (`utils/xyzEnergies.ts`), as agreed on 2026-10-05 - part of
   reading XYZ, which Meno does itself.

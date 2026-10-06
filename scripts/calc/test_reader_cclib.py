@@ -10,7 +10,8 @@ They need cclib, so they run in an environment built from its lock:
 The programs' outputs they read are not in the repository
 (docs/WORKSPACE.md, stage 3): put small ones - cclib's own samples, from
 its repository's data folder - in calc-samples/, as
-calc-samples/ORCA/dvb_gopt.out and so on. Those tests are skipped where
+calc-samples/ORCA/dvb_gopt.out and so on; scripts/calc/samples.json says
+where each of one per program comes from. Those tests are skipped where
 the files are not there.
 """
 
@@ -162,6 +163,27 @@ class XTB(unittest.TestCase):
         # (cclib reads xTB's HOMO as many numbers: no orbitals are said rather than wrong ones)
         r = read(sample("XTB/dvb_opt.out"))["result"]
         self.assertIsNone(result(r, "orbitals"))
+
+
+class EveryProgram(unittest.TestCase):
+    """Each program whose kind cclib's manifest brings, from a real output of
+    it (scripts/calc/samples.json says which, and where each comes from)."""
+
+    def test_each_gives_its_molecule_named_by_its_program(self):
+        table = json.loads((ROOT / "scripts/calc/samples.json").read_text(encoding="utf-8"))
+        manifest = json.loads((WORKER.parent / "manifest.json").read_text(encoding="utf-8"))
+        read_by_cclib = set(manifest["reads"])
+        for s in table["samples"]:
+            with self.subTest(s["file"]):
+                self.assertIn(s["kind"], read_by_cclib)
+                a = read(sample(s["file"]))
+                self.assertTrue(a["ok"], a.get("error"))
+                r = a["result"]
+                self.assertTrue(r["atoms"])
+                self.assertTrue(r["program"])
+                if s.get("geometry", True):
+                    self.assertTrue(r["frames"])
+                    self.assertTrue(all(len(f) == 3 * len(r["atoms"]) for f in r["frames"]))
 
 
 if __name__ == "__main__":
