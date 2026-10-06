@@ -1,8 +1,8 @@
-"""Meno's cclib reader: a calculation program's output, read by cclib.
+"""The cclib plugin's worker: a calculation program's output, read by cclib.
 
-A reader plugin's worker (docs/WORKSPACE.md, stage 3), run in an
-environment of its own. One JSON object per line on stdin, one per line
-back on stdout, as Meno's chemistry worker's:
+A reader plugin's worker (docs/PLUGINS.md), run in an environment of its
+own. One JSON object per line on stdin, one per line back on stdout, as
+every reader's:
 
     {"id": 7, "op": "read", "name": "job.out", "text": "..."}
     {"id": 7, "ok": true, "result": {...}}

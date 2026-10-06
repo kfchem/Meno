@@ -1,5 +1,6 @@
 import type { TabKind } from "../../lib/core";
-import { extensionOf, kinds, kindOf, type Kind } from "../../lib/io/kinds";
+import { extensionOf, kindOf, type Kind } from "../../lib/io/kinds";
+import { OFFERED } from "../../lib/calc/catalog";
 
 /** What a file opens as: a tab of `kind`, named for the file, holding `data`. */
 export type Opened = { kind: TabKind; label: string; data: Record<string, unknown> };
@@ -9,8 +10,8 @@ const EXT_TEXT = new Set([
   "js", "ts", "tsx", "py", "c", "cpp", "css", "html",
 ]);
 
-/** The files Open offers: every kind Meno takes in (lib/io/kinds), and text. */
-export const OPENABLE = [...new Set([...kinds().flatMap((k) => k.extensions), ...[...EXT_TEXT].map((ext) => `.${ext}`)])];
+/** The files Open offers: every kind Meno takes in (lib/io/kinds) - its own, and those the plugins on offer bring, added or not, so that one not added can be named - and text. */
+export const OPENABLE = [...new Set([...OFFERED.kinds.flatMap((k) => k.extensions), ...[...EXT_TEXT].map((ext) => `.${ext}`)])];
 
 /**
  * The tab a file opens in, by what it is (lib/io/kinds): a Meno workspace,

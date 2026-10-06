@@ -1,5 +1,5 @@
 /**
- * What a pixi lock (resources/pixi/<name>/pixi.lock) says an environment
+ * What a pixi lock (a plugin's pixi.lock, in its folder) says an environment
  * downloads on a computer: its packages for that platform, and how large
  * they are together, where the lock says - what Meno says before asking to
  * download them. Read as the lock is written (version 6 and on): the

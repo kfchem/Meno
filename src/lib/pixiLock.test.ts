@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pixiDownload, pixiPlatform } from "./pixiLock";
-import lock from "../../src-tauri/resources/pixi/reader-pyscf/pixi.lock?raw";
+import lock from "../../src-tauri/resources/plugins/pyscf/pixi.lock?raw";
 
 describe("a pixi lock", () => {
   it("names the platform as pixi does", () => {

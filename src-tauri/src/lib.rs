@@ -117,9 +117,9 @@ fn validate_env_info(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
         return Err(format!("unexpected host: {}", info.host));
     }
     let lock = safe_relative(&info.lock_path)?;
-    if !lock.starts_with("resources/py")
-        || lock.extension().and_then(|e| e.to_str()) != Some("lock")
-    {
+    let is_lock = lock.extension().and_then(|e| e.to_str()) == Some("lock");
+    // (Meno's own, among its locks; or a plugin's, in its folder)
+    if !is_lock || !(lock.starts_with("resources/py") || plugin_file(&lock).is_some()) {
         return Err(format!("unexpected lock file: {}", info.lock_path));
     }
     let venv_home = safe_relative(&info.venv_home)?;
@@ -138,19 +138,28 @@ fn validate_env_info(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
     })
 }
 
-/// A pixi environment's paths: its lock must be a bundled
-/// `resources/pixi/<name>/pixi.lock` (its manifest beside it), its home
-/// `pixi/<name>` in the app data, and its interpreter where pixi puts it.
+/// A plugin's file, in its folder of its own among the plugins Meno
+/// carries: `resources/plugins/<id>/<file>`. Its id and the file's name.
+fn plugin_file(path: &Path) -> Option<(String, String)> {
+    let id_ok = |n: &str| !n.is_empty() && n.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    let parts: Vec<String> = path.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+    match parts.as_slice() {
+        [r, p, id, file] if r == "resources" && p == "plugins" && id_ok(id) && !file.is_empty() => Some((id.clone(), file.clone())),
+        _ => None,
+    }
+}
+
+/// A pixi environment's paths: its lock must be a plugin's
+/// `resources/plugins/<id>/pixi.lock` (its manifest beside it), its home
+/// `pixi/reader-<id>` in the app data, and its interpreter where pixi puts it.
 fn validate_pixi_env(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
-    let name_ok = |n: &str| !n.is_empty() && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
     let lock = safe_relative(&info.lock_path)?;
-    let parts: Vec<String> = lock.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
-    let name = match parts.as_slice() {
-        [r, p, name, file] if r == "resources" && p == "pixi" && file == "pixi.lock" && name_ok(name) => name.clone(),
+    let id = match plugin_file(&lock) {
+        Some((id, file)) if file == "pixi.lock" => id,
         _ => return Err(format!("unexpected lock file: {}", info.lock_path)),
     };
     let venv_home = safe_relative(&info.venv_home)?;
-    if venv_home != Path::new("pixi").join(&name) {
+    if venv_home != Path::new("pixi").join(format!("reader-{id}")) {
         return Err(format!("unexpected environment location: {}", info.venv_home));
     }
     let venv_python_rel = safe_relative(&info.venv_python_rel)?;
@@ -170,14 +179,15 @@ fn validate_pixi_env(info: &PyEnvInfo) -> Result<ValidatedEnv, String> {
 
 /// Check a sidecar request: `entry` must be a Python interpreter inside
 /// `venv_root`, and `args` must be allowed interpreter flags followed by a
-/// `.py` script inside `workers_root` (arguments after the script are passed
-/// to it untouched). Both roots must already be canonical. Returns the
-/// script's directory, used as the working directory.
+/// `.py` script inside one of `workers_roots` - Meno's own workers, or the
+/// plugins' folders (arguments after the script are passed to it
+/// untouched). The roots must already be canonical. Returns the script's
+/// directory, used as the working directory.
 fn validate_sidecar(
     entry: &Path,
     args: &[String],
     venv_root: &Path,
-    workers_root: &Path,
+    workers_roots: &[PathBuf],
 ) -> Result<PathBuf, String> {
     let name = entry.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if !entry.is_absolute() || !PYTHON_NAMES.contains(&name) {
@@ -206,7 +216,7 @@ fn validate_sidecar(
     let canonical = script
         .canonicalize()
         .map_err(|e| format!("sidecar script: {e}"))?;
-    if !canonical.starts_with(workers_root) {
+    if !workers_roots.iter().any(|r| canonical.starts_with(r)) {
         return Err("sidecar script must be one of the bundled workers".into());
     }
     script
@@ -277,7 +287,7 @@ fn reader_stamp(dir: &Path) -> Result<PathBuf, String> {
 }
 
 /// Takes a reader plugin's environment away, and its record of being set
-/// up, when it is removed in Settings, Calculation readers - and, with the
+/// up, when it is removed in Settings, Plugins - and, with the
 /// last of pixi's, what pixi keeps for them. Its worker is stopped first,
 /// by the app.
 #[tauri::command]
@@ -524,14 +534,19 @@ async fn ext_spawn_sidecar(
     if roots.is_empty() {
         return Err("the Python environment is not set up".to_string());
     }
-    let workers_root = resource_path(&app, Path::new("resources/workers"))?
-        .canonicalize()
-        .map_err(|e| format!("worker directory: {e}"))?;
+    // (Meno's own workers, and the plugins' - each in its folder)
+    let workers_roots: Vec<PathBuf> = ["resources/workers", "resources/plugins"]
+        .iter()
+        .filter_map(|r| resource_path(&app, Path::new(r)).ok()?.canonicalize().ok())
+        .collect();
+    if workers_roots.is_empty() {
+        return Err("no worker directory".to_string());
+    }
     let entry = PathBuf::from(&payload.entry);
     let (cwd, root) = roots
         .iter()
-        .find_map(|root| validate_sidecar(&entry, &payload.args, root, &workers_root).ok().map(|cwd| (cwd, root.clone())))
-        .ok_or_else(|| validate_sidecar(&entry, &payload.args, &roots[0], &workers_root).err().unwrap_or_default())?;
+        .find_map(|root| validate_sidecar(&entry, &payload.args, root, &workers_roots).ok().map(|cwd| (cwd, root.clone())))
+        .ok_or_else(|| validate_sidecar(&entry, &payload.args, &roots[0], &workers_roots).err().unwrap_or_default())?;
 
     let mut cmd = Command::new(&entry);
     cmd.args(&payload.args).current_dir(cwd);
@@ -936,17 +951,20 @@ mod tests {
 
     #[test]
     fn a_pixi_environment_is_one_meno_carries_the_lock_of_made_in_the_app_data() {
-        let env = validate_env_info(&pixi_info("resources/pixi/reader-pyscf/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python")).unwrap();
+        let env = validate_env_info(&pixi_info("resources/plugins/pyscf/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python")).unwrap();
         assert!(env.pixi);
         assert_eq!(env.venv_home, Path::new("pixi/reader-pyscf"));
-        assert!(validate_env_info(&pixi_info("resources/pixi/reader-pyscf/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/python.exe")).is_ok());
+        assert!(validate_env_info(&pixi_info("resources/plugins/pyscf/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/python.exe")).is_ok());
         for (lock, home, python) in [
             ("resources/py/requirements.chem.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/pixi/reader-pyscf/pixi.toml", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/pixi/../py/x/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/pixi/reader-pyscf/pixi.lock", "pixi/other", ".pixi/envs/default/bin/python"),
-            ("resources/pixi/reader-pyscf/pixi.lock", "uv/reader-pyscf", ".pixi/envs/default/bin/python"),
-            ("resources/pixi/reader-pyscf/pixi.lock", "pixi/reader-pyscf", "bin/sh"),
+            ("resources/plugins/pyscf/pixi.toml", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/../py/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/x/pixi.lock", "pixi/reader-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/PySCF/pixi.lock", "pixi/reader-PySCF", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/pixi.lock", "pixi/pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/pixi.lock", "pixi/reader-other", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/pixi.lock", "uv/reader-pyscf", ".pixi/envs/default/bin/python"),
+            ("resources/plugins/pyscf/pixi.lock", "pixi/reader-pyscf", "bin/sh"),
         ] {
             assert!(validate_env_info(&pixi_info(lock, home, python)).is_err(), "{lock} {home} {python}");
         }
@@ -1008,12 +1026,17 @@ mod tests {
             "3.12"
         ))
         .is_ok());
+        // a plugin's, from its folder
+        assert!(validate_env_info(&env_info("resources/plugins/cclib/requirements.lock", "uv/reader-cclib/venv", "3.12")).is_ok());
     }
 
     #[test]
     fn env_info_rejects_foreign_paths() {
         let cases = [
             env_info("resources/py/notes.txt", "uv/console/venv", "3.12"),
+            env_info("resources/plugins/cclib/manifest.json", "uv/reader-cclib/venv", "3.12"),
+            env_info("resources/plugins/cclib/x/requirements.lock", "uv/reader-cclib/venv", "3.12"),
+            env_info("resources/workers/requirements.lock", "uv/console/venv", "3.12"),
             env_info("../outside.lock", "uv/console/venv", "3.12"),
             env_info(LOCK, "../../elsewhere", "3.12"),
             env_info(LOCK, "uv", "3.12"),
@@ -1031,8 +1054,8 @@ mod tests {
         }
     }
 
-    /// Temporary tree: <root>/uv/console/venv/<bin>/python, <root>/workers/w.py
-    /// and look-alikes outside both roots.
+    /// Temporary tree: <root>/uv/console/venv/<bin>/python, <root>/workers/w.py,
+    /// a plugin's <root>/plugins/p/worker.py, and look-alikes outside the roots.
     struct Sandbox {
         root: PathBuf,
     }
@@ -1044,6 +1067,7 @@ mod tests {
             for dir in [
                 format!("uv/console/venv/{bin}"),
                 "workers".into(),
+                "plugins/p".into(),
                 "outside".into(),
             ] {
                 fs::create_dir_all(root.join(dir)).unwrap();
@@ -1052,6 +1076,7 @@ mod tests {
                 format!("uv/console/venv/{bin}/python"),
                 format!("uv/console/venv/{bin}/cmd.exe"),
                 "workers/w.py".into(),
+                "plugins/p/worker.py".into(),
                 "outside/python".into(),
                 "outside/evil.py".into(),
             ] {
@@ -1076,7 +1101,7 @@ mod tests {
 
         fn check(&self, entry: &Path, args: &[&str]) -> Result<PathBuf, String> {
             let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-            validate_sidecar(entry, &args, &self.p("uv"), &self.p("workers"))
+            validate_sidecar(entry, &args, &self.p("uv"), &[self.p("workers"), self.p("plugins")])
         }
     }
 
@@ -1093,6 +1118,9 @@ mod tests {
         let worker = worker.to_str().unwrap();
         let cwd = sb.check(&sb.python(), &["-u", worker, "--script-arg"]);
         assert_eq!(cwd, Ok(sb.p("workers")));
+        // a plugin's, in its folder
+        let plugin = sb.p("plugins/p/worker.py");
+        assert_eq!(sb.check(&sb.python(), &["-u", plugin.to_str().unwrap()]), Ok(sb.p("plugins/p")));
     }
 
     #[test]

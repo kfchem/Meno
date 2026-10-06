@@ -3,7 +3,9 @@ import { listen } from "@tauri-apps/api/event";
 import { resolveResource } from "@tauri-apps/api/path";
 import { create } from "zustand";
 import { ensurePyEnv, pyEnvReady, removePyEnv } from "../pyEnv";
-import { READERS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { manifestOf, READERS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { registerKinds } from "../io/kinds";
+import type { Manifest } from "../plugins/manifest";
 import { ReaderClient, type Reader } from "./client";
 import { menoReader } from "./builtin";
 
@@ -14,6 +16,8 @@ import { menoReader } from "./builtin";
  * first time it is asked to read, then kept for the session. A worker reads
  * what it is sent and has no business on the network; the app keeps it off
  * it. Meno's own reading is always there, and runs in the app (./builtin).
+ * The kinds a plugin brings are registered while it is added, and only
+ * then (lib/io/kinds).
  */
 export type ReaderState = "absent" | "adding" | "added" | "removing";
 
@@ -24,11 +28,20 @@ export const useReaders = create<{
   problem: Record<string, string>;
 }>(() => ({ state: {}, problem: {} }));
 
-const setState = (id: string, state: ReaderState, problem?: string) =>
+const setState = (id: string, state: ReaderState, problem?: string) => {
   useReaders.setState((s) => ({
     state: { ...s.state, [id]: state },
     problem: problem ? { ...s.problem, [id]: problem } : Object.fromEntries(Object.entries(s.problem).filter(([k]) => k !== id)),
   }));
+  // (the kinds of the plugins added - until one is taken away - registered with Meno's own)
+  const now = useReaders.getState().state;
+  registerKinds(
+    Object.keys(now)
+      .filter((p) => now[p] === "added" || now[p] === "removing")
+      .map(manifestOf)
+      .filter((m): m is Manifest => m != null),
+  );
+};
 
 /** How long a reader's first import may take. */
 const READY_MS = 60_000;

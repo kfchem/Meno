@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   alsoReadersFor,
+  anyKindById,
   MENO,
+  OFFERED,
   READER_PLUGINS,
+  readerOf,
   READERS,
   readerFor,
   readerIdOfLine,
@@ -15,7 +18,7 @@ import {
 const none = { read: {}, also: {} };
 
 describe("the readers Meno knows of", () => {
-  it("are Meno's own, then each plugin from its manifest, as before they had manifests", () => {
+  it("are Meno's own, then each plugin from its manifest in its folder", () => {
     expect(READERS.map((r) => r.id)).toEqual(["meno", "cclib", "pyscf"]);
     // (the structure files Meno reads on the page, and the cube, under the readers' contract)
     expect(MENO.reads).toEqual(["meno-workspace", "rxn", "mol", "sdf", "xyz", "cube"]);
@@ -24,12 +27,43 @@ describe("the readers Meno knows of", () => {
       name: "cclib",
       version: "1.9rc1",
       profile: "reader-cclib",
-      lock: "resources/py/requirements.reader-cclib.lock",
-      worker: "resources/workers/reader_cclib.py",
-      reads: ["orca", "gaussian", "gaussian-fchk", "xtb"],
+      lock: "resources/plugins/cclib/requirements.lock",
+      worker: "resources/plugins/cclib/worker.py",
     });
     expect(cclib.env).toBeUndefined();
-    expect(pyscf).toMatchObject({ name: "PySCF", profile: "reader-pyscf", lock: "resources/pixi/reader-pyscf/pixi.lock", env: "pixi" });
+    // (every program cclib reads, each a kind it brings itself)
+    expect(cclib.reads).toEqual(expect.arrayContaining(["orca", "gaussian", "gaussian-fchk", "xtb", "nwchem", "psi4", "qchem", "gamess", "molpro"]));
+    expect(cclib.reads.length).toBeGreaterThan(15);
+    expect(pyscf).toMatchObject({
+      name: "PySCF",
+      profile: "reader-pyscf",
+      lock: "resources/plugins/pyscf/pixi.lock",
+      worker: "resources/plugins/pyscf/worker.py",
+      env: "pixi",
+      reads: ["orca", "gaussian", "gaussian-fchk", "molden"],
+    });
+  });
+
+  it("each reads the kinds it brings, and Meno's: none a kind only another plugin brings, which it does not know", () => {
+    const nbo = readerOf({
+      id: "nbo",
+      name: "NBO",
+      version: "7",
+      description: "",
+      licence: "",
+      homepage: "",
+      environment: { maker: "uv", lock: "requirements.lock" },
+      worker: "worker.py",
+      reads: ["nbo-47", "xyz", "gaussian"],
+      kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO" }] }],
+    });
+    expect(nbo).toMatchObject({ reads: ["nbo-47", "xyz"], lock: "resources/plugins/nbo/requirements.lock", worker: "resources/plugins/nbo/worker.py" });
+    for (const p of READER_PLUGINS) {
+      for (const id of p.reads) expect(anyKindById(id), `${p.id} reads ${id}`).toBeDefined();
+    }
+    // (the kinds of every plugin on offer, Meno's with them: what a file nothing added reads would be read as)
+    expect(OFFERED.kinds.map((k) => k.id)).toEqual(expect.arrayContaining(["mol", "cube", "orca", "molden", "nwchem"]));
+    expect(OFFERED.refused).toEqual([]);
   });
 
   it("are known by id - a molecule keeps each as its id and version - and named by it", () => {

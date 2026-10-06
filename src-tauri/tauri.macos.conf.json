@@ -3,8 +3,11 @@
   "bundle": {
     "resources": [
       "resources/py/*.lock",
-      "resources/pixi/**/*",
       "resources/workers/**/*",
+      "resources/plugins/*/manifest.json",
+      "resources/plugins/*/*.py",
+      "resources/plugins/*/*.lock",
+      "resources/plugins/*/pixi.toml",
       "resources/licenses/*"
     ]
   }

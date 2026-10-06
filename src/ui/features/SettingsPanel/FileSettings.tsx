@@ -1,14 +1,14 @@
 import { useEffect } from "react";
 import { alsoReadersFor, READERS, readerFor, readersOf } from "../../../lib/calc/catalog";
 import { addedReaders, useReaders } from "../../../lib/calc/workers";
-import { kinds, MENO_KINDS, MENO_WRITES } from "../../../lib/io/kinds";
+import { MENO_KINDS, MENO_WRITES, useKinds } from "../../../lib/io/kinds";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 
 /**
- * Files in Settings: every kind of file Meno knows of, and who reads it -
- * Meno, or a plugin added - who else reads it, their findings added to the
- * reader's, and who writes it. Where more than one can read a kind, the
- * chemist chooses.
+ * Files in Settings: every kind of file Meno reads - its own, and those the
+ * plugins added bring - and who reads it - Meno, or a plugin added - who
+ * else reads it, their findings added to the reader's, and who writes it.
+ * Where more than one can read a kind, the chemist chooses.
  */
 export default function FileSettings() {
   const states = useReaders((s) => s.state);
@@ -18,7 +18,7 @@ export default function FileSettings() {
     void addedReaders();
   }, []);
   const added = new Set(READERS.filter((p) => states[p.id] === "added").map((p) => p.id));
-  const shown = kinds().filter((k) => k.id !== MENO_KINDS.record.id);
+  const shown = useKinds((s) => s.kinds).filter((k) => k.id !== MENO_KINDS.record.id);
 
   return (
     <div className="rounded-lg border border-gh-line bg-white divide-y divide-gh-line">

@@ -1,10 +1,10 @@
-"""Tests for the cclib reader (src-tauri/resources/workers/reader_cclib.py).
+"""Tests for the cclib plugin's worker (src-tauri/resources/plugins/cclib/worker.py).
 
 They need cclib, so they run in an environment built from its lock:
 
     uv venv .venv-cclib --python 3.12
     uv pip install --python .venv-cclib/bin/python --require-hashes --no-deps \
-        -r src-tauri/resources/py/requirements.reader-cclib.lock
+        -r src-tauri/resources/plugins/cclib/requirements.lock
     .venv-cclib/bin/python -m unittest scripts/calc/test_reader_cclib.py
 
 The programs' outputs they read are not in the repository
@@ -20,7 +20,7 @@ import pathlib
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-WORKER = ROOT / "src-tauri/resources/workers/reader_cclib.py"
+WORKER = ROOT / "src-tauri/resources/plugins/cclib/worker.py"
 SAMPLES = ROOT / "calc-samples"
 spec = importlib.util.spec_from_file_location("reader_cclib", WORKER)
 worker = importlib.util.module_from_spec(spec)

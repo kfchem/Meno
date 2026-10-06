@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calcLine, calcOf, multiplicityName, readCalc, type ReaderOutput } from "./output";
 import { combine, whoReads, checked } from "./read";
-import { READER_PLUGINS, READERS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { OFFERED, READER_PLUGINS, READERS, type PythonReader, type ReaderPlugin } from "./catalog";
 import { kindById } from "../io/kinds";
 
 // water, as a reader hands back an optimisation of it: written by hand,
@@ -79,7 +79,8 @@ describe("what a reader hands back", () => {
 });
 
 describe("reading an output", () => {
-  const orca = kindById("orca")!;
+  // (a kind the plugins on offer bring: registered or not, it is the same kind)
+  const orca = kindById("orca", OFFERED.kinds)!;
   // a second reader of ORCA's output
   const other: ReaderPlugin = { ...(READER_PLUGINS[0] as PythonReader), id: "orca-own", name: "Meno's ORCA reader", reads: ["orca"], profile: "reader-orca-own" };
   const readers = [...READERS, other];
@@ -101,7 +102,7 @@ describe("reading an output", () => {
   });
 
   it("says so where the output holds no geometry, as an xTB single point's does not", () => {
-    const xtb = kindById("xtb")!;
+    const xtb = kindById("xtb", OFFERED.kinds)!;
     expect(() => checked({ atoms: ["O", "H", "H"], frames: [] }, xtb, "sp.out")).toThrow(/holds no geometry/);
     expect(checked(water, orca, "job.out")).toBe(water);
   });

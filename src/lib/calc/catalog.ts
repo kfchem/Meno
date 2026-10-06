@@ -1,19 +1,20 @@
 /**
- * The readers Meno knows of (docs/PLUGINS.md, docs/FILE-IO.md): the plugins,
- * each from its manifest (lib/plugins/manifest) - the plugins come with
- * Meno's own list for now (lib/plugins/manifests); a list fetched online
- * needs a way to trust it, and comes later - and Meno itself, which reads
- * some kinds under the same contract (./menoReads). The kinds the plugins
- * bring are registered with Meno's own (lib/io/kinds).
+ * The readers Meno knows of (docs/PLUGINS.md, docs/FILE-IO.md): the plugins
+ * on offer, each from its manifest in its folder (lib/plugins/known) - those
+ * Meno carries, for now; a list fetched online needs a way to trust it, and
+ * comes later - and Meno itself, which reads some kinds under the same
+ * contract (./menoReads). The kinds a plugin brings are registered while it
+ * is added (lib/io/kinds, ./workers); those of every plugin on offer are
+ * looked at only to say which plugin would read a file nothing added reads.
  *
  * A reader is known by its id. What it gave - results, the readers a
  * molecule was read by - keeps the id; its name is looked up only to show
  * it.
  */
 import type { Manifest } from "../plugins/manifest";
-import { MANIFESTS } from "../plugins/known";
+import { MANIFESTS, PLUGINS_ROOT } from "../plugins/known";
 import { MENO_READS } from "./menoReads";
-import { MENO_KINDS } from "../io/kinds";
+import { kindById, MENO_KINDS, registered, type Kind } from "../io/kinds";
 
 type ReaderBase = {
   id: string;
@@ -30,7 +31,7 @@ type ReaderBase = {
 /** A reader plugin: what it is, what it reads, and what it runs - a worker in a Python environment of its own. */
 export type PythonReader = ReaderBase & {
   builtin?: undefined;
-  /** Its Python environment's profile, lock and worker, among Meno's resources. */
+  /** Its Python environment's profile, and its lock and worker, in its folder among Meno's resources. */
   profile: `reader-${string}`;
   lock: string;
   worker: string;
@@ -41,28 +42,48 @@ export type PythonReader = ReaderBase & {
 export type MenoReader = ReaderBase & { builtin: true };
 export type ReaderPlugin = PythonReader | MenoReader;
 
-const readerOf = (m: Manifest): PythonReader => ({
+const MENO_IDS: ReadonlySet<string> = new Set(Object.values(MENO_KINDS).map((k) => k.id));
+
+/** A plugin, as a reader, from its manifest. */
+export const readerOf = (m: Manifest): PythonReader => ({
   id: m.id,
   name: m.name,
   version: m.version,
   description: m.description,
   licence: m.licence,
   homepage: m.homepage,
-  reads: m.reads,
+  // (its own kinds, and Meno's: never another plugin's, which it does not know)
+  reads: m.reads.filter((id) => MENO_IDS.has(id) || m.kinds.some((k) => k.id === id)),
   profile: `reader-${m.id}`,
-  lock: m.environment.lock,
-  worker: m.worker,
+  lock: `${PLUGINS_ROOT}/${m.id}/${m.environment.lock}`,
+  worker: `${PLUGINS_ROOT}/${m.id}/${m.worker}`,
   ...(m.environment.maker === "pixi" ? { env: "pixi" as const } : {}),
 });
 
-/** The reader plugins Meno knows of, in Meno's order. */
-export const READER_PLUGINS: readonly PythonReader[] = MANIFESTS.map(readerOf);
+/** The reader plugins Meno knows of, in Meno's order: each that reads something. */
+export const READER_PLUGINS: readonly PythonReader[] = MANIFESTS.map(readerOf).filter((p) => p.reads.length);
+
+/** The manifest of a plugin Meno knows of. */
+export const manifestOf = (id: string): Manifest | undefined => MANIFESTS.find((m) => m.id === id);
+
+const offered = registered(MANIFESTS);
+
+/**
+ * The kinds the plugins on offer bring, added or not, with Meno's own: what
+ * a file nothing added reads would be read as, by which plugin - said, so
+ * that the plugin can be added. Also the marks refused as they were
+ * registered, each of which would have claimed one of Meno's own files.
+ */
+export const OFFERED = { kinds: offered.kinds as readonly Kind[], refused: offered.refused };
+
+/** The kind of that id: registered, or else one a plugin on offer brings. */
+export const anyKindById = (id: string): Kind | undefined => kindById(id) ?? kindById(id, OFFERED.kinds);
 
 /**
  * Meno's own reading, as a reader: the structure files it reads on the page
  * (a workspace, RXN, MOL, SD and XYZ files - into the readers' contract in
  * step 4 of docs/FILE-IO.md), and what it reads under the contract already
- * (./menoReads).
+ * (./menoReads): the cube.
  */
 export const MENO: MenoReader = {
   id: "meno",

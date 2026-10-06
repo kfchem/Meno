@@ -22,8 +22,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { kindOf, MENO_KINDS } from "./lib/io/kinds";
-import { probeKind } from "./lib/calc/probe";
+import { MENO_KINDS } from "./lib/io/kinds";
+import { kindOfFile } from "./lib/calc/probe";
+import { addedReaders } from "./lib/calc/workers";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
 import {
@@ -77,6 +78,13 @@ export default function App() {
     const doc = entry.createDocument(tab.content.data);
     documentsRef.current.set(tab.meta.id, { kind: tab.content.kind, doc });
     return doc;
+  }, []);
+
+  // The plugins added on this computer, looked at once as Meno starts: the
+  // kinds they bring registered (lib/io/kinds), for whatever is opened,
+  // dropped or pasted.
+  useEffect(() => {
+    if (isTauri()) void addedReaders().catch(() => {});
   }, []);
 
   // The application's settings - the drawing style among them - read once,
@@ -204,7 +212,7 @@ export default function App() {
       try {
         const text = new TextDecoder().decode(await readFile(path));
         // (what it is: told by what it holds - or, where nothing tells it, by a plugin asked)
-        openTab(openedAs(name, text, path, kindOf(name, text) ?? (await probeKind(name, text))));
+        openTab(openedAs(name, text, path, await kindOfFile(name, text)));
       } catch (e) {
         setNotice(`${name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
       }

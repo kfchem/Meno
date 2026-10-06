@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { READER_PLUGINS, type PythonReader } from "../../../lib/calc/catalog";
+import { manifestOf, OFFERED, READER_PLUGINS, type PythonReader } from "../../../lib/calc/catalog";
 import { addedReaders, addReader, removeReader, useReaders } from "../../../lib/calc/workers";
-import { kindById, refusedMarks } from "../../../lib/io/kinds";
+import { kindById } from "../../../lib/io/kinds";
 
 /**
- * Plugins in Settings: every plugin Meno knows of, added or not - what it
+ * Plugins in Settings: every plugin on offer, added or not - what it
  * is, the kinds of file it reads, its version, licence and home - each added
  * or taken away here. Meno itself is not among them: what it reads and
  * writes is in Files.
@@ -35,7 +35,9 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonReader; state?: s
   };
   const status =
     state === "added" ? "Added" : state === "adding" ? "Adding…" : state === "removing" ? "Removing…" : state === "absent" ? "Not added" : "";
-  const refused = refusedMarks().filter((r) => r.plugin === p.id);
+  const refused = OFFERED.refused.filter((r) => r.plugin === p.id);
+  // (the kinds it reads by the names it gives them, or Meno's)
+  const named = (id: string) => manifestOf(p.id)?.kinds.find((k) => k.id === id)?.name ?? kindById(id)?.name ?? id;
   return (
     <div className="rounded-lg border border-gh-line bg-white px-4 py-3 flex items-start gap-4">
       <div className="flex-1">
@@ -43,7 +45,7 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonReader; state?: s
           {p.name} <span className="text-gh-gray">{p.version}</span>
         </div>
         <p className="text-xs text-gh-gray mt-0.5">{p.description}</p>
-        <p className="text-xs text-gh-gray mt-1">Reads {p.reads.map((k) => kindById(k)?.name ?? k).join(", ")}.</p>
+        <p className="text-xs text-gh-gray mt-1">Reads {p.reads.map(named).join(", ")}.</p>
         <p className="text-xs text-gh-gray mt-1">
           {p.licence} · {p.homepage.replace(/^https?:\/\//, "")}
         </p>

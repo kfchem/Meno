@@ -4,17 +4,18 @@
  * once; what reads the file then is the kind's - Meno itself, or the
  * readers (lib/calc).
  *
- * Kinds are registered:
- * - Meno registers its own, and the well-known kinds of calculation output,
- *   by id.
- * - A plugin registers the kinds it brings in its manifest
- *   (lib/plugins/manifest), told by marks - text, never a pattern. A mark
- *   that would claim one of Meno's own sample files is refused, so that no
- *   plugin takes a molfile for its own.
+ * Meno knows its own kinds only: its workspace and records, the structure
+ * files, and the cube, which it reads itself. It knows no program. Every
+ * kind of a program's output is brought by the plugins that read it, in
+ * their manifests (lib/plugins/manifest), and registered while a plugin
+ * that brings it is added - told by marks, text, never a pattern. A mark
+ * that would claim one of Meno's own sample files is refused, so that no
+ * plugin takes a molfile for its own.
  *
  * A file is told by what it holds, the strongest evidence first:
  * 1. Meno's own records - a workspace, a structure's record;
- * 2. a program's banner, Meno's or a plugin's;
+ * 2. a program's banner - the one that comes first in the file, where it
+ *    holds more than one (an output quoting another program's);
  * 3. an RXN file's or a molfile's markers;
  * 4. a cube's layout;
  * 5. an XYZ file's layout.
@@ -22,9 +23,9 @@
  * cannot make out is still a molfile, and says why it cannot be read - and
  * a kind its plugin tells, asked (`probe`), is asked about last.
  */
+import { create } from "zustand";
 import { CUBE_MARK } from "../calc/cube";
-import { folded, holdsMark, type KindDecl, type Manifest, type Mark } from "../plugins/manifest";
-import { MANIFESTS } from "../plugins/known";
+import { folded, holdsMark, markAt, type KindDecl, type Manifest, type Mark } from "../plugins/manifest";
 import sampleSdf from "../../samples/cholesterol.sdf?raw";
 import sampleXyz from "../../samples/cholesterol.xyz?raw";
 import sampleRxn from "../../samples/diels-alder.rxn?raw";
@@ -39,8 +40,8 @@ export type Kind = {
   name: string;
   /** The file names it goes by, lower case, with their dot. */
   extensions: readonly string[];
-  /** A calculation's output, read by the readers (lib/calc): the program that writes it, as a molecule read from it names it. Unset for a kind Meno reads on the page. */
-  output?: { program: string };
+  /** A calculation's output, read by the readers (lib/calc): the program that writes it, as a molecule read from it names it, where it is one program's. Unset for a kind Meno reads on the page. */
+  output?: { program?: string };
   /** What the start of such a file says - a program's banner - one of them at least. */
   marks?: readonly Mark[];
   /** How such a file is laid out: Meno's own kinds only, a pattern being Meno's to trust. */
@@ -49,7 +50,7 @@ export type Kind = {
   probe?: true;
 };
 
-/** The kinds Meno reads itself, on the page. */
+/** The kinds Meno knows: its own. Each but the cube read on the page; the cube, which programs of every kind write, by Meno under the readers' contract. */
 export const MENO_KINDS = {
   workspace: { id: "meno-workspace", name: "Meno workspace", extensions: [".meno"] },
   record: { id: "meno-record", name: "Meno structure", extensions: [] },
@@ -57,44 +58,11 @@ export const MENO_KINDS = {
   mol: { id: "mol", name: "MOL file", extensions: [".mol"] },
   sdf: { id: "sdf", name: "SD file", extensions: [".sdf"] },
   xyz: { id: "xyz", name: "XYZ file", extensions: [".xyz"] },
+  cube: { id: "cube", name: "Cube file", extensions: [".cube", ".cub"], output: {}, layout: CUBE_MARK },
 } as const satisfies Record<string, Kind>;
 
 /** The kinds Meno writes itself: the workspace by Save, the rest by Export (StructureEditor/fileActions). */
 export const MENO_WRITES: readonly string[] = [MENO_KINDS.workspace.id, MENO_KINDS.mol.id, MENO_KINDS.sdf.id, MENO_KINDS.rxn.id];
-
-/** The well-known kinds of calculation output, which Meno registers for every plugin to read by id; and the cube, which Meno reads itself. */
-export const OUTPUT_KINDS: readonly Kind[] = [
-  {
-    id: "molden",
-    name: "Molden file",
-    extensions: [".molden", ".mld"],
-    output: { program: "the program" },
-    marks: [{ text: "[Molden Format]", at: "line-start", anyCase: true }],
-  },
-  { id: "cube", name: "Cube file", extensions: [".cube", ".cub"], output: { program: "the program" }, layout: CUBE_MARK },
-  { id: "orca", name: "ORCA output", extensions: [".out", ".log"], output: { program: "ORCA" }, marks: [{ text: "* O R C A *" }] },
-  {
-    id: "gaussian",
-    name: "Gaussian output",
-    extensions: [".log", ".out"],
-    output: { program: "Gaussian" },
-    marks: [{ text: "Entering Gaussian System", at: "line-start" }],
-  },
-  {
-    id: "gaussian-fchk",
-    name: "Gaussian formatted checkpoint",
-    extensions: [".fchk", ".fch"],
-    output: { program: "Gaussian" },
-    marks: [{ text: "Number of atoms I", at: "line-start" }],
-  },
-  {
-    id: "xtb",
-    name: "xTB output",
-    extensions: [".out", ".log"],
-    output: { program: "xTB" },
-    marks: [{ text: "| x T B |" }, { text: "* xtb version", at: "line-start" }],
-  },
-];
 
 /** Files of Meno's own kinds a plugin's marks are tried on: a mark one of them holds is not the plugin's to claim. */
 const MENO_SAMPLES: readonly string[] = [
@@ -109,15 +77,16 @@ const MENO_SAMPLES: readonly string[] = [
 export type Refused = { plugin: string; kind: string; mark: string };
 
 /**
- * The kinds registered by Meno and by `manifests`: a plugin's kind of an id
- * Meno or another plugin registered too is one kind, its marks and file
- * names put together. Marks that would claim one of Meno's samples are
- * refused, and said; a kind left with no way to be told is left out.
+ * The kinds of Meno's and those `manifests` bring: a kind two plugins bring,
+ * by one id, is one kind - the first's name, their marks and file names put
+ * together - and a plugin's kind of the id of one of Meno's is Meno's. Marks
+ * that would claim one of Meno's samples are refused, and said; a kind left
+ * with no way to be told is left out.
  */
 export function registered(manifests: readonly Manifest[]): { kinds: Kind[]; refused: Refused[] } {
   const samples = MENO_SAMPLES.map(headOf);
   const refused: Refused[] = [];
-  const outputs = new Map<string, Kind>(OUTPUT_KINDS.map((k) => [k.id, k]));
+  const brought = new Map<string, Kind>();
   const own = new Set(Object.values(MENO_KINDS).map((k) => k.id as string));
   for (const m of manifests) {
     for (const k of m.kinds) {
@@ -127,26 +96,29 @@ export function registered(manifests: readonly Manifest[]): { kinds: Kind[]; ref
         if (claims) refused.push({ plugin: m.id, kind: k.id, mark: mark.text });
         return !claims;
       });
-      const was = outputs.get(k.id);
-      const merged: Kind = was
-        ? {
-            ...was,
-            extensions: [...new Set([...was.extensions, ...k.extensions])],
-            marks: [...(was.marks ?? []), ...marks],
-            ...(k.probe || was.probe ? { probe: true as const } : {}),
-          }
-        : kindFrom(k, marks);
-      if (merged.marks?.length || merged.layout || merged.probe) outputs.set(k.id, merged);
+      if (!marks.length && !k.probe) continue;
+      const was = brought.get(k.id);
+      brought.set(
+        k.id,
+        was
+          ? {
+              ...was,
+              extensions: [...new Set([...was.extensions, ...k.extensions])],
+              marks: [...(was.marks ?? []), ...marks.filter((x) => !was.marks?.some((y) => y.text === x.text && y.at === x.at))],
+              ...(k.probe || was.probe ? { probe: true as const } : {}),
+            }
+          : kindFrom(k, marks),
+      );
     }
   }
-  return { kinds: [...Object.values(MENO_KINDS), ...outputs.values()], refused };
+  return { kinds: [...Object.values(MENO_KINDS), ...brought.values()], refused };
 }
 
 const kindFrom = (k: KindDecl, marks: Mark[]): Kind => ({
   id: k.id,
   name: k.name,
   extensions: k.extensions,
-  output: { program: k.program },
+  output: k.program ? { program: k.program } : {},
   ...(marks.length ? { marks } : {}),
   ...(k.probe ? { probe: true as const } : {}),
 });
@@ -156,32 +128,26 @@ export function headOf(text: string): string {
   return folded(text.slice(0, MARK_REACH).replace(/\r\n?/g, "\n"));
 }
 
-// (the kinds the plugins Meno knows of bring, registered with Meno's own)
-let table: { kinds: Kind[]; refused: Refused[] } = registered(MANIFESTS);
+/** The kinds registered: Meno's own, and those the plugins added bring (lib/calc/workers registers them as plugins are added and taken away). */
+export const useKinds = create<{ kinds: readonly Kind[] }>(() => ({ kinds: registered([]).kinds }));
 
-/** Registers the kinds `manifests` bring, in place of those registered before - the plugins Meno knows of, and any it comes to know of. */
-export function registerKinds(manifests: readonly Manifest[]): Refused[] {
-  table = registered(manifests);
-  return table.refused;
-}
-
-/** The marks refused as the plugins' kinds were registered: each would have claimed one of Meno's own files. */
-export function refusedMarks(): readonly Refused[] {
-  return table.refused;
+/** Registers the kinds `manifests` - the plugins added - bring, with Meno's own, in place of those registered before. */
+export function registerKinds(manifests: readonly Manifest[]): void {
+  useKinds.setState({ kinds: registered(manifests).kinds });
 }
 
 /** Every kind registered. */
 export function kinds(): readonly Kind[] {
-  return table.kinds;
+  return useKinds.getState().kinds;
 }
 
-/** The kind of that id, where one is registered. */
-export function kindById(id: string): Kind | undefined {
-  return table.kinds.find((k) => k.id === id);
+/** The kind of that id, among those registered or `among`. */
+export function kindById(id: string, among: readonly Kind[] = kinds()): Kind | undefined {
+  return among.find((k) => k.id === id);
 }
 
-/** What a file is, from what it holds and then its name; null where neither says - text, say, or a kind only its plugin tells (`probeCandidates`). */
-export function kindOf(name: string, text: string, among: readonly Kind[] = table.kinds): Kind | null {
+/** What a file is, from what it holds and then its name, among the kinds registered or `among`; null where neither says - text, say, a kind no plugin added brings, or one only its plugin tells (`probeCandidates`). */
+export function kindOf(name: string, text: string, among: readonly Kind[] = kinds()): Kind | null {
   const raw = text.slice(0, MARK_REACH).replace(/\r\n?/g, "\n");
   const head = folded(raw);
   const ext = extensionOf(name);
@@ -191,9 +157,15 @@ export function kindOf(name: string, text: string, among: readonly Kind[] = tabl
     if (said === "meno-workspace") return MENO_KINDS.workspace;
     if (said === "meno-structure") return MENO_KINDS.record;
   }
-  // 2. a program's banner
-  const banner = among.find((k) => k.marks?.some((m) => holdsMark(head, m)));
-  if (banner) return banner;
+  // 2. a program's banner: the first in the file
+  let banner: { kind: Kind; at: number } | null = null;
+  for (const kind of among) {
+    for (const mark of kind.marks ?? []) {
+      const at = markAt(head, mark);
+      if (at >= 0 && (!banner || at < banner.at)) banner = { kind, at };
+    }
+  }
+  if (banner) return banner.kind;
   // 3. an RXN file's or a molfile's markers
   if (/^\s*\$RXN\b/m.test(raw)) return MENO_KINDS.rxn;
   if (/\b(V2000|V3000)\b/.test(raw) || /^\s*M {2}END\s*$/m.test(raw)) return ext === ".sdf" ? MENO_KINDS.sdf : MENO_KINDS.mol;
@@ -207,7 +179,7 @@ export function kindOf(name: string, text: string, among: readonly Kind[] = tabl
 }
 
 /** The kinds a plugin could tell a file to be, asked: those told by asking, whose files go by its name's extension. */
-export function probeCandidates(name: string, among: readonly Kind[] = table.kinds): Kind[] {
+export function probeCandidates(name: string, among: readonly Kind[] = kinds()): Kind[] {
   const ext = extensionOf(name);
   return ext ? among.filter((k) => k.probe && k.extensions.includes(ext)) : [];
 }

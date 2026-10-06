@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { extensionOf, kindOf, kinds, probeCandidates, registered } from "./kinds";
+import { extensionOf, kindOf, kinds, probeCandidates, registerKinds, registered } from "./kinds";
 import { acceptManifest, type Manifest } from "../plugins/manifest";
+import { MANIFESTS } from "../plugins/known";
 import sampleSdf from "../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../samples/diels-alder.rxn?raw";
 import sampleXyz from "../../samples/cholesterol.xyz?raw";
 
 const id = (name: string, text: string) => kindOf(name, text)?.id ?? null;
+// (with the plugins Meno carries added: the kinds they bring registered)
+const added = registered(MANIFESTS).kinds;
+const idAdded = (name: string, text: string) => kindOf(name, text, added)?.id ?? null;
 
 // Ethane as a V2000 molfile, its title a bare number, as PubChem's are
 const numericTitleMol = [
@@ -39,15 +43,31 @@ describe("what a file is", () => {
     expect(id("download.txt", numericTitleMol + "\n$$$$\n")).toBe("mol");
   });
 
-  it("is a calculation's output by its program's banner, whatever it is called", () => {
-    expect(id("job.out", ORCA)).toBe("orca");
-    expect(id("run.log", GAUSSIAN)).toBe("gaussian");
-    expect(id("", "title\nSP        RB3LYP     STO-3G\nNumber of atoms                            I               20\n")).toBe("gaussian-fchk");
-    expect(id("", "     |                           x T B                           |     \n")).toBe("xtb");
-    expect(id("", "   * xtb version 6.6.1 (8d0f1dd)\n")).toBe("xtb");
+  it("is a calculation's output by its program's banner, whatever it is called - where a plugin added brings the kind", () => {
+    expect(idAdded("job.out", ORCA)).toBe("orca");
+    expect(idAdded("run.log", GAUSSIAN)).toBe("gaussian");
+    expect(idAdded("", "title\nSP        RB3LYP     STO-3G\nNumber of atoms                            I               20\n")).toBe("gaussian-fchk");
+    expect(idAdded("", "     |                           x T B                           |     \n")).toBe("xtb");
+    expect(idAdded("", "   * xtb version 6.6.1 (8d0f1dd)\n")).toBe("xtb");
     // (a Molden file, by its first section)
-    expect(id("", "[Molden Format]\n[Atoms] AU\nO 1 8 0 0 0\n")).toBe("molden");
-    expect(id("water.txt", "  [MOLDEN FORMAT]\n")).toBe("molden");
+    expect(idAdded("", "[Molden Format]\n[Atoms] AU\nO 1 8 0 0 0\n")).toBe("molden");
+    expect(idAdded("water.txt", "  [MOLDEN FORMAT]\n")).toBe("molden");
+    // (and the other programs cclib reads, by their banners, in any case)
+    expect(idAdded("", "              Northwest Computational Chemistry Package (NWChem) 7.0.2\n")).toBe("nwchem");
+    expect(idAdded("output.dat", "    Psi4: An Open-Source Ab Initio Electronic Structure Package\n")).toBe("psi4");
+    expect(idAdded("", "          A Quantum Leap Into The Future Of Chemistry\n")).toBe("qchem");
+  });
+
+  it("is no program's output where no plugin added brings its kind: Meno knows no program", () => {
+    expect(kinds().map((k) => k.id)).toEqual(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "cube"]);
+    expect(id("job.out", ORCA)).toBeNull();
+    expect(id("run.log", GAUSSIAN)).toBeNull();
+    expect(id("", "[Molden Format]\n")).toBeNull();
+  });
+
+  it("is the program's whose banner comes first, where an output holds another's too", () => {
+    expect(idAdded("job.log", GAUSSIAN + " basis read from the TURBOMOLE library\n")).toBe("gaussian");
+    expect(idAdded("job.out", " TURBOMOLE V7.5.1\n Entering Gaussian System\n")).toBe("turbomole");
   });
 
   it("is Meno's own record by what it says it is", () => {
@@ -59,8 +79,8 @@ describe("what a file is", () => {
 
   it("takes the strongest evidence first: a banner over a molfile's markers, a cube's layout over an XYZ file's", () => {
     // an output that echoes a molfile, or a word like one
-    expect(id("job.out", ORCA + "  input read from x.mol (V2000)\nM  END\n")).toBe("orca");
-    expect(id("ethane.mol", GAUSSIAN + numericTitleMol)).toBe("gaussian");
+    expect(idAdded("job.out", ORCA + "  input read from x.mol (V2000)\nM  END\n")).toBe("orca");
+    expect(idAdded("ethane.mol", GAUSSIAN + numericTitleMol)).toBe("gaussian");
     // a cube whose comment is a number: its third line reads as an XYZ file's first atom
     const cube = ["2", "density", "    1    0.000000    0.000000    0.000000", "   -2    0.5 0.0 0.0", "   -2    0.0 0.5 0.0", "   -2    0.0 0.0 0.5", "    2    2.0 0.25 0.25 0.25", ""].join("\n");
     expect(id("", cube)).toBe("cube");
@@ -83,11 +103,14 @@ describe("what a file is", () => {
 });
 
 describe("the kinds", () => {
-  it("are each named, Meno's own and the readers' alike, every one once", () => {
+  it("are Meno's own, and those the plugins added bring while they are added, each named, every one once", () => {
+    registerKinds(MANIFESTS);
     const ids = kinds().map((k) => k.id);
-    expect(ids).toEqual(expect.arrayContaining(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "orca", "gaussian", "gaussian-fchk", "xtb", "molden", "cube"]));
+    expect(ids).toEqual(expect.arrayContaining(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "orca", "gaussian", "gaussian-fchk", "xtb", "molden", "cube", "nwchem"]));
     expect(new Set(ids).size).toBe(ids.length);
     expect(kinds().filter((k) => k.output).map((k) => k.id)).not.toContain("xyz");
+    registerKinds([]);
+    expect(kinds().map((k) => k.id)).not.toContain("orca");
   });
 
   it("give a file's extension, lower case, with its dot", () => {
@@ -103,8 +126,8 @@ describe("kinds a plugin registers", () => {
       id: "nbo",
       name: "NBO",
       version: "7",
-      environment: { maker: "uv", lock: "resources/py/requirements.reader-nbo.lock" },
-      worker: "resources/workers/reader_nbo.py",
+      environment: { maker: "uv", lock: "requirements.lock" },
+      worker: "worker.py",
       reads: ["nbo-out", "gaussian"],
       kinds,
     })!;
@@ -117,17 +140,27 @@ describe("kinds a plugin registers", () => {
     const k = all.find((x) => x.id === "nbo-out")!;
     expect(k).toMatchObject({ name: "NBO output", extensions: [".47"], output: { program: "NBO" } });
     expect(kindOf("job.out", "\n   N A T U R A L    A T O M I C    O R B I T A L   A N A L Y S I S\n", all)?.id).toBe("nbo-out");
-    // (and a kind Meno knows is still told as it was)
-    expect(kindOf("job.out", " Entering Gaussian System\n", all)?.id).toBe("gaussian");
+    // (and a kind it does not bring is not told by it: Meno knows no program)
+    expect(kindOf("job.out", " Entering Gaussian System\n", all)).toBeNull();
   });
 
-  it("are one kind with Meno's, or another plugin's, of the same id - their marks and names put together", () => {
-    const { kinds: all } = registered([nbo([{ id: "orca", name: "ORCA", program: "ORCA", extensions: [".orca"], marks: [{ text: "Program Version 6", at: "line-start" }] }])]);
+  it("are one kind with another plugin's of the same id - the first's name, their marks and file names put together", () => {
+    const cclib = MANIFESTS.find((m) => m.id === "cclib")!;
+    const { kinds: all } = registered([
+      cclib,
+      nbo([{ id: "orca", name: "ORCA", program: "ORCA", extensions: [".orca"], marks: [{ text: "Program Version 6", at: "line-start" }] }]),
+    ]);
     const orca = all.filter((x) => x.id === "orca");
     expect(orca).toHaveLength(1);
     expect(orca[0].name).toBe("ORCA output");
     expect(orca[0].extensions).toEqual([".out", ".log", ".orca"]);
     expect(kindOf("x", "  Program Version 6.0.1\n", all)?.id).toBe("orca");
+    expect(kindOf("x", ORCA, all)?.id).toBe("orca");
+  });
+
+  it("are Meno's, where a plugin brings a kind of the id of one of Meno's", () => {
+    const { kinds: all } = registered([nbo([{ id: "xyz", name: "NBO's XYZ", program: "NBO", extensions: [".nboxyz"], marks: [{ text: "NBO XYZ FRAME" }] }])]);
+    expect(all.filter((x) => x.id === "xyz")).toEqual([{ id: "xyz", name: "XYZ file", extensions: [".xyz"] }]);
   });
 
   it("may not take one of Meno's own files for theirs: a mark one of them holds is refused, and said", () => {
