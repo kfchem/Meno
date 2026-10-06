@@ -85,6 +85,8 @@ export default function App() {
       await applyNetworkSettings(useAppSettings.getState().network);
       // keeping Meno up to date, as the network now allows (lib/update)
       if (!gone) stopUpdates = startUpdates();
+      // (the measurement of 2026-10-06, where it was asked for: not to be merged)
+      if (!gone) void import("./bench/readerBench").then((m) => m.benchIfAsked());
     })();
     const unwatch = useNetwork.subscribe((s, prev) => {
       if (!useAppSettings.getState().loaded) return;
