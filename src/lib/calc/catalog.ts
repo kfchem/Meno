@@ -26,6 +26,11 @@ export type OutputKind = {
   extensions: readonly string[];
   /** What the start of such a file says, one of them at least. */
   marks: readonly RegExp[];
+  /**
+   * Told by how it is laid out, not by a program's banner: weaker evidence,
+   * so asked after a molfile's markers (lib/io/kinds).
+   */
+  layout?: true;
 };
 
 type ReaderBase = {
@@ -66,6 +71,7 @@ export const OUTPUT_KINDS: readonly OutputKind[] = [
     program: "the program",
     extensions: [".cube", ".cub"],
     marks: [CUBE_MARK],
+    layout: true,
   },
   {
     id: "orca",
@@ -126,11 +132,6 @@ export const READER_PLUGINS: readonly ReaderPlugin[] = [
  * The kind of output a file is, by what its start says - not by its name: a
  * program's output goes by many - or null, none Meno knows.
  */
-export function outputKindOf(text: string, kinds: readonly OutputKind[] = OUTPUT_KINDS): OutputKind | null {
-  const start = text.slice(0, MARK_REACH);
-  return kinds.find((k) => k.marks.some((m) => m.test(start))) ?? null;
-}
-
 /** The file names Meno opens as calculation output: every kind's, with their dot. */
 export function outputExtensions(kinds: readonly OutputKind[] = OUTPUT_KINDS): string[] {
   return [...new Set(kinds.flatMap((k) => k.extensions))];

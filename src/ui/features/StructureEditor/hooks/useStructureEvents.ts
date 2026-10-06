@@ -11,15 +11,15 @@ import { editorModelOf, processFileContent, type ProcessedFileResult } from "../
 import { schemeOf, type ImportedScheme } from "../document";
 import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
-import { isWorkspaceFile, readWorkspace } from "../utils/workspace";
+import { readWorkspace } from "../utils/workspace";
 import type { Drawn } from "../store/types";
 import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, rowAfter, solidOf } from "../utils/molecule3d";
 import type { DropZone, Dropped } from "../../../../lib/drop";
 
-/** The files a drop opens as structures, beside what is drawn. */
-const STRUCTURE_FILE = /\.(mol|sdf|rxn|xyz|meno)$/i;
 import { readRecord } from "../utils/copyPaste";
+import { kindById, kindOf, MENO_KINDS } from "../../../../lib/io/kinds";
+import { MARK_REACH } from "../../../../lib/calc/catalog";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
 export function useStructureEvents(
@@ -27,6 +27,8 @@ export function useStructureEvents(
   initialFilename?: string,
   /** The payload is a file opened by its name - not a document's object - which Save As then suggests. */
   openedFile?: boolean,
+  /** What the payload is, where whoever opened it said (lib/io/kinds); otherwise told here. */
+  initialKind?: string,
 ) {
   const store = useEditorStore();
 
@@ -109,24 +111,29 @@ export function useStructureEvents(
       // One import per canvas: this effect runs twice under StrictMode, and
       // importing twice would leave two undo steps for a single file.
       importedInitial.current = true;
-      // A workspace file, as it was saved; or a structure from a document
-      // (lib/ole): Meno's own record, taken as it is.
-      if (isWorkspaceFile(initialFilename ?? "")) {
+      // what it is, as whoever opened it said (lib/io/kinds) - or told now
+      const kind = (initialKind ? kindById(initialKind) : undefined) ?? kindOf(initialFilename ?? "", initialPayload);
+      // A workspace file, as it was saved
+      if (kind?.id === MENO_KINDS.workspace.id) {
         const ws = readWorkspace(initialPayload);
         if (ws) {
           store.getState().openWorkspace(ws, true);
           if (openedFile && initialFilename) store.getState().markOpenedOver(initialFilename);
-          return;
-        }
+        } else reportImportError("initial payload", new Error("The workspace could not be read."));
+        return;
+      }
+      // Meno's own record of a structure - one from a document (lib/ole) - taken as it is
+      if (kind?.id === MENO_KINDS.record.id) {
         const record = readRecord(initialPayload);
         if (record) store.getState().openModel(record, schemeOf(record));
-        else reportImportError("initial payload", new Error("The workspace could not be read."));
+        else reportImportError("initial payload", new Error("The structure could not be read."));
         return;
       }
       try {
         const result = await processFileContent(
           initialFilename || "",
           initialPayload,
+          kind,
         );
         const shifted = {
           atoms: result.model.atoms.map((a) => ({
@@ -375,10 +382,13 @@ export function useStructureEvents(
     dropReading.current = null;
     const dropped = files[0];
     const at = clientToWorld(x, y) || { x: 0, y: 0 };
-    // Not a structure's file: a picture or an object dragged out of Word or
+    // What a file dropped is, from its start (lib/io/kinds): nothing need be
+    // read of a large picture to know it is none of Meno's kinds
+    const kind = dropped ? kindOf(dropped.name, await dropped.slice(0, MARK_REACH).text()) : null;
+    // None of them: a picture or an object dragged out of Word or
     // PowerPoint, perhaps, whose structure goes where it was dropped,
     // selected - as a paste would
-    if (!dropped || !STRUCTURE_FILE.test(dropped.name)) {
+    if (!kind) {
       // (read again if nothing was to be had as it came: a program may
       // hand over what it drags only once it is dropped)
       const found =
@@ -392,17 +402,17 @@ export function useStructureEvents(
     if (!dropped) return;
     const f = dropped;
     const text = await f.text();
-    // a workspace dropped: what it holds, beside what is drawn, selected
-    if (isWorkspaceFile(f.name)) {
-      const ws = readWorkspace(text);
-      if (ws) {
-        store.getState().pasteModel(centredAt(ws.drawn, at));
+    // a workspace dropped, or a record: what it holds, beside what is drawn, selected
+    if (kind?.id === MENO_KINDS.workspace.id || kind?.id === MENO_KINDS.record.id) {
+      const drawn = kind.id === MENO_KINDS.workspace.id ? readWorkspace(text)?.drawn : readRecord(text);
+      if (drawn) {
+        store.getState().pasteModel(centredAt(drawn, at));
         setImportError(null);
-      } else reportImportError("append", new Error("The workspace could not be read."));
+      } else reportImportError("append", new Error(`${f.name} could not be read.`));
       return;
     }
     try {
-      const result = await processFileContent(f.name, text);
+      const result = await processFileContent(f.name, text, kind);
       const dx = at.x - result.centroid.x;
       const dy = at.y - result.centroid.y;
 

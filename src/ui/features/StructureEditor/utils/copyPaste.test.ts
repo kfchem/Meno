@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Drawn, Model } from "../store/types";
-import { centredAt, clipItems, looksLikeMolfile, looksLikeSmiles, partToCopy, readRecord, recordText } from "./copyPaste";
+import { centredAt, clipItems, looksLikeSmiles, partToCopy, readRecord, recordText } from "./copyPaste";
+import { kindOf } from "../../../../lib/io/kinds";
 
 const atom = (id: number, x: number, y: number, el = "C") => ({ id, x, y, r: 0.9, el });
 
@@ -32,7 +33,7 @@ describe("the clipboard's items", () => {
     const items = clipItems(model);
     expect(items.map((i) => i.flavor)).toEqual(["meno", "mol"]);
     expect(readRecord(items[0].text!)).toEqual(model);
-    expect(looksLikeMolfile(items[1].text!)).toBe(true);
+    expect(kindOf("", items[1].text!)?.id).toBe("mol");
     expect(items[1].text).toMatch(/M {2}CHG {2}1 {3}3 {3}1/);
   });
 
@@ -47,12 +48,12 @@ describe("the clipboard's items", () => {
 
 describe("plain text", () => {
   it("is told apart: a MOL file, a SMILES, or neither", () => {
-    expect(looksLikeMolfile(clipItems(model)[1].text!)).toBe(true);
+    expect(kindOf("", clipItems(model)[1].text!)?.id).toBe("mol");
     expect(looksLikeSmiles("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")).toBe(true);
     expect(looksLikeSmiles(" CCO\n")).toBe(true);
     expect(looksLikeSmiles("two words")).toBe(false);
     expect(looksLikeSmiles("")).toBe(false);
-    expect(looksLikeMolfile("CCO")).toBe(false);
+    expect(kindOf("", "CCO")).toBeNull();
   });
 });
 

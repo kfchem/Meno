@@ -260,11 +260,6 @@ function readStereo(given: unknown, atoms: number, bonds: number): Carried3D["st
   return { atoms: a, bonds: b, ...(chosen ? { chosen } : {}) };
 }
 
-/** Whether plain text is a MOL file (or an SD file) rather than, say, a SMILES. */
-export function looksLikeMolfile(text: string): boolean {
-  return /^M {2}END\s*$/m.test(text) && /V[23]000/.test(text);
-}
-
 /**
  * Whether plain text could be a SMILES: one word of the characters one is
  * written in. RDKit has the last word on it.

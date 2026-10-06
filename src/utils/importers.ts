@@ -72,71 +72,14 @@ const QUERY_OF: Record<number, EditorBond["query"]> = {
 
 const normalizeNewlines = (s: string) => s.replace(/\r\n?/g, "\n");
 
-export type DetectedFormat = "mol" | "sdf" | "rxn" | "xyz" | null;
-
-// XYZ: line 1 is the atom count, line 2 a comment, line 3 the first atom
-// ("<symbol or atomic number> <x> <y> <z>").
-const XYZ_NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?`;
-const XYZ_ATOM_LINE = new RegExp(
-  String.raw`^\s*(?:[A-Za-z]{1,3}|\d{1,3})\s+${XYZ_NUM}\s+${XYZ_NUM}\s+${XYZ_NUM}\b`
-);
-
-function looksLikeXyz(lines: string[]): boolean {
-  const first = lines[0] ?? "";
-  if (!/^\s*\d+\s*$/.test(first)) return false;
-  if (Number.parseInt(first, 10) === 0) return true;
-  return XYZ_ATOM_LINE.test(lines[2] ?? "");
-}
-
-export function detectFormat(fileName: string, text: string): DetectedFormat {
-  const ext = (fileName.split(".").pop() || "").toLowerCase();
-  const t = normalizeNewlines(text).trim();
-  if (/^\s*\$RXN\b/m.test(t)) return "rxn";
-  if (ext === "rxn") return "rxn";
-  // CTfile markers must be checked before the XYZ heuristic: a MOL/SDF title
-  // line is free text and is often a bare number (e.g. PubChem CIDs).
-  if (/\b(V2000|V3000)\b/.test(t) || /(M\s{2,}END)\s*$/m.test(t))
-    return ext === "sdf" ? "sdf" : "mol";
-  if (ext === "sdf") return "sdf";
-  if (ext === "mol") return "mol";
-  if (ext === "xyz") return "xyz";
-  if (looksLikeXyz(t.split("\n"))) return "xyz";
-  return null;
-}
-
-function parseRXN(text: string): ParsedMol[] {
-  const src = normalizeNewlines(text);
-  // Split robustly around $MOL, tolerating surrounding/ending whitespace
-  const parts = src.split(/^\s*\$MOL\s*$/gm).slice(1);
-  if (!parts.length) return [];
-  const mols: ParsedMol[] = [];
-  for (const p of parts) {
-    const block = p.trim();
-    if (!block) continue;
-    try {
-      const mm = parseSDF(block);
-      if (mm && mm.length > 0) mols.push(mm[0]);
-    } catch {
-      // ignore malformed block
-    }
-  }
-  return mols;
-}
-
-export function readMoleculesFromText(
-  text: string,
-  format: DetectedFormat | string
-): ParsedMol[] {
-  const fmt = (format as DetectedFormat) ?? null;
+/**
+ * The molecules in a MOL, SD or XYZ file's text. What a file is, is
+ * decided elsewhere, once (lib/io/kinds); an RXN file is laid out as a
+ * scheme (`buildEditorModelFromRXN`).
+ */
+export function readMoleculesFromText(text: string, format: "mol" | "sdf" | "xyz"): ParsedMol[] {
   const t = normalizeNewlines(text);
-  if (fmt === "rxn") return parseRXN(t);
-  if (fmt === "sdf") return parseSDF(t);
-  if (fmt === "mol") return parseSDF(t);
-  if (fmt === "xyz") return parseXYZ(t);
-  // try auto-detect fallback
-  const auto = detectFormat("", t);
-  if (auto) return readMoleculesFromText(t, auto);
-  return [];
+  return format === "xyz" ? parseXYZ(t) : parseSDF(t);
 }
 
 export type RXNGroups = {

@@ -38,7 +38,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 /// The kinds read out of a drag, by their clipboard names (clipboard.rs).
-const KINDS: [&str; 6] = ["Meno Structure", "MDLCT", "chemical/x-mdl-molfile", "Art::GVML ClipFormat", "PNG", "CF_UNICODETEXT"];
+const KINDS: [&str; 7] = ["Meno Structure", "MDLCT", "chemical/x-mdl-molfile", "chemical/x-mdl-rxnfile", "Art::GVML ClipFormat", "PNG", "CF_UNICODETEXT"];
 /// Where an object Office drags keeps its storage, Meno's record in it.
 const OBJECTS: [&str; 2] = ["Embedded Object", "Embed Source"];
 

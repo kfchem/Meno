@@ -1,21 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { outputExtensions, outputKindOf, READER_PLUGINS, readerFor, readersFor, readersOf, type PythonReader, type ReaderPlugin } from "./catalog";
+import { outputExtensions, READER_PLUGINS, readerFor, readersFor, readersOf, type PythonReader, type ReaderPlugin } from "./catalog";
 
-describe("a calculation output's kind", () => {
-  it("is told by what its file starts with, whatever it is called", () => {
-    expect(outputKindOf("\n\n                                 * O   R   C   A *\n")?.id).toBe("orca");
-    expect(outputKindOf(" Entering Gaussian System, Link 0=g16\n")?.id).toBe("gaussian");
-    expect(outputKindOf("title\nSP        RB3LYP     STO-3G\nNumber of atoms                            I               20\n")?.id).toBe("gaussian-fchk");
-    expect(outputKindOf("     |                           x T B                           |     \n")?.id).toBe("xtb");
-    expect(outputKindOf("   * xtb version 6.6.1 (8d0f1dd)\n")?.id).toBe("xtb");
-  });
-
-  it("is none for what no reader reads: a structure file, or text", () => {
-    expect(outputKindOf("3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n")).toBeNull();
-    expect(outputKindOf("Saturday: ran the column\n")).toBeNull();
-  });
-
-  it("opens as files of every kind's names", () => {
+describe("the kinds of calculation output", () => {
+  it("open as files of every kind's names", () => {
     expect(outputExtensions()).toEqual(expect.arrayContaining([".out", ".log", ".fchk"]));
   });
 });

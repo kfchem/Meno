@@ -18,6 +18,10 @@ import type { DocumentStore } from "./lib/doc";
 import { keepClipboard, keepPageUnselected, openIntent, undoIntent } from "./lib/doc/shortcuts";
 import { isBlankDocument, type StructureDocument } from "./ui/features/StructureEditor/document";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isTauri } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { readFile } from "@tauri-apps/plugin-fs";
+import { MENO_KINDS } from "./lib/io/kinds";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
 import {
@@ -180,17 +184,39 @@ export default function App() {
   };
 
   // Open (Ctrl/Cmd+O, or the menu): files picked in the system's dialog,
-  // each in a tab, by what it is (openFile).
+  // each in a tab, by what it is (openFile). Tauri's dialog gives each
+  // file's path, which goes with it; outside Tauri - the browser dev
+  // server - the page's own picker stands in, and gives none.
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pickFiles = () => fileInputRef.current?.click();
+  const pickFiles = async () => {
+    if (!isTauri()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    const picked = await openDialog({
+      multiple: true,
+      filters: [{ name: "Files Meno opens", extensions: OPENABLE.map((ext) => ext.slice(1)) }],
+    }).catch(() => null);
+    for (const path of picked ?? []) {
+      const name = path.split(/[\\/]/).pop() || path;
+      try {
+        openTab(openedAs(name, new TextDecoder().decode(await readFile(path)), path));
+      } catch (e) {
+        setNotice(`${name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  };
   const openFiles = async (files: File[]) => {
     for (const f of files) openTab(openedAs(f.name, await f.text()));
   };
+  // (the key listened for once; what it does is this render's)
+  const pickRef = useRef(pickFiles);
+  pickRef.current = pickFiles;
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!openIntent(e)) return;
       e.preventDefault();
-      pickFiles();
+      void pickRef.current();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -244,7 +270,8 @@ export default function App() {
           continue;
         }
         const label = s.name ? `${s.name} - Office` : "Structure from Office";
-        const data = { payload: s.record, filename: "office.meno", officeId: s.id };
+        // (Meno's own record, read as what it is)
+        const data = { payload: s.record, kind: MENO_KINDS.record.id, officeId: s.id };
         if (!openTab({ kind: "structure", label, data })) void letOfficeGo(s.id);
       }
     };
@@ -363,7 +390,7 @@ export default function App() {
         type="file"
         multiple
         className="hidden"
-        accept={OPENABLE}
+        accept={OPENABLE.join(",")}
         onChange={(e) => {
           const files = [...(e.target.files ?? [])];
           // (the same file can be picked again)

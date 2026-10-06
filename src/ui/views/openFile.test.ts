@@ -16,13 +16,15 @@ describe("openedAs", () => {
     expect(openedAs("ethanol.mol", MOL)).toEqual({
       kind: "structure",
       label: "ethanol.mol",
-      data: { filename: "ethanol.mol", payload: MOL },
+      data: { filename: "ethanol.mol", payload: MOL, kind: "mol" },
     });
+    // (told what it is, so that the canvas need not ask again; and where it is, where that is known)
+    expect(openedAs("ethanol.mol", MOL, "/data/ethanol.mol").data).toMatchObject({ kind: "mol", path: "/data/ethanol.mol" });
   });
 
   it("opens an XYZ file and a Meno workspace on a structure canvas too, where 3D stands in 3D", () => {
     const xyz = "3\nwater\nO 0 0 0\nH 0.76 0.59 0\nH -0.76 0.59 0\n";
-    expect(openedAs("water.xyz", xyz)).toEqual({ kind: "structure", label: "water.xyz", data: { filename: "water.xyz", payload: xyz } });
+    expect(openedAs("water.xyz", xyz)).toEqual({ kind: "structure", label: "water.xyz", data: { filename: "water.xyz", payload: xyz, kind: "xyz" } });
     // (known by its content, whatever it is called)
     expect(openedAs("water.out", xyz).kind).toBe("structure");
     expect(openedAs("work.meno", "{}").kind).toBe("structure");
@@ -34,10 +36,11 @@ describe("openedAs", () => {
     expect(openedAs("notes.abc", "plain words")).toMatchObject({ kind: "text", data: { text: "plain words", language: "abc" } });
   });
 
-  it("offers chemical files, calculations' output and text to Open", () => {
-    for (const ext of [".meno", ".mol", ".sdf", ".rxn", ".xyz", ".out", ".log", ".fchk", ".txt", ".py"]) expect(OPENABLE.split(",")).toContain(ext);
+  it("offers chemical files, calculations' output and text to Open - and no kind nothing reads", () => {
+    for (const ext of [".meno", ".mol", ".sdf", ".rxn", ".xyz", ".out", ".log", ".fchk", ".cube", ".txt", ".py"]) expect(OPENABLE).toContain(ext);
+    for (const ext of [".pdb", ".ket"]) expect(OPENABLE).not.toContain(ext);
     // (each once)
-    expect(new Set(OPENABLE.split(",")).size).toBe(OPENABLE.split(",").length);
+    expect(new Set(OPENABLE).size).toBe(OPENABLE.length);
   });
 
   it("opens a calculation's output on a structure canvas, a log of something else as text", () => {
