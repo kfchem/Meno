@@ -6,7 +6,8 @@ maintainer's request ("整理して、reader の位置づけを明確化"), from
 #147 with the PySCF reader of #148.
 
 The first half is how things are. The second is the plan, along the
-maintainer's answers of the same day; nothing in it is built yet. Plugins
+maintainer's answers of the same day, built step by step in the order at
+its end. Plugins
 beyond files - SMILES, R/S, conformers, what comes later - are in
 [`PLUGINS.md`](./PLUGINS.md).
 
@@ -180,7 +181,8 @@ Each point is resolved by the plan below (see *Every point resolved*).
   worker or on the page is decided once, for all of them alike, after the
   maintainer has seen the measurements; a mix is not wanted (see
   *Response*).
-- **RDKit is a plugin**, and it is kept running as part of Meno's core
+- **RDKit is a plugin.** No plugin is kept running ahead of need: each
+  starts when first needed and stays for the session, as RDKit does now
   (PLUGINS.md).
 
 ### The line
@@ -271,7 +273,9 @@ How these behave:
   flavour is already a kind.
 - **Open uses the system's dialog through Tauri**, so Meno has the file's
   path. It reads bytes, and decodes the text kinds. It offers `.meno`,
-  text, and the kinds that something added reads.
+  text, and the kinds something reads: Meno, or a plugin Meno knows of,
+  added or not. A file whose reader is not added says which plugin to
+  add, as now.
 - **Office's record is handed to the canvas as the record**, not under a
   made-up name.
 
@@ -343,7 +347,7 @@ same way, never some in the worker and some on the page.
 | 18 | Write scope unsaid | said in ARCHITECTURE.md (*What the backend accepts*) and beside the capability | 5 |
 | 19 | ARCHITECTURE.md out of date | its format table drawn from the table of kinds; the stale lines rewritten | 8 |
 
-### Proposed, unless the maintainer says otherwise
+### Also decided
 
 1. **The tab for files is named "Files"**, and every kind Meno knows of
    has a row in it, so who reads what can always be seen.
@@ -352,7 +356,7 @@ same way, never some in the worker and some on the page.
 3. **"Also read with…" for one file** - from the molecule's menu, without
    changing the kind's row - comes later, if it is wanted.
 
-## In order, once the maintainer says to start
+## In order
 
 Each step is a pull request from main.
 
@@ -384,7 +388,7 @@ Each step is a pull request from main.
    - outputs found again by path;
    - one SMILES copy;
    - the write scope said.
-6. **RDKit as a plugin, kept running** (PLUGINS.md), with SMILES read
+6. **RDKit as a plugin** (PLUGINS.md), with SMILES read
    through it.
 7. **New kinds:** reading PDB, and a first calculation's input. Which
    program, and whether Meno or a plugin reads PDB, are decided then.

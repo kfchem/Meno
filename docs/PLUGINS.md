@@ -1,9 +1,8 @@
 # Plugins
 
 What Meno does through plugins and what it does itself, how the chemist
-chooses which plugin does what, and which plugins are kept running. This
-is a plan, written on 2026-10-06 with the maintainer, and nothing in it
-is built yet. How files come in and go out under it is in
+chooses which plugin does what, and when plugins run. This is a plan,
+written on 2026-10-06 with the maintainer, and its decisions are made. How files come in and go out under it is in
 [`FILE-IO.md`](./FILE-IO.md).
 
 ## The maintainer's direction (2026-10-06)
@@ -14,8 +13,10 @@ is built yet. How files come in and go out under it is in
 - **The chemist chooses the program.** Which program reads a kind of file
   - Meno's own parser or cclib for XYZ - and which parses SMILES, assigns
   R/S, or searches conformers.
-- **RDKit is a plugin of its own**, independent like the others. It is
-  also kept running as a part Meno's everyday work rests on.
+- **RDKit is a plugin of its own**, independent like the others.
+- **Nothing is kept running ahead of need.** Every plugin starts when it
+  is first needed and stays for the session, as RDKit does now. More
+  plugins kept running would only take more memory.
 - **A fingerprint might lead into a workflow**, and so might other such
   results.
 
@@ -35,7 +36,6 @@ is built yet. How files come in and go out under it is in
   chemist's choice, made in Settings, with a default Meno ships.
 - **Core role** - a role Meno's everyday drawing rests on: parsing
   SMILES, the chemical checks, R/S and E/Z, a structure in 3D.
-- **Resident** - kept running for the whole session, ready at once.
 
 ## Roles
 
@@ -71,7 +71,7 @@ new plugin for an existing role needs no change to Meno.
   and a default. Meno draws them and remembers the chemist's last
   choices.
 
-## Kept running
+## When plugins run
 
 **As things are** (`lib/rdkit/worker.ts`):
 
@@ -92,22 +92,19 @@ new plugin for an existing role needs no change to Meno.
 The calculation readers start the same way, on first use, and are stopped
 only when taken away or when Meno quits.
 
-This is the answer to whether RDKit should be two things at once. It
-should not, as RDKit. Being kept running belongs to the core roles, not
-to any one plugin:
+**As planned, the same for every plugin** (the maintainer, 2026-10-06:
+no plugin is kept running ahead of need):
 
-- **RDKit is an ordinary plugin.** It is independent, has its own
-  version, and can be replaced.
-- **It is kept running because it fills the core roles** by default.
-  Whatever plugin fills them is started as soon as Meno starts, once it
-  is installed. It is kept for the session, and started again if it
-  stops. If another plugin is assigned to them, that one is kept running
-  instead.
-- **Other plugins start when first needed** and stop after a while
-  unused: a reader, a writer, a conformer search.
-- **A core role with no plugin installed** says what to add, as reading an
-  output with no reader does today. RDKit, the default, is asked for with
-  the network's consent the first time it is needed, as now.
+- **Set up** the first time something needs it, asking first for the
+  network.
+- **Started** the first time it is asked for. Nothing starts with Meno.
+- **Kept** for the session, and started again if it stops.
+- **Stopped** when it is taken away, or when Meno quits.
+
+RDKit is an ordinary plugin. It is in use all day only because, by
+default, it fills the core roles, and so it is asked for as soon as a
+structure is drawn. A core role with no plugin installed says what to
+add, as reading an output with no reader does today.
 
 ## Two faces of a role
 
@@ -167,27 +164,29 @@ The same for every plugin and for Meno's own parts:
 - **What, never how** (the maintainer's rule): a choice names the program
   and the method a chemist would name, never how Meno talks to it.
 
-## Decisions wanted
+## Decided
 
-1. **"Kept running" belongs to the core roles**, not to RDKit: whatever
-   fills them is started with Meno and kept. Recommended.
+By the maintainer, 2026-10-06:
+
+1. **No plugin is kept running ahead of need.** Every plugin runs as RDKit
+   does now: started when first needed, kept for the session.
 2. **The other roles are chosen where they are used** (*Chemistry*,
    *Molecules in 3D*, a workflow step), not in the Plugins tab. The
-   Plugins tab says what each plugin offers. Recommended.
-3. **RDKit can be removed like any plugin.** The core features then say
-   what to add. Recommended, so that RDKit has no special standing.
+   Plugins tab says what each plugin offers.
+3. **RDKit can be taken away like any plugin.** The core features then
+   say what to add.
 4. **Molecules cross the contract in the record's form**, RDKit
-   included. Recommended: one form, checked by one reader.
-5. **The tabs' names:** "Plugins", and "Files" for the per-kind choices.
-   Recommended.
+   included.
+5. **The tabs are named "Plugins", and "Files"** for the per-kind choices.
 
 ## In order
 
 After the files (FILE-IO.md's order, steps 2 to 5):
 
-1. **RDKit as a plugin** (FILE-IO.md's step 6). It gets its own entry in the list. Its roles are
-   named, and it is assigned to the core roles by default and kept
-   running. Molecules reach it in the record's form. The choices go in
+1. **RDKit as a plugin** (FILE-IO.md's step 6). It gets its own entry in
+   the list. Its roles are named, and it is assigned to the core roles by
+   default, started when first needed as now. Molecules reach it in the
+   record's form. The choices go in
    *Chemistry* and *Molecules in 3D*, with RDKit as the only plugin at
    first.
 2. **New roles, each with a plugin that fills it:** fingerprints into
