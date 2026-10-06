@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { drawingSvg, exportKinds, exportPxPerWorld, fileNameOf, structureFileText, suggestedExportPath, suggestedSavePath } from "./fileActions";
+import {
+  drawingSvg,
+  exportKindOf,
+  exportKinds,
+  exportPxPerWorld,
+  fileNameOf,
+  structureFileText,
+  suggestedExportPath,
+  suggestedSavePath,
+} from "./fileActions";
+import { optionsFor, WRITERS } from "../../../lib/io/writers";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { ACS_1996, RSC } from "../../../lib/chem/style";
 import type { Model } from "./store/types";
@@ -29,11 +39,21 @@ describe("structureFileText", () => {
     expect(rxn.split("\n").slice(0, 5)).toEqual(["$RXN", "oxidation", "      Meno", "", "  1  0"]);
     expect(() => structureFileText(model, "/tmp/nothing.rxn")).toThrow(/arrow/);
   });
+
+  it("writes V2000 where V2000 holds the structure, and V3000 where the writer's options ask for it", () => {
+    expect(structureFileText(model, "/tmp/a.mol")).toContain(" V2000\n");
+    expect(structureFileText(model, "/tmp/a.mol", { version: "V3000" })).toContain("M  V30 BEGIN CTAB");
+    expect(structureFileText(model, "/tmp/a.sdf", { version: "V3000" })).toContain("M  V30 BEGIN CTAB");
+    const reaction = { ...model, arrows: [{ id: 1, x: 3 * L, y: 0, angle: 0, length: 2 * L }] };
+    expect(structureFileText(reaction, "/tmp/r.rxn", { version: "V3000" }).startsWith("$RXN V3000")).toBe(true);
+  });
 });
 
 describe("suggestedSavePath", () => {
   it("saves a workspace: where the canvas was saved; else beside the file opened over it, by its name; else workspace.meno", () => {
     expect(suggestedSavePath({ savedPath: "/work/a.meno", openedName: null })).toBe("/work/a.meno");
+    // (in its folder, where Open said where it was)
+    expect(suggestedSavePath({ savedPath: null, openedName: "/data/run 3/b.sdf" })).toBe("/data/run 3/b.meno");
     expect(suggestedSavePath({ savedPath: null, openedName: "b.sdf" })).toBe("b.meno");
     expect(suggestedSavePath({ savedPath: null, openedName: "conformers.xyz" })).toBe("conformers.meno");
     expect(suggestedSavePath({ savedPath: null, openedName: null })).toBe("workspace.meno");
@@ -61,6 +81,30 @@ describe("Export", () => {
     expect(suggestedExportPath({ savedPath: null, openedName: null }, structure)).toBe("structure.mol");
     expect(suggestedExportPath({ savedPath: null, openedName: null }, reaction)).toBe("reaction.rxn");
     expect(suggestedExportPath({ savedPath: null, openedName: null }, solid)).toBe("molecules.sdf");
+  });
+
+  it("starts from the kind of the file the canvas came from, where it can be written as it; and suggests the kind chosen", () => {
+    expect(exportKindOf({ savedPath: null, openedName: "/data/b.SDF" }, structure)).toBe("sdf");
+    expect(exportKindOf({ savedPath: null, openedName: "/data/b.rxn" }, structure)).toBeUndefined();
+    expect(exportKindOf({ savedPath: "/work/a.meno", openedName: "b.sdf" }, structure)).toBeUndefined();
+    expect(suggestedExportPath({ savedPath: null, openedName: "/data/b.sdf" }, structure, "svg")).toBe("/data/b.svg");
+    expect(suggestedExportPath({ savedPath: null, openedName: null }, structure, "sdf")).toBe("structure.sdf");
+  });
+
+  it("offers kinds Meno writes, each named, with its options' defaults among their choices", () => {
+    for (const k of new Set([...exportKinds(structure), ...exportKinds(reaction), ...exportKinds(solid)])) {
+      const w = WRITERS[k];
+      expect(w.name).toBeTruthy();
+      for (const o of w.options) if (o.type === "choice") expect(o.choices.map((c) => c.value)).toContain(o.default);
+    }
+  });
+
+  it("shows a writer's options about what the page holds: no version for molecules in 3D alone, no frames for a drawing alone", () => {
+    const ids = (holds: { drawing: boolean; molecules3d: boolean }) => optionsFor(WRITERS.sdf, holds).map((o) => o.id);
+    expect(ids({ drawing: true, molecules3d: true })).toEqual(["version", "frames"]);
+    expect(ids({ drawing: false, molecules3d: true })).toEqual(["frames"]);
+    expect(ids({ drawing: true, molecules3d: false })).toEqual(["version"]);
+    expect(optionsFor(WRITERS.svg, { drawing: true, molecules3d: true })).toEqual([]);
   });
 });
 
@@ -149,5 +193,32 @@ describe("an SD file of a canvas with molecules in 3D", () => {
     expect(back.molecules3d![0].atoms[1]).toMatchObject({ el: "H", x: 0.8, z: 1 });
     // molecules in 3D alone: their records alone
     expect(structureFileText({ atoms: [], bonds: [], molecules3d: [water3d] }, "/tmp/w.sdf").match(/\$\$\$\$/g)).toHaveLength(1);
+  });
+
+  it("holds every frame of each, a record each, numbered, with its energy where it is known, where the writer's options ask", async () => {
+    const { processFileContent } = await import("./utils/io");
+    const conformers = {
+      atoms: [
+        { el: "O", x: 0, y: 0, z: 0 },
+        { el: "H", x: 0.96, y: 0, z: 0 },
+      ],
+      bonds: [{ a1: 0, a2: 1, order: 1 }],
+      at: { x: 0, y: 0 },
+      frames: [[0, 0, 0, 0.97, 0, 0], [0, 0, 0, 0.98, 0, 0], [0, 0, 0]],
+      energies: [-75.4, -75.39, -75.38],
+      frame: 1,
+      name: "oh.xyz",
+    };
+    const text = structureFileText({ atoms: [], bonds: [], molecules3d: [conformers] }, "/tmp/oh.sdf", { frames: "all" });
+    // (the frame of the wrong size is none of them)
+    expect(text.match(/\$\$\$\$/g)).toHaveLength(3);
+    expect(text.startsWith("oh 1\n")).toBe(true);
+    expect(text).toContain("\noh 3\n");
+    expect(text).toContain("> <Energy (Eh)>\n-75.39\n");
+    const back = await processFileContent("oh.sdf", text);
+    expect(back.molecules3d).toHaveLength(3);
+    expect(back.molecules3d![2].atoms[1]).toMatchObject({ el: "H", x: 0.98 });
+    // (the frame shown, unless asked)
+    expect(structureFileText({ atoms: [], bonds: [], molecules3d: [conformers] }, "/tmp/oh.sdf").match(/\$\$\$\$/g)).toHaveLength(1);
   });
 });

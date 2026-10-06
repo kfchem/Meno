@@ -106,7 +106,8 @@ Everything a plugin is lives in one folder, named by its id:
   calculation input's method and basis - are declared by the plugin in a
   general form: a choice, a number, a text or a switch, each with a label
   and a default. Meno draws them and remembers the chemist's last
-  choices.
+  choices. The form, its drawing and the remembering are in place, used
+  first by Meno's own writers in Export (`lib/options.ts`, FILE-IO.md).
 
 ## When plugins run
 

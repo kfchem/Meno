@@ -19,6 +19,8 @@ import { currentStyle3D } from "./style3d";
 import { withSolidsImage } from "./render3d";
 import { chemistry } from "../../../lib/chem/molecule";
 import { schemeOutlines } from "../../../lib/chem/reactionScheme";
+import type { OptionValues } from "../../../lib/options";
+import { WRITERS, type WriterId } from "../../../lib/io/writers";
 
 /** A file's name without its folder. */
 export function fileNameOf(path: string): string {
@@ -31,12 +33,15 @@ function stem(path: string): string {
   return name.replace(/\.[^.]*$/, "");
 }
 
-/** The kinds of file a canvas is exported as, by extension, with their names. */
-const EXPORT_KINDS = { mol: "MOL file", sdf: "SD file", rxn: "RXN file", svg: "SVG picture" } as const;
-type ExportKind = keyof typeof EXPORT_KINDS;
-
 /** What is on a canvas, as far as what it can be exported as goes. */
-type Holds = { solid: boolean; reaction: boolean; drawn: boolean };
+export type Holds = { solid: boolean; reaction: boolean; drawn: boolean };
+
+/** What is on the canvas, as far as what it can be exported as goes. */
+export const holdsOf = (state: Pick<EditorState, "molecules3d" | "arrows" | "model">): Holds => ({
+  solid: state.molecules3d.length > 0,
+  reaction: state.arrows.length > 0,
+  drawn: state.model.atoms.length > 0,
+});
 
 /**
  * What a canvas can be exported as, the one suggested first (docs/FILE-IO.md:
@@ -45,7 +50,7 @@ type Holds = { solid: boolean; reaction: boolean; drawn: boolean };
  * file, which keeps them; a structure, as a MOL file first. Always as a
  * picture too.
  */
-export function exportKinds(what: Holds): ExportKind[] {
+export function exportKinds(what: Holds): WriterId[] {
   if (what.reaction) return ["rxn", "mol", "sdf", "svg"];
   if (what.solid && !what.drawn) return ["sdf", "svg"];
   return ["mol", "sdf", "svg"];
@@ -58,44 +63,65 @@ function withExtension(path: string, ext: string): string {
 
 /**
  * Where Save As suggests saving the workspace: where the canvas was last
- * saved; else beside the file last opened over it, by its name; else
- * "workspace.meno".
+ * saved; else beside the file last opened over it - in its folder, where
+ * Open said where it was; else "workspace.meno".
  */
 export function suggestedSavePath(state: Pick<EditorState, "savedPath" | "openedName">): string {
   const from = state.savedPath ?? state.openedName;
   return from ? withExtension(from, "meno") : "workspace.meno";
 }
 
+/** The kind of the file the canvas was saved to or opened from, where the canvas can be exported as it. */
+export function exportKindOf(state: Pick<EditorState, "savedPath" | "openedName">, what: Holds): WriterId | undefined {
+  const from = (state.savedPath ?? state.openedName ?? "").toLowerCase();
+  return exportKinds(what).find((k) => from.endsWith(`.${k}`));
+}
+
 /**
- * Where Export suggests: the canvas's name - where it was saved, or the file
- * opened over it - as the first kind it can be exported as, unless it is of
- * one already; else a name for what is on it.
+ * Where Export suggests writing the canvas as `kind` - unless said, the kind
+ * of the file it came from, or else the first it can be exported as: the
+ * canvas's name - where it was saved, or the file opened over it - as that
+ * kind; else a name for what is on it.
  */
-export function suggestedExportPath(state: Pick<EditorState, "savedPath" | "openedName">, what: Holds): string {
-  const kinds = exportKinds(what);
+export function suggestedExportPath(
+  state: Pick<EditorState, "savedPath" | "openedName">,
+  what: Holds,
+  kind = exportKindOf(state, what) ?? exportKinds(what)[0],
+): string {
   const from = state.savedPath ?? state.openedName;
-  if (from) return kinds.some((k) => from.toLowerCase().endsWith(`.${k}`)) ? from : withExtension(from, kinds[0]);
-  return `${what.reaction ? "reaction" : what.solid && !what.drawn ? "molecules" : "structure"}.${kinds[0]}`;
+  if (from) return from.toLowerCase().endsWith(`.${kind}`) ? from : withExtension(from, kind);
+  return `${what.reaction ? "reaction" : what.solid && !what.drawn ? "molecules" : "structure"}.${kind}`;
 }
 
 /**
  * The drawing as the file at `path` is to hold it: an RXN file for `.rxn` -
  * the reaction its arrow shows, throwing where it shows none - an SD file
  * for `.sdf`, a MOL file for anything else, titled with the file's own
- * name. A cage drawn in perspective is given the wedges that say its
- * stereochemistry, which the file has no other way to hold.
+ * name, as the writer's options say (lib/io/writers): in V3000, or in V2000
+ * where V2000 holds it; an SD file's molecules in 3D in the frame each
+ * shows, or in every frame. A cage drawn in perspective is given the wedges
+ * that say its stereochemistry, which the file has no other way to hold.
  */
-export function structureFileText(drawn: Drawn, path: string): string {
+export function structureFileText(drawn: Drawn, path: string, options: OptionValues = {}): string {
   const title = stem(path);
-  if (/\.rxn$/i.test(path)) return reactionFileText(drawn, title);
+  const version = options.version === "V3000" ? "V3000" : "auto";
+  if (/\.rxn$/i.test(path)) return reactionFileText(drawn, title, version);
   const flat = forFlatReaders(drawn);
-  if (!/\.sdf$/i.test(path)) return writeMolfile(flat, { title });
+  if (!/\.sdf$/i.test(path)) return writeMolfile(flat, { title, version });
   // an SD file: the drawing, and each molecule in 3D a record of its own,
-  // in 3D - the frame it shows, where its file had it
-  const records = (drawn.molecules3d ?? []).map(
-    (m) => writeMolfile3d(frameAtoms(m, m.frame), m.bonds, { title: m.name ? stem(m.name) : title }) + "$$$$\n",
-  );
-  return (drawn.atoms.length ? writeSdf(flat, { title }) : "") + records.join("");
+  // in 3D - the frame it shows, where its file had it, or each of its
+  // frames, numbered, with its energy where it is known
+  const records = (drawn.molecules3d ?? []).flatMap((m) => {
+    const name = m.name ? stem(m.name) : title;
+    if (options.frames !== "all") return [writeMolfile3d(frameAtoms(m, m.frame), m.bonds, { title: name }) + "$$$$\n"];
+    const frames = 1 + (m.frames ?? []).filter((f) => f.length === 3 * m.atoms.length).length;
+    return Array.from({ length: frames }, (_, i) => {
+      const energy = m.energies?.[i];
+      const data = energy != null && Number.isFinite(energy) ? `> <Energy (Eh)>\n${energy}\n\n` : "";
+      return writeMolfile3d(frameAtoms(m, i), m.bonds, { title: `${name} ${i + 1}` }) + data + "$$$$\n";
+    });
+  });
+  return (drawn.atoms.length ? writeSdf(flat, { title, version }) : "") + records.join("");
 }
 
 /** A molecule in 3D's atoms in one of its frames, where its file had them, in ångströms. */
@@ -233,10 +259,12 @@ export function drawingSvg(
 
 /**
  * Save, Save As and Export for the canvas this is called in. Save writes the
- * workspace - all of it, as it is - where the canvas was last saved, or asks
- * where the first time; either way the document is then saved, and the
- * tab's unsaved mark goes. Export writes another kind of file, a copy, and
- * leaves that alone. `error` says what went wrong, if anything.
+ * workspace - all of it, as it is - where the canvas was last saved, or
+ * where the workspace it holds was opened from, or asks where the first
+ * time; either way the document is then saved, and the tab's unsaved mark
+ * goes. Export writes another kind of file, a copy, with its writer's
+ * options (ExportCard), and leaves that alone. `error` says what went
+ * wrong, if anything.
  */
 export function useFileActions(nameTab?: (label: string) => void) {
   const store = useEditorStore();
@@ -290,25 +318,26 @@ export function useFileActions(nameTab?: (label: string) => void) {
     return saveAs();
   }, [attempt, saveAs, saveTo, store]);
 
-  /** The canvas written as another kind of file - a MOL, SD or RXN file, a picture - where the chemist says. */
+  /** The canvas written as `kind` - a MOL, SD or RXN file, a picture - with `options`, where the chemist says. */
   const exportAs = useCallback(
-    () =>
+    (kind: WriterId, options: OptionValues) =>
       attempt("Export", async () => {
         const state = store.getState();
-        const what = { solid: state.molecules3d.length > 0, reaction: state.arrows.length > 0, drawn: state.model.atoms.length > 0 };
-        const path = await saveDialog({
+        const picked = await saveDialog({
           title: "Export",
-          defaultPath: suggestedExportPath(state, what),
-          filters: exportKinds(what).map((k) => ({ name: EXPORT_KINDS[k], extensions: [k] })),
+          defaultPath: suggestedExportPath(state, holdsOf(state), kind),
+          filters: [{ name: WRITERS[kind].name, extensions: [kind] }],
         });
-        if (!path) return;
+        if (!picked) return;
+        // (that kind, whatever it was called)
+        const path = picked.toLowerCase().endsWith(`.${kind}`) ? picked : `${picked}.${kind}`;
         // (everything on the canvas, the molecules in 3D as they are seen)
         const drawn = { ...drawnOf(state), molecules3d: carriedOf(state) };
-        if (/\.svg$/i.test(path)) {
+        if (kind === "svg") {
           // The style the canvas is drawn in: the document's own, or the app's.
           const style = styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle);
           await writeTextFile(path, drawingSvg(drawn, state, style, true));
-        } else await writeTextFile(path, structureFileText(drawn, path));
+        } else await writeTextFile(path, structureFileText(drawn, path, options));
       }),
     [attempt, store],
   );

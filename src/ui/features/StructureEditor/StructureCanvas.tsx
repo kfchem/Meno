@@ -34,6 +34,8 @@ import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
 import SmilesPanel from "./SmilesPanel";
+import ExportCard from "./ExportCard";
+import type { WriterId } from "../../../lib/io/writers";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { currentStyle3D, useStyle3D } from "./style3d";
 import { offerCommands, type CommandGroup } from "../../layouts/commands";
@@ -64,7 +66,7 @@ import { chemWorker, useChem } from "../../../lib/rdkit/worker";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { cleanUp } from "./chem/cleanUp";
 import { useChemMarks } from "./chem/useChemMarks";
-import { useFileActions } from "./fileActions";
+import { exportKindOf, exportKinds, holdsOf, useFileActions, type Holds } from "./fileActions";
 import { setSaver } from "../../../lib/doc/savers";
 import { useReadings } from "../../../lib/calc/readings";
 import { CANVAS_DPR } from "./constants";
@@ -94,6 +96,7 @@ function StructureCanvasContent({
   initialPayload,
   initialFilename,
   initialKind,
+  initialPath,
   officeId,
   ownTab,
   nameTab,
@@ -108,6 +111,8 @@ function StructureCanvasContent({
   initialFilename?: string;
   /** What the payload is, where whoever opened it said (lib/io/kinds). */
   initialKind?: string;
+  /** Where the file opened in it is, where Open said. */
+  initialPath?: string;
   /** The object in a document this canvas was opened from (lib/ole). */
   officeId?: number;
   /** Whether the canvas is a tab's own, which offers the app's menu its commands. */
@@ -143,7 +148,7 @@ function StructureCanvasContent({
     handleMouseDownCapture,
     clientToWorld,
     pasteTarget,
-  } = useStructureEvents(initialPayload, initialFilename, officeId == null, initialKind);
+  } = useStructureEvents(initialPayload, initialFilename, officeId == null, initialKind, initialPath);
   useOfficeLink(officeId);
 
   const onCreated = useCanvasSetup(camRef, domRef);
@@ -613,6 +618,8 @@ function StructureCanvasContent({
   useDropZone(dropRef, dropZone);
   // SMILES in and out, by RDKit, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
+  // Export: the kind and its options asked in a card over the canvas, then the file's name
+  const [exporting, setExporting] = useState<{ kinds: WriterId[]; from?: WriterId; what: Holds } | null>(null);
 
   // What the canvas does besides drawing - saving, fitting, R and S, its
   // style - offered to the app's menu while its tab is in front, and on
@@ -624,7 +631,14 @@ function StructureCanvasContent({
       items: [
         { name: "Save", keys: shortcutLabel("S"), run: () => void save() },
         { name: "Save As…", keys: shortcutLabel("S", true), run: () => void saveAs() },
-        { name: "Export…", run: () => void files.exportAs() },
+        {
+          name: "Export…",
+          run: () => {
+            const state = store.getState();
+            const what = holdsOf(state);
+            setExporting({ kinds: exportKinds(what), from: exportKindOf(state, what), what });
+          },
+        },
       ],
     },
     {
@@ -743,6 +757,21 @@ function StructureCanvasContent({
       </AnimatePresence>
       <AnimatePresence>
         {smilesOpen && <SmilesPanel key="smiles" onClose={() => setSmilesOpen(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {exporting && (
+          <ExportCard
+            key="export"
+            kinds={exporting.kinds}
+            from={exporting.from}
+            what={exporting.what}
+            onCancel={() => setExporting(null)}
+            onExport={(kind, options) => {
+              setExporting(null);
+              void files.exportAs(kind, options);
+            }}
+          />
+        )}
       </AnimatePresence>
       <AnimatePresence>
       {menu && (
@@ -902,6 +931,7 @@ export default function StructureCanvas({
   initialPayload,
   initialFilename,
   initialKind,
+  initialPath,
   officeId,
   active = true,
   document,
@@ -912,6 +942,8 @@ export default function StructureCanvas({
   initialFilename?: string;
   /** What the payload is, where whoever opened it said (lib/io/kinds). */
   initialKind?: string;
+  /** Where the file opened in it is, where Open said: a workspace's is where Save writes it back. */
+  initialPath?: string;
   /** The object in a document it was opened from, when it was (lib/ole). */
   officeId?: number;
   /** False while the owning tab is hidden: pauses the render loop. */
@@ -937,6 +969,7 @@ export default function StructureCanvas({
           initialPayload={initialPayload}
           initialFilename={initialFilename}
           initialKind={initialKind}
+          initialPath={initialPath}
           officeId={officeId}
           ownTab={document != null}
           nameTab={nameTab}

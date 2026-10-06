@@ -41,6 +41,8 @@ export async function processFileContent(
   filename: string,
   content: string,
   kind: Kind | null = kindOf(filename, content),
+  /** Where the file is, where Open said: kept with a calculation's output, to find it again by. */
+  path?: string,
 ): Promise<ProcessedFileResult> {
   const name = filename || "the file";
   // Errors are shown to the user as-is, so keep the messages readable.
@@ -56,7 +58,7 @@ export async function processFileContent(
   // a calculation's output: read by the reader plugins that read its kind (lib/calc)
   if (kind.output) {
     // (kept for the session: what its promises are asked for from, and what readers reading it as well join it by)
-    const source = await rememberOutput(name, content, kind.id);
+    const source = await rememberOutput(name, content, kind.id, path);
     const { output, readers } = await readOutput(name, content, kind, source.sha256);
     return calcResult(output, readers, filename, source);
   }

@@ -683,7 +683,7 @@ export function writeMolfile3d(atoms: Atom3D[], bonds: Bond3D[], options: { titl
 
 export function writeSdf(
   model: WriterModel,
-  options: { title?: string } = {},
+  options: { title?: string; version?: "V2000" | "V3000" | "auto" } = {},
 ): string {
   return writeMolfile(model, options) + "$$$$\n";
 }

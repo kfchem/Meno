@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { askFor, calcShowing, givenValue, rememberOutput, useAsks, askKey } from "./asks";
+import { createHash } from "node:crypto";
+import { askFor, calcShowing, findOutput, givenValue, rememberOutput, useAsks, askKey } from "./asks";
 import type { Reader } from "./client";
 import type { CalcInfo } from "./output";
 import { resultKey } from "./results";
@@ -56,10 +57,45 @@ describe("a promise", () => {
     expect(r.asked).toEqual(["cube grid:0"]);
   });
 
-  it("says to open its output again, where it is not open this session", async () => {
-    const calc = calcOf({ name: "gone.cube", sha256: "0".repeat(64) });
-    await expect(askFor(calc, "meno", "grid:0", async () => reader(() => 1))).rejects.toThrow("Open gone.cube again to show this.");
-    expect(useAsks.getState().state[askKey(calc.source, "meno", "grid:0")]).toEqual({ error: "Open gone.cube again to show this." });
+  it("says to open its output again, where it is not open this session - nor where it was - and that it is missing", async () => {
+    const calc = calcOf({ name: "gone.cube", sha256: "0".repeat(64), path: "/data/gone.cube" });
+    await expect(askFor(calc, "meno", "grid:0", async () => reader(() => 1), async () => null)).rejects.toThrow("Open gone.cube again to show this.");
+    expect(useAsks.getState().state[askKey(calc.source, "meno", "grid:0")]).toEqual({ error: "Open gone.cube again to show this.", missing: true });
+  });
+
+  it("is asked for from its output read again where it was, where it is there unchanged", async () => {
+    // (kept as a workspace keeps it - its SHA-256, and where it was - and not opened this session)
+    const text = "the text it had, never opened this session";
+    const kept = { name: "elsewhere.cube", sha256: createHash("sha256").update(text).digest("hex"), kind: "cube", path: "/data/run/elsewhere.cube" };
+    const asked: string[] = [];
+    const read = async (path: string) => (asked.push(path), path === kept.path ? text : null);
+    const r = reader((key, sent) => `${key} of ${sent}`);
+    expect(await askFor(calcOf(kept), "meno", "grid:1", async () => r, read)).toBe(`grid:1 of ${text}`);
+    expect(asked).toEqual(["/data/run/elsewhere.cube"]);
+    // (and kept for the session once read)
+    expect(await askFor(calcOf(kept), "meno", "grid:0", async () => r, async () => null)).toBe(`grid:0 of ${text}`);
+    // changed since: not taken
+    const changed = calcOf({ ...kept, sha256: "1".repeat(64) });
+    await expect(askFor(changed, "meno", "grid:0", async () => r, read)).rejects.toThrow("Open elsewhere.cube again");
+    // and a path is kept as the output was opened from it
+    expect((await rememberOutput("here.cube", "here", "cube", "/data/here.cube")).path).toBe("/data/here.cube");
+  });
+
+  it("missing, takes the file the chemist finds only if it is that output, and asks again for what waited on it", async () => {
+    const text = "the output found again";
+    const { sha256 } = await rememberOutput("x.cube", "something else entirely", "cube");
+    const source = { name: "found.cube", sha256: (await rememberOutput("found.cube", text, "cube")).sha256, kind: "cube", path: "/old/found.cube" };
+    expect(sha256).not.toBe(source.sha256);
+    const waiting = askKey(source, "meno", "grid:0");
+    useAsks.setState({ state: { [waiting]: { error: "Open found.cube again to show this.", missing: true } } });
+    // another file: not taken, and said
+    await expect(findOutput(source, async () => ({ path: "/new/found.cube", text: "another text" }))).rejects.toThrow(/not the found.cube this molecule was read from/);
+    expect(useAsks.getState().state[waiting]).toMatchObject({ missing: true, error: expect.stringMatching(/changed since/) });
+    // none chosen: nothing taken
+    expect(await findOutput(source, async () => null)).toBe(false);
+    // the same output: taken, and what waited on it asked for again
+    expect(await findOutput(source, async () => ({ path: "/new/found.cube", text }))).toBe(true);
+    expect(useAsks.getState().state[waiting]).toBeUndefined();
   });
 
   it("kept without its kind, as before kinds were kept, is asked for with its kind told again", async () => {

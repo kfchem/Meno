@@ -4,9 +4,15 @@
  * promise when it is wanted - readers keep nothing between - and what each
  * promise came to, once given. None of it is saved: a workspace saves the
  * values a molecule is showing (`calcShowing`), and a promise not yet given
- * is asked for from its output - opened again, where it is not open now.
+ * is asked for from its output. Where that is not open this session, it is
+ * read again where it was (its source's `path`) - where Meno may still read
+ * it, and only if it is unchanged - and else the chemist is asked for it
+ * (`findOutput`), the file chosen taken only if it is the same.
  */
 import { create } from "zustand";
+import { isTauri } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { readFile } from "@tauri-apps/plugin-fs";
 import { readerById, readerIdOfLine, type ReaderPlugin } from "./catalog";
 import { kindOf } from "../io/kinds";
 import type { Reader } from "./client";
@@ -18,19 +24,74 @@ const outputs = new Map<string, { name: string; text: string }>();
 const given = new Map<string, unknown>();
 const underWay = new Map<string, Promise<unknown>>();
 
+/** What went wrong asking for a promise; `missing`, where it is that its output is not to be had - the chemist may find it. */
+export type AskError = { error: string; missing?: true };
+
 /** Each promise asked for, by key: being worked out, given, or what went wrong. */
-export const useAsks = create<{ state: Record<string, "asking" | "given" | { error: string }> }>(() => ({ state: {} }));
+export const useAsks = create<{ state: Record<string, "asking" | "given" | AskError> }>(() => ({ state: {} }));
 
 async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Keeps an opened output for the session: what its promises are asked for from - its name, its kind and its SHA-256. */
-export async function rememberOutput(name: string, text: string, kind: string): Promise<CalcSource> {
+/** Keeps an opened output for the session: what its promises are asked for from - its name, its kind, its SHA-256, and where it is, where Open said. */
+export async function rememberOutput(name: string, text: string, kind: string, path?: string): Promise<CalcSource> {
   const hash = await sha256(text);
   outputs.set(hash, { name, text });
-  return { name, sha256: hash, kind };
+  return { name, sha256: hash, kind, ...(path ? { path } : {}) };
+}
+
+/** A file's text, read where it is: none where Meno may not read it there, or it is not there. */
+export type ReadAt = (path: string) => Promise<string | null>;
+
+const readAt: ReadAt = async (path) => {
+  if (!isTauri()) return null;
+  // (as Open reads: bytes, as UTF-8)
+  return readFile(path).then((bytes) => new TextDecoder().decode(bytes), () => null);
+};
+
+/** An output kept where it was, read again: its text, where it is there and unchanged - the same SHA-256 - and kept for the session; else none. */
+async function foundAt(source: CalcSource, read: ReadAt): Promise<{ name: string; text: string } | null> {
+  if (!source.path) return null;
+  const text = await read(source.path);
+  if (text == null || (await sha256(text)) !== source.sha256) return null;
+  const output = { name: source.name, text };
+  outputs.set(source.sha256, output);
+  return output;
+}
+
+/** The chosen file, as asked for: its path and its text; none where none was chosen. */
+export type Pick = (source: CalcSource) => Promise<{ path: string; text: string } | null>;
+
+const pickWithDialog: Pick = async (source) => {
+  const picked = await openDialog({ title: `Find ${source.name}`, defaultPath: source.path ?? source.name, multiple: false });
+  if (typeof picked !== "string") return null;
+  const text = await readAt(picked);
+  return text == null ? null : { path: picked, text };
+};
+
+/**
+ * The chemist asked for an output that is not to be had - not opened this
+ * session, not where it was: the file chosen is taken if it is that output,
+ * unchanged, and the promises that waited on it are asked for again.
+ * Whether one was taken; throws, saying why, where the file chosen is
+ * another.
+ */
+export async function findOutput(source: CalcSource, pick: Pick = pickWithDialog): Promise<boolean> {
+  const chosen = await pick(source);
+  if (!chosen) return false;
+  // (what failed for want of it: said again, or asked for again as it is next wanted)
+  const waited = `${source.sha256}\u0000`;
+  const waiting = ([k, s]: [string, unknown]) => k.startsWith(waited) && typeof s === "object";
+  if ((await sha256(chosen.text)) !== source.sha256) {
+    const error = `That is not the ${source.name} this molecule was read from: it has changed since, or it is another file.`;
+    useAsks.setState((was) => ({ state: Object.fromEntries(Object.entries(was.state).map(([k, s]) => [k, waiting([k, s]) ? { error, missing: true as const } : s])) }));
+    throw new Error(error);
+  }
+  outputs.set(source.sha256, { name: source.name, text: chosen.text });
+  useAsks.setState((was) => ({ state: Object.fromEntries(Object.entries(was.state).filter((e) => !waiting(e))) }));
+  return true;
 }
 
 /** What a promise is known by, among every molecule's: its output, the reader that gave it - by id - and its key. */
@@ -41,12 +102,13 @@ export function givenValue(source: CalcSource | undefined, from: string | undefi
   return given.get(askKey(source, from, key));
 }
 
-const setState = (k: string, s: "asking" | "given" | { error: string }) => useAsks.setState((was) => ({ state: { ...was.state, [k]: s } }));
+const setState = (k: string, s: "asking" | "given" | AskError) => useAsks.setState((was) => ({ state: { ...was.state, [k]: s } }));
 
 /**
  * Asks the reader that gave a promise (`from`, its id) what it stands for,
  * sending the output again, and its kind; resolved once given. Where the
- * output is not open this session, says to open it.
+ * output is not open this session, it is read again where it was, if it is
+ * there unchanged; where it is not, says so, as `missing`.
  */
 export function askFor(
   calc: CalcInfo,
@@ -54,19 +116,28 @@ export function askFor(
   key: string,
   /** The reader a plugin is asked through: its worker, or the one that comes with Meno (tests hand in their own). */
   readerOf: (p: ReaderPlugin) => Promise<Reader> = readerClient,
+  /** How an output is read again where it was (tests hand in their own). */
+  read: ReadAt = readAt,
 ): Promise<unknown> {
   const k = askKey(calc.source, from, key);
   if (given.has(k)) return Promise.resolve(given.get(k));
   // (asked for twice while it is worked out: worked out once)
-  if (!underWay.has(k)) underWay.set(k, ask(calc, from, key, k, readerOf).finally(() => underWay.delete(k)));
+  if (!underWay.has(k)) underWay.set(k, ask(calc, from, key, k, readerOf, read).finally(() => underWay.delete(k)));
   return underWay.get(k)!;
 }
 
-async function ask(calc: CalcInfo, from: string | undefined, key: string, k: string, readerOf: (p: ReaderPlugin) => Promise<Reader>): Promise<unknown> {
-  const output = calc.source ? outputs.get(calc.source.sha256) : undefined;
+async function ask(
+  calc: CalcInfo,
+  from: string | undefined,
+  key: string,
+  k: string,
+  readerOf: (p: ReaderPlugin) => Promise<Reader>,
+  read: ReadAt,
+): Promise<unknown> {
+  const output = calc.source ? (outputs.get(calc.source.sha256) ?? (await foundAt(calc.source, read))) : undefined;
   if (!calc.source || !output) {
     const error = `Open ${calc.source?.name ?? "the calculation's output"} again to show this.`;
-    setState(k, { error });
+    setState(k, { error, ...(calc.source ? { missing: true as const } : {}) });
     throw new Error(error);
   }
   const who = from ?? readerIdOfLine(calc.readers[0] ?? "");
