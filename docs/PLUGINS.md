@@ -74,7 +74,8 @@ Everything a plugin is lives in one folder, named by its id:
   manifest.json      what it is, its version, licence and home; what makes
                      its environment and runs its worker; the kinds of file
                      it brings (id, name, extensions, marks) and those it
-                     reads, by id - its own, or Meno's
+                     reads, by id - its own, or Meno's; the kinds it writes,
+                     each with what it takes and its options (`writes`)
   worker.py          its worker, spoken to in JSON lines under the contract
   requirements.lock  its environment, made by uv from PyPI - or, where it
   (or pixi.toml and  needs conda-forge, by pixi
@@ -181,18 +182,20 @@ The same for every plugin and for Meno's own parts:
   - `read`, `ask`, `write` - the file roles, and `probe` - whether a file
     is of a kind it registered (FILE-IO.md);
   - `run {role, input, options}` - every other role.
-- **Molecules cross it in one form, the record's.** That is atoms,
-  bonds, coordinates in 2D or 3D, charge, isotope, stereo,
-  and a molecule's charge and multiplicity: Meno's own form, checked by
-  Meno's own reader on the way in. RDKit today is given V3000 molfiles,
-  and would take the record instead.
+- **Molecules cross it in Meno's own forms.** Chemistry plugins are
+  given and give back MOL blocks (decision 4, revised); a writer is given
+  Meno's plain data - each atom's element, place in ångströms, charge,
+  isotope and radical, the bonds by index with their orders, a name
+  (FILE-IO.md, *As step 7's writer was built*); a reader gives back
+  Meno's own plain data, checked by Meno on the way in.
 - **Keeps nothing between requests**; what it needs is sent each time.
 - **Gives data, never code or markup**, in Meno's units, checked by Meno.
 - **Runs apart from the page:**
   - a plugin in its own process and environment;
-  - Meno's own parts all in a web worker, giving coordinates back in
+  - Meno's own readers all in a web worker, giving coordinates back in
     buffers - decided once the measurements were seen (FILE-IO.md,
-    *Response*).
+    *Response*). Meno's own writers run on the page: an SVG picture of
+    molecules in 3D needs the page's WebGL.
 
 ## Settings
 
@@ -255,3 +258,10 @@ After the files (FILE-IO.md's order, steps 2 to 5):
    *Molecules in 3D*, with RDKit as the only plugin at first.
 2. **New roles, each with a plugin that fills it:** fingerprints into
    the workflow, a structure search, running a calculation.
+3. **Plugins without Python, perhaps** (raised by the maintainer on
+   2026-10-06, as Gaussian's input writer was built): a plugin of
+   TypeScript, run in the app, would need no Python and start at once -
+   right for a writer that only lays text out. It would run inside the
+   app's web view, so it needs a sandbox first - no Tauri, no network -
+   shown to hold before plugins are fetched online. Until then every
+   plugin is Python, made by uv or pixi.

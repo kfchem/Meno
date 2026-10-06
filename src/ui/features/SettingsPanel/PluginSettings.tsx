@@ -47,6 +47,7 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonPlugin; state?: s
         </div>
         <p className="text-xs text-gh-gray mt-0.5">{p.description}</p>
         {p.reads.length > 0 && <p className="text-xs text-gh-gray mt-1">Reads {p.reads.map(named).join(", ")}.</p>}
+        {p.writes.length > 0 && <p className="text-xs text-gh-gray mt-1">Writes {p.writes.map((w) => `${w.name} (${w.extensions.join(", ")})`).join(", ")}.</p>}
         {p.roles.length > 0 && <p className="text-xs text-gh-gray mt-1">{p.roles.map((r) => ROLES[r].name).join("; ")}.</p>}
         <p className="text-xs text-gh-gray mt-1">
           {p.licence} · {p.homepage.replace(/^https?:\/\//, "")}

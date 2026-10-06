@@ -34,7 +34,9 @@ src/
   lib/io/                 kinds.ts: every kind of file Meno takes in, and what a file is - one
                           decision, by content, for Open, a drop and pasted text (docs/FILE-IO.md);
                           structures.ts: Meno's own reading of MOL, SD, RXN, XYZ and PDB files, run in
-                          its worker, and the page's checks of what comes back
+                          its worker, and the page's checks of what comes back; writers.ts: who
+                          writes each kind Export offers - Meno, or a plugin added - and what a
+                          plugin's writer is given (`WrittenMolecule`, `knownOf`)
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
@@ -361,6 +363,16 @@ which plugin would read a file no plugin added reads
   Like the chemistry worker, it runs no code it is sent and is kept off the
   network. A reader is known by its id: a molecule keeps its readers as
   "id version" (`readerIdOfLine`), its results their reader's id.
+- A plugin that writes a kind declares it in its manifest's `writes` (the
+  kind, its files' extensions, what it takes, its options as data, checked
+  by `acceptOptions`). Export offers it while the plugin is added, for
+  molecules in 3D: the molecules chosen become one `WrittenMolecule`
+  (`StructureEditor/utils/written.ts`; several as they stand on the page),
+  the worker is asked `{"op": "write", "kind", "name", "molecules",
+  "options"}` through the same client, and the text it gives back is
+  written where the chemist chose. The first is Gaussian's input
+  (`resources/plugins/gaussian-input/`, Python alone; its tests,
+  `scripts/calc/test_writer_gaussian_input.py`, run in CI).
 - Where the line is between a plugin and Meno: a plugin knows the file,
   Meno where and how what it found shows, and what can be done with it.
   What Meno does something with has a form of its own in `ReaderOutput` -

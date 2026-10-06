@@ -3,8 +3,9 @@
  * plugin's folder of its own, beside its worker and its lock, saying what it
  * is, what makes its environment and runs its worker, the kinds of file it
  * brings - their names, the names their files go by, and how a file of one
- * is told - which kinds it reads, by their ids: its own, or Meno's - and the
- * roles it fills besides, by the ids Meno gives them (lib/plugins/roles).
+ * is told - which kinds it reads, by their ids: its own, or Meno's - the
+ * kinds it writes, with their options (`writes`), and the roles it fills
+ * besides, by the ids Meno gives them (lib/plugins/roles).
  *
  * A plugin stands alone: it knows of no other, and Meno of no program. Two
  * plugins that read the same kind each bring it, by the same id; Meno puts
@@ -19,6 +20,7 @@
  * The plugins Meno carries for now (./known) are each read here as one
  * fetched would be.
  */
+import { acceptOptions, type Option } from "../options";
 
 /** Text a file's start holds, which tells a kind: anywhere, or at a line's start; runs of spaces counted as one. */
 export type Mark = {
@@ -44,6 +46,21 @@ export type KindDecl = {
   probe?: true;
 };
 
+/**
+ * A kind of file a plugin writes (docs/FILE-IO.md, *The contract for
+ * files*): what it is called, the names its files go by - the first the one
+ * Export gives - what it is given, and its options, in the general form
+ * (lib/options), which Meno draws in Export.
+ */
+export type WriteDecl = {
+  id: string;
+  name: string;
+  extensions: string[];
+  /** What it is given: one molecule - one system of molecules in 3D, which Meno asks for where it must. */
+  takes: "molecule";
+  options: Option[];
+};
+
 /** A plugin's manifest, as Meno reads it. */
 export type Manifest = {
   id: string;
@@ -64,6 +81,8 @@ export type Manifest = {
   roles: string[];
   /** The kinds it brings. */
   kinds: KindDecl[];
+  /** The kinds it writes. */
+  writes: WriteDecl[];
 };
 
 const ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -95,6 +114,16 @@ function kindOf(v: unknown): KindDecl | null {
   return { id, name, ...(program ? { program } : {}), extensions, marks, ...(probe ? { probe: true as const } : {}) };
 }
 
+function writeOf(v: unknown): WriteDecl | null {
+  const w = v as Record<string, unknown> | null;
+  const id = typeof w?.id === "string" && ID.test(w.id) ? w.id : null;
+  const name = text(w?.name, 80);
+  const extensions = Array.isArray(w?.extensions) ? w.extensions.filter((e): e is string => typeof e === "string" && EXTENSION.test(e)) : [];
+  // (given one molecule: the one thing a plugin is given, for now)
+  if (!id || !name || !extensions.length || w?.takes !== "molecule") return null;
+  return { id, name, extensions, takes: "molecule", options: acceptOptions(w.options) };
+}
+
 /** A manifest as Meno reads it, or null where it does not read as one: what reads wrong in it is left out, what it cannot do without makes it none. */
 export function acceptManifest(raw: unknown): Manifest | null {
   const m = raw as Record<string, unknown> | null;
@@ -114,8 +143,9 @@ export function acceptManifest(raw: unknown): Manifest | null {
   const ids = (v: unknown) => (Array.isArray(v) ? v.filter((r): r is string => typeof r === "string" && ID.test(r)) : []);
   const reads = ids(m.reads);
   const roles = ids(m.roles);
+  const writes = Array.isArray(m.writes) ? m.writes.map(writeOf).filter((w): w is WriteDecl => w != null) : [];
   // (a plugin that does nothing is none)
-  if (!reads.length && !roles.length) return null;
+  if (!reads.length && !roles.length && !writes.length) return null;
   return {
     id,
     name,
@@ -128,6 +158,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
     reads,
     roles,
     kinds,
+    writes,
   };
 }
 

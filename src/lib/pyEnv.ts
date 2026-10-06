@@ -216,12 +216,16 @@ export async function ensurePyEnv(
         (plugin
           ? `${plugin.description} It runs in a Python ${info.pythonVersion} of its own, `
           : `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, `) +
-        `with the ${packages} packages it needs, in its data folder. ` +
-        `Astral's uv, fetched the first time it is needed, downloads them - once` +
-        (hashed ? ", every file checked against the fingerprint Meno carries for it:" : ":"),
+        // (a plugin that needs Python alone: no packages to fetch)
+        (packages
+          ? `with the ${packages} packages it needs, in its data folder. ` +
+            `Astral's uv, fetched the first time it is needed, downloads them - once` +
+            (hashed ? ", every file checked against the fingerprint Meno carries for it:" : ":")
+          : "in its data folder, and needs nothing else. Astral's uv, fetched the first time it is needed, " +
+            "downloads Python - once, and only where Meno has not fetched it before:"),
       sources: [
         "uv the first time, and Python itself, from Astral, who make uv (releases.astral.sh)",
-        "the packages, from the Python Package Index (pypi.org, files.pythonhosted.org)",
+        ...(packages ? ["the packages, from the Python Package Index (pypi.org, files.pythonhosted.org)"] : []),
       ],
     });
     if (!allowed) {

@@ -13,10 +13,17 @@ type OptionBase = {
   /** What the chemist reads beside it. */
   label: string;
 };
+/**
+ * What Meno knows of what is written, which an option may start from rather
+ * than from its default - the charge of the molecule written, say: given
+ * afresh for what is written each time, and never remembered, since it is
+ * that molecule's (`known`).
+ */
+export type Known = "charge" | "multiplicity" | "name";
 /** One of several, each with what it is called. */
 export type ChoiceOption = OptionBase & { type: "choice"; choices: readonly { value: string; label: string }[]; default: string };
-export type NumberOption = OptionBase & { type: "number"; default: number; min?: number; max?: number; step?: number; unit?: string };
-export type TextOption = OptionBase & { type: "text"; default: string };
+export type NumberOption = OptionBase & { type: "number"; default: number; min?: number; max?: number; step?: number; unit?: string; from?: Known };
+export type TextOption = OptionBase & { type: "text"; default: string; from?: Known };
 export type SwitchOption = OptionBase & { type: "switch"; default: boolean };
 export type Option = ChoiceOption | NumberOption | TextOption | SwitchOption;
 
@@ -37,7 +44,73 @@ function fitting(o: Option, v: unknown): string | number | boolean | undefined {
   }
 }
 
-/** The values of `options`: those remembered, where each still fits its option, else each one's default. */
-export function valuesOf(options: readonly Option[], remembered: Readonly<Record<string, unknown>> = {}): OptionValues {
-  return Object.fromEntries(options.map((o) => [o.id, fitting(o, remembered[o.id]) ?? o.default]));
+/**
+ * The values of `options`: an option that starts from what Meno knows of
+ * what is written, that (`known`); else those remembered, where each still
+ * fits its option; else each one's default.
+ */
+export function valuesOf(
+  options: readonly Option[],
+  remembered: Readonly<Record<string, unknown>> = {},
+  known: Partial<Record<Known, string | number>> = {},
+): OptionValues {
+  return Object.fromEntries(
+    options.map((o) => {
+      const from = o.type === "number" || o.type === "text" ? o.from : undefined;
+      if (from) return [o.id, fitting(o, known[from]) ?? o.default];
+      return [o.id, fitting(o, remembered[o.id]) ?? o.default];
+    }),
+  );
+}
+
+/** The values to remember of `values`: all but those that start from what is written (`Known`). */
+export function rememberable(options: readonly Option[], values: OptionValues): OptionValues {
+  const fresh = new Set(options.filter((o) => (o.type === "number" || o.type === "text") && o.from).map((o) => o.id));
+  return Object.fromEntries(Object.entries(values).filter(([id]) => !fresh.has(id)));
+}
+
+const OPTION_ID = /^[a-z][a-z0-9-]{0,39}$/;
+const KNOWN: readonly Known[] = ["charge", "multiplicity", "name"];
+const label = (v: unknown, most: number): string | null => (typeof v === "string" && v.trim() && v.length <= most ? v.trim() : null);
+const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+
+/**
+ * Options as a plugin's manifest declares them, read as data - each in the
+ * general form, its default one it takes - and those that do not read as
+ * one left out: a plugin's options are drawn by Meno, never run.
+ */
+export function acceptOptions(raw: unknown): Option[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Option[] = [];
+  for (const r of raw.slice(0, 40) as Record<string, unknown>[]) {
+    const id = typeof r?.id === "string" && OPTION_ID.test(r.id) ? r.id : null;
+    const name = label(r?.label, 120);
+    if (!id || !name || out.some((o) => o.id === id)) continue;
+    const from = KNOWN.find((k) => k === r.from);
+    let o: Option | null = null;
+    if (r.type === "choice" && Array.isArray(r.choices)) {
+      const choices = (r.choices as Record<string, unknown>[])
+        .slice(0, 40)
+        .map((c) => ({ value: label(c?.value, 80), label: label(c?.label, 120) }))
+        .filter((c): c is { value: string; label: string } => c.value != null && c.label != null);
+      if (choices.length) o = { id, label: name, type: "choice", choices, default: String(r.default) };
+    } else if (r.type === "number") {
+      o = {
+        id,
+        label: name,
+        type: "number",
+        default: num(r.default) ?? 0,
+        ...(num(r.min) !== undefined ? { min: num(r.min) } : {}),
+        ...(num(r.max) !== undefined ? { max: num(r.max) } : {}),
+        ...(num(r.step) !== undefined ? { step: num(r.step) } : {}),
+        ...(label(r.unit, 20) ? { unit: label(r.unit, 20)! } : {}),
+        ...(from ? { from } : {}),
+      };
+    } else if (r.type === "text") {
+      o = { id, label: name, type: "text", default: typeof r.default === "string" ? r.default.slice(0, 200) : "", ...(from ? { from } : {}) };
+    } else if (r.type === "switch") o = { id, label: name, type: "switch", default: r.default === true };
+    // (its default, one it takes: else it is none)
+    if (o && fitting(o, o.default) !== undefined) out.push(o);
+  }
+  return out;
 }
