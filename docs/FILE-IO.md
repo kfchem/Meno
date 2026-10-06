@@ -52,7 +52,7 @@ beyond files - SMILES, R/S, conformers, what comes later - are in
 | SDF | the same | Save (drawing as one record, each molecule in 3D as one) | |
 | RXN (V2000/V3000) | `readRxnfile` via `buildEditorModelFromRXN` | Save, Copy | |
 | XYZ, many frames | `parseXYZ` (`utils/structureParsers.ts`), main thread; bonds from covalent radii | never | each frame's energy from its comment line (`lib/calc/readers.ts`) |
-| SMILES | RDKit (`chem` profile); abbreviations' SMILES by Meno's own `lib/chem/smiles.ts` | Copy as SMILES (RDKit) | |
+| SMILES | the plugin that fills the role (RDKit's, `plugin-rdkit`); abbreviations' SMILES by Meno's own `lib/chem/smiles.ts` | Copy as SMILES (the same plugin) | |
 | `.meno` | `readWorkspace` (`workspace.ts`) | Save | version 1, no migration |
 | Meno record | `readRecord` (`utils/copyPaste.ts`) | Copy, Office | in the clipboard's own flavour, an EMF comment, a PNG text chunk, OLE streams |
 | PDB, KET | not read | never | Open offers them and then says "not supported yet" |
@@ -500,8 +500,10 @@ Each step is a pull request from main.
    - outputs found again by path;
    - one SMILES copy;
    - the write scope said.
-6. **RDKit as a plugin** (PLUGINS.md), with SMILES read
-   through it.
+6. **RDKit as a plugin** (PLUGINS.md; built with this step's pull
+   request), with SMILES read through it: the SMILES the chemist gives are
+   read by the plugin that fills the role; the dictionary's stay with
+   Meno's own parser.
 7. **New kinds:** reading PDB, and a first calculation's input. Which
    program, and whether Meno or a plugin reads PDB, are decided then.
 8. **ARCHITECTURE.md** drawn from the table of kinds.

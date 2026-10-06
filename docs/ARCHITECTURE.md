@@ -37,7 +37,7 @@ src/
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
-  lib/rdkit/              the chemistry worker: client, sidecar, the MOL blocks it is asked about
+  lib/roles/              the roles' workers (RDKit's, for now): client, sidecar, the MOL blocks they are asked about
   lib/calc/               readers of calculation output: the catalog, reading, promises, Meno's own reading
   lib/plugins/            plugins' manifests (data), read and checked; the plugins Meno carries, found in their folders
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
@@ -309,20 +309,26 @@ PyConsole ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_set
              ext_kill(id)
 ```
 
-The chemistry worker (`resources/workers/chem_worker.py`) is a sidecar of
-the `chem` profile, started by `lib/rdkit/worker.ts` and asked through
-`lib/rdkit/client.ts`: JSON lines, a fixed set of requests (ping,
-to_smiles, from_smiles, clean, analyse, and for 3D open_stereo,
-conformers and drawing_of), MOL blocks in (written by
-`lib/rdkit/molblock.ts`, a label that is not an element as `*`) and V3000
-blocks or coordinates out. It runs no code it is sent, and the app keeps it
-off the network. Its tests need RDKit and run by hand
-(`scripts/chem/test_chem_worker.py`).
+The chemistry roles (`lib/plugins/roles.ts`: SMILES, the checks, R and S,
+stereoisomers, conformers, a formula of a molecule in 3D) are filled by a
+plugin that says so in its manifest - RDKit, for now, a folder of its own
+like any plugin (`resources/plugins/rdkit/`, its environment
+`plugin-rdkit`). Its worker is a sidecar, started by `lib/roles/worker.ts`
+(`chemWorker(role)`: the plugin chosen for the role in Settings, else the
+first that fills it) and asked through `lib/roles/client.ts`: JSON lines, a
+fixed set of requests (ping, to_smiles, from_smiles, analyse, and for 3D
+open_stereo, conformers and drawing_of), MOL blocks in (written by
+`lib/roles/molblock.ts`, a label that is not an element as `*`) and V3000
+blocks or coordinates out. It is set up the first time a role it fills is
+needed, asking first, unless the chemist took it away in Settings, Plugins
+(`plugins.removed` in the settings); then the role says to add it. It runs
+no code it is sent, and the app keeps it off the network. Its tests need
+RDKit and run by hand (`scripts/chem/test_chem_worker.py`).
 
 Reader plugins (docs/FILE-IO.md, docs/PLUGINS.md) are sidecars too, one
-profile each, named `reader-<id>`. Each is a folder of its own,
-`resources/plugins/<id>/`, and stands alone: it knows of no other plugin,
-and Meno names none of them. Its manifest (`lib/plugins/manifest.ts`;
+profile each, named `plugin-<id>` as every plugin's is. Each is a folder
+of its own, `resources/plugins/<id>/`, and stands alone: it knows of no
+other plugin, and Meno names none of them. Its manifest (`lib/plugins/manifest.ts`;
 the folders found by `lib/plugins/known.ts`, the plugins Meno carries for
 now) is data saying what it is, its lock and worker in its folder, the
 kinds it brings - each told by marks, text, never a pattern - and the kinds
@@ -336,14 +342,14 @@ the plugins on offer, added or not (`OFFERED`), are looked at only to say
 which plugin would read a file no plugin added reads
 (`lib/calc/probe.ts` `kindOfFile`).
 - A plugin is added in Settings, *Plugins*: `ensurePyEnv`, with the
-  network's consent under `python-env:reader-<id>`. It is taken away there
+  network's consent under `python-env:plugin-<id>`. It is taken away there
   too: `py_env_remove`, which removes only its own folder.
 - *Files* in Settings says who reads each kind: one reader (`readerFor`:
   the one chosen, else Meno where Meno reads it, else the first added), and
   the readers chosen to read it as well (`alsoReadersFor`), kept as
   `files` in the settings.
 - `lib/calc/workers.ts` starts a reader's worker the first time it is asked
-  to read, as `lib/rdkit/worker.ts` does, and asks it through
+  to read, as `lib/roles/worker.ts` does, and asks it through
   `lib/calc/client.ts`: `{"op": "read", "kind", "name", "text"}` - Meno has
   told the kind already; the file's text, never a path - and back Meno's
   own plain data (`lib/calc/output.ts` `ReaderOutput`); `ask` for a
@@ -554,7 +560,7 @@ runs both for the computer it runs on).
 An environment pixi makes (`pixienv.rs`, `py_env_setup_pixi`) comes from the
 manifest and the lock in a plugin's folder, `resources/plugins/<id>/pixi.toml`
 and `pixi.lock` - every package for every platform pinned by its SHA-256 -
-copied into `<data>/pixi/reader-<id>/`, where `pixi install --frozen` makes it
+copied into `<data>/pixi/plugin-<id>/`, where `pixi install --frozen` makes it
 (`.pixi/envs/default`). pixi keeps its cache and home under `<data>/pixi/`
 and reads no configuration of the user's (`PIXI_NO_CONFIG`). A conda
 environment expects to be activated - on Windows its libraries are found
@@ -579,7 +585,7 @@ path it is given:
 - `py_env_*`: the webview names no tool - uv is the one `tools.rs` pins;
   `lockPath` must be a `.lock` file under `resources/py/`, or in a plugin's
   folder, `resources/plugins/<id>/` - for pixi, that folder's `pixi.lock`,
-  made in `<app data>/pixi/reader-<id>`; `venvHome` must be under `uv/` in the
+  made in `<app data>/pixi/plugin-<id>`; `venvHome` must be under `uv/` in the
   app data dir; relative paths may not contain `..`, `.` or absolute/drive
   prefixes; `pythonVersion` must look like `3.12` or `3.12.4`; `purpose` must
   be `python-env:<name>` - never a purpose that needs no asking.
