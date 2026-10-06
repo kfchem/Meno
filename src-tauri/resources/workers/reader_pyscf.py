@@ -157,6 +157,15 @@ def read_data(m):
     return data
 
 
+def method_of(meta):
+    """What the calculation was, as its program names it: the functional
+    of a DFT calculation, or else the last method it ran."""
+    if meta.get("functional"):
+        return str(meta["functional"])
+    methods = [m for m in meta.get("methods") or [] if m]
+    return str(methods[-1]) if methods else None
+
+
 def molecule_of(data):
     """The molecule an output is of, in Meno's form: its atoms, each
     geometry it went through, each one's SCF energy (hartrees) where every
@@ -171,6 +180,7 @@ def molecule_of(data):
         "schema": SCHEMA,
         "program": meta.get("package"),
         "version": meta.get("package_version"),
+        "method": method_of(meta),
         "basis": meta.get("basis_set"),
         "charge": int(data.charge) if has(data, "charge") else None,
         "multiplicity": int(data.mult) if has(data, "mult") else None,

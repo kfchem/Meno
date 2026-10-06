@@ -108,6 +108,8 @@ class Outputs(unittest.TestCase):
         r = ask("read", path)
         self.assertEqual(len(r["atoms"]), 20)
         self.assertEqual(r["program"], "Gaussian")
+        # (what the calculation was, as the program names it)
+        self.assertEqual((r["method"], r["basis"]), ("B3LYP", "STO-3G"))
         # (only what it is for: no charges or vibrations - the cclib reader's)
         self.assertEqual({x["id"] for x in r["results"]}, {"orbitals", "densities"})
         homo = next(row for row in result(r, "orbitals")["rows"] if row["cells"][0] == "HOMO")
@@ -123,6 +125,7 @@ class Outputs(unittest.TestCase):
 
     def test_an_output_without_its_basis_says_to_open_a_molden_file(self):
         r = ask("read", sample("ORCA/dvb_gopt.out"))
+        self.assertEqual(r["method"], "DFT")
         self.assertGreater(len(r["frames"]), 1)
         self.assertIsNone(result(r, "orbitals"))
         self.assertEqual(result(r, "surfaces")["value"], "open a Molden file the program wrote")
