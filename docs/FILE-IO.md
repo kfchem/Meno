@@ -416,8 +416,8 @@ web worker.
 
 Each step is a pull request from main.
 
-1. **These documents.**
-2. **Kinds and Open:**
+1. **These documents** (#149).
+2. **Kinds and Open** (built in #150):
    - the table of kinds and the one decision;
    - Open through Tauri's dialog;
    - the record from Office as the record;
@@ -426,7 +426,7 @@ Each step is a pull request from main.
    - Open offering only what is read;
    - the dead branch removed;
    - tests for each misread case.
-3. **Readers by the table:**
+3. **Readers by the table** (built with this step's pull request):
    - kinds registered: Meno's own and the well-known ones, and each
      plugin's from its manifest; marks as data, tried on Meno's samples
      when a plugin is added; `probe`;
@@ -439,7 +439,7 @@ Each step is a pull request from main.
    - `readers.ts` into the XYZ reader, and geometries made directly.
 4. **Meno's readers in the worker:** all of them behind the contract,
    in a web worker, giving back coordinates in buffers (*Response*).
-5. **Save and Export:**
+5. **Save and Export** (in part in #151 - Save writing `.meno`, Save when closing, one SMILES copy, the write scope; the rest to come):
    - Save writing `.meno` only, back to the file it came from;
    - Save offered when closing;
    - Export with the writer's options;
@@ -452,3 +452,19 @@ Each step is a pull request from main.
 7. **New kinds:** reading PDB, and a first calculation's input. Which
    program, and whether Meno or a plugin reads PDB, are decided then.
 8. **ARCHITECTURE.md** drawn from the table of kinds.
+
+As step 3 was built:
+
+- **Its manifests ship with Meno for now.** `lib/plugins/manifests/` is
+  read as data by the same check a fetched manifest would meet. Meno
+  registers Molden with the well-known kinds, so no plugin Meno knows of
+  brings a kind of its own yet. Registration, the samples' check and
+  `probe` are in place, and tested with made-up plugins.
+- **The cube reader became Meno's own reading.** It is the reader `meno`
+  under the same contract; a workspace that kept it as "Cube files" reads
+  it so.
+- **A reader's late findings join every molecule read from the output,**
+  by its SHA-256 - opened, dropped or pasted, in any tab. They join
+  through the document's `amend`, which writes them into the history too,
+  so undo does not take them back.
+

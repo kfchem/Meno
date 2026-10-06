@@ -36,7 +36,8 @@ src/
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
   lib/pyEnv.ts            creates/validates the uv venv for a Python profile
   lib/rdkit/              the chemistry worker: client, sidecar, the MOL blocks it is asked about
-  lib/calc/               readers of calculation programs' output (to be plugins): energies, for now
+  lib/calc/               readers of calculation output: the catalog, reading, promises, Meno's own reading
+  lib/plugins/            plugins' manifests (data), read and checked; the plugins Meno knows of
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
   utils/importers         readMoleculesFromText, RXN grouping/layout, EditorModel conversion
   utils/atomUtils         element table (radii, colours)
@@ -300,22 +301,34 @@ blocks or coordinates out. It runs no code it is sent, and the app keeps it
 off the network. Its tests need RDKit and run by hand
 (`scripts/chem/test_chem_worker.py`).
 
-Calculation readers (stage 3 of docs/WORKSPACE.md) are sidecars too, one
-profile each, named `reader-<id>`: `lib/calc/catalog.ts` lists the readers
-Meno knows of - each one's lock, worker and the kinds of output it reads -
-and the kinds, each told by what its file starts with (ORCA's banner,
-Gaussian's "Entering Gaussian System", ...), never by its name. Meno's core
-knows no program's format beyond that.
-- A reader is added in Settings, *Calculation readers*: `ensurePyEnv`, with
-  the network's consent under `python-env:reader-<id>`. It is taken away
-  there too: `py_env_remove`, which removes only a `uv/reader-<id>`
-  folder.
+Reader plugins (docs/FILE-IO.md, docs/PLUGINS.md) are sidecars too, one
+profile each, named `reader-<id>`. Each is known from its manifest
+(`lib/plugins/manifest.ts`; those Meno knows of in `lib/plugins/manifests/`,
+listed by `lib/plugins/known.ts`): data saying what it is, its lock and
+worker, the kinds it reads by id, and the kinds it brings, each told by
+marks - text, never a pattern - and checked as data however it came.
+`lib/calc/catalog.ts` makes the readers of the manifests, with Meno's own
+reading (`MENO`) first; `lib/io/kinds.ts` registers the plugins' kinds with
+Meno's own and the well-known ones, refusing a mark that one of Meno's own
+sample files holds. Meno's core knows no program's format beyond the kinds'
+marks.
+- A plugin is added in Settings, *Plugins*: `ensurePyEnv`, with the
+  network's consent under `python-env:reader-<id>`. It is taken away there
+  too: `py_env_remove`, which removes only its own folder.
+- *Files* in Settings says who reads each kind: one reader (`readerFor`:
+  the one chosen, else Meno where Meno reads it, else the first added), and
+  the readers chosen to read it as well (`alsoReadersFor`), kept as
+  `files` in the settings.
 - `lib/calc/workers.ts` starts a reader's worker the first time it is asked
   to read, as `lib/rdkit/worker.ts` does, and asks it through
-  `lib/calc/client.ts`: `{"op": "read", "name", "text"}` - the file's text,
-  never a path - and back Meno's own plain data (`lib/calc/output.ts`
-  `ReaderOutput`). Like the chemistry worker, it runs no code it is sent
-  and is kept off the network.
+  `lib/calc/client.ts`: `{"op": "read", "kind", "name", "text"}` - Meno has
+  told the kind already; the file's text, never a path - and back Meno's
+  own plain data (`lib/calc/output.ts` `ReaderOutput`); `ask` for a
+  promise, `probe` for a kind its plugin tells itself (`lib/calc/probe.ts`).
+  Like the chemistry worker, it runs no code it is sent and is kept off the
+  network. A reader is known by its id: a molecule keeps its readers as
+  "id version", its results their reader's id; names kept by workspaces
+  saved before are read as ids (`readerIdOf`, `readerLineOf`).
 - Where the line is between a plugin and Meno: a plugin knows the file,
   Meno where and how what it found shows, and what can be done with it.
   What Meno does something with has a form of its own in `ReaderOutput` -
@@ -330,19 +343,23 @@ knows no program's format beyond that.
   (the right count, indices it has, no markup), and `valueText` writes
   them, the same whoever gave them. A list's row can be of atoms, a frame or
   a motion; a molecule's result can rank for the chip's line (`chipLine`).
-- Readers are alike: every one added that reads a kind of output reads it
-  (`readersFor`), and what they found is put together (`lib/calc/read.ts`
-  `combine`). The geometries are the first's that gives any, a reader whose
-  atoms are not those is left out, and each thing the calculation was is
-  the first's that gives it - the one chosen in Settings for that kind
-  (`calcReaders.chosen`), or else the first in the catalog's order. Every
-  reader's results are kept, the first's first, each with the reader it
-  came from: a result is known by its reader and its name with that reader
-  (`resultKey`), and names are never matched across readers. Where two
+- One reader reads a kind (`lib/calc/read.ts` `readOutput`): the molecule
+  stands on the page as soon as it answers, with its geometries and what
+  the calculation was. The readers chosen to read it as well read it
+  alongside; what each finds - or that it could not read it - is put out by
+  the output's SHA-256 (`lib/calc/readings.ts`) and joined to each molecule
+  read from that output wherever it stands (`withReadings`, applied by the
+  document's `amend`: learnt of the document, not done to it, so nothing
+  to undo), a reader that could not read it said in the chip's card.
+  `combine` puts findings together as they are joined: the geometries are
+  the reader's, a reader whose atoms are not those is left out, and every
+  reader's results are kept, each with the reader it came from: a result is
+  known by its reader and its name with that reader (`resultKey`), and
+  names are never matched across readers. Where two
   readers' results stand in one place, each reader's are under its name
   (`lib/calc/sources.ts`: `cardGroupsOf` for cards and the chip's details,
   `titled` for the menu's lists); the chip's line is the first's that
-  ranked any. Where none is added, opening the file says which to add.
+  ranked any. Where none is added, opening the file says which plugin to add.
 - An opened file that is no structure file but a kind of output
   (`openedAs`, `processFileContent`) is read so, and its geometries come in
   as an XYZ file's frames do (`calcResult`), its last shown; what the
@@ -393,19 +410,21 @@ knows no program's format beyond that.
   most 90 to a side), the basis functions' values a chunk of points at a
   time. Its tests (`scripts/calc/test_reader_pyscf.py`) run by hand in an
   environment made from its lock.
-- A reader that comes with Meno (`BuiltinReader` in the catalog) is asked
-  as a plugin's worker is - the same `Reader`: what it makes of a file,
-  and a promise it gave - but runs in the app, in a web worker of its own
-  (`lib/calc/builtin.ts`, `builtinWorker.ts`): always added, nothing
-  downloaded, and taken out by taking it out of the catalog and the
-  worker. The first is the cube reader (`lib/calc/cube.ts`), from the
+- Meno's own reading under the same contract (`MENO` in the catalog,
+  `lib/calc/menoReads.ts`, the one list of what it reads so) is asked as a
+  plugin's worker is - the same `Reader`: what it makes of a file, and a
+  promise it gave - but runs in the app, in a web worker of its own
+  (`lib/calc/builtin.ts`, `builtinWorker.ts`, which reads that list): always
+  there, nothing downloaded. The first it reads so is the cube
+  (`lib/calc/cube.ts`), from the
   layout Gaussian's documentation gives: a cube's molecule, in ångströms,
   and its grids as a list, each a promise, shown as it comes (a list's
   `shown`, opened by `shownLists` as a file is opened).
 - Promises (stage 3d): a row's motion or surface may be `{ "ask": key }`.
   Chosen, it is asked for of the reader that gave it (`lib/calc/asks.ts`
-  `askFor`), the output's text sent again - each opened output is kept for
-  the session by its SHA-256, which the molecule keeps as its `source` -
+  `askFor`), the output's text and kind sent again - each opened output is
+  kept for the session by its SHA-256, which the molecule keeps, with its
+  name and kind, as its `source` -
   and kept once given; a promise whose output is not open says to open it
   again. A workspace saves the shown row's promise given, as what it came
   to (`calcShowing`, from `carriedOf`), and the open list - its row and its
@@ -613,7 +632,7 @@ do beyond files, and which are kept running: [`PLUGINS.md`](./PLUGINS.md)
 | MOL (V2000/V3000) | Structure canvas | `parseSDF` | Stereo codes 1/6/4 → up/down/wavy. A molfile that says it is 3D, or whose atoms spread in depth, stands in 3D. |
 | SDF | Structure canvas | `parseSDF` | Flat records merged into one drawing; 3D records each a molecule in 3D beside it. Exported, each molecule in 3D is a 3D record. |
 | RXN (V2000) | Structure canvas | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
-| XYZ (multi-frame) | Structure canvas, in 3D | `parseXYZ` | Bonds inferred from covalent radii. Frames kept; each frame's energy where a calculation reader (`lib/calc`) finds one on its comment line. |
+| XYZ (multi-frame) | Structure canvas, in 3D | `parseXYZ` | Bonds inferred from covalent radii (`bondsByDistance`, as a calculation's geometries are given theirs). Frames kept; each frame's energy as CREST, xtb and ORCA write it on the comment lines (`utils/xyzEnergies.ts`). |
 | Meno workspace (`.meno`) | Structure canvas | `readWorkspace` | Everything on the canvas, as it was saved: what Save and Save As write. MOL, SDF, RXN and SVG are written by Export. |
 | PDB, KET | — | none | Not offered by Open (nothing reads them yet); one dropped is reported "not supported yet". |
 | Text files | Text editor | — | By extension, or anything that is not recognised. |
