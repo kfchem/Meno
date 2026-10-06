@@ -262,7 +262,7 @@ function readStereo(given: unknown, atoms: number, bonds: number): Carried3D["st
 
 /**
  * Whether plain text could be a SMILES: one word of the characters one is
- * written in. RDKit has the last word on it.
+ * written in. The plugin that reads SMILES has the last word on it.
  */
 export function looksLikeSmiles(text: string): boolean {
   const t = text.trim();

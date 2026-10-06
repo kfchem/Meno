@@ -15,8 +15,8 @@ npm run layout-stereo                                  # each drawing as a MOL f
 How to tune the engine with these, and what has been decided, is in
 [`docs/LAYOUT-2D-TUNING.md`](../../docs/LAYOUT-2D-TUNING.md).
 
-`<chem python>` is the Python of the chem lock: the app's own environment,
-under its data folder at `uv/chem/venv`, will do.
+`<chem python>` is the Python of the RDKit plugin's lock: the app's own
+environment for it, under its data folder at `uv/plugin-rdkit/venv`, will do.
 
 ## What it is for
 

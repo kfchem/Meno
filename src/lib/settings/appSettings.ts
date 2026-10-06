@@ -33,6 +33,18 @@ export type AppSettings = {
   abbreviations: CustomAbbreviation[];
   /** Who reads each kind of file (Settings, Files): its reader, and those that read it as well (lib/calc/catalog `readerFor`). */
   files: FileSettings;
+  /** The plugins and the roles they fill (docs/PLUGINS.md). */
+  plugins: PluginSettings;
+};
+
+/**
+ * The plugins: those the chemist took away in Settings, Plugins - by id -
+ * which are not set up again of themselves when a role they fill is
+ * needed; and who fills each role, where the chemist chose (lib/plugins/roles).
+ */
+export type PluginSettings = {
+  removed: string[];
+  roles: Record<string, string>;
 };
 
 /** Who reads each kind of file, by the kind's id: its reader - unset, Meno where Meno reads it, or else the first added that reads it - and the readers that read it as well. */
@@ -50,7 +62,7 @@ export type UpdateSettings = {
   asked: boolean;
 };
 
-/** What RDKit points out on a structure as it is drawn. */
+/** What the plugin that does the checks points out on a structure as it is drawn. */
 export type ChemistrySettings = {
   /** Atoms with more bonds than they can have. */
   valenceWarnings: boolean;
@@ -74,6 +86,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   options: {},
   abbreviations: [],
   files: { read: {}, also: {} },
+  plugins: { removed: [], roles: {} },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -92,6 +105,7 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     options: acceptOptions(r.options),
     abbreviations: acceptAbbreviations(r.abbreviations),
     files: acceptFiles(r.files, r.calcReaders),
+    plugins: acceptPlugins(r.plugins),
   };
 }
 
@@ -118,6 +132,18 @@ function acceptFiles(raw: unknown, before: unknown): FileSettings {
     if (ID.test(kind) && ids.length) also[kind] = ids;
   }
   return { read, also };
+}
+
+/** The plugins taken away, and the roles' choices, that read: ids only. */
+function acceptPlugins(raw: unknown): PluginSettings {
+  const r = (raw ?? {}) as { removed?: unknown; roles?: unknown };
+  const id = (v: unknown): v is string => typeof v === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(v);
+  const removed = Array.isArray(r.removed) ? [...new Set(r.removed.filter(id))] : [];
+  const roles: Record<string, string> = {};
+  if (r.roles && typeof r.roles === "object" && !Array.isArray(r.roles)) {
+    for (const [role, plugin] of Object.entries(r.roles)) if (id(role) && id(plugin)) roles[role] = plugin;
+  }
+  return { removed, roles };
 }
 
 /** The options remembered that read: by a role's name, each a value that is a string, a number or a switch. Whether each still fits its option is asked when it is drawn (lib/options `valuesOf`). */
@@ -230,6 +256,7 @@ type SettingsState = AppSettings & {
   rememberOptions: (role: string, values: OptionValues) => void;
   setAbbreviations: (abbreviations: CustomAbbreviation[]) => void;
   setFiles: (files: FileSettings) => void;
+  setPlugins: (plugins: PluginSettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -240,9 +267,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -271,6 +298,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setFiles: (files) => {
       set({ files });
+      scheduleSave();
+    },
+    setPlugins: (plugins) => {
+      set({ plugins });
       scheduleSave();
     },
     setUpdates: (updates) => {

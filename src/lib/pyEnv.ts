@@ -9,7 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { arch, platform } from "@tauri-apps/plugin-os";
 import { pixiDownload, pixiPlatform } from "./pixiLock";
 import { askToConnect } from "./net/network";
-import { READER_PLUGINS, type PythonReader } from "./calc/catalog";
+import { PLUGINS, type PythonPlugin } from "./calc/catalog";
 
 async function sha256(s: string) {
   const buf = await crypto.subtle.digest(
@@ -21,13 +21,13 @@ async function sha256(s: string) {
     .join("");
 }
 /**
- * A Python environment of Meno's own: the console's, workflows', RDKit's,
- * or a calculation reader plugin's (lib/calc/catalog), each from its lock.
+ * A Python environment: one of Meno's own - the console's, workflows' - or a
+ * plugin's (lib/calc/catalog), each from its lock.
  */
-export type PyProfile = "console" | "node" | "chem" | `reader-${string}`;
+export type PyProfile = "console" | "node" | `plugin-${string}`;
 
-/** The reader plugin a profile is the environment of; none, for Meno's own. */
-const readerOf = (profile: PyProfile) => READER_PLUGINS.find((p): p is PythonReader => !p.builtin && p.profile === profile);
+/** The plugin a profile is the environment of; none, for Meno's own. */
+const pluginOf = (profile: PyProfile): PythonPlugin | undefined => PLUGINS.find((p) => p.profile === profile);
 
 async function ensureDir(rel: string, baseDir: BaseDirectory) {
   const parts = rel.split("/").filter(Boolean);
@@ -69,17 +69,14 @@ type PyEnvInfo = {
   label: string;
 };
 
-/** What each profile is for, in words. */
-const PROFILE_USE: Record<"console" | "node" | "chem", string> = {
+/** What each of Meno's own profiles is for, in words. */
+const PROFILE_USE: Record<"console" | "node", string> = {
   console: "the console",
   node: "workflows",
-  chem: "chemistry",
 };
-const purposeOf = (profile: PyProfile) =>
-  readerOf(profile) ? `reading calculations with ${readerOf(profile)!.name}` : PROFILE_USE[profile as keyof typeof PROFILE_USE];
 
-/** Each profile's lock file, among the app's resources. */
-const lockOf = (profile: PyProfile) => readerOf(profile)?.lock ?? `resources/py/requirements.${profile}.lock`;
+/** Each profile's lock file, among the app's resources: a plugin's in its folder. */
+const lockOf = (profile: PyProfile) => pluginOf(profile)?.lock ?? `resources/py/requirements.${profile}.lock`;
 
 async function baseInfo(
   profile: PyProfile,
@@ -87,7 +84,8 @@ async function baseInfo(
   pyVer = "3.12"
 ): Promise<PyEnvInfo> {
   const os = await platform();
-  const pixi = readerOf(profile)?.env === "pixi";
+  const plugin = pluginOf(profile);
+  const pixi = plugin?.env === "pixi";
   return {
     os: os as any,
     host: pixi ? "pixi" : "uv",
@@ -104,12 +102,7 @@ async function baseInfo(
     stampPath: pixi ? `pixi/stamps/${profile}.json` : `uv/stamps/${profile}.json`,
     pythonVersion: pyVer,
     purpose: `python-env:${profile}`,
-    label:
-      profile === "chem"
-        ? "Setting up RDKit for chemistry"
-        : readerOf(profile)
-          ? `Setting up ${readerOf(profile)!.name} for reading calculations`
-          : `Setting up Python for ${purposeOf(profile)}`,
+    label: plugin ? `Setting up ${plugin.name}` : `Setting up Python for ${PROFILE_USE[profile as keyof typeof PROFILE_USE]}`,
   };
 }
 
@@ -186,14 +179,14 @@ export async function ensurePyEnv(
 
   if (needSetup && info.host === "pixi") {
     // (a conda-forge environment: what pixi downloads on this computer, from its lock)
-    const reader = readerOf(profile)!;
+    const plugin = pluginOf(profile)!;
     const download = pixiDownload(lockText, pixiPlatform(info.os, arch()));
     const mb = Math.round(download.bytes / 1e6 / 10) * 10;
     const allowed = await askToConnect({
       purpose: info.purpose,
-      title: `Download ${reader.name} for reading calculations?`,
+      title: `Download ${plugin.name}?`,
       detail:
-        `${reader.name} reads calculation programs' output for Meno, in a Python of its own ` +
+        `${plugin.description} It runs in a Python of its own, ` +
         `with the ${download.packages} packages it needs` +
         (mb ? ` (about ${mb} MB)` : "") +
         `, in its data folder. pixi, fetched the first time it is needed, downloads them - once, ` +
@@ -215,22 +208,14 @@ export async function ensurePyEnv(
       .split(/\r?\n/)
       .filter((line) => /^[A-Za-z0-9_.-]+==/.test(line)).length;
     const hashed = /^\s*--hash=/m.test(lockText);
+    const plugin = pluginOf(profile);
     const allowed = await askToConnect({
       purpose: info.purpose,
-      title:
-        profile === "chem"
-          ? "Download RDKit for chemistry?"
-          : readerOf(profile)
-            ? `Download ${readerOf(profile)!.name} for reading calculations?`
-            : `Download Python for ${purposeOf(profile)}?`,
+      title: plugin ? `Download ${plugin.name}?` : `Download Python for ${PROFILE_USE[profile as keyof typeof PROFILE_USE]}?`,
       detail:
-        (profile === "chem"
-          ? "Meno's chemistry - hydrogens and valence, SMILES, clean-up, stereo labels - " +
-            `runs on RDKit, in a Python ${info.pythonVersion} of its own `
-          : readerOf(profile)
-            ? `${readerOf(profile)!.name} reads calculation programs' output for Meno, ` +
-              `in a Python ${info.pythonVersion} of its own `
-            : `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, `) +
+        (plugin
+          ? `${plugin.description} It runs in a Python ${info.pythonVersion} of its own, `
+          : `To run Python, Meno sets up a Python ${info.pythonVersion} of its own, `) +
         `with the ${packages} packages it needs, in its data folder. ` +
         `Astral's uv, fetched the first time it is needed, downloads them - once` +
         (hashed ? ", every file checked against the fingerprint Meno carries for it:" : ":"),
@@ -257,11 +242,11 @@ export async function ensurePyEnv(
 }
 
 /**
- * Takes a reader plugin's environment away, and its record of being set
- * up: what Settings' *Plugins* removes. Meno's own environments
- * are not taken away this way.
+ * Takes a plugin's environment away, and its record of being set up: what
+ * Settings' *Plugins* removes. Meno's own environments are not taken away
+ * this way.
  */
 export async function removePyEnv(profile: PyProfile): Promise<void> {
-  if (!readerOf(profile)) throw new Error(`${profile} is not a reader's environment`);
+  if (!pluginOf(profile)) throw new Error(`${profile} is not a plugin's environment`);
   await invoke("py_env_remove", { payload: await baseInfo(profile, lockOf(profile)) });
 }

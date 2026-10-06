@@ -1,7 +1,7 @@
 //! Python environments pixi makes - a plugin's, where it needs conda-forge
 //! (docs/PLUGINS.md) - beside those uv makes. An environment is made from
 //! the manifest and the lock in the plugin's folder, copied into the app's
-//! data folder, `pixi/reader-<id>/`, where pixi
+//! data folder, `pixi/plugin-<id>/`, where pixi
 //! keeps the environment it makes (`.pixi/envs/default`); everything else
 //! pixi keeps - its cache, its home - is there too, and no configuration of
 //! the user's is read.
@@ -148,14 +148,14 @@ mod tests {
     #[test]
     fn pixi_keeps_everything_under_the_app_data_and_reads_no_configuration_of_the_users() {
         let data = Path::new("/data/Meno");
-        let cmd = install_command(Path::new("/data/Meno/tools/pixi/0.81.0/pixi"), data, Path::new("/data/Meno/pixi/reader-pyscf/pixi.toml"));
+        let cmd = install_command(Path::new("/data/Meno/tools/pixi/0.81.0/pixi"), data, Path::new("/data/Meno/pixi/plugin-pyscf/pixi.toml"));
         let envs: HashMap<_, _> = cmd.get_envs().map(|(k, v)| (k.to_owned(), v.map(|v| v.to_owned()))).collect();
         let get = |k: &str| envs.get(std::ffi::OsStr::new(k)).cloned().flatten();
         assert_eq!(get("PIXI_CACHE_DIR"), Some(data.join("pixi").join("cache").into_os_string()));
         assert_eq!(get("PIXI_HOME"), Some(data.join("pixi").join("home").into_os_string()));
         assert_eq!(get("PIXI_NO_CONFIG"), Some("1".into()));
         let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(args, ["install", "--frozen", "--manifest-path", "/data/Meno/pixi/reader-pyscf/pixi.toml"]);
+        assert_eq!(args, ["install", "--frozen", "--manifest-path", "/data/Meno/pixi/plugin-pyscf/pixi.toml"]);
     }
 
     #[test]
@@ -200,13 +200,13 @@ mod tests {
     fn what_pixi_keeps_goes_with_the_last_environment() {
         let root = std::env::temp_dir().join(format!("meno-pixi-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        for d in ["cache", "home", "stamps", "reader-a", "reader-b"] {
+        for d in ["cache", "home", "stamps", "plugin-a", "plugin-b"] {
             std::fs::create_dir_all(root.join(d)).unwrap();
         }
         assert!(unused_keeping(&root).is_empty());
-        std::fs::remove_dir_all(root.join("reader-a")).unwrap();
+        std::fs::remove_dir_all(root.join("plugin-a")).unwrap();
         assert!(unused_keeping(&root).is_empty());
-        std::fs::remove_dir_all(root.join("reader-b")).unwrap();
+        std::fs::remove_dir_all(root.join("plugin-b")).unwrap();
         assert_eq!(unused_keeping(&root), [root.join("cache"), root.join("home")]);
         std::fs::remove_dir_all(root.join("home")).unwrap();
         assert_eq!(unused_keeping(&root), [root.join("cache")]);
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn an_interpreter_is_known_by_its_environment() {
         let root = Path::new("/data/Meno/pixi");
-        assert_eq!(env_dir_of(Path::new("/data/Meno/pixi/reader-pyscf/.pixi/envs/default/bin/python"), root), Some(root.join("reader-pyscf")));
+        assert_eq!(env_dir_of(Path::new("/data/Meno/pixi/plugin-pyscf/.pixi/envs/default/bin/python"), root), Some(root.join("plugin-pyscf")));
         assert_eq!(env_dir_of(Path::new("/data/Meno/uv/chem/venv/bin/python"), root), None);
     }
 }

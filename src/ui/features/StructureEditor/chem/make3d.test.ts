@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
-import type { Conformers } from "../../../../lib/rdkit/client";
+import type { Conformers } from "../../../../lib/roles/client";
 import type { Model } from "../store/types";
 import { solidOf } from "../utils/molecule3d";
 import { blocksOf, likeOf, linkOf, moleculeOf, placeRow, rowFrom, signatureOf, turnedOver, type Box, type Turned } from "./make3d";

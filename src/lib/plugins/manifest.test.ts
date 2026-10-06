@@ -12,6 +12,7 @@ const good = {
   environment: { maker: "uv", lock: "requirements.lock" },
   worker: "worker.py",
   reads: ["gaussian", "nbo-47"],
+  roles: [],
   kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO", at: "line-start" }] }],
 };
 
@@ -19,7 +20,13 @@ describe("a plugin's manifest", () => {
   it("is read as data: what it is, what makes its environment and runs its worker, what it reads, and the kinds it brings", () => {
     expect(acceptManifest(good)).toEqual(good);
     // (each plugin Meno carries, from its folder: Meno names none of them)
-    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "pyscf"]);
+    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "pyscf", "rdkit"]);
+  });
+
+  it("may fill roles rather than read files - but a plugin that does neither is none", () => {
+    const roles = { ...good, reads: [], kinds: [], roles: ["smiles", "checks", "Not A Role"] };
+    expect(acceptManifest(roles)?.roles).toEqual(["smiles", "checks"]);
+    expect(acceptManifest({ ...good, reads: [], kinds: [], roles: [] })).toBeNull();
   });
 
   it("is none where it cannot be used: no id, a lock or worker outside its folder, nothing it reads", () => {

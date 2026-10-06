@@ -4,14 +4,16 @@ import {
   anyKindById,
   MENO,
   OFFERED,
+  PLUGINS,
+  pluginsFilling,
   READER_PLUGINS,
-  readerOf,
+  pluginOf,
   READERS,
   readerFor,
   readerIdOfLine,
   readerNameOf,
   readersOf,
-  type PythonReader,
+  type PythonPlugin,
   type ReaderPlugin,
 } from "./catalog";
 
@@ -26,7 +28,7 @@ describe("the readers Meno knows of", () => {
     expect(cclib).toMatchObject({
       name: "cclib",
       version: "1.9rc1",
-      profile: "reader-cclib",
+      profile: "plugin-cclib",
       lock: "resources/plugins/cclib/requirements.lock",
       worker: "resources/plugins/cclib/worker.py",
     });
@@ -36,7 +38,7 @@ describe("the readers Meno knows of", () => {
     expect(cclib.reads.length).toBeGreaterThan(15);
     expect(pyscf).toMatchObject({
       name: "PySCF",
-      profile: "reader-pyscf",
+      profile: "plugin-pyscf",
       lock: "resources/plugins/pyscf/pixi.lock",
       worker: "resources/plugins/pyscf/worker.py",
       env: "pixi",
@@ -44,8 +46,18 @@ describe("the readers Meno knows of", () => {
     });
   });
 
+  it("are every plugin - those that read files, and those that fill roles, as RDKit does - each in an environment named for it", () => {
+    expect(PLUGINS.map((p) => p.id)).toEqual(["cclib", "pyscf", "rdkit"]);
+    const rdkit = PLUGINS.find((p) => p.id === "rdkit")!;
+    expect(rdkit).toMatchObject({ reads: [], profile: "plugin-rdkit", lock: "resources/plugins/rdkit/requirements.lock", worker: "resources/plugins/rdkit/worker.py" });
+    expect(rdkit.roles).toEqual(["smiles", "checks", "stereo-labels", "stereoisomers", "conformers", "drawing"]);
+    expect(READER_PLUGINS.map((p) => p.id)).toEqual(["cclib", "pyscf"]);
+    expect(pluginsFilling("smiles").map((p) => p.id)).toEqual(["rdkit"]);
+    expect(pluginsFilling("conformers").map((p) => p.id)).toEqual(["rdkit"]);
+  });
+
   it("each reads the kinds it brings, and Meno's: none a kind only another plugin brings, which it does not know", () => {
-    const nbo = readerOf({
+    const nbo = pluginOf({
       id: "nbo",
       name: "NBO",
       version: "7",
@@ -55,6 +67,7 @@ describe("the readers Meno knows of", () => {
       environment: { maker: "uv", lock: "requirements.lock" },
       worker: "worker.py",
       reads: ["nbo-47", "xyz", "gaussian"],
+      roles: [],
       kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO" }] }],
     });
     expect(nbo).toMatchObject({ reads: ["nbo-47", "xyz"], lock: "resources/plugins/nbo/requirements.lock", worker: "resources/plugins/nbo/worker.py" });
@@ -77,7 +90,7 @@ describe("the readers Meno knows of", () => {
 
 describe("who reads a kind", () => {
   // another reader of ORCA's output, and of cubes
-  const other: ReaderPlugin = { ...(READER_PLUGINS[0] as PythonReader), id: "orca-own", name: "Meno's ORCA reader", reads: ["orca", "cube"], profile: "reader-orca-own" };
+  const other: ReaderPlugin = { ...(READER_PLUGINS[0] as PythonPlugin), id: "orca-own", name: "Meno's ORCA reader", reads: ["orca", "cube"], profile: "plugin-orca-own" };
   const readers = [...READERS, other];
 
   it("is any reader that reads it, in Meno's order: Meno first, where it reads it", () => {

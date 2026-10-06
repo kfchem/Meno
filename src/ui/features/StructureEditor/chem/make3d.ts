@@ -1,14 +1,15 @@
 /**
- * A drawn structure made in 3D: its conformers, by RDKit (ETKDG, then
- * MMFF94), set on the page as a molecule in 3D that rises out of the drawing
- * - laid over it at first, turned to match it - and comes to rest beside it,
- * tied to it atom by atom (docs/WORKSPACE.md, stage 2).
+ * A drawn structure made in 3D: its conformers, by the plugin that fills
+ * that role (RDKit's: ETKDG, then MMFF94), set on the page as a molecule in
+ * 3D that rises out of the drawing - laid over it at first, turned to match
+ * it - and comes to rest beside it, tied to it atom by atom
+ * (docs/WORKSPACE.md, stage 2).
  */
 import * as THREE from "three";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import type { Style3D } from "../../../../lib/chem/style3d";
-import type { ChemClient, Conformers, Like } from "../../../../lib/rdkit/client";
-import { chemMolblock, molIndex } from "../../../../lib/rdkit/molblock";
+import type { ChemClient, Conformers, Like } from "../../../../lib/roles/client";
+import { chemMolblock, molIndex } from "../../../../lib/roles/molblock";
 import { writeMolfile3d } from "../../../../lib/chem/molWriter";
 import { editorModelOf, processFileContent } from "../utils/io";
 import type { Model, Molecule3D, Turn3D } from "../store/types";
@@ -25,13 +26,13 @@ export const CONFORMERS_MS = 5 * 60_000;
 const GAP = 1.5 * NOMINAL_BOND_LENGTH;
 
 /**
- * A structure as RDKit is asked about it, and which of the drawing's atoms
- * and bonds each of the block's is; made again, where the one made before
- * has its atoms (`likeOf`).
+ * A structure as the plugin is asked about it, and which of the drawing's
+ * atoms and bonds each of the block's is; made again, where the one made
+ * before has its atoms (`likeOf`).
  */
 export type Block = { molblock: string; atoms: number[]; bonds: number[]; part: Model; like?: Like };
 
-/** The structures that hold these atoms, each as RDKit is asked about it; a lone atom's none. */
+/** The structures that hold these atoms, each as the plugin is asked about it; a lone atom's none. */
 export function blocksOf(model: Model, atoms: Iterable<number>): Block[] {
   return fragmentsHolding(model, atoms)
     .map((ids) => partOf(model, ids))

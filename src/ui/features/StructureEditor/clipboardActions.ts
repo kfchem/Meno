@@ -2,8 +2,8 @@ import { useCallback, useMemo } from "react";
 import { writeClipboard } from "../../../lib/clipboard";
 import { styleOf } from "../../../lib/chem/style";
 import { useAppSettings } from "../../../lib/settings/appSettings";
-import { chemMolblock } from "../../../lib/rdkit/molblock";
-import { chemWorker } from "../../../lib/rdkit/worker";
+import { chemMolblock } from "../../../lib/roles/molblock";
+import { chemWorker } from "../../../lib/roles/worker";
 import { forFlatReaders } from "./chem/drawing";
 import { structureOnClipboard } from "./chem/fromClipboard";
 import { drawnOf } from "./fileActions";
@@ -118,7 +118,7 @@ export function useClipboardActions(
     const p = part()?.part;
     if (!p?.atoms.length) return;
     try {
-      const c = await chemWorker();
+      const c = await chemWorker("smiles");
       const { smiles } = await c.request("to_smiles", { molblock: chemMolblock(forFlatReaders(p)) });
       await writeClipboard([{ flavor: "text", text: smiles }]);
     } catch (e) {

@@ -1,7 +1,7 @@
 /**
- * Asking a reader plugin's worker (resources/workers/reader_*.py): one JSON
- * object a line each way, answers matched to questions by id, as Meno's
- * chemistry worker is asked (lib/rdkit/client). It reads what it is sent,
+ * Asking a reader plugin's worker (resources/plugins/<id>/worker.py): one
+ * JSON object a line each way, answers matched to questions by id, as the
+ * worker of a plugin that fills a role is asked (lib/roles/client). It reads what it is sent,
  * and nothing else.
  *
  * The transport is handed in, so that the client knows nothing of how the

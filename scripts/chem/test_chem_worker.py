@@ -1,10 +1,10 @@
-"""Tests for the chemistry worker (src-tauri/resources/workers/chem_worker.py).
+"""Tests for the RDKit plugin's worker (src-tauri/resources/plugins/rdkit/worker.py).
 
 They need RDKit, so they run in an environment built from the chem lock:
 
     uv venv .venv-chem --python 3.12
     uv pip install --python .venv-chem/bin/python --require-hashes --no-deps \
-        -r src-tauri/resources/py/requirements.chem.lock
+        -r src-tauri/resources/plugins/rdkit/requirements.lock
     .venv-chem/bin/python -m unittest scripts/chem/test_chem_worker.py
 """
 
@@ -14,7 +14,7 @@ import pathlib
 import time
 import unittest
 
-WORKER = pathlib.Path(__file__).resolve().parents[2] / "src-tauri/resources/workers/chem_worker.py"
+WORKER = pathlib.Path(__file__).resolve().parents[2] / "src-tauri/resources/plugins/rdkit/worker.py"
 spec = importlib.util.spec_from_file_location("chem_worker", WORKER)
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)

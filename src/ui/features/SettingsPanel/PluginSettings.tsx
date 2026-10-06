@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { manifestOf, OFFERED, READER_PLUGINS, type PythonReader } from "../../../lib/calc/catalog";
-import { addedReaders, addReader, removeReader, useReaders } from "../../../lib/calc/workers";
+import { manifestOf, OFFERED, PLUGINS, type PythonPlugin } from "../../../lib/calc/catalog";
+import { addedReaders, addPlugin, removePlugin, useReaders } from "../../../lib/calc/workers";
+import { ROLES } from "../../../lib/plugins/roles";
 import { kindById } from "../../../lib/io/kinds";
 
 /**
@@ -13,11 +14,11 @@ export default function PluginSettings() {
   const states = useReaders((s) => s.state);
   const problems = useReaders((s) => s.problem);
   useEffect(() => {
-    void addedReaders();
+    void addedReaders(PLUGINS);
   }, []);
   return (
     <div className="space-y-3">
-      {READER_PLUGINS.map((p) => (
+      {PLUGINS.map((p) => (
         <Plugin key={p.id} plugin={p} state={states[p.id]} problem={problems[p.id]} />
       ))}
     </div>
@@ -25,9 +26,9 @@ export default function PluginSettings() {
 }
 
 /** A plugin: what it is and reads, whether it is added, and the button that adds it or takes it away. */
-function Plugin({ plugin: p, state, problem }: { plugin: PythonReader; state?: string; problem?: string }) {
+function Plugin({ plugin: p, state, problem }: { plugin: PythonPlugin; state?: string; problem?: string }) {
   const [busy, setBusy] = useState(false);
-  const run = (job: (p: PythonReader) => Promise<void>) => {
+  const run = (job: (p: PythonPlugin) => Promise<void>) => {
     setBusy(true);
     job(p)
       .catch(() => {}) // (said by the plugin's problem)
@@ -45,7 +46,8 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonReader; state?: s
           {p.name} <span className="text-gh-gray">{p.version}</span>
         </div>
         <p className="text-xs text-gh-gray mt-0.5">{p.description}</p>
-        <p className="text-xs text-gh-gray mt-1">Reads {p.reads.map(named).join(", ")}.</p>
+        {p.reads.length > 0 && <p className="text-xs text-gh-gray mt-1">Reads {p.reads.map(named).join(", ")}.</p>}
+        {p.roles.length > 0 && <p className="text-xs text-gh-gray mt-1">{p.roles.map((r) => ROLES[r].name).join("; ")}.</p>}
         <p className="text-xs text-gh-gray mt-1">
           {p.licence} · {p.homepage.replace(/^https?:\/\//, "")}
         </p>
@@ -63,7 +65,7 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonReader; state?: s
         {(state === "added" || state === "absent") && (
           <button
             disabled={busy}
-            onClick={() => run(state === "added" ? removeReader : addReader)}
+            onClick={() => run(state === "added" ? removePlugin : addPlugin)}
             className="h-7 shrink-0 rounded-md border border-gh-line bg-white px-3 text-xs text-gh-black hover:bg-gh-base disabled:opacity-50"
           >
             {state === "added" ? "Remove" : "Add"}

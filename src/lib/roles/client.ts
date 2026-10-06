@@ -1,8 +1,9 @@
 /**
- * Asking RDKit, in the chemistry worker (src-tauri/resources/workers/
- * chem_worker.py): one JSON object a line each way, answers matched to
- * questions by id. The worker answers a fixed set of requests - these - and
- * runs nothing else.
+ * Asking the worker of a plugin that fills the chemistry roles (lib/plugins/
+ * roles; RDKit's, for now: resources/plugins/rdkit/worker.py): one JSON
+ * object a line each way, answers matched to questions by id. The worker
+ * answers a fixed set of requests - these, the roles' contract - and runs
+ * nothing else. Molecules go to it, and come back, as MOL blocks.
  *
  * The transport is handed in, so that the client knows nothing of how the
  * worker runs (a sidecar, here; anything that carries lines, in tests).
@@ -10,7 +11,7 @@
 
 /** The requests the worker answers, and what each answers with. */
 export type ChemRequests = {
-  ping: { args: Record<string, never>; result: { rdkit: string } };
+  ping: { args: Record<string, never>; result: { version: string } };
   to_smiles: { args: { molblock: string }; result: { smiles: string } };
   from_smiles: { args: { smiles: string }; result: { molblock: string } };
   /** Hydrogens, valence, aromaticity and stereo labels, per atom and bond. */
@@ -91,7 +92,7 @@ export type ChemTransport = {
   listen(onLine: (line: string) => void): () => void;
 };
 
-/** An answer that is an error: RDKit could not do what was asked. */
+/** An answer that is an error: the plugin could not do what was asked. */
 export class ChemError extends Error {}
 
 type Pending = {
@@ -107,13 +108,15 @@ export class ChemClient {
   private next = 1;
   private pending = new Map<number, Pending>();
   private stop: () => void;
-  /** The RDKit version, once the worker has said it is ready. */
+  /** The plugin's version, once the worker has said it is ready. */
   version: string | null = null;
   readonly ready: Promise<string>;
 
   constructor(
     private transport: ChemTransport,
     private timeoutMs = TIMEOUT_MS,
+    /** What the plugin is called, in what is said of it. */
+    private name = "The plugin",
   ) {
     let markReady!: (v: string) => void;
     this.ready = new Promise((resolve) => (markReady = resolve));
@@ -127,15 +130,15 @@ export class ChemClient {
       result?: unknown;
       error?: string;
       event?: string;
-      rdkit?: string;
+      version?: string;
     };
     try {
       m = JSON.parse(line);
     } catch {
-      return; // not an answer: RDKit's own output, say
+      return; // not an answer: what the plugin's library printed, say
     }
     if (m.event === "ready") {
-      this.version = m.rdkit ?? "";
+      this.version = m.version ?? "";
       markReady(this.version);
       return;
     }
@@ -144,7 +147,7 @@ export class ChemClient {
     this.pending.delete(m.id!);
     clearTimeout(p.timer);
     if (m.ok) p.resolve(m.result);
-    else p.reject(new ChemError(m.error ?? "RDKit could not answer"));
+    else p.reject(new ChemError(m.error ?? `${this.name} could not answer`));
   }
 
   /**
@@ -160,7 +163,7 @@ export class ChemClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new ChemError(`RDKit did not answer ${op} in time`));
+        reject(new ChemError(`${this.name} did not answer ${op} in time`));
       }, timeoutMs);
       this.pending.set(id, {
         resolve: resolve as (v: unknown) => void,

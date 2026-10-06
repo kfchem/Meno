@@ -50,7 +50,7 @@ written on 2026-10-06 with the maintainer, and its decisions are made. How files
 | Group | Role | Filled today by |
 | --- | --- | --- |
 | Files | read a kind; write a kind | Meno (MOL, SDF, RXN, XYZ, cube; MOL, SDF, RXN, SVG), cclib, PySCF - see FILE-IO.md |
-| Chemistry (core) | SMILES to a structure, and back | RDKit (`chem_worker.py` `from_smiles`, `to_smiles`) |
+| Chemistry (core) | SMILES to a structure, and back | RDKit (its worker's `from_smiles`, `to_smiles`) |
 | Chemistry (core) | the checks: hydrogens, valence, aromatic rings | RDKit (`analyse`) |
 | Chemistry (core) | stereo labels: R/S, E/Z | RDKit (`analyse`, CIP labeller) |
 | Chemistry (core) | stereoisomers of what is left open | RDKit (`open_stereo`) |
@@ -111,24 +111,35 @@ Everything a plugin is lives in one folder, named by its id:
 
 ## When plugins run
 
-**As things are** (`lib/rdkit/worker.ts`):
+**As built** (step 6, `lib/roles/worker.ts`): RDKit is a plugin, a folder
+of its own (`resources/plugins/rdkit/`), its manifest saying the roles it
+fills.
 
-- **Setting it up.** RDKit's environment (the `chem` profile, from a lock,
-  made by uv) is set up the first time something needs it - SMILES, a
-  structure in 3D, R and S - asking first for the network.
+- **Setting it up.** Its environment (`plugin-rdkit`, from its lock, made
+  by uv) is set up the first time a role it fills is needed - SMILES, a
+  structure in 3D, R and S - asking first for the network. Once the
+  chemist takes it away in *Plugins* it is not set up of itself again: a
+  role it fills says to add it there (the maintainer, 2026-10-06).
 - **Starting it.** Once set up, the worker starts the first time it is
   asked for, not when Meno starts. In practice that is as soon as a
   structure is drawn, since the chemical checks run by themselves once
-  RDKit is at hand (`useChemMarks`, `chemAtHand`). Its first import may
+  it is at hand (`useChemMarks`, `chemAtHand`). Its first import may
   take a while; up to 90 s is allowed.
 - **Keeping it.** It is then kept for the session. If it stops, the next
   request starts it again.
-- **In Settings.** *Chemistry* says whether it is running, set up and to
-  start when a structure is drawn, or not set up. It is not listed as a
-  plugin and cannot be taken away.
+- **In Settings.** *Plugins* lists it with the others, to add or take
+  away. *Chemistry* says whether it is running, set up and to start when
+  a structure is drawn, not set up, or taken away; it and *Molecules in
+  3D* say who fills each of their roles, a choice where more than one
+  plugin fills it (`plugins.roles` in the settings).
+- **Its name is the plugin's.** What Meno says while it sets up or starts
+  - "Setting up RDKit…" - and the consent it asks for take the plugin's
+  name and description from its manifest; no code of Meno's names it.
 
 The calculation readers start the same way, on first use, and are stopped
-only when taken away or when Meno quits.
+only when taken away or when Meno quits. Every plugin's environment is
+named for it, `plugin-<id>` (the maintainer, 2026-10-06); those made before
+under other names are left where they were.
 
 **As planned, the same for every plugin** (the maintainer, 2026-10-06:
 no plugin is kept running ahead of need):
@@ -215,7 +226,13 @@ By the maintainer, 2026-10-06:
 3. **RDKit can be taken away like any plugin.** The core features then
    say what to add.
 4. **Molecules cross the contract in the record's form**, RDKit
-   included.
+   included. *Revised by the maintainer on 2026-10-06, as step 6 was
+   built:* chemistry plugins are given and give back MOL blocks, as RDKit
+   always was. Meno keeps its MOL writer for Export and the clipboard
+   anyway, and only Meno can write out its abbreviations - by its
+   dictionary - so a record sent instead would be a MOL block written as
+   JSON, its conversion copied into every plugin. The record stays Meno's
+   own form: the clipboard, Office, the workspace.
 5. **The tabs are named "Plugins", and "Files"** for the per-kind choices.
 6. **Kinds of file are registered by plugins** in their manifests, so that
    a plugin can read a program Meno does not know (FILE-IO.md) - and only
@@ -231,11 +248,10 @@ By the maintainer, 2026-10-06:
 
 After the files (FILE-IO.md's order, steps 2 to 5):
 
-1. **RDKit as a plugin** (FILE-IO.md's step 6). It gets its own entry in
-   the list. Its roles are named, and it is assigned to the core roles by
-   default, started when first needed as now. Molecules reach it in the
-   record's form. The choices go in
-   *Chemistry* and *Molecules in 3D*, with RDKit as the only plugin at
-   first.
+1. **RDKit as a plugin** (FILE-IO.md's step 6; built). It gets its own
+   entry in the list. Its roles are named, and it is assigned to the core
+   roles by default, started when first needed as now. Molecules reach it
+   as MOL blocks (decision 4, revised). The choices go in *Chemistry* and
+   *Molecules in 3D*, with RDKit as the only plugin at first.
 2. **New roles, each with a plugin that fills it:** fingerprints into
    the workflow, a structure search, running a calculation.

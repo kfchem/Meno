@@ -1,4 +1,5 @@
-"""Meno's chemistry worker: RDKit, answering a fixed set of requests.
+"""The RDKit plugin's worker: RDKit, answering a fixed set of requests - the
+roles it fills for Meno (its manifest; docs/PLUGINS.md).
 
 One JSON object per line on stdin, one per line back on stdout:
 
@@ -9,7 +10,7 @@ One JSON object per line on stdin, one per line back on stdout:
 It runs no code it is sent - only the operations below - and needs no
 network. When RDKit has been imported it says so:
 
-    {"event": "ready", "rdkit": "2026.03.6"}
+    {"event": "ready", "version": "2026.03.6"}
 
 Structures come in as MOL blocks, V2000 or V3000, and go back as V3000 ones
 with their atoms in the order they came in. (Clean-up is Meno's own layout
@@ -55,7 +56,7 @@ def read(molblock, sanitize=True):
 
 
 def op_ping(_):
-    return {"rdkit": rdBase.rdkitVersion}
+    return {"version": rdBase.rdkitVersion}
 
 
 def op_to_smiles(m):
@@ -448,7 +449,7 @@ def answer(line):
 
 
 def main():
-    print(json.dumps({"event": "ready", "rdkit": rdBase.rdkitVersion}), flush=True)
+    print(json.dumps({"event": "ready", "version": rdBase.rdkitVersion}), flush=True)
     for line in sys.stdin:
         line = line.strip()
         if line:

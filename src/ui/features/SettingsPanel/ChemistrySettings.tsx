@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { useEffect, useState } from "react";
-import { chemAtHand, chemWorker, useChem } from "../../../lib/rdkit/worker";
+import { chemAtHand, chemWorker, rolePlugin, useChem } from "../../../lib/roles/worker";
+import RoleChoices from "./RoleChoices";
 import {
   useAppSettings,
   type ChemistrySettings as Settings,
@@ -25,13 +26,19 @@ const SWITCHES: { key: keyof Settings; name: string; detail: string }[] = [
 ];
 
 /**
- * Chemistry in Settings: what RDKit points out on a structure as it is
- * drawn, and whether RDKit is there to do it.
+ * Chemistry in Settings: what is pointed out on a structure as it is drawn,
+ * who does it - the plugin that fills each role - and whether it is there to
+ * do it.
  */
 export default function ChemistrySettings() {
   const chemistry = useAppSettings((s) => s.chemistry);
   const setChemistry = useAppSettings((s) => s.setChemistry);
   const chem = useChem();
+  const removed = useAppSettings((s) => s.plugins.removed);
+  // (the plugin that checks a structure as it is drawn, and whether the chemist took it away)
+  const who = rolePlugin("checks");
+  const name = who?.name ?? "A plugin";
+  const takenAway = who != null && removed.includes(who.id);
   const [atHand, setAtHand] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -46,18 +53,20 @@ export default function ChemistrySettings() {
 
   const status =
     chem.state === "ready"
-      ? `RDKit ${chem.rdkit} is running.`
+      ? `${chem.plugin} ${chem.version} is running.`
       : chem.state === "setting-up"
-        ? "Setting up RDKit…"
+        ? `Setting up ${chem.plugin}…`
         : chem.state === "starting"
-          ? "Starting RDKit…"
+          ? `Starting ${chem.plugin}…`
           : atHand
-            ? "RDKit is set up, and starts when a structure is drawn."
-            : atHand === false
-              ? "RDKit is not set up yet. Meno sets it up - asking before it downloads - the " +
-                "first time something needs it: SMILES, clean-up or R and S. Until then " +
-                "nothing is pointed out."
-              : "";
+            ? `${name} is set up, and starts when a structure is drawn.`
+            : takenAway
+              ? `${name} was taken away. Add it again in Settings, Plugins, and these are pointed out again.`
+              : atHand === false
+                ? `${name} is not set up yet. Meno sets it up - asking before it downloads - the ` +
+                  "first time something needs it: SMILES, a structure in 3D, or R and S. Until then " +
+                  "nothing is pointed out."
+                : "";
 
   return (
     <div className="space-y-3">
@@ -94,14 +103,10 @@ export default function ChemistrySettings() {
       <div className="flex items-start gap-3 px-1 pt-1 text-xs text-gh-gray">
         <p key={`${chem.state}-${!!error}`} className="flex-1 meno-fade-in">
           {status}
-          {chem.state === "failed" && (
-            <span className="text-accel-accent">
-              RDKit could not start: {chem.message}
-            </span>
-          )}
+          {chem.state === "failed" && <span className="text-accel-accent">{chem.message}</span>}
           {error && <span className="block text-accel-accent">{error}</span>}
         </p>
-        {atHand === false && chem.state === "idle" && (
+        {atHand === false && !takenAway && chem.state === "idle" && (
           <button
             onClick={() => {
               setError(null);
@@ -111,10 +116,11 @@ export default function ChemistrySettings() {
             }}
             className="h-7 shrink-0 rounded-md border border-gh-line bg-white px-3 text-xs text-gh-black hover:bg-gh-base meno-fade-in"
           >
-            Set up RDKit
+            Set up {name}
           </button>
         )}
       </div>
+      <RoleChoices where="chemistry" />
     </div>
   );
 }

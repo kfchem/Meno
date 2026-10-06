@@ -5,7 +5,7 @@
  * its wedge narrow at the end the drawing puts it.
  *
  * And the structure as a reader that knows only wedges needs it - a MOL
- * file, RDKit: a cage drawn in perspective shows its stereochemistry by the
+ * file, a plugin: a cage drawn in perspective shows its stereochemistry by the
  * drawing itself, which such a reader cannot see, so it is given the wedges
  * (and H) that say it.
  */
@@ -13,7 +13,7 @@ import { wedgeNarrowAtom } from "../../../../lib/chem/layout2d";
 import { implicitHydrogens, valenceOrder } from "../../../../lib/chem/molecule";
 import type { WriterModel } from "../../../../lib/chem/molWriter";
 import { wedgesForFlat, type DrawnAtom, type DrawnBond } from "../../../../lib/layout/drawn";
-import { isElementSymbol } from "../../../../lib/rdkit/molblock";
+import { isElementSymbol } from "../../../../lib/roles/molblock";
 import type { Bond, Model } from "../store/types";
 
 /** How many bonds each atom has, as the drawing counts them to say which end of a wedge is narrow. */

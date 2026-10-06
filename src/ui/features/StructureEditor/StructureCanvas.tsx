@@ -44,7 +44,7 @@ import { currentStyle3D, useStyle3D } from "./style3d";
 import { offerCommands, type CommandGroup } from "../../layouts/commands";
 import { chosenPath, frameOf, lookOf, solidOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
-import { isElementSymbol } from "../../../lib/rdkit/molblock";
+import { isElementSymbol } from "../../../lib/roles/molblock";
 
 /** No atoms or bonds: the same array each time, so that nothing redraws for it. */
 const NO_IDS: number[] = [];
@@ -65,7 +65,7 @@ import {
   saveIntent,
   shortcutLabel,
 } from "../../../lib/doc/shortcuts";
-import { chemWorker, useChem } from "../../../lib/rdkit/worker";
+import { chemWorker, useChem } from "../../../lib/roles/worker";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { cleanUp } from "./chem/cleanUp";
 import { useChemMarks } from "./chem/useChemMarks";
@@ -172,8 +172,8 @@ function StructureCanvasContent({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [active, save, saveAs]);
-  // RDKit: its marks on the structure and R/S on request; and clean-up, by
-  // Meno's own layout engine (chem/cleanUp)
+  // the plugins that fill the chemistry roles: their marks on the structure
+  // and R/S on request; and clean-up, by Meno's own layout engine (chem/cleanUp)
   const store = useEditorStore();
   // What readers reading an output as well find, joined to each molecule
   // read from it as it comes - or as the molecule comes to stand here
@@ -222,14 +222,14 @@ function StructureCanvasContent({
   // Structures made in 3D (chem/make3d): asked first about what their
   // drawing leaves open, then their conformers made and risen out of them
   const [ask3d, setAsk3d] = useState<{ blocks: Block[]; open: Open[]; replacing?: Molecule3D } | null>(null);
-  // (what RDKit is doing for it, said meanwhile)
+  // (what the plugin is doing for it, said meanwhile)
   const [working3d, setWorking3d] = useState<string | null>(null);
   const build3d = useCallback(
     async (blocks: Block[], isomers: "one" | "all", replacing?: Molecule3D) => {
       setWorking3d("Making the 3D structure…");
       setChemError(null);
       try {
-        const chem = await chemWorker();
+        const chem = await chemWorker("conformers");
         const made: Parameters<ReturnType<typeof store.getState>["riseMolecules3d"]>[0] = [];
         let allInView = true;
         for (const block of blocks) {
@@ -266,7 +266,7 @@ function StructureCanvasContent({
       if (!blocks.length) return;
       setChemError(null);
       try {
-        const chem = await chemWorker();
+        const chem = await chemWorker("stereoisomers");
         const open = await Promise.all(
           blocks.map(async (b) =>
             openIn(b, await chem.request("open_stereo", { molblock: b.molblock, ...(b.like ? { like: b.like } : {}) })),
@@ -303,7 +303,7 @@ function StructureCanvasContent({
       setWorking3d("Drawing the formula…");
       setChemError(null);
       try {
-        const { model: formula, link } = await formulaOf(await chemWorker(), mol, st.frames3d[id] ?? 0);
+        const { model: formula, link } = await formulaOf(await chemWorker("drawing"), mol, st.frames3d[id] ?? 0);
         const placed = centredAt(formula, formulaPlace(mol, formula, currentStyle3D()));
         store.getState().drawFormula3d(id, placed, link);
         // (beyond the view, the view takes it in)
@@ -609,9 +609,9 @@ function StructureCanvasContent({
     const stereoLabels = !chemistry.stereoLabels;
     setChemistry({ ...chemistry, stereoLabels });
     if (!stereoLabels) return;
-    // asked for: RDKit set up now, if it has not been
+    // asked for: what labels them set up now, if it has not been
     setChemError(null);
-    chemWorker().catch((e: unknown) => {
+    chemWorker("stereo-labels").catch((e: unknown) => {
       setChemistry({ ...useAppSettings.getState().chemistry, stereoLabels: false });
       setChemError(
         `R and S cannot be shown: ${e instanceof Error ? e.message : String(e)}`,
@@ -632,7 +632,7 @@ function StructureCanvasContent({
   // Drops on the drawing: files, and objects and pictures out of Office (lib/drop)
   const dropRef = useRef<HTMLDivElement>(null);
   useDropZone(dropRef, dropZone);
-  // SMILES in and out, by RDKit, in a card over the canvas's corner
+  // SMILES in and out, by a plugin, in a card over the canvas's corner
   const [smilesOpen, setSmilesOpen] = useState(false);
   // Export: the kind and its options asked in a card over the canvas, then the file's name
   const [exporting, setExporting] = useState<{ kinds: WriterId[]; from?: WriterId; what: Holds } | null>(null);
@@ -736,7 +736,7 @@ function StructureCanvasContent({
       <AnimatePresence>
         {active && (chem.state === "setting-up" || chem.state === "starting" || working3d) && (
           <motion.div
-            key="rdkit"
+            key="working"
             {...RISE}
             layout
             role="status"
@@ -745,9 +745,9 @@ function StructureCanvasContent({
             <AnimatePresence mode="wait" initial={false}>
               <motion.span key={chem.state === "setting-up" || chem.state === "starting" ? chem.state : "working"} {...FADE} className="block">
                 {chem.state === "setting-up"
-                  ? "Setting up RDKit…"
+                  ? `Setting up ${chem.plugin}…`
                   : chem.state === "starting"
-                    ? "Starting RDKit…"
+                    ? `Starting ${chem.plugin}…`
                     : working3d}
               </motion.span>
             </AnimatePresence>
@@ -859,7 +859,7 @@ function StructureCanvasContent({
         />
       )}
       </AnimatePresence>
-      {/* (a molecule in 3D made again from its changed drawing: asked of RDKit here) */}
+      {/* (a molecule in 3D made again from its changed drawing: asked of the plugin here) */}
       <Remake3D.Provider value={remake3d}>
       <Canvas
         key={tabId}
@@ -914,7 +914,7 @@ function StructureCanvasContent({
           <Suspense fallback={null}>
             <Labels2D />
           </Suspense>
-          {/* RDKit's marks: valence problems, R/S and E/Z */}
+          {/* the plugin's marks: valence problems, R/S and E/Z */}
           <ChemMarks2D marks={marks} />
           {/* the atom a molecule in 3D under the pointer was made from */}
           <LinkedHover2D />

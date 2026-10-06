@@ -24,11 +24,11 @@ function fakeWorker() {
 }
 
 describe("the chemistry client", () => {
-  it("is ready when the worker says so, with RDKit's version", async () => {
+  it("is ready when the worker says so, with its plugin's version", async () => {
     const w = fakeWorker();
     const c = new ChemClient(w.transport);
-    w.say("RDKit says something of its own"); // not an answer: ignored
-    w.say({ event: "ready", rdkit: "2026.03.6" });
+    w.say("the plugin's library says something of its own"); // not an answer: ignored
+    w.say({ event: "ready", version: "2026.03.6" });
     await expect(c.ready).resolves.toBe("2026.03.6");
     expect(c.version).toBe("2026.03.6");
   });

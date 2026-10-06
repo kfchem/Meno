@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calcLine, calcOf, multiplicityName, readCalc, type ReaderOutput } from "./output";
 import { combine, whoReads, checked } from "./read";
-import { OFFERED, READER_PLUGINS, READERS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { OFFERED, READER_PLUGINS, READERS, type PythonPlugin, type ReaderPlugin } from "./catalog";
 import { kindById } from "../io/kinds";
 
 // water, as a reader hands back an optimisation of it: written by hand,
@@ -90,7 +90,7 @@ describe("reading an output", () => {
   // (a kind the plugins on offer bring: registered or not, it is the same kind)
   const orca = kindById("orca", OFFERED.kinds)!;
   // a second reader of ORCA's output
-  const other: ReaderPlugin = { ...(READER_PLUGINS[0] as PythonReader), id: "orca-own", name: "Meno's ORCA reader", reads: ["orca"], profile: "reader-orca-own" };
+  const other: ReaderPlugin = { ...(READER_PLUGINS[0] as PythonPlugin), id: "orca-own", name: "Meno's ORCA reader", reads: ["orca"], profile: "plugin-orca-own" };
   const readers = [...READERS, other];
   const ids = (w: ReturnType<typeof whoReads>) => (w instanceof Error ? w.message : [w.reader.id, w.also.map((p) => p.id)]);
 

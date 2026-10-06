@@ -1,4 +1,0 @@
-# The chem profile: what RDKit needs, for the chemistry worker.
-# Locked for every platform, with hashes, by:
-#   uv pip compile --universal --python-version 3.12 --generate-hashes requirements.chem.in -o requirements.chem.lock
-rdkit
