@@ -490,7 +490,7 @@ Each step is a pull request from main.
      once;
    - failures said;
    - `readers.ts` into the XYZ reader, and geometries made directly.
-4. **Meno's readers in the worker** (built in this step's pull request): all of them behind the contract,
+4. **Meno's readers in the worker** (built in #156): all of them behind the contract,
    in a web worker, giving back coordinates in buffers (*Response*).
 5. **Save and Export** (in part in #151 - Save writing `.meno`, Save when closing, one SMILES copy, the write scope - and #155 - Save back to the file it came from, Export with the writer's options; the rest to come):
    - Save writing `.meno` only, back to the file it came from;
