@@ -212,7 +212,8 @@ PLUGINS.md's contract, with three requests for files:
     with its checks;
   - **results** in the general form, any of them a promise.
 - **`ask {kind, key, name, data}`** gives a promise's value.
-- **`write {kind, molecules, options}`** gives the file's content.
+- **`write {kind, name, molecules, options}`** gives the file's content
+  (`{text}`); Meno writes it where the chemist chose.
 
 In each:
 
@@ -364,8 +365,10 @@ As this part of step 5 was built (#155, from main beside step 3):
     each, numbered, with its energy where it is known
     (`> <Energy (Eh)>`).
   - **SVG** takes no options yet.
-- **What a writer takes** - the page, the molecules, or one molecule - is
-  not asked yet. Each writes the whole canvas as it did.
+- **What a writer takes** is said by it (step 7): Meno's own take the
+  page, as before; a plugin's, one molecule - the molecules in 3D
+  selected (several, one system), else the one there is, else the one
+  Export asks for.
 - **Outputs are found again by path.**
   - A molecule read from an output keeps where the output was, where
     Open said (its `source.path`), with its SHA-256. A workspace saves it.
@@ -380,9 +383,9 @@ As this part of step 5 was built (#155, from main beside step 3):
   - A saved workspace holds an output's path only where it does not
     keep the output itself (*The workspace file*): where the file was on
     the computer that saved it.
-- **Meno's writers behind the contract** come with the first writer that
-  is not Meno's - a calculation's input, in step 7 - so that the contract
-  is shaped by both.
+- **Meno's writers behind the contract** came with the first writer that
+  is not Meno's - Gaussian's input, in step 7 - so that the contract was
+  shaped by both (*As step 7's writer was built*).
 
 ### The workspace file
 
@@ -553,8 +556,54 @@ Each step is a pull request from main.
    read by the plugin that fills the role; the dictionary's stay with
    Meno's own parser.
 7. **New kinds:** reading PDB, and a first calculation's input. Which
-   program, and whether Meno or a plugin reads PDB, are decided then.
+   program, and whether Meno or a plugin reads PDB, are decided then:
+   Gaussian's input comes first, written by a plugin, with the writer
+   contract (built with this step's pull request for it; *As step 7's
+   writer was built*).
 8. **ARCHITECTURE.md** drawn from the table of kinds.
+
+As step 7's writer was built - decided with the maintainer on
+2026-10-06:
+
+- **Gaussian's input is the first calculation's input**, written by a
+  plugin of its own, `gaussian-input`: Meno knows no program. Its worker
+  needs Python alone, no package; its environment is made by uv as any
+  plugin's is, and where Meno has fetched Python before, adding it
+  downloads nothing.
+- **Written from Gaussian's own reference only** (gaussian.com: "About
+  Gaussian 16 Input", "Link 0 Commands", "Molecule Specifications", the
+  keywords' pages): Link 0 commands (%Chk named after the input, and
+  %NProcShared and %Mem where given), the route section, the title
+  without the characters the reference says to avoid, the charge and spin
+  multiplicity, and each atom's element - an isotope as `(Iso=n)` - and
+  Cartesian coordinates, each section ended as the reference says. A
+  charge and multiplicity the molecule's electrons cannot have are
+  refused before Gaussian would stop on them.
+- **Its options' defaults**, the maintainer's: B3LYP/6-31G(d) with
+  EmpiricalDispersion=GD3BJ, Opt Freq. The last chosen are remembered,
+  but for the charge, the spin multiplicity and the title, which start
+  from the molecule written each time (lib/options `Known`): its atoms'
+  charges summed; one more than its unpaired electrons - its radicals',
+  and one more where its electrons are odd without them; its name.
+- **Offered only where the page holds molecules in 3D**: a drawing is
+  made 3D first, by *3D structures*, so that the conformer written is the
+  one seen.
+- **Which molecule:** those selected - several are one system, written as
+  they stand on the page, each turned and placed as it is seen, its
+  ångströms kept - else the one there is; else Export asks which.
+- **The contract** (`lib/io/writers`): a writer, Meno's or a plugin's, is
+  one `Writer` - the kind it writes, its name, its files' extensions,
+  what it takes, its options in the general form, who writes it. A
+  plugin's manifest declares its `writes` as data, checked as its kinds
+  are (`acceptOptions`): an option is drawn by Meno, never run. The
+  plugin's worker is asked `write {kind, name, molecules, options}` and
+  gives back `{text}`; molecules cross as Meno's plain data
+  (`WrittenMolecule`: each atom's element, place in ångströms, charge,
+  isotope and radical; bonds by index with their orders; a name).
+  Meno's own writers run on the page - an SVG picture of molecules in 3D
+  needs the page's WebGL - and are given the page, as before.
+- **Settings:** *Plugins* says what a plugin writes; *Files* lists the
+  kinds the plugins added write, by who writes each.
 
 As step 3 was built:
 
