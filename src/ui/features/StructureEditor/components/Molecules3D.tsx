@@ -298,8 +298,14 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     };
 
     const onDown = (e: PointerEvent) => {
-      if (e.button !== 0 || gesture.current) return;
-      const h = store.getState().hovered3d ?? hit(e);
+      if (gesture.current) return;
+      // what the press is on, as it is now: a molecule can have come to stand
+      // under a pointer that has not moved since - opened, say - and the menu
+      // a right press asks for is that molecule's
+      store.getState().setHovered3d(hit(e));
+      store.getState().setHoveredMeasure3d(labelAt(e));
+      if (e.button !== 0) return;
+      const h = store.getState().hovered3d;
       if (!h) return;
       const st = store.getState();
       const m = st.molecules3d.find((x) => x.id === h.id);
