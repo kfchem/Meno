@@ -1,15 +1,18 @@
 /**
- * Meno's own reading of structures' files - MOL, SD, RXN and XYZ files - as
- * a reader under the contract (docs/FILE-IO.md): what such a file holds, as
- * Meno's reader gives it, run in Meno's own worker (lib/calc/menoReads);
- * and the checks the page makes of it, as of any reader's answer.
+ * Meno's own reading of structures' files - MOL, SD, RXN, XYZ and PDB
+ * files - as a reader under the contract (docs/FILE-IO.md): what such a
+ * file holds, as Meno's reader gives it, run in Meno's own worker
+ * (lib/calc/menoReads); and the checks the page makes of it, as of any
+ * reader's answer.
  */
 import { buildEditorModelFromRXN, moleculesToEditorModel, readMoleculesFromText, type EditorModel } from "../../utils/importers";
 import { energiesOf } from "../../utils/xyzEnergies";
+import { bondsByDistance } from "../../utils/structureParsers";
 import type { Molecule, ParsedAtom, ParsedBond } from "../chem/molecule";
+import { readPdb, type PdbAtom, type PdbEntry } from "../chem/pdb";
 
 /** The kinds of structures' files Meno reads itself. */
-export type StructureKind = "mol" | "sdf" | "rxn" | "xyz";
+export type StructureKind = "mol" | "sdf" | "rxn" | "xyz" | "pdb";
 
 /** A molecule in 3D as a file holds it: not yet placed on the page; showing its first frame, or the one `frame` says. */
 export type FileMolecule3D = {
@@ -69,22 +72,34 @@ export function xyzComments(text: string): string[] {
 /** How far a molecule's atoms spread in depth, in its file's units. */
 function depthOf(m: Molecule): number {
   if (!m.atoms.length) return 0;
-  const zs = m.atoms.map((a) => a.z);
-  return Math.max(...zs) - Math.min(...zs);
+  // (by a loop: spread over tens of thousands of atoms, Math.max overruns a web worker's stack)
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const a of m.atoms) {
+    lo = Math.min(lo, a.z);
+    hi = Math.max(hi, a.z);
+  }
+  return hi - lo;
 }
 
 /** Why a file holds nothing to read, as the chemist is told. */
-const noMolecules = (name: string) => new Error(`No molecules found in ${name}. Supported formats: MOL, SDF, RXN, XYZ.`);
+const noMolecules = (name: string) => new Error(`No molecules found in ${name}. Supported formats: MOL, SDF, RXN, XYZ, PDB.`);
 
 /**
  * What a structure's file of `kind` holds: an RXN file's reaction, laid out
  * with its arrow and "+" signs; an XYZ file's frames, one molecule's, in
- * 3D, each with its energy where the comment lines give one; a MOL or SD
- * file's records, each a drawing or - where the file says it is 3D, or its
- * atoms spread in depth - a molecule in 3D.
+ * 3D, each with its energy where the comment lines give one; a PDB file's
+ * models, in 3D (`pdbMolecules`); a MOL or SD file's records, each a
+ * drawing or - where the file says it is 3D, or its atoms spread in depth -
+ * a molecule in 3D.
  */
 export function readStructures(kind: StructureKind, filename: string, content: string): StructureRead {
   const name = filename || "the file";
+  if (kind === "pdb") {
+    const molecules3d = pdbMolecules(readPdb(content), filename);
+    if (!molecules3d.length) throw noMolecules(name);
+    return { model: { atoms: [], bonds: [] }, centroid: { x: 0, y: 0 }, molecules3d };
+  }
   if (kind === "rxn") {
     // RXN format: uses pre-computed layout with arrow
     const rxnLayout = buildEditorModelFromRXN(content);
@@ -136,6 +151,80 @@ export function readStructures(kind: StructureKind, filename: string, content: s
   // unrecognised text, so check atoms, not molecules.
   if (!model.atoms.length) throw noMolecules(name);
   return { model, centroid, ...(molecules3d.length ? { molecules3d } : {}) };
+}
+
+/**
+ * The atoms of a model Meno shows: each in one place - where an atom is
+ * given in more than one, the first alternate location its residue gives
+ * (ATOM, *Details*: a residue's atoms in one conformation share their
+ * indicator).
+ */
+function inOnePlace(atoms: readonly PdbAtom[]): PdbAtom[] {
+  const chosen = new Map<string, string>();
+  return atoms.filter((a) => {
+    if (!a.altLoc) return true;
+    const residue = `${a.chainID} ${a.resSeq} ${a.iCode} ${a.resName}`;
+    const first = chosen.get(residue);
+    if (first === undefined) chosen.set(residue, a.altLoc);
+    return (first ?? a.altLoc) === a.altLoc;
+  });
+}
+
+/**
+ * A model's bonds: those its CONECT records give, and - where they do not
+ * speak for both atoms of a pair - those its atoms' distances give, as an
+ * XYZ file's. CONECT records give a hetero group's bonds and the links
+ * between groups (Connectivity Section); a standard residue's own bonds
+ * are in the Chemical Component Dictionary, not in the file, and Meno does
+ * not carry the dictionary.
+ */
+function pdbBonds(atoms: readonly PdbAtom[], conect: readonly [number, number][]): ParsedBond[] {
+  const index = new Map<number, number>();
+  atoms.forEach((a, i) => {
+    if (Number.isFinite(a.serial) && !index.has(a.serial)) index.set(a.serial, i);
+  });
+  const given: ParsedBond[] = [];
+  const spoken = new Set<number>();
+  for (const [p, q] of conect) {
+    const a1 = index.get(p);
+    const a2 = index.get(q);
+    if (a1 === undefined || a2 === undefined) continue;
+    given.push({ a1: Math.min(a1, a2), a2: Math.max(a1, a2), order: 1 });
+    spoken.add(a1).add(a2);
+  }
+  const near = bondsByDistance(atoms.map((a) => ({ el: a.element, x: a.x, y: a.y, z: a.z }))).filter(
+    (b) => !(spoken.has(b.a1) && spoken.has(b.a2)),
+  );
+  const seen = new Set(given.map((b) => `${b.a1} ${b.a2}`));
+  return [...given, ...near.filter((b) => !seen.has(`${b.a1} ${b.a2}`))].sort((x, y) => x.a1 - y.a1 || x.a2 - y.a2);
+}
+
+const parsedAtom = (a: PdbAtom): ParsedAtom => ({ el: a.element, x: a.x, y: a.y, z: a.z, ...(a.charge ? { charge: a.charge } : {}) });
+
+/**
+ * A PDB file's molecules in 3D: its models one molecule's frames, where
+ * each holds the same atoms (MODEL, *Details*: an ensemble's models are
+ * alike); else each model a molecule of its own. All a model holds - its
+ * chains, hetero groups, waters - is one molecule in 3D, as an XYZ file's
+ * atoms are.
+ */
+function pdbMolecules(entry: PdbEntry, filename: string): FileMolecule3D[] {
+  const models = entry.models.map((m) => inOnePlace(m.atoms)).filter((atoms) => atoms.length);
+  if (!models.length) return [];
+  const [first, ...rest] = models;
+  const alike = rest.every((atoms) => atoms.length === first.length && atoms.every((a, i) => a.element === first[i].element));
+  const named = filename ? { name: filename } : {};
+  if (alike) {
+    return [
+      {
+        atoms: first.map(parsedAtom),
+        bonds: pdbBonds(first, entry.conect),
+        ...(rest.length ? { frames: rest.map((atoms) => atoms.flatMap((a) => [a.x, a.y, a.z])) } : {}),
+        ...named,
+      },
+    ];
+  }
+  return models.map((atoms) => ({ atoms: atoms.map(parsedAtom), bonds: pdbBonds(atoms, entry.conect), ...named }));
 }
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);

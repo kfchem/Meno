@@ -40,7 +40,8 @@ describe("openedAs", () => {
 
   it("offers chemical files, calculations' output - of the plugins on offer, added or not - and text to Open, and no kind nothing reads", () => {
     for (const ext of [".meno", ".mol", ".sdf", ".rxn", ".xyz", ".out", ".log", ".fchk", ".cube", ".txt", ".py"]) expect(OPENABLE).toContain(ext);
-    for (const ext of [".pdb", ".ket"]) expect(OPENABLE).not.toContain(ext);
+    expect(OPENABLE).toContain(".pdb");
+    expect(OPENABLE).not.toContain(".ket");
     // (each once)
     expect(new Set(OPENABLE).size).toBe(OPENABLE.length);
   });

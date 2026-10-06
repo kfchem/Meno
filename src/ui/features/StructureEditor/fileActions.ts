@@ -21,6 +21,7 @@ import { chemistry } from "../../../lib/chem/molecule";
 import { schemeOutlines } from "../../../lib/chem/reactionScheme";
 import type { OptionValues } from "../../../lib/options";
 import { WRITERS, type WriterId } from "../../../lib/io/writers";
+import { writePdb } from "../../../lib/chem/pdb";
 
 /** A file's name without its folder. */
 export function fileNameOf(path: string): string {
@@ -47,13 +48,14 @@ export const holdsOf = (state: Pick<EditorState, "molecules3d" | "arrows" | "mod
  * What a canvas can be exported as, the one suggested first (docs/FILE-IO.md:
  * Save writes a workspace, everything else is Export): a reaction, as an
  * RXN file first; molecules in 3D with nothing drawn beside them, as an SD
- * file, which keeps them; a structure, as a MOL file first. Always as a
- * picture too.
+ * file, which keeps them; a structure, as a MOL file first. Molecules in 3D
+ * as a PDB file too, which holds them and no drawing; always as a picture.
  */
 export function exportKinds(what: Holds): WriterId[] {
-  if (what.reaction) return ["rxn", "mol", "sdf", "svg"];
-  if (what.solid && !what.drawn) return ["sdf", "svg"];
-  return ["mol", "sdf", "svg"];
+  const pdb: WriterId[] = what.solid ? ["pdb"] : [];
+  if (what.reaction) return ["rxn", "mol", "sdf", ...pdb, "svg"];
+  if (what.solid && !what.drawn) return ["sdf", ...pdb, "svg"];
+  return ["mol", "sdf", ...pdb, "svg"];
 }
 
 /** `path` with the extension `ext` in place of its own. */
@@ -95,8 +97,9 @@ export function suggestedExportPath(
 
 /**
  * The drawing as the file at `path` is to hold it: an RXN file for `.rxn` -
- * the reaction its arrow shows, throwing where it shows none - an SD file
- * for `.sdf`, a MOL file for anything else, titled with the file's own
+ * the reaction its arrow shows, throwing where it shows none - a PDB file
+ * for `.pdb`, its molecules in 3D only (`pdbFileText`), an SD file for
+ * `.sdf`, a MOL file for anything else, titled with the file's own
  * name, as the writer's options say (lib/io/writers): in V3000, or in V2000
  * where V2000 holds it; an SD file's molecules in 3D in the frame each
  * shows, or in every frame. A cage drawn in perspective is given the wedges
@@ -106,6 +109,7 @@ export function structureFileText(drawn: Drawn, path: string, options: OptionVal
   const title = stem(path);
   const version = options.version === "V3000" ? "V3000" : "auto";
   if (/\.rxn$/i.test(path)) return reactionFileText(drawn, title, version);
+  if (/\.pdb$/i.test(path)) return pdbFileText(drawn.molecules3d ?? [], options);
   const flat = forFlatReaders(drawn);
   if (!/\.sdf$/i.test(path)) return writeMolfile(flat, { title, version });
   // an SD file: the drawing, and each molecule in 3D a record of its own,
@@ -122,6 +126,25 @@ export function structureFileText(drawn: Drawn, path: string, options: OptionVal
     });
   });
   return (drawn.atoms.length ? writeSdf(flat, { title, version }) : "") + records.join("");
+}
+
+/**
+ * Molecules in 3D as a PDB file holds them (lib/chem/pdb): each a residue of
+ * its own, in the frame it shows - or, every frame, a model for each frame
+ * there is, each molecule in its frame of that number, or in the frame it
+ * shows where it has none of that number. Throws where there are none.
+ */
+export function pdbFileText(molecules: readonly Carried3D[], options: OptionValues = {}): string {
+  if (!molecules.length) throw new Error("There are no molecules in 3D to write: a PDB file holds no drawing.");
+  const framesOf = (m: Carried3D) => 1 + (m.frames ?? []).filter((f) => f.length === 3 * m.atoms.length).length;
+  const count = options.frames === "all" ? Math.max(...molecules.map(framesOf)) : 1;
+  const models = Array.from({ length: count }, (_, i) =>
+    molecules.map((m) => ({
+      atoms: frameAtoms(m, options.frames === "all" && i < framesOf(m) ? i : m.frame),
+      bonds: m.bonds,
+    })),
+  );
+  return writePdb(models);
 }
 
 /** A molecule in 3D's atoms in one of its frames, where its file had them, in ångströms. */

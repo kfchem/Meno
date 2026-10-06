@@ -3,6 +3,7 @@ import { calcResult, editorModelOf, processFileContent, xyzComments } from "./io
 import sampleSdf from "../../../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../../../samples/esterification.rxn?raw";
 import sampleXyz from "../../../../samples/cholesterol.xyz?raw";
+import samplePdb from "../../../../samples/cholesterol.pdb?raw";
 
 describe("processFileContent", () => {
   it("imports an SDF", async () => {
@@ -17,15 +18,13 @@ describe("processFileContent", () => {
     expect(r.arrow).toBeDefined();
   });
 
+  it("imports a PDB file's atoms as a molecule in 3D", async () => {
+    const r = await processFileContent("cholesterol.pdb", samplePdb);
+    expect(r.model.atoms).toHaveLength(0);
+    expect(r.molecules3d?.[0].atoms).toHaveLength(74);
+  });
+
   it("names unsupported formats instead of showing a blank canvas", async () => {
-    const pdb = [
-      "HEADER    PEPTIDE",
-      "ATOM      1  N   ALA A   1      11.104   6.134  -6.504  1.00  0.00           N",
-      "END",
-    ].join("\n");
-    await expect(processFileContent("1abc.pdb", pdb)).rejects.toThrow(
-      "PDB files are not supported yet (1abc.pdb).",
-    );
     await expect(
       processFileContent("reaction.ket", '{"root":{"nodes":[]}}'),
     ).rejects.toThrow("KET files are not supported yet");

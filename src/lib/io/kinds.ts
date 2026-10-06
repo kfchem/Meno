@@ -17,18 +17,21 @@
  * 2. a program's banner - the one that comes first in the file, where it
  *    holds more than one (an output quoting another program's);
  * 3. an RXN file's or a molfile's markers;
- * 4. a cube's layout;
- * 5. an XYZ file's layout.
+ * 4. a PDB file's records;
+ * 5. a cube's layout;
+ * 6. an XYZ file's layout.
  * Its name decides only where what it holds does not - a molfile Meno
  * cannot make out is still a molfile, and says why it cannot be read - and
  * a kind its plugin tells, asked (`probe`), is asked about last.
  */
 import { create } from "zustand";
 import { CUBE_MARK } from "../calc/cube";
+import { recordName, RECORD_NAMES } from "../chem/pdb";
 import { folded, holdsMark, markAt, type KindDecl, type Manifest, type Mark } from "../plugins/manifest";
 import sampleSdf from "../../samples/cholesterol.sdf?raw";
 import sampleXyz from "../../samples/cholesterol.xyz?raw";
 import sampleRxn from "../../samples/diels-alder.rxn?raw";
+import samplePdb from "../../samples/cholesterol.pdb?raw";
 
 /** How much of a file's start is looked at to tell what it is. */
 export const MARK_REACH = 64 * 1024;
@@ -58,17 +61,19 @@ export const MENO_KINDS = {
   mol: { id: "mol", name: "MOL file", extensions: [".mol"] },
   sdf: { id: "sdf", name: "SD file", extensions: [".sdf"] },
   xyz: { id: "xyz", name: "XYZ file", extensions: [".xyz"] },
+  pdb: { id: "pdb", name: "PDB file", extensions: [".pdb"] },
   cube: { id: "cube", name: "Cube file", extensions: [".cube", ".cub"], output: {}, layout: CUBE_MARK },
 } as const satisfies Record<string, Kind>;
 
 /** The kinds Meno writes itself: the workspace by Save, the rest by Export (StructureEditor/fileActions). */
-export const MENO_WRITES: readonly string[] = [MENO_KINDS.workspace.id, MENO_KINDS.mol.id, MENO_KINDS.sdf.id, MENO_KINDS.rxn.id];
+export const MENO_WRITES: readonly string[] = [MENO_KINDS.workspace.id, MENO_KINDS.mol.id, MENO_KINDS.sdf.id, MENO_KINDS.rxn.id, MENO_KINDS.pdb.id];
 
 /** Files of Meno's own kinds a plugin's marks are tried on: a mark one of them holds is not the plugin's to claim. */
 const MENO_SAMPLES: readonly string[] = [
   sampleSdf,
   sampleXyz,
   sampleRxn,
+  samplePdb,
   '{"format":"meno-workspace","version":1,"atoms":[],"bonds":[],"arrows":[],"pluses":[],"molecules3d":[]}',
   '{"format":"meno-structure","version":1,"atoms":[],"bonds":[]}',
 ];
@@ -169,10 +174,12 @@ export function kindOf(name: string, text: string, among: readonly Kind[] = kind
   // 3. an RXN file's or a molfile's markers
   if (/^\s*\$RXN\b/m.test(raw)) return MENO_KINDS.rxn;
   if (/\b(V2000|V3000)\b/.test(raw) || /^\s*M {2}END\s*$/m.test(raw)) return ext === ".sdf" ? MENO_KINDS.sdf : MENO_KINDS.mol;
-  // 4. a cube's layout
+  // 4. a PDB file's records
+  if (looksLikePdb(raw)) return MENO_KINDS.pdb;
+  // 5. a cube's layout
   const layout = among.find((k) => k.layout?.test(raw));
   if (layout) return layout;
-  // 5. an XYZ file's layout
+  // 6. an XYZ file's layout
   if (looksLikeXyz(raw)) return MENO_KINDS.xyz;
   // its name, where what it holds says nothing - of Meno's own kinds, whose names their files keep
   return Object.values(MENO_KINDS).find((k) => (k.extensions as readonly string[]).includes(ext)) ?? null;
@@ -201,4 +208,20 @@ function looksLikeXyz(text: string): boolean {
   if (!/^\s*\d+\s*$/.test(first)) return false;
   if (Number.parseInt(first, 10) === 0) return true;
   return XYZ_ATOM_LINE.test(lines[2] ?? "");
+}
+
+/**
+ * Whether text is laid out as a PDB file: its first line begins with one of
+ * the format's record names, and an atom's record - ATOM or HETATM - has
+ * its coordinates where the format puts them, columns 31 to 54.
+ */
+function looksLikePdb(text: string): boolean {
+  const lines = text.split("\n");
+  const first = lines.find((l) => l.trim());
+  if (!first || !RECORD_NAMES.has(recordName(first))) return false;
+  const real = (s: string) => /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/.test(s);
+  return lines.some((l) => {
+    const name = recordName(l);
+    return (name === "ATOM" || name === "HETATM") && real(l.substring(30, 38)) && real(l.substring(38, 46)) && real(l.substring(46, 54));
+  });
 }
