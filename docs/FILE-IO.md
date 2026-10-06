@@ -55,7 +55,8 @@ beyond files - SMILES, R/S, conformers, what comes later - are in
 | SMILES | the plugin that fills the role (RDKit's, `plugin-rdkit`); abbreviations' SMILES by Meno's own `lib/chem/smiles.ts` | Copy as SMILES (the same plugin) | |
 | `.meno` | `readWorkspace` (`workspace.ts`) | Save | version 1, no migration |
 | Meno record | `readRecord` (`utils/copyPaste.ts`) | Copy, Office | in the clipboard's own flavour, an EMF comment, a PNG text chunk, OLE streams |
-| PDB, KET | not read | never | Open offers them and then says "not supported yet" |
+| PDB | `readPdb` (`lib/chem/pdb.ts`) via `readStructures`, in Meno's worker: every atom, MODELs as frames, bonds from CONECT and distances | Export: molecules in 3D only (`writePdb`) | wwPDB Format v3.3; see *As step 7 was built* |
+| KET | not read | never | Open does not offer it; one dropped says "not supported yet" |
 
 ### Calculation output
 
@@ -333,8 +334,8 @@ How these behave:
   Discard.
 - **Export…** offers every kind a writer added writes, each written by
   the one assigned:
-  - MOL, SDF, RXN and SVG now;
-  - PDB and a calculation's input later.
+  - MOL, SDF, RXN, PDB and SVG now;
+  - a calculation's input later.
 
   The writer says what it takes: the page, the molecules, or one
   molecule. Meno asks which where it must, then shows the writer's
@@ -553,8 +554,49 @@ Each step is a pull request from main.
    read by the plugin that fills the role; the dictionary's stay with
    Meno's own parser.
 7. **New kinds:** reading PDB, and a first calculation's input. Which
-   program, and whether Meno or a plugin reads PDB, are decided then.
+   program, and whether Meno or a plugin reads PDB, are decided then:
+   Meno reads and writes PDB itself (built with this step's first pull
+   request), and Gaussian's input comes first, written by a plugin
+   (*As step 7 was built*).
 8. **ARCHITECTURE.md** drawn from the table of kinds.
+
+As step 7 was built - decided with the maintainer on 2026-10-06:
+
+- **Meno reads PDB itself**, not a plugin: it is a file of structures and
+  where their atoms are, as MOL and XYZ files are, and it opens with
+  nothing added. Gaussian's input is the first calculation's input; a
+  plugin writes it, since Meno knows no program.
+- **Written from the specifications only** - the wwPDB's "Atomic
+  Coordinate Entry Format Version 3.3" for PDB, gaussian.com's input
+  reference for Gaussian - never from another program's code or from
+  memory. The code says which part of the specification each rule comes
+  from.
+- **What is read, for now** (`lib/chem/pdb.ts`, `lib/io/structures.ts`):
+  - every ATOM and HETATM record, all its fields kept - name, residue,
+    chain, occupancy and the rest - though Meno shows only the atoms;
+  - an atom's element from its element columns, or - where they are
+    blank - from how its name is aligned, as the format says;
+  - MODELs as one molecule's frames, where each holds the same atoms;
+    else each model a molecule of its own;
+  - where an atom is given in more than one place, its residue's first
+    alternate location;
+  - bonds from CONECT records, and - for pairs CONECT does not speak for
+    both atoms of - from distances, as an XYZ file's: a standard
+    residue's own bonds are in the Chemical Component Dictionary, not in
+    the file;
+  - HEADER's ID code and TITLE, kept for later.
+  No ribbons; mmCIF later. A big structure is read quickly: a 58,870-atom
+  entry in about 0.2 s, its bonds found cube by cube
+  (`bondsByDistance`).
+- **What is read can grow.** Each record read has a handler of its own;
+  every other record is counted by name. Reading one more - SEQRES,
+  HELIX, SHEET for ribbons, LINK and SSBOND - is a handler more, and what
+  the atoms already keep is there for it.
+- **What is written** (Export, molecules in 3D only): HETATM records, each
+  molecule a residue of its own named UNL - the Chemical Component
+  Dictionary's unknown ligand - in chain A; every bond in CONECT records;
+  a MODEL for each frame where the writer's options ask; END. No HEADER,
+  CRYST1 or MASTER: a file of coordinates, not an entry of the archive.
 
 As step 3 was built:
 

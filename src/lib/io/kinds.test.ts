@@ -5,6 +5,7 @@ import { MANIFESTS } from "../plugins/known";
 import sampleSdf from "../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../samples/diels-alder.rxn?raw";
 import sampleXyz from "../../samples/cholesterol.xyz?raw";
+import samplePdb from "../../samples/cholesterol.pdb?raw";
 
 const id = (name: string, text: string) => kindOf(name, text)?.id ?? null;
 // (with the plugins Meno carries added: the kinds they bring registered)
@@ -36,6 +37,18 @@ describe("what a file is", () => {
     expect(id("", "0\nempty frame")).toBe("xyz");
   });
 
+  it("is a PDB file by its records: a record name first, and an atom's coordinates in their columns", () => {
+    expect(id("cholesterol.pdb", samplePdb)).toBe("pdb");
+    expect(id("structure.txt", samplePdb)).toBe("pdb");
+    expect(id("", "REMARK   1 MADE BY HAND\n" + samplePdb)).toBe("pdb");
+    // (a record name first, but no atom's record whose coordinates read)
+    expect(id("", "REMARK   1 NOTHING HERE\nEND\n")).toBeNull();
+    expect(id("notes.txt", "ATOM bomb\nHETATM? no\n")).toBeNull();
+    // (its name, where what it holds says nothing: then it reads as no molecule, and says so)
+    expect(id("empty.pdb", "")).toBe("pdb");
+    expect(id("1abc.pdb", "HEADER    PROTEIN\nATOM      1  N   ALA A   1\n")).toBe("pdb");
+  });
+
   it("is a molfile, not an XYZ file, when its title is a bare number", () => {
     expect(id("6324.sdf", numericTitleMol)).toBe("sdf");
     expect(id("6324.mol", numericTitleMol)).toBe("mol");
@@ -59,7 +72,7 @@ describe("what a file is", () => {
   });
 
   it("is no program's output where no plugin added brings its kind: Meno knows no program", () => {
-    expect(kinds().map((k) => k.id)).toEqual(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "cube"]);
+    expect(kinds().map((k) => k.id)).toEqual(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "pdb", "cube"]);
     expect(id("job.out", ORCA)).toBeNull();
     expect(id("run.log", GAUSSIAN)).toBeNull();
     expect(id("", "[Molden Format]\n")).toBeNull();
@@ -98,7 +111,7 @@ describe("what a file is", () => {
     expect(id("notes.txt", "42\nthe answer\nis not a molecule")).toBeNull();
     expect(id("Saturday.txt", "Saturday: ran the column\n")).toBeNull();
     expect(id("", "CCO")).toBeNull();
-    expect(id("1abc.pdb", "HEADER    PROTEIN\nATOM      1  N   ALA A   1\n")).toBeNull();
+    expect(id("reaction.ket", '{"root":{"nodes":[]}}')).toBeNull();
   });
 });
 
@@ -106,7 +119,7 @@ describe("the kinds", () => {
   it("are Meno's own, and those the plugins added bring while they are added, each named, every one once", () => {
     registerKinds(MANIFESTS);
     const ids = kinds().map((k) => k.id);
-    expect(ids).toEqual(expect.arrayContaining(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "orca", "gaussian", "gaussian-fchk", "xtb", "molden", "cube", "nwchem"]));
+    expect(ids).toEqual(expect.arrayContaining(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "pdb", "orca", "gaussian", "gaussian-fchk", "xtb", "molden", "cube", "nwchem"]));
     expect(new Set(ids).size).toBe(ids.length);
     expect(kinds().filter((k) => k.output).map((k) => k.id)).not.toContain("xyz");
     registerKinds([]);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkedStructures, readStructures } from "./structures";
 import sampleSdf from "../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../samples/esterification.rxn?raw";
+import samplePdb from "../../samples/cholesterol.pdb?raw";
 
 const WATER = "3\nwater\nO 0 0 0\nH 0.76 0.59 0\nH -0.76 0.59 0\n";
 
@@ -26,5 +27,74 @@ describe("a structure's file, as Meno's own reader gives it", () => {
     broken({ ...read, molecules3d: [{ ...m, bonds: [{ a1: 0, a2: 7, order: 1 }] }] }, /bond of a molecule in 3D joins no atoms/);
     broken({ ...read, molecules3d: [{ ...m, frames: [[0, 0, 0]] }] }, /frame of a molecule in 3D is not whole/);
     broken({ ...read, pluses: [{ x: 1 }] }, /"\+" sign is not placed/);
+  });
+});
+
+/** A HETATM line, its fields in the format's columns (lib/chem/pdb). */
+function het(serial: number, el: string, x: number, y: number, z: number, more: { altLoc?: string; resSeq?: number } = {}): string {
+  const line = Array(80).fill(" ");
+  const put = (from: number, s: string) => [...s].forEach((c, i) => (line[from - 1 + i] = c));
+  put(1, "HETATM");
+  put(7, String(serial).padStart(5));
+  put(14, el);
+  put(17, more.altLoc ?? " ");
+  put(18, "LIG");
+  put(22, "A");
+  put(23, String(more.resSeq ?? 1).padStart(4));
+  put(31, x.toFixed(3).padStart(8));
+  put(39, y.toFixed(3).padStart(8));
+  put(47, z.toFixed(3).padStart(8));
+  put(77, el.padStart(2));
+  return line.join("");
+}
+const conect = (from: number, ...to: number[]) => "CONECT" + [from, ...to].map((n) => String(n).padStart(5)).join("");
+
+describe("a PDB file, as Meno's own reader gives it", () => {
+  it("is a molecule in 3D: its atoms, and its bonds from CONECT records and from its atoms' distances", () => {
+    const read = readStructures("pdb", "cholesterol.pdb", samplePdb);
+    expect(read.model.atoms).toHaveLength(0);
+    expect(read.molecules3d).toHaveLength(1);
+    const m = read.molecules3d![0];
+    expect(m).toMatchObject({ name: "cholesterol.pdb" });
+    expect(m.atoms).toHaveLength(74);
+    expect(m.bonds).toHaveLength(77);
+    expect(checkedStructures(read, "cholesterol.pdb")).toBe(read);
+  });
+
+  it("takes a bond between two atoms CONECT records speak for only where they give it; any other pair by distance", () => {
+    const text = [
+      het(1, "C", 0, 0, 0),
+      het(2, "O", 1.2, 0, 0),
+      // (close to the carbon, but CONECT bonds it to the oxygen only)
+      het(3, "C", 0, 1.4, 0),
+      // (spoken for by no CONECT record: bonded by distance)
+      het(4, "C", 0, -1.5, 0),
+      conect(1, 2),
+      conect(2, 1, 3),
+      conect(3, 2),
+    ].join("\n");
+    const m = readStructures("pdb", "x.pdb", text).molecules3d![0];
+    expect(m.bonds.map((b) => [b.a1, b.a2])).toEqual([[0, 1], [0, 3], [1, 2]]);
+  });
+
+  it("shows each atom in one place: its residue's first alternate location", () => {
+    const text = [het(1, "C", 0, 0, 0, { altLoc: "A" }), het(2, "C", 0.3, 0, 0, { altLoc: "B" }), het(3, "O", 1.4, 0, 0, { altLoc: "A" }), het(4, "O", 1.5, 0.3, 0, { altLoc: "B" }), het(5, "N", 9, 9, 9)].join("\n");
+    const m = readStructures("pdb", "x.pdb", text).molecules3d![0];
+    expect(m.atoms.map((a) => [a.el, a.x])).toEqual([["C", 0], ["O", 1.4], ["N", 9]]);
+  });
+
+  it("is one molecule's frames where its models hold the same atoms, else a molecule for each model", () => {
+    const model = (n: number, atoms: string[]) => [`MODEL     ${String(n).padStart(4)}`, ...atoms, "ENDMDL"];
+    const alike = [...model(1, [het(1, "C", 0, 0, 0), het(2, "O", 1.2, 0, 0)]), ...model(2, [het(1, "C", 0, 0, 0.5), het(2, "O", 1.2, 0, 0.5)])].join("\n");
+    const one = readStructures("pdb", "x.pdb", alike).molecules3d!;
+    expect(one).toHaveLength(1);
+    expect(one[0].frames).toEqual([[0, 0, 0.5, 1.2, 0, 0.5]]);
+    const unlike = [...model(1, [het(1, "C", 0, 0, 0)]), ...model(2, [het(1, "N", 0, 0, 0), het(2, "O", 1.2, 0, 0)])].join("\n");
+    const two = readStructures("pdb", "x.pdb", unlike).molecules3d!;
+    expect(two.map((m) => m.atoms.map((a) => a.el))).toEqual([["C"], ["N", "O"]]);
+  });
+
+  it("says so where it holds no atoms", () => {
+    expect(() => readStructures("pdb", "x.pdb", "REMARK   1\nEND\n")).toThrow(/No molecules found in x.pdb/);
   });
 });

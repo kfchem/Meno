@@ -13,7 +13,7 @@ a workspace holding 2D and 3D together - see [`WORKSPACE.md`](./WORKSPACE.md).
 | Tauri shell (Rust) | `src-tauri/src/lib.rs` | Window, plugins (`fs`, `os`, `opener`), and the only code that spawns OS processes: the bundled `uv` binary and the Python sidecar. No chemistry logic lives here. |
 | App shell (React) | `src/App.tsx`, `src/lib/core/`, `src/ui/layouts/`, `src/ui/views/` | Tab model (open/close/reorder/rename), mapping a tab's `kind` to a view component. |
 | Features (React) | `src/ui/features/*` | One folder per view: the structure canvas (2D drawing and molecules in 3D), workflow editor, Python console, text editor, settings. |
-| Chemistry helpers (TS) | `src/lib/chem/`, `src/utils/` | File parsing (MOL/SDF/RXN/XYZ), editor model conversion, 2D depiction layout (bond lines, wedges, labels) and ACS-style sizing. Pure functions — no React, no Tauri. |
+| Chemistry helpers (TS) | `src/lib/chem/`, `src/utils/` | File parsing (MOL/SDF/RXN/XYZ/PDB), editor model conversion, 2D depiction layout (bond lines, wedges, labels) and ACS-style sizing. Pure functions — no React, no Tauri. |
 | Python worker | `src-tauri/resources/workers/interactive_worker.py` | Line-delimited JSON REPL run inside a `uv`-managed venv. |
 
 Rule of thumb: parsing and geometry are pure TypeScript (testable with Vitest),
@@ -28,11 +28,12 @@ src/
   lib/core/               tab state: types.ts (TabKind, State, Action), state.ts (reducer)
   lib/chem/               layout2d.ts (2D depiction primitives), style.ts / styleFields.ts (drawing style),
                           labelFonts.ts (label typefaces, letter by letter), ctfile.ts (molfiles,
-                          SDfiles and Rxnfiles read as CTfile Formats has them: docs/CTFILE.md)
+                          SDfiles and Rxnfiles read as CTfile Formats has them: docs/CTFILE.md),
+                          pdb.ts (PDB files read and written as the wwPDB's format v3.3 has them)
   lib/net/                network.ts: the network's record, consent, offline mode
   lib/io/                 kinds.ts: every kind of file Meno takes in, and what a file is - one
                           decision, by content, for Open, a drop and pasted text (docs/FILE-IO.md);
-                          structures.ts: Meno's own reading of MOL, SD, RXN and XYZ files, run in
+                          structures.ts: Meno's own reading of MOL, SD, RXN, XYZ and PDB files, run in
                           its worker, and the page's checks of what comes back
   lib/settings/           appSettings.ts: the app's settings and their file
   lib/input/              wheel.ts: a mouse wheel told from two fingers on a trackpad
@@ -449,7 +450,7 @@ which plugin would read a file no plugin added reads
   (`lib/calc/builtin.ts`, `builtinWorker.ts`, which reads that list): always
   there, nothing downloaded. It reads every file Meno reads but its own
   workspace and record, which are Meno's core's (docs/FILE-IO.md, step 4):
-  - MOL, SD, RXN and XYZ files (`lib/io/structures.ts`): what each holds -
+  - MOL, SD, RXN, XYZ and PDB files (`lib/io/structures.ts`): what each holds -
     the drawing, laid out, a reaction's arrow and "+" signs, and the
     molecules in 3D with their frames and energies - as `structures` in its
     answer. The page checks it (`checkedStructures`) as it would a plugin's.
@@ -684,8 +685,9 @@ do beyond files, and which are kept running: [`PLUGINS.md`](./PLUGINS.md)
 | SDF | Structure canvas | `parseSDF` | Flat records merged into one drawing; 3D records each a molecule in 3D beside it. Exported, each molecule in 3D is a 3D record. |
 | RXN (V2000) | Structure canvas | `parseRXNGroups` + `buildEditorModelFromRXN` | Reactants → arrow → products, agents above the arrow. |
 | XYZ (multi-frame) | Structure canvas, in 3D | `parseXYZ` | Bonds inferred from covalent radii (`bondsByDistance`, as a calculation's geometries are given theirs). Frames kept; each frame's energy as CREST, xtb and ORCA write it on the comment lines (`utils/xyzEnergies.ts`). |
-| Meno workspace (`.meno`) | Structure canvas | `readWorkspace` | Everything on the canvas, as it was saved: what Save and Save As write. MOL, SDF, RXN and SVG are written by Export. |
-| PDB, KET | — | none | Not offered by Open (nothing reads them yet); one dropped is reported "not supported yet". |
+| PDB | Structure canvas, in 3D | `readPdb` (`lib/chem/pdb.ts`) | Every atom; MODELs as frames; bonds from CONECT, and from distances where CONECT does not speak for both atoms; an atom given in more than one place in its residue's first. Exported, molecules in 3D are HETATM records and CONECT (docs/FILE-IO.md, *As step 7 was built*). |
+| Meno workspace (`.meno`) | Structure canvas | `readWorkspace` | Everything on the canvas, as it was saved: what Save and Save As write. MOL, SDF, RXN, PDB and SVG are written by Export. |
+| KET | — | none | Not offered by Open (nothing reads it yet); one dropped is reported "not supported yet". |
 | Text files | Text editor | — | By extension, or anything that is not recognised. |
 
 ## Verification commands

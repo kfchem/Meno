@@ -13,7 +13,7 @@ export type WriterOption = Option & { about?: "drawing" | "molecules3d" };
 /** A kind Meno writes, as Export offers it. */
 export type Writer = {
   /** Known by it, and its files by it as their extension. */
-  id: "mol" | "sdf" | "rxn" | "svg";
+  id: "mol" | "sdf" | "rxn" | "pdb" | "svg";
   /** What it is called, in Export. */
   name: string;
   options: readonly WriterOption[];
@@ -53,6 +53,24 @@ export const WRITERS = {
     ],
   },
   rxn: { id: "rxn", name: "RXN file", options: [VERSION] },
+  // (molecules in 3D only: the format holds no drawing)
+  pdb: {
+    id: "pdb",
+    name: "PDB file",
+    options: [
+      {
+        id: "frames",
+        about: "molecules3d",
+        label: "Molecules in 3D",
+        type: "choice",
+        choices: [
+          { value: "shown", label: "The frame shown" },
+          { value: "all", label: "Every frame, a model each" },
+        ],
+        default: "shown",
+      },
+    ],
+  },
   svg: { id: "svg", name: "SVG picture", options: [] },
 } as const satisfies Record<string, Writer>;
 

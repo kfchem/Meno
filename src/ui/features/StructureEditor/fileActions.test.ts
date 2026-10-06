@@ -69,9 +69,9 @@ describe("Export", () => {
   it("offers what the canvas can be written as, the fittest first, and always a picture", () => {
     expect(exportKinds(structure)).toEqual(["mol", "sdf", "svg"]);
     expect(exportKinds(reaction)).toEqual(["rxn", "mol", "sdf", "svg"]);
-    // (molecules in 3D alone: an SD file keeps them; a drawing beside them is a MOL file's too)
-    expect(exportKinds(solid)).toEqual(["sdf", "svg"]);
-    expect(exportKinds(both)).toEqual(["mol", "sdf", "svg"]);
+    // (molecules in 3D alone: an SD file keeps them; a drawing beside them is a MOL file's too; a PDB file holds them and no drawing)
+    expect(exportKinds(solid)).toEqual(["sdf", "pdb", "svg"]);
+    expect(exportKinds(both)).toEqual(["mol", "sdf", "pdb", "svg"]);
   });
 
   it("suggests the canvas's name as the first kind it can be written as, unless it is of one already", () => {
@@ -85,6 +85,8 @@ describe("Export", () => {
 
   it("starts from the kind of the file the canvas came from, where it can be written as it; and suggests the kind chosen", () => {
     expect(exportKindOf({ savedPath: null, openedName: "/data/b.SDF" }, structure)).toBe("sdf");
+    expect(exportKindOf({ savedPath: null, openedName: "/data/1abc.pdb" }, solid)).toBe("pdb");
+    expect(exportKindOf({ savedPath: null, openedName: "/data/1abc.pdb" }, structure)).toBeUndefined();
     expect(exportKindOf({ savedPath: null, openedName: "/data/b.rxn" }, structure)).toBeUndefined();
     expect(exportKindOf({ savedPath: "/work/a.meno", openedName: "b.sdf" }, structure)).toBeUndefined();
     expect(suggestedExportPath({ savedPath: null, openedName: "/data/b.sdf" }, structure, "svg")).toBe("/data/b.svg");
@@ -220,5 +222,36 @@ describe("an SD file of a canvas with molecules in 3D", () => {
     expect(back.molecules3d![2].atoms[1]).toMatchObject({ el: "H", x: 0.98 });
     // (the frame shown, unless asked)
     expect(structureFileText({ atoms: [], bonds: [], molecules3d: [conformers] }, "/tmp/oh.sdf").match(/\$\$\$\$/g)).toHaveLength(1);
+  });
+
+  it("writes molecules in 3D as a PDB file - each a residue, the frame shown or a model for each frame - which reads back as they were", async () => {
+    const { processFileContent } = await import("./utils/io");
+    const oh = {
+      atoms: [
+        { el: "O", x: 0, y: 0, z: 0, charge: -1 },
+        { el: "H", x: 0.96, y: 0, z: 0 },
+      ],
+      bonds: [{ a1: 0, a2: 1, order: 1 }],
+      at: { x: 0, y: 0 },
+      frames: [[0, 0, 0, 0.97, 0, 0], [0, 0, 0, 0.98, 0, 0]],
+      frame: 1,
+      name: "oh.xyz",
+    };
+    const na = { atoms: [{ el: "Na", x: 5, y: 0, z: 0, charge: 1 }], bonds: [], at: { x: 0, y: 0 } };
+    // (the drawing beside them is not written: the format holds none)
+    const shown = structureFileText({ ...model, molecules3d: [oh, na] }, "/tmp/ions.pdb");
+    expect(shown).not.toMatch(/^MODEL/m);
+    expect(shown.split("\n").filter((l) => l.startsWith("HETATM")).map((l) => l.substring(22, 26).trim())).toEqual(["1", "1", "2"]);
+    const back = await processFileContent("ions.pdb", shown);
+    expect(back.model.atoms).toHaveLength(0);
+    expect(back.molecules3d![0].atoms.map((a) => [a.el, a.x, a.charge])).toEqual([["O", 0, -1], ["H", 0.97, undefined], ["Na", 5, 1]]);
+    expect(back.molecules3d![0].bonds).toEqual([{ a1: 0, a2: 1, order: 1 }]);
+    // every frame: a model for each, the sodium where it stands in each
+    const all = structureFileText({ atoms: [], bonds: [], molecules3d: [oh, na] }, "/tmp/ions.pdb", { frames: "all" });
+    expect(all.match(/^MODEL/gm)).toHaveLength(3);
+    const frames = await processFileContent("ions.pdb", all);
+    expect(frames.molecules3d).toHaveLength(1);
+    expect(frames.molecules3d![0].frames).toEqual([[0, 0, 0, 0.97, 0, 0, 5, 0, 0], [0, 0, 0, 0.98, 0, 0, 5, 0, 0]]);
+    expect(() => structureFileText(model, "/tmp/none.pdb")).toThrow(/no molecules in 3D/);
   });
 });
