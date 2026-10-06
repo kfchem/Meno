@@ -3,18 +3,21 @@ import { listen } from "@tauri-apps/api/event";
 import { resolveResource } from "@tauri-apps/api/path";
 import { create } from "zustand";
 import { ensurePyEnv, pyEnvReady, removePyEnv } from "../pyEnv";
-import { READER_PLUGINS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { manifestOf, READERS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { registerKinds } from "../io/kinds";
+import type { Manifest } from "../plugins/manifest";
 import { ReaderClient, type Reader } from "./client";
-import { builtinReader } from "./builtin";
+import { menoReader } from "./builtin";
 
 /**
- * The reader plugins on this computer, and their workers: a reader is
+ * The reader plugins on this computer, and their workers: a plugin is
  * added - its environment set up, asking first for the network - only in
- * Settings, *Calculation readers*, and taken away there; its worker is
- * started the first time it is asked to read, then kept for the session.
- * A worker reads what it is sent and has no business on the network; the
- * app keeps it off it. A reader that comes with Meno is always added, and
- * runs in the app (./builtin).
+ * Settings, *Plugins*, and taken away there; its worker is started the
+ * first time it is asked to read, then kept for the session. A worker reads
+ * what it is sent and has no business on the network; the app keeps it off
+ * it. Meno's own reading is always there, and runs in the app (./builtin).
+ * The kinds a plugin brings are registered while it is added, and only
+ * then (lib/io/kinds).
  */
 export type ReaderState = "absent" | "adding" | "added" | "removing";
 
@@ -25,20 +28,29 @@ export const useReaders = create<{
   problem: Record<string, string>;
 }>(() => ({ state: {}, problem: {} }));
 
-const setState = (id: string, state: ReaderState, problem?: string) =>
+const setState = (id: string, state: ReaderState, problem?: string) => {
   useReaders.setState((s) => ({
     state: { ...s.state, [id]: state },
     problem: problem ? { ...s.problem, [id]: problem } : Object.fromEntries(Object.entries(s.problem).filter(([k]) => k !== id)),
   }));
+  // (the kinds of the plugins added - until one is taken away - registered with Meno's own)
+  const now = useReaders.getState().state;
+  registerKinds(
+    Object.keys(now)
+      .filter((p) => now[p] === "added" || now[p] === "removing")
+      .map(manifestOf)
+      .filter((m): m is Manifest => m != null),
+  );
+};
 
 /** How long a reader's first import may take. */
 const READY_MS = 60_000;
 
 const running = new Map<string, Promise<{ client: ReaderClient; id: string }>>();
-const builtins = new Map<string, Reader>();
+let meno: Reader | null = null;
 
-/** The readers added on this computer, looked at afresh. */
-export async function addedReaders(plugins: readonly ReaderPlugin[] = READER_PLUGINS): Promise<Set<string>> {
+/** The readers added on this computer, looked at afresh: Meno's own always. */
+export async function addedReaders(plugins: readonly ReaderPlugin[] = READERS): Promise<Set<string>> {
   const added = new Set<string>();
   for (const p of plugins) {
     if (p.builtin) {
@@ -88,10 +100,7 @@ export async function removeReader(p: PythonReader): Promise<void> {
 
 /** A reader's worker, started the first time it is asked for; the reader must be added. */
 export function readerClient(p: ReaderPlugin): Promise<Reader> {
-  if (p.builtin) {
-    if (!builtins.has(p.id)) builtins.set(p.id, builtinReader(p.id));
-    return Promise.resolve(builtins.get(p.id)!);
-  }
+  if (p.builtin) return Promise.resolve((meno ??= menoReader()));
   let worker = running.get(p.id);
   if (!worker) {
     worker = start(p);
@@ -104,7 +113,7 @@ export function readerClient(p: ReaderPlugin): Promise<Reader> {
 type Line = { id: string; line: string };
 
 async function start(p: PythonReader): Promise<{ client: ReaderClient; id: string }> {
-  if (!(await pyEnvReady(p.profile))) throw new Error(`${p.name} is not added: add it in Settings, Calculation readers.`);
+  if (!(await pyEnvReady(p.profile))) throw new Error(`${p.name} is not added: add it in Settings, Plugins.`);
   const python = await ensurePyEnv(p.profile);
   const script = await resolveResource(p.worker);
   // (heard from before the worker's id is known, so that nothing it says

@@ -82,6 +82,32 @@ function covalentRadius(el: string): number {
   return r;
 }
 
+/**
+ * Bonds where atoms stand closer than their covalent radii allow, a tenth
+ * over: how a molecule given only its atoms and where they are - an XYZ
+ * file's, a calculation's - is given its bonds, all single.
+ */
+export function bondsByDistance(atoms: readonly { el: string; x: number; y: number; z: number }[]): Bond[] {
+  // (each atom's covalent radius looked up once, not once for every pair:
+  // a trajectory of hundreds of frames is read quickly)
+  const radii = atoms.map((a) => covalentRadius(a.el));
+  const bonds: Bond[] = [];
+  for (let m = 0; m < atoms.length; m++) {
+    const a1 = atoms[m];
+    for (let n = m + 1; n < atoms.length; n++) {
+      const a2 = atoms[n];
+      const threshold = (radii[m] + radii[n]) * 1.1;
+      const dx = a1.x - a2.x;
+      const dy = a1.y - a2.y;
+      const dz = a1.z - a2.z;
+      if (dx * dx + dy * dy + dz * dz < threshold * threshold) {
+        bonds.push({ a1: m, a2: n, order: 1 });
+      }
+    }
+  }
+  return bonds;
+}
+
 export function parseXYZ(xyz: string): Molecule[] {
   const lines = xyz.trim().split("\n");
   const frames: Molecule[] = [];
@@ -101,25 +127,7 @@ export function parseXYZ(xyz: string): Molecule[] {
       };
     });
 
-    // (each atom's covalent radius looked up once, not once for every pair:
-    // a trajectory of hundreds of frames is read quickly)
-    const radii = atoms.map((a) => covalentRadius(a.el));
-    const bonds: Bond[] = [];
-    for (let m = 0; m < atoms.length; m++) {
-      const a1 = atoms[m];
-      for (let n = m + 1; n < atoms.length; n++) {
-        const a2 = atoms[n];
-        const threshold = (radii[m] + radii[n]) * 1.1;
-        const dx = a1.x - a2.x;
-        const dy = a1.y - a2.y;
-        const dz = a1.z - a2.z;
-        if (dx * dx + dy * dy + dz * dz < threshold * threshold) {
-          bonds.push({ a1: m, a2: n, order: 1 });
-        }
-      }
-    }
-
-    frames.push({ atoms, bonds });
+    frames.push({ atoms, bonds: bondsByDistance(atoms) });
     i += 2 + atomCount;
   }
 

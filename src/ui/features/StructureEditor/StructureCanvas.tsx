@@ -66,6 +66,7 @@ import { cleanUp } from "./chem/cleanUp";
 import { useChemMarks } from "./chem/useChemMarks";
 import { useFileActions } from "./fileActions";
 import { setSaver } from "../../../lib/doc/savers";
+import { useReadings } from "../../../lib/calc/readings";
 import { CANVAS_DPR } from "./constants";
 import { startingZoom } from "./layoutOptions";
 import { useDrawingStyle } from "./useDrawingStyle";
@@ -166,6 +167,14 @@ function StructureCanvasContent({
   // RDKit: its marks on the structure and R/S on request; and clean-up, by
   // Meno's own layout engine (chem/cleanUp)
   const store = useEditorStore();
+  // What readers reading an output as well find, joined to each molecule
+  // read from it as it comes - or as the molecule comes to stand here
+  // (lib/calc/readings).
+  const sources = useEditor((s) => s.molecules3d.map((m) => m.calc?.source?.sha256 ?? "").join(","));
+  useEffect(() => {
+    store.getState().joinReadings();
+    return useReadings.subscribe(() => store.getState().joinReadings());
+  }, [store, sources]);
   const model = useEditor((s) => s.model);
   const marks = useChemMarks(model, active);
   const chemistry = useAppSettings((s) => s.chemistry);

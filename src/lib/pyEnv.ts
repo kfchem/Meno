@@ -258,7 +258,7 @@ export async function ensurePyEnv(
 
 /**
  * Takes a reader plugin's environment away, and its record of being set
- * up: what Settings' *Calculation readers* removes. Meno's own environments
+ * up: what Settings' *Plugins* removes. Meno's own environments
  * are not taken away this way.
  */
 export async function removePyEnv(profile: PyProfile): Promise<void> {

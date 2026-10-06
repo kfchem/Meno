@@ -446,6 +446,8 @@ export type EditorState = {
   endMoveDrag: () => void;
   /** The structure a tab opens with: where its document starts, not an edit. */
   openModel: (next: Model, scheme?: ImportedScheme) => void;
+  /** Joins what readers reading an output as well have found to each molecule read from it (lib/calc/readings): learnt of the document, not done to it - nothing to undo. */
+  joinReadings: () => void;
   /** A file opened over the canvas's contents, as one undo step. */
   replaceModel: (next: Model, scheme?: ImportedScheme) => void;
   /**

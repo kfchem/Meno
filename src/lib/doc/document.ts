@@ -57,6 +57,14 @@ export interface DocumentStore<T> {
   redo(): boolean;
   /** Replaces the content and forgets the history, e.g. after opening a file. */
   reset(state: T, label?: string): void;
+  /**
+   * Applies `updater` to every state the history holds - past, present,
+   * future and the saved one - with no step of its own: for what is learnt
+   * of the document rather than done to it, such as a reader's findings in
+   * a file it was opened from, arriving after it opened. Undo does not take
+   * it back, and it leaves the document as saved as it was.
+   */
+  amend(updater: (state: T) => T): void;
   /** Marks the current state as the saved one. */
   markSaved(): void;
   history(): HistoryInfo;
@@ -152,6 +160,25 @@ export function createDocument<T>(
       present = { state, label, at: now() };
       savedState = state;
       notify();
+    },
+
+    amend(updater) {
+      const was = present.state;
+      // (one state held twice - the saved one is one of the history's - amended once, so it is still the same state)
+      const amended = new Map<T, T>();
+      const next = (state: T) => {
+        if (!amended.has(state)) amended.set(state, updater(state));
+        return amended.get(state)!;
+      };
+      const map = (e: Entry<T>): Entry<T> => {
+        const state = next(e.state);
+        return Object.is(state, e.state) ? e : { ...e, state };
+      };
+      past = past.map(map);
+      future = future.map(map);
+      present = map(present);
+      savedState = next(savedState);
+      if (!Object.is(present.state, was)) notify();
     },
 
     markSaved() {

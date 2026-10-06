@@ -19,17 +19,24 @@ written on 2026-10-06 with the maintainer, and its decisions are made. How files
   plugins kept running would only take more memory.
 - **A fingerprint might lead into a workflow**, and so might other such
   results.
+- **Plugins are completely independent, and Meno builds only a general
+  place to take them in** (the maintainer, 2026-10-06, not for the first
+  time). Plugins will be distributed and fetched over the internet.
+  Meno names no plugin and knows no program: what a plugin is, does and
+  reads is the plugin's own data, in its folder.
 
 ## Words
 
 - **Role** - a job Meno defines, with what it is given and what it gives,
   in Meno's forms. Examples: read a kind of file, write one, parse
   SMILES, assign R/S, make conformers, make a fingerprint.
-- **Plugin** - an independent package that fills roles. It has an
-  environment of its own, made from a lock with the network's consent, a
-  worker, and a manifest: data saying which roles it fills and which kinds
-  of file it reads and writes, read when it is added (FILE-IO.md). It shares no code with another plugin
-  (the maintainer, 2026-10-06). Examples: RDKit, cclib, PySCF.
+- **Plugin** - an independent package that fills roles: a folder of its
+  own (*A plugin's folder*). It has an environment of its own, made from a
+  lock with the network's consent, a worker, and a manifest: data saying
+  which roles it fills and which kinds of file it brings, reads and
+  writes, read when it is added (FILE-IO.md). It shares no code with
+  another plugin, and knows of none (the maintainer, 2026-10-06).
+  Examples: RDKit, cclib, PySCF.
 - **Meno's own parts** - what comes with Meno and fills roles too: its
   readers and writers of MOL, SDF, RXN, XYZ and cube, its SVG, its 2D
   layout. Meno's own parts are not plugins and are not listed as plugins.
@@ -54,9 +61,38 @@ written on 2026-10-06 with the maintainer, and its decisions are made. How files
 | Later | structure search in outside databases | - |
 | Later | running a calculation, an input written and an output read back | - |
 
-Meno defines the roles and their contracts. A plugin says, in Meno's list
-of plugins, which roles it fills. A new kind of role comes with Meno, and a
+Meno defines the roles and their contracts. A plugin says, in its
+manifest, which roles it fills. A new kind of role comes with Meno, and a
 new plugin for an existing role needs no change to Meno.
+
+## A plugin's folder
+
+Everything a plugin is lives in one folder, named by its id:
+
+```
+<id>/
+  manifest.json      what it is, its version, licence and home; what makes
+                     its environment and runs its worker; the kinds of file
+                     it brings (id, name, extensions, marks) and those it
+                     reads, by id - its own, or Meno's
+  worker.py          its worker, spoken to in JSON lines under the contract
+  requirements.lock  its environment, made by uv from PyPI - or, where it
+  (or pixi.toml and  needs conda-forge, by pixi
+   pixi.lock)
+```
+
+- **Meno carries some for now**, in `src-tauri/resources/plugins/`, and
+  finds them there: no code of Meno's names one. Those fetched over the
+  internet later will be folders of the same kind; how Meno trusts a list
+  fetched online is decided then.
+- **Kinds are shared by id, not by code.** Two plugins that read Gaussian's
+  output each bring the kind `gaussian`, with its name and marks, and Meno
+  puts them together. A plugin reads only the kinds it brings and Meno's
+  own.
+- **Meno checks every manifest as data**, wherever it came from: its id,
+  its lock and worker in its folder (the backend allows nothing else), its
+  marks as text of some length, and no mark that one of Meno's own sample
+  files holds.
 
 ## Several plugins, one role
 
@@ -148,7 +184,7 @@ The same for every plugin and for Meno's own parts:
 
 ## Settings
 
-- **Plugins.** A tab of its own that lists every plugin, added or not:
+- **Plugins.** A tab of its own that lists every plugin on offer, added or not:
   - what roles it fills, by name - the kinds of file it reads and writes
     among them;
   - its version, licence and home;
@@ -181,7 +217,14 @@ By the maintainer, 2026-10-06:
    included.
 5. **The tabs are named "Plugins", and "Files"** for the per-kind choices.
 6. **Kinds of file are registered by plugins** in their manifests, so that
-   a plugin can read a program Meno does not know (FILE-IO.md).
+   a plugin can read a program Meno does not know (FILE-IO.md) - and only
+   by them: Meno knows no program, and lists a program's kind only while
+   a plugin that reads it is added.
+7. **Plugins are completely independent**, each a folder of its own, and
+   will be fetched over the internet; Meno builds only the general place
+   to take them in.
+8. **A file no plugin added reads, but one on offer would, names that
+   plugin** - against the ideal, but needed for those new to Meno.
 
 ## In order
 

@@ -1116,6 +1116,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               populations={shares}
               about={m.calc ? calcLine(m.calc) : undefined}
               results={m.calc?.results}
+              unread={m.calc?.unread}
               area={gl.domElement}
             />
           ) : (

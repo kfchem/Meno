@@ -145,7 +145,7 @@ describe("where results are said", () => {
 describe("results from two readers", () => {
   const one = (from: string, id: string, label: string, value: number, rank?: number) => ({ id, on: "molecule", group: "Properties", label, value, from, ...(rank ? { rank } : {}) });
   const results = readResults(
-    [one("cclib 1.9rc1", "dipole", "Dipole moment", 1.8, 1), one("PySCF 2.14.0", "dipole", "Dipole moment", 1.9, 1), one("PySCF 2.14.0", "s2", "<S²>", 0.75, 2)],
+    [one("cclib", "dipole", "Dipole moment", 1.8, 1), one("pyscf", "dipole", "Dipole moment", 1.9, 1), one("pyscf", "s2", "<S²>", 0.75, 2)],
     1,
     1,
   );
@@ -164,10 +164,10 @@ describe("results from two readers", () => {
   });
 
   it("are named by their reader where another's of the kind stand beside them, a menu's lists", () => {
-    expect(titled({ label: "Molecular orbitals", from: "PySCF" }, [{ from: "cclib 1.9rc1" }, { from: "PySCF" }])).toBe("Molecular orbitals · PySCF");
-    expect(titled({ label: "Molecular orbitals", from: "cclib 1.9rc1" }, [{ from: "cclib 1.9rc1" }])).toBe("Molecular orbitals");
-    expect(readerNameOf("cclib 1.9rc1")).toBe("cclib");
-    expect(readerNameOf("Cube files")).toBe("Cube files");
+    expect(titled({ label: "Molecular orbitals", from: "pyscf" }, [{ from: "cclib" }, { from: "pyscf" }])).toBe("Molecular orbitals · PySCF");
+    expect(titled({ label: "Molecular orbitals", from: "cclib" }, [{ from: "cclib" }])).toBe("Molecular orbitals");
+    expect(readerNameOf("cclib")).toBe("cclib");
+    expect(readerNameOf("meno")).toBe("Meno");
   });
 
   it("fill the chip's line from one reader: the first that ranked any", () => {

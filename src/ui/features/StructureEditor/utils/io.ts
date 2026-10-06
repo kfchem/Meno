@@ -8,9 +8,10 @@ import { bondChem, chemistry, type Molecule } from "../../../../lib/chem/molecul
 import type { Carried3D, Drawn, Model, Molecule3D } from "../store/types";
 import { currentStyle3D } from "../style3d";
 import { lookOf, rowAbout, solidOf } from "./molecule3d";
-import { energiesOf } from "../../../../lib/calc/readers";
+import { energiesOf } from "../../../../utils/xyzEnergies";
 import { extensionOf, kindOf, MENO_KINDS, type Kind } from "../../../../lib/io/kinds";
-import { calcOf, xyzOf, type CalcSource, type ReaderOutput } from "../../../../lib/calc/output";
+import { calcOf, type CalcSource, type ReaderOutput } from "../../../../lib/calc/output";
+import { bondsByDistance } from "../../../../utils/structureParsers";
 import { rememberOutput } from "../../../../lib/calc/asks";
 import { readOutput } from "../../../../lib/calc/read";
 
@@ -89,9 +90,10 @@ export async function processFileContent(
   }
   // a calculation's output: read by the reader plugins that read its kind (lib/calc)
   if (kind.output) {
-    const { output, readers } = await readOutput(name, content, kind.output);
-    // (kept for the session: what its promises are asked for from)
-    return calcResult(output, readers, filename, await rememberOutput(name, content));
+    // (kept for the session: what its promises are asked for from, and what readers reading it as well join it by)
+    const source = await rememberOutput(name, content, kind.id);
+    const { output, readers } = await readOutput(name, content, kind, source.sha256);
+    return calcResult(output, readers, filename, source);
   }
   if (kind.id === MENO_KINDS.workspace.id || kind.id === MENO_KINDS.record.id) {
     throw new Error(`${name} is a ${kind.name}: it is opened as one, not read as a structure's file.`);
@@ -118,8 +120,7 @@ export async function processFileContent(
   // where the file says it is 3D, or its atoms spread in depth.
   if (format === "xyz" && molecules.length && molecules[0].atoms.length) {
     const [first, ...rest] = molecules;
-    // (what else the file says - each frame's energy - is a calculation
-    // reader's to find: lib/calc)
+    // (and each frame's energy, as programs write it on the comment lines)
     const energies = rest.length ? energiesOf(xyzComments(content)) : undefined;
     return {
       model: { atoms: [], bonds: [] },
@@ -218,16 +219,20 @@ function inRow(ms: Omit<Molecule3D, "id" | "at">[]): Carried3D[] {
 }
 
 /**
- * A calculation's output, as its readers read it (`readers`, each its name
- * and version), as an opened file's molecules: one molecule in 3D, read from
- * its geometries as an XYZ file's frames are - its bonds found the same
- * way - their energies, and what the calculation says of it; showing its
- * last geometry, an optimisation's end.
+ * A calculation's output, as its readers read it (`readers`, each its id
+ * and version), as an opened file's molecules: one molecule in 3D, its
+ * atoms where the first geometry puts them and its bonds found as an XYZ
+ * file's are, the rest of its geometries its frames; their energies, and
+ * what the calculation says of it; showing its last geometry, an
+ * optimisation's end.
  */
 export function calcResult(out: ReaderOutput, readers: readonly string[], filename?: string, source?: CalcSource): ProcessedFileResult {
-  const [first, ...rest] = readMoleculesFromText(xyzOf(out), "xyz");
-  if (!first?.atoms.length) throw new Error(`No molecule found in ${filename || "the file"}.`);
-  const frames = rest.map((f) => f.atoms.flatMap((a) => [a.x, a.y, a.z]));
+  const n = out.atoms.length;
+  const [f0, ...rest] = out.frames.filter((f) => f.length === 3 * n);
+  if (!n || !f0) throw new Error(`No molecule found in ${filename || "the file"}.`);
+  const atoms = out.atoms.map((el, i) => ({ el, x: f0[3 * i], y: f0[3 * i + 1], z: f0[3 * i + 2] }));
+  const first = { atoms, bonds: bondsByDistance(atoms) };
+  const frames = rest.map((f) => [...f]);
   const energies = out.energies?.length === 1 + frames.length ? out.energies : undefined;
   return {
     model: { atoms: [], bonds: [] },

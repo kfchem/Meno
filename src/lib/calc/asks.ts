@@ -7,7 +7,8 @@
  * is asked for from its output - opened again, where it is not open now.
  */
 import { create } from "zustand";
-import { READER_PLUGINS, type ReaderPlugin } from "./catalog";
+import { readerById, readerIdOfLine, type ReaderPlugin } from "./catalog";
+import { kindOf } from "../io/kinds";
 import type { Reader } from "./client";
 import type { CalcInfo, CalcSource } from "./output";
 import { isAsk, resultKey, resultsOn, type ListResult } from "./results";
@@ -25,14 +26,14 @@ async function sha256(text: string): Promise<string> {
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Keeps an opened output for the session: what its promises are asked for from. */
-export async function rememberOutput(name: string, text: string): Promise<CalcSource> {
+/** Keeps an opened output for the session: what its promises are asked for from - its name, its kind and its SHA-256. */
+export async function rememberOutput(name: string, text: string, kind: string): Promise<CalcSource> {
   const hash = await sha256(text);
   outputs.set(hash, { name, text });
-  return { name, sha256: hash };
+  return { name, sha256: hash, kind };
 }
 
-/** What a promise is known by, among every molecule's: its output, the reader that gave it, its key. */
+/** What a promise is known by, among every molecule's: its output, the reader that gave it - by id - and its key. */
 export const askKey = (source: CalcSource | undefined, from: string | undefined, key: string) => `${source?.sha256 ?? "-"}\u0000${from ?? ""}\u0000${key}`;
 
 /** What a promise came to, where it has been given. */
@@ -43,8 +44,8 @@ export function givenValue(source: CalcSource | undefined, from: string | undefi
 const setState = (k: string, s: "asking" | "given" | { error: string }) => useAsks.setState((was) => ({ state: { ...was.state, [k]: s } }));
 
 /**
- * Asks the reader that gave a promise (`from`, its name and version) what
- * it stands for, sending the output again; resolved once given. Where the
+ * Asks the reader that gave a promise (`from`, its id) what it stands for,
+ * sending the output again, and its kind; resolved once given. Where the
  * output is not open this session, says to open it.
  */
 export function askFor(
@@ -68,16 +69,18 @@ async function ask(calc: CalcInfo, from: string | undefined, key: string, k: str
     setState(k, { error });
     throw new Error(error);
   }
-  const who = from ?? calc.readers[0] ?? "";
-  const plugin = READER_PLUGINS.find((p) => who === p.name || who.startsWith(`${p.name} `));
-  if (!plugin) {
-    const error = `${who} is not a reader Meno knows of.`;
+  const who = from ?? readerIdOfLine(calc.readers[0] ?? "");
+  const plugin = readerById(who);
+  // (its kind as it was told; or, kept before kinds were, told again)
+  const kind = calc.source.kind ?? kindOf(output.name, output.text)?.id;
+  if (!plugin || !kind) {
+    const error = plugin ? `What ${output.name} is cannot be told.` : `${who} is not a reader Meno knows of.`;
     setState(k, { error });
     throw new Error(error);
   }
   setState(k, "asking");
   try {
-    const value = await (await readerOf(plugin)).ask(key, output.name, output.text);
+    const value = await (await readerOf(plugin)).ask(kind, key, output.name, output.text);
     given.set(k, value);
     setState(k, "given");
     return value;
