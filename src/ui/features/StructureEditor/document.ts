@@ -13,6 +13,9 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
 import type { Arrow, Atom, Bond, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus } from "./store/types";
+import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
+import { readerIdOf } from "../../../lib/calc/catalog";
+import { readResults } from "../../../lib/calc/results";
 
 export type StructureDocument = {
   model: Model;
@@ -696,6 +699,42 @@ export function withImportedScheme(
 export function addMolecule3d(doc: StructureDocument, m: Omit<Molecule3D, "id">): StructureDocument {
   const id = doc.nextMolecule3dId ?? 1;
   return { ...doc, molecules3d: [...(doc.molecules3d ?? []), { ...m, id }], nextMolecule3dId: id + 1 };
+}
+
+/**
+ * What readers chosen to read an output as well found in it (lib/calc/
+ * readings), joined to each molecule read from that output - by its
+ * SHA-256 - that has not got it yet: each reader's results, kept as its
+ * own, where the atoms it read are the molecule's, in the same order; what
+ * belongs to frames only where it read as many; and a reader that could not
+ * read it, said. The document as it was where there is nothing to join.
+ */
+export function withReadings(doc: StructureDocument, bySource: Readonly<Record<string, readonly (Found | Unread)[]>>): StructureDocument {
+  let changed = false;
+  const molecules3d = (doc.molecules3d ?? []).map((m) => {
+    const readings = m.calc?.source ? bySource[m.calc.source.sha256] : undefined;
+    if (!m.calc || !readings?.length) return m;
+    let calc = m.calc;
+    for (const r of readings) {
+      // (a reader as a molecule keeps it: its id, then its version)
+      const has = calc.readers.some((x) => x === r.from || x.startsWith(`${r.from} `) || readerIdOf(x) === r.from) || calc.unread?.some((u) => u.from === r.from);
+      if (has) continue;
+      const atoms = m.atoms.map((a) => a.el);
+      if ("why" in r || !sameAtoms(r.output.atoms, atoms)) {
+        const why = "why" in r ? r.why : "it read other atoms";
+        calc = { ...calc, unread: [...(calc.unread ?? []), { from: r.from, why }] };
+      } else {
+        const frames = 1 + (m.frames?.length ?? 0);
+        const read = (r.output.frames ?? []).filter((f) => Array.isArray(f) && f.length === 3 * atoms.length).length;
+        const results = readResults(r.output.results, atoms.length, read === frames ? frames : 0, r.from);
+        calc = { ...calc, readers: [...calc.readers, readerLine(r)], results: [...(calc.results ?? []), ...results] };
+      }
+    }
+    if (calc === m.calc) return m;
+    changed = true;
+    return { ...m, calc };
+  });
+  return changed ? { ...doc, molecules3d } : doc;
 }
 
 /** A molecule in 3D tied to a drawing atom by atom (`drawnFrom`), the drawing as it is now (`drawnAs`). */

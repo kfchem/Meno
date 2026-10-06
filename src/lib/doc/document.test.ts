@@ -186,3 +186,38 @@ describe("createDocument", () => {
     expect(doc.getState().meta).toBe(before.meta);
   });
 });
+
+describe("amending a document", () => {
+  it("changes every state it holds - past, present, future, saved - with no step of its own, the saved state still saved", () => {
+    const doc = createDocument({ items: ["a"], note: "" });
+    doc.edit("add b", (d) => ({ ...d, items: [...d.items, "b"] }));
+    doc.markSaved();
+    doc.edit("add c", (d) => ({ ...d, items: [...d.items, "c"] }));
+    doc.undo();
+    // (the present is the saved state; "add c" waits to be redone)
+    expect(doc.history()).toMatchObject({ undoDepth: 1, redoDepth: 1, dirty: false });
+    const heard = vi.fn();
+    doc.subscribe(heard);
+    doc.amend((d) => ({ ...d, note: "read" }));
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(doc.getState()).toEqual({ items: ["a", "b"], note: "read" });
+    expect(doc.history()).toMatchObject({ undoDepth: 1, redoDepth: 1, dirty: false });
+    doc.redo();
+    expect(doc.getState()).toEqual({ items: ["a", "b", "c"], note: "read" });
+    doc.undo();
+    doc.undo();
+    expect(doc.getState()).toEqual({ items: ["a"], note: "read" });
+    expect(doc.history().dirty).toBe(true);
+    doc.redo();
+    expect(doc.history().dirty).toBe(false);
+  });
+
+  it("says nothing where nothing changed", () => {
+    const doc = createDocument({ n: 1 });
+    const heard = vi.fn();
+    doc.subscribe(heard);
+    doc.amend((d) => d);
+    expect(heard).not.toHaveBeenCalled();
+  });
+});
+

@@ -18,8 +18,8 @@ import { lookOf, rowAbout, rowAfter, solidOf } from "../utils/molecule3d";
 import type { DropZone, Dropped } from "../../../../lib/drop";
 
 import { readRecord } from "../utils/copyPaste";
-import { kindById, kindOf, MENO_KINDS } from "../../../../lib/io/kinds";
-import { MARK_REACH } from "../../../../lib/calc/catalog";
+import { kindById, kindOf, MARK_REACH, MENO_KINDS } from "../../../../lib/io/kinds";
+import { probeKind } from "../../../../lib/calc/probe";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 
 export function useStructureEvents(
@@ -384,7 +384,8 @@ export function useStructureEvents(
     const at = clientToWorld(x, y) || { x: 0, y: 0 };
     // What a file dropped is, from its start (lib/io/kinds): nothing need be
     // read of a large picture to know it is none of Meno's kinds
-    const kind = dropped ? kindOf(dropped.name, await dropped.slice(0, MARK_REACH).text()) : null;
+    const head = dropped ? await dropped.slice(0, MARK_REACH).text() : "";
+    const kind = dropped ? (kindOf(dropped.name, head) ?? (await probeKind(dropped.name, head))) : null;
     // None of them: a picture or an object dragged out of Word or
     // PowerPoint, perhaps, whose structure goes where it was dropped,
     // selected - as a paste would

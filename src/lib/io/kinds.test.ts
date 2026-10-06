@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extensionOf, KINDS, kindOf } from "./kinds";
+import { extensionOf, kindOf, kinds, probeCandidates, registered } from "./kinds";
+import { acceptManifest, type Manifest } from "../plugins/manifest";
 import sampleSdf from "../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../samples/diels-alder.rxn?raw";
 import sampleXyz from "../../samples/cholesterol.xyz?raw";
@@ -83,15 +84,78 @@ describe("what a file is", () => {
 
 describe("the kinds", () => {
   it("are each named, Meno's own and the readers' alike, every one once", () => {
-    const ids = KINDS.map((k) => k.id);
+    const ids = kinds().map((k) => k.id);
     expect(ids).toEqual(expect.arrayContaining(["meno-workspace", "meno-record", "rxn", "mol", "sdf", "xyz", "orca", "gaussian", "gaussian-fchk", "xtb", "molden", "cube"]));
     expect(new Set(ids).size).toBe(ids.length);
-    expect(KINDS.filter((k) => k.output).map((k) => k.id)).not.toContain("xyz");
+    expect(kinds().filter((k) => k.output).map((k) => k.id)).not.toContain("xyz");
   });
 
   it("give a file's extension, lower case, with its dot", () => {
     expect(extensionOf("Ethanol.MOL")).toBe(".mol");
     expect(extensionOf("a.b/c.sdf")).toBe(".sdf");
     expect(extensionOf("README")).toBe("");
+  });
+});
+
+describe("kinds a plugin registers", () => {
+  const nbo = (kinds: unknown[]): Manifest =>
+    acceptManifest({
+      id: "nbo",
+      name: "NBO",
+      version: "7",
+      environment: { maker: "uv", lock: "resources/py/requirements.reader-nbo.lock" },
+      worker: "resources/workers/reader_nbo.py",
+      reads: ["nbo-out", "gaussian"],
+      kinds,
+    })!;
+
+  it("are told by their marks, as Meno's are, so that a program Meno does not know can be read", () => {
+    const { kinds: all, refused } = registered([
+      nbo([{ id: "nbo-out", name: "NBO output", program: "NBO", extensions: [".47"], marks: [{ text: "N A T U R A L   A T O M I C   O R B I T A L" }] }]),
+    ]);
+    expect(refused).toEqual([]);
+    const k = all.find((x) => x.id === "nbo-out")!;
+    expect(k).toMatchObject({ name: "NBO output", extensions: [".47"], output: { program: "NBO" } });
+    expect(kindOf("job.out", "\n   N A T U R A L    A T O M I C    O R B I T A L   A N A L Y S I S\n", all)?.id).toBe("nbo-out");
+    // (and a kind Meno knows is still told as it was)
+    expect(kindOf("job.out", " Entering Gaussian System\n", all)?.id).toBe("gaussian");
+  });
+
+  it("are one kind with Meno's, or another plugin's, of the same id - their marks and names put together", () => {
+    const { kinds: all } = registered([nbo([{ id: "orca", name: "ORCA", program: "ORCA", extensions: [".orca"], marks: [{ text: "Program Version 6", at: "line-start" }] }])]);
+    const orca = all.filter((x) => x.id === "orca");
+    expect(orca).toHaveLength(1);
+    expect(orca[0].name).toBe("ORCA output");
+    expect(orca[0].extensions).toEqual([".out", ".log", ".orca"]);
+    expect(kindOf("x", "  Program Version 6.0.1\n", all)?.id).toBe("orca");
+  });
+
+  it("may not take one of Meno's own files for theirs: a mark one of them holds is refused, and said", () => {
+    const { kinds: all, refused } = registered([
+      nbo([
+        { id: "greedy", name: "Greedy", program: "G", extensions: [], marks: [{ text: "RDKit 2D" }, { text: "cholesterol", at: "line-start" }] },
+        { id: "fair", name: "Fair", program: "F", extensions: [], marks: [{ text: "cholesterol", at: "line-start" }, { text: "FAIR BANNER" }] },
+      ]),
+    ]);
+    expect(refused).toEqual([
+      { plugin: "nbo", kind: "greedy", mark: "RDKit 2D" },
+      { plugin: "nbo", kind: "greedy", mark: "cholesterol" },
+      { plugin: "nbo", kind: "fair", mark: "cholesterol" },
+    ]);
+    // (left with no way to be told, the greedy kind is not registered; the fair one keeps its own mark)
+    expect(all.find((x) => x.id === "greedy")).toBeUndefined();
+    expect(all.find((x) => x.id === "fair")?.marks).toEqual([{ text: "FAIR BANNER" }]);
+    expect(kindOf("cholesterol.sdf", sampleSdf, all)?.id).toBe("sdf");
+  });
+
+  it("may not be told by marks too short to tell anything: what a molfile holds, say", () => {
+    expect(nbo([{ id: "short", name: "Short", program: "S", extensions: [], marks: [{ text: "V2000" }, { text: "M  END" }] }]).kinds).toEqual([]);
+  });
+
+  it("told only by asking their plugin, are asked about only for files of their names", () => {
+    const { kinds: all } = registered([nbo([{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [], probe: true }])]);
+    expect(kindOf("job.47", "$GENNBO NATOMS=3 $END", all)).toBeNull();
+    expect(probeCandidates("job.47", all).map((k) => k.id)).toEqual(["nbo-47"]);
+    expect(probeCandidates("job.out", all)).toEqual([]);
   });
 });

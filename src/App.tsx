@@ -22,7 +22,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { MENO_KINDS } from "./lib/io/kinds";
+import { kindOf, MENO_KINDS } from "./lib/io/kinds";
+import { probeKind } from "./lib/calc/probe";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
 import {
@@ -201,7 +202,9 @@ export default function App() {
     for (const path of picked ?? []) {
       const name = path.split(/[\\/]/).pop() || path;
       try {
-        openTab(openedAs(name, new TextDecoder().decode(await readFile(path)), path));
+        const text = new TextDecoder().decode(await readFile(path));
+        // (what it is: told by what it holds - or, where nothing tells it, by a plugin asked)
+        openTab(openedAs(name, text, path, kindOf(name, text) ?? (await probeKind(name, text))));
       } catch (e) {
         setNotice(`${name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
       }

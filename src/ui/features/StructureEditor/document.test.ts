@@ -411,3 +411,48 @@ describe("molecules in 3D on the page", () => {
   });
 });
 
+describe("what readers reading an output as well found", () => {
+  const sha = "a".repeat(64);
+  const water3d = {
+    atoms: [
+      { el: "O", x: 0, y: 0, z: 0 },
+      { el: "H", x: 0.76, y: 0.59, z: 0 },
+      { el: "H", x: -0.76, y: 0.59, z: 0 },
+    ],
+    bonds: [],
+    at: { x: 0, y: 0 },
+    calc: { readers: ["cclib 1.9rc1"], source: { name: "w.out", sha256: sha, kind: "orca" } },
+  };
+  const withWater = () => ops.addMolecule3d(emptyStructureDocument(), water3d);
+  const charges = { id: "npa", on: "atoms", group: "Partial charges", label: "Natural", quantity: "charge", values: [-0.9, 0.45, 0.45] };
+  const found = { from: "nbo", version: "7", output: { atoms: ["O", "H", "H"], frames: [], results: [charges] } };
+
+  it("is joined to each molecule read from that output, as its own reader's, once", () => {
+    const d = ops.withReadings(withWater(), { [sha]: [found] });
+    const calc = d.molecules3d![0].calc!;
+    expect(calc.readers).toEqual(["cclib 1.9rc1", "nbo 7"]);
+    expect(calc.results!.map((r) => [r.id, r.from])).toEqual([["npa", "nbo"]]);
+    // (joined again: nothing new)
+    expect(ops.withReadings(d, { [sha]: [found] })).toBe(d);
+  });
+
+  it("says a reader that could not read it, or read other atoms", () => {
+    const d = ops.withReadings(withWater(), {
+      [sha]: [
+        { from: "pyscf", why: "no basis set in it" },
+        { ...found, from: "other", output: { ...found.output, atoms: ["O", "H"] } },
+      ],
+    });
+    expect(d.molecules3d![0].calc!.unread).toEqual([
+      { from: "pyscf", why: "no basis set in it" },
+      { from: "other", why: "it read other atoms" },
+    ]);
+  });
+
+  it("leaves a molecule of another output, and a document with nothing to join, as they are", () => {
+    const d = withWater();
+    expect(ops.withReadings(d, { ["b".repeat(64)]: [found] })).toBe(d);
+    expect(ops.withReadings(d, {})).toBe(d);
+  });
+});
+

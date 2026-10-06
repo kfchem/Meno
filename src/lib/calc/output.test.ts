@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { calcLine, calcOf, multiplicityName, readCalc, xyzOf, type ReaderOutput } from "./output";
+import { calcLine, calcOf, multiplicityName, readCalc, type ReaderOutput } from "./output";
 import { combine, whoReads, checked } from "./read";
-import { OUTPUT_KINDS, READER_PLUGINS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { READER_PLUGINS, READERS, type PythonReader, type ReaderPlugin } from "./catalog";
+import { kindById } from "../io/kinds";
 
 // water, as a reader hands back an optimisation of it: written by hand,
 // in Meno's own form - no program's output is in the repository
@@ -36,18 +37,13 @@ const water: ReaderOutput = {
 };
 
 describe("what a reader hands back", () => {
-  it("is written as an XYZ file's frames, for Meno to read as it reads any", () => {
-    const xyz = xyzOf(water).split("\n");
-    expect(xyz.slice(0, 5)).toEqual(["3", "frame 1", "O 0 0 0.1", "H 0 0.8 -0.5", "H 0 -0.8 -0.5"]);
-    expect(xyz).toHaveLength(10);
-  });
-
   it("is kept on the molecule as what the calculation was, and its results, each with the reader it came from", () => {
     const c = calcOf(water, ["cclib 1.9rc1"]);
     expect(c).toMatchObject({ readers: ["cclib 1.9rc1"], program: "ORCA", version: "6.0.1", method: "B3LYP", basis: "def2-SVP", charge: 0, multiplicity: 1, optimised: true });
+    // (each result keeps its reader by id)
     expect(c.results!.map((r) => [r.id, r.from])).toEqual([
-      ["charges.mulliken", "cclib 1.9rc1"],
-      ["vibrations", "cclib 1.9rc1"],
+      ["charges.mulliken", "cclib"],
+      ["vibrations", "cclib"],
     ]);
   });
 
@@ -68,6 +64,28 @@ describe("what a reader hands back", () => {
     expect(other?.[0].on === "list" && other[0].rows.some((r) => r.move)).toBe(false);
   });
 
+  it("reads one kept before readers were known by id as kept by id: its readers, its results', its source's kind unsaid", () => {
+    const before = {
+      readers: ["PySCF 2.14.0"],
+      results: [{ id: "orbitals", on: "molecule", group: "Orbitals", label: "HOMO", value: 1, from: "PySCF 2.14.0" }],
+      source: { name: "job.out", sha256: "a".repeat(64) },
+    };
+    const read = readCalc(before, 3, 1)!;
+    expect(read.readers).toEqual(["pyscf 2.14.0"]);
+    expect(read.results!.map((r) => r.from)).toEqual(["pyscf"]);
+    expect(read.source).toEqual({ name: "job.out", sha256: "a".repeat(64) });
+    expect(readCalc({ readers: ["Cube files"], source: { name: "x.cube", sha256: "b".repeat(64), kind: "cube" } }, 3, 1)).toMatchObject({
+      readers: ["meno"],
+      source: { kind: "cube" },
+    });
+  });
+
+  it("keeps the readers that could not read it, and why", () => {
+    const c = calcOf(water, ["cclib 1.9rc1"], undefined, [{ from: "pyscf", why: "no basis" }]);
+    expect(c.unread).toEqual([{ from: "pyscf", why: "no basis" }]);
+    expect(readCalc(JSON.parse(JSON.stringify(c)), 3, 2)?.unread).toEqual([{ from: "pyscf", why: "no basis" }]);
+  });
+
   it("is said in a line: program, method and basis, charge and multiplicity", () => {
     expect(calcLine(calcOf(water, ["cclib"]))).toBe("ORCA 6.0.1 · B3LYP/def2-SVP · charge 0, singlet");
     expect(calcLine({ readers: ["cclib"], program: "xTB", method: "GFN2-xTB", charge: -1, multiplicity: 2 })).toBe("xTB · GFN2-xTB · charge -1, doublet");
@@ -77,27 +95,29 @@ describe("what a reader hands back", () => {
 });
 
 describe("reading an output", () => {
-  const orca = OUTPUT_KINDS.find((k) => k.id === "orca")!;
+  const orca = kindById("orca")!;
   // a second reader of ORCA's output
   const other: ReaderPlugin = { ...(READER_PLUGINS[0] as PythonReader), id: "orca-own", name: "Meno's ORCA reader", reads: ["orca"], profile: "reader-orca-own" };
+  const readers = [...READERS, other];
+  const ids = (w: ReturnType<typeof whoReads>) => (w instanceof Error ? w.message : [w.reader.id, w.also.map((p) => p.id)]);
 
-  it("is every added reader's that reads it, the one chosen first", () => {
-    const plugins = [...READER_PLUGINS, other];
-    expect(whoReads(orca, "job.out", new Set(["cclib"]), {}, plugins)).toEqual([READER_PLUGINS[0]]);
-    expect((whoReads(orca, "job.out", new Set(["cclib", "orca-own"]), { orca: "orca-own" }, plugins) as ReaderPlugin[]).map((p) => p.id)).toEqual([
+  it("is its reader's - the one chosen - alone, unless others are chosen to read it as well", () => {
+    expect(ids(whoReads(orca, "job.out", new Set(["cclib"]), { read: {}, also: {} }, readers))).toEqual(["cclib", []]);
+    expect(ids(whoReads(orca, "job.out", new Set(["cclib", "orca-own"]), { read: { orca: "orca-own" }, also: {} }, readers))).toEqual(["orca-own", []]);
+    expect(ids(whoReads(orca, "job.out", new Set(["cclib", "orca-own"]), { read: { orca: "orca-own" }, also: { orca: ["cclib"] } }, readers))).toEqual([
       "orca-own",
-      "cclib",
+      ["cclib"],
     ]);
   });
 
-  it("says which reader to add, where none that reads it is", () => {
-    const why = whoReads(orca, "job.out", new Set(), {});
+  it("says which plugin to add, where none that reads it is", () => {
+    const why = whoReads(orca, "job.out", new Set(), { read: {}, also: {} });
     expect(why).toBeInstanceOf(Error);
-    expect((why as Error).message).toBe("To read job.out (ORCA output), add cclib or PySCF in Settings, Calculation readers.");
+    expect((why as Error).message).toBe("To read job.out (ORCA output), add cclib or PySCF in Settings, Plugins.");
   });
 
   it("says so where the output holds no geometry, as an xTB single point's does not", () => {
-    const xtb = OUTPUT_KINDS.find((k) => k.id === "xtb")!;
+    const xtb = kindById("xtb")!;
     expect(() => checked({ atoms: ["O", "H", "H"], frames: [] }, xtb, "sp.out")).toThrow(/holds no geometry/);
     expect(checked(water, orca, "job.out")).toBe(water);
   });
@@ -119,33 +139,33 @@ describe("what several readers found in one output", () => {
 
   it("is put together: the geometries, and what the calculation was, the first's that gives them; every reader's results, each its own", () => {
     const { output, readers } = combine([
-      { from: "cclib 1.9rc1", output: water },
-      { from: "NBO 7", output: nbo },
+      { from: "cclib", version: "1.9rc1", output: water },
+      { from: "nbo", version: "7", output: nbo },
     ]);
-    expect(readers).toEqual(["cclib 1.9rc1", "NBO 7"]);
+    expect(readers).toEqual(["cclib 1.9rc1", "nbo 7"]);
     expect(output.frames).toEqual(water.frames);
     expect(output.energies).toEqual(water.energies);
     expect(output.method).toBe("B3LYP");
     const results = calcOf(output, readers).results!;
     // (a name is its reader's own: NBO's Mulliken is NBO's, beside cclib's)
     expect(results.map((r) => `${r.label} (${r.from})`)).toEqual([
-      "Mulliken (cclib 1.9rc1)",
-      "Vibrations (cclib 1.9rc1)",
-      "Natural (NPA) (NBO 7)",
-      "Mulliken (NBO 7)",
-      "Wiberg bond index (NBO 7)",
+      "Mulliken (cclib)",
+      "Vibrations (cclib)",
+      "Natural (NPA) (nbo)",
+      "Mulliken (nbo)",
+      "Wiberg bond index (nbo)",
     ]);
   });
 
   it("takes the geometries of whichever gives them, the order deciding what both give, and whose results come first", () => {
     const { output } = combine([
-      { from: "NBO 7", output: nbo },
-      { from: "cclib 1.9rc1", output: water },
+      { from: "nbo", version: "7", output: nbo },
+      { from: "cclib", version: "1.9rc1", output: water },
     ]);
     expect(output.frames).toEqual(water.frames);
     expect(output.method).toBe("B3LYP-D3");
     expect(output.program).toBe("ORCA");
-    expect((output.results as { label: string; from: string }[]).filter((r) => r.label === "Mulliken").map((r) => r.from)).toEqual(["NBO 7", "cclib 1.9rc1"]);
+    expect((output.results as { label: string; from: string }[]).filter((r) => r.label === "Mulliken").map((r) => r.from)).toEqual(["nbo", "cclib"]);
   });
 
   it("leaves out a reader whose atoms are not the geometries', and what belongs to frames it did not read as many of", () => {
@@ -156,9 +176,9 @@ describe("what several readers found in one output", () => {
       results: [{ id: "grad", on: "frames", group: "Optimisation", label: "RMS gradient", unit: "Eh/bohr", values: [0.001] }],
     };
     const { output, readers } = combine([
-      { from: "cclib 1.9rc1", output: water },
-      { from: "x", output: { ...nbo, atoms: ["O", "H"] } },
-      { from: "y", output: other },
+      { from: "cclib", version: "1.9rc1", output: water },
+      { from: "x", version: "", output: { ...nbo, atoms: ["O", "H"] } },
+      { from: "y", version: "", output: other },
     ]);
     expect(readers).toEqual(["cclib 1.9rc1", "y"]);
     expect(output.energies).toEqual(water.energies);

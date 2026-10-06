@@ -97,10 +97,10 @@ describe("a workspace file", () => {
 
   it("opens with a calculation's list open as it was, its row's surface - given - kept, at the value it was drawn at", async () => {
     // a molecule read from a cube file, its first grid shown and given; the
-    // second a promise still
-    const source = await rememberOutput("water.cube", "the cube");
+    // second a promise still - its reader kept by name, as before readers were known by id
+    const source = await rememberOutput("water.cube", "the cube", "cube");
     const grid = { origin: [0, 0, 0], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], counts: [2, 2, 2], values: floatsText(new Float32Array(8)), signed: true };
-    await askFor({ readers: ["Cube files"], source }, "Cube files", "grid:0", async () => ({ version: "", read: () => Promise.reject(), ask: async () => grid }));
+    await askFor({ readers: ["Cube files"], source }, "Cube files", "grid:0", async () => ({ version: "", read: () => Promise.reject(), ask: async () => grid, probe: async () => false }));
     const calc = {
       readers: ["Cube files"],
       source,
@@ -119,7 +119,8 @@ describe("a workspace file", () => {
     const other = createEditorStore(again);
     connectStoreToDocument(other, again);
     other.getState().openWorkspace(readWorkspace(text)!, true);
-    expect(other.getState().lists3d).toEqual({ 1: { list: resultKey({ id: "grids", from: "Cube files" }), row: 0, pointed: null, iso: 0.02 } });
+    // (opened, the list known by its reader's id)
+    expect(other.getState().lists3d).toEqual({ 1: { list: resultKey({ id: "grids", from: "meno" }), row: 0, pointed: null, iso: 0.02 } });
     const rows = (other.getState().molecules3d[0].calc!.results![0] as { rows: { surface?: unknown }[] }).rows;
     expect(rows[0].surface).toEqual(grid);
     expect(rows[1].surface).toEqual({ ask: "grid:1" });

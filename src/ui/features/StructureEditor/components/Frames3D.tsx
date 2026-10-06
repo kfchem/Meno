@@ -1,7 +1,7 @@
 import PageHtml from "./PageHtml";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { chipLine, isMarked, resultsOn, valueText, type Result } from "../../../../lib/calc/results";
-import { cardGroupsOf } from "../../../../lib/calc/sources";
+import { cardGroupsOf, readerNameOf } from "../../../../lib/calc/sources";
 import { ResultGroups, type CardGroups } from "./PointedCard3D";
 
 /** Kilocalories per mole in a hartree. */
@@ -65,6 +65,7 @@ export default function Frames3D({
   populations,
   about,
   results,
+  unread,
   area,
 }: {
   count: number;
@@ -82,6 +83,8 @@ export default function Frames3D({
   about?: string;
   /** What the calculation found (lib/calc/results): the molecule's and each frame's are said here. */
   results?: Result[];
+  /** The readers chosen to read it as well that could not, and why: said with what it found. */
+  unread?: { from: string; why: string }[];
   /** What it keeps within: the canvas. */
   area?: Element;
 }) {
@@ -133,6 +136,7 @@ export default function Frames3D({
     const v = r.on === "molecule" ? r.value : (r.values[told] ?? null);
     return { text: valueText(v, r), marked: isMarked(v, r) };
   });
+  if (unread?.length) details.push({ group: "Could not read it", rows: unread.map((u) => ({ label: readerNameOf(u.from), text: u.why })) });
   const line = (energy?: number) => chipLine([about ?? "", energy != null ? absolute(energy) : ""], results);
   // how far it has risen to stay within the canvas, followed each frame
   // while it is open, and until it is back down

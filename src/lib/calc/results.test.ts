@@ -167,7 +167,9 @@ describe("results from two readers", () => {
     expect(titled({ label: "Molecular orbitals", from: "PySCF" }, [{ from: "cclib 1.9rc1" }, { from: "PySCF" }])).toBe("Molecular orbitals · PySCF");
     expect(titled({ label: "Molecular orbitals", from: "cclib 1.9rc1" }, [{ from: "cclib 1.9rc1" }])).toBe("Molecular orbitals");
     expect(readerNameOf("cclib 1.9rc1")).toBe("cclib");
-    expect(readerNameOf("Cube files")).toBe("Cube files");
+    // (the cube reader, once a reader of its own, is Meno's reading now)
+    expect(readerNameOf("Cube files")).toBe("Meno");
+    expect(readerNameOf("pyscf")).toBe("PySCF");
   });
 
   it("fill the chip's line from one reader: the first that ranked any", () => {

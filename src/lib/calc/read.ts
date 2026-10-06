@@ -1,48 +1,57 @@
 /**
- * Reading a calculation's output (docs/WORKSPACE.md, stage 3): the kind of
- * output it is, told by its start; every reader added that reads that kind,
- * each reading it; and what they found, put together. Readers are alike:
- * every one's results are kept, each its own; where two give what Meno
- * keeps one of - the geometries, what the calculation was - the one chosen
- * in Settings for that kind gives it, or else the first in Meno's order,
- * and its results come first. What no reader added reads says which would.
+ * Reading a calculation's output (docs/FILE-IO.md): the kind it is, told
+ * once (lib/io/kinds); its reader - the one chosen for the kind in
+ * Settings, Files, or else Meno where Meno reads it, or else the first
+ * added that reads it - whose answer is shown as soon as it comes; and the
+ * readers chosen to read it as well, whose results join it as they come,
+ * so that a slow one never holds the file up. Every reader's results are
+ * kept, each its own; Meno's own forms - the geometries, what the
+ * calculation was - are the reader's. What nothing added reads says what
+ * would.
  */
+import type { Kind } from "../io/kinds";
 import { useAppSettings } from "../settings/appSettings";
-import { READER_PLUGINS, readersFor, readersOf, type OutputKind, type ReaderPlugin } from "./catalog";
+import { alsoReadersFor, READERS, readerFor, readersOf, type FileChoices, type ReaderPlugin } from "./catalog";
 import { OUTPUT_SCHEMA, type ReaderOutput } from "./output";
 import { readResults, type Result } from "./results";
 import { addedReaders, readerClient } from "./workers";
+import { publishReading } from "./readings";
 
-/** The readers that read a file of `kind`, the one whose finding counts first first; or why no one can: no reader that reads it is added. */
+/** Who reads a file of `kind`: its reader, and those that read it as well; or why no one can - no reader added reads it. */
 export function whoReads(
-  kind: OutputKind,
+  kind: Kind,
   name: string,
   added: ReadonlySet<string>,
-  chosen: Readonly<Record<string, string>>,
-  plugins: readonly ReaderPlugin[] = READER_PLUGINS,
-): ReaderPlugin[] | Error {
-  const readers = readersFor(kind.id, added, chosen, plugins);
-  if (readers.length) return readers;
-  const could = readersOf(kind.id, plugins).map((p) => p.name);
+  choices: FileChoices,
+  readers: readonly ReaderPlugin[] = READERS,
+): { reader: ReaderPlugin; also: ReaderPlugin[] } | Error {
+  const reader = readerFor(kind.id, added, choices, readers);
+  if (reader) return { reader, also: alsoReadersFor(kind.id, added, choices, readers) };
+  const could = readersOf(kind.id, readers).map((p) => p.name);
   return new Error(
     could.length
-      ? `To read ${name} (${kind.name}), add ${could.join(" or ")} in Settings, Calculation readers.`
+      ? `To read ${name} (${kind.name}), add ${could.join(" or ")} in Settings, Plugins.`
       : `${name} (${kind.name}) is read by no reader Meno knows of.`,
   );
 }
 
 /** What was read, where it has a geometry to stand on the page; or why it is no use. */
-export function checked(output: ReaderOutput, kind: OutputKind, name: string): ReaderOutput {
+export function checked(output: ReaderOutput, kind: Kind, name: string): ReaderOutput {
   if (!output.atoms?.length || !output.frames?.some((f) => f.length === 3 * output.atoms.length)) {
     throw new Error(
-      `${name} (${kind.name}) holds no geometry for its molecule: ${kind.program} can leave it to another file. Open that one (its .xyz, say) to see the molecule.`,
+      `${name} (${kind.name}) holds no geometry for its molecule: ${kind.output?.program ?? "the program"} can leave it to another file. Open that one (its .xyz, say) to see the molecule.`,
     );
   }
   return output;
 }
 
-/** What one reader found in an output, and the reader: its name and version. */
-export type Found = { from: string; output: ReaderOutput };
+/** What one reader found in an output: the reader, by id, its version, and its answer. */
+export type Found = { from: string; version: string; output: ReaderOutput };
+/** A reader that could not read an output, by id, and why. */
+export type Unread = { from: string; why: string };
+
+/** A reader as a molecule keeps it: its id, and its version where it has one ("cclib 1.9rc1"). */
+export const readerLine = (f: { from: string; version: string }) => (f.version ? `${f.from} ${f.version}` : f.from);
 
 /**
  * What readers found in one output, put together - `found` in the order
@@ -63,10 +72,7 @@ export function combine(found: readonly Found[]): { output: ReaderOutput; reader
   if (!base) return { output: found[0]?.output ?? { atoms: [], frames: [] }, readers: [] };
   const atoms = base.output.atoms;
   const frames = framesOf(base.output);
-  const els = atoms.map((el) => String(el).toLowerCase());
-  const agrees = (o: ReaderOutput) =>
-    Array.isArray(o.atoms) && o.atoms.length === els.length && o.atoms.every((el, i) => typeof el === "string" && el.toLowerCase() === els[i]);
-  const taken = found.filter((f) => f === base || agrees(f.output));
+  const taken = found.filter((f) => f === base || sameAtoms(f.output.atoms, atoms));
   const sameFrames = (o: ReaderOutput) => framesOf(o).length === frames.length;
   const first = <T>(pick: (o: ReaderOutput) => T | null | undefined): T | undefined =>
     taken.map((f) => pick(f.output)).find((v) => v != null && v !== "") ?? undefined;
@@ -86,31 +92,40 @@ export function combine(found: readonly Found[]): { output: ReaderOutput; reader
       energies: first((o) => (sameFrames(o) && o.energies?.length === frames.length ? o.energies : null)),
       results,
     },
-    readers: taken.map((f) => f.from),
+    readers: taken.map(readerLine),
   };
 }
 
+/** Whether a reader's atoms are those of the geometries: the same elements, in the same order. */
+export function sameAtoms(atoms: readonly unknown[] | undefined, of: readonly string[]): boolean {
+  return Array.isArray(atoms) && atoms.length === of.length && atoms.every((el, i) => typeof el === "string" && el.toLowerCase() === String(of[i]).toLowerCase());
+}
+
 /**
- * Reads a calculation's output with every reader added that reads its
- * kind, and puts together what they found (`combine`): the output, and the
- * readers that read it. A reader that fails leaves the others' findings as
- * they are; where every one fails, the first's failure is said.
+ * Reads a calculation's output with its reader, for the molecule to stand
+ * on the page as soon as that answers: the output, and the reader that
+ * read it. The readers chosen to read it as well read it alongside, and
+ * what each finds - or that it could not read it - is put out as it comes,
+ * by the output's SHA-256 (./readings), to join the molecule wherever it
+ * stands. Where the reader cannot read it, that is said.
  */
-export async function readOutput(name: string, text: string, kind: OutputKind): Promise<{ output: ReaderOutput; readers: string[] }> {
-  const readers = whoReads(kind, name, await addedReaders(), useAppSettings.getState().calcReaders.chosen);
-  if (readers instanceof Error) throw readers;
-  const tries = await Promise.allSettled(
-    readers.map(async (p) => {
-      const client = await readerClient(p);
-      const version = client.version ?? p.version;
-      return { from: version ? `${p.name} ${version}` : p.name, output: await client.read(name, text) };
-    }),
-  );
-  const found = tries.flatMap((t) => (t.status === "fulfilled" ? [t.value] : []));
-  if (!found.length) throw (tries[0] as PromiseRejectedResult).reason;
-  tries.forEach((t, i) => {
-    if (t.status === "rejected") console.warn(`${readers[i].name} could not read ${name}:`, t.reason);
-  });
-  const { output, readers: by } = combine(found);
-  return { output: checked(output, kind, name), readers: by };
+export async function readOutput(
+  name: string,
+  text: string,
+  kind: Kind,
+  sha256: string,
+): Promise<{ output: ReaderOutput; readers: string[] }> {
+  const who = whoReads(kind, name, await addedReaders(), useAppSettings.getState().files);
+  if (who instanceof Error) throw who;
+  const readWith = async (p: ReaderPlugin): Promise<Found> => {
+    const client = await readerClient(p);
+    return { from: p.id, version: client.version || p.version, output: await client.read(kind.id, name, text) };
+  };
+  for (const p of who.also) {
+    void readWith(p)
+      .catch((e: unknown): Unread => ({ from: p.id, why: e instanceof Error ? e.message : String(e) }))
+      .then((r) => publishReading(sha256, r));
+  }
+  const { output, readers } = combine([await readWith(who.reader)]);
+  return { output: checked(output, kind, name), readers };
 }

@@ -1,8 +1,7 @@
 /**
- * The readers that come with Meno (lib/calc/catalog `BuiltinReader`), asked
- * as a plugin's worker is - the same `Reader` - but run in the app, in a
- * worker of its own (./builtinWorker), started the first time one is asked.
- * Taking one out of Meno is taking it out of the catalog and of the worker.
+ * Meno's own reading (./menoReads), asked as a plugin's worker is - the same
+ * `Reader` - but run in the app, in a web worker of its own
+ * (./builtinWorker), started the first time it is asked.
  */
 import type { Reader } from "./client";
 import type { ReaderOutput } from "./output";
@@ -31,11 +30,12 @@ function ask(question: Record<string, unknown>): Promise<unknown> {
   });
 }
 
-/** A reader that comes with Meno, by its id, as a `Reader`. */
-export function builtinReader(id: string): Reader {
+/** Meno's own reading, as a `Reader`. It tells no kind by asking: Meno's kinds are told by their marks and layouts (lib/io/kinds). */
+export function menoReader(): Reader {
   return {
     version: "",
-    read: (name, text) => ask({ reader: id, op: "read", name, text }) as Promise<ReaderOutput>,
-    ask: (key, name, text) => ask({ reader: id, op: "ask", key, name, text }),
+    read: (kind, name, text) => ask({ kind, op: "read", name, text }) as Promise<ReaderOutput>,
+    ask: (kind, key, name, text) => ask({ kind, op: "ask", key, name, text }),
+    probe: async () => false,
   };
 }
