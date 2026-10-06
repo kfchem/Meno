@@ -2,8 +2,8 @@
 
 What comes into Meno and what goes out of it - files, the clipboard,
 Office - and who reads and writes each kind. Written on 2026-10-06 at the
-maintainer's request ("整理して、reader の位置づけを明確化"), from main at
-#147 with the PySCF reader of #148.
+maintainer's request - to put all of it in order and make plain where a
+reader stands - from main at #147 with the PySCF reader of #148.
 
 The first half is how things are. The second is the plan, along the
 maintainer's answers of the same day, built step by step in the order at
