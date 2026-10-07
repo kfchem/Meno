@@ -86,6 +86,7 @@ import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 import { EYE_HEIGHT, eyeOf } from "./utils/page";
 import Molecules3D from "./components/Molecules3D";
+import DollyRise from "./components/DollyRise";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
@@ -952,6 +953,8 @@ function StructureCanvasContent({
         </DrawnLayoutProvider>
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />
+        {/* the page seen in perspective for a moment as molecules rise out of it */}
+        <DollyRise />
         <PanZoom2D />
       </Canvas>
       </Remake3D.Provider>
