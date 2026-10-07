@@ -19,12 +19,16 @@ type KeyLike = {
  * inputs (the 2D editor's atom label editor) and rich-text hosts.
  *
  * A `<textarea>` is deliberately **not** in this list: the text view's textarea
- * is backed by a document, so its undo has to be the document's.
+ * is backed by a document, so its undo has to be the document's - unless it
+ * says otherwise (`data-native-undo`), its words not the document's until
+ * they are kept.
  */
 function isNativeEditingTarget(target: unknown): boolean {
-  const el = target as { tagName?: string; isContentEditable?: boolean } | null;
+  const el = target as { tagName?: string; isContentEditable?: boolean; dataset?: { nativeUndo?: string } } | null;
   if (!el) return false;
   if (el.isContentEditable) return true;
+  // (a text box whose words are not yet the document's: words being written on the page)
+  if (el.dataset?.nativeUndo != null) return true;
   const tag = (el.tagName ?? "").toUpperCase();
   return tag === "INPUT" || tag === "SELECT";
 }

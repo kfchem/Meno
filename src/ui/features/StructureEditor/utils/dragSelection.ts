@@ -5,8 +5,8 @@ type Pt = { x: number; y: number };
 
 /**
  * The selection dragged, from the press at `from` (on the screen): moved by
- * as much as the pointer goes, off the grid, with the arrows and "+" signs
- * among it and the molecules in 3D selected with it, as one undo step - one move a frame, as every move lays the
+ * as much as the pointer goes, off the grid, with the arrows, "+" signs and
+ * words among it and the molecules in 3D selected with it, as one undo step - one move a frame, as every move lays the
  * drawing out again. `toWorld` takes a point of the screen to the page;
  * `done` is told when the button comes up.
  */
@@ -18,7 +18,7 @@ export function dragSelection(
 ) {
   const st = store.getState();
   const atoms = st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y }));
-  const among = schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses }, st.sel.atoms);
+  const among = schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses, captions: st.captions }, st.sel.atoms);
   const solids = st.molecules3d.filter((m) => st.sel3d.has(m.id)).map((m) => ({ id: m.id, at: m.at }));
   const p0 = toWorld(from.x, from.y);
   const gesture = `drag-${performance.now()}`;
@@ -32,6 +32,7 @@ export function dragSelection(
     store.getState().moveAtoms(atoms.map(by), gesture, {
       arrows: among.arrows.map(by),
       pluses: among.pluses.map(by),
+      captions: among.captions.map(by),
       molecules3d: solids.map((m) => ({ id: m.id, at: { x: m.at.x + dx, y: m.at.y + dy } })),
     });
   };

@@ -55,6 +55,12 @@ export type Arrow = {
 };
 /** A "+" between two structures of a reaction scheme: where its middle is. */
 export type Plus = { id: number; x: number; y: number };
+/**
+ * Words on the page - a reaction's reagents and conditions, or anything
+ * else - where their middle is (lib/chem/captions); over or under an arrow,
+ * `arrow`, going where it goes.
+ */
+export type Caption = { id: number; x: number; y: number; text: string; arrow?: number };
 /** How a molecule in 3D is drawn: balls and sticks, or space-filling. */
 export type Look3D = "balls" | "space";
 /**
@@ -124,7 +130,7 @@ export type Rising3D = { from: { x: number; y: number }; start: number; flat?: n
 /** One of its calculation's lists, open, as a file carries it: the list, the row chosen, and the value its surface is drawn at. */
 export type CarriedList = { id: string; row: number | null; iso?: number };
 export type Carried3D = Omit<Molecule3D, "id"> & { turn?: Turn3D; frame?: number; list?: CarriedList };
-export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[]; molecules3d?: Carried3D[] };
+export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[]; captions?: Caption[]; molecules3d?: Carried3D[] };
 
 export type EditorState = {
   model: Model;
@@ -247,6 +253,26 @@ export type EditorState = {
   hoveredArrow: number | null;
   /** The "+" under the pointer, likewise. */
   hoveredPlus: number | null;
+  /** The words under the pointer, likewise. */
+  hoveredCaption: number | null;
+  setHoveredCaption: (id: number | null) => void;
+  /** Words on the page. */
+  captions: Caption[];
+  nextCaptionId: number;
+  /**
+   * Words being written, in place: the caption's, or (null) new ones where
+   * `at` is - where Quick Add or the menu was opened.
+   */
+  captionEdit: { id: number | null; at: { x: number; y: number } } | null;
+  setCaptionEdit: (edit: EditorState["captionEdit"]) => void;
+  /** Words added, as one step; their id. */
+  addCaption: (text: string, x: number, y: number, arrow?: number) => number;
+  /**
+   * Words changed - written anew, moved, put over an arrow or taken from
+   * one (`arrow` null) - a run of changes in one gesture one step.
+   */
+  updateCaption: (id: number, patch: { text?: string; x?: number; y?: number; arrow?: number | null }, gesture?: string) => void;
+  removeCaption: (id: number) => void;
   hoverPulse: { id: number | null; nonce: number; until: number };
   arrows: Arrow[];
   pluses: Plus[];

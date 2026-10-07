@@ -189,7 +189,9 @@ export default function Selection2D() {
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0 || e.target !== gl.domElement) return;
       const st = store.getState();
-      if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || st.labelEdit.active || st.extend.active) return;
+      // (on an arrow, a "+" or words: theirs)
+      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null;
+      if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || onMark || st.labelEdit.active || st.extend.active || st.captionEdit) return;
       const add = addsToSelection(e);
       const second =
         e.timeStamp - lastEmpty.t <= DOUBLE_CLICK_MS && Math.hypot(e.clientX - lastEmpty.x, e.clientY - lastEmpty.y) < 8;

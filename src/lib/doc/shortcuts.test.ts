@@ -47,6 +47,10 @@ describe("undoIntent", () => {
     expect(undoIntent(key({ target: { tagName: "TEXTAREA" } }))).toBe("undo");
     expect(undoIntent(key({ target: null }))).toBe("undo");
   });
+
+  it("leaves a textarea that says so to the browser: words on the page, as they are written", () => {
+    expect(undoIntent(key({ target: { tagName: "TEXTAREA", dataset: { nativeUndo: "" } } }))).toBeNull();
+  });
 });
 
 describe("saveIntent", () => {

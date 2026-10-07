@@ -29,7 +29,7 @@ export type Workspace = {
 
 type Saved = Pick<
   EditorState,
-  "model" | "arrows" | "pluses" | "molecules3d" | "turns3d" | "frames3d" | "lists3d" | "docStyle" | "aromaticEnabled" | "aromaticRings"
+  "model" | "arrows" | "pluses" | "captions" | "molecules3d" | "turns3d" | "frames3d" | "lists3d" | "docStyle" | "aromaticEnabled" | "aromaticRings"
 >;
 
 /**
@@ -68,6 +68,7 @@ export function workspaceText(state: Saved, kept: ReadonlySet<string> = new Set(
       bonds: state.model.bonds,
       arrows: state.arrows,
       pluses: state.pluses,
+      ...(state.captions.length ? { captions: state.captions } : {}),
       molecules3d,
       ...(state.docStyle ? { style: state.docStyle } : {}),
       ...(state.aromaticEnabled ? { aromaticEnabled: true } : {}),

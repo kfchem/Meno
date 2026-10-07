@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { TAU, follow } from "../../../theme/motion";
-import { labelSetOf, placeLabel } from "../../../../lib/chem/layout2d";
+import { labelSetOf, placeLabel, type TextItem } from "../../../../lib/chem/layout2d";
 import {
   needsFallback,
   noteUncovered,
@@ -28,14 +28,23 @@ function slanted(x: number, y: number): THREE.Matrix4 {
  * being dragged where it is being dragged to, so its label goes with it.
  */
 export default function Labels2D() {
-  const { layout, opts, zoom } = useDrawnLayout();
+  const { layout } = useDrawnLayout();
+  return <Texts2D texts={layout.texts} />;
+}
+
+/**
+ * Texts set as the drawing sets its labels (lib/chem/layout2d `placeLabel`):
+ * the labels, and the words on the page (Captions2D).
+ */
+export function Texts2D({ texts: items }: { texts: readonly TextItem[] }) {
+  const { opts, zoom } = useDrawnLayout();
 
   // Set in the style's typeface, where the layout has placed each run: the
   // font the layout measures in is the one drawn with, so nothing needs
   // measuring here. Until the font is known nothing is drawn, rather than a
   // label in some other font that then jumps.
   const family = opts.fontFamily ?? "Arial";
-  const texts = layout.texts.map((t) => t.text);
+  const texts = items.map((t) => t.text);
   const font = useLabelFontUrl(family, needsFallback(texts));
   // what no font of Meno's has goes on the network's record, once known
   const key = texts.join("\n");
@@ -67,7 +76,7 @@ export default function Labels2D() {
     if (font === null) return null;
     const set = labelSetOf(opts);
     const fill = seen.current.level;
-    return layout.texts.map((t, i) => {
+    return items.map((t, i) => {
       const fontWorld = labelZoom != null ? t.fontPx / Math.max(labelZoom, 1e-6) : t.fontPx;
       return (
         <group key={`txt-${i}`}>
@@ -94,7 +103,7 @@ export default function Labels2D() {
         </group>
       );
     });
-  }, [layout, opts, labelZoom, labelColor, font]);
+  }, [items, opts, labelZoom, labelColor, font]);
   if (font === null) return null;
   return <group ref={group}>{labels}</group>;
 }

@@ -2,7 +2,8 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { useCallback, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
-import { createSVG, labelSetOf, layoutMolecule, measureLabelBox, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
+import { createSVG, labelBox, labelSetOf, layoutMolecule, measureLabelBox, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
+import { captionSet } from "../../../lib/chem/captions";
 import { writeMolfile, writeMolfile3d, writeSdf, type Atom3D } from "../../../lib/chem/molWriter";
 import { forFlatReaders } from "./chem/drawing";
 import { reactionFileText } from "./chem/reactionFile";
@@ -178,7 +179,7 @@ export function exportPxPerWorld(style: DrawingStyle): number {
 
 /**
  * The drawing exactly as the canvas lays it out, at the style's own size,
- * for a picture made of it - its reaction arrows and "+" signs with it.
+ * for a picture made of it - its reaction arrows, "+" signs and words with it.
  * Lines keep their true width however thin - the canvas's on-screen minimum
  * is for the screen - and the margin round it is a few pixels.
  */
@@ -220,6 +221,18 @@ export function drawingLayout(
     take(
       points.map((p) => p.x),
       points.map((p) => p.y),
+    );
+  }
+  // and the words on the page, set as the canvas sets them
+  const set = labelSetOf(opts);
+  const words = (model.captions ?? []).flatMap((c) => captionSet(c.text, c.x, c.y, opts.fontPx, set).items);
+  if (words.length) {
+    layout.texts.push(...words);
+    // (each line's ink, about where it is set)
+    const boxes = words.map((t) => ({ t, b: labelBox(t, opts.fontPx, set) }));
+    take(
+      boxes.flatMap(({ t, b }) => [t.x - b.left, t.x + b.right]),
+      boxes.flatMap(({ t, b }) => [t.y - b.bottom, t.y + b.top]),
     );
   }
   // and molecules in 3D, as they are seen, over it
@@ -389,6 +402,6 @@ export function useFileActions(nameTab?: (label: string) => void) {
 }
 
 /** Everything the canvas draws: its structures, arrows and "+" signs. */
-export function drawnOf(state: Pick<EditorState, "model" | "arrows" | "pluses">): Drawn {
-  return { ...state.model, arrows: state.arrows, pluses: state.pluses };
+export function drawnOf(state: Pick<EditorState, "model" | "arrows" | "pluses" | "captions">): Drawn {
+  return { ...state.model, arrows: state.arrows, pluses: state.pluses, captions: state.captions };
 }

@@ -11,7 +11,7 @@ export type MenuTarget = {
    * The atom, bond, reaction arrow or "+" right-clicked, or a molecule in 3D
    * or a measurement on one; null, when it was nothing.
    */
-  kind: "atom" | "bond" | "arrow" | "plus" | "molecule3d" | "measure3d" | null;
+  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "molecule3d" | "measure3d" | null;
   /** Its id: for a measurement, its molecule's. */
   id: number | null;
   /** A measurement's own id. */
@@ -101,6 +101,8 @@ export default function PartMenu({
   onArrowStyle,
   onAddArrow,
   onAddPlus,
+  onAddText,
+  onEditText,
   onSaveAbbreviation,
   canvas = [],
   clipboard,
@@ -129,6 +131,10 @@ export default function PartMenu({
   /** A reaction arrow, or a "+", added where the menu was opened on empty space. */
   onAddArrow: () => void;
   onAddPlus: () => void;
+  /** Words written where the menu was opened on empty space. */
+  onAddText: () => void;
+  /** The words right-clicked, written anew. */
+  onEditText: () => void;
   /** The selection saved as an abbreviation of the user's own. */
   onSaveAbbreviation: () => void;
   /** What the canvas does as a whole - fit, R and S, its style - offered on empty space. */
@@ -182,6 +188,7 @@ export default function PartMenu({
   const scheme: Item[] = [
     { name: "Add reaction arrow", keys: "", run: onAddArrow, divider: true },
     { name: "Add plus", keys: "", run: onAddPlus },
+    { name: "Add text", keys: "", run: onAddText },
   ];
   // a molecule in 3D: a measurement of its chosen atoms, its look, its turn
   const measureName = ["", "", "Measure distance", "Measure angle", "Measure torsion angle"];
@@ -227,6 +234,11 @@ export default function PartMenu({
         ]
       : target.kind === "plus"
       ? [{ name: "Delete plus", keys: deleteKey, run: onDelete }]
+      : target.kind === "caption"
+      ? [
+          { name: "Edit text", keys: "", run: onEditText },
+          { name: "Delete text", keys: deleteKey, run: onDelete },
+        ]
       : target.selection === "here"
       ? [
           // (on a molecule in 3D in it: that molecule's own, first)
@@ -295,6 +307,8 @@ export default function PartMenu({
                 ? "Arrow"
                 : target.kind === "plus"
                   ? "Plus"
+                  : target.kind === "caption"
+                    ? "Text"
                   : target.kind === "molecule3d"
                     ? "Molecule"
                     : target.kind === "measure3d"

@@ -607,6 +607,17 @@ function runWidth(font: LabelFont, text: string, size: number): number {
   return w;
 }
 
+/** How wide `runs` come to set side by side at `fontSize`, as `placeLabel` sets them: each at its own size, a mark at its own width. */
+export function runsWidth(runs: readonly TextRun[], fontSize: number, set: LabelSet = ACS_LABEL_SET): number {
+  const font = labelFont(set.fontFamily);
+  let w = 0;
+  for (const r of runs) {
+    const size = fontSize * (r.sub || r.sup || r.mark ? set.subscriptSize : 1);
+    w += r.mark ? size * MARK_WIDTH : runWidth(font, r.text, size);
+  }
+  return w;
+}
+
 export function computeBounds(atoms: Atom[]): { min: Vec2; max: Vec2 } {
   let minX = Infinity,
     minY = Infinity,
