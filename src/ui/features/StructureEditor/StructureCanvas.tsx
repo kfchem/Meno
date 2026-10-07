@@ -37,7 +37,8 @@ import SmilesPanel from "./SmilesPanel";
 import ExportCard, { type Offered3D } from "./ExportCard";
 import { findOutput, outputOf } from "../../../lib/calc/asks";
 import type { CalcSource } from "../../../lib/calc/output";
-import { openInTab } from "../../views/tabOpener";
+import { setTextTaker } from "../../views/texts";
+import TextColumn from "./TextColumn";
 import { knownOf, pluginWriters, WRITERS, type Writer } from "../../../lib/io/writers";
 import { WRITER_PLUGINS } from "../../../lib/calc/catalog";
 import { useReaders } from "../../../lib/calc/workers";
@@ -179,6 +180,11 @@ function StructureCanvasContent({
   // the plugins that fill the chemistry roles: their marks on the structure
   // and R/S on request; and clean-up, by Meno's own layout engine (chem/cleanUp)
   const store = useEditorStore();
+  // (a tab's own, unless it is a document's, holds texts opened while it is in front: ui/views/texts)
+  useEffect(
+    () => (ownTab && officeId == null ? setTextTaker(tabId, (texts) => store.getState().addTexts(texts)) : undefined),
+    [ownTab, officeId, tabId, store],
+  );
   // What readers reading an output as well find, joined to each molecule
   // read from it as it comes - or as the molecule comes to stand here
   // (lib/calc/readings).
@@ -457,12 +463,13 @@ function StructureCanvasContent({
   const chosen3d = useEditor((s) => s.chosen3d);
   const style3d = useStyle3D();
   const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
-  // a molecule's output shown in a tab of its own: held this session or in
-  // its workspace, read again where it was, or else found by the chemist
+  // a molecule's output shown in the column of texts, held in the
+  // workspace: held this session or in its workspace, read again where it
+  // was, or else found by the chemist
   const showOutput = async (source: CalcSource) => {
     try {
       const out = (await outputOf(source)) ?? ((await findOutput(source)) ? await outputOf(source) : undefined);
-      if (out) openInTab({ kind: "text", label: out.name, data: { text: out.text, language: "txt", filename: out.name } });
+      if (out) store.getState().addTexts([{ name: out.name, text: out.text, ...(source.path ? { path: source.path } : {}) }]);
     } catch (e) {
       setChemError(e instanceof Error ? e.message : String(e));
     }
@@ -642,8 +649,10 @@ function StructureCanvasContent({
   const [exporting, setExporting] = useState<{ writers: Writer[]; from?: string; what: Holds; molecules: Offered3D[]; selected: number[] } | null>(null);
 
   // What the canvas does besides drawing - saving, fitting, R and S, its
-  // style - offered to the app's menu while its tab is in front, and on
-  // empty space in the right-click menu; the keys say the same.
+  // style, its texts - offered to the app's menu while its tab is in front,
+  // and on empty space in the right-click menu; the keys say the same.
+  const texts = useEditor((s) => s.texts);
+  const textsOpen = useEditor((s) => s.textsOpen);
   const commandsNow = useRef<() => CommandGroup[]>(() => []);
   commandsNow.current = () => [
     {
@@ -665,6 +674,8 @@ function StructureCanvasContent({
             setExporting({ writers: [...exportKinds(what).map((k) => WRITERS[k]), ...theirs], from: exportKindOf(state, what), what, molecules, selected });
           },
         },
+        // (a text of its own, in the column of texts)
+        ...(officeId == null ? [{ name: "New text", run: () => store.getState().addTexts([{ name: "", text: "" }]) }] : []),
       ],
     },
     {
@@ -693,6 +704,13 @@ function StructureCanvasContent({
       items: [
         { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit },
         { name: chemistry.stereoLabels ? "Hide R and S" : "Show R and S", run: toggleStereoLabels },
+        ...(texts.length
+          ? [
+              textsOpen
+                ? { name: "Hide texts", run: () => store.getState().closeTexts() }
+                : { name: "Show texts", run: () => store.getState().showText(store.getState().textShown ?? texts[0].id) },
+            ]
+          : []),
       ],
     },
     {
@@ -1011,6 +1029,8 @@ export default function StructureCanvas({
           openArrowStyle={(id) => setPanel({ arrow: id })}
           openSaveAbbreviation={(ids, smiles) => setPanel({ abbreviation: { ids, smiles } })}
         />
+        {/* The texts the workspace holds, in their column */}
+        <TextColumn />
         {/* The panel beside the canvas slides open and shut, the canvas giving
             way as it does; one going as another comes takes as long, so the
             canvas keeps its width. */}
