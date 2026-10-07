@@ -76,7 +76,13 @@ describe("Export", () => {
 
   it("suggests the canvas's name as the first kind it can be written as, unless it is of one already", () => {
     expect(suggestedExportPath({ savedPath: "/work/a.meno", openedName: null }, structure)).toBe("/work/a.mol");
-    expect(suggestedExportPath({ savedPath: null, openedName: "b.sdf" }, structure)).toBe("b.sdf");
+    // (never the file it came from: beside it, numbered, the first free)
+    expect(suggestedExportPath({ savedPath: null, openedName: "b.sdf" }, structure)).toBe("b-2.sdf");
+    expect(suggestedExportPath({ savedPath: null, openedName: "/data/1abc.PDB" }, structure, "pdb")).toBe("/data/1abc-2.pdb");
+    const taken = new Set(["/data/b-2.sdf", "/data/b-3.sdf"]);
+    expect(suggestedExportPath({ savedPath: null, openedName: "/data/b.sdf" }, structure, "sdf", (p) => taken.has(p))).toBe("/data/b-4.sdf");
+    // (saved since as a workspace: named after it, which is no file it came from)
+    expect(suggestedExportPath({ savedPath: "/work/b.meno", openedName: "/data/b.sdf" }, structure, "sdf")).toBe("/work/b.sdf");
     expect(suggestedExportPath({ savedPath: null, openedName: "conformers.xyz" }, reaction)).toBe("conformers.rxn");
     expect(suggestedExportPath({ savedPath: null, openedName: null }, structure)).toBe("structure.mol");
     expect(suggestedExportPath({ savedPath: null, openedName: null }, reaction)).toBe("reaction.rxn");
