@@ -39,8 +39,8 @@ built* below.
 
 | Way in | Kind decided by | Read by, where | Becomes |
 | --- | --- | --- | --- |
-| **Open** (Cmd/Ctrl+O; `<input type=file>`, `App.tsx`) | `openedAs` (`ui/views/openFile.ts`) picks the tab - structure canvas or text - from the extension, `detectFormat` and `outputKindOf`; the canvas then decides again (`processFileContent`, `StructureEditor/utils/io.ts`) | see the formats below | a new tab |
-| **A file dropped** on the canvas (`dropAppend`, `useStructureEvents.ts`) | the extension first (`STRUCTURE_FILE`), to know whether to look at the drag's clipboard flavours; then as Open | as Open; a `.meno` is pasted, not opened | added to the page |
+| **Open** (Cmd/Ctrl+O; `<input type=file>`, `App.tsx`) | `openedAs` (`ui/views/openFile.ts`) tells a kind from text, from the extension, `detectFormat` and `outputKindOf`; the canvas then decides again (`processFileContent`, `StructureEditor/utils/io.ts`) | see the formats below | a new tab; text, a text in the column of the workspace in front (`ui/views/texts.ts`), or of a canvas of its own where none is |
+| **A file dropped** on the canvas (`dropAppend`, `useStructureEvents.ts`) | the extension first (`STRUCTURE_FILE`), to know whether to look at the drag's clipboard flavours; then as Open | as Open; a `.meno` is pasted, not opened | added to the page; text (`opensAsText`), to the column |
 | **An Office picture or object dragged** in | the drag's flavours, in order: Meno record or embedded object, Mac Office object, GVML, PNG, RXN, MOL (`fromClipboard.ts`); read by Rust (`drag_read`; on Windows an overlay window, `drop.rs`) | the record Meno put in it (EMF comment, PNG text chunk, OLE stream) | pasted |
 | **Paste** (`clipboardActions.ts`) | the clipboard's flavours, in the order above, then plain text that looks like a molfile, then SMILES (`fromClipboard.ts`; Rust `clipboard_read`) | the record; CTfiles in TS; SMILES by RDKit (chem worker) | pasted |
 | **Office re-edit** (Windows OLE: Word or PowerPoint opens Meno) | always a record; named `office.meno` to reach it (`App.tsx`) | `readRecord` | a tab linked to the object |
@@ -323,6 +323,8 @@ How these behave:
   path. It reads bytes, and decodes the text kinds. It offers `.meno`,
   text, and the kinds something reads: Meno, or a plugin on offer, added
   or not. A file whose reader is not added says which plugin to add.
+  What a plugin on offer writes - a Gaussian input - it offers as text,
+  to be read and changed in a workspace's column (2026-10-07).
 - **Office's record is handed to the canvas as the record**, not under a
   made-up name.
 
@@ -426,9 +428,16 @@ work.meno (zip)
   maintainer: kept, and seen as needed). Saved, the workspace keeps every
   output its molecules were read from that is held this session - opened,
   or kept in a workspace opened. Opened, a workspace holds what it keeps
-  for the session. A molecule's menu shows its output in a tab of its own
-  (*Show <name>*); where it is held nowhere, it is read again where it
-  was, or found (*Find…*).
+  for the session. A molecule's menu shows its output in the workspace's
+  column of texts (*Show <name>*); where it is held nowhere, it is read
+  again where it was, or found (*Find…*).
+- **A workspace's texts are kept in it too** (the maintainer, 2026-10-07:
+  held in the workspace, editable, written back by Export). Each is a file
+  kept, `text/plain`, by its SHA-256 - one that is an output's words kept
+  once - and `workspace.json` lists them in order (`texts`: each one's
+  name and SHA-256) with the one its column showed (`textShown`). Where a
+  text was opened from is not saved, as an output kept is not. A text the
+  file does not hold is left out as the workspace opens, and named.
 - **Written off the page.** The files kept are compressed in a worker of
   their own as the workspace is saved (`lib/doc/menoFileWorker.ts`), so a
   long output never holds the canvas up.

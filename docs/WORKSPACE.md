@@ -338,6 +338,26 @@ Taken on 2026-10-04:
   (the close button and its neighbours) at some stage.
 - **Closing the last tab quits Meno.**
 
+Taken on 2026-10-07:
+
+- **Texts.** A workspace is a tab, and a tab is a workspace: text no
+  longer opens in a tab of its own. A text file opened, or dropped on the
+  canvas, a molecule's output shown and a new text (Meno's menu, *New
+  text*; the New… menu, *Text*) are held in the workspace in front - one
+  of its own where none is in front - and shown in a column on the
+  canvas's right (the maintainer chose the column over a window inside
+  Meno's). It is the workspace's:
+  - edited there, its typing undone as any edit, and saved with it in
+    `.meno` (docs/FILE-IO.md, *The workspace file*);
+  - written to a file by Export, the column's button: beside the file it
+    came from, numbered from 2, never over it unasked;
+  - closed from the workspace by its name's ×, and back with an undo; the
+    column hidden (*Hide texts*, its own button) keeps them all, and
+    *Show texts* in Meno's menu brings it back;
+  - the column slides open and shut as the panels beside the canvas do,
+    and is as wide as its left edge is dragged.
+  The small previews on the page, decided on 2026-10-04, are not made yet.
+
 ## Stage 2, as built
 
 - **A drawing to 3D.** A structure's right-click menu, or a selection's,

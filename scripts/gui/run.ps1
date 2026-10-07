@@ -124,15 +124,17 @@ function Invoke-MenoMenu {
       .DESCRIPTION
       The items are where a structure canvas in front has them, read off a
       Mac's shot (2560x1720); the menu is at the window's left, so they do
-      not move with its size. Three dots stand for the ellipsis.
+      not move with its size. Three dots stand for the ellipsis. A canvas
+      holding texts has *Show texts* or *Hide texts* after *Show R and S*,
+      and *Drawing style...* a row lower.
     #>
     param([Parameter(Mandatory)] [ValidateSet(
-        "Open...", "Save", "Save As...", "Export...", "SMILES...", "Clean up all",
+        "Open...", "Save", "Save As...", "Export...", "New text", "SMILES...", "Clean up all",
         "3D structures", "Fit to content", "Show R and S", "Drawing style...")] [string] $Item)
     $at = @{
-        "Open..." = 170; "Save" = 234; "Save As..." = 298; "Export..." = 362
-        "SMILES..." = 486; "Clean up all" = 550; "3D structures" = 614; "Fit to content" = 740
-        "Show R and S" = 804; "Drawing style..." = 930
+        "Open..." = 170; "Save" = 234; "Save As..." = 298; "Export..." = 362; "New text" = 426
+        "SMILES..." = 550; "Clean up all" = 614; "3D structures" = 678; "Fit to content" = 804
+        "Show R and S" = 868; "Drawing style..." = 994
     }
     Invoke-MenoClick -X 42 -Y 42
     Start-Sleep -Milliseconds 400
