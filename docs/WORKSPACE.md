@@ -65,10 +65,11 @@ built the way the 2D layers are, rather than the viewer moved in as it is.
      perspective (stage 1's spike); since 2026-10-05 it is orthographic
      (see Decisions), and a view that is to show depth can still have a
      camera in perspective.
-   - As molecules rise out of a drawing, the view sees in perspective for
-     the moment of the rise and back, by a dolly zoom that leaves the page
-     as it was (the maintainer's trial, 2026-10-07: `components/DollyRise`,
-     `utils/rise.ts`).
+   - A molecule rising out of a drawing is seen in perspective for the
+     moment of its rise, and back, by a dolly zoom that leaves the page as
+     it was: it alone, the other molecules in 3D staying as they are (the
+     maintainer's trial, 2026-10-07, and their choice of 2026-10-08:
+     `utils/rise.ts` `dollyMatrix`, through which `Molecule3DView` draws it).
 2. **The molecule relates everything.** A structure's 2D drawing, its 3D
    structures, its conformers and the results of its calculations are
    tied by which atom is which (a 2D atom's id, a 3D atom's index).

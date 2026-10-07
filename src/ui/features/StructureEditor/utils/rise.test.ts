@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { dollyAt, dollyProjection, RISE_END } from "./rise";
+import { dollyAt, dollyMatrix, RISE_END } from "./rise";
 import { EYE_HEIGHT } from "./page";
 
-describe("the page seen in perspective as molecules rise", () => {
+describe("a molecule seen in perspective as it rises", () => {
   it("comes and goes with the rise, all of it halfway, easing at both ends", () => {
     const end = RISE_END * 1000;
     expect(dollyAt(0, [])).toBe(0);
@@ -17,37 +17,32 @@ describe("the page seen in perspective as molecules rise", () => {
     expect(dollyAt((end + 240) / 2, [0, 120, 240])).toBeCloseTo(1);
   });
 
-  it("sees the page as the orthographic view did, and what stands above it larger and further out", () => {
+  it("leaves the page as it was, and sees what stands above it larger and further out from under the eye", () => {
     const cam = new THREE.OrthographicCamera(-640, 640, 430, -430, 0.1, 2 * EYE_HEIGHT);
     cam.zoom = 32;
     cam.position.set(3, -2, EYE_HEIGHT);
-    cam.updateProjectionMatrix();
-    cam.updateMatrixWorld();
-    const ndc = (p: THREE.Vector3, m: THREE.Matrix4) => p.clone().applyMatrix4(cam.matrixWorldInverse).applyMatrix4(m);
-    const m = dollyProjection(cam, EYE_HEIGHT, 1)!;
+    const m = dollyMatrix(cam, 1)!;
     for (const [x, y] of [[0, 0], [10, 5], [-15, 12]]) {
-      const page = new THREE.Vector3(x, y, 0);
-      const a = ndc(page, cam.projectionMatrix);
-      const b = ndc(page, m);
-      expect(b.x).toBeCloseTo(a.x, 6);
-      expect(b.y).toBeCloseTo(a.y, 6);
-      expect(Math.abs(b.z)).toBeLessThan(1);
+      const page = new THREE.Vector3(x, y, 0).applyMatrix4(m);
+      expect(page.x).toBeCloseTo(x, 9);
+      expect(page.y).toBeCloseTo(y, 9);
+      expect(page.z).toBeCloseTo(0, 9);
     }
-    // (5 units up, away from the middle: seen further out than straight below it)
-    const up = ndc(new THREE.Vector3(13, 3, 5), m);
-    const below = ndc(new THREE.Vector3(13, 3, 0), m);
-    expect(up.x).toBeGreaterThan(below.x);
-    expect(up.y).toBeGreaterThan(below.y);
-    // (zoomed in, the camera comes no nearer the page than a view in perspective stands: 60)
+    // (5 units up, off to the right of the eye at (3, -2): further right, and above it no larger than up)
+    const up = new THREE.Vector3(13, -2, 5).applyMatrix4(m);
+    expect(up.x).toBeGreaterThan(13);
+    expect(up.y).toBeCloseTo(-2, 9);
+    // (straight under the eye: where it was)
+    expect(new THREE.Vector3(3, -2, 5).applyMatrix4(m).x).toBeCloseTo(3, 9);
+    // (nothing of it at all: as it is)
+    expect(dollyMatrix(cam, 0)).toBeNull();
+  });
+
+  it("brings the eye no nearer the page than a view in perspective stands, zoomed in as far as may be", () => {
     const near = new THREE.OrthographicCamera(-640, 640, 430, -430, 0.1, 2 * EYE_HEIGHT);
     near.zoom = 200;
-    near.position.set(0, 0, EYE_HEIGHT);
-    near.updateProjectionMatrix();
-    near.updateMatrixWorld();
-    const n = dollyProjection(near, EYE_HEIGHT, 1)!;
-    const seen = (z: number) => new THREE.Vector3(1, 0, z).applyMatrix4(near.matrixWorldInverse).applyMatrix4(n).x;
-    expect(seen(10) / seen(0)).toBeCloseTo(60 / 50, 3);
-    // (nothing of it at all: the orthographic view as it is)
-    expect(dollyProjection(cam, EYE_HEIGHT, 0)).toBeNull();
+    const m = dollyMatrix(near, 1)!;
+    // (10 up, 1 out: seen 60 / 50 as far out)
+    expect(new THREE.Vector3(1, 0, 10).applyMatrix4(m).x).toBeCloseTo(60 / 50, 6);
   });
 });
