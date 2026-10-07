@@ -12,6 +12,7 @@
  * it.
  */
 import type { Manifest, WriteDecl } from "../plugins/manifest";
+import type { Option } from "../options";
 import { MANIFESTS, PLUGINS_ROOT } from "../plugins/known";
 import { isRole, type RoleId } from "../plugins/roles";
 import { MENO_READS } from "./menoReads";
@@ -36,6 +37,8 @@ export type PythonPlugin = ReaderBase & {
   roles: readonly RoleId[];
   /** The kinds it writes (lib/io/writers): none of Meno's, which Meno writes itself. */
   writes: readonly WriteDecl[];
+  /** The options it takes for the roles it fills, by role (Settings, where each role is chosen). */
+  roleOptions: Partial<Record<RoleId, readonly Option[]>>;
   /** Its Python environment's profile, and its lock and worker, in its folder among Meno's resources. */
   profile: `plugin-${string}`;
   lock: string;
@@ -62,6 +65,7 @@ export const pluginOf = (m: Manifest): PythonPlugin => ({
   // (the roles Meno defines, of those it says it fills)
   roles: m.roles.filter(isRole),
   writes: m.writes.filter((w) => !MENO_IDS.has(w.id)),
+  roleOptions: Object.fromEntries(Object.entries(m.roleOptions).filter(([role]) => isRole(role))),
   profile: `plugin-${m.id}`,
   lock: `${PLUGINS_ROOT}/${m.id}/${m.environment.lock}`,
   worker: `${PLUGINS_ROOT}/${m.id}/${m.worker}`,

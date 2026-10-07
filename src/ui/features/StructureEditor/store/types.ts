@@ -100,6 +100,8 @@ export type Molecule3D = {
   drawnAs?: string;
   /** Its frames are conformers - not a path through time - so each is as likely as its energy says (`populations`). */
   conformerSet?: boolean;
+  /** How it was made, where something made it - its conformers' method and force field - as rows to show, in the words of what made it. */
+  made?: { how: { label: string; text: string }[] };
   /**
    * Its stereocentres' and double bonds' CIP labels, by atom and bond index;
    * and which of them its drawing left open - one stereoisomer of several

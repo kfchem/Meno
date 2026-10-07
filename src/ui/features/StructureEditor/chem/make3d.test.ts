@@ -54,6 +54,10 @@ describe("making a drawn structure in 3D", () => {
     expect(m.energies).toEqual(answer.energies);
     expect(m.drawnFrom).toEqual([11, 12, 13, null, null]);
     expect(m.stereo).toEqual({ atoms: {}, bonds: {} });
+    // (how they were made, kept where the plugin says: none here)
+    expect(m.made).toBeUndefined();
+    const how = [{ label: "Optimised", text: "MMFF94s, at most 300 steps" }];
+    expect(moleculeOf({ ...answer, how }, blocksOf(ethanol, [11])[0]).made).toEqual({ how });
   });
 
   it("keeps each centre's label, and which were left open, so that stereoisomers are told apart", () => {

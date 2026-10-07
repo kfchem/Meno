@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import type { Style3D } from "../../../../lib/chem/style3d";
 import type { ChemClient, Conformers, Like } from "../../../../lib/roles/client";
+import type { OptionValues } from "../../../../lib/options";
 import { chemMolblock, molIndex } from "../../../../lib/roles/molblock";
 import { writeMolfile3d } from "../../../../lib/chem/molWriter";
 import { editorModelOf, processFileContent } from "../utils/io";
@@ -82,6 +83,7 @@ export function moleculeOf(c: Conformers, block: Block): Omit<Molecule3D, "id" |
     drawnFrom: c.atoms.map((_, i) => (i < block.part.atoms.length ? block.atoms[i] : null)),
     drawnAs: signatureOf(block.part, block.atoms),
     conformerSet: true,
+    ...(c.how?.length ? { made: { how: c.how } } : {}),
     stereo: {
       atoms: numbered(c.cip?.atoms),
       bonds: numbered(c.cip?.bonds),
@@ -253,10 +255,10 @@ export function rowFrom(items: Turned[], at: { x: number; y: number }): { x: num
   });
 }
 
-/** Each stereoisomer asked for, its conformers made: what `conformers` answers. */
-export async function conformersOf(chem: ChemClient, block: Block, isomers: "one" | "all"): Promise<Conformers[]> {
+/** Each stereoisomer asked for, its conformers made - with the options the plugin takes for the role, as chosen in Settings: what `conformers` answers. */
+export async function conformersOf(chem: ChemClient, block: Block, isomers: "one" | "all", options: OptionValues = {}): Promise<Conformers[]> {
   const like = block.like ? { like: block.like } : {};
-  return (await chem.request("conformers", { molblock: block.molblock, isomers, ...like }, CONFORMERS_MS)).isomers;
+  return (await chem.request("conformers", { molblock: block.molblock, isomers, ...like, options }, CONFORMERS_MS)).isomers;
 }
 
 /**

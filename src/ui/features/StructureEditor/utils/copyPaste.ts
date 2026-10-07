@@ -177,6 +177,17 @@ export function readDrawn(data: unknown): Drawn | null {
   };
 }
 
+/** How a molecule was made, as a file carries it: rows of text, each read as data; otherwise none. */
+function madeOf(v: unknown): Carried3D["made"] {
+  const how = (v as { how?: unknown } | null | undefined)?.how;
+  if (!Array.isArray(how)) return undefined;
+  const rows = how
+    .slice(0, 20)
+    .filter((r): r is { label: string; text: string } => typeof r?.label === "string" && typeof r?.text === "string")
+    .map((r) => ({ label: r.label.slice(0, 80), text: r.text.slice(0, 300) }));
+  return rows.length ? { how: rows } : undefined;
+}
+
 /** A molecule's open list as a file carries it; otherwise none. */
 function listOf(v: unknown): CarriedList | undefined {
   const l = v as Partial<Record<keyof CarriedList, unknown>> | null | undefined;
@@ -228,6 +239,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
     ...(drawnFrom ? { drawnFrom } : {}),
     ...(drawnFrom && typeof m.drawnAs === "string" ? { drawnAs: m.drawnAs } : {}),
     ...(m.conformerSet === true ? { conformerSet: true } : {}),
+    ...(madeOf(m.made) ? { made: madeOf(m.made) } : {}),
     ...(stereo ? { stereo } : {}),
     ...(calc ? { calc } : {}),
   };

@@ -202,6 +202,20 @@ class ChemWorkerTest(unittest.TestCase):
         )
         self.assertEqual(ask("open_stereo", molblock=flat)["result"], {"atoms": [1], "bonds": [], "isomers": 2})
 
+    def test_makes_conformers_as_its_options_say_and_says_how(self):
+        made = ask("conformers", molblock=PCPA, options={"count": 5, "field": "MMFF94s", "iters": 300, "same": 0.3, "seed": 7})["result"]["isomers"][0]
+        self.assertEqual(made["field"], "MMFF94s")
+        how = {r["label"]: r["text"] for r in made["how"]}
+        self.assertEqual(how["Embedded"], "ETKDG v3, random seed 7")
+        self.assertEqual(how["Optimised"], "MMFF94s, at most 300 steps")
+        self.assertIn("of 5 sought, none within 0.3", how["Kept"])
+        self.assertTrue(how["Made by"].startswith("RDKit "))
+        self.assertLessEqual(len(made["frames"]), 5)
+        # (what it may not be, kept to what it may: a force field it does not know, the default)
+        odd = ask("conformers", molblock=PCPA, options={"count": 2, "field": "GAFF", "iters": 1})["result"]["isomers"][0]
+        self.assertEqual(odd["field"], "MMFF94")
+        self.assertIn("at most 10 steps", {r["label"]: r["text"] for r in odd["how"]}["Optimised"])
+
     def test_makes_conformers_keeping_the_atoms_and_the_drawn_wedge(self):
         made = ask("conformers", molblock=PCPA, count=8)["result"]["isomers"]
         self.assertEqual(len(made), 1)

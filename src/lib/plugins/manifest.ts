@@ -79,6 +79,8 @@ export type Manifest = {
   reads: string[];
   /** The roles it fills besides reading files, by the ids Meno gives them: "smiles", "checks"... */
   roles: string[];
+  /** The options it takes for a role it fills, by the role's id, in the general form (lib/options): drawn in Settings where the role is chosen. */
+  roleOptions: Record<string, Option[]>;
   /** The kinds it brings. */
   kinds: KindDecl[];
   /** The kinds it writes. */
@@ -144,6 +146,14 @@ export function acceptManifest(raw: unknown): Manifest | null {
   const reads = ids(m.reads);
   const roles = ids(m.roles);
   const writes = Array.isArray(m.writes) ? m.writes.map(writeOf).filter((w): w is WriteDecl => w != null) : [];
+  // (options for the roles it says it fills, read as data; for no other)
+  const roleOptions: Record<string, Option[]> = {};
+  if (m.roleOptions && typeof m.roleOptions === "object" && !Array.isArray(m.roleOptions)) {
+    for (const [role, raw] of Object.entries(m.roleOptions as Record<string, unknown>)) {
+      const options = acceptOptions(raw);
+      if (roles.includes(role) && options.length) roleOptions[role] = options;
+    }
+  }
   // (a plugin that does nothing is none)
   if (!reads.length && !roles.length && !writes.length) return null;
   return {
@@ -157,6 +167,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
     worker: worker!,
     reads,
     roles,
+    roleOptions,
     kinds,
     writes,
   };

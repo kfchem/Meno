@@ -150,6 +150,33 @@ MOST_ISOMERS = 32
 CONFORMERS = 30
 #: Conformers closer than this, in angstroms over their heavy atoms, are one.
 SAME_SHAPE = 0.5
+# conformers' random seed, and how many steps an optimisation may take, unless asked
+SEED = 0x4D45
+STEPS = 2000
+# the force fields conformers may be optimised in
+FIELDS = ("MMFF94", "MMFF94s", "UFF")
+
+
+def options_of(m):
+    """How conformers are to be made, as the request's options say - those
+    the manifest declares for the role (roleOptions), each kept to what it
+    may be - else as before: `count` alone, as older requests give it."""
+    o = m.get("options") or {}
+
+    def number(key, default, low, high, kind=int):
+        try:
+            v = kind(o.get(key, default))
+        except (TypeError, ValueError):
+            v = default
+        return min(max(v, low), high)
+
+    return {
+        "count": number("count", int(m.get("count", CONFORMERS)), 1, 500),
+        "seed": number("seed", SEED, 0, 2**31 - 1),
+        "field": o.get("field") if o.get("field") in FIELDS else "MMFF94",
+        "same": number("same", SAME_SHAPE, 0.05, 5.0, float),
+        "iters": number("iters", STEPS, 10, 100000),
+    }
 #: Kilocalories per mole in a hartree: energies go back in hartrees.
 KCAL_PER_HARTREE = 627.509474
 
@@ -291,7 +318,7 @@ def reflected(entry):
     }
 
 
-def conformers_of(iso, count, made):
+def conformers_of(iso, how, made):
     """A stereoisomer's conformers. Of two enantiomers, the one whose SMILES
     comes first is made, and the other is its mirror image: the same shapes
     and energies, whichever is asked for and in whichever request. `made`
@@ -301,27 +328,29 @@ def conformers_of(iso, count, made):
     twin = smiles_of(mirror) if mirror is not None else smiles
     if twin >= smiles:
         if smiles not in made:
-            made[smiles] = conformers(iso, count)
+            made[smiles] = conformers(iso, **how)
         return made[smiles]
     if twin not in made:
-        made[twin] = conformers(mirror, count)
+        made[twin] = conformers(mirror, **how)
     entry = reflected(made[twin])
     # (and if the mirror has not given this one after all, it is made itself)
     if smiles_from_3d(iso, entry["frames"][0]) != smiles:
         if smiles not in made:
-            made[smiles] = conformers(iso, count)
+            made[smiles] = conformers(iso, **how)
         return made[smiles]
     return entry
 
 
-def conformers(mol, count=CONFORMERS, seed=0x4D45):
+def conformers(mol, count=CONFORMERS, seed=SEED, field="MMFF94", same=SAME_SHAPE, iters=STEPS):
     """A stereoisomer's conformers, embedded (ETKDG) and optimised (MMFF94,
-    or UFF where MMFF has no parameters), lowest energy first, the same
-    shape twice kept once, and each laid over the first by its heavy atoms."""
+    MMFF94s or UFF, as asked - UFF where MMFF has no parameters), lowest
+    energy first, the same shape twice kept once, and each laid over the
+    first by its heavy atoms; and how they were made, said as rows to show
+    (`how`)."""
     mol = Chem.AddHs(mol)
     params = rdDistGeom.ETKDGv3()
     params.randomSeed = seed
-    params.pruneRmsThresh = SAME_SHAPE
+    params.pruneRmsThresh = same
     params.numThreads = 0  # (every core)
     ids = list(rdDistGeom.EmbedMultipleConfs(mol, numConfs=count, params=params))
     if not ids:
@@ -330,10 +359,11 @@ def conformers(mol, count=CONFORMERS, seed=0x4D45):
         ids = list(rdDistGeom.EmbedMultipleConfs(mol, numConfs=count, params=params))
     if not ids:
         raise ValueError("no 3D structure could be made of it")
-    if rdForceFieldHelpers.MMFFHasAllMoleculeParams(mol):
-        field, results = "MMFF94", rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, numThreads=0, maxIters=2000)
+    asked = field
+    if field in ("MMFF94", "MMFF94s") and rdForceFieldHelpers.MMFFHasAllMoleculeParams(mol):
+        results = rdForceFieldHelpers.MMFFOptimizeMoleculeConfs(mol, numThreads=0, maxIters=iters, mmffVariant=field)
     else:
-        field, results = "UFF", rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, numThreads=0, maxIters=2000)
+        field, results = "UFF", rdForceFieldHelpers.UFFOptimizeMoleculeConfs(mol, numThreads=0, maxIters=iters)
     energy = {cid: e for cid, (_, e) in zip(ids, results)}
     heavy = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() > 1]
     kept = []
@@ -341,8 +371,8 @@ def conformers(mol, count=CONFORMERS, seed=0x4D45):
         if kept:
             # (laid over the lowest, which keeps it so for the overlay)
             rms = rdMolAlign.AlignMol(mol, mol, prbCid=cid, refCid=kept[0], atomMap=[(i, i) for i in heavy])
-            if rms < SAME_SHAPE or any(
-                rdMolAlign.CalcRMS(mol, mol, prbId=cid, refId=k, map=[[(i, i) for i in heavy]]) < SAME_SHAPE
+            if rms < same or any(
+                rdMolAlign.CalcRMS(mol, mol, prbId=cid, refId=k, map=[[(i, i) for i in heavy]]) < same
                 for k in kept[1:]
             ):
                 continue
@@ -360,6 +390,16 @@ def conformers(mol, count=CONFORMERS, seed=0x4D45):
         ],
         "energies": [energy[cid] / KCAL_PER_HARTREE for cid in kept],
         "field": field,
+        "how": [
+            {"label": "Embedded", "text": f"ETKDG v3, random seed {seed}"},
+            {
+                "label": "Optimised",
+                "text": f"{field}, at most {iters} steps"
+                + (f" ({asked} has no parameters for it)" if field != asked else ""),
+            },
+            {"label": "Kept", "text": f"{len(kept)} of {count} sought, none within {same:g} \u00c5 of another (heavy atoms' RMSD)"},
+            {"label": "Made by", "text": f"RDKit {rdBase.rdkitVersion}"},
+        ],
     }
 
 
@@ -378,8 +418,9 @@ def op_conformers(m):
     if m.get("isomers", "one") != "all":
         isomers = isomers[:1]
     made, cache = [], {}
+    how = options_of(m)
     for iso in isomers:
-        entry = dict(conformers_of(iso, int(m.get("count", CONFORMERS)), cache))
+        entry = dict(conformers_of(iso, how, cache))
         rdCIPLabeler.AssignCIPLabels(iso)
         entry["cip"] = {
             "atoms": {str(a.GetIdx()): a.GetProp("_CIPCode") for a in iso.GetAtoms() if a.HasProp("_CIPCode")},
