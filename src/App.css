@@ -141,7 +141,6 @@ input[type="range"]::-webkit-slider-thumb {
   background-color: rgb(49, 118, 137);
   border-radius: 9999px;
   border: 1px solid rgb(209, 217, 224);
-  cursor: pointer;
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -150,7 +149,6 @@ input[type="range"]::-moz-range-thumb {
   background-color: rgb(49, 118, 137);
   border-radius: 9999px;
   border: 1px solid rgb(209, 217, 224);
-  cursor: pointer;
 }
 
 @layer base {
