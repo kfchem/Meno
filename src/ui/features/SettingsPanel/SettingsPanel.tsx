@@ -9,6 +9,7 @@ import Style3DEditor from "../StyleEditor/Style3DEditor";
 import AbbreviationSettings from "./AbbreviationSettings";
 import ChemistrySettings from "./ChemistrySettings";
 import FileSettings from "./FileSettings";
+import PictureSettings from "./PictureSettings";
 import PluginSettings from "./PluginSettings";
 import RoleChoices from "./RoleChoices";
 import { useSettingsSection, type SettingsSection } from "./section";
@@ -27,7 +28,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
  * The application's settings: the drawing style every structure is drawn
  * in unless its document has its own, how molecules in 3D look and turn,
  * what is pointed out on a structure, who reads and writes each kind
- * of file, the plugins, what the labels Meno reads stand for, and what Meno
+ * of file and how sharp a copied picture is, the plugins, what the labels Meno reads stand for, and what Meno
  * may do on the network.
  */
 export default function SettingsPanel() {
@@ -128,6 +129,11 @@ export default function SettingsPanel() {
               what they find added beside it.
             </p>
             <FileSettings />
+            <h3 className="mt-6 text-sm font-semibold text-gh-black">Copied pictures</h3>
+            <p className="mt-1 mb-3 text-sm text-gh-gray max-w-2xl">
+              What a copy puts beside a structure for other programs - Word, PowerPoint - to paste.
+            </p>
+            <PictureSettings />
           </section>
         ) : section === "plugins" ? (
           <section className="mt-6 max-w-4xl">

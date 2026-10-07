@@ -142,7 +142,8 @@ for each topic (one pull request per dependent chain).
   the clipboard and the workspace file.
 - Pictures: in a copy's EMF, SVG and PNG, molecules in 3D are drawn as the
   canvas draws them - lit, in depth - each seen from straight above its
-  centre, a bitmap at 300 dpi. A structure opened from Word or PowerPoint
+  centre, a bitmap at the resolution copied pictures are made at (Settings,
+  Files; 600 dpi unless changed). A structure opened from Word or PowerPoint
   goes back with its molecules in 3D, turned as they are, and one holding
   only molecules in 3D is updated too.
 - Opening: XYZ files, and 3D MOL and SD records, by Open, a drop or a new

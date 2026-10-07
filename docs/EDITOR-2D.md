@@ -210,10 +210,16 @@ V, as everywhere, and the same from the menus.
   its own size, each carrying Meno's record so that the structure comes
   back: an EMF (vectors, the record in a comment) in Office's own clip
   format, which Word and PowerPoint keep as it is on either system; the
-  EMF on its own, for Windows' other programs; and a PNG at 300 dpi (the
+  EMF on its own, for Windows' other programs; and a PNG (the
   record in a text chunk) for everything else. Pasted into Word or
   PowerPoint, the structure is a vector picture; copied there and pasted
   back into Meno, it is the structure again, wedges and charges and all.
+  What is made of pixels - the PNG, and molecules in 3D in any of them -
+  is made at the resolution Settings › Files, *Copied pictures*, says:
+  300, 600 or 1200 dpi, 600 unless changed (the maintainer asked for
+  sharper pictures in Office, 2026-10-08; it was 300). A picture so large
+  that it would come to more than 48 million pixels is made at a lower
+  resolution, its size on the page the same (`pictureDpiFor`).
 - A paste reads Meno's own record first, then a picture that carries one
   (Office's clip format, as Word and PowerPoint hand it back, or a PNG),
   then a MOL file, then plain text that is a MOL file or a SMILES (drawn by
