@@ -347,7 +347,10 @@ end (docs/EDITOR-2D.md). The arrows and pluses drawn
 among a selection go with it: they are copied, cut, deleted and moved with
 it (but not turned). Pictures - SVG, and the EMF and PNG a copy puts on the
 clipboard - show them, and Meno's own record of a copied drawing keeps
-them.
+them. Words written over or under an arrow - the reagents' and conditions'
+names, as text - go with it the same way (docs/EDITOR-2D.md, *Text*); an
+Rxnfile has no place for text, and does not keep them: a reagent written
+as a structure above the arrow is the file's reagent.
 
 ## Writing
 
