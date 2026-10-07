@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { COLORS } from "../../../theme/colors";
 import { atomColour, type Style3D } from "../../../../lib/chem/style3d";
 import type { Look3D, Measure3D, Molecule3D, Rising3D, Turn3D } from "../store/types";
-import { bondLines, bondReach, frameOf, labelSpot, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine, type LabelBox, type Stick } from "../utils/molecule3d";
+import { bondLines, bondReach, frameBondsOf, frameOf, labelSpot, linesOf, populations, solidOf, widestWay, WORLD_PER_ANGSTROM, type BondLine, type LabelBox, type Stick } from "../utils/molecule3d";
 import { MARK_MIN_PX, MARK_SCALE, stereoTextEms } from "../chem/marks";
 import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS } from "../constants";
 import { kindOf, MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, measureText, measureValue, piecesOf } from "../utils/measure3d";
@@ -194,7 +194,12 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const { m, style, look, frame, turn, lit, selected, chosen, chosenBonds, holding, following, leaving } = props;
   const solid = solidOf(m, style);
   const n = m.atoms.length;
-  const lineCount = useMemo(() => m.bonds.reduce((k, b) => k + linesOf(b.order), 0), [m.bonds]);
+  // the bonds drawn: its bonds - or, where they go frame by frame, every
+  // bond any frame has, each drawn as far as the frame shown has it, growing
+  // and shrinking as frames go (utils/molecule3d `frameBondsOf`)
+  const fb = useMemo(() => frameBondsOf(m), [m]);
+  const drawn = useMemo(() => (fb ? { ...m, bonds: fb.bonds } : m), [m, fb]);
+  const lineCount = useMemo(() => drawn.bonds.reduce((k, b) => k + linesOf(b.order), 0), [drawn.bonds]);
   const placed = useRef<THREE.Group>(null!);
   const turned = useRef<THREE.Group>(null!);
   const atoms = useRef<THREE.InstancedMesh>(null!);
@@ -270,7 +275,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     return { level, deepest: level.reduce((most, l) => Math.max(most, l), 0) };
   }, [holding, m.atoms, m.bonds, n]);
   // each bond's lines, by bond
-  const lineBond = useMemo(() => m.bonds.flatMap((b, i) => Array.from({ length: linesOf(b.order) }, () => i)), [m.bonds]);
+  const lineBond = useMemo(() => drawn.bonds.flatMap((b, i) => Array.from({ length: linesOf(b.order) }, () => i)), [drawn.bonds]);
+  // how far each drawn bond is there, on its way to what the frame shown has
+  const there = useRef<Float32Array>(Float32Array.from(fb ? fb.present[frameOf(solid, frame)] : []));
+  if (fb && there.current.length !== fb.bonds.length) there.current = Float32Array.from(fb.present[frameOf(solid, frame)]);
   // (rising out of a drawing, it is its full size from the first: its atoms grow instead)
   const grown = useRef({ v: leaving || props.rising ? 1 : 0, vel: 0, to: leaving ? 0 : 1 });
   // how far its atoms have grown, rising out of a drawing
@@ -622,11 +630,27 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       return r * (swell.current.get(i)?.v ?? 1) * risen.current;
     };
     const bondR = style.bondRadius * WORLD_PER_ANGSTROM * (1 - fill.current) * risen.current;
+    // (bonds forming and breaking as the frame goes: each grows or shrinks to what it has)
+    if (fb) {
+      const want = fb.present[frameOf(solid, frame)];
+      const t = there.current;
+      const k = 1 - Math.exp(-step / FRAME_TAU);
+      for (let i = 0; i < t.length; i++) {
+        if (t[i] === want[i]) continue;
+        t[i] = Math.abs(want[i] - t[i]) < 0.01 ? want[i] : t[i] + (want[i] - t[i]) * k;
+        reshaped = moving = true;
+      }
+    }
+    const linesNow = () => {
+      const all = bondLines(drawn, p, bondR);
+      if (fb) all.forEach((l, k) => (l.r *= there.current[lineBond[k]]));
+      return all;
+    };
     let lines: BondLine[] | null = null;
     if (reshaped) {
       placeAtoms(atoms.current, p, radius, 0);
       if (bonds.current) {
-        lines = bondLines(m, p, bondR);
+        lines = linesNow();
         placeBonds(bonds.current, lines, 0);
         bonds.current.visible = fill.current < 0.98;
       }
@@ -645,13 +669,13 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       const wide = SELECTED_PX * px;
       placeAtoms(atomHull.current, p, radius, holdShown ? (i) => Math.max(w, wide * h[i]) : w);
       if (bondHull.current) {
-        const all = lines ?? bondLines(m, p, bondR);
+        const all = lines ?? linesNow();
         placeBonds(
           bondHull.current,
           all,
           holdShown
             ? (k) => {
-                const b = m.bonds[lineBond[k]];
+                const b = drawn.bonds[lineBond[k]];
                 return Math.max(w, wide * Math.min(h[b.a1], h[b.a2]));
               }
             : w,
@@ -799,7 +823,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         if (!balls) {
           balls = [];
           for (let i = 0; i < n; i++) balls.push({ ...onScreen(parent, p[3 * i], p[3 * i + 1], p[3 * i + 2]), r: (radius(i) * g) / px });
-          if (bondR > 0) for (const b of m.bonds) if (balls[b.a1] && balls[b.a2]) sticks.push({ a: balls[b.a1], b: balls[b.a2], r: (bondR * g) / px });
+          if (bondR > 0) {
+            const shownBonds = fb ? drawn.bonds.filter((_, i) => there.current[i] > 0.5) : m.bonds;
+            for (const b of shownBonds) if (balls[b.a1] && balls[b.a2]) sticks.push({ a: balls[b.a1], b: balls[b.a2], r: (bondR * g) / px });
+          }
           // (the measurements' values, where they are written now - each
           // value's size read when its text is new: it is written in a
           // root of its own, after this one's, so not before it shows)

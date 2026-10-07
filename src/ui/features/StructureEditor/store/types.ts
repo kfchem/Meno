@@ -101,6 +101,12 @@ export type Molecule3D = {
   /** Its frames are conformers - not a path through time - so each is as likely as its energy says (`populations`). */
   conformerSet?: boolean;
   /**
+   * Its bonds are where its atoms stand close enough, as its file gives no
+   * bonds - an XYZ file's, a calculation's: frame by frame, so that a bond
+   * forms and breaks as its frames go (utils/molecule3d `frameBondsOf`).
+   */
+  bondsFrom?: "distance";
+  /**
    * Its stereocentres' and double bonds' CIP labels, by atom and bond index;
    * and which of them its drawing left open - one stereoisomer of several
    * made from it - so that it is told apart from the others.

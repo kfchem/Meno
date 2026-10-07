@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { atomColour, KEY_LIGHT_FROM, type Style3D } from "../../../lib/chem/style3d";
 import { solidsBounds } from "../../../lib/chem/layout2d";
 import { EYE_HEIGHT } from "./utils/page";
-import { bondLines, frameOf, heightOf, lookOf, pictureMarks, solidOf, WORLD_PER_ANGSTROM } from "./utils/molecule3d";
+import { bondLines, bondsAt, frameOf, heightOf, lookOf, pictureMarks, solidOf, WORLD_PER_ANGSTROM } from "./utils/molecule3d";
 import { MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, piecesOf } from "./utils/measure3d";
 import { COLORS } from "../../theme/colors";
 import type { Carried3D, Molecule3D } from "./store/types";
@@ -105,7 +105,8 @@ export function rendered3d(
         group.add(mesh);
       });
       if (look === "balls") {
-        for (const line of bondLines(molecule, places, style.bondRadius * WORLD_PER_ANGSTROM)) {
+        // (the bonds the frame shown has, where they go frame by frame)
+        for (const line of bondLines({ ...molecule, bonds: bondsAt(molecule, frameOf(solid, m.frame)) }, places, style.bondRadius * WORLD_PER_ANGSTROM)) {
           const along = line.b.clone().sub(line.a);
           const length = along.length();
           if (length < 1e-9) continue;
