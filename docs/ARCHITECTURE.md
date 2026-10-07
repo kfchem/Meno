@@ -133,9 +133,10 @@ must not need one undo per frame), and the stack is capped.
 `subscribe` matches React's `useSyncExternalStore`; nothing in `lib/doc`
 imports React.
 
-Adoption is incremental. The text view and the structure canvas, with its
-molecules in 3D, are on documents; the workflow editor still keeps its
-content in component state, and it is still lost when its tab closes.
+Adoption is incremental. The structure canvas, with its molecules in 3D
+and the texts in its column, is on a document; the workflow editor still
+keeps its content in component state, and it is still lost when its tab
+closes.
 
 ## How things move
 
