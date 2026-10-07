@@ -7,15 +7,17 @@
  *   pointer; led back the way it came - or beside it, near enough - it
  *   takes its bonds back again, as far as the point it is led back to. Led
  *   round a hexagon of the honeycomb to a point it has been through, it
- *   closes a six-membered ring.
+ *   closes a six-membered ring; led round further, to a point it went
+ *   through longer ago, it is taken back to it, and the loop draws a
+ *   six-membered ring there.
  * - Led round in a loop back to a point of the chain - not straight back
  *   the way it came, but round, so that the way it went encloses room - it
- *   draws a ring there, of as many members as the loop is long: the ring has
- *   the bond the loop began along, on the side the loop went round. (Round
- *   a hexagon of the honeycomb, a loop as long as six bonds is that
- *   hexagon.) Led on from there, the ring stays; led back further, it goes.
- *   A loop is taken as the hand meant it: its tremble does not make it
- *   longer, and a way out and back that encloses only a sliver is no loop.
+ *   draws a six-membered ring there: the ring has the bond the loop began
+ *   along, on the side the loop went round. Led on from there, the ring
+ *   stays; led back further, it goes. A loop is taken as the hand meant it:
+ *   a way out and back that encloses only a sliver is no loop.
+ * - A chain makes six-membered rings, and no other (the maintainer,
+ *   2026-10-07): a ring of another size is drawn by hand.
  */
 import { cellOf, honeycombFrom, neighboursOf, type Cell, type Honeycomb, type Pt } from "./honeycomb";
 
@@ -53,10 +55,8 @@ const LOOP_LENGTH = 2.3;
 const LOOP_ROUND = 0.45;
 /** How far apart a loop's points are taken, as a part of a bond: any closer, and the hand's tremble lengthens it. */
 const LOOP_STEP = 0.25;
-/** A loop traced freehand runs a little longer than the ring it means. */
-const LOOP_SLACK = 1.07;
-/** The fewest and most members a loop draws a ring of. */
-const RING_SIZES = [3, 12] as const;
+/** The ring a chain makes: six-membered, and no other. */
+export const CHAIN_RING = 6;
 
 /** A chain from `start`, its honeycomb turned so that a bond it already has (`bondedTo`) is one of its own. */
 export function startChain(start: Pt, bondedTo: Pt[], length: number): Chain {
@@ -105,7 +105,10 @@ export function followChain(c: Chain, pointer: Pt): Chain {
       if (back >= 0 && back < walk.length - 1) {
         const loop = trail.slice(Math.max(stepAt[back], trailFrom));
         const ring = loopRing(back, best, cellOf(c.honeycomb, walk[back + 1]), loop, L);
-        if (!ring || ring.points.length + 1 !== walk.length - back) {
+        // (round a hexagon, going round: closed; round anything longer,
+        // taken back to it, the loop drawing a six-membered ring there; and
+        // back to it without going round, taken back to it)
+        if (!ring || walk.length - back !== CHAIN_RING) {
           walk = walk.slice(0, back + 1);
           stepAt = stepAt.slice(0, back);
           rings = rings.filter((r) => r.at < walk.length);
@@ -165,8 +168,7 @@ function loopRing(at: number, j: Pt, s: Pt, loop: Pt[], L: number): ChainRing | 
   const encloses = Math.abs(area / 2);
   if (encloses < LOOP_AREA * L * L || length < LOOP_LENGTH * L || (4 * Math.PI * encloses) / (length * length) < LOOP_ROUND) return null;
   const centroid = { x: cx / (3 * area), y: cy / (3 * area) };
-  const n = Math.min(RING_SIZES[1], Math.max(RING_SIZES[0], Math.round(length / (LOOP_SLACK * L))));
-  return { at, points: regularRing(j, s, n, centroid) };
+  return { at, points: regularRing(j, s, CHAIN_RING, centroid) };
 }
 
 /**

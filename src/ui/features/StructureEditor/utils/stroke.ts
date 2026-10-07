@@ -15,7 +15,7 @@
  * step.
  */
 import { snapBond, type Pt } from "./extendSnap";
-import { endChain, followChain, ringsOf, startChain, type Chain } from "./chain";
+import { CHAIN_RING, endChain, followChain, ringsOf, startChain, type Chain } from "./chain";
 import { cellOf } from "./honeycomb";
 
 /**
@@ -82,7 +82,10 @@ export function startStroke(
  * A chain's walk and rings as the nodes it adds: each point of the walk an
  * atom - one already there where the honeycomb's point falls on it - a
  * point it comes round to again the same atom, and each ring's atoms going
- * off from the walk's point and back to it.
+ * off from the walk's point and back to it. A point is taken as an atom
+ * already there, or one of the chain's own, only where that closes a
+ * six-membered ring, or none: a chain makes no ring of another size (the
+ * maintainer, 2026-10-07); there, it is an atom of its own.
  */
 export function chainNodes(model: StrokeModel, s: Stroke): StrokeNode[] {
   const c = s.chain;
@@ -95,15 +98,62 @@ export function chainNodes(model: StrokeModel, s: Stroke): StrokeNode[] {
   const near = (p: Pt) => placed.find((q) => Math.hypot(q.at.x - p.x, q.at.y - p.y) < 0.3 * L)?.ref;
   const existing = (p: Pt) =>
     model.atoms.find((a) => a.id !== s.baseId && Math.hypot(a.x - p.x, a.y - p.y) < 0.35 * L)?.id;
+  // the drawing as it stands with the chain so far, atom by atom: what
+  // each is bonded to - an atom already there by "m<id>", the chain's own
+  // by "n<ref>" - to tell what ring taking a point as an atom closes
+  const vertexOf = (ref: number): string =>
+    ref === BASE ? (s.baseId === NEW_ATOM ? "base" : `m${s.baseId}`) : nodes[ref].atomId != null ? `m${nodes[ref].atomId}` : `n${ref}`;
+  const graph = new Map<string, Set<string>>();
+  const join = (u: string, v: string) => {
+    if (u === v) return;
+    if (!graph.has(u)) graph.set(u, new Set());
+    if (!graph.has(v)) graph.set(v, new Set());
+    graph.get(u)!.add(v);
+    graph.get(v)!.add(u);
+  };
+  for (const b of model.bonds) join(`m${b.a}`, `m${b.b}`);
+  // (the ring a bond from `u` to `v` closes: as many members as the way
+  // between them is bonds, and one; none where there is no way, or where
+  // they are bonded already - the bond is there)
+  const closes = (u: string, v: string): number | null => {
+    if (u === v || graph.get(u)?.has(v)) return null;
+    const seen = new Set([u]);
+    let edge = [u];
+    for (let d = 1; edge.length; d++) {
+      const next: string[] = [];
+      for (const x of edge)
+        for (const y of graph.get(x) ?? []) {
+          if (y === v) return d + 1;
+          if (!seen.has(y)) {
+            seen.add(y);
+            next.push(y);
+          }
+        }
+      edge = next;
+    }
+    return null;
+  };
+  // (taking `to` for the point, bonded from `from`: a six-membered ring, or none)
+  const allowed = (from: string, to: string) => {
+    const ring = closes(from, to);
+    return ring == null || ring === CHAIN_RING;
+  };
+  let last = BASE;
   const place = (p: Pt, from?: number): number => {
+    const u = vertexOf(from ?? last);
     const again = near(p);
-    if (again != null) {
+    if (again != null && allowed(u, vertexOf(again))) {
       nodes.push({ x: p.x, y: p.y, pathIndex: again, ...(from != null ? { from } : {}) });
+      join(u, vertexOf(again));
+      last = again;
       return again;
     }
-    const atomId = existing(p);
+    const found = existing(p);
+    const atomId = found != null && allowed(u, `m${found}`) ? found : undefined;
     nodes.push({ x: p.x, y: p.y, ...(atomId != null ? { atomId } : {}), ...(from != null ? { from } : {}) });
     placed.push({ at: p, ref: nodes.length - 1 });
+    join(u, vertexOf(nodes.length - 1));
+    last = nodes.length - 1;
     return nodes.length - 1;
   };
   // the walk: one bond a step
@@ -126,7 +176,11 @@ export function chainNodes(model: StrokeModel, s: Stroke): StrokeNode[] {
       from = undefined;
     }
     const j = at === BASE ? base : nodes[at];
-    if (j) nodes.push({ x: j.x, y: j.y, pathIndex: at });
+    if (j) {
+      nodes.push({ x: j.x, y: j.y, pathIndex: at });
+      join(vertexOf(last), vertexOf(at));
+      last = at;
+    }
   }
   return nodes;
 }

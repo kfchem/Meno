@@ -93,4 +93,36 @@ describe("a chain stroke", () => {
     for (let t = 0.05; t <= 1; t += 0.05) s = advanceStroke(methyl, s, { x: -t, y: 0.02 }, L);
     expect(s.nodes.some((n) => n.atomId === 2)).toBe(true);
   });
+
+  it("goes onto an atom already there only where that closes a six-membered ring, or none", () => {
+    // the hexagon round the methyl's bond: from its carbon up and round
+    const h = Math.sqrt(3) / 2;
+    const way = [
+      { x: 0.5, y: h },
+      { x: 0, y: 2 * h },
+      { x: -1, y: 2 * h },
+      { x: -1.5, y: h },
+    ];
+    const lead = (model: typeof methyl, to: number) => {
+      let s = startStroke("chain", 1, model, undefined, L);
+      let at = { x: 0, y: 0 };
+      for (const p of way.slice(0, to)) {
+        for (let t = 0.05; t <= 1.001; t += 0.05) s = advanceStroke(model, s, { x: at.x + (p.x - at.x) * t, y: at.y + (p.y - at.y) * t }, L);
+        at = p;
+      }
+      return s;
+    };
+    // an atom bonded to the methyl's other carbon, where the chain's fourth
+    // point falls: taken, closing six members
+    const six = { atoms: [...methyl.atoms, { id: 3, x: -1.5, y: h }], bonds: [...methyl.bonds, { a: 2, b: 3 }] };
+    expect(lead(six, 4).nodes.some((n) => n.atomId === 3)).toBe(true);
+    // one where its third falls: it would close five - not taken, an atom of the chain's own
+    const five = { atoms: [...methyl.atoms, { id: 3, x: -1, y: 2 * h }], bonds: [...methyl.bonds, { a: 2, b: 3 }] };
+    const s = lead(five, 3);
+    expect(s.nodes.length).toBe(3);
+    expect(s.nodes.some((n) => n.atomId === 3)).toBe(false);
+    // and one bonded to nothing of the chain's: taken, closing no ring
+    const apart = { atoms: [...methyl.atoms, { id: 3, x: -1, y: 2 * h }], bonds: methyl.bonds };
+    expect(lead(apart, 3).nodes.some((n) => n.atomId === 3)).toBe(true);
+  });
 });

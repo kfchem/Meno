@@ -65,31 +65,47 @@ describe("a chain traced on its honeycomb", () => {
     expect(new Set(c.walk).size).toBe(6);
   });
 
-  it("draws a ring of as many members as a loop back to it is long, on the side it went round", () => {
+  it("closes a six-membered ring for a loop back to it, however long, on the side it went round - a chain makes no other", () => {
     const c0 = startChain({ x: 0, y: 0 }, [], L);
     // round a loop about as long as five bonds, from the start and back to it
     const rr = (5 * L) / (2 * Math.PI);
     const centre = { x: 0.2 * rr, y: Math.sqrt(1 - 0.04) * rr };
     const from = Math.atan2(-centre.y, -centre.x);
     const c = endChain(lead(c0, round(centre, rr, from, -1, 60), 3));
-    const rings = ringsOf(c);
-    expect(rings).toHaveLength(1);
-    expect(rings[0].points.length + 1).toBe(5);
-    expect(rings[0].at).toBe(0);
+    // round the honeycomb's hexagon, back to the start: six members, and no ring of another size
+    expect(c.walk).toHaveLength(7);
+    expect(c.walk[6]).toBe(c.walk[0]);
+    expect(ringsOf(c)).toEqual([]);
     // on the loop's side: above the start
-    expect(rings[0].points.reduce((y, p) => y + p.y, 0)).toBeGreaterThan(0);
+    const cells = c.walk.map((k) => cellOf(c.honeycomb, k));
+    expect(cells.reduce((y, p) => y + p.y, 0)).toBeGreaterThan(0);
   });
 
-  it("draws no larger a ring for a loop traced with a trembling hand", () => {
+  it("closes a six-membered ring for a loop traced with a trembling hand too", () => {
     const c0 = startChain({ x: 0, y: 0 }, [], L);
     const rr = (5 * L) / (2 * Math.PI);
     const centre = { x: 0.2 * rr, y: Math.sqrt(1 - 0.04) * rr };
     const from = Math.atan2(-centre.y, -centre.x);
     // each point of the way a little off it, to one side and back
     const shaky = round(centre, rr, from, -1, 60).flatMap((p) => [{ x: p.x - 0.08 * L, y: p.y }, p]);
-    const rings = ringsOf(endChain(lead(c0, shaky, 1)));
-    expect(rings).toHaveLength(1);
-    expect(rings[0].points.length + 1).toBe(5);
+    const c = endChain(lead(c0, shaky, 1));
+    expect(c.walk).toHaveLength(7);
+    expect(c.walk[6]).toBe(c.walk[0]);
+    expect(ringsOf(c)).toEqual([]);
+  });
+
+  it("draws a six-membered ring, and no other, for a loop longer than a hexagon", () => {
+    const c0 = startChain({ x: 0, y: 0 }, [], L);
+    // round a loop as long as nine bonds: once a ring of nine members, now six
+    const rr = (9 * L) / (2 * Math.PI);
+    const centre = { x: 0.2 * rr, y: Math.sqrt(1 - 0.04) * rr };
+    const from = Math.atan2(-centre.y, -centre.x);
+    const c = endChain(lead(c0, round(centre, rr, from, -1, 90), 3));
+    const sizes = ringsOf(c).map((r) => r.points.length + 1);
+    expect(sizes.every((n) => n === 6)).toBe(true);
+    // (and the walk closes nothing but a hexagon)
+    const back = c.walk.findIndex((k, i) => c.walk.indexOf(k) !== i);
+    if (back >= 0) expect(back - c.walk.indexOf(c.walk[back])).toBe(6);
   });
 
   it("draws no ring for a way out and back that encloses only a sliver", () => {
@@ -105,8 +121,11 @@ describe("a chain traced on its honeycomb", () => {
     const centre = { x: head.x, y: head.y + L * 0.9 };
     c = lead(out, round(centre, L * 0.9, -Math.PI / 2, 1.0, 60), 3);
     c = lead(c, [{ x: head.x + 2 * L, y: head.y - 0.2 * L }]);
-    expect(c.rings.length).toBe(1);
+    // round the hexagon at the head: the walk comes back to it, and goes on
+    const closed = (w: string[]) => w.some((k, i) => w.indexOf(k) !== i);
+    expect(closed(c.walk)).toBe(true);
     const back = lead(c, [{ x: 0, y: 0 }]);
+    expect(closed(back.walk)).toBe(false);
     expect(ringsOf(back)).toEqual([]);
   });
 });
