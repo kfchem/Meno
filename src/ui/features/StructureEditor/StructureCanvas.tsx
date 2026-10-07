@@ -86,6 +86,8 @@ import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 import { EYE_HEIGHT, eyeOf } from "./utils/page";
 import Molecules3D from "./components/Molecules3D";
+import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
+import QuickAdd from "./QuickAdd";
 import Captions2D from "./components/Captions2D";
 import CaptionEditor2D from "./components/CaptionEditor2D";
 import OpenStereo2D from "./components/OpenStereo2D";
@@ -458,6 +460,9 @@ function StructureCanvasContent({
   }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget, requestFit]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
+  // and what a double-click on empty space can put down there (QuickAdd)
+  const quickAdd = useEditor((s) => s.quickAdd);
+  const closeQuickAdd = useCallback(() => store.getState().setQuickAdd(null), [store]);
   // a molecule in 3D right-clicked: what its menu does to it
   const molecules3d = useEditor((s) => s.molecules3d);
   const chosen3d = useEditor((s) => s.chosen3d);
@@ -815,6 +820,31 @@ function StructureCanvasContent({
             onExport={(writer, options, molecules) => {
               setExporting(null);
               void files.exportAs(writer, options, molecules);
+            }}
+          />
+        )}
+      </AnimatePresence>
+      {/* a double-click on empty space: what can be put down there */}
+      <AnimatePresence>
+        {quickAdd && (
+          <QuickAdd
+            key={`${quickAdd.x},${quickAdd.y}`}
+            x={quickAdd.x}
+            y={quickAdd.y}
+            within={quickAdd.within}
+            onClose={closeQuickAdd}
+            onChoose={(what) => {
+              const st = store.getState();
+              const { at } = quickAdd;
+              st.setQuickAdd(null);
+              if (what === "bond") {
+                // (across at 30 degrees, as a chain from empty space begins)
+                const dx = (Math.cos(Math.PI / 6) * NOMINAL_BOND_LENGTH) / 2;
+                const dy = (Math.sin(Math.PI / 6) * NOMINAL_BOND_LENGTH) / 2;
+                st.addBondedPair({ x: at.x - dx, y: at.y - dy }, { x: at.x + dx, y: at.y + dy });
+              } else if (what === "text") st.setCaptionEdit({ id: null, at });
+              else if (what === "arrow") st.addArrow(at.x, at.y);
+              else st.addPlus(at.x, at.y);
             }}
           />
         )}

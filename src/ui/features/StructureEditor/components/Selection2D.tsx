@@ -6,7 +6,7 @@ import { useEditor, useEditorStore } from "../store";
 import { COLORS } from "../../../theme/colors";
 import { SELECTION_SHADE } from "./selectionShade";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX } from "../constants";
+import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX, QUICK_ADD_MS } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
 import type { Style3D } from "../../../../lib/chem/style3d";
@@ -108,9 +108,17 @@ export default function Selection2D() {
     // on the canvas's container, capturing: ahead of the view's own pan and
     // of the drawing's own handlers
     const host = gl.domElement.parentElement ?? gl.domElement;
-    // the last press on nothing that was not a drag: a second press soon
-    // after it, near it, is a double-click's
-    let lastEmpty = { t: -Infinity, x: 0, y: 0 };
+    // the last press on nothing that was not a drag, and how many came one
+    // after another there: a second soon after it, near it, is a
+    // double-click's; a third, a triple-click's
+    let lastEmpty = { t: -Infinity, x: 0, y: 0, count: 0 };
+    const none = { t: -Infinity, x: 0, y: 0, count: 0 };
+    // Quick Add, waiting for a third click not to come
+    let quick: number | null = null;
+    const noQuick = () => {
+      if (quick != null) window.clearTimeout(quick);
+      quick = null;
+    };
     // A box, or (Alt) a lasso, from a press: drawn as the pointer goes, what
     // it holds selected when the button comes up.
     const box = (e: PointerEvent, sx: number, sy: number, kind: "box" | "lasso", add: boolean) => {
@@ -154,8 +162,8 @@ export default function Selection2D() {
       window.addEventListener("pointerup", onUp, true);
     };
 
-    // A chain from a point of empty space, two clicks there: led by a drag
-    // from the second, or - the second let go where it was - traced with
+    // A chain from a point of empty space, three clicks there: led by a
+    // drag from the third, or - the third let go where it was - traced with
     // the button up until a click ends it (ChainGuide2D).
     const chain = (e: PointerEvent, sx: number, sy: number) => {
       const st = store.getState();
@@ -193,37 +201,69 @@ export default function Selection2D() {
       const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null;
       if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || onMark || st.labelEdit.active || st.extend.active || st.captionEdit) return;
       const add = addsToSelection(e);
-      const second =
+      const near =
         e.timeStamp - lastEmpty.t <= DOUBLE_CLICK_MS && Math.hypot(e.clientX - lastEmpty.x, e.clientY - lastEmpty.y) < 8;
+      const count = near ? lastEmpty.count + 1 : 1;
       const sx = e.clientX;
       const sy = e.clientY;
       const kind = e.altKey ? "lasso" : "box";
       // with Ctrl (⌘): a box at once, added to the selection
       if (add) {
-        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        lastEmpty = none;
         box(e, sx, sy, kind, true);
         return;
       }
-      if (second) {
-        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+      // three clicks: a chain - Quick Add, open or about to be, gone
+      if (count >= 3) {
+        lastEmpty = none;
+        noQuick();
+        st.setQuickAdd(null);
         chain(e, sx, sy);
+        return;
+      }
+      // two: Quick Add there, once no third has come (QUICK_ADD_MS); a drag
+      // from the second moves the view, as any drag on nothing does
+      if (count === 2) {
+        lastEmpty = { t: e.timeStamp, x: sx, y: sy, count: 2 };
+        const onSecondMove = (ev: PointerEvent) => {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < MOV_PX) return;
+          lastEmpty = none;
+          done();
+        };
+        const onSecondUp = () => {
+          done();
+          if (lastEmpty.count !== 2) return;
+          noQuick();
+          quick = window.setTimeout(() => {
+            quick = null;
+            const r = host.getBoundingClientRect();
+            store.getState().setQuickAdd({ at: toWorld(sx, sy), x: sx - r.left, y: sy - r.top, within: { width: r.width, height: r.height } });
+          }, QUICK_ADD_MS);
+        };
+        const done = () => {
+          window.removeEventListener("pointermove", onSecondMove);
+          window.removeEventListener("pointerup", onSecondUp, true);
+        };
+        window.addEventListener("pointermove", onSecondMove);
+        window.addEventListener("pointerup", onSecondUp, true);
         return;
       }
       // A first press: a drag moves the view (PanZoom2D), a click lets the
       // selection go; held still, a box begins where it is, a ring
       // spreading there as it is held (HoldProgress2D).
-      lastEmpty = { t: e.timeStamp, x: sx, y: sy };
+      noQuick();
+      lastEmpty = { t: e.timeStamp, x: sx, y: sy, count: 1 };
       st.setPressHold({ at: toWorld(sx, sy), start: performance.now() });
       const hold = window.setTimeout(() => {
         cleanUp();
         store.getState().setPressHold(null);
-        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        lastEmpty = none;
         box(e, sx, sy, kind, false);
       }, LONG_PRESS_MS);
       const onFirstMove = (ev: PointerEvent) => {
         if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < MOV_PX) return;
         // (a pan is no first click)
-        lastEmpty = { t: -Infinity, x: 0, y: 0 };
+        lastEmpty = none;
         cleanUp();
       };
       const onFirstUp = () => cleanUp();
@@ -237,7 +277,10 @@ export default function Selection2D() {
       window.addEventListener("pointerup", onFirstUp, true);
     };
     host.addEventListener("pointerdown", onDown, true);
-    return () => host.removeEventListener("pointerdown", onDown, true);
+    return () => {
+      noQuick();
+      host.removeEventListener("pointerdown", onDown, true);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gl, camera, store, invalidate]);
 

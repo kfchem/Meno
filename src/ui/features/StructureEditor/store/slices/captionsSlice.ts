@@ -9,12 +9,13 @@ type SetState = StoreApi<EditorState>["setState"];
 /**
  * Words on the page (lib/chem/captions): edits to the document, so that
  * undo takes them back and Save keeps them; which are under the pointer,
- * and being written, the view's.
+ * being written, and the icons a double-click opens, the view's.
  */
 export function createCaptionsSlice(doc: DocumentStore<StructureDocument>, set: SetState) {
   return {
     setHoveredCaption: (id: number | null) => set({ hoveredCaption: id }),
     setCaptionEdit: (edit: EditorState["captionEdit"]) => set({ captionEdit: edit }),
+    setQuickAdd: (q: EditorState["quickAdd"]) => set({ quickAdd: q }),
     addCaption: (text: string, x: number, y: number, arrow?: number) => {
       const id = doc.getState().nextCaptionId ?? 1;
       doc.edit("add text", (d) => ops.addCaption(d, { text, x, y, ...(arrow != null ? { arrow } : {}) }));

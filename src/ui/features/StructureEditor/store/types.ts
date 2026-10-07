@@ -273,6 +273,13 @@ export type EditorState = {
    */
   updateCaption: (id: number, patch: { text?: string; x?: number; y?: number; arrow?: number | null }, gesture?: string) => void;
   removeCaption: (id: number) => void;
+  /**
+   * The icons a double-click on empty space opens there (QuickAdd): where,
+   * on the page and in the canvas, and how big the canvas is, for them to
+   * stay inside it.
+   */
+  quickAdd: { at: { x: number; y: number }; x: number; y: number; within: { width: number; height: number } } | null;
+  setQuickAdd: (q: EditorState["quickAdd"]) => void;
   hoverPulse: { id: number | null; nonce: number; until: number };
   arrows: Arrow[];
   pluses: Plus[];

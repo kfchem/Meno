@@ -107,6 +107,7 @@ export function createEditorStore(
     hoveredPlus: null,
     hoveredCaption: null,
     captionEdit: null,
+    quickAdd: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
     pressHold: null,
     doubleClickBond: null,
