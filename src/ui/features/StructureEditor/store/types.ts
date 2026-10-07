@@ -109,6 +109,12 @@ export type Molecule3D = {
   /** What the calculation it was read from says of it, besides its geometries and energies (lib/calc). */
   calc?: CalcInfo;
 };
+/**
+ * A text the workspace holds - a file opened as text, an output shown -
+ * read and edited in the column beside the canvas (docs/WORKSPACE.md,
+ * *Texts*): its name, and where it was opened from, where Open said.
+ */
+export type WorkspaceText = { id: number; name: string; text: string; path?: string };
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];
 /** A molecule in 3D rising out of its drawing (EditorState `rising3d`). */
@@ -143,6 +149,25 @@ export type EditorState = {
   hoveredAtom3d: { id: number; atom: number } | null;
   /** The molecules in 3D on the page. */
   molecules3d: Molecule3D[];
+  /** The texts the workspace holds, in their column's order. */
+  texts: WorkspaceText[];
+  /** The text its column shows, or showed as it was closed, by id; null, none. */
+  textShown: number | null;
+  /** Whether the column of texts is open beside the canvas. */
+  textsOpen: boolean;
+  /**
+   * Texts added to the workspace, as one undo step, the last shown: each
+   * one the workspace holds already - the same name and text - shown instead.
+   */
+  addTexts: (texts: Omit<WorkspaceText, "id">[]) => void;
+  /** A text as typed: a run of typing in it is one undo step. */
+  editText: (id: number, text: string) => void;
+  /** A text taken out of the workspace, as one undo step. */
+  removeText: (id: number) => void;
+  /** A text shown in its column, which opens. */
+  showText: (id: number) => void;
+  /** The column of texts closed: the texts kept. */
+  closeTexts: () => void;
   /** How each molecule in 3D is turned, by id; unturned if absent. */
   turns3d: Record<number, Turn3D>;
   /** Which frame each molecule in 3D shows, by id; the first if absent. */
