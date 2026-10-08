@@ -420,8 +420,13 @@ export function ringsOf(m: Molecule3D): number[][] {
   return all;
 }
 
-/** How far outside its outline a press is still on a molecule, in pixels. */
-export const BODY_PX = 4;
+/**
+ * How far outside its outline a press is still on a molecule, in pixels:
+ * a press there turns it, as one on it does - room enough round a small
+ * molecule to take hold of it without aiming (the maintainer, 2026-10-07:
+ * two sizes larger than the 4 px it was).
+ */
+export const BODY_PX = 16;
 
 function toSegment(px: number, py: number, a: Seen, b: Seen): number {
   const dx = b.x - a.x, dy = b.y - a.y;

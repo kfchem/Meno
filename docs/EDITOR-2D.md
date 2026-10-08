@@ -149,7 +149,7 @@ come up, so a right drag is a move, not a menu.
 | Everything | Ctrl+A | ⌘A |
 | Nothing | click empty space, or Esc | the same |
 
-**A long press** is a press held still for LONG_PRESS_MS (0.4 s), on the
+**A long press** is a press held still for LONG_PRESS_MS (0.32 s), on the
 first press only: the second of a double-click held still waits to be
 dragged. It is counted while the button is held, so a click's label edit,
 which waits for DOUBLE_CLICK_MS after the button comes up, is unaffected.
