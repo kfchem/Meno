@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { captionPlace, captionSet, type CaptionSet } from "../../../../lib/chem/captions";
 import { labelSetOf } from "../../../../lib/chem/layout2d";
@@ -55,6 +55,15 @@ function CaptionHold({ laid }: { laid: Laid }) {
   const { camera, gl, invalidate } = useThree();
   const margin = MARGIN * opts.fontPx;
   const light = useRef<THREE.MeshBasicMaterial>(null);
+  // gone from under the pointer without the pointer leaving it - its box
+  // standing in its place while it is written anew: no longer under it
+  useEffect(
+    () => () => {
+      const s = store.getState();
+      if (s.hoveredCaption === c.id) s.setHoveredCaption(null);
+    },
+    [store, c.id],
+  );
   useFrame((_, dt) => {
     const m = light.current;
     if (!m) return;
@@ -73,7 +82,8 @@ function CaptionHold({ laid }: { laid: Laid }) {
   };
   return (
     <group
-      position={[c.x, c.y, 0.02]}
+      // (over an arrow's hit area, where they meet: a press there is the words')
+      position={[c.x, c.y, 0.04]}
       onPointerOver={() => store.getState().setHoveredCaption(c.id)}
       onPointerOut={() => store.getState().setHoveredCaption(null)}
       onDoubleClick={(e) => {
@@ -83,6 +93,8 @@ function CaptionHold({ laid }: { laid: Laid }) {
       onPointerDown={(e) => {
         // a right press is the menu's, or the view's to move
         if (e.nativeEvent.button !== 0) return;
+        // (one press, one thing moved: not the arrow under the words as well)
+        e.stopPropagation();
         const sx = e.nativeEvent.clientX;
         const sy = e.nativeEvent.clientY;
         const at = toWorld(sx, sy);
