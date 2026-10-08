@@ -24,8 +24,9 @@ rearrange and run again, with its results beside the molecule it is about.
    added fills is not offered.
 4. **Conformers go through a workflow as ACCeL takes them** (the
    maintainer's own library, MIT): a box of entries, each a structure,
-   worked through step after step. **Nothing becomes a conformer set by
-   itself** (*Boxes of conformers*, below).
+   worked through step after step. **A box is a conformer set only where
+   the flow shows that it is one**; boxed by the chemist, it is a
+   compound set (*Compound sets and conformer sets*, below).
 5. **What lies inside a box is what it holds**: a structure moved into it
    joins it, one moved out leaves it.
 6. **xTB first.** Programs installed separately - ORCA, Gaussian and
@@ -43,8 +44,18 @@ rearrange and run again, with its results beside the molecule it is about.
 11. **A step on many entries runs a job for each**, by default; a plugin
     may say that its program takes them all in one job, where it does
     that better (*Several at once*).
+12. **Meno does the simple steps itself, a plugin may do them instead**,
+    the chemist choosing which - as *Files* chooses who reads a kind of
+    file (FILE-IO.md). ACCeL's second version is under way, outside this
+    repository: it may come later as a plugin that fills these steps.
+    RDKit can fill *Duplicates*, if less thoroughly than ACCeL (*Who
+    does a step*).
+13. **A conformer set is converted to only on purpose**: what the chemist
+    boxes is a compound set; a step of its own, *As conformers*, makes
+    it a conformer set, on the page for the flow to show.
 
-Still open: *Questions*, at the end.
+No question is left open; the whole is for the maintainer to read and
+agree before step 1 is built.
 
 ## Words
 
@@ -54,8 +65,12 @@ Still open: *Questions*, at the end.
   is drawn by the chemist round what is there; a *result* box is made by
   a step, round what it gave.
 - **Entry** - one structure in a box: a drawing, or a molecule in 3D,
-  with what has been found of it (its energy, its population...), of a
-  molecule (*a*, *b*), and in play or set aside.
+  with what has been found of it (its energy, its population...), and in
+  play or set aside.
+- **Compound set** - a box whose entries are each a compound of its own:
+  what a box the chemist draws holds.
+- **Conformer set** - a box whose entries are conformers, grouped by the
+  compound each is of (*a*, *b*...): what the flow makes, and only it.
 - **Step** - one kind of calculation done to a box's entries, of a kind
   Meno defines (*Kinds of step*), filled by a plugin or by Meno.
 - **Port** - where a wire starts or ends: a box gives from its right
@@ -144,9 +159,9 @@ pointer does; put back by an undo, they glide back.
   it held; a box left empty stays, empty, until it is deleted.
 
 A box's entries are its structures and molecules in 3D, in the order they
-lie (top to bottom, left to right). Each is an entry of its own molecule
-(*a*, *b*...), unless the box was made by a step that says otherwise
-(*Boxes of conformers*).
+lie (top to bottom, left to right). A box the chemist draws is a
+**compound set**: each entry a compound of its own, however alike two
+are (*Compound sets and conformer sets*).
 
 ### Kinds of step
 
@@ -157,20 +172,43 @@ new kind comes with Meno, as a new role does (PLUGINS.md, *Roles*).
 
 | Kind | Icon | Takes | Gives |
 | --- | --- | --- | --- |
-| 3D structure | a cube | structures | molecules in 3D |
-| Conformers | three rings, stacked | molecules in 3D | each molecule's conformers |
-| Optimise | a curve down to its lowest point | molecules in 3D | each optimised, its path as frames |
-| Energy | E and a level | molecules in 3D | each with its energy |
-| Frequencies | a wave | molecules in 3D | each with its vibrations and thermal corrections |
-| Energy window | a band | entries with energies | those within it of their molecule's lowest; the rest set aside |
-| Duplicates | two rings, one dashed | molecules in 3D | each unlike the others kept; the rest set aside |
-| Populations | falling bars | entries with energies | each with its Boltzmann population within its molecule |
+| 3D structure | a cube | structures | molecules in 3D - the same kind of set |
+| Conformers | three rings, stacked | molecules in 3D | **a conformer set**: each compound's conformers |
+| Optimise | a curve down to its lowest point | molecules in 3D | each optimised, its path as frames - the same kind of set |
+| Energy | E and a level | molecules in 3D | each with its energy - the same kind of set |
+| Frequencies | a wave | molecules in 3D | each with its vibrations and thermal corrections - the same kind of set |
+| Energy window | a band | a conformer set, with energies | those within the window of their compound's lowest; the rest set aside |
+| Duplicates | two rings, one dashed | molecules in 3D | each unlike the others of its compound kept; the rest set aside - the same kind of set |
+| Populations | falling bars | a conformer set, with energies | each with its Boltzmann population within its compound |
+| As conformers | three rings, one boxed | a compound set of molecules in 3D | **a conformer set**: entries of the same constitution - the same atoms, bonded the same way - as conformers of one compound |
 
-The first five run a program; the last three work on a box's entries
-alone, and are filled by Meno's own part, or a plugin's (*Questions*,
-ACCeL). More kinds come with Meno as they are needed - a free energy from
-an energy and its corrections, the lowest of each molecule, a template
-input written out - each specified before it is built.
+The first five run a program; the last four work on a box's entries
+alone (*Who does a step*). A step that keeps a set keeps its kind: a
+conformer set optimised is still one. More kinds come with Meno as they
+are needed - a free energy from an energy and its corrections, the
+lowest of each compound, a template input written out - each specified
+before it is built.
+
+### Who does a step
+
+As *Files* chooses who reads each kind of file (FILE-IO.md, decided
+again for steps on 2026-10-08):
+
+- **Meno does the simple steps itself** - *Energy window*,
+  *Populations*, *As conformers*, and *Duplicates* in a plain way (the
+  RMSD of the entries' atoms in their own order, after the best fit; it
+  does not see symmetric atoms swapped, so two copies of a structure
+  numbered differently can both be kept). Meno's part is there from the
+  start, with nothing to add.
+- **A plugin added may do any of them instead**: RDKit does *Duplicates*
+  with its best RMSD over the molecule's symmetries; ACCeL, its second
+  version, may come as a plugin that does them all as ACCeL does.
+- **The chemist chooses**, in Settings, *Calculations* - a table like
+  *Files*: each kind of step, who does it (*Meno*, or a plugin added),
+  and its options' defaults - and in the step itself, which says who
+  does it on its card (*Duplicates · Meno*, *Duplicates · RDKit*).
+- **Steps that run a program** are done by plugins only: Meno runs no
+  program of its own.
 
 ### A step: from Quick Add
 
@@ -180,17 +218,20 @@ input written out - each specified before it is built.
   gains **one button**: *Calculations*, a small graph of two joined
   boxes, after a thin rule.
 - **Pressed, it opens** a panel below the row, of the kinds of step,
-  each an icon, named on hover with who fills it (*Optimise · xTB*):
+  each an icon, named on hover with who does it (*Optimise · xTB*):
   first those that run a program, then those that work on entries.
-- **Only what something added fills is there.** With no plugin that runs
-  a program added, the panel shows the kinds Meno fills itself; a kind
-  nothing fills is not shown, and nothing is shown of plugins not added.
+  *As conformers* is not among them: it is reached from a compound set's
+  port, its wire let go on empty space, at the end of the panel - a
+  conversion taken on purpose.
+- **Only what something added does is there.** With no plugin that runs
+  a program added, the panel shows the steps Meno does itself; a kind
+  nothing does is not shown, and nothing is shown of plugins not added.
 - **A wire let go on empty space** opens Quick Add already at
   *Calculations*, showing only the kinds that take what the wire
   carries.
-- **Who fills a kind** where more than one plugin added can is chosen in
-  the step (*Its options*); Settings says who by default, as *Molecules
-  in 3D* does for conformers today.
+- **Who does a kind** where more than one can is chosen in the step
+  (*Its options*); Settings, *Calculations*, says who by default (*Who
+  does a step*).
 
 ### Wires
 
@@ -199,7 +240,9 @@ input written out - each specified before it is built.
   take it are lit, the others dimmed.
 - **What may join**: what a port gives to a port that takes it (*Kinds of
   step*). Nothing is converted on the way: a box of structures does not
-  go into *Optimise* - a *3D structure* step goes between, on the page.
+  go into *Optimise* - a *3D structure* step goes between, on the page;
+  a compound set does not go into *Populations* - *As conformers* goes
+  between, or a *Conformers* step.
 - **One port may feed several steps**; a port that takes, one wire. A
   wire drawn to a port that has one replaces it.
 - **Deleted** by Delete or Backspace with the pointer on it, or its menu;
@@ -218,40 +261,45 @@ frames chip opens to its slider:
   (3 kcal/mol);
 - the charge and the unpaired electrons, read from each entry as Export
   reads them, and changeable;
-- who fills it, where more than one added can;
+- who does it, where more than one can (*Who does a step*);
 - *Show log* and *Show files* once it has run.
 
 Another click on its title, Escape, or a press elsewhere closes it. The
 last options chosen for each kind are what a new step starts with.
 
-## Boxes of conformers
+## Compound sets and conformer sets
 
 ![A box of conformers through a workflow](workflows/7-conformers.svg)
 
 Conformers go through a workflow as ACCeL's `Box` takes them (decided):
 
-- **A box holds entries**, each a structure, **of a molecule** (*a*,
-  *b*...) - as ACCeL's labels group a molecule's conformers - with what
-  has been found of it: energies, corrections, populations.
-- **Steps work entry by entry**, or molecule by molecule where the kind
-  says so: *Optimise* each entry; *Energy window* within each molecule;
-  *Populations* within each molecule.
+- **A box holds entries**, each a structure, with what has been found of
+  it: energies, corrections, populations.
+- **A box is one of two kinds of set** (decided):
+  - a **compound set** - each entry a compound of its own. What the
+    chemist boxes is one, always: two structures boxed together are two
+    compounds, however alike; a file of many geometries read and boxed
+    is a compound set of many, not conformers because there are many;
+  - a **conformer set** - entries grouped by the compound each is a
+    conformer of (*a*, *b*...), as ACCeL's labels group them. It is made
+    by the flow only: by *Conformers*, or by *As conformers* - the
+    conversion taken on purpose, a step on the page like any other - and
+    kept by the steps after them that keep their set's kind. So whether
+    a box is a conformer set can always be read from the flow that led
+    to it.
+- **Steps work entry by entry**, or compound by compound where the kind
+  says so: *Optimise* each entry; *Energy window* and *Populations*
+  within each compound of a conformer set.
 - **What a step sets aside is kept**, struck through in its box, not
   deleted - as ACCeL's entries are switched off - so that a window made
   wider brings it back on the next run.
-- **Nothing becomes a conformer set by itself** (decided): entries are
-  conformers of one molecule only where a step that makes conformers says
-  so (*Conformers*), or the chemist does (*These are conformers of one
-  molecule*, on a box's menu). Two structures boxed together are two
-  molecules, however alike; a file of many geometries read is not a
-  conformer set because it has many; a box is never merged into one
-  molecule with frames unless a step makes it so.
-- **On the page**, a box's entries of one molecule that are its
-  conformers are shown as that molecule in 3D with its conformers as
-  frames - the conformer set Meno draws today, its chip saying the
-  entry, its energy and population; entries set aside are not among its
-  frames, and are listed, struck through, in its box. Entries of
-  different molecules are separate molecules in the box.
+- **On the page**, a conformer set's compound is shown as one molecule in
+  3D with its conformers as frames - the conformer set Meno draws today,
+  its chip saying the entry, its energy and population; entries set aside
+  are not among its frames, and are listed, struck through, in its box.
+  A compound set's entries are separate molecules, each its own.
+- **A box's tab says which it is**: *Compounds · 2*, *Conformers · 2
+  compounds · 81*.
 
 ## Running
 
@@ -300,12 +348,13 @@ of the step, wired from it (decided):
 
 - **Optimise**: each entry as optimised, its path as frames, the energy
   of each frame - what an optimisation read from a file shows today;
-- **Conformers**: each molecule's conformers, as entries of that
-  molecule (*Boxes of conformers*);
+- **Conformers**: a conformer set - each compound's conformers, as its
+  entries (*Compound sets and conformer sets*);
 - **Energy**, **Frequencies**: the entries, each with its energy, or its
   vibrations and thermal corrections;
 - **Energy window**, **Duplicates**, **Populations**: the same entries,
-  some set aside, or with their populations.
+  some set aside, or with their populations;
+- **As conformers**: the same entries, as a conformer set.
 
 They are calculation results as Meno knows them: the frames chip,
 pointing at atoms, the lists. The box's port feeds the next step.
@@ -402,8 +451,9 @@ gave), and one can be shown again.
   started, stopped and logged the same way, whoever prepared it; *Stop*
   stops the program and everything it started (a process group on macOS
   and Linux, a job object on Windows).
-- **Steps on entries alone** (*Energy window*...) are a plain request,
-  `run {step, entries, options}`, answered at once, no job made.
+- **Steps on entries alone** (*Energy window*...), done by a plugin
+  rather than by Meno, are a plain request, `run {step, entries,
+  options}`, answered at once, no job made.
 - **Jobs reach no network**, as the plugins' workers do not.
 - **A job's folder** is in Meno's data folder (`jobs/<id>/`; decided):
   its input, its log, its outputs, Meno's record of it. *Show files*
@@ -423,10 +473,11 @@ gave), and one can be shown again.
   conda-forge with the chemist's consent; their licences are shown in
   Settings, *Plugins*, as each plugin's is.
 - **Programs installed separately** are found, never fetched or shipped.
-- **ACCeL** (MIT), if it fills kinds of step, is a plugin fetched from
-  PyPI like any other, its notice shown with it; its ideas are the
-  maintainer's to take into Meno's own part, its code is not copied
-  without its notice (Meno is Apache-2.0).
+- **ACCeL** (MIT), if its second version comes as a plugin, is fetched
+  like any other, its notice shown with it. Meno's own steps on entries
+  are written for Meno from this specification and published methods;
+  ACCeL's code is not copied into Meno (were it ever, its MIT notice
+  would go with it - Meno is Apache-2.0).
 - **Figures and icons** here and in the app are Meno's own.
 
 ## Where this leaves what is there
@@ -444,10 +495,11 @@ gave), and one can be shown again.
 
 1. **Boxes, steps and wires on the page**, none run: the document's new
    items, their drawing, boxing from the selection, wires, Quick Add's
-   *Calculations*, menus, undo, saving; Meno's own *Energy window*,
-   *Duplicates* and *Populations* - the first steps that do something,
-   on entries read from files. The Workflow Builder tab and ReactFlow
-   removed.
+   *Calculations*, menus, undo, saving; Meno's own *As conformers*,
+   *Energy window*, *Duplicates* and *Populations* - the first steps that
+   do something, on entries read from files - and Settings,
+   *Calculations*, choosing who does each. The Workflow Builder tab and
+   ReactFlow removed.
 2. **The job runner**: Meno's job mode, started apart; logs; *Stop*;
    picking jobs up when a workspace is opened; Settings, *Calculations*.
 3. **xTB**: its plugin; *Optimise*, *Energy*, *Frequencies*; results
@@ -455,7 +507,8 @@ gave), and one can be shown again.
    optimise.
 4. **Chains**: running in order, *Run from here*, *Run all*, *Changed*,
    runs kept, several at once.
-5. **Conformers**: RDKit's in a step, then CREST (macOS and Linux).
+5. **Conformers**: RDKit's in a step, and RDKit's *Duplicates*; then
+   CREST (macOS and Linux).
 6. **Programs installed separately**: ORCA and Gaussian - finding them,
    their steps, reading their outputs.
 7. **Procedures**: saved, put down again, shared as a file.
@@ -465,20 +518,6 @@ something is Windows' own (the job object; xTB's Windows build).
 
 ## Questions
 
-1. **ACCeL as the back end** of the steps on entries (*Energy window*,
-   *Duplicates*, *Populations*, and more of `Box`'s methods later) - or
-   Meno's own part?
-   - *ACCeL, as a plugin*: the maintainer's own, tried on real ensembles,
-     and its RMSD with symmetry (`calc_symm`, `map_numbers`) is the hard
-     part of *Duplicates*; it grows with ACCeL. But every step starts
-     Python, its `Box` works from files, and entries go to it and back as
-     data.
-   - *Meno's own*: the window and populations are a few lines, at once,
-     with no process; *Duplicates* needs an RMSD that knows symmetric
-     atoms, written for Meno from a published method.
-   - *Both*: Meno defines the kinds, ACCeL fills them first as a plugin,
-     and Meno fills the light ones itself where waiting for Python would
-     be felt. (My recommendation.)
-2. **Conformers of one molecule, said by the chemist.** *These are
-   conformers of one molecule* on a box's menu (proposed), for entries
-   read from files - or only steps make conformers?
+None left open (2026-10-08). The specification as a whole is for the
+maintainer to read and agree before step 1 is built; what they change
+is folded in here first.
