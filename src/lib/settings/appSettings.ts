@@ -37,6 +37,14 @@ export type AppSettings = {
   plugins: PluginSettings;
   /** The pictures a copy puts beside a structure, for other programs (StructureEditor/picture). */
   pictures: PictureSettings;
+  /** How the mouse and the trackpad work the canvas. */
+  pointer: PointerSettings;
+};
+
+/** How the mouse and the trackpad work the canvas: which way a turn of the wheel zooms. */
+export type PointerSettings = {
+  /** A turn of the wheel upwards zooms in (as maps do), or out. */
+  wheelUp: "in" | "out";
 };
 
 /** The resolutions a copied picture may be made at, in pixels to the inch. */
@@ -100,6 +108,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   files: { read: {}, also: {} },
   plugins: { removed: [], roles: {} },
   pictures: { dpi: 600 },
+  pointer: { wheelUp: "in" },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -120,7 +129,14 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     files: acceptFiles(r.files, r.calcReaders),
     plugins: acceptPlugins(r.plugins),
     pictures: acceptPictures(r.pictures),
+    pointer: acceptPointer(r.pointer),
   };
+}
+
+/** How the pointer works, as the file holds it; what does not read, as it is by default. */
+function acceptPointer(raw: unknown): PointerSettings {
+  const r = (raw ?? {}) as { wheelUp?: unknown };
+  return { wheelUp: r.wheelUp === "out" ? "out" : "in" };
 }
 
 function acceptPictures(raw: unknown): PictureSettings {
@@ -277,6 +293,7 @@ type SettingsState = AppSettings & {
   setFiles: (files: FileSettings) => void;
   setPlugins: (plugins: PluginSettings) => void;
   setPictures: (pictures: PictureSettings) => void;
+  setPointer: (pointer: PointerSettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -287,9 +304,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -326,6 +343,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setPictures: (pictures) => {
       set({ pictures });
+      scheduleSave();
+    },
+    setPointer: (pointer) => {
+      set({ pointer });
       scheduleSave();
     },
     setUpdates: (updates) => {

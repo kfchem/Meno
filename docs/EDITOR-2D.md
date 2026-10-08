@@ -123,7 +123,14 @@ Each notch zooms by the same ratio - 17 % for a 100 px notch - whether the
 view was still before it or already moving, at any frame rate: what is left
 to zoom is gone over a share a frame (`zoomTaken`), all of it in the end.
 The wheel over what is laid on the canvas - a molecule's frames chip, its
-note - zooms as over the canvas.
+note - zooms as over the canvas. The wheel turned upwards zooms in, as maps
+do, or out where Settings, *Mouse and trackpad*, says so (the maintainer,
+2026-10-08); a pinch zooms as the fingers go, whichever is chosen.
+A pinch let go while still zooming goes on zooming, as a drag let go goes on
+moving, and slows to a stop: as fast as it went over its last 64 ms, unless
+held still for 80 ms first (`lib/input/glide.ts`). Chromium's pinch, as the
+wheel with Ctrl, has no end of its own: it ends once no step has come for
+80 ms.
 A step within a thousandth of a pixel of whole counts as whole: Windows'
 display scaling leaves notches that close (ten notches at once came as
 999.99993 px at 175 %), and read as fingers they moved the view a thousand

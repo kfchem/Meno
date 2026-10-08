@@ -9,6 +9,7 @@ import Style3DEditor from "../StyleEditor/Style3DEditor";
 import AbbreviationSettings from "./AbbreviationSettings";
 import ChemistrySettings from "./ChemistrySettings";
 import FileSettings from "./FileSettings";
+import PointerSettings from "./PointerSettings";
 import PictureSettings from "./PictureSettings";
 import PluginSettings from "./PluginSettings";
 import RoleChoices from "./RoleChoices";
@@ -17,6 +18,7 @@ import { useSettingsSection, type SettingsSection } from "./section";
 const SECTIONS: { id: SettingsSection; name: string }[] = [
   { id: "style", name: "Drawing style" },
   { id: "style3d", name: "Molecules in 3D" },
+  { id: "pointer", name: "Mouse and trackpad" },
   { id: "chemistry", name: "Chemistry" },
   { id: "files", name: "Files" },
   { id: "plugins", name: "Plugins" },
@@ -27,6 +29,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
 /**
  * The application's settings: the drawing style every structure is drawn
  * in unless its document has its own, how molecules in 3D look and turn,
+ * how the mouse and the trackpad work the canvas,
  * what is pointed out on a structure, who reads and writes each kind
  * of file and how sharp a copied picture is, the plugins, what the labels Meno reads stand for, and what Meno
  * may do on the network.
@@ -108,6 +111,12 @@ export default function SettingsPanel() {
             >
               <RoleChoices where="molecules3d" heading="Made by" />
             </Style3DEditor>
+          </section>
+        ) : section === "pointer" ? (
+          <section className="mt-6 max-w-4xl">
+            <h2 className="text-base font-semibold text-gh-black">Mouse and trackpad</h2>
+            <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">How the mouse and the trackpad work the canvas. Changes are saved as you make them.</p>
+            <PointerSettings />
           </section>
         ) : section === "chemistry" ? (
           <section className="mt-6 max-w-4xl">
