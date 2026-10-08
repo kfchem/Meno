@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { endChain, followChain, regularRing, ringsOf, startChain, type Chain } from "./chain";
+import { followChain, startChain, type Chain } from "./chain";
 import { cellOf } from "./honeycomb";
 import type { Pt } from "./honeycomb";
 
@@ -13,6 +13,12 @@ function lead(c: Chain, points: Pt[], steps = 12): Chain {
     at = p;
   }
   return c;
+}
+
+/** The ring the walk closed, as many members as the way round is bonds; none where it came round to no point again. */
+function closedRing(c: Chain): number | null {
+  const again = c.walk.findIndex((k, i) => c.walk.indexOf(k) !== i);
+  return again < 0 ? null : again - c.walk.indexOf(c.walk[again]);
 }
 
 /** Points round a circle about `centre`, from the angle `from`, `turns` of the way round. */
@@ -36,7 +42,6 @@ describe("a chain traced on its honeycomb", () => {
     const out = lead(startChain({ x: 0, y: 0 }, [], L), [{ x: 3 * L, y: 0 }]);
     const back = lead(out, [{ x: 0.2 * L, y: 0 }]);
     expect(back.walk).toEqual(["0,0,A"]);
-    expect(ringsOf(back)).toEqual([]);
   });
 
   it("takes its bonds back when led back a little beside the way it came, and closes no ring for that", () => {
@@ -49,9 +54,8 @@ describe("a chain traced on its honeycomb", () => {
       const c0 = startChain(at(824, 1146), [at(843, 1050)], L);
       const out = lead(c0, [at(1324, 1180)], steps);
       const back = lead(out, [at(1060, 1160)], steps);
-      expect(new Set(back.walk).size).toBe(back.walk.length);
+      expect(closedRing(back)).toBeNull();
       expect(out.walk.slice(0, back.walk.length)).toEqual(back.walk);
-      expect(ringsOf(back)).toEqual([]);
     }
   });
 
@@ -62,56 +66,74 @@ describe("a chain traced on its honeycomb", () => {
     const c = lead(c0, round(centre, L, -Math.PI / 2, 1.02, 60), 3);
     expect(c.walk[0]).toBe("0,0,A");
     expect(c.walk[c.walk.length - 1]).toBe("0,0,A");
-    expect(new Set(c.walk).size).toBe(6);
+    expect(closedRing(c)).toBe(6);
   });
 
-  it("closes a six-membered ring for a loop back to it, however long, on the side it went round - a chain makes no other", () => {
+  it("closes a ten-membered ring when led round two hexagons of it - the honeycomb's ring, not a six", () => {
     const c0 = startChain({ x: 0, y: 0 }, [], L);
-    // round a loop about as long as five bonds, from the start and back to it
-    const rr = (5 * L) / (2 * Math.PI);
-    const centre = { x: 0.2 * rr, y: Math.sqrt(1 - 0.04) * rr };
-    const from = Math.atan2(-centre.y, -centre.x);
-    const c = endChain(lead(c0, round(centre, rr, from, -1, 60), 3));
-    // round the honeycomb's hexagon, back to the start: six members, and no ring of another size
-    expect(c.walk).toHaveLength(7);
-    expect(c.walk[6]).toBe(c.walk[0]);
-    expect(ringsOf(c)).toEqual([]);
-    // on the loop's side: above the start
-    const cells = c.walk.map((k) => cellOf(c.honeycomb, k));
-    expect(cells.reduce((y, p) => y + p.y, 0)).toBeGreaterThan(0);
+    // round the hexagon above the start and the one to its right, along their outside
+    const h = (Math.sqrt(3) / 2) * L;
+    const way = [
+      { x: -h, y: 0.5 * L },
+      { x: -h, y: 1.5 * L },
+      { x: 0, y: 2 * L },
+      { x: h, y: 1.5 * L },
+      { x: 2 * h, y: 2 * L },
+      { x: 3 * h, y: 1.5 * L },
+      { x: 3 * h, y: 0.5 * L },
+      { x: 2 * h, y: 0 },
+      { x: h, y: 0.5 * L },
+      { x: 0, y: 0 },
+    ];
+    const c = lead(c0, way, 8);
+    expect(c.walk).toHaveLength(11);
+    expect(c.walk[10]).toBe(c.walk[0]);
+    expect(closedRing(c)).toBe(10);
   });
 
-  it("closes a six-membered ring for a loop traced with a trembling hand too", () => {
+  it("closes the ring along the honeycomb for a loop back round to the chain, however long the loop", () => {
+    const c0 = startChain({ x: 0, y: 0 }, [], L);
+    for (const [bonds, members] of [
+      [5, 6],
+      [9, 10],
+      [12, 14],
+    ]) {
+      // round a loop about as long as that many bonds, from the start and back to it
+      const rr = (bonds * L) / (2 * Math.PI);
+      const centre = { x: 0.2 * rr, y: Math.sqrt(1 - 0.04) * rr };
+      const from = Math.atan2(-centre.y, -centre.x);
+      const c = lead(c0, round(centre, rr, from, -1, 90), 3);
+      // (a ring of the honeycomb: six members round one hexagon, ten round two, fourteen round three)
+      expect(closedRing(c)).toBe(members);
+      // on the loop's side: above the start
+      const cells = c.walk.map((k) => cellOf(c.honeycomb, k));
+      expect(cells.reduce((y, p) => y + p.y, 0)).toBeGreaterThan(0);
+    }
+  });
+
+  it("closes the hexagon's ring for a loop traced with a trembling hand too", () => {
     const c0 = startChain({ x: 0, y: 0 }, [], L);
     const rr = (5 * L) / (2 * Math.PI);
     const centre = { x: 0.2 * rr, y: Math.sqrt(1 - 0.04) * rr };
     const from = Math.atan2(-centre.y, -centre.x);
     // each point of the way a little off it, to one side and back
     const shaky = round(centre, rr, from, -1, 60).flatMap((p) => [{ x: p.x - 0.08 * L, y: p.y }, p]);
-    const c = endChain(lead(c0, shaky, 1));
-    expect(c.walk).toHaveLength(7);
-    expect(c.walk[6]).toBe(c.walk[0]);
-    expect(ringsOf(c)).toEqual([]);
+    const c = lead(c0, shaky, 1);
+    expect(closedRing(c)).toBe(6);
   });
 
-  it("draws a six-membered ring, and no other, for a loop longer than a hexagon", () => {
-    const c0 = startChain({ x: 0, y: 0 }, [], L);
-    // round a loop as long as nine bonds: once a ring of nine members, now six
-    const rr = (9 * L) / (2 * Math.PI);
-    const centre = { x: 0.2 * rr, y: Math.sqrt(1 - 0.04) * rr };
-    const from = Math.atan2(-centre.y, -centre.x);
-    const c = endChain(lead(c0, round(centre, rr, from, -1, 90), 3));
-    const sizes = ringsOf(c).map((r) => r.points.length + 1);
-    expect(sizes.every((n) => n === 6)).toBe(true);
-    // (and the walk closes nothing but a hexagon)
-    const back = c.walk.findIndex((k, i) => c.walk.indexOf(k) !== i);
-    if (back >= 0) expect(back - c.walk.indexOf(c.walk[back])).toBe(6);
+  it("draws no ring for a small loop that comes round to no point of the chain", () => {
+    const out = lead(startChain({ x: 0, y: 0 }, [], L), [{ x: 2 * L, y: 0 }]);
+    const head = cellOf(out.honeycomb, out.walk[out.walk.length - 1]);
+    // round, inside the hexagon by the head: once a ring as long as the loop, now none
+    const c = lead(out, round({ x: head.x, y: head.y + 0.4 * L }, 0.4 * L, -Math.PI / 2, 1, 40), 2);
+    expect(closedRing(c)).toBeNull();
   });
 
   it("draws no ring for a way out and back that encloses only a sliver", () => {
     const out = lead(startChain({ x: 0, y: 0 }, [], L), [{ x: 3 * L, y: 0 }]);
-    const back = endChain(lead(out, [{ x: 3 * L, y: -0.35 * L }, { x: 0.1 * L, y: -0.35 * L }]));
-    expect(ringsOf(back)).toEqual([]);
+    const back = lead(out, [{ x: 3 * L, y: -0.35 * L }, { x: 0.1 * L, y: -0.35 * L }]);
+    expect(closedRing(back)).toBeNull();
   });
 
   it("keeps a ring the chain goes on from, and lets it go when led back past it", () => {
@@ -122,25 +144,8 @@ describe("a chain traced on its honeycomb", () => {
     c = lead(out, round(centre, L * 0.9, -Math.PI / 2, 1.0, 60), 3);
     c = lead(c, [{ x: head.x + 2 * L, y: head.y - 0.2 * L }]);
     // round the hexagon at the head: the walk comes back to it, and goes on
-    const closed = (w: string[]) => w.some((k, i) => w.indexOf(k) !== i);
-    expect(closed(c.walk)).toBe(true);
+    expect(closedRing(c)).toBe(6);
     const back = lead(c, [{ x: 0, y: 0 }]);
-    expect(closed(back.walk)).toBe(false);
-    expect(ringsOf(back)).toEqual([]);
-  });
-});
-
-describe("a regular ring on a bond", () => {
-  it("has the bond as a side, its atoms a bond apart, on the side asked for", () => {
-    const pts = regularRing({ x: 0, y: 0 }, { x: L, y: 0 }, 5, { x: 0.5, y: -3 });
-    expect(pts).toHaveLength(4);
-    expect(pts[0].x).toBeCloseTo(L, 9);
-    const all = [{ x: 0, y: 0 }, ...pts];
-    for (let i = 0; i < all.length; i++) {
-      const p = all[i];
-      const q = all[(i + 1) % all.length];
-      expect(Math.hypot(q.x - p.x, q.y - p.y)).toBeCloseTo(L, 9);
-    }
-    expect(pts.every((p) => p.y <= 1e-9)).toBe(true);
+    expect(closedRing(back)).toBeNull();
   });
 });

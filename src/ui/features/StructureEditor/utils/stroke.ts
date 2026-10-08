@@ -15,8 +15,8 @@
  * step.
  */
 import { snapBond, type Pt } from "./extendSnap";
-import { CHAIN_RING, endChain, followChain, ringsOf, startChain, type Chain } from "./chain";
-import { cellOf } from "./honeycomb";
+import { followChain, startChain, type Chain } from "./chain";
+import { cellOf, nearestCell, neighboursOf } from "./honeycomb";
 
 /**
  * An atom a stroke has reached: a new one where it goes, an atom already
@@ -79,13 +79,14 @@ export function startStroke(
 }
 
 /**
- * A chain's walk and rings as the nodes it adds: each point of the walk an
- * atom - one already there where the honeycomb's point falls on it - a
- * point it comes round to again the same atom, and each ring's atoms going
- * off from the walk's point and back to it. A point is taken as an atom
- * already there, or one of the chain's own, only where that closes a
- * six-membered ring, or none: a chain makes no ring of another size (the
- * maintainer, 2026-10-07); there, it is an atom of its own.
+ * A chain's walk as the nodes it adds: each point of the walk an atom - one
+ * already there where the honeycomb's point falls on it - and a point it
+ * comes round to again the same atom. A point is taken as an atom already
+ * there, or one of the chain's own, only where the ring that closes lies
+ * along the honeycomb - its atoms on its points, its bonds its bonds - or
+ * where it closes none: a chain draws the honeycomb's rings and no other
+ * (the maintainer, 2026-10-07 and 2026-10-08); elsewhere, it is an atom of
+ * its own.
  */
 export function chainNodes(model: StrokeModel, s: Stroke): StrokeNode[] {
   const c = s.chain;
@@ -112,31 +113,48 @@ export function chainNodes(model: StrokeModel, s: Stroke): StrokeNode[] {
     graph.get(v)!.add(u);
   };
   for (const b of model.bonds) join(`m${b.a}`, `m${b.b}`);
-  // (the ring a bond from `u` to `v` closes: as many members as the way
-  // between them is bonds, and one; none where there is no way, or where
-  // they are bonded already - the bond is there)
-  const closes = (u: string, v: string): number | null => {
+  // (the ring a bond from `u` to `v` closes: the shortest way between
+  // them, from `u` to `v`; none where there is no way, or where they are
+  // bonded already - the bond is there)
+  const closes = (u: string, v: string): string[] | null => {
     if (u === v || graph.get(u)?.has(v)) return null;
-    const seen = new Set([u]);
+    const came = new Map<string, string>([[u, u]]);
     let edge = [u];
-    for (let d = 1; edge.length; d++) {
+    while (edge.length) {
       const next: string[] = [];
       for (const x of edge)
         for (const y of graph.get(x) ?? []) {
-          if (y === v) return d + 1;
-          if (!seen.has(y)) {
-            seen.add(y);
-            next.push(y);
+          if (came.has(y)) continue;
+          came.set(y, x);
+          if (y === v) {
+            const way = [v];
+            while (way[way.length - 1] !== u) way.push(came.get(way[way.length - 1])!);
+            return way.reverse();
           }
+          next.push(y);
         }
       edge = next;
     }
     return null;
   };
-  // (taking `to` for the point, bonded from `from`: a six-membered ring, or none)
+  const placeOf = (v: string): Pt | undefined =>
+    v === "base" ? base : v.startsWith("m") ? model.atoms.find((a) => `m${a.id}` === v) : nodes[Number(v.slice(1))];
+  // (a ring along the honeycomb: each of its atoms on a point of it, and
+  // each of its bonds, the closing one too, between neighbours there)
+  const alongHoneycomb = (ring: string[]) =>
+    ring.every((v, i) => {
+      const p = placeOf(v);
+      const q = placeOf(ring[(i + 1) % ring.length]);
+      if (!p || !q) return false;
+      const a = nearestCell(c.honeycomb, p);
+      const b = nearestCell(c.honeycomb, q);
+      const on = (cell: Pt, at: Pt) => Math.hypot(cell.x - at.x, cell.y - at.y) < 0.35 * L;
+      return on(a, p) && on(b, q) && neighboursOf(c.honeycomb, a).some((n) => n.key === b.key);
+    });
+  // (taking `to` for the point, bonded from `from`: a ring along the honeycomb, or none)
   const allowed = (from: string, to: string) => {
     const ring = closes(from, to);
-    return ring == null || ring === CHAIN_RING;
+    return ring == null || alongHoneycomb(ring);
   };
   let last = BASE;
   const place = (p: Pt, from?: number): number => {
@@ -165,22 +183,6 @@ export function chainNodes(model: StrokeModel, s: Stroke): StrokeNode[] {
     const prev = refs[i - 1];
     const from = nodes.length && refOf(nodes, nodes.length - 1) !== prev ? prev : undefined;
     refs.push(place(cell, from));
-  }
-  // the rings: off from the walk's point, round, and back to it
-  for (const r of ringsOf(c)) {
-    const at = refs[r.at];
-    if (at == null) continue;
-    let from: number | undefined = at;
-    for (const p of r.points) {
-      place(p, from);
-      from = undefined;
-    }
-    const j = at === BASE ? base : nodes[at];
-    if (j) {
-      nodes.push({ x: j.x, y: j.y, pathIndex: at });
-      join(vertexOf(last), vertexOf(at));
-      last = at;
-    }
   }
   return nodes;
 }
@@ -351,7 +353,7 @@ export function finishStroke(
 ): StrokeNode[] {
   if (s.kind === "chain") {
     if (!s.chain) return s.nodes;
-    return chainNodes(model, { ...s, chain: endChain(s.chain) });
+    return chainNodes(model, s);
   }
   const target = strokeTarget(model, s, pointer, length);
   if (!target) return s.nodes;

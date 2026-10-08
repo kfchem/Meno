@@ -94,7 +94,7 @@ describe("a chain stroke", () => {
     expect(s.nodes.some((n) => n.atomId === 2)).toBe(true);
   });
 
-  it("goes onto an atom already there only where that closes a six-membered ring, or none", () => {
+  it("goes onto an atom already there only where the ring that closes lies along the honeycomb, or where it closes none", () => {
     // the hexagon round the methyl's bond: from its carbon up and round
     const h = Math.sqrt(3) / 2;
     const way = [
@@ -112,11 +112,12 @@ describe("a chain stroke", () => {
       }
       return s;
     };
-    // an atom bonded to the methyl's other carbon, where the chain's fourth
-    // point falls: taken, closing six members
+    // an atom bonded to the methyl's other carbon along the honeycomb, where
+    // the chain's fourth point falls: taken, closing its hexagon
     const six = { atoms: [...methyl.atoms, { id: 3, x: -1.5, y: h }], bonds: [...methyl.bonds, { a: 2, b: 3 }] };
     expect(lead(six, 4).nodes.some((n) => n.atomId === 3)).toBe(true);
-    // one where its third falls: it would close five - not taken, an atom of the chain's own
+    // one where its third falls, bonded off the honeycomb: it would close a
+    // ring of five - not taken, an atom of the chain's own
     const five = { atoms: [...methyl.atoms, { id: 3, x: -1, y: 2 * h }], bonds: [...methyl.bonds, { a: 2, b: 3 }] };
     const s = lead(five, 3);
     expect(s.nodes.length).toBe(3);
