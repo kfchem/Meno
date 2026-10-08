@@ -634,6 +634,85 @@ Not yet, and where it comes:
 - a program installed separately, found where the system finds programs
   (ORCA, Gaussian) - step 6.
 
+### Step 3: xTB (2026-10-08)
+
+Built: the xTB plugin (xtb 6.7.1 from conda-forge, made by pixi), filling
+*Optimise*, *Energy* and *Frequencies*; RDKit filling *3D structure*; the
+manifest's `steps` and the requests `prepare` and `collect`; steps that
+run jobs - *Waiting · 2nd*, *Running 1:12* with the log's last line under
+it, *Stopped after 0:31*, the wire into a running step a slow dash -
+*Stop*, *Show log* and *Show files* in a step's menu; results coming in; a
+workspace opened again picking its jobs up; and what closing says of jobs
+going on. The first workflow that runs: an input of drawn structures, *3D
+structure*, *Optimise*. How it works: ARCHITECTURE.md, *Workflows*.
+
+What xtb is asked, and what is read of what it writes, are as xtb's own
+documentation has them (xtb-docs.readthedocs.io) - the command line, the
+optimisation's trajectory and the files that say whether it converged,
+the machine-readable dump (`$write json=true`), the thermochemistry it
+prints - and the plugin's tests are written after its examples; no output
+of a real run is kept in the repository.
+
+Decided while building it, for the maintainer to confirm:
+
+- **The manifest's `steps`**: each kind it fills, with the `programs` it
+  runs - none, where it does the step in its worker - and its options in
+  the general form. A step's options are its doer's: who does it says
+  what it takes.
+- **`prepare {step, entries, options, cores}`** gives each job's input
+  files, its program and arguments, the entries it is for, and the files
+  `collect` will want; **`collect {step, entries, options, files, log,
+  ended}`** gives an output for each entry in the readers' output form
+  (lib/calc/output) - or, for a job that did not end done, why, in the
+  program's words. Meno asks `collect` of a failed job too, so that the
+  card says why.
+- **An entry goes to a plugin as Export gives a molecule to a writer**,
+  with its charge and spin multiplicity as Export reads them. Changing
+  them in the step comes later.
+- **One job for each entry**; a plugin taking all its entries in one job
+  comes with CREST (step 5).
+- **3D structure** is RDKit's: one conformer of the first stereoisomer,
+  as *3D structure* from the canvas's menu makes it, asked through the
+  roles' `conformers` with its options from Settings.
+- **Optimise, in a compound set**: each entry as optimised, its path as
+  its frames, ending at it and shown there; such a molecule is one entry
+  of a set - its last geometry - not one for each frame (`path`). In a
+  conformer set: each conformer's optimised geometry and energy, the path
+  not kept, the calculation's results not each conformer's.
+- **Frequencies**: the vibrations - their wavenumbers, reduced masses and
+  IR intensities - and the thermochemistry (Gibbs free energy, zero-point
+  energy, the corrections to G and H, T·S). How each mode moves is not
+  yet shown: xtb documents no displacements in a form of its own (its
+  `g98.out` is "GAUSSIAN-format"), so they wait for a documented source.
+- **A run under way is kept in the workspace with no step to undo**, the
+  workspace unsaved until it is saved; the results coming in are one step
+  to undo. Each job's log is kept in the workspace with the molecules it
+  gave.
+- **Closing**: a workspace with unsaved changes asks as before, and says
+  that closing it without saving stops its jobs, saved first they go on;
+  one saved says, once its tab is closed, how many go on. Meno quitting
+  with nothing unsaved says nothing: there is nowhere left to say it.
+- **Deleting a running step asks first**; deleted, a step's jobs are
+  stopped and their folders taken away. Undone, the step comes back
+  without them; its results keep its logs.
+- **Show log** opens each job's log as a text of the workspace, *Optimise
+  log* (*Optimise log 2*, ... where there are several), following the
+  job while it runs; a text that grows at its end keeps its last lines in
+  view unless it was scrolled up.
+- **A choice of more than five** is a list to pick from, in a step's
+  options and in Settings (xTB's solvents, its convergence levels).
+- **xTB's options**: the method (GFN2-xTB, GFN1-xTB, GFN-FF), a solvent -
+  ALPB, any of the 24 its documentation gives for all three methods - and,
+  optimising, how far it converges (crude to extreme, normal by default).
+
+Not yet, and where it comes:
+
+- *Run from here*, *Run all*, runs kept in a step, several steps at once
+  - step 4 (*Run* already runs the steps before it that need it);
+- a thin bar where a program says how far it is;
+- a workspace never saved keeping its jobs with the unsaved workspace
+  Meno reopens: Meno reopens no unsaved workspace yet.
+
 ## Questions
 
 None left open (2026-10-08). The specification as a whole is for the

@@ -358,6 +358,20 @@ not taken from either.
   it. Colours, cards and icons are Meno's own (WORKFLOWS.md, *How it
   looks*): its palette, its cards' hairline borders, Heroicons' outline
   icons (`workflow/icons.tsx`).
+- **Who does a step** (`workflow/doers.ts`): Meno, for the steps on
+  entries alone, and the plugins added whose manifests' `steps` fill the
+  kind; who does a step says what options it takes (`optionsFor`).
+- **Running** (`store/slices/stepRuns.ts`): the steps before it first,
+  then the step - Meno's at once, as one edit; a plugin's in its worker
+  (RDKit's 3D structure, through the roles' `conformers`); a plugin's
+  program as jobs: `prepare` asked of its worker, a job started for each
+  (lib/jobs), the run kept in the document as `running` - amended in, so
+  that undo does not take a run back, but the workspace is unsaved until
+  saved, and saved keeps it - its jobs looked at each second while there
+  are any (Workflow2D), and, all ended, `collect` asked for each and the
+  results brought in as one edit. A workspace opened with steps running
+  is looked at the same way, and picks them up. What a plugin sends and
+  reads back is checked as data (`workflow/programs.ts`).
 - Quick Add's calculations come from `workflow/offered.ts`; Settings,
   Calculations, is `SettingsPanel/CalculationSettings.tsx`, and its jobs
   `SettingsPanel/JobSettings.tsx`.
