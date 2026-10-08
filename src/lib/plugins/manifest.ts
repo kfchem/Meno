@@ -71,6 +71,10 @@ export type WriteDecl = {
  */
 export type StepDecl = { kind: string; programs: string[]; options: Option[] };
 
+/** The systems Meno runs on, as a plugin names those it can be added on. */
+export const SYSTEMS = ["macos", "windows", "linux"] as const;
+export type System = (typeof SYSTEMS)[number];
+
 /** A plugin's manifest, as Meno reads it. */
 export type Manifest = {
   id: string;
@@ -97,6 +101,8 @@ export type Manifest = {
   writes: WriteDecl[];
   /** The kinds of step it fills. */
   steps: StepDecl[];
+  /** The systems it can be added on - its programs built for those alone; none said, every one. */
+  systems: System[];
 };
 
 const ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -183,6 +189,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
   }
   // (a plugin that does nothing is none)
   if (!reads.length && !roles.length && !writes.length && !steps.length) return null;
+  const systems = Array.isArray(m.systems) ? SYSTEMS.filter((s) => (m.systems as unknown[]).includes(s)) : [];
   return {
     id,
     name,
@@ -198,6 +205,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
     kinds,
     writes,
     steps,
+    systems,
   };
 }
 

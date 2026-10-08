@@ -48,7 +48,7 @@ describe("the readers Meno knows of", () => {
   });
 
   it("are every plugin - those that read files, those that fill roles, as RDKit does, and those that fill kinds of step - each in an environment named for it", () => {
-    expect(PLUGINS.map((p) => p.id)).toEqual(["cclib", "gaussian-input", "pyscf", "rdkit", "xtb"]);
+    expect(PLUGINS.map((p) => p.id)).toEqual(["cclib", "crest", "gaussian-input", "pyscf", "rdkit", "xtb"]);
     const rdkit = PLUGINS.find((p) => p.id === "rdkit")!;
     expect(rdkit).toMatchObject({ reads: [], profile: "plugin-rdkit", lock: "resources/plugins/rdkit/requirements.lock", worker: "resources/plugins/rdkit/worker.py" });
     expect(rdkit.roles).toEqual(["smiles", "checks", "stereo-labels", "stereoisomers", "conformers", "drawing"]);
@@ -62,6 +62,9 @@ describe("the readers Meno knows of", () => {
     const xtb = PLUGINS.find((p) => p.id === "xtb")!;
     expect(xtb).toMatchObject({ reads: [], roles: [], writes: [], profile: "plugin-xtb", env: "pixi", lock: "resources/plugins/xtb/pixi.lock" });
     expect(xtb.steps.map((d) => d.kind)).toEqual(["optimise", "energy", "frequencies"]);
+    const crest = PLUGINS.find((p) => p.id === "crest")!;
+    expect(crest).toMatchObject({ profile: "plugin-crest", env: "pixi", systems: ["macos", "linux"] });
+    expect(crest.steps.map((d) => [d.kind, d.programs])).toEqual([["conformers", ["crest"]]]);
     expect(rdkit.steps.map((d) => [d.kind, d.programs])).toEqual([
       ["structure-3d", []],
       ["conformers", ["python"]],
@@ -83,6 +86,7 @@ describe("the readers Meno knows of", () => {
       roles: [],
       roleOptions: {},
       steps: [],
+      systems: [],
       writes: [],
       kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO" }] }],
     });

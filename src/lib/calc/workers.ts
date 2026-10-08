@@ -10,6 +10,7 @@ import { ReaderClient, type Reader } from "./client";
 import { menoReader } from "./builtin";
 import { stopRoleWorker } from "../roles/worker";
 import { useAppSettings } from "../settings/appSettings";
+import { forThisSystem } from "../plugins/here";
 
 /**
  * The plugins on this computer, and the readers' workers: a plugin is added
@@ -80,6 +81,7 @@ function markTakenAway(p: PythonPlugin, away: boolean) {
 
 /** Adds a plugin: sets its environment up, asking first whether it may download. */
 export async function addPlugin(p: PythonPlugin): Promise<void> {
+  if (!forThisSystem(p)) throw new Error(`${p.name} is not made for this system.`);
   setState(p.id, "adding");
   try {
     await ensurePyEnv(p.profile);

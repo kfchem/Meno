@@ -456,9 +456,10 @@ gave), and one can be shown again.
   xtb 6.7.1, LGPL-3.0, for macOS (Apple silicon and Intel), Windows and
   Linux. It fills *Optimise*, *Energy* and *Frequencies*, and reads its
   own outputs back.
-- **CREST**: *Conformers*, by a plugin made the same way - crest 3.0.2,
-  LGPL-3.0, on conda-forge for macOS and Linux only. On Windows it cannot
-  be added, and *Conformers* is filled by RDKit alone there.
+- **CREST**: *Conformers*, by a plugin made the same way - crest 2.12
+  with xtb 6.7.1, LGPL-3.0, on conda-forge for macOS and Linux only. On
+  Windows it cannot be added, and *Conformers* is filled by RDKit alone
+  there. (Not 3.0.2: *As built*, step 5.)
 - **Programs installed separately** (ORCA, Gaussian): never fetched by
   Meno - their licences do not allow it. A plugin's manifest says which
   program it needs and how to know it (its name, and the line its version
@@ -760,6 +761,68 @@ Decided while building it, for the maintainer to confirm:
   kept says how it was set even after the step's are changed.
 - ***Run all* leaves out a step with nothing coming into it**, which
   could only fail.
+
+### Step 5: conformers (2026-10-08)
+
+Built: *Conformers* by RDKit, as a job, and by CREST, a plugin of its own
+for macOS and Linux; *Duplicates* by RDKit, at once. A conformer search's
+results come in as a conformer set. How it works: ARCHITECTURE.md,
+*Workflows*.
+
+What CREST is asked, and what is read of what it writes, are as CREST's
+own documentation has them (crest-lab.github.io/crest-docs) - the command
+line, and the ensemble file its conformers are written to, each frame's
+comment line its energy in hartrees - and the plugin's tests are written
+after it; no output of a real run is kept in the repository.
+
+Decided while building it, for the maintainer to confirm:
+
+- **RDKit's conformer search in a step is the one *3D structures* makes
+  on the canvas** - ETKDG v3, then MMFF94, MMFF94s or UFF - with the same
+  options, run as a job: RDKit's own Python runs a script of the plugin's
+  on the molecule written into the job's folder, so that a long search
+  goes on when Meno closes, as any job does. The stereo is kept as the
+  entry's 3D structure has it.
+- **A search on a compound set** runs one job for each entry; **on a
+  conformer set**, one for each compound, from its first conformer.
+  Either way the results are a conformer set: each geometry a search gave
+  a conformer of its entry's compound, numbered lowest energy first, each
+  with its energy; the calculation is kept with the first. The card says
+  how many: *0:45 · 17 conformers* (*... of 2 compounds*).
+- **RDKit's *Duplicates*** compares the entries of each compound - a
+  conformer set's, or in a compound set those of the same structure -
+  lowest energy first, and sets aside each within the RMSD of one kept:
+  over the heavy atoms, at its best over the molecule's symmetries
+  (0.125 Å by default, the threshold CREST's own sorting starts from). It is done at
+  once in RDKit's worker - `run {step, entries, options, holds}`, no job -
+  and says *2 of 3 kept*.
+- **CREST's options**: the method (GFN2-xTB, GFN1-xTB, GFN-FF, or
+  GFN2-xTB//GFN-FF: searched with GFN-FF, the conformers then optimised
+  with GFN2-xTB), a solvent (ALPB, the 24 xTB offers), how thorough the
+  search is (full, or CREST's three quicker ones), and the energy window
+  (6 kcal/mol by default). The charge and spin multiplicity are those
+  Export reads, as for xTB.
+- **CREST 2.12, not 3.0.2.** conda-forge's CREST 3.0.2 for macOS keeps
+  only the lowest conformer, whatever energy window it is given: its
+  CREGEN sorting takes the window as 0 (github.com/crest-lab/crest/issues/431,
+  open; seen here with n-butane, 1 conformer where 2.12 finds 3). 2.12
+  runs xtb as a program, which 3.0 does within itself - slower (n-butane
+  2 min 21 s against 11 s, on 8 cores) - but one version on both
+  systems finds the same conformers. A later build that keeps the window
+  is a change of the plugin's lock alone.
+- **A plugin for some systems only** says so in its manifest
+  (`systems`); elsewhere Settings, *Plugins*, says *For macOS and Linux
+  only* in place of *Add*, and it cannot be added.
+
+Not yet, and where it comes:
+
+- **A plugin taking all its entries in one job** (*Several at once*):
+  CREST's conformer search takes one molecule, so it is one job a
+  compound; CREST optimising a set of conformers in one run
+  (`crest --mdopt`) would be its *Optimise*, not offered yet.
+- **Each conformer's population** as CREST works it out, and the
+  rotamers it sets aside, are not read: Meno's own *Populations* works
+  them out from the energies.
 
 ## Questions
 

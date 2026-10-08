@@ -77,13 +77,19 @@ Everything a plugin is lives in one folder, named by its id:
                      reads, by id - its own, or Meno's; the kinds it writes,
                      each with what it takes and its options (`writes`);
                      the kinds of a workflow's step it fills, each with the
-                     programs it runs and its options (`steps`)
+                     programs it runs and its options (`steps`); the
+                     systems it can be added on, where not every one
+                     (`systems`: macos, windows, linux)
   worker.py          its worker, spoken to in JSON lines under the contract
   requirements.lock  its environment, made by uv from PyPI - or, where it
   (or pixi.toml and  needs conda-forge, by pixi
    pixi.lock)
 ```
 
+- **A plugin may be for some systems only**: its manifest's `systems`
+  names them - CREST, whose program conda-forge builds for macOS and
+  Linux - and elsewhere Settings, *Plugins*, says so in place of *Add*.
+  None named, it is for every one.
 - **Meno carries some for now**, in `src-tauri/resources/plugins/`, and
   finds them there: no code of Meno's names one. Those fetched over the
   internet later will be folders of the same kind; how Meno trusts a list
@@ -198,7 +204,11 @@ The same for every plugin and for Meno's own parts:
   - `prepare {step, entries, options, cores}` and `collect {step,
     entries, options, files, log, ended}` - a kind of step its program
     does (WORKFLOWS.md, *What changes in the contract*): the jobs Meno is
-    to run, and what one gave, read back.
+    to run, and what one gave, read back;
+  - `run {step, entries, options, holds}` - a kind of step it does at
+    once, in its worker, with no job: the entries it kept, by their
+    place (RDKit's *Duplicates*). `holds` says whether they came as a
+    conformer set or a compound set.
 - **Molecules cross it in Meno's own forms.** Chemistry plugins are
   given and give back MOL blocks (decision 4, revised); a writer is given
   Meno's plain data - each atom's element, place in ångströms, charge,

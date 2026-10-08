@@ -11,7 +11,7 @@
  * molecule was read by - keeps the id; its name is looked up only to show
  * it.
  */
-import type { Manifest, StepDecl, WriteDecl } from "../plugins/manifest";
+import type { Manifest, StepDecl, System, WriteDecl } from "../plugins/manifest";
 import type { Option } from "../options";
 import { MANIFESTS, PLUGINS_ROOT } from "../plugins/known";
 import { isRole, type RoleId } from "../plugins/roles";
@@ -41,6 +41,8 @@ export type PythonPlugin = ReaderBase & {
   roleOptions: Partial<Record<RoleId, readonly Option[]>>;
   /** The kinds of a workflow's step it fills (docs/WORKFLOWS.md). */
   steps: readonly StepDecl[];
+  /** The systems it can be added on; none, every one. */
+  systems: readonly System[];
   /** Its Python environment's profile, and its lock and worker, in its folder among Meno's resources. */
   profile: `plugin-${string}`;
   lock: string;
@@ -68,6 +70,7 @@ export const pluginOf = (m: Manifest): PythonPlugin => ({
   roles: m.roles.filter(isRole),
   writes: m.writes.filter((w) => !MENO_IDS.has(w.id)),
   steps: m.steps,
+  systems: m.systems,
   roleOptions: Object.fromEntries(Object.entries(m.roleOptions).filter(([role]) => isRole(role))),
   profile: `plugin-${m.id}`,
   lock: `${PLUGINS_ROOT}/${m.id}/${m.environment.lock}`,
