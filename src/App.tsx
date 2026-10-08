@@ -453,7 +453,10 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col relative">
+    // (the window is the app: it never scrolls as a whole - fixed to the
+    // window and clipped, nothing in it can scroll it, a section scrolled
+    // into view in Settings included; only what is inside it scrolls)
+    <div className="fixed inset-0 flex flex-col overflow-clip">
       <TopBar ctl={ctl} />
       <input
         ref={fileInputRef}
