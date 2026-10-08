@@ -171,18 +171,4 @@ input[type="range"]::-moz-range-thumb {
     transition-duration: 150ms;
     transition-timing-function: var(--ease-meno);
   }
-  .rf-no-cursor
-    :is(
-      .react-flow__pane,
-      .react-flow__renderer,
-      .react-flow__node,
-      .react-flow__node.dragging,
-      .react-flow__edge,
-      .react-flow__edge-path,
-      .react-flow__handle,
-      .react-flow__minimap,
-      .react-flow__controls button
-    ) {
-    cursor: default !important;
-  }
 }

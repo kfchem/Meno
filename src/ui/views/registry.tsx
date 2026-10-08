@@ -1,7 +1,6 @@
 import type { JSX } from "react";
 import type { DocumentStore } from "../../lib/doc";
 import PyConsole from "../features/PythonConsole";
-import GraphEditor from "../features/WorkflowEditor";
 import SettingsPanel from "../features/SettingsPanel";
 
 import type {
@@ -74,17 +73,6 @@ export const viewRegistry: Record<string, ViewEntry> = {
     kind: "pyconsole",
     Component: () => <PyConsole />,
     create: (label) => create(label, "pyconsole", {}),
-  },
-  node: {
-    kind: "node",
-    Component: ({ content, active }) => (
-      <GraphEditor
-        active={active}
-        initialFilename={(content as any)?.data?.filename}
-        initialPayload={(content as any)?.data?.payload}
-      />
-    ),
-    create: (label) => create(label, "node", {}),
   },
   structure: {
     kind: "structure",

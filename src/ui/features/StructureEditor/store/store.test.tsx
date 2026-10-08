@@ -16,8 +16,8 @@ function Capture({ into }: { into: EditorStore[] }) {
 
 describe("EditorProvider", () => {
   it("gives each canvas its own store even when ids collide", () => {
-    // Every Workflow Builder tab embeds a sketch canvas with the node id
-    // "mol2d"; those canvases must not share one.
+    // Two canvases given the same id (an embedded canvas's, say) must not
+    // share one.
     const stores: EditorStore[] = [];
     renderToString(
       <>

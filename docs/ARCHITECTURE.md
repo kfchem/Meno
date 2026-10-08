@@ -12,7 +12,7 @@ a workspace holding 2D and 3D together - see [`WORKSPACE.md`](./WORKSPACE.md).
 | --- | --- | --- |
 | Tauri shell (Rust) | `src-tauri/src/lib.rs` | Window, plugins (`fs`, `os`, `opener`), and the only code that spawns OS processes: the bundled `uv` binary and the Python sidecar. No chemistry logic lives here. |
 | App shell (React) | `src/App.tsx`, `src/lib/core/`, `src/ui/layouts/`, `src/ui/views/` | Tab model (open/close/reorder/rename), mapping a tab's `kind` to a view component. |
-| Features (React) | `src/ui/features/*` | One folder per view: the structure canvas (2D drawing and molecules in 3D), workflow editor, Python console, text editor, settings. |
+| Features (React) | `src/ui/features/*` | One folder per view: the structure canvas (2D drawing and molecules in 3D), Python console, text editor, settings. |
 | Chemistry helpers (TS) | `src/lib/chem/`, `src/utils/` | File parsing (MOL/SDF/RXN/XYZ/PDB), editor model conversion, 2D depiction layout (bond lines, wedges, labels) and ACS-style sizing. Pure functions — no React, no Tauri. |
 | Python worker | `src-tauri/resources/workers/interactive_worker.py` | Line-delimited JSON REPL run inside a `uv`-managed venv. |
 
@@ -61,7 +61,6 @@ src/
   ui/views/openFile       a file to the tab it opens in: Open (Ctrl/Cmd+O)
   ui/features/
     StructureEditor/      2D editor (see below)
-    WorkflowEditor/       React Flow graph (prototype, not executable yet)
     PythonConsole/        UI for the Python sidecar
     TextEditor/           plain textarea with line numbers
     StyleEditor/          every drawing setting, with a preview
@@ -134,9 +133,7 @@ must not need one undo per frame), and the stack is capped.
 imports React.
 
 Adoption is incremental. The structure canvas, with its molecules in 3D
-and the texts in its column, is on a document; the workflow editor still
-keeps its content in component state, and it is still lost when its tab
-closes.
+and the texts in its column, is on a document.
 
 ## How things move
 
@@ -324,11 +321,13 @@ What is left before the editor counts as finished, and in what order, is in
   canvas, Save offers only it or an SD file, which holds each as a 3D
   record.
 
-## Workflow editor (`ui/features/WorkflowEditor`)
+## Workflows
 
-A React Flow canvas with a fixed demo pipeline (2D sketch → RDKit conformers →
-filter → ORCA → filter → Gaussian → select → 3D). Node parameters are local
-state only; nothing is executed yet.
+Calculations built as workflows are to be on the page itself - the
+workspace is the node editor - as [`WORKFLOWS.md`](./WORKFLOWS.md)
+specifies (stage 6). The Workflow Builder tab, a prototype on React Flow,
+was removed with React Flow on 2026-10-08, before that is built: the
+workspace's editor is written anew, its code not taken from either.
 
 ## Python console and sidecar
 

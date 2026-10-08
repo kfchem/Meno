@@ -11,7 +11,6 @@ export type TabKind =
   | "2d"
   | "settings"
   | "pyconsole"
-  | "node"
   | "structure";
 
 export type TabContentBase = {
