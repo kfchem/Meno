@@ -305,11 +305,12 @@ describe("Quick Add's calculations", () => {
     // plugins added: theirs first, each under its name - and only those that take what a wire carries
     useReaders.setState({ state: { rdkit: "added", xtb: "added" }, problem: {} });
     expect(offered(doc)).toEqual([
-      ["RDKit", ["structure-3d"]],
+      ["RDKit", ["structure-3d", "conformers", "duplicates"]],
       ["xTB", ["optimise", "energy", "frequencies"]],
       ["Meno", ["energy-window", "duplicates", "populations"]],
     ]);
     expect(offered(doc, { set: 1 })).toEqual([
+      ["RDKit", ["conformers", "duplicates"]],
       ["xTB", ["optimise", "energy", "frequencies"]],
       ["Meno", ["duplicates", "as-conformers"]],
     ]);

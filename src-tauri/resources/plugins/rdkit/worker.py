@@ -17,9 +17,20 @@ with their atoms in the order they came in. (Clean-up is Meno's own layout
 engine's, in the app: src/lib/layout.) Their 3D structures go back as
 atoms, bonds and coordinates: the atoms in the order they came in, the
 hydrogens made for them after.
+
+It also fills kinds of a workflow's step (docs/WORKFLOWS.md, its
+manifest's `steps`), given molecules in 3D as Meno gives a writer one -
+each atom's element, place, charge and radical, the bonds by index:
+
+- *Conformers*, as a job: `prepare` says what each job is - this folder's
+  conformers_job.py, run by its environment's Python on the molecule
+  written into the job's folder - and `collect` reads back what it wrote;
+- *Duplicates*, at once (`run`): those alike within an RMSD over their
+  heavy atoms, at their best over the molecule's symmetries, set aside.
 """
 
 import json
+import os
 import sys
 
 from rdkit import Chem, RDLogger, rdBase
@@ -463,8 +474,130 @@ def op_drawing_of(m):
     return {"molblock": Chem.MolToV3KMolBlock(heavy)}
 
 
+# --- a workflow's steps --------------------------------------------------------
+
+#: The script a conformer search runs as a job, beside this one.
+CONFORMERS_JOB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "conformers_job.py")
+#: What a conformer search's job writes, and is read back from.
+CONFORMERS_OUT = "conformers.json"
+#: Below this RMSD (angstroms) two entries are taken to be the same, unless a step says otherwise.
+ALIKE = 0.125
+
+BOND_TYPES = {1: Chem.BondType.SINGLE, 2: Chem.BondType.DOUBLE, 3: Chem.BondType.TRIPLE, 4: Chem.BondType.AROMATIC}
+RADICALS = {"doublet": 1, "triplet": 2, "singlet": 2}
+
+
+def mol_of(entry):
+    """A molecule in 3D as Meno gives one: its atoms - element, place in
+    angstroms, charge, radical - and its bonds by index with their orders;
+    its stereo read from where its atoms are."""
+    atoms = entry.get("atoms") or []
+    if not atoms:
+        raise ValueError("a molecule has no atoms")
+    rw = Chem.RWMol()
+    for a in atoms:
+        atom = Chem.Atom(str(a.get("el", "")))
+        atom.SetFormalCharge(int(a.get("charge") or 0))
+        if a.get("radical") in RADICALS:
+            atom.SetNumRadicalElectrons(RADICALS[a["radical"]])
+            atom.SetNoImplicit(True)
+        rw.AddAtom(atom)
+    for b in entry.get("bonds") or []:
+        rw.AddBond(int(b["a1"]), int(b["a2"]), BOND_TYPES.get(int(b.get("order", 1)), Chem.BondType.SINGLE))
+    mol = rw.GetMol()
+    conf = Chem.Conformer(len(atoms))
+    for i, a in enumerate(atoms):
+        conf.SetAtomPosition(i, Point3D(float(a["x"]), float(a["y"]), float(a["z"])))
+    mol.AddConformer(conf, assignId=True)
+    problem = Chem.SanitizeMol(mol, catchErrors=True)
+    if problem != Chem.SanitizeFlags.SANITIZE_NONE:
+        raise ValueError(f"cannot make sense of the structure ({problem})")
+    Chem.AssignStereochemistryFrom3D(mol)
+    return mol
+
+
+def op_prepare(m):
+    """A conformer search's jobs: one for each molecule, its molecule and the
+    options written into its folder, run by this environment's Python."""
+    if m.get("step") != "conformers":
+        raise ValueError(f"RDKit does no {m.get('step')!r} as a job")
+    options = m.get("options") or {}
+    jobs = []
+    for i, entry in enumerate(m.get("entries") or []):
+        mol_of(entry)  # (one RDKit cannot make sense of, said now - not in its job)
+        given = {"atoms": entry["atoms"], "bonds": entry.get("bonds") or [], "options": options}
+        jobs.append({
+            "entries": [i],
+            "program": "python",
+            "args": ["-u", CONFORMERS_JOB, "molecule.json"],
+            "files": [{"name": "molecule.json", "text": json.dumps(given)}],
+            "reads": [CONFORMERS_OUT],
+        })
+    if not jobs:
+        raise ValueError("nothing came in")
+    return {"jobs": jobs}
+
+
+def op_collect(m):
+    """What a conformer search's job wrote, as Meno's output form: each
+    conformer a geometry, lowest energy first, with its energy."""
+    if m.get("step") != "conformers":
+        raise ValueError(f"RDKit does no {m.get('step')!r} as a job")
+    if m.get("ended") != "done":
+        lines = [line.strip() for line in (m.get("log") or "").splitlines() if line.strip()]
+        return {"why": lines[-1] if lines else "it said nothing"}
+    text = (m.get("files") or {}).get(CONFORMERS_OUT)
+    if not text:
+        raise ValueError("the search wrote no conformers")
+    made = json.loads(text)
+    outputs = []
+    for entry in m.get("entries") or []:
+        outputs.append({
+            "schema": 1,
+            "program": "RDKit",
+            "version": made.get("version"),
+            "method": f"ETKDG v3, {made.get('field', 'MMFF94')}",
+            "atoms": [a["el"] for a in made["atoms"]],
+            "frames": made["frames"],
+            "energies": made["energies"],
+            "results": [],
+        })
+    return {"outputs": outputs}
+
+
+def op_run(m):
+    """A step done at once. *Duplicates*: within each compound - a conformer
+    set's, or in a compound set the entries of the same structure - lowest
+    energy first, each entry set aside that is within the RMSD of one kept,
+    over their heavy atoms, at its best over the molecule's symmetries."""
+    if m.get("step") != "duplicates":
+        raise ValueError(f"RDKit does no {m.get('step')!r} at once")
+    alike = float((m.get("options") or {}).get("rmsd", ALIKE))
+    entries = m.get("entries") or []
+    heavy = []
+    groups = {}
+    for i, entry in enumerate(entries):
+        mol = mol_of(entry)
+        key = entry.get("compound") if m.get("holds") == "conformers" else Chem.MolToSmiles(Chem.RemoveHs(mol))
+        heavy.append(Chem.RemoveHs(mol))
+        groups.setdefault(key, []).append(i)
+    kept = []
+    for members in groups.values():
+        energy = lambda i: entries[i].get("energy") if isinstance(entries[i].get("energy"), (int, float)) else float("inf")
+        mine = []
+        for i in sorted(members, key=lambda i: (energy(i), i)):
+            if any(rdMolAlign.GetBestRMS(Chem.Mol(heavy[i]), heavy[k]) < alike for k in mine):
+                continue
+            mine.append(i)
+        kept += mine
+    return {"kept": sorted(kept)}
+
+
 OPS = {
     "ping": op_ping,
+    "prepare": op_prepare,
+    "collect": op_collect,
+    "run": op_run,
     "to_smiles": op_to_smiles,
     "from_smiles": op_from_smiles,
     "analyse": op_analyse,

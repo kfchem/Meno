@@ -121,6 +121,11 @@ export class ReaderClient implements Reader {
     return this.request({ op: "collect", step, entries, options, files, log, ended }, `reading what ${step} gave`);
   }
 
+  /** A step a plugin does at once, on the entries that came in - a conformer set's (`holds`) or a compound set's: what it did (docs/WORKFLOWS.md, `run`). */
+  run(step: string, entries: readonly unknown[], options: OptionValues, holds: string): Promise<unknown> {
+    return this.request({ op: "run", step, entries, options, holds }, `doing ${step}`);
+  }
+
   private request(question: Record<string, unknown>, what: string): Promise<unknown> {
     const id = this.next++;
     return new Promise((resolve, reject) => {

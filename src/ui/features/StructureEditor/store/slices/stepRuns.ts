@@ -17,7 +17,7 @@ import { setEntries, type SetEntry } from "../../workflow/entries";
 import { findSet, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "../../workflow/flow";
 import { kindInfo, optionsOf, type SetKind } from "../../workflow/kinds";
 import { setRan, setRunning } from "../../workflow/model";
-import { clock, doneSaid, pluginEntry, readCollected, readPrepared, workedOf } from "../../workflow/programs";
+import { clock, conformersWorked, doneSaid, jobEntries, pluginEntry, readCollected, readKept, readPrepared, workedOf } from "../../workflow/programs";
 import { keepRun, runStep as runMenoStep, showRun, whyNot, withResults, type RunWith, type Worked } from "../../workflow/run";
 import type { EditorState, JobSeen, StepJob, StepRan } from "../types";
 
@@ -102,7 +102,8 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     const plugin = pluginById(by);
     if (!plugin) return void fail(id, "Nothing added does this step", at, key);
     if (programsFor(step.kind, by).length) return runJobs(id, plugin, at);
-    return runInWorker(id, plugin, at);
+    if (step.kind === "structure-3d") return runInWorker(id, plugin, at);
+    return runAtOnce(id, plugin, at);
   }
 
   /** The kind of set a step's results make, for what came in. */
@@ -111,15 +112,15 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     return g === "same" ? holds : g;
   };
 
-  /** The results of a step put in, as one edit, and what it did kept with it; a molecule that is an optimisation's path shown at its end. */
-  function bringIn(id: number, worked: Worked[], holds: SetKind, ran: StepRan) {
+  /** The results of a step put in, as one edit - with the entries it set aside - and what it did kept with it; a molecule that is an optimisation's path shown at its end. */
+  function bringIn(id: number, worked: Worked[], holds: SetKind, ran: StepRan, aside: SetEntry[] = []) {
     const d = doc.getState();
     const step = stepOf(d, id);
     if (!step) return;
     const before = new Set((d.molecules3d ?? []).map((m) => m.id));
     // (what it did before kept among its runs)
     if (!worked.length) doc.edit("run", (x) => setRan(keepRun(x, stepOf(x, id)!), id, ran));
-    else doc.edit("results", (x) => setRan(withResults(keepRun(x, stepOf(x, id)!), step, { ok: true, holds, kept: worked, aside: [], said: ran.said }, w), id, ran));
+    else doc.edit("results", (x) => setRan(withResults(keepRun(x, stepOf(x, id)!), step, { ok: true, holds, kept: worked, aside, said: ran.said }, w), id, ran));
     atTheirEnds(before);
   }
 
@@ -224,13 +225,42 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     });
   }
 
+  /** A step a plugin does at once on the entries that came in (`run`): those it keeps, the rest set aside. */
+  async function runAtOnce(id: number, plugin: PythonPlugin, at: number): Promise<void> {
+    const d = doc.getState();
+    const step = stepOf(d, id)!;
+    const key = inputKey(d, step, plugin.id);
+    const input = inputOf(d, id)!;
+    const entries = setEntries(input.molecules, input.holds as "molecules" | "conformers");
+    if (!entries.length) return void fail(id, "Nothing came in", at, key);
+    const options: OptionValues = optionsOf(optionsFor(step.kind, plugin.id), step.options);
+    let kept;
+    try {
+      const client = await pluginClient(plugin);
+      const given = entries.map((e) => ({ ...pluginEntry(e), compound: e.compound, ...(e.energy != null ? { energy: e.energy } : {}) }));
+      kept = readKept(await client.run(step.kind, given, options, input.holds), entries.length);
+    } catch (e) {
+      return void fail(id, message(e), at, key);
+    }
+    if (typeof kept === "string") return void fail(id, kept, at, key);
+    const keep = new Set(kept);
+    const took = Date.now() - at;
+    bringIn(
+      id,
+      entries.filter((_, i) => keep.has(i)),
+      givesFor(step.kind, input.holds),
+      { at, ok: true, said: `${keep.size} of ${entries.length} kept`, input: key, took, kind: step.kind, ...(step.options ? { options: step.options } : {}) },
+      entries.filter((_, i) => !keep.has(i)),
+    );
+  }
+
   /** A step a plugin's program does: prepared by the plugin, a job for each entry, started - and waited for. */
   async function runJobs(id: number, plugin: PythonPlugin, at: number): Promise<void> {
     const d = doc.getState();
     const step = stepOf(d, id)!;
     const key = inputKey(d, step, plugin.id);
     const input = inputOf(d, id)!;
-    const entries = setEntries(input.molecules, input.holds as "molecules" | "conformers");
+    const entries = jobEntries(step.kind, setEntries(input.molecules, input.holds as "molecules" | "conformers"), input.holds);
     if (!entries.length) return void fail(id, "Nothing came in", at, key);
     const options: OptionValues = optionsOf(optionsFor(step.kind, plugin.id), step.options);
     const { slots, cores } = runningOf(useAppSettings.getState().calculations);
@@ -326,7 +356,7 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
       // (what comes in now, where it is what came in when it started - its options aside, which may change as it runs)
       const input = inputOf(d, id);
       const same = inputKey(d, { ...step, kind, options: run.options }, by) === run.input;
-      const entries: SetEntry[] = same && input && input.holds !== "structures" ? setEntries(input.molecules, input.holds) : [];
+      const entries: SetEntry[] = same && input && input.holds !== "structures" ? jobEntries(kind, setEntries(input.molecules, input.holds), input.holds) : [];
       const total = run.jobs.reduce((n, j) => n + j.entries.length, 0);
       const worked: Worked[] = [];
       const whys: string[] = [];
@@ -362,13 +392,19 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
         // (its log kept with the workspace, as an output it was read from)
         const { kind: _kind, ...source } = await rememberOutput(`${kindInfo(kind).name} ${k + 1}.log`, log, "");
         for (const [i, out] of said.entries()) {
-          const made = workedOf(kind, mine[i], out, [`${plugin.id} ${plugin.version}`], log ? source : undefined);
+          const readers = [`${plugin.id} ${plugin.version}`];
+          const made = kind === "conformers" ? conformersWorked(mine[i], out, readers, log ? source : undefined) : workedOf(kind, mine[i], out, readers, log ? source : undefined);
           if (typeof made === "string") whys.push(made);
-          else worked.push(made);
+          else worked.push(...(Array.isArray(made) ? made : [made]));
         }
       }
       const ok = !whys.length && worked.length > 0;
-      const said = ok ? doneSaid(worked, total, took) : whys.length >= total ? whys[0] : `${whys.length} of ${total} failed · ${whys[0]}`;
+      // (a search says how many conformers it found, of how many compounds)
+      const found =
+        kind === "conformers"
+          ? `${clock(took)} \u00b7 ${worked.length} conformer${worked.length === 1 ? "" : "s"}${total > 1 ? ` of ${total} compounds` : ""}`
+          : doneSaid(worked, total, took);
+      const said = ok ? found : whys.length >= total ? whys[0] : `${whys.length} of ${total} failed \u00b7 ${whys[0]}`;
       bringIn(id, worked, givesFor(kind, input?.holds ?? "molecules"), { at: run.at, ok, said, input: run.input, took, jobs: ids, ...as });
       close();
     } finally {

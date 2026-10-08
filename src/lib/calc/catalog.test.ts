@@ -62,7 +62,11 @@ describe("the readers Meno knows of", () => {
     const xtb = PLUGINS.find((p) => p.id === "xtb")!;
     expect(xtb).toMatchObject({ reads: [], roles: [], writes: [], profile: "plugin-xtb", env: "pixi", lock: "resources/plugins/xtb/pixi.lock" });
     expect(xtb.steps.map((d) => d.kind)).toEqual(["optimise", "energy", "frequencies"]);
-    expect(rdkit.steps).toEqual([{ kind: "structure-3d", programs: [], options: [] }]);
+    expect(rdkit.steps.map((d) => [d.kind, d.programs])).toEqual([
+      ["structure-3d", []],
+      ["conformers", ["python"]],
+      ["duplicates", []],
+    ]);
   });
 
   it("each reads the kinds it brings, and Meno's: none a kind only another plugin brings, which it does not know", () => {
