@@ -6,7 +6,7 @@ import { withText } from "../../../lib/binary/png";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { ACS_1996 } from "../../../lib/chem/style";
 import { structureInDrop, structureOnClipboard } from "./chem/fromClipboard";
-import { pictureItems, structureInPicture } from "./picture";
+import { pictureDpiFor, pictureItems, structureInPicture } from "./picture";
 import type { Model } from "./store/types";
 import { readRecord, recordText } from "./utils/copyPaste";
 
@@ -104,5 +104,18 @@ describe("an object Meno served for Office, as Word or PowerPoint for Mac hand i
 describe("a drop", () => {
   it("reads nothing outside the app, where nothing is dragged in", async () => {
     expect(await structureInDrop()).toBeNull();
+  });
+});
+
+describe("the resolution a copied picture is made at", () => {
+  it("is the one asked for, or lower for a picture so large it would come to more than 48 million pixels", () => {
+    // (a structure two by one and a half inches: 600 dpi is 1200 by 900 pixels)
+    expect(pictureDpiFor(192, 144, 600)).toBe(600);
+    expect(pictureDpiFor(192, 144, 1200)).toBe(1200);
+    // (a scheme twenty by ten inches at 1200 dpi would be 288 million: lowered, to fit)
+    const dpi = pictureDpiFor(1920, 960, 1200);
+    expect(dpi).toBeLessThan(1200);
+    expect(1920 * 960 * (dpi / 96) ** 2).toBeLessThanOrEqual(48_000_000);
+    expect(1920 * 960 * ((dpi + 1) / 96) ** 2).toBeGreaterThan(48_000_000);
   });
 });

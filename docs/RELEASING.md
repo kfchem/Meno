@@ -139,6 +139,11 @@ updates. The `uv` inside is already signed and notarized by its makers.
 - On Windows, the installer registers Meno's class for Office again (its
   `--register-ole` hook), so structures in documents keep opening in the
   Meno installed.
+- On Windows, an installer over an earlier version leaves the files that
+  version had and this one has not; its hook (`src-tauri/windows/hooks.nsh`)
+  deletes those, each by name - since 0.1.8, the uv, RDKit lock and
+  chemistry worker 0.1.6 and before carried. **A release that stops
+  carrying a file adds it there.** (A Mac's app is replaced whole.)
 - On Windows, the installer it ran stays in the temporary folder
   (`%TEMP%\Meno-<version>-updater-…`, some 17 MB), since Meno has ended
   by then; the next Meno to start takes it away, once it is ten minutes

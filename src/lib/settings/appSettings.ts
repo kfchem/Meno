@@ -35,6 +35,8 @@ export type AppSettings = {
   files: FileSettings;
   /** The plugins and the roles they fill (docs/PLUGINS.md). */
   plugins: PluginSettings;
+  /** The pictures a copy puts beside a structure, for other programs (StructureEditor/picture). */
+  pictures: PictureSettings;
   /** How the mouse and the trackpad work the canvas. */
   pointer: PointerSettings;
 };
@@ -44,6 +46,16 @@ export type PointerSettings = {
   /** A turn of the wheel upwards zooms in (as maps do), or out. */
   wheelUp: "in" | "out";
 };
+
+/** The resolutions a copied picture may be made at, in pixels to the inch. */
+export const PICTURE_DPIS = [300, 600, 1200] as const;
+
+/**
+ * The pictures a copy puts beside a structure: how many pixels to the inch
+ * where they are made of pixels - the picture for programs that take no
+ * drawing in vectors, and molecules in 3D in any picture.
+ */
+export type PictureSettings = { dpi: (typeof PICTURE_DPIS)[number] };
 
 /**
  * The plugins: those the chemist took away in Settings, Plugins - by id -
@@ -95,6 +107,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   abbreviations: [],
   files: { read: {}, also: {} },
   plugins: { removed: [], roles: {} },
+  pictures: { dpi: 600 },
   pointer: { wheelUp: "in" },
 };
 
@@ -115,6 +128,7 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     abbreviations: acceptAbbreviations(r.abbreviations),
     files: acceptFiles(r.files, r.calcReaders),
     plugins: acceptPlugins(r.plugins),
+    pictures: acceptPictures(r.pictures),
     pointer: acceptPointer(r.pointer),
   };
 }
@@ -123,6 +137,11 @@ export function acceptAppSettings(raw: unknown): AppSettings {
 function acceptPointer(raw: unknown): PointerSettings {
   const r = (raw ?? {}) as { wheelUp?: unknown };
   return { wheelUp: r.wheelUp === "out" ? "out" : "in" };
+}
+
+function acceptPictures(raw: unknown): PictureSettings {
+  const dpi = (raw as { dpi?: unknown } | null)?.dpi;
+  return PICTURE_DPIS.includes(dpi as PictureSettings["dpi"]) ? { dpi: dpi as PictureSettings["dpi"] } : DEFAULT_APP_SETTINGS.pictures;
 }
 
 const ID = /^[a-z0-9-]{1,40}$/;
@@ -273,6 +292,7 @@ type SettingsState = AppSettings & {
   setAbbreviations: (abbreviations: CustomAbbreviation[]) => void;
   setFiles: (files: FileSettings) => void;
   setPlugins: (plugins: PluginSettings) => void;
+  setPictures: (pictures: PictureSettings) => void;
   setPointer: (pointer: PointerSettings) => void;
 };
 
@@ -284,9 +304,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pointer } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pointer }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -319,6 +339,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setPlugins: (plugins) => {
       set({ plugins });
+      scheduleSave();
+    },
+    setPictures: (pictures) => {
+      set({ pictures });
       scheduleSave();
     },
     setPointer: (pointer) => {

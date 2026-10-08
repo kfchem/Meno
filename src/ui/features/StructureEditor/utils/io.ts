@@ -14,6 +14,15 @@ export { xyzComments } from "../../../../lib/io/structures";
 /** Extensions of kinds nothing reads yet, said so when such a file is dropped. */
 const UNSUPPORTED_EXTENSIONS = new Set([".ket"]);
 
+/**
+ * Whether a file of no kind Meno reads (lib/io/kinds) is text, held in the
+ * workspace's column as Open holds it: not one Meno says it does not read
+ * yet, nor bytes - a NUL in its start, `head`.
+ */
+export function opensAsText(name: string, head: string): boolean {
+  return !UNSUPPORTED_EXTENSIONS.has(extensionOf(name)) && !head.includes("\u0000");
+}
+
 export type ProcessedFileResult = {
   model: EditorModel;
   centroid: { x: number; y: number };
@@ -152,6 +161,7 @@ export function calcResult(out: ReaderOutput, readers: readonly string[], filena
       {
         atoms: first.atoms,
         bonds: first.bonds,
+        bondsFrom: "distance" as const,
         ...(frames.length ? { frames, frame: frames.length } : {}),
         ...(energies ? { energies } : {}),
         ...(filename ? { name: filename } : {}),

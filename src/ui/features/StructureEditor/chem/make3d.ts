@@ -12,7 +12,7 @@ import type { ChemClient, Conformers, Like } from "../../../../lib/roles/client"
 import { chemMolblock, molIndex } from "../../../../lib/roles/molblock";
 import { writeMolfile3d } from "../../../../lib/chem/molWriter";
 import { editorModelOf, processFileContent } from "../utils/io";
-import type { Model, Molecule3D, Turn3D } from "../store/types";
+import type { Arrow, Model, Molecule3D, Plus, Turn3D } from "../store/types";
 import { turnOnto } from "../utils/align3d";
 import { signatureOf } from "../utils/drawnLink";
 import { solidOf } from "../utils/molecule3d";
@@ -188,60 +188,136 @@ function seenAs(b: Box, view: Box, height: number, eyeHeight?: number): Box {
 
 /**
  * Where molecules in 3D made from a drawing come to rest: in a row beside
- * it - to its right, its left, below it or above it, the first of those
- * where the whole row is in view, as the camera sees it (`eyeHeight`, for one
- * in perspective) - and whether it is. In none, to its right.
+ * it - to its right, its left, below it or above it - clear of what stands
+ * on the page already (`taken`: other drawings, arrows and "+" signs, other
+ * molecules in 3D), the row going on out past any of it in its way; the
+ * first of those sides where the whole row is in view, as the camera sees
+ * it (`eyeHeight`, for one in perspective) - and whether it is, and where
+ * the row then stands. In none, to its right.
  */
 export function placeRow(
   items: Turned[],
   drawing: Box,
   view: Box | null,
   eyeHeight?: number,
-): { at: { x: number; y: number }[]; inView: boolean } {
+  taken: readonly Box[] = [],
+): { at: { x: number; y: number }[]; inView: boolean; box: Box } {
   const cx = (drawing.x0 + drawing.x1) / 2;
   const cy = (drawing.y0 + drawing.y1) / 2;
   const across = items.reduce((a, t) => a + t.reach.x1 - t.reach.x0, 0) + GAP * Math.max(0, items.length - 1);
   const tall = Math.max(...items.map((t) => t.reach.y1 - t.reach.y0));
-  const sides: (() => { at: { x: number; y: number }[]; box: Box })[] = [
+  type Row = { at: { x: number; y: number }[]; box: Box };
+  // each side: the row that far (`out`) beyond where it starts, and how
+  // much further out it would have to go to clear a box in its way
+  const sides: { row: (out: number) => Row; past: (row: Box, b: Box) => number }[] = [
     // right: from the drawing's right edge on, level with it
-    () => {
-      let x = drawing.x1 + GAP;
-      const at = items.map((t) => {
-        const p = { x: x - t.reach.x0, y: cy };
-        x = p.x + t.reach.x1 + GAP;
-        return p;
-      });
-      return { at, box: { x0: drawing.x1 + GAP, x1: x - GAP, y0: cy - tall / 2, y1: cy + tall / 2 } };
+    {
+      row: (out) => {
+        let x = drawing.x1 + GAP + out;
+        const at = items.map((t) => {
+          const p = { x: x - t.reach.x0, y: cy };
+          x = p.x + t.reach.x1 + GAP;
+          return p;
+        });
+        return { at, box: { x0: drawing.x1 + GAP + out, x1: x - GAP, y0: cy - tall / 2, y1: cy + tall / 2 } };
+      },
+      past: (row, b) => b.x1 + GAP - row.x0,
     },
     // left: from its left edge back
-    () => {
-      let x = drawing.x0 - GAP;
-      const at = items.map((t) => {
-        const p = { x: x - t.reach.x1, y: cy };
-        x = p.x + t.reach.x0 - GAP;
-        return p;
-      });
-      return { at, box: { x0: x + GAP, x1: drawing.x0 - GAP, y0: cy - tall / 2, y1: cy + tall / 2 } };
+    {
+      row: (out) => {
+        let x = drawing.x0 - GAP - out;
+        const at = items.map((t) => {
+          const p = { x: x - t.reach.x1, y: cy };
+          x = p.x + t.reach.x0 - GAP;
+          return p;
+        });
+        return { at, box: { x0: x + GAP, x1: drawing.x0 - GAP - out, y0: cy - tall / 2, y1: cy + tall / 2 } };
+      },
+      past: (row, b) => row.x1 - (b.x0 - GAP),
     },
     // below, and above: a row under it or over it, centred on it
-    ...[-1, 1].map((side) => () => {
-      let x = cx - across / 2;
-      const edge = side < 0 ? drawing.y0 - GAP : drawing.y1 + GAP;
-      const at = items.map((t) => {
-        const p = { x: x - t.reach.x0, y: side < 0 ? edge - t.reach.y1 : edge - t.reach.y0 };
-        x = p.x + t.reach.x1 + GAP;
-        return p;
-      });
-      const y0 = side < 0 ? edge - tall : edge;
-      return { at, box: { x0: cx - across / 2, x1: cx + across / 2, y0, y1: y0 + tall } };
-    }),
+    ...[-1, 1].map((side) => ({
+      row: (out: number) => {
+        let x = cx - across / 2;
+        const edge = side < 0 ? drawing.y0 - GAP - out : drawing.y1 + GAP + out;
+        const at = items.map((t) => {
+          const p = { x: x - t.reach.x0, y: side < 0 ? edge - t.reach.y1 : edge - t.reach.y0 };
+          x = p.x + t.reach.x1 + GAP;
+          return p;
+        });
+        const y0 = side < 0 ? edge - tall : edge;
+        return { at, box: { x0: cx - across / 2, x1: cx + across / 2, y0, y1: y0 + tall } };
+      },
+      past: (row: Box, b: Box) => (side < 0 ? row.y1 - (b.y0 - GAP) : b.y1 + GAP - row.y0),
+    })),
   ];
+  // (a side's row, gone on out past whatever is in its way)
+  const clear = (side: (typeof sides)[number]): Row => {
+    let out = 0;
+    for (let tries = 0; tries <= taken.length; tries++) {
+      const row = side.row(out);
+      const hit = taken.filter((b) => overlaps(b, row.box));
+      if (!hit.length) return row;
+      out += Math.max(...hit.map((b) => side.past(row.box, b)));
+    }
+    return side.row(out);
+  };
   const height = Math.max(...items.map((t) => t.height));
-  for (const side of sides) {
-    const row = side();
-    if (view && inside(seenAs(row.box, view, height, eyeHeight), view)) return { at: row.at, inView: true };
+  const rows = sides.map(clear);
+  for (const row of rows) {
+    if (view && inside(seenAs(row.box, view, height, eyeHeight), view)) return { ...row, inView: true };
   }
-  return { at: sides[0]().at, inView: !view };
+  return { ...rows[0], inView: !view };
+}
+
+const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+
+/**
+ * What stands on the page besides the drawing `except` - each other
+ * structure drawn, each arrow and "+" sign - as boxes, for molecules in 3D
+ * made from it to keep clear of; the molecules in 3D already there, seen
+ * from above, the caller gives (`solids`).
+ */
+export function takenOnPage(
+  page: { model: Model; arrows: readonly Arrow[]; pluses: readonly Plus[] },
+  except: Iterable<number>,
+  solids: readonly Box[] = [],
+): Box[] {
+  const skip = new Set(except);
+  const around = new Map<number, number[]>();
+  for (const b of page.model.bonds) {
+    around.set(b.a, [...(around.get(b.a) ?? []), b.b]);
+    around.set(b.b, [...(around.get(b.b) ?? []), b.a]);
+  }
+  const byId = new Map(page.model.atoms.map((a) => [a.id, a]));
+  const seen = new Set<number>();
+  const boxes: Box[] = [];
+  for (const a of page.model.atoms) {
+    if (skip.has(a.id) || seen.has(a.id)) continue;
+    // (one structure: its atoms, as its bonds join them)
+    const part: Model["atoms"] = [];
+    const todo = [a.id];
+    seen.add(a.id);
+    while (todo.length) {
+      const id = todo.pop()!;
+      part.push(byId.get(id)!);
+      for (const n of around.get(id) ?? []) {
+        if (seen.has(n) || skip.has(n) || !byId.has(n)) continue;
+        seen.add(n);
+        todo.push(n);
+      }
+    }
+    boxes.push(boxOf({ atoms: part, bonds: [] }));
+  }
+  const pad = 0.4 * NOMINAL_BOND_LENGTH;
+  for (const r of page.arrows) {
+    const dx = (Math.cos(r.angle) * r.length) / 2;
+    const dy = (Math.sin(r.angle) * r.length) / 2;
+    boxes.push({ x0: r.x - Math.abs(dx) - pad, x1: r.x + Math.abs(dx) + pad, y0: r.y - Math.abs(dy) - pad, y1: r.y + Math.abs(dy) + pad });
+  }
+  for (const p of page.pluses) boxes.push({ x0: p.x - 2 * pad, x1: p.x + 2 * pad, y0: p.y - 2 * pad, y1: p.y + 2 * pad });
+  return [...boxes, ...solids];
 }
 
 /** A row of molecules in 3D starting where `at` is - where one made again stood - each after the last. */

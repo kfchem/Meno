@@ -25,6 +25,8 @@ export type FileMolecule3D = {
   /** The file it came from. */
   name?: string;
   frame?: number;
+  /** Its bonds are where its atoms stand close enough, frame by frame: its file gives none (an XYZ file). */
+  bondsFrom?: "distance";
 };
 
 /**
@@ -129,6 +131,7 @@ export function readStructures(kind: StructureKind, filename: string, content: s
         {
           atoms: first.atoms,
           bonds: first.bonds,
+          bondsFrom: "distance",
           ...(rest.length ? { frames: rest.map((f) => f.atoms.flatMap((a) => [a.x, a.y, a.z])) } : {}),
           ...(energies?.length === molecules.length ? { energies } : {}),
           ...(filename ? { name: filename } : {}),

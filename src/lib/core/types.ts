@@ -9,7 +9,6 @@ export type TabMeta = {
 
 export type TabKind =
   | "2d"
-  | "text"
   | "settings"
   | "pyconsole"
   | "node"
