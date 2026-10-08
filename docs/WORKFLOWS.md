@@ -11,7 +11,7 @@ rearrange and run again, with its results beside the molecule it is about.
 ## Decided by the maintainer (2026-10-08)
 
 1. **The workspace is the node editor.** There is no editor of its own: a
-   molecule drawn on the page, boxed, is a workflow's input, and a
+   molecule drawn on the page, gathered into a set, is a workflow's input, and a
    calculation is a step added from Quick Add. *This is central to Meno's
    design from here on; it is specified in detail before it is built.*
 2. **Meno is first a structure editor that is plain to use**; what more
@@ -22,21 +22,23 @@ rearrange and run again, with its results beside the molecule it is about.
    be fetched over the internet and made by anyone, and Meno cannot know
    all a plugin does. Only **plugins added** are shown: a step no plugin
    added fills is not offered.
-4. **Conformers go through a workflow as ACCeL takes them** (the
-   maintainer's own library, MIT): a box of entries, each a structure,
-   worked through step after step. **A box is a conformer set only where
-   the flow shows that it is one**; boxed by the chemist, it is a
-   compound set (*Compound sets and conformer sets*, below).
-5. **What lies inside a box is what it holds**: a structure moved into it
-   joins it, one moved out leaves it.
+4. **A set of conformers goes through a workflow as any set does**: a
+   set of entries, each a structure, worked through step after step.
+   (ACCeL, the maintainer's own library, was named only as an example
+   that conformer sets can flow so; Meno takes nothing else from it - see
+   15.) **A set is a conformer set only where the flow shows that it is
+   one**; made by the chemist, it is a compound set (*Compound sets and
+   conformer sets*, below).
+5. **What lies inside a set's frame is what it holds**: a structure moved
+   into it joins it, one moved out leaves it.
 6. **xTB first.** Programs installed separately - ORCA, Gaussian and
    others - are to be run later, through the same kinds of step.
 7. **This computer only**, for now. A cluster or a remote machine comes
    later, in a stage of its own; nothing here shuts it out.
 8. **A calculation running when Meno closes goes on.** Opened again, the
    workspace picks it up.
-9. **The proposals are kept** for: boxing from the selection's port;
-   results in a box to the right of their step; menus, not keys, to run;
+9. **The proposals are kept** for: making an input from the selection's
+   port; results in a set to the right of their step; menus, not keys, to run;
    2D made 3D by a step of its own; jobs' files in Meno's data folder.
 10. **The Workflow Builder tab goes, and ReactFlow with it.** The
     workspace's editor is built anew: neither the tab nor ReactFlow's
@@ -51,31 +53,41 @@ rearrange and run again, with its results beside the molecule it is about.
     RDKit can fill *Duplicates*, if less thoroughly than ACCeL (*Who
     does a step*).
 13. **A conformer set is converted to only on purpose**: what the chemist
-    boxes is a compound set; a step of its own, *As conformers*, makes
-    it a conformer set, on the page for the flow to show.
+    gathers into a set is a compound set; a step of its own, *As
+    conformers*, makes it a conformer set, on the page for the flow to
+    show.
+14. **Meno's own words, and its own design** (the maintainer, 2026-10-08):
+    what holds a workflow's entries is not called a *box* - ACCeL's
+    word for its own class (its second version calls it a *Flow*) - but
+    a **set**; and the implementation and the interface are what suit
+    Meno best, not ACCeL's.
+15. **The figures here are conceptual** (the maintainer, 2026-10-08): they
+    show what is where, not how it looks. The look follows Meno's own
+    design (*How it looks*); the figures' colours, transparency, line
+    widths and icons are not to be taken from them.
 
 No question is left open; the whole is for the maintainer to read and
 agree before step 1 is built.
 
 ## Words
 
-- **Workflow** - what is wired together on one page: boxes and the steps
+- **Workflow** - what is wired together on one page: sets and the steps
   between them.
-- **Box** - a frame on the page, and what lies inside it. An *input* box
-  is drawn by the chemist round what is there; a *result* box is made by
+- **Set** - a frame on the page, and what lies inside it. An *input* set
+  is made by the chemist round what is there; a *result* set is made by
   a step, round what it gave.
-- **Entry** - one structure in a box: a drawing, or a molecule in 3D,
+- **Entry** - one structure in a set: a drawing, or a molecule in 3D,
   with what has been found of it (its energy, its population...), and in
   play or set aside.
-- **Compound set** - a box whose entries are each a compound of its own:
-  what a box the chemist draws holds.
-- **Conformer set** - a box whose entries are conformers, grouped by the
+- **Compound set** - a set whose entries are each a compound of its own:
+  what a set the chemist makes holds.
+- **Conformer set** - a set whose entries are conformers, grouped by the
   compound each is of (*a*, *b*...): what the flow makes, and only it.
-- **Step** - one kind of calculation done to a box's entries, of a kind
+- **Step** - one kind of calculation done to a set's entries, of a kind
   Meno defines (*Kinds of step*), filled by a plugin or by Meno.
-- **Port** - where a wire starts or ends: a box gives from its right
+- **Port** - where a wire starts or ends: a set gives from its right
   edge; a step takes on its left edge and gives on its right; a result
-  box takes on its left edge.
+  set takes on its left edge.
 - **Wire** - a line from a port that gives to a port that takes.
 - **Run** - one time a step was carried out, and what it gave; a step
   keeps its runs.
@@ -91,75 +103,82 @@ agree before step 1 is built.
 A workflow lives among everything else on the page - drawings, molecules
 in 3D, arrows, text - and is made of three things:
 
-- **Boxes.** A thin rounded frame, with its name on a tab at its top left
+- **Sets.** A thin rounded frame, with its name on a tab at its top left
   - *Input*, or what a step made (*Conformers*, *Optimised*) - and how
   many entries it holds (*1 structure*, *81 conformers*, *23 of 81*). It
-  gives from a port on its right edge, half-way down; a result box takes
+  gives from a port on its right edge, half-way down; a result set takes
   on its left edge too.
 - **Steps.** A small card: an icon and what the step does (*Optimise*);
   below it, who does it and how (*xTB · GFN2-xTB*); a rule; and what it is
   doing (*Ready*, *Running 0:42*). It takes on its left edge and gives on
   its right.
-- **Wires.** Curves from port to port, leaving and arriving level, in the
-  frames' grey; while a step runs, the wire into it moves (a slow dash),
+- **Wires.** Curves from port to port, leaving and arriving level; while
+  a step runs, the wire into it moves (a slow dash),
   and goes still when it is done.
 
 They are page items, as an arrow or a molecule in 3D is: they lie on the
 page, at the page's scale, zoom and pan with it, and are saved with it. A
 step's words stay legible as it zooms: where they would be smaller than 9
-px on the screen, the card shows its icon and its state's mark alone.
+px on the screen, the card shows its icon and its state's icon alone.
 
-### How each looks
+### How it looks
 
-| Part | Look |
-| --- | --- |
-| Box | 1.2 px line, `#8c959f`, radius 10 px at 100 %; no fill. Its tab: white, the same line, radius 10 px; the name in 11.5 px semibold, the count in grey. |
-| Box, under the pointer | lit from behind in the highlight's blue at 7 %, as anything under the pointer is (EDITOR-2D.md, *Hover, then act*) |
-| Box, selected | its line in the highlight's blue |
-| Step | white card, 1 px `gh-line`, radius 12 px, the frames chip's soft shadow; 160 to 250 px wide at 100 %; title 13.5 px semibold, who and how 11.5 px grey, state 11.5 px in the state's colour (*States*), the log's last line 10.5 px monospaced |
-| Port | 11 px circle, white, 1.6 px line in the frames' grey; filled with the highlight's blue while a wire is drawn from it, and on the ports that would take it |
-| Wire | 1.6 px, the frames' grey; running: the highlight's blue, a dash moving along it at about 20 px a second; failed: the attention colour |
+As Meno's own things look (decided: 15), not as the figures here do:
 
-Everything comes and goes as Meno's things do (theme/motion): a box, a
+- **Colours** from Meno's palette only: its greys for frames, lines and
+  words; the accent (`accel-base`) for what is done or chosen; the
+  attention colour (`accel-accent`) for what failed; the canvas's own
+  hover blue for what is under the pointer on the canvas, as an atom or
+  an arrow is lit.
+- **Lines** as fine as Meno's cards' and chips' borders - a hair on the
+  screen, at any zoom - and wires no heavier than they.
+- **Cards** as Meno's chips and cards are: white, rounded, a hairline
+  border, a soft shadow; words in the sizes Meno's chips use.
+- **No tints or fading** to say what state a thing is in: its words and
+  its icon say it. A part fades in and out only as it comes and goes.
+- **Icons** in the style of the icons Meno already uses (Heroicons'
+  outline), from that set where one fits.
+
+Everything comes and goes as Meno's things do (theme/motion): a set, a
 step and a wire fade in where they are put; a state changes its words
 and colour in a short ease; nothing jumps. Moved, they move as the
 pointer does; put back by an undo, they glide back.
 
 ## Making a workflow
 
-### An input: boxing molecules
+### An input: a set from the selection
 
-![Boxing a molecule as an input](workflows/1-boxing.svg)
+![Making an input from the selection](workflows/1-input.svg)
 
-1. **Box the molecules** with the gesture that selects today: a long
+1. **Select the molecules** with the gesture that selects today: a long
    press on empty space and a drag (or Ctrl/⌘ and a drag).
 2. **A port shows on the selection's right edge** while it holds whole
    structures or molecules in 3D (a few atoms of a structure make no
-   input). It fades in once the box is drawn; nothing else of the
+   input). It fades in once the selection is made; nothing else of the
    selection changes, and a chemist who never pulls it never meets a
    workflow.
 3. **Pull a wire out of the port.** The selection's frame stays, as an
-   *Input* box; a wire follows the pointer.
+   *Input* set; a wire follows the pointer.
    - Let go on empty space: Quick Add opens there, at the kinds of step
-     that take what the box gives. A step chosen is put down there, wired.
+     that take what the set gives. A step chosen is put down there, wired.
    - Let go on a step's port: wired to it.
-   - Let go where nothing takes it, or Escape: the wire goes, and the box
+   - Let go where nothing takes it, or Escape: the wire goes, and the set
      stays.
-4. **Or from the menu**: right-click the selection, *Box as input*.
+4. **Or from the menu**: right-click the selection, *Use as input*.
 
-**What a box holds is what lies inside its frame** (decided):
+**What a set holds is what lies inside its frame** (decided):
 
 - a structure or a molecule in 3D whose middle is inside the frame is in
-  the box; dragged in, it joins; dragged out, it leaves;
-- the frame is the box's own: its tab drags it, with all it holds; its
+  the set; dragged in, it joins; dragged out, it leaves;
+- the frame is the set's own: its tab drags it, with all it holds; its
   edges and corners drag to size it;
 - drawn on, a structure stays in it, and the frame grows to keep it
   inside if it would reach past it;
-- *Delete box* (right-click its tab) takes the frame away and leaves what
-  it held; a box left empty stays, empty, until it is deleted.
+- *Delete set* (right-click its tab) takes the frame away and leaves what
+  it held; a set left empty stays, empty, until it is deleted.
 
-A box's entries are its structures and molecules in 3D, in the order they
-lie (top to bottom, left to right). A box the chemist draws is a
+A set's entries are its structures and molecules in 3D, in the order they
+lie (top to bottom, left to right). A set the chemist makes is a
 **compound set**: each entry a compound of its own, however alike two
 are (*Compound sets and conformer sets*).
 
@@ -170,19 +189,19 @@ it is shown - so that steps join whoever fills them; plugins fill them,
 each with its own options. A plugin cannot bring a kind of its own; a
 new kind comes with Meno, as a new role does (PLUGINS.md, *Roles*).
 
-| Kind | Icon | Takes | Gives |
+| Kind | Icon (Heroicons' outline) | Takes | Gives |
 | --- | --- | --- | --- |
 | 3D structure | a cube | structures | molecules in 3D - the same kind of set |
-| Conformers | three rings, stacked | molecules in 3D | **a conformer set**: each compound's conformers |
-| Optimise | a curve down to its lowest point | molecules in 3D | each optimised, its path as frames - the same kind of set |
-| Energy | E and a level | molecules in 3D | each with its energy - the same kind of set |
-| Frequencies | a wave | molecules in 3D | each with its vibrations and thermal corrections - the same kind of set |
-| Energy window | a band | a conformer set, with energies | those within the window of their compound's lowest; the rest set aside |
-| Duplicates | two rings, one dashed | molecules in 3D | each unlike the others of its compound kept; the rest set aside - the same kind of set |
-| Populations | falling bars | a conformer set, with energies | each with its Boltzmann population within its compound |
-| As conformers | three rings, one boxed | a compound set of molecules in 3D | **a conformer set**: entries of the same constitution - the same atoms, bonded the same way - as conformers of one compound |
+| Conformers | a stack of layers | molecules in 3D | **a conformer set**: each compound's conformers |
+| Optimise | a trend going down | molecules in 3D | each optimised, its path as frames - the same kind of set |
+| Energy | a bolt | molecules in 3D | each with its energy - the same kind of set |
+| Frequencies | a signal | molecules in 3D | each with its vibrations and thermal corrections - the same kind of set |
+| Energy window | a funnel | a conformer set, with energies | those within the window of their compound's lowest; the rest set aside |
+| Duplicates | two squares, one over the other | molecules in 3D | each unlike the others of its compound kept; the rest set aside - the same kind of set |
+| Populations | bars | a conformer set, with energies | each with its Boltzmann population within its compound |
+| As conformers | shapes grouped | a compound set of molecules in 3D | **a conformer set**: entries of the same constitution - the same atoms, bonded the same way - as conformers of one compound |
 
-The first five run a program; the last four work on a box's entries
+The first five run a program; the last four work on a set's entries
 alone (*Who does a step*). A step that keeps a set keeps its kind: a
 conformer set optimised is still one. More kinds come with Meno as they
 are needed - a free energy from an energy and its corrections, the
@@ -216,7 +235,7 @@ again for steps on 2026-10-08):
 
 - **Quick Add keeps its four** - bond, text, reaction arrow, "+" - and
   gains **one button**: *Calculations*, a small graph of two joined
-  boxes, after a thin rule.
+  sets, after a thin rule.
 - **Pressed, it opens** a panel below the row, of the kinds of step,
   each an icon, named on hover with who does it (*Optimise · xTB*):
   first those that run a program, then those that work on entries.
@@ -237,9 +256,9 @@ again for steps on 2026-10-08):
 
 - **Drawn** from a port that gives to one that takes, or the other way: a
   press on a port and a drag. While it is drawn, the ports that would
-  take it are lit, the others dimmed.
+  take it are lit in the accent; the others stay as they are.
 - **What may join**: what a port gives to a port that takes it (*Kinds of
-  step*). Nothing is converted on the way: a box of structures does not
+  step*). Nothing is converted on the way: a set of structures does not
   go into *Optimise* - a *3D structure* step goes between, on the page;
   a compound set does not go into *Populations* - *As conformers* goes
   between, or a *Conformers* step.
@@ -269,36 +288,37 @@ last options chosen for each kind are what a new step starts with.
 
 ## Compound sets and conformer sets
 
-![A box of conformers through a workflow](workflows/7-conformers.svg)
+![A set of conformers through a workflow](workflows/7-conformers.svg)
 
-Conformers go through a workflow as ACCeL's `Box` takes them (decided):
+Conformers go through a workflow as any set does (decided):
 
-- **A box holds entries**, each a structure, with what has been found of
+- **A set holds entries**, each a structure, with what has been found of
   it: energies, corrections, populations.
-- **A box is one of two kinds of set** (decided):
+- **A set is one of two kinds** (decided):
   - a **compound set** - each entry a compound of its own. What the
-    chemist boxes is one, always: two structures boxed together are two
-    compounds, however alike; a file of many geometries read and boxed
+    chemist gathers into a set is one, always: two structures in a set
+    together are two compounds, however alike; a file of many geometries
+    read and gathered into a set
     is a compound set of many, not conformers because there are many;
   - a **conformer set** - entries grouped by the compound each is a
-    conformer of (*a*, *b*...), as ACCeL's labels group them. It is made
+    conformer of (*a*, *b*...). It is made
     by the flow only: by *Conformers*, or by *As conformers* - the
     conversion taken on purpose, a step on the page like any other - and
     kept by the steps after them that keep their set's kind. So whether
-    a box is a conformer set can always be read from the flow that led
+    a set is a conformer set can always be read from the flow that led
     to it.
 - **Steps work entry by entry**, or compound by compound where the kind
   says so: *Optimise* each entry; *Energy window* and *Populations*
   within each compound of a conformer set.
-- **What a step sets aside is kept**, struck through in its box, not
-  deleted - as ACCeL's entries are switched off - so that a window made
+- **What a step sets aside is kept**, struck through in its set, not
+  deleted, so that a window made
   wider brings it back on the next run.
 - **On the page**, a conformer set's compound is shown as one molecule in
   3D with its conformers as frames - the conformer set Meno draws today,
   its chip saying the entry, its energy and population; entries set aside
-  are not among its frames, and are listed, struck through, in its box.
+  are not among its frames, and are listed, struck through, in its set.
   A compound set's entries are separate molecules, each its own.
-- **A box's tab says which it is**: *Compounds · 2*, *Conformers · 2
+- **A set's tab says which it is**: *Compounds · 2*, *Conformers · 2
   compounds · 81*.
 
 ## Running
@@ -322,15 +342,15 @@ once (*Several at once*).
 
 ![A step's states](workflows/5-states.svg)
 
-| State | Mark and colour | What the card says |
+| State | Icon and colour | What the card says |
 | --- | --- | --- |
-| Ready | ○ grey | *Ready* |
-| Waiting | ◔ grey | *Waiting · 2nd* - its place in the queue |
-| Running | ● the highlight's blue | *Running 1:12*, or *Running · 7 of 81*; the log's last line under it; a thin bar where the program says how far it is |
-| Done | ✓ the accent | *2:03 · −42.10871 Eh*, or *81 of 81*, or *23 kept* - how long, and the number the step is for |
-| Failed | ! the attention colour | *Failed* - and the line of the log that says why; *3 of 81 failed* where some entries did |
-| Stopped | ■ grey | *Stopped after 0:31* |
-| Changed | ↻ grey, the card dimmed | *Changed · run again* - its options, or what comes into it, changed since its run; its results stay, dimmed |
+| Ready | none, grey words | *Ready* |
+| Waiting | a clock, grey | *Waiting · 2nd* - its place in the queue |
+| Running | turning, the accent | *Running 1:12*, or *Running · 7 of 81*; the log's last line under it; a thin bar where the program says how far it is |
+| Done | a tick, the accent | *2:03 · −42.10871 Eh*, or *81 of 81*, or *23 kept* - how long, and the number the step is for |
+| Failed | an exclamation mark, the attention colour | *Failed* - and the line of the log that says why; *3 of 81 failed* where some entries did |
+| Stopped | a stop, grey | *Stopped after 0:31* |
+| Changed | turning arrows, grey | *Changed · run again* - its options, or what comes into it, changed since its run; its results stay as they are |
 
 ### The log
 
@@ -343,7 +363,7 @@ named for the entry. A log is a text of the workspace like any other.
 
 ![A step's results and its log](workflows/6-results.svg)
 
-When a run is done, what it gave comes in as a result box to the right
+When a run is done, what it gave comes in as a result set to the right
 of the step, wired from it (decided):
 
 - **Optimise**: each entry as optimised, its path as frames, the energy
@@ -357,9 +377,9 @@ of the step, wired from it (decided):
 - **As conformers**: the same entries, as a conformer set.
 
 They are calculation results as Meno knows them: the frames chip,
-pointing at atoms, the lists. The box's port feeds the next step.
+pointing at atoms, the lists. The set's port feeds the next step.
 
-Run again, a step replaces its result box's entries with the new run's,
+Run again, a step replaces its result set's entries with the new run's,
 gliding to where they now are; earlier runs are kept in the step (*Runs*,
 under its options: when, with what options, how long, the number it
 gave), and one can be shown again.
@@ -394,7 +414,7 @@ gave), and one can be shown again.
 
 ### Undo
 
-- Making a workflow is editing the page: a box, a step, a wire, options -
+- Making a workflow is editing the page: a set, a step, a wire, options -
   each an undo step, as anything drawn.
 - A run is not undone. Its results coming in is one step: an undo takes
   them away (the step shows its earlier run, or none), a redo brings them
@@ -404,7 +424,7 @@ gave), and one can be shown again.
 ## Saving and sharing
 
 - **The workspace keeps it all** (`.meno`, FILE-IO.md, *The workspace
-  file*): boxes, steps, wires, options; each run - when, with what
+  file*): sets, steps, wires, options; each run - when, with what
   options, which program and version, how it ended; logs and outputs, as
   files kept by their SHA-256; results as entries on the page.
 - **Shared, a workspace is the procedure with its results**: opened
@@ -463,7 +483,7 @@ gave), and one can be shown again.
 
 ## Licences
 
-- **The editor is Meno's own.** Boxes, steps, wires, ports and their
+- **The editor is Meno's own.** Sets, steps, wires, ports and their
   drawing on the page are written for Meno, from this specification,
   with no code taken or read from ReactFlow, the Workflow Builder tab, or
   any other node editor (the maintainer, 2026-10-08). ReactFlow
@@ -482,19 +502,19 @@ gave), and one can be shown again.
 
 ## Where this leaves what is there
 
-- **The Workflow Builder tab** and ReactFlow go (decided), once boxes and
+- **The Workflow Builder tab** and ReactFlow go (decided), once sets and
   steps are on the page - or before; nothing here uses them.
 - **Export** keeps writing a calculation's input (Gaussian's, through
   its plugin) for a chemist who runs it elsewhere.
 - **Opening an output** keeps working as now; an output read is a
-  molecule like any other, and can be boxed.
+  molecule like any other, and can be put in a set.
 - **RDKit's conformers** (*3D structures*) stay as they are; in a
   workflow, RDKit fills *3D structure* and *Conformers*.
 
 ## In order
 
-1. **Boxes, steps and wires on the page**, none run: the document's new
-   items, their drawing, boxing from the selection, wires, Quick Add's
+1. **Sets, steps and wires on the page**, none run: the document's new
+   items, their drawing, inputs made from the selection, wires, Quick Add's
    *Calculations*, menus, undo, saving; Meno's own *As conformers*,
    *Energy window*, *Duplicates* and *Populations* - the first steps that
    do something, on entries read from files - and Settings,
