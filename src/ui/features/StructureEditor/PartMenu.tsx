@@ -11,7 +11,7 @@ export type MenuTarget = {
    * The atom, bond, reaction arrow or "+" right-clicked, or a molecule in 3D
    * or a measurement on one; null, when it was nothing.
    */
-  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "molecule3d" | "measure3d" | null;
+  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "molecule3d" | "measure3d" | "box" | "step" | "wire" | null;
   /** Its id: for a measurement, its molecule's. */
   id: number | null;
   /** A measurement's own id. */
@@ -103,6 +103,9 @@ export default function PartMenu({
   onAddPlus,
   onAddText,
   onEditText,
+  onRunStep,
+  onStepOptions,
+  onBoxAsInput,
   onSaveAbbreviation,
   canvas = [],
   clipboard,
@@ -135,6 +138,11 @@ export default function PartMenu({
   onAddText: () => void;
   /** The words right-clicked, written anew. */
   onEditText: () => void;
+  /** A workflow's step right-clicked: run, or opened to its options. */
+  onRunStep: () => void;
+  onStepOptions: () => void;
+  /** The selection boxed as a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
+  onBoxAsInput?: () => void;
   /** The selection saved as an abbreviation of the user's own. */
   onSaveAbbreviation: () => void;
   /** What the canvas does as a whole - fit, R and S, its style - offered on empty space. */
@@ -239,6 +247,16 @@ export default function PartMenu({
           { name: "Edit text", keys: "", run: onEditText },
           { name: "Delete text", keys: deleteKey, run: onDelete },
         ]
+      : target.kind === "box"
+      ? [{ name: "Delete box", keys: deleteKey, run: onDelete }]
+      : target.kind === "step"
+      ? [
+          { name: "Run", keys: "", run: onRunStep },
+          { name: "Options…", keys: "", run: onStepOptions },
+          { name: "Delete step", keys: deleteKey, run: onDelete, divider: true },
+        ]
+      : target.kind === "wire"
+      ? [{ name: "Delete wire", keys: deleteKey, run: onDelete }]
       : target.selection === "here"
       ? [
           // (on a molecule in 3D in it: that molecule's own, first)
@@ -248,6 +266,7 @@ export default function PartMenu({
           // (on empty space, a paste goes there)
           ...(target.kind == null ? [paste] : []),
           { name: "Delete selection", keys: deleteKey, run: onDelete, divider: true },
+          ...(onBoxAsInput ? [{ name: "Box as input", keys: "", run: onBoxAsInput, divider: true }] : []),
           // (what only a drawing has: none, for molecules in 3D alone)
           ...(drawing
             ? [
@@ -309,6 +328,12 @@ export default function PartMenu({
                   ? "Plus"
                   : target.kind === "caption"
                     ? "Text"
+                  : target.kind === "box"
+                    ? "Box"
+                  : target.kind === "step"
+                    ? "Step"
+                  : target.kind === "wire"
+                    ? "Wire"
                   : target.kind === "molecule3d"
                     ? "Molecule"
                     : target.kind === "measure3d"

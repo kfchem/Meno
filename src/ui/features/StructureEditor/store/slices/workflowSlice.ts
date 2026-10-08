@@ -4,14 +4,29 @@ import { rememberable, valuesOf } from "../../../../../lib/options";
 import { useAppSettings } from "../../../../../lib/settings/appSettings";
 import type { StructureDocument } from "../../document";
 import { currentStyle3D } from "../../style3d";
-import { lookOf, solidOf } from "../../utils/molecule3d";
+import { lookOf, poseOf, seenBounds, solidOf } from "../../utils/molecule3d";
+import type { Style3D } from "../../../../../lib/chem/style3d";
 import { byOf } from "../../workflow/doers";
 import { kindInfo, type StepKind } from "../../workflow/kinds";
 import * as wf from "../../workflow/model";
 import { runStep } from "../../workflow/run";
-import type { EditorState, Molecule3D } from "../types";
+import type { EditorState, Molecule3D, WorkflowView } from "../types";
 
 type SetState = StoreApi<EditorState>["setState"];
+
+/** How far a molecule in 3D reaches from its middle on the page, across and up, as it stands unturned, in any of its frames. */
+function extentOf(m: Molecule3D, style: Style3D): { w: number; h: number } {
+  const solid = solidOf(m, style);
+  const look = lookOf(m, style);
+  let w = 0;
+  let h = 0;
+  for (let f = 0; f < solid.frames.length; f++) {
+    const b = seenBounds(poseOf({ ...m, at: { x: 0, y: 0 } }, solid, look, undefined, f));
+    w = Math.max(w, -b.minX, b.maxX);
+    h = Math.max(h, -b.minY, b.maxY);
+  }
+  return { w, h };
+}
 
 /** The role a kind of step's options are remembered by (lib/settings/appSettings `options`). */
 export const stepRole = (kind: StepKind) => `step:${kind}`;
@@ -24,7 +39,7 @@ export const stepRole = (kind: StepKind) => `step:${kind}`;
 export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: SetState) {
   const coalesce = (what: string, id: number, gesture?: string) => (gesture ? { coalesceKey: `${what}:${id}:${gesture}` } : {});
   return {
-    setWorkflowView: (patch: Partial<Pick<EditorState, "hoveredBox" | "chosenBox" | "hoveredWire" | "openStep" | "wireDrag">>) => set(patch),
+    setWorkflowView: (patch: Partial<Pick<EditorState, WorkflowView>>) => set(patch),
     addBox: (frame: { x0: number; y0: number; x1: number; y1: number }) => {
       const id = doc.getState().nextWorkflowId ?? 1;
       doc.edit("add box", (d) => wf.addBox(d, frame));
@@ -57,7 +72,11 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
     },
     removeStep: (id: number) => {
       if (doc.edit("delete step", (d) => wf.removeStep(d, id)))
-        set((prev: EditorState) => ({ ...prev, openStep: prev.openStep === id ? null : prev.openStep }));
+        set((prev: EditorState) => ({
+          ...prev,
+          openStep: prev.openStep === id ? null : prev.openStep,
+          hoveredStep: prev.hoveredStep === id ? null : prev.hoveredStep,
+        }));
     },
     connect: (from: Parameters<typeof wf.connect>[1], to: number) => {
       const was = doc.getState();
@@ -68,11 +87,20 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
       if (doc.edit("delete wire", (d) => wf.removeWire(d, id)))
         set((prev: EditorState) => ({ ...prev, hoveredWire: prev.hoveredWire === id ? null : prev.hoveredWire }));
     },
+    rewire: (id: number, to: number) => {
+      doc.edit("wire", (d) => {
+        const w = d.wires?.find((x) => x.id === id);
+        if (!w || w.to === to) return d;
+        const moved = wf.connect(wf.removeWire(d, id), w.from, to);
+        // (where it may not go there, it stays where it was)
+        return moved.wires?.some((x) => x.to === to && JSON.stringify(x.from) === JSON.stringify(w.from)) ? moved : d;
+      });
+    },
     runStep: (id: number) => {
       const style = currentStyle3D();
       doc.edit("run", (d) =>
         runStep(d, id, {
-          reachOf: (m) => solidOf(m as Molecule3D, style).reach[lookOf(m as Molecule3D, style)],
+          extentOf: (m) => extentOf({ ...m, id: 0 }, style),
           byOf,
           now: Date.now(),
         }),

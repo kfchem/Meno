@@ -24,6 +24,8 @@ export const BOX_TOP = 30 * PX;
 /** A result box's distance from its step, and between molecules in it. */
 export const GAP = 64 * PX;
 export const BETWEEN = 24 * PX;
+/** The room a molecule's frames chip takes below it, where it has one. */
+export const CHIP = 30 * PX;
 /** A box's list of entries: a row's height, and its width. */
 export const ROW = 17 * PX;
 export const LIST_W = 196 * PX;

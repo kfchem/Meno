@@ -35,14 +35,16 @@ export type KindInfo = {
   runs: "program" | "entries";
   /** Its options, where Meno does it. */
   options?: readonly Option[];
+  /** What its result box is called; `{id}`, an option's value. */
+  made: string;
 };
 
 export const KINDS: readonly KindInfo[] = [
-  { kind: "structure-3d", name: "3D structure", icon: "cube", takes: ["structures"], gives: "molecules", runs: "program" },
-  { kind: "conformers", name: "Conformers", icon: "rings", takes: ["molecules", "conformers"], gives: "conformers", runs: "program" },
-  { kind: "optimise", name: "Optimise", icon: "curve", takes: ["molecules", "conformers"], gives: "same", runs: "program" },
-  { kind: "energy", name: "Energy", icon: "level", takes: ["molecules", "conformers"], gives: "same", runs: "program" },
-  { kind: "frequencies", name: "Frequencies", icon: "wave", takes: ["molecules", "conformers"], gives: "same", runs: "program" },
+  { kind: "structure-3d", name: "3D structure", icon: "cube", takes: ["structures"], gives: "molecules", runs: "program", made: "3D structures" },
+  { kind: "conformers", name: "Conformers", icon: "rings", takes: ["molecules", "conformers"], gives: "conformers", runs: "program", made: "Conformers" },
+  { kind: "optimise", name: "Optimise", icon: "curve", takes: ["molecules", "conformers"], gives: "same", runs: "program", made: "Optimised" },
+  { kind: "energy", name: "Energy", icon: "level", takes: ["molecules", "conformers"], gives: "same", runs: "program", made: "Energies" },
+  { kind: "frequencies", name: "Frequencies", icon: "wave", takes: ["molecules", "conformers"], gives: "same", runs: "program", made: "Frequencies" },
   {
     kind: "energy-window",
     name: "Energy window",
@@ -50,6 +52,7 @@ export const KINDS: readonly KindInfo[] = [
     takes: ["conformers"],
     gives: "conformers",
     runs: "entries",
+    made: "Within {window} kcal/mol",
     options: [{ id: "window", label: "Within", type: "number", default: 3, min: 0, step: 0.5, unit: "kcal/mol" }],
   },
   {
@@ -59,6 +62,7 @@ export const KINDS: readonly KindInfo[] = [
     takes: ["molecules", "conformers"],
     gives: "same",
     runs: "entries",
+    made: "Unlike",
     options: [{ id: "rmsd", label: "Alike within (RMSD)", type: "number", default: 0.125, min: 0, step: 0.025, unit: "Å" }],
   },
   {
@@ -68,9 +72,10 @@ export const KINDS: readonly KindInfo[] = [
     takes: ["conformers"],
     gives: "conformers",
     runs: "entries",
+    made: "Populations at {temperature} K",
     options: [{ id: "temperature", label: "At", type: "number", default: 298.15, min: 1, step: 1, unit: "K" }],
   },
-  { kind: "as-conformers", name: "As conformers", icon: "boxed-rings", takes: ["molecules"], gives: "conformers", runs: "entries" },
+  { kind: "as-conformers", name: "As conformers", icon: "boxed-rings", takes: ["molecules"], gives: "conformers", runs: "entries", made: "Conformers" },
 ];
 
 export const kindInfo = (kind: StepKind): KindInfo => KINDS.find((k) => k.kind === kind)!;
@@ -86,4 +91,24 @@ export function optionsOf(kind: StepKind, own: Record<string, string | number | 
   const values: Record<string, string | number | boolean> = {};
   for (const o of kindInfo(kind).options ?? []) values[o.id] = own?.[o.id] ?? o.default;
   return values;
+}
+
+/** What a step's result box is called, its options' values put in. */
+export function madeName(kind: StepKind, own: Record<string, string | number | boolean> | undefined): string {
+  const values = optionsOf(kind, own);
+  return kindInfo(kind).made.replace(/\{([a-z0-9-]+)\}/g, (_, id: string) => String(values[id] ?? ""));
+}
+
+/** How a step does its work, in a line: each option's value, a number with its unit, a choice by its name. */
+export function howOf(kind: StepKind, own: Record<string, string | number | boolean> | undefined): string {
+  const values = optionsOf(kind, own);
+  return (kindInfo(kind).options ?? [])
+    .flatMap((o) => {
+      const v = values[o.id];
+      if (o.type === "number") return [`${v}${o.unit ? ` ${o.unit}` : ""}`];
+      if (o.type === "choice") return [o.choices.find((c) => c.value === v)?.label ?? String(v)];
+      if (o.type === "switch") return v ? [o.label] : [];
+      return v ? [String(v)] : [];
+    })
+    .join(" · ");
 }

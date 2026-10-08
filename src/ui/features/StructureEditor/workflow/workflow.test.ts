@@ -7,6 +7,8 @@ import { boxList } from "./list";
 import { KCAL_PER_HARTREE, boltzmann, runMeno } from "./meno";
 import { addBox, addStep, connect, moveBox, removeBox, removeStep, removeWire, updateStep } from "./model";
 import { runStep, type RunWith } from "./run";
+import { offeredSteps } from "./offered";
+import { selectionFrame } from "./boxing";
 
 /** Three atoms, bent, at `at` on the page: frame k opened out by k * `step` ångströms, with energies `e` (hartrees). */
 function bent(at: { x: number; y: number }, n = 1, e?: number[], step = 0.4, el = "O"): Omit<Molecule3D, "id"> {
@@ -22,7 +24,7 @@ function bent(at: { x: number; y: number }, n = 1, e?: number[], step = 0.4, el 
 }
 
 const kcal = (k: number) => k / KCAL_PER_HARTREE;
-const W: RunWith = { reachOf: () => 1, byOf: () => "meno", now: 1000 };
+const W: RunWith = { extentOf: () => ({ w: 1, h: 1 }), byOf: () => "meno", now: 1000 };
 
 /** A page with one molecule of five frames - energies 0, 0.5, 2, 4 and 0.5 kcal/mol above -76 - boxed: box 1. */
 function page(): StructureDocument {
@@ -243,5 +245,38 @@ describe("saving", () => {
     });
     expect(odd).toEqual({ boxes: [{ id: 1, x0: 0, y0: 0, x1: 2, y1: 2 }], steps: [], wires: [] });
     expect(readWorkflow({})).toBeUndefined();
+  });
+});
+
+describe("Quick Add's calculations", () => {
+  it("are the kinds something added does, As conformers only from a compound set's wire", () => {
+    let doc = addStep(page(), "as-conformers", 5, 0);
+    doc = connect(doc, { box: 1 }, 2);
+    // (no plugin added runs a program: Meno's own steps on entries)
+    expect(offeredSteps(doc).map((k) => k.kind)).toEqual(["energy-window", "duplicates", "populations"]);
+    expect(offeredSteps(doc).every((k) => k.who === "Meno")).toBe(true);
+    // a compound set's wire: what takes it, then the conversion
+    expect(offeredSteps(doc, { box: 1 }).map((k) => k.kind)).toEqual(["duplicates", "as-conformers"]);
+    // a conformer set's
+    expect(offeredSteps(doc, { step: 2 }).map((k) => k.kind)).toEqual(["energy-window", "duplicates", "populations"]);
+  });
+});
+
+describe("boxing the selection", () => {
+  it("takes whole structures, not a few atoms of one", () => {
+    const model = {
+      atoms: [
+        { id: 1, el: "C", x: 0, y: 0 },
+        { id: 2, el: "C", x: 1.8, y: 0 },
+      ] as never[],
+      bonds: [{ id: 3, a: 1, b: 2, order: 1 }] as never[],
+    };
+    const style = {} as never;
+    expect(selectionFrame(model, new Set([1]), [], new Set(), style, {}, {})).toBeNull();
+    const f = selectionFrame(model, new Set([1, 2]), [], new Set(), style, {}, {})!;
+    expect(f.x0).toBeLessThan(0);
+    expect(f.x1).toBeGreaterThan(1.8);
+    // (room under its tab)
+    expect(f.y1 - 0).toBeGreaterThan(0 - f.y0);
   });
 });

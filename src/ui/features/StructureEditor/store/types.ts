@@ -151,6 +151,8 @@ export type WorkflowStep = { id: number; kind: StepKind; x: number; y: number; b
 export type WireEnd = { box: number } | { step: number };
 /** A wire, from what gives to the step that takes it. */
 export type Wire = { id: number; from: WireEnd; to: number };
+/** What of a workflow is the view's, not the document's. */
+export type WorkflowView = "hoveredBox" | "chosenBox" | "hoveredStep" | "hoveredWire" | "openStep" | "wireDrag" | "workflowMenu";
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];
 /** A molecule in 3D rising out of its drawing (EditorState `rising3d`). */
@@ -327,18 +329,21 @@ export type EditorState = {
   boxes: WorkflowBox[];
   steps: WorkflowStep[];
   wires: Wire[];
-  /** The box whose tab is under the pointer; the box chosen (its tab clicked); the wire under the pointer; the step open to its options. */
+  /** The box whose tab is under the pointer; the box chosen (its tab clicked); the step and the wire under the pointer; the step open to its options. */
   hoveredBox: number | null;
   chosenBox: number | null;
+  hoveredStep: number | null;
   hoveredWire: number | null;
   openStep: number | null;
+  /** A box's tab or a step's card right-clicked: its menu asked for, there (StructureCanvas opens it). */
+  workflowMenu: { kind: "box" | "step"; id: number; clientX: number; clientY: number } | null;
   /**
    * A wire being drawn, to where the pointer is: from what gives, or back
    * from a step that takes (`to`); picked up off the step it went into,
    * the wire it was (`was`).
    */
   wireDrag: { from?: WireEnd; to?: number; at: { x: number; y: number }; was?: number } | null;
-  setWorkflowView: (patch: Partial<Pick<EditorState, "hoveredBox" | "chosenBox" | "hoveredWire" | "openStep" | "wireDrag">>) => void;
+  setWorkflowView: (patch: Partial<Pick<EditorState, WorkflowView>>) => void;
   /** A box round `frame`, as one step; its id. */
   addBox: (frame: { x0: number; y0: number; x1: number; y1: number }) => number;
   /** A box's frame sized anew, or the box moved with all it holds: a run of either in one gesture one step. */
@@ -356,6 +361,8 @@ export type EditorState = {
   removeWire: (id: number) => void;
   /** A step run, and first the steps before it that need it: one step to undo. */
   runStep: (id: number) => void;
+  /** A wire picked up off its step and let go on another's port: into that one instead, as one step. */
+  rewire: (id: number, to: number) => void;
   hoverPulse: { id: number | null; nonce: number; until: number };
   arrows: Arrow[];
   pluses: Plus[];

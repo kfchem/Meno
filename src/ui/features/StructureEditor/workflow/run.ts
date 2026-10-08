@@ -12,12 +12,12 @@ import { boxMembers, inside, setEntries, type Frame, type SetEntry } from "./ent
 import { boxOf, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "./flow";
 import { kindInfo, MENO_DOES, takes, type SetKind } from "./kinds";
 import { boxList } from "./list";
-import { BETWEEN, BOX_PAD, BOX_TOP, CARD_H, CARD_W, GAP, LIST_W, PX, ROW } from "./look";
+import { BETWEEN, BOX_PAD, BOX_TOP, CARD_H, CARD_W, CHIP, GAP, LIST_W, PX, ROW } from "./look";
 import { runMeno, type Outcome } from "./meno";
 import { addBox, setBoxFrame, setBoxMade, setRan } from "./model";
 
-/** What a run needs of the canvas: how far a molecule in 3D reaches from its middle on the page, who does a step, and the time. */
-export type RunWith = { reachOf: (m: Omit<Molecule3D, "id">) => number; byOf: (step: WorkflowStep) => string; now: number };
+/** What a run needs of the canvas: how far a molecule in 3D reaches from its middle on the page, across and up, in any of its frames; who does a step; and the time. */
+export type RunWith = { extentOf: (m: Omit<Molecule3D, "id">) => { w: number; h: number }; byOf: (step: WorkflowStep) => string; now: number };
 
 /** What each kind of set is called, where a step says what it takes. */
 const SET_NAMES: Record<SetKind, string> = { structures: "structures drawn", molecules: "molecules in 3D", conformers: "conformer sets" };
@@ -56,35 +56,39 @@ const ROW_MOST = 12 * NOMINAL_BOND_LENGTH;
 function withResults(doc: StructureDocument, step: WorkflowStep, outcome: Extract<Outcome, { ok: true }>, w: RunWith): StructureDocument {
   const made = moleculesOf(outcome);
   const aside: AsideEntry[] = outcome.aside.map((e) => ({ compound: e.compound, number: e.number, ...(e.energy != null ? { energy: e.energy } : {}) }));
-  // laid out in rows, left to right, under the box's tab; its list below them
-  const reach = made.map((m) => Math.max(w.reachOf({ ...m, at: { x: 0, y: 0 } }), NOMINAL_BOND_LENGTH / 2));
+  // its list under the box's tab; below it, the molecules in rows, left to
+  // right - each with room for its frames chip below it, where it has frames
+  const sizes = made.map((m) => {
+    const e = w.extentOf({ ...m, at: { x: 0, y: 0 } });
+    return { w: Math.max(e.w, NOMINAL_BOND_LENGTH / 2), h: Math.max(e.h, NOMINAL_BOND_LENGTH / 2), chip: m.frames?.length ? CHIP : 0 };
+  });
   const places: { x: number; y: number }[] = [];
   let x = 0;
   let y = 0;
   let rowH = 0;
   let wide = 0;
-  made.forEach((_, i) => {
-    const d = 2 * reach[i];
+  sizes.forEach((size) => {
+    const d = 2 * size.w;
     if (x > 0 && x + d > ROW_MOST) {
       y -= rowH + BETWEEN;
       x = 0;
       rowH = 0;
     }
-    places.push({ x: x + reach[i], y: y - reach[i] });
+    places.push({ x: x + size.w, y: y - size.h });
     x += d + BETWEEN;
-    rowH = Math.max(rowH, d);
+    rowH = Math.max(rowH, 2 * size.h + size.chip);
     wide = Math.max(wide, x - BETWEEN);
   });
   const tall = -y + rowH;
   const rows = boxList(made, aside, outcome.set).length;
-  const listH = rows ? rows * ROW + BETWEEN / 2 : 0;
+  const listH = rows ? rows * ROW + BETWEEN : 0;
   const width = Math.max(wide, rows ? LIST_W : 0, 120 * PX) + 2 * BOX_PAD;
   const height = BOX_TOP + tall + listH + BOX_PAD;
 
   const was = resultOf(doc, step.id);
   if (was) doc = removeMolecules3d(doc, boxMembers(doc, was).molecules);
   const frame = was ? frameAt(was.x0, was.y1, width, height) : placeFor(doc, step, width, height);
-  for (const [i, m] of made.entries()) doc = addMolecule3d(doc, { ...m, at: { x: frame.x0 + BOX_PAD + places[i].x, y: frame.y1 - BOX_TOP + places[i].y } });
+  for (const [i, m] of made.entries()) doc = addMolecule3d(doc, { ...m, at: { x: frame.x0 + BOX_PAD + places[i].x, y: frame.y1 - BOX_TOP - listH + places[i].y } });
   const set = { step: step.id, set: outcome.set };
   if (was) return setBoxMade(setBoxFrame(doc, was.id, frame), was.id, set, aside);
   const id = doc.nextWorkflowId ?? 1;
