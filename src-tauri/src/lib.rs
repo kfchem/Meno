@@ -15,6 +15,7 @@ mod clipboard;
 mod fonts;
 #[cfg(windows)]
 mod drop;
+mod jobs;
 mod net;
 mod pixienv;
 mod tools;
@@ -773,6 +774,10 @@ fn registration_asked() -> Option<i32> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // started to run a job (jobs.rs): that, apart from Meno, and nothing else
+    if let Some(code) = jobs::job_mode() {
+        std::process::exit(code);
+    }
     #[cfg(windows)]
     if let Some(code) = registration_asked() {
         std::process::exit(code);
@@ -849,7 +854,18 @@ pub fn run() {
             // python sidecar
             ext_spawn_sidecar,
             ext_stdin,
-            ext_kill
+            ext_kill,
+            // jobs: programs run for a workflow's steps, apart from Meno
+            jobs::job_start,
+            jobs::job_state,
+            jobs::jobs_list,
+            jobs::job_log,
+            jobs::job_files,
+            jobs::job_read,
+            jobs::job_folder,
+            jobs::job_stop,
+            jobs::job_remove,
+            jobs::jobs_clear_finished
         ])
         .build(context)
         .expect("error while building tauri application")

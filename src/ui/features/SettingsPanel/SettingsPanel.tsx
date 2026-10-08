@@ -12,6 +12,7 @@ import FileSettings from "./FileSettings";
 import PointerSettings from "./PointerSettings";
 import PictureSettings from "./PictureSettings";
 import CalculationSettings from "./CalculationSettings";
+import JobSettings from "./JobSettings";
 import PluginSettings from "./PluginSettings";
 import RoleChoices from "./RoleChoices";
 import { useSettingsSection, type SettingsSection } from "./section";
@@ -33,7 +34,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
  * in unless its document has its own, how molecules in 3D look and turn,
  * how the mouse and the trackpad work the canvas,
  * what is pointed out on a structure, who reads and writes each kind
- * of file and how sharp a copied picture is, who does each kind of step in a workflow, the plugins, what the labels Meno reads stand for, and what Meno
+ * of file and how sharp a copied picture is, who does each kind of step in a workflow and how its jobs run, the plugins, what the labels Meno reads stand for, and what Meno
  * may do on the network.
  */
 export default function SettingsPanel() {
@@ -153,6 +154,11 @@ export default function SettingsPanel() {
               options last chosen in a step become them.
             </p>
             <CalculationSettings />
+            <h3 className="mt-6 text-sm font-semibold text-gh-black">Jobs</h3>
+            <p className="mt-1 mb-3 text-sm text-gh-gray max-w-2xl">
+              The programs steps run, on this computer. They go on when Meno closes, and those waiting start in turn.
+            </p>
+            <JobSettings />
           </section>
         ) : section === "plugins" ? (
           <section className="mt-6 max-w-4xl">
