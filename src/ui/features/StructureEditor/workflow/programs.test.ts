@@ -1,0 +1,117 @@
+import { describe, expect, it } from "vitest";
+import { addMolecule3d, emptyStructureDocument } from "../document";
+import type { Molecule3D } from "../store/types";
+import { countOf, setEntries } from "./entries";
+import { addSet } from "./model";
+import { clock, doneSaid, hartrees, pluginEntry, readCollected, readPrepared, workedOf } from "./programs";
+import type { SetEntry } from "./entries";
+
+const WATER: SetEntry = {
+  compound: 0,
+  number: 1,
+  atoms: [
+    { el: "O", x: 0, y: 0, z: 0, charge: -1 },
+    { el: "H", x: 0, y: 0, z: 0 },
+    { el: "H", x: 0, y: 0, z: 0, radical: "doublet" },
+  ],
+  bonds: [
+    { a1: 0, a2: 1, order: 1 },
+    { a1: 0, a2: 2, order: 1 },
+  ],
+  xyz: [0, 0, 0, 0, 0.76, 0.59, 0, -0.76, 0.59],
+  name: "water",
+};
+
+describe("what a plugin is given of an entry", () => {
+  it("is Meno's plain data at the entry's geometry, with its charge and multiplicity as Export reads them", () => {
+    const e = pluginEntry(WATER);
+    expect(e.atoms[1]).toEqual({ el: "H", x: 0, y: 0.76, z: 0.59 });
+    expect(e.atoms[0].charge).toBe(-1);
+    expect(e.bonds).toEqual([
+      { a1: 0, a2: 1, order: 1 },
+      { a1: 0, a2: 2, order: 1 },
+    ]);
+    // (11 electrons with the charge, one of them unpaired, on the radical)
+    expect([e.charge, e.multiplicity, e.name]).toEqual([-1, 2, "water"]);
+  });
+});
+
+describe("the jobs a plugin prepares", () => {
+  const job = { entries: [0], program: "xtb", args: ["input.xyz", "--opt"], files: [{ name: "input.xyz", text: "3\n\n" }], reads: ["xtbopt.log"] };
+
+  it("are taken as they are where they can be run: each entry in one, programs by name, files inside the job's folder", () => {
+    expect(readPrepared({ jobs: [job, { ...job, entries: [1] }] }, 2)).toEqual([job, { ...job, entries: [1] }]);
+  });
+
+  it("are refused where they cannot", () => {
+    expect(readPrepared({ jobs: [] }, 1)).toBe("It prepared no job");
+    expect(readPrepared({ jobs: [job] }, 2)).toBe("It prepared no job for some of what came in");
+    for (const bad of [
+      { ...job, program: "/bin/sh" },
+      { ...job, program: "../xtb" },
+      { ...job, entries: [3] },
+      { ...job, files: [{ name: "../escape", text: "" }] },
+      { ...job, files: [{ name: "/etc/passwd", text: "" }] },
+      { ...job, reads: ["../../secret"] },
+      { ...job, args: "--opt" },
+    ])
+      expect(readPrepared({ jobs: [bad] }, 1)).toBe("It prepared a job Meno cannot run");
+  });
+});
+
+describe("what a plugin reads back of a job", () => {
+  const out = { schema: 1, program: "xtb", version: "6.7.1", method: "GFN2-xTB", atoms: ["O", "H", "H"], frames: [WATER.xyz as number[], [0, 0, 0.01, 0, 0.77, 0.58, 0, -0.77, 0.58]], energies: [-5.0703, -5.0705], optimised: true };
+
+  it("is an output for each entry - or why the job gave none", () => {
+    expect(readCollected({ outputs: [out] }, 1)).toEqual([out]);
+    expect(readCollected({ why: "  Some atoms are very close  " }, 1)).toEqual({ why: "Some atoms are very close" });
+    expect(readCollected({ outputs: [] }, 1)).toEqual({ why: "It read back nothing for it" });
+    expect(readCollected({ outputs: [{ ...out, schema: 2 }] }, 1)).toEqual({ why: "It read it back in a form this Meno does not read" });
+    expect(readCollected({ outputs: [{ ...out, frames: [[1, 2]] }] }, 1)).toEqual({ why: "It read back no geometry" });
+  });
+
+  it("makes the entry worked out: its last geometry and energy; an optimisation's path before it; what the calculation was", () => {
+    const w = workedOf("optimise", WATER, out, ["xtb 6.7.1"]);
+    if (typeof w === "string") throw new Error(w);
+    expect(w.xyz).toEqual(out.frames[1]);
+    expect(w.energy).toBe(-5.0705);
+    expect(w.path).toEqual([WATER.xyz]);
+    expect(w.pathEnergies).toEqual([-5.0703]);
+    expect(w.calc).toMatchObject({ readers: ["xtb 6.7.1"], program: "xtb", method: "GFN2-xTB", optimised: true });
+    // (an energy keeps no path; another molecule is refused)
+    const energy = workedOf("energy", WATER, { ...out, frames: [WATER.xyz as number[]], energies: [-5.07] }, ["xtb 6.7.1"]);
+    expect(typeof energy !== "string" && energy.path).toBeFalsy();
+    expect(workedOf("energy", WATER, { ...out, atoms: ["O", "H", "C"] }, ["xtb 6.7.1"])).toBe("What came back is not the molecule that went");
+  });
+});
+
+describe("what a step that ran jobs says", () => {
+  it("says how long, and its energy - or how many of how many", () => {
+    expect(clock(42_000)).toBe("0:42");
+    expect(clock(723_000)).toBe("12:03");
+    expect(clock(3_723_000)).toBe("1:02:03");
+    expect(hartrees(-42.108712)).toBe("−42.10871 Eh");
+    expect(doneSaid([{ ...WATER, energy: -5.07054 }], 1, 12_000)).toBe("0:12 · −5.07054 Eh");
+    expect(doneSaid([WATER, WATER], 3, 65_000)).toBe("1:05 · 2 of 3");
+  });
+});
+
+describe("a molecule whose frames are a path", () => {
+  it("is one entry in a set - its last geometry, with its energy - not one for each frame", () => {
+    const path: Omit<Molecule3D, "id"> = {
+      atoms: WATER.atoms.map((a) => ({ ...a })),
+      bonds: WATER.bonds.map((b) => ({ ...b })),
+      frames: [[0, 0, 0, 0, 0.7, 0.6, 0, -0.7, 0.6], [0, 0, 0, 0, 0.77, 0.58, 0, -0.77, 0.58]],
+      energies: [-5.0, -5.06, -5.07],
+      path: true,
+      at: { x: 0, y: 0 },
+    };
+    let doc = addMolecule3d(emptyStructureDocument(), path);
+    doc = addSet(doc, { x0: -3, y0: -3, x1: 3, y1: 3 });
+    expect(countOf(doc, doc.sets![0])).toMatchObject({ holds: "molecules", entries: 1 });
+    const [entry, ...more] = setEntries(doc.molecules3d!, "molecules");
+    expect(more).toEqual([]);
+    expect(entry.xyz).toEqual(path.frames![1]);
+    expect(entry.energy).toBe(-5.07);
+  });
+});

@@ -2,7 +2,8 @@ import { rememberable, valuesOf } from "../../../lib/options";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import OptionRows from "../../options/OptionRows";
 import { stepRole } from "../StructureEditor/store/slices/workflowSlice";
-import { defaultDoer, doable, doersOf } from "../StructureEditor/workflow/doers";
+import { defaultDoer, doable, doersOf, optionsFor } from "../StructureEditor/workflow/doers";
+import { useReaders } from "../../../lib/calc/workers";
 import { StepGlyph } from "../StructureEditor/workflow/icons";
 import { KINDS } from "../StructureEditor/workflow/kinds";
 
@@ -18,13 +19,15 @@ export default function CalculationSettings() {
   const setCalculations = useAppSettings((s) => s.setCalculations);
   const remembered = useAppSettings((s) => s.options);
   const rememberOptions = useAppSettings((s) => s.rememberOptions);
+  // (who does a kind changes as plugins are added and taken away)
+  useReaders((r) => r.state);
   const shown = KINDS.filter((k) => doable(k.kind));
   return (
     <div className="rounded-lg border border-gh-line bg-white divide-y divide-gh-line">
       {shown.map((k) => {
         const can = doersOf(k.kind);
         const by = defaultDoer(k.kind);
-        const options = k.options ?? [];
+        const options = optionsFor(k.kind, by?.id ?? "");
         return (
           <div key={k.kind} className="divide-y divide-gh-line/60">
             <div className="px-3 py-2.5 flex items-center gap-3">

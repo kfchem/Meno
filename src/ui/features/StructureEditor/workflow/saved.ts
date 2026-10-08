@@ -4,7 +4,7 @@
  * back as data, what does not read left out, and a wire whose ends are
  * not there with it.
  */
-import type { AsideEntry, Wire, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
+import type { AsideEntry, StepJob, StepRan, StepRunning, Wire, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
 import type { OptionValues } from "../../../../lib/options";
 import { KINDS, type SetKind, type StepKind } from "./kinds";
 
@@ -34,15 +34,52 @@ function readSet(v: unknown): WorkflowSet | null {
   };
 }
 
+/** A job's id, as Meno makes them: a UUID. */
+const JOB = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** A file's name in a job's folder: inside it. */
+const IN_FOLDER = /^(?!\/)(?![A-Za-z]:)(?!.*(?:^|[\\/])\.\.?(?:[\\/]|$)).{1,200}$/;
+
+function optionsIn(v: unknown): OptionValues {
+  const options: OptionValues = {};
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    for (const [k, o] of Object.entries(v)) if (typeof o === "string" || typeof o === "boolean" || isNum(o)) options[k] = o;
+  }
+  return options;
+}
+
+function readRan(v: unknown): StepRan | undefined {
+  const r = v as { at?: unknown; ok?: unknown; said?: unknown; input?: unknown; stopped?: unknown; took?: unknown; jobs?: unknown } | undefined;
+  if (!r || !isNum(r.at) || typeof r.ok !== "boolean" || typeof r.said !== "string" || typeof r.input !== "string") return undefined;
+  const jobs = Array.isArray(r.jobs) ? r.jobs.filter((j): j is string => typeof j === "string" && JOB.test(j)) : [];
+  return {
+    at: r.at,
+    ok: r.ok,
+    said: r.said,
+    input: r.input,
+    ...(r.stopped === true ? { stopped: true as const } : {}),
+    ...(isNum(r.took) && r.took >= 0 ? { took: r.took } : {}),
+    ...(jobs.length ? { jobs } : {}),
+  };
+}
+
+/** A step's run under way, as a file keeps it: its jobs to be picked up. */
+function readRunning(v: unknown): StepRunning | undefined {
+  const r = v as { at?: unknown; input?: unknown; options?: unknown; jobs?: unknown } | undefined;
+  if (!r || !isNum(r.at) || typeof r.input !== "string" || !Array.isArray(r.jobs)) return undefined;
+  const jobs = r.jobs.flatMap((j: { id?: unknown; entries?: unknown; reads?: unknown } | null): StepJob[] =>
+    typeof j?.id === "string" && JOB.test(j.id) && Array.isArray(j.entries) && j.entries.every((i) => Number.isInteger(i) && i >= 0)
+      ? [{ id: j.id, entries: j.entries as number[], reads: Array.isArray(j.reads) ? j.reads.filter((n): n is string => typeof n === "string" && IN_FOLDER.test(n)) : [] }]
+      : [],
+  );
+  return jobs.length ? { at: r.at, input: r.input, options: optionsIn(r.options), jobs } : undefined;
+}
+
 function readStep(v: unknown): WorkflowStep | null {
   const s = v as Partial<Record<keyof WorkflowStep, unknown>> | null;
   if (!s || !isId(s.id) || !KINDS.some((k) => k.kind === s.kind) || !isNum(s.x) || !isNum(s.y)) return null;
-  const options: OptionValues = {};
-  if (s.options && typeof s.options === "object" && !Array.isArray(s.options)) {
-    for (const [k, o] of Object.entries(s.options)) if (typeof o === "string" || typeof o === "boolean" || isNum(o)) options[k] = o;
-  }
-  const r = s.ran as { at?: unknown; ok?: unknown; said?: unknown; input?: unknown } | undefined;
-  const ran = r && isNum(r.at) && typeof r.ok === "boolean" && typeof r.said === "string" && typeof r.input === "string" ? { at: r.at, ok: r.ok, said: r.said, input: r.input } : undefined;
+  const options = optionsIn(s.options);
+  const ran = readRan(s.ran);
+  const running = readRunning(s.running);
   return {
     id: s.id,
     kind: s.kind as StepKind,
@@ -51,6 +88,7 @@ function readStep(v: unknown): WorkflowStep | null {
     ...(typeof s.by === "string" && /^[a-z0-9-]{1,40}$/.test(s.by) ? { by: s.by } : {}),
     ...(Object.keys(options).length ? { options } : {}),
     ...(ran ? { ran } : {}),
+    ...(running ? { running } : {}),
   };
 }
 

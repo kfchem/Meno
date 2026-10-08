@@ -39,6 +39,7 @@ import { findOutput, outputOf } from "../../../lib/calc/asks";
 import type { CalcSource } from "../../../lib/calc/output";
 import { setTextTaker } from "../../views/texts";
 import TextColumn from "./TextColumn";
+import ConfirmDiscard from "../../layouts/ConfirmDiscard";
 import { knownOf, pluginWriters, WRITERS, type Writer } from "../../../lib/io/writers";
 import { WRITER_PLUGINS } from "../../../lib/calc/catalog";
 import { useReaders } from "../../../lib/calc/workers";
@@ -497,6 +498,7 @@ function StructureCanvasContent({
   const closeMenu = useCallback(() => setMenu(null), []);
   // and what a double-click on empty space can put down there (QuickAdd)
   const quickAdd = useEditor((s) => s.quickAdd);
+  const askDeleteStep = useEditor((s) => s.askDeleteStep);
   const closeQuickAdd = useCallback(() => store.getState().setQuickAdd(null), [store]);
   // a molecule in 3D right-clicked: what its menu does to it
   const molecules3d = useEditor((s) => s.molecules3d);
@@ -936,6 +938,17 @@ function StructureCanvasContent({
         )}
       </AnimatePresence>
       <AnimatePresence>
+        {askDeleteStep != null && (
+          <ConfirmDiscard
+            title="Delete a step that is running?"
+            message="Its jobs are stopped, and their files go with it."
+            discardLabel="Delete step"
+            onCancel={() => store.getState().setWorkflowView({ askDeleteStep: null })}
+            onDiscard={() => store.getState().removeStep(askDeleteStep, true)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
       {menu && (
         <PartMenu
           key={`${menu.x},${menu.y}`}
@@ -968,8 +981,18 @@ function StructureCanvasContent({
           onAddPlus={() => store.getState().addPlus(menu.at.x, menu.at.y)}
           onAddText={() => store.getState().setCaptionEdit({ id: null, at: menu.at })}
           onRunStep={() => {
-            if (menu.kind === "step" && menu.id != null) store.getState().runStep(menu.id);
+            if (menu.kind === "step" && menu.id != null) void store.getState().runStep(menu.id);
           }}
+          step={(() => {
+            const s = menu.kind === "step" ? store.getState().steps.find((x) => x.id === menu.id) : undefined;
+            if (!s) return undefined;
+            const st = store.getState();
+            const jobs = !!(s.running?.jobs.length || s.ran?.jobs?.length);
+            return {
+              ...(s.running ? { onStop: () => st.stopStep(s.id) } : {}),
+              ...(jobs ? { onShowLog: () => void st.showStepLog(s.id), onShowFiles: () => void st.showStepFiles(s.id).catch(() => {}) } : {}),
+            };
+          })()}
           onStepOptions={() => {
             if (menu.kind === "step" && menu.id != null) store.getState().setWorkflowView({ openStep: menu.id });
           }}

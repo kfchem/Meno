@@ -11,7 +11,7 @@
  * molecule was read by - keeps the id; its name is looked up only to show
  * it.
  */
-import type { Manifest, WriteDecl } from "../plugins/manifest";
+import type { Manifest, StepDecl, WriteDecl } from "../plugins/manifest";
 import type { Option } from "../options";
 import { MANIFESTS, PLUGINS_ROOT } from "../plugins/known";
 import { isRole, type RoleId } from "../plugins/roles";
@@ -39,6 +39,8 @@ export type PythonPlugin = ReaderBase & {
   writes: readonly WriteDecl[];
   /** The options it takes for the roles it fills, by role (Settings, where each role is chosen). */
   roleOptions: Partial<Record<RoleId, readonly Option[]>>;
+  /** The kinds of a workflow's step it fills (docs/WORKFLOWS.md). */
+  steps: readonly StepDecl[];
   /** Its Python environment's profile, and its lock and worker, in its folder among Meno's resources. */
   profile: `plugin-${string}`;
   lock: string;
@@ -65,6 +67,7 @@ export const pluginOf = (m: Manifest): PythonPlugin => ({
   // (the roles Meno defines, of those it says it fills)
   roles: m.roles.filter(isRole),
   writes: m.writes.filter((w) => !MENO_IDS.has(w.id)),
+  steps: m.steps,
   roleOptions: Object.fromEntries(Object.entries(m.roleOptions).filter(([role]) => isRole(role))),
   profile: `plugin-${m.id}`,
   lock: `${PLUGINS_ROOT}/${m.id}/${m.environment.lock}`,
@@ -72,8 +75,8 @@ export const pluginOf = (m: Manifest): PythonPlugin => ({
   ...(m.environment.maker === "pixi" ? { env: "pixi" as const } : {}),
 });
 
-/** The plugins Meno knows of, in Meno's order: each that reads or writes something, or fills a role. */
-export const PLUGINS: readonly PythonPlugin[] = MANIFESTS.map(pluginOf).filter((p) => p.reads.length || p.roles.length || p.writes.length);
+/** The plugins Meno knows of, in Meno's order: each that reads or writes something, or fills a role or a kind of step. */
+export const PLUGINS: readonly PythonPlugin[] = MANIFESTS.map(pluginOf).filter((p) => p.reads.length || p.roles.length || p.writes.length || p.steps.length);
 
 /** The plugins that read files. */
 export const READER_PLUGINS: readonly PythonPlugin[] = PLUGINS.filter((p) => p.reads.length);

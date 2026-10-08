@@ -86,27 +86,27 @@ export const takes = (kind: StepKind, holds: SetKind): boolean => kindInfo(kind)
 /** The kinds Meno does itself (docs/WORKFLOWS.md, *Who does a step*): those on entries alone. */
 export const MENO_DOES: readonly StepKind[] = KINDS.filter((k) => k.runs === "entries").map((k) => k.kind);
 
-/** A step's options' values, its own over its kind's defaults. */
-export function optionsOf(kind: StepKind, own: Record<string, string | number | boolean> | undefined): Record<string, string | number | boolean> {
+/** A step's options' values, its own over the defaults of the options it takes (doers `optionsFor`). */
+export function optionsOf(options: readonly Option[], own: Record<string, string | number | boolean> | undefined): Record<string, string | number | boolean> {
   const values: Record<string, string | number | boolean> = {};
-  for (const o of kindInfo(kind).options ?? []) values[o.id] = own?.[o.id] ?? o.default;
+  for (const o of options) values[o.id] = own?.[o.id] ?? o.default;
   return values;
 }
 
 /** What a step's result set is called, its options' values put in. */
-export function madeName(kind: StepKind, own: Record<string, string | number | boolean> | undefined): string {
-  const values = optionsOf(kind, own);
+export function madeName(kind: StepKind, options: readonly Option[], own: Record<string, string | number | boolean> | undefined): string {
+  const values = optionsOf(options, own);
   return kindInfo(kind).made.replace(/\{([a-z0-9-]+)\}/g, (_, id: string) => String(values[id] ?? ""));
 }
 
-/** How a step does its work, in a line: each option's value, a number with its unit, a choice by its name. */
-export function howOf(kind: StepKind, own: Record<string, string | number | boolean> | undefined): string {
-  const values = optionsOf(kind, own);
-  return (kindInfo(kind).options ?? [])
+/** How a step does its work, in a line: each option's value, a number with its unit, a choice by its name - one of none left out. */
+export function howOf(options: readonly Option[], own: Record<string, string | number | boolean> | undefined): string {
+  const values = optionsOf(options, own);
+  return options
     .flatMap((o) => {
       const v = values[o.id];
       if (o.type === "number") return [`${v}${o.unit ? ` ${o.unit}` : ""}`];
-      if (o.type === "choice") return [o.choices.find((c) => c.value === v)?.label ?? String(v)];
+      if (o.type === "choice") return v === "none" ? [] : [o.choices.find((c) => c.value === v)?.label ?? String(v)];
       if (o.type === "switch") return v ? [o.label] : [];
       return v ? [String(v)] : [];
     })

@@ -9,14 +9,16 @@ import { COLORS } from "../../../theme/colors";
 import { MOV_PX } from "../constants";
 import { useStyle3D } from "../style3d";
 import SetFrame, { type Edge } from "../workflow/SetFrame";
-import StepCard, { Port, type PortLook } from "../workflow/StepCard";
+import StepCard, { Port, type PortLook, type RunView } from "../workflow/StepCard";
 import { setMembers, countOf, type Frame } from "../workflow/entries";
 import { selectionFrame } from "../workflow/selectionSet";
 import { canWire, stateOf } from "../workflow/flow";
 import { howOf, kindInfo, madeName, optionsOf } from "../workflow/kinds";
+import { useReaders } from "../../../../lib/calc/workers";
+import { finished } from "../../../../lib/jobs";
 import { setList } from "../workflow/list";
 import { CARD_W, HTML_DISTANCE, PORT_DOWN, PX } from "../workflow/look";
-import { byOf, doerOf, doersOf } from "../workflow/doers";
+import { byOf, doerOf, doersOf, stepOptions } from "../workflow/doers";
 
 type Pt = { x: number; y: number };
 
@@ -35,6 +37,12 @@ const ATTENTION = "rgb(205, 69, 96)";
 /** A wire's width on the screen, in px, at any zoom; and the band round it the pointer takes. */
 const WIRE_PX = 1.25;
 const WIRE_HIT_PX = 10;
+/** The wire into a running step, dashed - its dashes and gaps, in px on the screen - and how fast they move along it, in px a second: slowly. */
+const DASH_PX = 6;
+const GAP_PX = 4;
+const DASH_SPEED = 12;
+/** How often the jobs of the steps that run any are looked at, in ms. */
+const LOOK_MS = 1000;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -61,7 +69,12 @@ function ribbon(p: Pt, q: Pt, width: number): THREE.BufferGeometry {
   const pts = Array.from({ length: N + 1 }, (_, i) => at(i / N));
   const positions: number[] = [];
   const index: number[] = [];
+  // (how far along it each point is, for a dash)
+  const along: number[] = [];
+  let run = 0;
   pts.forEach((pt, i) => {
+    if (i > 0) run += Math.hypot(pt.x - pts[i - 1].x, pt.y - pts[i - 1].y);
+    along.push(run, run);
     const a = pts[Math.max(0, i - 1)];
     const b = pts[Math.min(N, i + 1)];
     const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -72,8 +85,58 @@ function ribbon(p: Pt, q: Pt, width: number): THREE.BufferGeometry {
   });
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute("along", new THREE.Float32BufferAttribute(along, 1));
   g.setIndex(index);
   return g;
+}
+
+const DASH_VERTEX = `
+attribute float along;
+varying float vAlong;
+void main() {
+  vAlong = along;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const DASH_FRAGMENT = `
+uniform vec3 color;
+uniform float offset;
+uniform float dash;
+uniform float gap;
+varying float vAlong;
+void main() {
+  if (mod(vAlong - offset, dash + gap) > dash) discard;
+  gl_FragColor = vec4(color, 1.0);
+}`;
+
+/** The wire into a running step: dashed, its dashes moving slowly towards the step - a frame drawn for each step they move. */
+function MovingWire({ p, q, color, zoom }: { p: Pt; q: Pt; color: string; zoom: number }) {
+  const line = useMemo(() => ribbon(p, q, WIRE_PX / zoom), [p.x, p.y, q.x, q.y, zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => line.dispose(), [line]);
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: { color: { value: new THREE.Color(color) }, offset: { value: 0 }, dash: { value: 1 }, gap: { value: 1 } },
+        vertexShader: DASH_VERTEX,
+        fragmentShader: DASH_FRAGMENT,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    [color],
+  );
+  useEffect(() => () => material.dispose(), [material]);
+  const { invalidate } = useThree();
+  useFrame((_, dt) => {
+    const u = material.uniforms;
+    u.dash.value = DASH_PX / zoom;
+    u.gap.value = GAP_PX / zoom;
+    u.offset.value = (u.offset.value + (Math.min(dt, 0.1) * DASH_SPEED) / zoom) % ((DASH_PX + GAP_PX) / zoom);
+    invalidate();
+  });
+  return (
+    <group position={[0, 0, 0.012]}>
+      <mesh geometry={line} material={material} renderOrder={4} />
+    </group>
+  );
 }
 
 /** A wire drawn from `p` to `q`; where it can be pointed at, a wider band round it that the pointer takes. */
@@ -134,8 +197,21 @@ export default function Workflow2D() {
   const sel3d = useEditor((s) => s.sel3d);
   const turns3d = useEditor((s) => s.turns3d);
   const frames3d = useEditor((s) => s.frames3d);
+  const jobsSeen = useEditor((s) => s.jobsSeen);
   const style3d = useStyle3D();
   const { camera, gl, invalidate } = useThree();
+  // (who does a kind of step changes as plugins are added and taken away)
+  useReaders((r) => r.state);
+
+  // the jobs of the steps that run any, looked at while there are any - and
+  // at once, so that a workspace opened with jobs under way picks them up
+  const anyRunning = useEditor((s) => s.steps.some((x) => x.running));
+  useEffect(() => {
+    if (!anyRunning) return;
+    void store.getState().lookAtJobs();
+    const t = setInterval(() => void store.getState().lookAtJobs(), LOOK_MS);
+    return () => clearInterval(t);
+  }, [anyRunning, store]);
 
   // the zoom: where it crosses what a card's words need to be read; what
   // a hair on the screen is on the page's layer of HTML (`--hair`); and, by
@@ -367,6 +443,28 @@ export default function Workflow2D() {
     return s ? stepGives(s) : null;
   };
   const states = useMemo(() => new Map(steps.map((s) => [s.id, stateOf(flow, s, byOf(s))])), [flow, steps]);
+  // how each running step's jobs are getting on, as last looked at
+  const runs = useMemo(() => {
+    const out = new Map<number, { waiting: boolean; view: RunView }>();
+    for (const s of steps) {
+      if (!s.running) continue;
+      const seen = s.running.jobs.map((j) => jobsSeen[j.id]);
+      const places = seen.flatMap((x) => (x?.place ? [x.place] : []));
+      const starts = seen.flatMap((x) => (x?.started != null ? [x.started] : []));
+      const line = seen.find((x) => x?.state === "running" && x.line)?.line;
+      out.set(s.id, {
+        waiting: seen.every((x) => !x || x.state === "waiting"),
+        view: {
+          ...(places.length ? { place: Math.min(...places) } : {}),
+          ...(starts.length ? { since: Math.min(...starts) } : {}),
+          ended: seen.filter((x) => x && finished(x.state)).length,
+          total: s.running.jobs.length,
+          ...(line ? { line } : {}),
+        },
+      });
+    }
+    return out;
+  }, [steps, jobsSeen]);
   // each set's tab and list: what it holds, worked out as the page changes, not as the pointer moves
   const setInfo = useMemo(
     () =>
@@ -383,7 +481,7 @@ export default function Workflow2D() {
               : count.holds === "molecules"
                 ? `${plural(count.compounds, "compound")}${aside ? ` · ${count.entries} of ${count.entries + aside}` : ""}`
                 : `${plural(count.compounds, "compound")} · ${aside ? `${count.entries} of ${count.entries + aside}` : count.entries}`;
-          return [b.id, { name: made ? madeName(made.kind, made.options) : "Input", count: counted, rows: setList(molecules, b.aside ?? [], count.holds) }];
+          return [b.id, { name: made ? madeName(made.kind, stepOptions(made), made.options) : "Input", count: counted, rows: setList(molecules, b.aside ?? [], count.holds) }];
         }),
       ),
     [flow, sets, steps, molecules3d],
@@ -438,6 +536,8 @@ export default function Workflow2D() {
         const s = stepById.get(w.to);
         if (!p || !s) return null;
         const failed = states.get(s.id) === "failed";
+        if (s.running && hoveredWire !== w.id)
+          return <MovingWire key={`w${w.id}`} p={p} q={stepTakes(s)} color={WIRE} zoom={zoom} />;
         return (
           <WireLine
             key={`w${w.id}`}
@@ -486,7 +586,9 @@ export default function Workflow2D() {
           {steps.map((s) => {
             const info = kindInfo(s.kind);
             const doer = doerOf(s);
-            const how = howOf(s.kind, s.options);
+            const takes = stepOptions(s);
+            const how = howOf(takes, s.options);
+            const run = runs.get(s.id);
             return (
               // (its top at its place: the card grows downwards as it opens)
               <div key={`s${s.id}`} data-step-card={s.id} style={onLayer(s.x, s.y)}>
@@ -494,11 +596,13 @@ export default function Workflow2D() {
                   step={s}
                   info={info}
                   who={[doer?.name ?? "Nothing added does this", how].filter(Boolean).join(" · ")}
-                  state={states.get(s.id) ?? "ready"}
+                  state={run?.waiting ? "waiting" : (states.get(s.id) ?? "ready")}
+                  run={run?.view}
                   compact={compact}
                   open={openStep === s.id}
                   ports={{ take: portLook("take", s.id), give: portLook("give", { step: s.id }) }}
-                  options={optionsOf(s.kind, s.options)}
+                  optionList={takes}
+                  options={optionsOf(takes, s.options)}
                   doers={doersOf(s.kind)}
                   by={byOf(s)}
                   onOptions={(values) => store.getState().updateStep(s.id, { options: values })}

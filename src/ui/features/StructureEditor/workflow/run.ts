@@ -7,6 +7,7 @@
  */
 import { addMolecule3d, removeMolecules3d, type StructureDocument } from "../document";
 import type { AsideEntry, Molecule3D, WorkflowStep } from "../store/types";
+import type { CalcInfo } from "../../../../lib/calc/output";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { setMembers, inside, setEntries, type Frame, type SetEntry } from "./entries";
 import { findSet, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "./flow";
@@ -36,14 +37,30 @@ export function runStep(doc: StructureDocument, id: number, w: RunWith, depth = 
   const input = inputOf(doc, id);
   const key = inputKey(doc, step, by);
   const fail = (said: string) => setRan(doc, id, { at: w.now, ok: false, said, input: key });
-  // (not on what a step before it gave on an earlier run: it failed this time)
-  if (prior && stepOf(doc, prior.id)?.ran?.ok === false) return fail("The step before it failed");
-  if (!input) return fail("Nothing comes into it");
-  if (!takes(step.kind, input.holds)) return fail(`Takes ${kindInfo(step.kind).takes.map((s) => SET_NAMES[s]).join(" or ")}`);
+  const why = whyNot(doc, step, by);
+  if (why) return fail(why);
   if (by !== "meno" || !MENO_DOES.includes(step.kind)) return fail("Nothing added does this step");
+  if (!input) return fail("Nothing comes into it");
   const outcome = runMeno(step.kind, setEntries(input.molecules, input.holds as "molecules" | "conformers"), input.holds, step.options);
   if (!outcome.ok) return fail(outcome.said);
   return setRan(withResults(doc, step, outcome, w), id, { at: w.now, ok: true, said: outcome.said, input: key });
+}
+
+/**
+ * Why a step cannot run as things are, whoever does it: the step before it
+ * failed this time; nothing comes into it; what does is not what it takes;
+ * nothing added does it. None, where it can.
+ */
+export function whyNot(doc: StructureDocument, step: WorkflowStep, by: string): string | null {
+  const from = wireInto(doc, step.id)?.from;
+  const before = from ? ("step" in from ? from.step : findSet(doc, from.set)?.made?.step) : undefined;
+  // (not on what a step before it gave on an earlier run: it failed this time)
+  if (before != null && stepOf(doc, before)?.ran?.ok === false) return "The step before it failed";
+  const input = inputOf(doc, step.id);
+  if (!input) return "Nothing comes into it";
+  if (!takes(step.kind, input.holds)) return `Takes ${kindInfo(step.kind).takes.map((s) => SET_NAMES[s]).join(" or ")}`;
+  if (!by) return "Nothing added does this step";
+  return null;
 }
 
 /** A frame `w` wide and `h` tall, its top left at (x, y). */
@@ -52,8 +69,22 @@ const frameAt = (x: number, y: number, w: number, h: number): Frame => ({ x0: x,
 /** The most a row of molecules in a result set spans before the next row begins. */
 const ROW_MOST = 12 * NOMINAL_BOND_LENGTH;
 
+/**
+ * What a step gave as an entry, where a program worked it out: besides its
+ * geometry and energy, the path that led to it - an optimisation's
+ * geometries before it, each with its energy - and what the calculation
+ * says of it (lib/calc).
+ */
+export type Worked = SetEntry & {
+  path?: number[][];
+  pathEnergies?: number[];
+  calc?: CalcInfo;
+  /** What the molecule made keeps besides: the drawing it was made from, its stereo labels, how it was made. */
+  keep?: Pick<Molecule3D, "drawnFrom" | "drawnAs" | "stereo" | "made">;
+};
+
 /** `doc` with what a step gave as the entries of its result set: made to the right of it, or the one it made before, emptied of what it held. */
-function withResults(doc: StructureDocument, step: WorkflowStep, outcome: Extract<Outcome, { ok: true }>, w: RunWith): StructureDocument {
+export function withResults(doc: StructureDocument, step: WorkflowStep, outcome: Extract<Outcome, { ok: true }>, w: Pick<RunWith, "extentOf">): StructureDocument {
   const made = moleculesOf(outcome);
   const aside: AsideEntry[] = outcome.aside.map((e) => ({ compound: e.compound, number: e.number, ...(e.energy != null ? { energy: e.energy } : {}) }));
   // its list under the set's tab; below it, the molecules in rows, left to
@@ -117,17 +148,29 @@ function placeFor(doc: StructureDocument, step: WorkflowStep, width: number, hei
   return frameAt(x, step.y, width, height);
 }
 
-/** What a step kept, as molecules in 3D: a conformer set's compounds, each a molecule with its conformers as frames; a compound set's entries, each a molecule of its own. */
+/**
+ * What a step kept, as molecules in 3D: a conformer set's compounds, each a
+ * molecule with its conformers as frames; a compound set's entries, each a
+ * molecule of its own - an optimised one with the path that led to it as
+ * its frames, ending at it, and what its calculation says.
+ */
 function moleculesOf(outcome: Extract<Outcome, { ok: true }>): Omit<Molecule3D, "id" | "at">[] {
-  const atomsAt = (e: SetEntry) => e.atoms.map((a, i) => ({ ...a, x: e.xyz[3 * i], y: e.xyz[3 * i + 1], z: e.xyz[3 * i + 2] }));
+  const atomsAt = (e: SetEntry, xyz: readonly number[] = e.xyz) => e.atoms.map((a, i) => ({ ...a, x: xyz[3 * i], y: xyz[3 * i + 1], z: xyz[3 * i + 2] }));
   const share = new Map(outcome.kept.map((e, i) => [e, outcome.shares?.[i]]));
   if (outcome.holds !== "conformers") {
-    return outcome.kept.map((e) => ({
-      atoms: atomsAt(e),
-      bonds: e.bonds.map((b) => ({ ...b })),
-      ...(e.energy != null ? { energies: [e.energy] } : {}),
-      ...(e.name ? { name: e.name } : {}),
-    }));
+    return (outcome.kept as Worked[]).map((e) => {
+      const path = e.path?.length ? e.path : undefined;
+      const energies = path ? (e.pathEnergies?.length === path.length && e.energy != null ? [...e.pathEnergies, e.energy] : undefined) : e.energy != null ? [e.energy] : undefined;
+      return {
+        atoms: atomsAt(e, path ? path[0] : e.xyz),
+        bonds: e.bonds.map((b) => ({ ...b })),
+        ...(path ? { frames: [...path.slice(1).map((f) => [...f]), [...e.xyz]], path: true as const } : {}),
+        ...(energies ? { energies } : {}),
+        ...(e.calc ? { calc: e.calc } : {}),
+        ...(e.name ? { name: e.name } : {}),
+        ...e.keep,
+      };
+    });
   }
   const groups = new Map<number, SetEntry[]>();
   for (const e of outcome.kept) groups.set(e.compound, [...(groups.get(e.compound) ?? []), e]);
@@ -135,6 +178,8 @@ function moleculesOf(outcome: Extract<Outcome, { ok: true }>): Omit<Molecule3D, 
     const first = g[0];
     const energies = g.every((e) => e.energy != null) ? g.map((e) => e.energy!) : undefined;
     const shares = g.every((e) => share.get(e) != null) ? g.map((e) => share.get(e)!) : undefined;
+    // (what the calculation was, where a program worked them out: each conformer's results its own, not the compound's)
+    const calc = (first as Worked).calc;
     return {
       atoms: atomsAt(first),
       bonds: first.bonds.map((b) => ({ ...b })),
@@ -142,6 +187,7 @@ function moleculesOf(outcome: Extract<Outcome, { ok: true }>): Omit<Molecule3D, 
       ...(energies ? { energies } : {}),
       numbers: g.map((e) => e.number),
       ...(shares ? { shares } : {}),
+      ...(calc ? { calc: { ...calc, results: undefined, source: undefined } } : {}),
       conformerSet: true,
       ...(first.name ? { name: first.name } : {}),
     };

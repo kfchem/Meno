@@ -90,6 +90,16 @@ export function setRan(doc: StructureDocument, id: number, ran: NonNullable<Work
   return withStep(doc, id, (s) => ({ ...s, ran }));
 }
 
+/** A step's run while its jobs wait or run - or, ended, none: the step as it was otherwise. */
+export function setRunning(doc: StructureDocument, id: number, running: WorkflowStep["running"]): StructureDocument {
+  return withStep(doc, id, (s) => {
+    if (running) return { ...s, running };
+    if (!s.running) return s;
+    const { running: _r, ...rest } = s;
+    return rest;
+  });
+}
+
 /** `doc` without a step and the wires into it and out of it. The set it made stays, with what it holds - a set like any the chemist drew. */
 export function removeStep(doc: StructureDocument, id: number): StructureDocument {
   const steps = (doc.steps ?? []).filter((s) => s.id !== id);

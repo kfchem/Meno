@@ -7,7 +7,7 @@
  */
 import type { OptionValues } from "../../../../lib/options";
 import type { SetEntry } from "./entries";
-import { optionsOf, type SetKind, type StepKind } from "./kinds";
+import { kindInfo, optionsOf, type SetKind, type StepKind } from "./kinds";
 import { rmsd } from "./rmsd";
 
 /** Kilocalories per mole in a hartree (CODATA 2018). */
@@ -25,7 +25,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /** A Meno step of `kind` on `entries`, of a set that holds `holds`, with its options (over its kind's defaults). */
 export function runMeno(kind: StepKind, entries: readonly SetEntry[], holds: SetKind, own?: OptionValues): Outcome {
   if (!entries.length) return { ok: false, said: "Nothing came in" };
-  const options = optionsOf(kind, own);
+  const options = optionsOf(kindInfo(kind).options ?? [], own);
   switch (kind) {
     case "as-conformers":
       return asConformers(entries);

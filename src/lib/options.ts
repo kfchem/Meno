@@ -27,6 +27,9 @@ export type TextOption = OptionBase & { type: "text"; default: string; from?: Kn
 export type SwitchOption = OptionBase & { type: "switch"; default: boolean };
 export type Option = ChoiceOption | NumberOption | TextOption | SwitchOption;
 
+/** How many choices are shown side by side, each to pick; more, and they are a list to pick from. */
+export const MANY_CHOICES = 5;
+
 /** A role's options' values, by their ids. */
 export type OptionValues = Record<string, string | number | boolean>;
 

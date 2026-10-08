@@ -6,13 +6,14 @@ import type { StructureDocument } from "../../document";
 import { currentStyle3D } from "../../style3d";
 import { lookOf, poseOf, seenBounds, solidOf } from "../../utils/molecule3d";
 import type { Style3D } from "../../../../../lib/chem/style3d";
-import { byOf } from "../../workflow/doers";
-import { kindInfo, type StepKind } from "../../workflow/kinds";
+import { defaultDoer, optionsFor, stepOptions } from "../../workflow/doers";
+import type { StepKind } from "../../workflow/kinds";
 import * as wf from "../../workflow/model";
-import { runStep } from "../../workflow/run";
 import type { EditorState, Molecule3D, WorkflowView } from "../types";
+import { createStepRuns } from "./stepRuns";
 
 type SetState = StoreApi<EditorState>["setState"];
+type GetState = StoreApi<EditorState>["getState"];
 
 /** How far a molecule in 3D reaches from its middle on the page, across and up, as it stands unturned, in any of its frames. */
 function extentOf(m: Molecule3D, style: Style3D): { w: number; h: number } {
@@ -36,9 +37,11 @@ export const stepRole = (kind: StepKind) => `step:${kind}`;
  * edits to the document - so that undo takes each back and Save keeps it;
  * what is under the pointer, chosen, open or being drawn, the view's.
  */
-export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: SetState) {
+export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: SetState, get: GetState) {
   const coalesce = (what: string, id: number, gesture?: string) => (gesture ? { coalesceKey: `${what}:${id}:${gesture}` } : {});
+  const { forgetJobs, ...runs } = createStepRuns(doc, set, get, { extentOf: (m) => extentOf({ ...m, id: 0 }, currentStyle3D()) });
   return {
+    ...runs,
     setWorkflowView: (patch: Partial<Pick<EditorState, WorkflowView>>) => set(patch),
     addSet: (frame: { x0: number; y0: number; x1: number; y1: number }) => {
       const id = doc.getState().nextWorkflowId ?? 1;
@@ -58,8 +61,8 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
     },
     addStep: (kind: StepKind, x: number, y: number) => {
       const id = doc.getState().nextWorkflowId ?? 1;
-      // (with the options last chosen for its kind)
-      const options = valuesOf(kindInfo(kind).options ?? [], useAppSettings.getState().options[stepRole(kind)]);
+      // (with the options last chosen for its kind, as who does it by default takes them)
+      const options = valuesOf(optionsFor(kind, defaultDoer(kind)?.id ?? ""), useAppSettings.getState().options[stepRole(kind)]);
       doc.edit("add step", (d) => wf.addStep(d, kind, x, y, options));
       return id;
     },
@@ -68,15 +71,22 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
       const step = doc.getState().steps?.find((s) => s.id === id);
       if (!step) return;
       doc.edit(patch.options ? "change options" : "change who does it", (d) => wf.updateStep(d, id, patch));
-      if (patch.options) useAppSettings.getState().rememberOptions(stepRole(step.kind), rememberable(kindInfo(step.kind).options ?? [], patch.options));
+      if (patch.options) useAppSettings.getState().rememberOptions(stepRole(step.kind), rememberable(stepOptions(step), patch.options));
     },
-    removeStep: (id: number) => {
-      if (doc.edit("delete step", (d) => wf.removeStep(d, id)))
+    removeStep: (id: number, asked = false) => {
+      const step = doc.getState().steps?.find((s) => s.id === id);
+      if (!step) return;
+      // (one running is asked about first: deleting it stops it)
+      if (step.running && !asked) return set({ askDeleteStep: id });
+      if (doc.edit("delete step", (d) => wf.removeStep(d, id))) {
+        forgetJobs(step);
         set((prev: EditorState) => ({
           ...prev,
+          askDeleteStep: null,
           openStep: prev.openStep === id ? null : prev.openStep,
           hoveredStep: prev.hoveredStep === id ? null : prev.hoveredStep,
         }));
+      }
     },
     connect: (from: Parameters<typeof wf.connect>[1], to: number) => {
       const was = doc.getState();
@@ -95,16 +105,6 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
         // (where it may not go there, it stays where it was)
         return moved.wires?.some((x) => x.to === to && JSON.stringify(x.from) === JSON.stringify(w.from)) ? moved : d;
       });
-    },
-    runStep: (id: number) => {
-      const style = currentStyle3D();
-      doc.edit("run", (d) =>
-        runStep(d, id, {
-          extentOf: (m) => extentOf({ ...m, id: 0 }, style),
-          byOf,
-          now: Date.now(),
-        }),
-      );
     },
   };
 }

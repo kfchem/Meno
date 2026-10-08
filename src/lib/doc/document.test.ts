@@ -212,6 +212,20 @@ describe("amending a document", () => {
     expect(doc.history().dirty).toBe(false);
   });
 
+  it("may leave the document unsaved - what it says to be kept when it is next saved - with still no step to undo", () => {
+    const doc = createDocument({ items: ["a"], note: "" });
+    doc.edit("add b", (d) => ({ ...d, items: [...d.items, "b"] }));
+    doc.markSaved();
+    doc.amend((d) => ({ ...d, note: "running" }), { unsaved: true });
+    expect(doc.history()).toMatchObject({ undoDepth: 1, dirty: true });
+    // (undo cannot take it back: the state before has it too)
+    doc.undo();
+    expect(doc.getState()).toEqual({ items: ["a"], note: "running" });
+    doc.redo();
+    doc.markSaved();
+    expect(doc.history().dirty).toBe(false);
+  });
+
   it("says nothing where nothing changed", () => {
     const doc = createDocument({ n: 1 });
     const heard = vi.fn();

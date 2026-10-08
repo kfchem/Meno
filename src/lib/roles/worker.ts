@@ -51,6 +51,11 @@ const sidecars = new Map<string, string>();
 export function chemWorker(role: RoleId = "checks"): Promise<ChemClient> {
   const plugin = rolePlugin(role);
   if (!plugin) return Promise.reject(new Error(`No plugin Meno knows of does this: ${ROLES[role].name}.`));
+  return pluginWorker(plugin);
+}
+
+/** A plugin's worker, asked under the roles' contract - for a kind of step it fills, say - started the first time it is asked for. */
+export function pluginWorker(plugin: PythonPlugin): Promise<ChemClient> {
   let worker = running.get(plugin.id);
   if (!worker) {
     worker = start(plugin).catch((e: unknown) => {

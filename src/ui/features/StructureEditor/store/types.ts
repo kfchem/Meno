@@ -8,6 +8,7 @@ import type { StyleChoice } from "../../../../lib/chem/style";
 import type { BondChem, ParsedAtom, ParsedBond } from "../../../../lib/chem/molecule";
 import type { Workspace } from "../utils/workspace";
 import type { CalcInfo } from "../../../../lib/calc/output";
+import type { JobState } from "../../../../lib/jobs";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
 export type Atom = EditorAtom & {
@@ -132,6 +133,12 @@ export type Molecule3D = {
   numbers?: number[];
   /** Each frame's share of its compound, as a *Populations* step worked it out; unset, by Boltzmann at room temperature where it is a conformer set. */
   shares?: number[];
+  /**
+   * Its frames are the path to its last geometry - an optimisation's, made
+   * by a step (docs/WORKFLOWS.md, *Results*) - so that a set takes it as
+   * that one entry, not as many compounds.
+   */
+  path?: true;
 };
 /**
  * A text the workspace holds - a file opened as text, an output shown -
@@ -157,16 +164,40 @@ export type WorkflowSet = {
 };
 /** An entry a step set aside: its compound, by its place among the set's (a, b...); its number among that compound's conformers; its energy, in hartrees. */
 export type AsideEntry = { compound: number; number: number; energy?: number };
-/** What a step did when it last ran: when, whether it did, what it says, and what came into it (`inputKey`: so that it shows when that has changed). */
-export type StepRan = { at: number; ok: boolean; said: string; input: string };
-/** A step on the page: its kind, where its card's top left stands, who does it (unset: as Settings says), its options, what it last did. */
-export type WorkflowStep = { id: number; kind: StepKind; x: number; y: number; by?: string; options?: OptionValues; ran?: StepRan };
+/**
+ * What a step did when it last ran: when, whether it did, what it says, and
+ * what came into it (`inputKey`: so that it shows when that has changed) -
+ * and, where it ran jobs, whether it was stopped, how long it took (ms), and
+ * its jobs, by id, whose logs and files are kept until the step is deleted.
+ */
+export type StepRan = { at: number; ok: boolean; said: string; input: string; stopped?: true; took?: number; jobs?: string[] };
+/**
+ * A job a step's run started (lib/jobs): its id; the entries it is for, by
+ * their place among those that came in; and the files of its folder its
+ * plugin reads back once it is done.
+ */
+export type StepJob = { id: string; entries: number[]; reads: string[] };
+/**
+ * A step's run while its jobs wait or run (docs/WORKFLOWS.md, *Running*):
+ * when it started, what came into it (`inputKey`), its options as they
+ * were, and its jobs - kept in the workspace, so that one opened again picks
+ * them up.
+ */
+export type StepRunning = { at: number; input: string; options: OptionValues; jobs: StepJob[] };
+/** A step on the page: its kind, where its card's top left stands, who does it (unset: as Settings says), its options, what it last did - and its run, while its jobs wait or run. */
+export type WorkflowStep = { id: number; kind: StepKind; x: number; y: number; by?: string; options?: OptionValues; ran?: StepRan; running?: StepRunning };
 /** Where a wire starts: a set, or a step - what it gave. */
 export type WireEnd = { set: number } | { step: number };
 /** A wire, from what gives to the step that takes it. */
 export type Wire = { id: number; from: WireEnd; to: number };
 /** What of a workflow is the view's, not the document's. */
-export type WorkflowView = "hoveredSet" | "chosenSet" | "hoveredStep" | "hoveredWire" | "openStep" | "wireDrag" | "workflowMenu";
+export type WorkflowView = "hoveredSet" | "chosenSet" | "hoveredStep" | "hoveredWire" | "openStep" | "wireDrag" | "workflowMenu" | "askDeleteStep";
+/**
+ * A job of a step's, as last looked at (lib/jobs): where it is, when it
+ * was asked for, started and ended; its place among those waiting, where it
+ * waits; and the last line of its log, where it runs.
+ */
+export type JobSeen = { state: JobState; created: number; started?: number; ended?: number; place?: number; line?: string };
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];
 /** A molecule in 3D rising out of its drawing (EditorState `rising3d`). */
@@ -388,12 +419,29 @@ export type EditorState = {
   moveStep: (id: number, x: number, y: number, gesture?: string) => void;
   /** A step's options, or who does it (null: as Settings says), changed: the options remembered for its kind. */
   updateStep: (id: number, patch: { options?: OptionValues; by?: string | null }) => void;
-  removeStep: (id: number) => void;
+  /** A step deleted - its jobs stopped and their files taken away; one running, only once asked about (`askDeleteStep`), `asked`. */
+  removeStep: (id: number, asked?: boolean) => void;
+  /** A running step asked to be deleted: the question asked (StructureCanvas). */
+  askDeleteStep: number | null;
   /** A wire from what gives into a step, where it may go (workflow/flow `canWire`); whether it went. */
   connect: (from: WireEnd, to: number) => boolean;
   removeWire: (id: number) => void;
-  /** A step run, and first the steps before it that need it: one step to undo. */
-  runStep: (id: number) => void;
+  /**
+   * A step run, and first the steps before it that need it - each step's
+   * results coming in one step to undo. A step that runs a program waits
+   * for its jobs; the promise is kept when the last of them has run.
+   */
+  runStep: (id: number) => Promise<void>;
+  /** A step's jobs asked to stop: those waiting never start, those running are stopped with what they started. */
+  stopStep: (id: number) => void;
+  /** A step's logs opened in the column of texts, following its jobs while they run. */
+  showStepLog: (id: number) => Promise<void>;
+  /** The folder of a step's last job shown where the system shows files. */
+  showStepFiles: (id: number) => Promise<void>;
+  /** The jobs of the steps that have any looked at: where each is, and, those that have all ended, their results brought in. */
+  lookAtJobs: () => Promise<void>;
+  /** Each step's jobs, as last looked at, by job id. */
+  jobsSeen: Record<string, JobSeen>;
   /** A wire picked up off its step and let go on another's port: into that one instead, as one step. */
   rewire: (id: number, to: number) => void;
   hoverPulse: { id: number | null; nonce: number; until: number };

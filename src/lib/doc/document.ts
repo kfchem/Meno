@@ -62,9 +62,11 @@ export interface DocumentStore<T> {
    * future and the saved one - with no step of its own: for what is learnt
    * of the document rather than done to it, such as a reader's findings in
    * a file it was opened from, arriving after it opened. Undo does not take
-   * it back, and it leaves the document as saved as it was.
+   * it back, and it leaves the document as saved as it was - unless
+   * `unsaved`: what is to be kept when the document is next saved, a run
+   * under way, say, which undo still does not take back.
    */
-  amend(updater: (state: T) => T): void;
+  amend(updater: (state: T) => T, meta?: { unsaved?: boolean }): void;
   /** Marks the current state as the saved one. */
   markSaved(): void;
   history(): HistoryInfo;
@@ -162,7 +164,7 @@ export function createDocument<T>(
       notify();
     },
 
-    amend(updater) {
+    amend(updater, meta = {}) {
       const was = present.state;
       // (one state held twice - the saved one is one of the history's - amended once, so it is still the same state)
       const amended = new Map<T, T>();
@@ -177,7 +179,8 @@ export function createDocument<T>(
       past = past.map(map);
       future = future.map(map);
       present = map(present);
-      savedState = next(savedState);
+      // (the saved state amended too - but not with what is not saved yet)
+      if (!meta.unsaved) savedState = next(savedState);
       if (!Object.is(present.state, was)) notify();
     },
 

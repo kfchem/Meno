@@ -107,6 +107,20 @@ export class ReaderClient implements Reader {
     return made.text;
   }
 
+  /**
+   * What a plugin's jobs for a step are (docs/WORKFLOWS.md, *What changes in
+   * the contract*): each one's input files, the program and arguments that
+   * run it, the entries it is for, and the files it reads back once done.
+   */
+  prepare(step: string, entries: readonly unknown[], options: OptionValues, cores?: number): Promise<unknown> {
+    return this.request({ op: "prepare", step, entries, options, ...(cores ? { cores } : {}) }, `preparing ${step}`);
+  }
+
+  /** What a job for a step gave, read back by its plugin from the files asked for and its log - or why it did not, where it did not end done. */
+  collect(step: string, entries: readonly unknown[], options: OptionValues, files: Record<string, string>, log: string, ended: string): Promise<unknown> {
+    return this.request({ op: "collect", step, entries, options, files, log, ended }, `reading what ${step} gave`);
+  }
+
   private request(question: Record<string, unknown>, what: string): Promise<unknown> {
     const id = this.next++;
     return new Promise((resolve, reject) => {

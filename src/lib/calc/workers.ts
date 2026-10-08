@@ -124,6 +124,17 @@ export function readerClient(p: ReaderPlugin): Promise<Reader> {
   return worker.then((w) => w.client);
 }
 
+/** A plugin's worker, as its client: what a step it fills is asked of (`prepare`, `collect`); the plugin must be added. */
+export function pluginClient(p: PythonPlugin): Promise<ReaderClient> {
+  let worker = running.get(p.id);
+  if (!worker) {
+    worker = start(p);
+    running.set(p.id, worker);
+    worker.catch(() => running.delete(p.id));
+  }
+  return worker.then((w) => w.client);
+}
+
 type Line = { id: string; line: string };
 
 async function start(p: PythonPlugin): Promise<{ client: ReaderClient; id: string }> {

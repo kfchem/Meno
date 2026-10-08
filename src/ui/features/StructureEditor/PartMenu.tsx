@@ -105,6 +105,7 @@ export default function PartMenu({
   onEditText,
   onRunStep,
   onStepOptions,
+  step,
   onUseAsInput,
   onSaveAbbreviation,
   canvas = [],
@@ -141,6 +142,8 @@ export default function PartMenu({
   /** A workflow's step right-clicked: run, or opened to its options. */
   onRunStep: () => void;
   onStepOptions: () => void;
+  /** What a step right-clicked can do besides, as it is: stopped, while its jobs wait or run; its logs and files shown, where it has jobs. */
+  step?: { onStop?: () => void; onShowLog?: () => void; onShowFiles?: () => void };
   /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
   onUseAsInput?: () => void;
   /** The selection saved as an abbreviation of the user's own. */
@@ -251,8 +254,10 @@ export default function PartMenu({
       ? [{ name: "Delete set", keys: deleteKey, run: onDelete }]
       : target.kind === "step"
       ? [
-          { name: "Run", keys: "", run: onRunStep },
-          { name: "Options…", keys: "", run: onStepOptions },
+          ...(step?.onStop ? [{ name: "Stop", keys: "", run: step.onStop }] : [{ name: "Run", keys: "", run: onRunStep }]),
+          ...(step?.onShowLog ? [{ name: "Show log", keys: "", run: step.onShowLog, divider: true }] : []),
+          ...(step?.onShowFiles ? [{ name: "Show files", keys: "", run: step.onShowFiles }] : []),
+          { name: "Options…", keys: "", run: onStepOptions, divider: !step?.onShowLog },
           { name: "Delete step", keys: deleteKey, run: onDelete, divider: true },
         ]
       : target.kind === "wire"

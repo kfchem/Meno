@@ -4,8 +4,9 @@
  * is, what makes its environment and runs its worker, the kinds of file it
  * brings - their names, the names their files go by, and how a file of one
  * is told - which kinds it reads, by their ids: its own, or Meno's - the
- * kinds it writes, with their options (`writes`), and the roles it fills
- * besides, by the ids Meno gives them (lib/plugins/roles).
+ * kinds it writes, with their options (`writes`), the roles it fills
+ * besides, by the ids Meno gives them (lib/plugins/roles), and the kinds of
+ * a workflow's step it fills (`steps`, docs/WORKFLOWS.md).
  *
  * A plugin stands alone: it knows of no other, and Meno of no program. Two
  * plugins that read the same kind each bring it, by the same id; Meno puts
@@ -61,6 +62,15 @@ export type WriteDecl = {
   options: Option[];
 };
 
+/**
+ * A kind of step a plugin fills (docs/WORKFLOWS.md, *What changes in the
+ * contract*): the kind, by the id Meno gives it; the programs it runs, by
+ * their names, from its environment - none, where it does the step in its
+ * worker; and its options, in the general form (lib/options), which Meno
+ * draws in the step and in Settings, *Calculations*.
+ */
+export type StepDecl = { kind: string; programs: string[]; options: Option[] };
+
 /** A plugin's manifest, as Meno reads it. */
 export type Manifest = {
   id: string;
@@ -85,6 +95,8 @@ export type Manifest = {
   kinds: KindDecl[];
   /** The kinds it writes. */
   writes: WriteDecl[];
+  /** The kinds of step it fills. */
+  steps: StepDecl[];
 };
 
 const ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -126,6 +138,17 @@ function writeOf(v: unknown): WriteDecl | null {
   return { id, name, extensions, takes: "molecule", options: acceptOptions(w.options) };
 }
 
+/** A program's name, as a job is given it: a name, not a path. */
+const PROGRAM = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,39}$/;
+
+function stepOf(v: unknown): StepDecl | null {
+  const s = v as Record<string, unknown> | null;
+  const kind = typeof s?.kind === "string" && ID.test(s.kind) ? s.kind : null;
+  if (!kind) return null;
+  const programs = Array.isArray(s?.programs) ? s.programs.filter((p): p is string => typeof p === "string" && PROGRAM.test(p)) : [];
+  return { kind, programs: [...new Set(programs)], options: acceptOptions(s?.options) };
+}
+
 /** A manifest as Meno reads it, or null where it does not read as one: what reads wrong in it is left out, what it cannot do without makes it none. */
 export function acceptManifest(raw: unknown): Manifest | null {
   const m = raw as Record<string, unknown> | null;
@@ -146,6 +169,10 @@ export function acceptManifest(raw: unknown): Manifest | null {
   const reads = ids(m.reads);
   const roles = ids(m.roles);
   const writes = Array.isArray(m.writes) ? m.writes.map(writeOf).filter((w): w is WriteDecl => w != null) : [];
+  // (each kind of step once)
+  const steps = (Array.isArray(m.steps) ? m.steps.map(stepOf).filter((d): d is StepDecl => d != null) : []).filter(
+    (d, i, all) => all.findIndex((e) => e.kind === d.kind) === i,
+  );
   // (options for the roles it says it fills, read as data; for no other)
   const roleOptions: Record<string, Option[]> = {};
   if (m.roleOptions && typeof m.roleOptions === "object" && !Array.isArray(m.roleOptions)) {
@@ -155,7 +182,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
     }
   }
   // (a plugin that does nothing is none)
-  if (!reads.length && !roles.length && !writes.length) return null;
+  if (!reads.length && !roles.length && !writes.length && !steps.length) return null;
   return {
     id,
     name,
@@ -170,6 +197,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
     roleOptions,
     kinds,
     writes,
+    steps,
   };
 }
 

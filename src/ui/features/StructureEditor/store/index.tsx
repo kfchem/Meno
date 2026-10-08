@@ -132,6 +132,7 @@ export function createEditorStore(
     openStep: null,
     wireDrag: null,
     workflowMenu: null,
+    askDeleteStep: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
     pressHold: null,
     doubleClickBond: null,
@@ -159,7 +160,7 @@ export function createEditorStore(
     ...createMolecules3dSlice(doc, set, get),
     ...createTextsSlice(doc, set),
     ...createCaptionsSlice(doc, set),
-    ...createWorkflowSlice(doc, set),
+    ...createWorkflowSlice(doc, set, get),
   }));
 
   return store;
