@@ -90,7 +90,7 @@ export function setRan(doc: StructureDocument, id: number, ran: NonNullable<Work
   return withStep(doc, id, (s) => ({ ...s, ran }));
 }
 
-/** `doc` without a step and the wires into it and out of it. The set it made stays, with what it holds - a set like any the chemist drew. */
+/** `doc` without a step and the wires into it and out of it. The set it made stays, with what it holds - a set like any the chemist drew (of conformers, where its molecules' frames are a conformer search's: entries `holdsOf`). */
 export function removeStep(doc: StructureDocument, id: number): StructureDocument {
   const steps = (doc.steps ?? []).filter((s) => s.id !== id);
   if (steps.length === (doc.steps ?? []).length) return doc;

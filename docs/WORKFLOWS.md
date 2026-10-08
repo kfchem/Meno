@@ -306,7 +306,12 @@ Conformers go through a workflow as any set does (decided):
     conversion taken on purpose, a step on the page like any other - and
     kept by the steps after them that keep their set's kind. So whether
     a set is a conformer set can always be read from the flow that led
-    to it.
+    to it - with one exception (the maintainer, 2026-10-08): **a
+    molecule whose frames a conformer search made** - Meno's own, *3D
+    structures*, or a workflow's - is one compound's conformers wherever
+    it is, as it says it is; a set the chemist draws round one is a
+    conformer set, each molecule in it a compound, its frames its
+    conformers. A file's many geometries are still many compounds.
 - **Steps work entry by entry**, or compound by compound where the kind
   says so: *Optimise* each entry; *Energy window* and *Populations*
   within each compound of a conformer set.
