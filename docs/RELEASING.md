@@ -43,7 +43,10 @@ taken up, or dropped, at any release.
    `src-tauri/Cargo.toml` (the app takes its version from `package.json`),
    and merge it into `main` as usual. Before that, see which files Meno
    carries no longer since the last release, and add each to the Windows
-   installer's hook (see *What an installed Meno does*, below):
+   installer's hook (see *What an installed Meno does*, below) - each the
+   installer carried, that is, as `bundle.resources` in
+   `src-tauri/tauri.windows.conf.json` picks them (a plugin's
+   `requirements.in` is not among them):
 
    ```bash
    git diff --name-status --diff-filter=DR "$(git describe --tags --abbrev=0)" -- src-tauri/resources
