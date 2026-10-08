@@ -153,6 +153,7 @@ describe("molecules in 3D on the clipboard", () => {
       drawnFrom: [10, null, null],
       drawnAs: "O",
       conformerSet: true,
+      bondsFrom: "distance" as const,
       stereo: { atoms: { 0: "R" }, bonds: {}, chosen: { atoms: [0], bonds: [] } },
     };
     const back = readRecord(recordText({ atoms: [], bonds: [], molecules3d: [made] }));

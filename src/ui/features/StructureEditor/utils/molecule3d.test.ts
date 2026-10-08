@@ -5,6 +5,8 @@ import type { Molecule3D } from "../store/types";
 import {
   BODY_PX,
   asSeen,
+  bondsAt,
+  frameBondsOf,
   atomAt,
   bondAt,
   bondLines,
@@ -449,5 +451,33 @@ describe("populations", () => {
     expect(low / high).toBeCloseTo(10, 1);
     expect(low + high).toBeCloseTo(1, 12);
     expect(populations([])).toEqual([]);
+  });
+});
+
+describe("a molecule's bonds frame by frame", () => {
+  // two carbons coming apart: bonded in the first frame, apart in the second, back in the third
+  const h2 = {
+    atoms: [
+      { el: "C", x: 0, y: 0, z: 0 },
+      { el: "C", x: 1.54, y: 0, z: 0 },
+    ],
+    bonds: [{ a1: 0, a2: 1, order: 1 }],
+    frames: [
+      [0, 0, 0, 3, 0, 0],
+      [0, 0, 0, 1.5, 0, 0],
+    ],
+  };
+
+  it("go where its atoms stand close enough, frame by frame, where its bonds are by distance", () => {
+    const fb = frameBondsOf({ ...h2, bondsFrom: "distance" })!;
+    expect(fb.bonds).toEqual([{ a1: 0, a2: 1, order: 1 }]);
+    expect(fb.present.map((p) => [...p])).toEqual([[1], [0], [1]]);
+    expect(bondsAt({ ...h2, bondsFrom: "distance" }, 1)).toEqual([]);
+    expect(bondsAt({ ...h2, bondsFrom: "distance" }, 2)).toEqual([{ a1: 0, a2: 1, order: 1 }]);
+  });
+
+  it("are its bonds, in every frame, where its file gave them", () => {
+    expect(frameBondsOf(h2)).toBeNull();
+    expect(bondsAt(h2, 1)).toBe(h2.bonds);
   });
 });

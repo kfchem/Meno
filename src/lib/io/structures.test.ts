@@ -10,7 +10,7 @@ describe("a structure's file, as Meno's own reader gives it", () => {
   it("is what the file holds: a drawing, a reaction's arrow, or molecules in 3D", () => {
     expect(readStructures("sdf", "cholesterol.sdf", sampleSdf).model.atoms.length).toBeGreaterThan(20);
     expect(readStructures("rxn", "e.rxn", sampleRxn).arrow).toBeDefined();
-    expect(readStructures("xyz", "w.xyz", WATER).molecules3d?.[0]).toMatchObject({ name: "w.xyz", atoms: [{ el: "O" }, { el: "H" }, { el: "H" }] });
+    expect(readStructures("xyz", "w.xyz", WATER).molecules3d?.[0]).toMatchObject({ name: "w.xyz", bondsFrom: "distance", atoms: [{ el: "O" }, { el: "H" }, { el: "H" }] });
     expect(() => readStructures("mol", "x.mol", "nothing")).toThrow(/No molecules found in x.mol/);
   });
 

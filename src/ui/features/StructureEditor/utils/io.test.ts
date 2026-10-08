@@ -144,6 +144,8 @@ describe("a calculation's output, as a reader read it", () => {
     const [m] = calcResult(out, ["cclib 1.9rc1"], "water_opt.out").molecules3d!;
     expect(m.atoms.map((a) => a.el)).toEqual(["O", "H", "H"]);
     expect(m.bonds).toHaveLength(2);
+    // (its bonds by distance, frame by frame: an output gives none)
+    expect(m.bondsFrom).toBe("distance");
     expect(m.frames).toHaveLength(2);
     expect(m.frame).toBe(2);
     expect(m.energies).toEqual([-76.30, -76.31, -76.32]);

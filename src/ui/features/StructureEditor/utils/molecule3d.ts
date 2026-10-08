@@ -4,6 +4,8 @@ import { atomColour, atomRadius, type Style3D } from "../../../../lib/chem/style
 import type { SolidMark } from "../../../../lib/chem/layout2d";
 import { seenAt, type Eye } from "./page";
 import type { Carried3D, Molecule3D, Turn3D } from "../store/types";
+import type { ParsedBond } from "../../../../lib/chem/molecule";
+import { bondsByDistance } from "../../../../utils/structureParsers";
 
 /** World units to the ångström: a bond of 1.5 Å as long as a drawn bond. */
 export const WORLD_PER_ANGSTROM = NOMINAL_BOND_LENGTH / 1.5;
@@ -218,6 +220,54 @@ export function solidOf(m: Molecule3D, style: Style3D): Solid {
   const solid = { frames, radii, reach: { balls: reachOf(radii.balls), space: reachOf(radii.space) } };
   byStyle.set(style, { frames: m.frames, solid });
   return solid;
+}
+
+/**
+ * A molecule's bonds frame by frame, where they are where its atoms stand
+ * close enough (`bondsFrom`): every bond any of its frames has, and which
+ * of them each frame has - a bond forming and breaking along a reaction's
+ * path or an optimisation. Null for a molecule whose bonds its file gave,
+ * or which has one frame: its bonds are its bonds.
+ */
+export type FrameBonds = { bonds: ParsedBond[]; present: Uint8Array[] };
+const frameBonds = new WeakMap<Molecule3D["atoms"], { frames: Molecule3D["frames"]; v: FrameBonds | null }>();
+
+export function frameBondsOf(m: Pick<Molecule3D, "atoms" | "bonds" | "frames" | "bondsFrom">): FrameBonds | null {
+  if (m.bondsFrom !== "distance" || !m.frames?.length) return null;
+  const known = frameBonds.get(m.atoms);
+  if (known && known.frames === m.frames) return known.v;
+  const n = m.atoms.length;
+  const xyzs = [m.atoms.flatMap((a) => [a.x, a.y, a.z]), ...m.frames.filter((f) => f.length === 3 * n)];
+  const index = new Map<string, number>();
+  const bonds: ParsedBond[] = [];
+  const each = xyzs.map((xyz) =>
+    bondsByDistance(m.atoms.map((a, i) => ({ el: a.el, x: xyz[3 * i], y: xyz[3 * i + 1], z: xyz[3 * i + 2] }))).map((b) => {
+      const key = `${b.a1} ${b.a2}`;
+      let k = index.get(key);
+      if (k === undefined) {
+        k = bonds.length;
+        index.set(key, k);
+        bonds.push(b);
+      }
+      return k;
+    }),
+  );
+  const present = each.map((ks) => {
+    const there = new Uint8Array(bonds.length);
+    for (const k of ks) there[k] = 1;
+    return there;
+  });
+  const v = { bonds, present };
+  frameBonds.set(m.atoms, { frames: m.frames, v });
+  return v;
+}
+
+/** A molecule's bonds in one of its frames: those that frame has, where they go frame by frame; else its bonds. */
+export function bondsAt(m: Pick<Molecule3D, "atoms" | "bonds" | "frames" | "bondsFrom">, frame = 0): ParsedBond[] {
+  const fb = frameBondsOf(m);
+  if (!fb) return m.bonds;
+  const there = fb.present[Math.min(Math.max(0, Math.round(frame)), fb.present.length - 1)];
+  return fb.bonds.filter((_, i) => there[i]);
 }
 
 /** The frame a molecule shows, kept to the frames it has. */
@@ -663,7 +713,7 @@ export function pictureMarks(m: Carried3D, style: Style3D, eye?: Eye): SolidMark
   if (look === "balls") {
     const turned = new Float32Array(places.length);
     for (let i = 0; i < radii.length; i++) at(i).toArray(turned, 3 * i);
-    for (const line of bondLines({ ...(m as Molecule3D), id: 0 }, turned, style.bondRadius * WORLD_PER_ANGSTROM)) {
+    for (const line of bondLines({ ...(m as Molecule3D), id: 0, bonds: bondsAt(m, frameOf(solid, m.frame)) }, turned, style.bondRadius * WORLD_PER_ANGSTROM)) {
       const a = seen(line.a);
       const b = seen(line.b);
       // (which atoms the line runs between: the nearest at each end)

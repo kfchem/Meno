@@ -12,7 +12,7 @@ import { editorLayoutOptions, layoutBonds } from "./layoutOptions";
 import { useEditorStore } from "./store";
 import type { Carried3D, Drawn, EditorState } from "./store/types";
 import { carriedOf, isWorkspaceFile, workspaceFile } from "./utils/workspace";
-import { pictureMarks } from "./utils/molecule3d";
+import { bondsAt, pictureMarks } from "./utils/molecule3d";
 import { measurePictureMarks } from "./utils/measure3d";
 import { MARK_SCALE } from "./chem/marks";
 import { currentStyle3D } from "./style3d";
@@ -151,7 +151,8 @@ export function structureFileText(drawn: Drawn, path: string, options: OptionVal
     return Array.from({ length: frames }, (_, i) => {
       const energy = m.energies?.[i];
       const data = energy != null && Number.isFinite(energy) ? `> <Energy (Eh)>\n${energy}\n\n` : "";
-      return writeMolfile3d(frameAtoms(m, i), m.bonds, { title: `${name} ${i + 1}` }) + data + "$$$$\n";
+      // (each frame with the bonds it has, where they go frame by frame)
+      return writeMolfile3d(frameAtoms(m, i), bondsAt(m, i), { title: `${name} ${i + 1}` }) + data + "$$$$\n";
     });
   });
   return (drawn.atoms.length ? writeSdf(flat, { title, version }) : "") + records.join("");
