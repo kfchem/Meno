@@ -109,6 +109,16 @@ Everything a plugin is lives in one folder, named by its id:
   and a default. Meno draws them and remembers the chemist's last
   choices. The form, its drawing and the remembering are in place, used
   first by Meno's own writers in Export (`lib/options.ts`, FILE-IO.md).
+  A plugin declares a role's options in its manifest (`roleOptions`, by
+  role); Settings draws them under the role, where it is chosen, and the
+  plugin is sent them with each request for the role (`options`). RDKit
+  declares its conformer search's (0.1.8): how many sought, the force
+  field (MMFF94, MMFF94s, UFF), the steps an optimisation may take, the
+  RMSD within which two are the same shape, the random seed.
+- **What a plugin made says how it was made**, in its own words, as rows
+  to show: RDKit's conformers carry their embedding, force field, how many
+  were kept and RDKit's version (`how`), kept with the molecule and shown
+  when its chip is opened (the maintainer, 2026-10-07).
 
 ## When plugins run
 

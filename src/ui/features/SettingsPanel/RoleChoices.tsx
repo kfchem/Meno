@@ -1,44 +1,70 @@
 import { pluginsFilling } from "../../../lib/calc/catalog";
-import { ROLES, type Role, type RoleId } from "../../../lib/plugins/roles";
+import { ROLES, roleOptionsRole, type Role, type RoleId } from "../../../lib/plugins/roles";
 import { rolePlugin } from "../../../lib/roles/worker";
 import { useAppSettings } from "../../../lib/settings/appSettings";
+import { valuesOf } from "../../../lib/options";
+import OptionRows from "../../options/OptionRows";
+import clsx from "clsx";
 
 /**
  * Who fills each role shown in a part of Settings (docs/PLUGINS.md, the
  * roles chosen where they are used): the plugin, by name - a choice where
- * more than one fills it.
+ * more than one fills it - and the options it takes for the role, as its
+ * manifest declares them, each a row under the role's, remembered. Laid out
+ * as the settings beside it are: under a heading, where it is given one,
+ * rows in one card.
  */
-export default function RoleChoices({ where }: { where: Role["where"] }) {
+export default function RoleChoices({ where, heading }: { where: Role["where"]; heading?: string }) {
   const plugins = useAppSettings((s) => s.plugins);
   const setPlugins = useAppSettings((s) => s.setPlugins);
+  const remembered = useAppSettings((s) => s.options);
+  const rememberOptions = useAppSettings((s) => s.rememberOptions);
   const roles = (Object.keys(ROLES) as RoleId[]).filter((r) => ROLES[r].where === where);
-  return (
-    <div className="rounded-lg border border-gh-line bg-white divide-y divide-gh-line">
+  const card = (
+    <div className={clsx("rounded-lg border border-gh-line bg-white divide-y divide-gh-line", heading && "mt-2")}>
       {roles.map((role) => {
         const can = pluginsFilling(role);
         const chosen = rolePlugin(role);
+        const options = chosen?.roleOptions[role] ?? [];
         return (
-          <div key={role} className="flex items-center gap-4 px-4 py-2">
-            <span className="flex-1 text-sm text-gh-black">{ROLES[role].name}</span>
-            {can.length > 1 ? (
-              <select
-                aria-label={`Who does this: ${ROLES[role].name}`}
-                value={chosen?.id ?? ""}
-                onChange={(e) => setPlugins({ ...plugins, roles: { ...plugins.roles, [role]: e.target.value } })}
-                className="h-7 rounded-md border border-gh-line bg-white px-2 text-xs text-gh-black"
-              >
-                {can.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className="text-xs text-gh-black">{chosen?.name ?? <span className="text-gh-gray">Nothing yet</span>}</span>
+          <div key={role} className="divide-y divide-gh-line/60">
+            <div className="px-3 py-2.5 flex items-center gap-3">
+              <span className="min-w-0 flex-1 text-sm text-gh-black">{ROLES[role].name}</span>
+              {can.length > 1 ? (
+                <select
+                  aria-label={`Who does this: ${ROLES[role].name}`}
+                  value={chosen?.id ?? ""}
+                  onChange={(e) => setPlugins({ ...plugins, roles: { ...plugins.roles, [role]: e.target.value } })}
+                  className="h-7 rounded-md border border-gh-line bg-white px-2 text-xs text-gh-black"
+                >
+                  {can.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-xs text-gh-black">{chosen?.name ?? <span className="text-gh-gray">Nothing yet</span>}</span>
+              )}
+            </div>
+            {options.length > 0 && (
+              <OptionRows
+                indent
+                options={options}
+                values={valuesOf(options, remembered[roleOptionsRole(role)])}
+                onChange={(v) => rememberOptions(roleOptionsRole(role), v)}
+              />
             )}
           </div>
         );
       })}
     </div>
+  );
+  if (!heading) return card;
+  return (
+    <section className="mt-6">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-gh-gray">{heading}</h3>
+      {card}
+    </section>
   );
 }

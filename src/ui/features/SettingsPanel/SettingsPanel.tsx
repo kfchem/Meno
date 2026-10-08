@@ -105,10 +105,9 @@ export default function SettingsPanel() {
             <Style3DEditor
               choice={style3d}
               onChange={(next) => setStyle3d(next)}
-            />
-            <div className="mt-6 max-w-2xl">
-              <RoleChoices where="molecules3d" />
-            </div>
+            >
+              <RoleChoices where="molecules3d" heading="Made by" />
+            </Style3DEditor>
           </section>
         ) : section === "chemistry" ? (
           <section className="mt-6 max-w-4xl">

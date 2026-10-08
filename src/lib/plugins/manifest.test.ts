@@ -15,6 +15,7 @@ const good = {
   roles: [],
   kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO", at: "line-start" }] }],
   writes: [],
+  roleOptions: {},
 };
 
 describe("a plugin's manifest", () => {
@@ -52,6 +53,15 @@ describe("a plugin's manifest", () => {
     const gaussian = MANIFESTS.find((m) => m.id === "gaussian-input")!;
     expect(gaussian.writes.map((w) => [w.id, w.extensions, w.takes])).toEqual([["gaussian-input", [".gjf", ".com"], "molecule"]]);
     expect(gaussian.writes[0].options.map((o) => o.id)).toEqual(["job", "method", "basis", "dispersion", "keywords", "charge", "multiplicity", "title", "checkpoint", "processors", "memory"]);
+  });
+
+  it("takes options for the roles it fills, read as data - for those only", () => {
+    const opts = { conformers: [{ id: "count", label: "Conformers sought", type: "number", default: 30, min: 1 }], smiles: [{ id: "x", label: "X", type: "switch", default: true }] };
+    const read = acceptManifest({ ...good, reads: [], kinds: [], roles: ["conformers"], roleOptions: opts })!;
+    expect(read.roleOptions).toEqual({ conformers: [{ id: "count", label: "Conformers sought", type: "number", default: 30, min: 1 }] });
+    // (RDKit's, as it carries them)
+    const rdkit = MANIFESTS.find((m) => m.id === "rdkit")!;
+    expect(rdkit.roleOptions.conformers.map((o) => o.id)).toEqual(["count", "field", "iters", "same", "seed"]);
   });
 
   it("may fill roles rather than read files - but a plugin that does neither is none", () => {

@@ -70,7 +70,9 @@ import {
   saveIntent,
   shortcutLabel,
 } from "../../../lib/doc/shortcuts";
-import { chemWorker, useChem } from "../../../lib/roles/worker";
+import { chemWorker, rolePlugin, useChem } from "../../../lib/roles/worker";
+import { roleOptionsRole } from "../../../lib/plugins/roles";
+import { valuesOf } from "../../../lib/options";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { cleanUp } from "./chem/cleanUp";
 import { useChemMarks } from "./chem/useChemMarks";
@@ -240,6 +242,9 @@ function StructureCanvasContent({
       setChemError(null);
       try {
         const chem = await chemWorker("conformers");
+        // (the options the plugin takes for the role, as chosen in Settings, Molecules in 3D)
+        const declared = rolePlugin("conformers")?.roleOptions.conformers ?? [];
+        const options = valuesOf(declared, useAppSettings.getState().options[roleOptionsRole("conformers")]);
         const made: Parameters<ReturnType<typeof store.getState>["riseMolecules3d"]>[0] = [];
         let allInView = true;
         // (what they keep clear of: the molecules in 3D there already, as they are seen now - and each row made)
@@ -250,7 +255,7 @@ function StructureCanvasContent({
           return { x0: b.minX, x1: b.maxX, y0: b.minY, y1: b.maxY };
         });
         for (const block of blocks) {
-          const ms = (await conformersOf(chem, block, isomers)).map((c) => moleculeOf(c, block));
+          const ms = (await conformersOf(chem, block, isomers, options)).map((c) => moleculeOf(c, block));
           const model = store.getState().model;
           const turned = ms.map((m) => turnedOver(m, model, look3d));
           // beside the drawing, where they can be seen as the view is now,

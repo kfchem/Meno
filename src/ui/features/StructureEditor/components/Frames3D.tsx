@@ -66,6 +66,7 @@ export default function Frames3D({
   about,
   results,
   unread,
+  made,
   area,
 }: {
   count: number;
@@ -85,6 +86,8 @@ export default function Frames3D({
   results?: Result[];
   /** The readers chosen to read it as well that could not, and why: said with what it found. */
   unread?: { from: string; why: string }[];
+  /** How it was made, where something made it - its conformers' method and force field: said with the rest, opened. */
+  made?: { label: string; text: string }[];
   /** What it keeps within: the canvas. */
   area?: Element;
 }) {
@@ -137,6 +140,7 @@ export default function Frames3D({
     return { text: valueText(v, r), marked: isMarked(v, r) };
   });
   if (unread?.length) details.push({ group: "Could not read it", rows: unread.map((u) => ({ label: readerNameOf(u.from), text: u.why })) });
+  if (made?.length) details.push({ group: "How it was made", rows: made.map((r) => ({ label: r.label, text: r.text })) });
   const line = (energy?: number) => chipLine([about ?? "", energy != null ? absolute(energy) : ""], results);
   // how far it has risen to stay within the canvas, followed each frame
   // while it is open, and until it is back down
