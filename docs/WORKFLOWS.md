@@ -40,6 +40,9 @@ rearrange and run again, with its results beside the molecule it is about.
 10. **The Workflow Builder tab goes, and ReactFlow with it.** The
     workspace's editor is built anew: neither the tab nor ReactFlow's
     code is looked at (*Licences*).
+11. **A step on many entries runs a job for each**, by default; a plugin
+    may say that its program takes them all in one job, where it does
+    that better (*Several at once*).
 
 Still open: *Questions*, at the end.
 
@@ -317,8 +320,15 @@ gave), and one can be shown again.
 - By default **one job runs at a time** on this computer; others wait,
   in the order they were started. Settings, *Calculations*: how many at
   once, and how many cores each may use.
-- A step on many entries makes one job for each, queued as above - each
-  with its own log, a failure its own (*Questions*, 2).
+- **A step on many entries makes one job for each** (decided), queued as
+  above - each with its own log, a failure its own, several at once
+  where Settings allows.
+- **Unless its plugin says otherwise**: a plugin's manifest may say that
+  a kind it fills takes all its entries in one job, where its program
+  does that better - CREST optimising an ensemble in one run
+  (`crest --mdopt`), ORCA chaining jobs in one input. Then the step runs
+  one job, with one log, and the entries that came out of it are told
+  apart in the results; a failure is the whole job's.
 
 ### When Meno closes
 
@@ -377,9 +387,9 @@ gave), and one can be shown again.
 ### What changes in the contract
 
 - **The manifest says which kinds of step a plugin fills** (`steps`): for
-  each, the kind (one of Meno's), its options in the general form, and
-  the programs it needs. Meno shows a kind only where something added
-  fills it.
+  each, the kind (one of Meno's), its options in the general form, the
+  programs it needs, and whether it takes all its entries in one job.
+  Meno shows a kind only where something added fills it.
 - **Two new requests** (PLUGINS.md, *The contract*):
   - `prepare {step, entries, options}` - each job's files and the command
     that runs it;
@@ -469,13 +479,6 @@ something is Windows' own (the job object; xTB's Windows build).
    - *Both*: Meno defines the kinds, ACCeL fills them first as a plugin,
      and Meno fills the light ones itself where waiting for Python would
      be felt. (My recommendation.)
-2. **One job for each entry, or one for all.** A step on 81 conformers
-   can run its program 81 times - 81 jobs, each its own log, a failure
-   its own, run several at once (proposed) - or once, for all 81, where
-   the program takes a file of many (`crest --mdopt` optimises an
-   ensemble in one run; ORCA can chain jobs in one input): one start,
-   one log, all or nothing. The plugin could say which its program does
-   best.
-3. **Conformers of one molecule, said by the chemist.** *These are
+2. **Conformers of one molecule, said by the chemist.** *These are
    conformers of one molecule* on a box's menu (proposed), for entries
    read from files - or only steps make conformers?
