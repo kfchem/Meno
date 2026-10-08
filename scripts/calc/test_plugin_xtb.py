@@ -170,6 +170,15 @@ class Collect(unittest.TestCase):
         self.assertEqual(said["why"], "Some atoms in the start geometry are *very* close: Found *very* short distance of  0.000E+00 for O1-H2")
         self.assertEqual(ask("collect", step="energy", entries=[ETHYNE], options={}, files={}, log="", ended="stopped")["why"], "xtb said nothing")
 
+    def test_a_dump_whose_command_line_holds_a_windows_path_unescaped(self):
+        # (xtb on Windows records its command line with the program's path as it is: backslashes JSON does not take)
+        dump = '{\n   "program call": "C:\\Users\\me\\AppData\\Roaming\\com.kfchem.meno\\pixi\\Library/bin\\xtb.exe input.xyz --gfn 2",\n   "total energy": -8.2255,\n   "note": "a \\"quoted\\" word"\n}'
+        with self.assertRaises(ValueError):
+            json.loads(dump)
+        out = ask("collect", step="energy", entries=[ETHYNE], options={}, files={"xtbout.json": dump}, log="", ended="done")["outputs"][0]
+        self.assertEqual(out["energies"], [-8.2255])
+        self.assertEqual(worker.dump_of({"xtbout.json": dump})["note"], 'a "quoted" word')
+
     def test_an_energy_without_its_dump_is_none(self):
         said = worker.answer(json.dumps({"id": 1, "op": "collect", "step": "energy", "entries": [ETHYNE], "options": {}, "files": {}, "log": "", "ended": "done"}))
         self.assertFalse(said["ok"])
