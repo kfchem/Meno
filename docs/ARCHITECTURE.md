@@ -47,6 +47,7 @@ src/
   lib/roles/              the roles' workers (RDKit's, for now): client, sidecar, the MOL blocks they are asked about
   lib/calc/               readers of calculation output: the catalog, reading, promises, Meno's own reading
   lib/plugins/            plugins' manifests (data), read and checked; the plugins Meno carries, found in their folders
+  lib/jobs.ts             jobs: programs run for a workflow's steps, apart from Meno (src-tauri/src/jobs.rs)
   utils/structureParsers  parseSDF (V2000/V3000), parseXYZ (multi-frame, distance-based bonds)
   utils/importers         readMoleculesFromText, RXN grouping/layout, EditorModel conversion
   utils/atomUtils         element table (radii, colours)
@@ -64,12 +65,13 @@ src/
     PythonConsole/        UI for the Python sidecar
     TextEditor/           plain textarea with line numbers
     StyleEditor/          every drawing setting, with a preview
-    SettingsPanel/        Settings: drawing style, molecules in 3D, chemistry, files, plugins,
-                          dictionary, network
+    SettingsPanel/        Settings: drawing style, molecules in 3D, chemistry, files, calculations
+                          and their jobs, plugins, dictionary, network
 src-tauri/
   src/lib.rs              Tauri commands (see table below)
   src/fonts.rs            the system's typefaces
   src/net.rs              the network: tasks, the proxy, the record
+  src/jobs.rs             jobs: Meno's job mode (`--job <folder>`), the queue, logs, stopping
   capabilities/           permission sets for the main window
   resources/py/           the lock files of Meno's own Python profiles (the console's, workflows');
                           uv and pixi are not bundled but fetched the first time an environment
@@ -357,7 +359,38 @@ not taken from either.
   looks*): its palette, its cards' hairline borders, Heroicons' outline
   icons (`workflow/icons.tsx`).
 - Quick Add's calculations come from `workflow/offered.ts`; Settings,
-  Calculations, is `SettingsPanel/CalculationSettings.tsx`.
+  Calculations, is `SettingsPanel/CalculationSettings.tsx`, and its jobs
+  `SettingsPanel/JobSettings.tsx`.
+
+### Jobs
+
+A program a step runs - xTB's, say - runs as a job (`src-tauri/src/jobs.rs`,
+`lib/jobs.ts`): in a folder of its own, `<app data>/jobs/<id>/`, apart from
+Meno, so that it goes on when Meno closes (WORKFLOWS.md, *When Meno
+closes*).
+
+- **Meno's own executable runs it.** `job_start` writes the job's folder -
+  `job.json` (the program, its arguments, its environment), its input in
+  `work/` - and starts Meno's executable as its runner, `Meno --job
+  <folder>`: `run()` hands that to `jobs::job_mode` before anything else, so
+  it opens no window and needs no webview. The runner is started in a
+  process group of its own (detached, on Windows) and nothing of Meno's
+  waits on it.
+- **Jobs wait their turn.** A runner takes its turn under `jobs/.queue.lock`
+  (`File::lock`): the earliest asked for among those waiting starts when
+  fewer are running than it allows (`slots`, Settings' *Jobs at once* when
+  it was asked for).
+- **Its program** runs in `work/`, its output and errors in `log.txt`, in a
+  process group of its own (macOS, Linux) or a job object that kills what
+  is in it when it closes (Windows), so that *Stop* - a `stop` file the
+  runner looks for - stops it and everything it started: asked, then made
+  to after 3 s (macOS, Linux); at once (Windows). The runner writes how it
+  ended in `state.json`, whole each time (written beside it, then renamed).
+- **Gone is told by a lock, not a process id.** The runner holds
+  `runner.lock` for as long as it is there; a record that says waiting or
+  running whose lock nobody holds was left by a runner that went without
+  saying how it ended - the computer restarted - and reads as *gone*. A
+  process id would be another program's after a restart.
 
 ## Python console and sidecar
 
@@ -609,6 +642,10 @@ nothing of Meno's environments lands in the user's own directories.
 | `net_set_offline`, `net_grant`, `net_revoke` | `lib/net/network.ts` | Offline mode; a purpose's leave to use the network, given or withdrawn. |
 | `net_note_blocked` | `lib/net/network.ts` | Records a connection the window was kept from making. |
 | `update_state`, `update_check`, `update_restart_after_quit` | `lib/update.ts` | Where keeping Meno up to date is; a look (and download) through the proxy; a restart into the update downloaded. |
+| `job_start` | `lib/jobs.ts` | A job's folder made, its input written, its runner started; returns its id. |
+| `job_state`, `jobs_list` | `lib/jobs.ts` | A job's record, or every job's - *gone* where its runner went without saying how it ended. |
+| `job_log`, `job_files`, `job_read`, `job_folder` | `lib/jobs.ts` | A job's log from a byte on; the files in its folder, one read; where they are. |
+| `job_stop`, `job_remove`, `jobs_clear_finished` | `lib/jobs.ts` | A job asked to stop; a finished job's folder taken away, or every finished one's. |
 | `greet` | — | Template leftover, unused. |
 
 Events: `uv:log`, `uv:err` (plain strings); `ext:stdout`, `ext:stderr`,
@@ -668,6 +705,16 @@ path it is given:
 - A sidecar running the console's worker is a `python-code` task on the
   network; any other worker is pointed at the proxy with no task, so what it
   reaches for is refused and on the record.
+- `job_start`: the webview names a plugin and a program, not a path. The
+  program must be one the plugin's manifest names (`steps[].programs`),
+  never a shell or an interpreter that takes code in its arguments, found
+  in that plugin's environment only - the folders its activation puts on
+  the PATH (pixi), or its venv's `bin`/`Scripts` (uv) - and, where it is
+  Python, with the rules of `ext_spawn_sidecar`, a script in the plugin's
+  folder. Its input files must lie inside its folder; it is given its
+  environment's activation, and is pointed at the proxy with no task, as
+  a worker is. A job's id must be one of Meno's (a UUID) whose folder holds
+  a `job.json`; a file read from it must lie inside it.
 - A lock with hashes (`--hash=`) is installed with `--require-hashes`.
 - Sidecars are reaped when their stdout closes or on `ext_kill`, and all of
   them are killed when the app exits.

@@ -588,12 +588,51 @@ Not yet, and where it comes:
   sets, steps and wires fading out as they are deleted (they fade in) -
   a follow-up;
 - *Waiting*, *Running* and *Stopped*, the running wire's dash, *Stop*,
-  logs and files - step 2, the job runner;
+  logs and files - the job runner, step 2, and on the cards with the
+  first steps that run jobs, step 3;
 - plugins filling kinds (the manifest's `steps`): until step 3, only
   Meno's own steps are offered, and Settings, *Calculations*, lists them
   alone;
 - *Run from here*, *Run all*, runs kept in a step - step 4;
 - copying sets and steps; procedures - step 7.
+
+### Step 2: the job runner (2026-10-08)
+
+Built: Meno's job mode, started apart from Meno (`Meno --job <folder>`);
+jobs waiting their turn, in the order they were asked for, as many at once
+as Settings allows; each one's log; *Stop*, for its program and
+everything it started; how each ended, recorded - and a job whose runner
+went without saying, the computer restarted, told apart. Settings,
+*Calculations*, *Jobs*: *Jobs at once*, *Cores for each*, and the
+finished jobs' files, cleared. How it works: ARCHITECTURE.md, *Jobs*.
+
+Decided while building it, for the maintainer to confirm:
+
+- **A job runs only a program its plugin's manifest names** (`steps`,
+  each kind with the `programs` it needs: a name, or an object with one
+  for a program installed separately, step 6), from that plugin's
+  environment - never a shell, and Python only running a script of the
+  plugin's. Meno's page names a plugin and a program, never a path.
+- **Cores for each, unset, are the computer's shared among the jobs at
+  once** - all of them while one runs at a time; set, never more than the
+  computer has. A program is told them as `OMP_NUM_THREADS` (and MKL's
+  and OpenBLAS's); a plugin's command may say them as well (xTB's `-P`).
+- **Jobs at once counts for jobs asked for after it is changed**: one
+  already waiting keeps the number it was asked with.
+- **A job whose runner went without saying how it ended is *gone***, in
+  its record; its card will show it *Stopped*, with its log, as above.
+- **Stop is at once on Windows** (its job object is ended); on macOS and
+  Linux the program is asked to stop, and made to after 3 s.
+
+Not yet, and where it comes:
+
+- steps that make jobs - their cards' *Waiting*, *Running* and *Stopped*,
+  the running wire's dash, *Stop* in a step's menu, logs in the column of
+  texts, *Show files*, jobs picked up when a workspace is opened, and the
+  note on closing with jobs going on - step 3, with xTB: until a plugin
+  names programs, nothing asks for a job;
+- a program installed separately, found where the system finds programs
+  (ORCA, Gaussian) - step 6.
 
 ## Questions
 
