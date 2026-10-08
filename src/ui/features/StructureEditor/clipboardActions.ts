@@ -10,7 +10,10 @@ import { drawnOf } from "./fileActions";
 import { pictureItems } from "./picture";
 import type { EditorStore } from "./store";
 import type { Carried3D, Drawn } from "./store/types";
-import { centredAt, clipItems, partToCopy } from "./utils/copyPaste";
+import { centredAt, clipItems, hasFlow, partToCopy } from "./utils/copyPaste";
+import { bondsAmong } from "./utils/selection";
+import { setMembers } from "./workflow/entries";
+import { partsOf } from "./workflow/parts";
 
 type Pt = { x: number; y: number };
 
@@ -41,19 +44,27 @@ export function useClipboardActions(
   // (`only`: one molecule in 3D, alone - what its own menu was opened on)
   const part = useCallback((only?: number): { part: Drawn; ids3d: number[] } | null => {
     const state = store.getState();
-    const { model, sel, hovered, sel3d, hovered3d, molecules3d, turns3d, frames3d } = state;
+    const { model, hovered, hovered3d, molecules3d, turns3d, frames3d, selFlow } = state;
+    // (a set selected takes what it holds along, selected or not - as it does when dragged)
+    const held = only != null ? [] : state.sets.filter((b) => selFlow.sets.has(b.id)).map((b) => setMembers(state, b));
+    const heldAtoms = new Set(held.flatMap((h) => h.structures.flat()));
+    const sel = heldAtoms.size
+      ? { atoms: new Set([...state.sel.atoms, ...heldAtoms]), bonds: new Set([...state.sel.bonds, ...bondsAmong(model, heldAtoms)]) }
+      : state.sel;
+    const sel3d = new Set([...state.sel3d, ...held.flatMap((h) => h.molecules)]);
+    const flow = only != null || (!selFlow.sets.size && !selFlow.steps.size) ? undefined : partsOf(state, selFlow.sets, selFlow.steps);
     const around =
       hovered.atomId ?? model.bonds.find((b) => b.id === hovered.bondId)?.a ?? null;
-    const drawn = only != null ? null : partToCopy(drawnOf(state), sel, around);
-    const nothingSelected = !sel.atoms.size && !sel.bonds.size && !sel3d.size;
+    const drawn = only != null ? null : partToCopy(drawnOf(state), sel, flow ? null : around);
+    const nothingSelected = !sel.atoms.size && !sel.bonds.size && !sel3d.size && !flow;
     const ids3d =
       only != null ? [only] : sel3d.size ? [...sel3d] : nothingSelected && hovered3d && !drawn ? [hovered3d.id] : [];
     const carried: Carried3D[] = molecules3d
       .filter((m) => ids3d.includes(m.id))
       .map(({ id, ...m }) => ({ ...m, ...(turns3d[id] ? { turn: turns3d[id] } : {}), ...(frames3d[id] ? { frame: frames3d[id] } : {}) }));
-    if (!drawn && !carried.length) return null;
+    if (!drawn && !carried.length && !flow) return null;
     return {
-      part: { ...(drawn ?? { atoms: [], bonds: [] }), ...(carried.length ? { molecules3d: carried } : {}) },
+      part: { ...(drawn ?? { atoms: [], bonds: [] }), ...(carried.length ? { molecules3d: carried } : {}), ...(flow ? { flow } : {}) },
       ids3d: molecules3d.filter((m) => ids3d.includes(m.id)).map((m) => m.id),
     };
   }, [store]);
@@ -102,7 +113,7 @@ export function useClipboardActions(
       if (busy()) return;
       try {
         const found = await structureOnClipboard();
-        if (!found || (!found.atoms.length && !found.molecules3d?.length)) {
+        if (!found || (!found.atoms.length && !found.molecules3d?.length && !hasFlow(found))) {
           onError("There is nothing on the clipboard that reads as a structure.");
           return;
         }

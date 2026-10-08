@@ -105,8 +105,8 @@ agree before step 1 is built.
   keeps its runs.
 - **Job** - a program running for a run, on this computer, in a folder
   of its own, its log written as it goes.
-- **Procedure** - a chain of steps without their data, saved to be put
-  down again.
+- **Procedure** - a whole workflow's steps without their data, saved to
+  be put down again.
 
 ## What is on the page
 
@@ -449,11 +449,15 @@ gave), and one can be shown again.
 - **Shared, a workspace is the procedure with its results**: opened
   elsewhere, everything is there to read, and runs again where the same
   plugins are added.
-- **A procedure** - steps without their data - is made from a selection
-  of steps: right-click, *Save as procedure…*, named. Procedures are
-  listed in Quick Add's *Calculations* after the kinds, one icon each;
-  put down, the chain comes, wired, ready for an input. Shared as a file
-  of their own (later in order).
+- **A procedure** - a whole workflow's steps without their data - is
+  saved from any step or set of it: right-click, *Save as procedure…*,
+  named. Procedures are listed in Quick Add's *Calculations* after the
+  kinds, one icon each; put down, the chain comes, wired, ready for an
+  input. Shared as a workspace file (decided: step 7).
+- **Copying** a workflow's parts is as copying a drawing: a box, a lasso,
+  Ctrl or ⌘ and a click, or *Select all* takes sets and steps with the
+  rest; they are copied, cut, pasted, deleted and moved with it (decided:
+  step 7).
 
 ## Programs and plugins
 
@@ -906,6 +910,46 @@ Not yet, and where it comes:
   *Calculations*), ORCA needs none.
 - **The version** of a program installed separately is what its output
   says, as the readers read it; Settings does not ask the program itself.
+
+### Step 7: procedures and copying (2026-10-08)
+
+Built: a workflow's sets and steps in the selection, as the drawing's
+parts are - copied, cut, pasted, deleted and moved with it; procedures,
+saved from a workflow's step or set, put down again from Quick Add, and
+kept in Settings, *Calculations*, where they are renamed, taken away or
+saved as a workspace file. How it works: ARCHITECTURE.md, *Workflows*.
+
+Decided by the maintainer (2026-10-08), as it was built:
+
+- **A procedure is a whole workflow**: there is no saving a part of
+  one. *Save as procedure…* on any step or set saves the workflow it is
+  part of.
+- **Copying is as with atoms**: the selection takes sets and steps by
+  the same gestures, and copy and paste carry them.
+- **Procedures are kept in Settings**, listed in *Calculations*, as the
+  user's abbreviations are in *Dictionary*.
+- **Shared as a workspace (.meno)**: *Save as file…* writes the
+  procedure as a workspace holding its sets and steps alone; opened, it
+  is a workspace like any other, and *Save as procedure…* keeps it.
+
+Decided while building it, for the maintainer to confirm:
+
+- **A box or a lasso takes a set or a step whose middle is inside it**,
+  as it takes a molecule in 3D by its centre. A set taken takes what it
+  holds along when it is moved or copied, selected or not.
+- **What a step did is not copied**: a pasted step is as it is set - its
+  kind, who does it, its options - and has not run (its runs and their
+  jobs are the step's own). A result set copied with the step that made
+  it is that step's still; copied without it, it is a set like any other.
+- **A running step is left out** when a selection is deleted or cut; it
+  is asked about on its own, as before.
+- **A procedure keeps the sets the chemist drew**, as empty frames for
+  an input, **not those its steps made**: a wire from a result set is,
+  in the procedure, from the step that made it. Put down, it is the
+  selection, to be moved as one.
+- **Quick Add offers every procedure saved**: one that needs a plugin
+  not added is shown, but cannot be put down, and says what it needs.
+  A wire let go on empty space offers none.
 
 ## Questions
 

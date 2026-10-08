@@ -9,6 +9,8 @@ import type { Style3D } from "../../../../../lib/chem/style3d";
 import { byOf, kindsOf, optionsFor } from "../../workflow/doers";
 import type { StepKind } from "../../workflow/kinds";
 import * as wf from "../../workflow/model";
+import { appendParts, partsBounds } from "../../workflow/parts";
+import { proceduresSaved } from "../../workflow/procedures";
 import type { EditorState, Molecule3D, WorkflowView } from "../types";
 import { createStepRuns } from "./stepRuns";
 
@@ -42,6 +44,7 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
   const { forgetJobs, ...runs } = createStepRuns(doc, set, get, { extentOf: (m) => extentOf({ ...m, id: 0 }, currentStyle3D()) });
   return {
     ...runs,
+    forgetStepJobs: forgetJobs,
     setWorkflowView: (patch: Partial<Pick<EditorState, WorkflowView>>) => set(patch),
     addSet: (frame: { x0: number; y0: number; x1: number; y1: number }) => {
       const id = doc.getState().nextWorkflowId ?? 1;
@@ -96,6 +99,27 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
           hoveredStep: prev.hoveredStep === id ? null : prev.hoveredStep,
         }));
       }
+    },
+    putDownProcedure: (id: string, x: number, y: number) => {
+      const procedure = proceduresSaved().find((p) => p.id === id);
+      if (!procedure) return;
+      // (its middle where Quick Add was opened, as a paste's is; put down, it is the selection - to be moved as one)
+      const b = partsBounds(procedure.parts);
+      const dx = b ? x - (b.x0 + b.x1) / 2 : x;
+      const dy = b ? y - (b.y0 + b.y1) / 2 : y;
+      let added: { sets: number[]; steps: number[] } = { sets: [], steps: [] };
+      const done = doc.edit("put down procedure", (d) => {
+        const r = appendParts(d, procedure.parts, dx, dy);
+        added = r;
+        return r.doc;
+      });
+      if (!done) return;
+      set((prev: EditorState) => ({
+        ...prev,
+        sel: { atoms: new Set(), bonds: new Set() },
+        sel3d: new Set(),
+        selFlow: { sets: new Set(added.sets), steps: new Set(added.steps) },
+      }));
     },
     connect: (from: Parameters<typeof wf.connect>[1], to: number) => {
       const was = doc.getState();

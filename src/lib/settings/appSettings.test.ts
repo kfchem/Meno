@@ -22,6 +22,7 @@ describe("the settings file", () => {
       pictures: { dpi: 1200 as const },
       pointer: { wheelUp: "out" as const },
       calculations: { atOnce: 2, cores: 4 },
+      procedures: [{ id: "p-1", name: "Optimise, then energies", saved: 1, flow: { sets: [{ id: 1, x0: 0, y0: -4, x1: 4, y1: 0 }], steps: [{ id: 2, kind: "optimise", x: 6, y: 0 }], wires: [{ id: 3, from: { set: 1 }, to: 2 }] } }],
     };
     const text = settingsFileText(settings);
     expect(JSON.parse(text).format).toBe(1);
@@ -71,6 +72,15 @@ describe("the settings file", () => {
     // the programs installed separately located: by plugin and program, each a full path
     const programs = { "orca:orca": "/opt/orca/orca", "gaussian:g16": "C:\\G16W\\g16.exe", "orca:../x": "/x", "Bad:p": "/x", "orca:x": "orca", "orca:y": 3 };
     expect(acceptAppSettings({ plugins: { programs } }).plugins.programs).toEqual({ "orca:orca": "/opt/orca/orca", "gaussian:g16": "C:\\G16W\\g16.exe" });
+    // the procedures saved: each with an id, a name and steps - the rest read as they are used
+    const procedures = [
+      { id: "p-1", name: " Optimise ", saved: 5, flow: { steps: [{}], sets: "x" } },
+      { id: "p-1", name: "Again", flow: { steps: [{}] } },
+      { id: "Bad Id", name: "x", flow: { steps: [{}] } },
+      { id: "p-2", name: "No steps", flow: { steps: [] } },
+    ];
+    expect(acceptAppSettings({ procedures }).procedures).toEqual([{ id: "p-1", name: "Optimise", saved: 5, flow: { sets: [], steps: [{}], wires: [] } }]);
+    expect(acceptAppSettings({}).procedures).toEqual([]);
     // copied pictures: at a resolution offered, or else 600 dpi - a file from before there was a choice too
     expect(acceptAppSettings({}).pictures).toEqual({ dpi: 600 });
     expect(acceptAppSettings({ pictures: { dpi: 300 } }).pictures).toEqual({ dpi: 300 });

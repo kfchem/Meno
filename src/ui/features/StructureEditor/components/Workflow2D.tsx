@@ -20,6 +20,8 @@ import { setList } from "../workflow/list";
 import { CARD_W, HTML_DISTANCE, PORT_DOWN, PX } from "../workflow/look";
 import { byOf, doerOf, installedFor, kindsOf, missingFor, optionsFor, stepOptions } from "../workflow/doers";
 import { lookFor, useInstalled } from "../../../../lib/plugins/installed";
+import { addsToSelection } from "../../../../lib/doc/shortcuts";
+import { dragSelection } from "../utils/dragSelection";
 
 type Pt = { x: number; y: number };
 
@@ -210,6 +212,7 @@ export default function Workflow2D() {
   const turns3d = useEditor((s) => s.turns3d);
   const frames3d = useEditor((s) => s.frames3d);
   const jobsSeen = useEditor((s) => s.jobsSeen);
+  const selFlow = useEditor((s) => s.selFlow);
   const style3d = useStyle3D();
   const { camera, gl, invalidate } = useThree();
   // (who does a kind of step changes as plugins are added and taken away)
@@ -352,9 +355,33 @@ export default function Workflow2D() {
     );
   };
 
+  /**
+   * A press on a selected set or step, or with Ctrl (⌘ on a Mac): as on an
+   * atom - Ctrl or ⌘ and a click takes it into the selection or out of it;
+   * a selected one dragged drags the whole selection. Whether it was the
+   * selection's; `click` is told of a press on a selected one let go where
+   * it was.
+   */
+  const asSelected = (e: ReactPointerEvent, part: { set: number } | { step: number }, click: () => void): boolean => {
+    const st = store.getState();
+    if (addsToSelection(e)) {
+      e.stopPropagation();
+      st.toggleFlowSel(part);
+      return true;
+    }
+    const selected = "set" in part ? st.selFlow.sets.has(part.set) : st.selFlow.steps.has(part.step);
+    if (!selected) return false;
+    e.stopPropagation();
+    dragSelection(store, worldOf, { x: e.clientX, y: e.clientY }, (_ev, moved) => {
+      if (!moved) click();
+    });
+    return true;
+  };
+
   /** A set dragged by its tab, with all it holds; clicked, chosen. */
   const dragSet = (e: ReactPointerEvent, set: WorkflowSet) => {
     if (e.button !== 0) return;
+    if (asSelected(e, { set: set.id }, () => store.getState().setWorkflowView({ chosenSet: set.id }))) return;
     let last = worldOf(e.clientX, e.clientY);
     const gesture = `${performance.now()}`;
     follow(
@@ -394,6 +421,11 @@ export default function Workflow2D() {
   /** A step dragged by its card; clicked, opened to its options, or shut. */
   const dragStep = (e: ReactPointerEvent, step: WorkflowStep) => {
     if (e.button !== 0) return;
+    const open = () => {
+      const s = store.getState();
+      s.setWorkflowView({ openStep: s.openStep === step.id ? null : step.id });
+    };
+    if (asSelected(e, { step: step.id }, open)) return;
     const start = worldOf(e.clientX, e.clientY);
     const gesture = `${performance.now()}`;
     follow(
@@ -594,7 +626,7 @@ export default function Workflow2D() {
                   count={info.count}
                   rows={info.rows}
                   hovered={hoveredSet === b.id}
-                  chosen={chosenSet === b.id}
+                  chosen={chosenSet === b.id || selFlow.sets.has(b.id)}
                   give={portLook("give", { set: b.id })}
                   onTabDown={(e) => dragSet(e, b)}
                   onEdgeDown={(edge, e) => sizeSet(edge, e, b)}
@@ -624,6 +656,7 @@ export default function Workflow2D() {
                   run={run?.view}
                   missing={missingFor(s)}
                   compact={compact}
+                  selected={selFlow.steps.has(s.id)}
                   open={openStep === s.id}
                   ports={{ take: portLook("take", s.id), give: portLook("give", { step: s.id }) }}
                   optionList={takes}

@@ -14,6 +14,7 @@ import type { Workspace } from "../../utils/workspace";
 import { StoreApi } from "zustand";
 import { DOUBLE_CLICK_MS } from "../../constants";
 import { nextIdAfter } from "../../workflow/saved";
+import { appendParts, NO_PARTS, removeParts } from "../../workflow/parts";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -145,16 +146,26 @@ export const createModelSlice = (
   },
 
   deleteSelection: () => {
-    const { sel, sel3d, model, arrows, pluses, captions } = get();
-    if (!sel.atoms.size && !sel.bonds.size && !sel3d.size) return;
-    // the arrows and pluses among it go with it, as with a cut; and the
-    // molecules in 3D selected, in the same step
+    const { sel, sel3d, selFlow, steps, model, arrows, pluses, captions } = get();
+    if (!sel.atoms.size && !sel.bonds.size && !sel3d.size && !selFlow.sets.size && !selFlow.steps.size) return;
+    // the arrows and pluses among it go with it, as with a cut; the
+    // molecules in 3D selected, and a workflow's sets and steps, in the same
+    // step - but not a step running, which is asked about on its own
     const among = schemeAmong({ ...model, arrows, pluses, captions }, sel.atoms);
     const ids = (xs: { id: number }[]) => new Set(xs.map((x) => x.id));
+    const idle = [...selFlow.steps].filter((id) => !steps.find((s) => s.id === id)?.running);
+    const gone = steps.filter((s) => idle.includes(s.id));
     const deleted = doc.edit("delete selection", (d) =>
-      ops.removeMolecules3d(ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses), ids(among.captions)), sel3d),
+      removeParts(
+        ops.removeMolecules3d(ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses), ids(among.captions)), sel3d),
+        selFlow.sets,
+        idle,
+      ),
     );
-    if (deleted) forgetDeleted(set);
+    if (!deleted) return;
+    forgetDeleted(set);
+    // (the steps' jobs' folders taken away, as when a step is deleted on its own)
+    for (const s of gone) get().forgetStepJobs(s);
   },
 
   moveAtom: (id: number, x: number, y: number) => {
@@ -319,6 +330,7 @@ export const createModelSlice = (
       ...prev,
       sel: { atoms: new Set(), bonds: new Set() },
       sel3d: new Set<number>(),
+      selFlow: { sets: new Set<number>(), steps: new Set<number>() },
       chosen3d: null,
       hoveredSet: null,
       chosenSet: null,
@@ -347,14 +359,24 @@ export const createModelSlice = (
 
   pasteModel: (next: Drawn) => {
     const carried = next.molecules3d ?? [];
-    if (!next.atoms.length && !carried.length) return;
+    const flow = next.flow ?? NO_PARTS;
+    if (!next.atoms.length && !carried.length && !flow.sets.length && !flow.steps.length) return;
     const start = doc.getState().nextId;
     const start3d = doc.getState().nextMolecule3dId ?? 1;
     // (the pasted atoms numbered on from here, in their order: a molecule in
-    // 3D pasted with its drawing is tied to the pasted drawing)
+    // 3D pasted with its drawing is tied to the pasted drawing - and a
+    // workflow's parts numbered on from its counter, wired as they were)
     const idOf = new Map(next.atoms.map((a, k) => [a.id, start + k]));
     const tied = { ...next, molecules3d: carried.map((m) => relinked(m, next, (id) => idOf.get(id))) };
-    if (!doc.edit("paste", (d) => ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(tied)))) return;
+    let pastedFlow: { sets: number[]; steps: number[] } = { sets: [], steps: [] };
+    const pasted = doc.edit("paste", (d) => {
+      const drawn = next.atoms.length || carried.length ? ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(tied)) : d;
+      if (!flow.sets.length && !flow.steps.length) return drawn;
+      const added = appendParts(drawn, flow);
+      pastedFlow = added;
+      return added.doc;
+    });
+    if (!pasted) return;
     // the molecules in 3D pasted, numbered from there on in order: selected
     // with the rest, turned and showing the frame they were copied in
     const ids = carried.map((_, i) => start3d + i);
@@ -368,6 +390,7 @@ export const createModelSlice = (
       ...prev,
       sel: added(start, doc.getState().model),
       sel3d: new Set(ids),
+      selFlow: { sets: new Set(pastedFlow.sets), steps: new Set(pastedFlow.steps) },
       chosen3d: null,
       turns3d,
       frames3d,
@@ -429,20 +452,28 @@ export const createModelSlice = (
   },
 
   deleteDrawn: (part: Drawn, molecules3d: number[] = []) => {
+    // (a workflow's parts cut with it - but not a step running, which is asked about on its own)
+    const steps = get().steps.filter((s) => part.flow?.steps.some((x) => x.id === s.id) && !s.running);
     const edited = doc.edit("cut", (d) =>
-      ops.removeMolecules3d(
-        ops.deleteDrawn(
-          d,
-          new Set(part.atoms.map((a) => a.id)),
-          new Set(part.bonds.map((b) => b.id)),
-          new Set((part.arrows ?? []).map((a) => a.id)),
-          new Set((part.pluses ?? []).map((p) => p.id)),
-          new Set((part.captions ?? []).map((c) => c.id)),
+      removeParts(
+        ops.removeMolecules3d(
+          ops.deleteDrawn(
+            d,
+            new Set(part.atoms.map((a) => a.id)),
+            new Set(part.bonds.map((b) => b.id)),
+            new Set((part.arrows ?? []).map((a) => a.id)),
+            new Set((part.pluses ?? []).map((p) => p.id)),
+            new Set((part.captions ?? []).map((c) => c.id)),
+          ),
+          molecules3d,
         ),
-        molecules3d,
+        (part.flow?.sets ?? []).map((b) => b.id),
+        steps.map((s) => s.id),
       ),
     );
-    if (edited) forgetDeleted(set);
+    if (!edited) return;
+    forgetDeleted(set);
+    for (const s of steps) get().forgetStepJobs(s);
   },
 
   expandAbbreviation: (id: number) => {

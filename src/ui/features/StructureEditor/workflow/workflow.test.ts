@@ -340,6 +340,54 @@ describe("Quick Add's calculations", () => {
   });
 });
 
+describe("a workflow's parts in the selection", () => {
+  /** A page with a molecule in a set (1), wired (3) into an optimisation (2) - and the store over it. */
+  function selecting() {
+    const doc = createStructureDocument();
+    doc.edit("page", () => connect(addStep(page(), "optimise", 6, 3, { method: "gfn2" }, "xtb"), { set: 1 }, 2));
+    const store = createEditorStore(doc);
+    connectStoreToDocument(store, doc);
+    return { doc, st: () => store.getState() };
+  }
+
+  it("are taken by Select all, by Ctrl or ⌘ and a click - in, and out again - and let go with the rest", () => {
+    const { st } = selecting();
+    st().selectAll();
+    expect(st().selFlow).toEqual({ sets: new Set([1]), steps: new Set([2]) });
+    st().clearSel();
+    expect(st().selFlow).toEqual({ sets: new Set(), steps: new Set() });
+    st().toggleFlowSel({ step: 2 });
+    st().toggleFlowSel({ set: 1 });
+    st().toggleFlowSel({ set: 1 });
+    expect(st().selFlow).toEqual({ sets: new Set(), steps: new Set([2]) });
+  });
+
+  it("are deleted with the rest, as one step to undo - and what was deleted leaves the selection", () => {
+    const { doc, st } = selecting();
+    st().selectAll();
+    st().deleteSelection();
+    expect(st().sets).toEqual([]);
+    expect(st().steps).toEqual([]);
+    expect(st().wires).toEqual([]);
+    expect(st().molecules3d).toEqual([]);
+    expect(st().selFlow).toEqual({ sets: new Set(), steps: new Set() });
+    doc.undo();
+    expect(st().steps.map((s) => s.kind)).toEqual(["optimise"]);
+    expect(st().wires).toHaveLength(1);
+  });
+
+  it("are pasted numbered on, wired as they were, and selected", () => {
+    const { st } = selecting();
+    const flow = { sets: [{ id: 1, x0: 0, y0: 0, x1: 4, y1: 4 }], steps: [{ id: 2, kind: "energy" as const, x: 6, y: 3, by: "xtb" }], wires: [{ id: 3, from: { set: 1 }, to: 2 }] };
+    st().pasteModel({ atoms: [], bonds: [], flow });
+    expect(st().sets).toHaveLength(2);
+    const step = st().steps.find((s) => s.kind === "energy")!;
+    const set = st().sets[1];
+    expect(st().wires.some((w) => w.to === step.id && "set" in w.from && w.from.set === set.id)).toBe(true);
+    expect(st().selFlow).toEqual({ sets: new Set([set.id]), steps: new Set([step.id]) });
+  });
+});
+
 describe("the selection as a set", () => {
   it("takes whole structures, not a few atoms of one", () => {
     const model = {

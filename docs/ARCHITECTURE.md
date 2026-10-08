@@ -392,6 +392,18 @@ not taken from either.
   reads back is checked as data (`workflow/programs.ts`). A step keeps
   its earlier runs, with what each gave (`keepRun`, `showRun` in
   `workflow/run.ts`), as a new run's results come in.
+- **A workflow's parts in the selection** (`selFlow`, beside `sel` and
+  `sel3d`): taken by a box or a lasso by their middles (`workflow/parts.ts`
+  `flowIn`), by Ctrl or ⌘ and a click, or *Select all*; deleted, moved
+  (`utils/dragSelection.ts`, `placeMarks`) and copied with the rest - a
+  copy's record carries them as `flow`, read back as a workspace's
+  workflow is (`readWorkflow`), pasted numbered on and wired as they were
+  (`appendParts`). What a step did never goes with it.
+- **Procedures** (`workflow/procedures.ts`): a whole flow (`flowOf`) as
+  `procedureParts` - its steps, the sets the chemist drew, emptied, the
+  wires among them - kept in Settings (`procedures`) as data, read as a
+  workflow each time; put down from Quick Add (`putDownProcedure`), listed
+  and written as a workspace in `SettingsPanel/ProcedureSettings.tsx`.
 - Settings, Calculations, is `SettingsPanel/CalculationSettings.tsx` - by
   plugin, each with its kinds' options - and its jobs
   `SettingsPanel/JobSettings.tsx`.

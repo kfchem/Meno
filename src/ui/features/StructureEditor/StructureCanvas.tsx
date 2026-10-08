@@ -40,6 +40,9 @@ import type { CalcSource } from "../../../lib/calc/output";
 import { setTextTaker } from "../../views/texts";
 import TextColumn from "./TextColumn";
 import ConfirmDiscard from "../../layouts/ConfirmDiscard";
+import NameDialog from "../../layouts/NameDialog";
+import { flowOf, procedureParts, type FlowParts } from "./workflow/parts";
+import { procedureNeeds, proceduresSaved, saveProcedure, suggestedName } from "./workflow/procedures";
 import { knownOf, pluginWriters, WRITERS, type Writer } from "../../../lib/io/writers";
 import { WRITER_PLUGINS } from "../../../lib/calc/catalog";
 import { useReaders } from "../../../lib/calc/workers";
@@ -209,6 +212,7 @@ function StructureCanvasContent({
   const model = useEditor((s) => s.model);
   const marks = useChemMarks(model, active);
   const chemistry = useAppSettings((s) => s.chemistry);
+  const procedures = useAppSettings((s) => s.procedures);
   const setChemistry = useAppSettings((s) => s.setChemistry);
   const chem = useChem();
   const [chemError, setChemError] = useState<string | null>(null);
@@ -404,6 +408,8 @@ function StructureCanvasContent({
     [store],
   );
   const [menu, setMenu] = useState<MenuTarget | null>(null);
+  /** A flow being saved as a procedure: its parts, asking for its name. */
+  const [naming, setNaming] = useState<FlowParts | null>(null);
   // Copy, cut and paste, by the keys and from the menu
   const clip = useClipboardActions(store, setChemError);
   const chargeAtom = useCallback(
@@ -430,7 +436,7 @@ function StructureCanvasContent({
       const kind = hoveredPart();
       const id = kind === "atom" ? hovered.atomId : hovered.bondId;
       const drawingSelected = sel.atoms.size > 0 || sel.bonds.size > 0;
-      const selected = drawingSelected || st.sel3d.size > 0;
+      const selected = drawingSelected || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0;
       const busy = st.labelEdit.active || st.moveDrag.active || st.extend.active;
       if (isCleanUpKey(e)) {
         e.preventDefault();
@@ -679,10 +685,10 @@ function StructureCanvasContent({
     const id = kind === "atom" ? hovered.atomId : hovered.bondId;
     // on something selected, or on nothing with a selection: the
     // selection's menu; on nothing else, the canvas's (paste, select all)
-    const { sel } = store.getState();
+    const { sel, selFlow } = store.getState();
     const part = kind && id != null;
     const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
-    const selected = drawing || sel3d.size > 0;
+    const selected = drawing || sel3d.size > 0 || selFlow.sets.size > 0 || selFlow.steps.size > 0;
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
@@ -935,6 +941,13 @@ function StructureCanvasContent({
               const id = st.addStep(kind, by, at.x, at.y + PORT_DOWN);
               if (wire) st.connect(wire, id);
             }}
+            procedures={quickAdd.wire ? [] : proceduresSaved(procedures).map((p) => ({ id: p.id, name: p.name, needs: procedureNeeds(p.parts) }))}
+            onProcedure={(id) => {
+              const st = store.getState();
+              const { at } = quickAdd;
+              st.setQuickAdd(null);
+              st.putDownProcedure(id, at.x, at.y);
+            }}
             onClose={closeQuickAdd}
             onChoose={(what) => {
               const st = store.getState();
@@ -960,6 +973,21 @@ function StructureCanvasContent({
             discardLabel="Delete step"
             onCancel={() => store.getState().setWorkflowView({ askDeleteStep: null })}
             onDiscard={() => store.getState().removeStep(askDeleteStep, true)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {naming && (
+          <NameDialog
+            title="Save as procedure"
+            message="Its steps, as they are set, the wires among them and the sets they take their input from - not the molecules - to put down again from Quick Add."
+            initial={suggestedName(naming)}
+            saveLabel="Save"
+            onCancel={() => setNaming(null)}
+            onSave={(name) => {
+              saveProcedure(name, naming);
+              setNaming(null);
+            }}
           />
         )}
       </AnimatePresence>
@@ -1015,6 +1043,12 @@ function StructureCanvasContent({
           onStepOptions={() => {
             if (menu.kind === "step" && menu.id != null) store.getState().setWorkflowView({ openStep: menu.id });
           }}
+          onSaveProcedure={(menu.kind === "step" || menu.kind === "set") && menu.id != null ? () => {
+            const st = store.getState();
+            const start = menu.kind === "step" ? { step: menu.id! } : { set: menu.id! };
+            const parts = procedureParts(st, flowOf(st, start));
+            if (parts.steps.length) setNaming(parts);
+          } : undefined}
           onUseAsInput={menu.selection === "here" && selectionAsSet() ? () => {
             const frame = selectionAsSet();
             if (!frame) return;

@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RISE } from "../../theme/motion";
-import { CalculationsGlyph, StepGlyph } from "./workflow/icons";
+import { CalculationsGlyph, ProcedureGlyph, StepGlyph } from "./workflow/icons";
 import type { StepKind } from "./workflow/kinds";
 import type { QuickGroup } from "./workflow/offered";
 
@@ -11,8 +11,8 @@ export type QuickAddChoice = "bond" | "text" | "arrow" | "plus";
 /** How far from the point it was opened at the icons stand, up and to the right, and each one's size, in px. */
 const OFF = 14;
 const SIZE = 36;
-/** How wide the name of who does a row of steps stands, beside its kinds. */
-const LABEL_W = 64;
+/** How wide the name of who does a row of steps stands, beside its kinds: "Gaussian 16" and "Procedures" whole. */
+const LABEL_W = 84;
 
 const CHOICES: { what: QuickAddChoice; name: string; icon: ReactNode }[] = [
   {
@@ -48,9 +48,10 @@ const CHOICES: { what: QuickAddChoice; name: string; icon: ReactNode }[] = [
  * - put down where the double-click was; and, after a thin rule, one
  * button for calculations, which opens below them to who does them - each
  * plugin added that fills a kind of step, then Meno - each a row of the
- * kinds it fills (docs/WORKFLOWS.md, *A step: from Quick Add*). A wire let
- * go on empty space opens it at its calculations alone, those that take
- * what the wire carries.
+ * kinds it fills (docs/WORKFLOWS.md, *A step: from Quick Add*) - and after
+ * them the procedures saved, an icon each, named as the pointer rests on
+ * it. A wire let go on empty space opens it at its calculations alone,
+ * those that take what the wire carries.
  * It stands up and to the right of that point, inside the canvas, and
  * closes on a choice, on Escape, on a press anywhere else and on a turn of
  * the wheel.
@@ -61,8 +62,10 @@ export default function QuickAdd({
   within,
   steps,
   wired = false,
+  procedures = [],
   onChoose,
   onStep,
+  onProcedure,
   onClose,
 }: {
   x: number;
@@ -72,8 +75,11 @@ export default function QuickAdd({
   steps: readonly QuickGroup[];
   /** Opened by a wire let go: its calculations alone. */
   wired?: boolean;
+  /** The procedures saved: each by its id and name, and what it needs that is not added - offered, but not to be put down, where it needs anything. */
+  procedures?: readonly { id: string; name: string; needs: readonly string[] }[];
   onChoose: (what: QuickAddChoice) => void;
   onStep: (kind: StepKind, by: string) => void;
+  onProcedure?: (id: string) => void;
   onClose: () => void;
 }) {
   const [calcOpen, setCalcOpen] = useState(wired);
@@ -97,13 +103,15 @@ export default function QuickAdd({
       window.removeEventListener("keydown", onKey, true);
     };
   }, [onClose]);
-  // (a row for each who does steps: its name, then its kinds)
-  const most = Math.max(1, ...steps.map((g) => g.steps.length));
+  // (a row for each who does steps: its name, then its kinds - and one for the procedures, after them)
+  const offered = wired ? [] : procedures;
+  const most = Math.max(1, ...steps.map((g) => g.steps.length), offered.length);
   const calcWidth = LABEL_W + most * SIZE + 8;
   const rowWidth = (CHOICES.length + 1) * SIZE + 8 + 9;
   // (a wire's: as wide as its rows, or the words saying there are none)
   const width = wired ? (steps.length ? calcWidth : 200) : calcOpen ? Math.max(rowWidth, calcWidth) : rowWidth;
-  const height = SIZE + 8 + (calcOpen && !wired ? Math.max(1, steps.length) * SIZE + 9 : 0);
+  const rows = Math.max(1, steps.length) + (offered.length ? 1 : 0);
+  const height = SIZE + 8 + (calcOpen && !wired ? rows * SIZE + 9 : 0);
   // (up and to the right, clear of the point; inside the canvas, below it or to its left where it must)
   const left = x + OFF + width <= within.width - 4 ? x + OFF : Math.max(4, x - OFF - width);
   const top = y - OFF - height >= 4 ? y - OFF - height : Math.min(within.height - height - 4, y + OFF);
@@ -172,6 +180,26 @@ export default function QuickAdd({
               ))
             ) : (
               <div className="px-2 text-xs leading-9 text-gh-gray whitespace-nowrap">No step added takes this</div>
+            )}
+            {offered.length > 0 && (
+              <div role="group" aria-label="Procedures" className="flex items-center">
+                <span className="shrink-0 truncate px-1.5 text-xs text-gh-gray" style={{ width: LABEL_W }}>
+                  Procedures
+                </span>
+                {offered.map((p) => (
+                  <button
+                    key={p.id}
+                    aria-label={`Procedure: ${p.name}`}
+                    title={p.needs.length ? `${p.name} - needs ${p.needs.join(" and ")}` : p.name}
+                    disabled={p.needs.length > 0}
+                    onClick={() => onProcedure?.(p.id)}
+                    className="rounded-md flex items-center justify-center text-gh-black hover:bg-gh-base disabled:opacity-35 disabled:hover:bg-transparent"
+                    style={{ width: SIZE, height: SIZE }}
+                  >
+                    <ProcedureGlyph size={20} stroke={2.1} />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>

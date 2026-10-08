@@ -1,4 +1,4 @@
-import { EditorState, type Sel } from "../types";
+import { EditorState, type Sel, type SelFlow } from "../types";
 import { StoreApi } from "zustand";
 import { fragmentOf } from "../../chem/cleanUp";
 import { pathBetween } from "../../utils/selection";
@@ -6,6 +6,7 @@ import { pathBetween } from "../../utils/selection";
 type SetState = StoreApi<EditorState>["setState"];
 
 const none = (): Sel => ({ atoms: new Set(), bonds: new Set() });
+const noFlow = (): SelFlow => ({ sets: new Set(), steps: new Set() });
 
 /**
  * What is selected, and the last atom chosen - where a Shift+click's path
@@ -72,21 +73,43 @@ export function createSelectionSlice(set: SetState) {
         return { ...prev, sel: { atoms, bonds }, selAnchor: id };
       }),
 
-    /** Everything on the canvas, the molecules in 3D with it. */
+    /** Everything on the canvas, the molecules in 3D and the workflow's sets and steps with it. */
     selectAll: () =>
       set((prev: EditorState) => ({
         ...prev,
         sel: { atoms: new Set(prev.model.atoms.map((a) => a.id)), bonds: new Set(prev.model.bonds.map((b) => b.id)) },
         sel3d: new Set(prev.molecules3d.map((m) => m.id)),
+        selFlow: { sets: new Set(prev.sets.map((b) => b.id)), steps: new Set(prev.steps.map((s) => s.id)) },
       })),
 
     /** Nothing selected, and no atom of a molecule in 3D chosen. */
     clearSel: () =>
       set((prev: EditorState) =>
-        prev.sel.atoms.size || prev.sel.bonds.size || prev.sel3d.size || prev.chosen3d
-          ? { ...prev, sel: none(), selAnchor: null, sel3d: new Set<number>(), chosen3d: null }
+        prev.sel.atoms.size || prev.sel.bonds.size || prev.sel3d.size || prev.chosen3d || prev.selFlow.sets.size || prev.selFlow.steps.size
+          ? { ...prev, sel: none(), selAnchor: null, sel3d: new Set<number>(), chosen3d: null, selFlow: noFlow() }
           : prev,
       ),
+
+    /** A set or a step of a workflow added to the selection, or taken out of it (Ctrl or ⌘ and a click). */
+    toggleFlowSel: (part: { set: number } | { step: number }) =>
+      set((prev: EditorState) => {
+        const sets = new Set(prev.selFlow.sets);
+        const steps = new Set(prev.selFlow.steps);
+        const [ids, id] = "set" in part ? [sets, part.set] : [steps, part.step];
+        if (ids.has(id)) ids.delete(id);
+        else ids.add(id);
+        return { ...prev, selFlow: { sets, steps } };
+      }),
+
+    /** The sets and steps selected: these, or (`add`) these besides those already. */
+    selectFlow: (flow: { sets: Iterable<number>; steps: Iterable<number> }, add = false) =>
+      set((prev: EditorState) => ({
+        ...prev,
+        selFlow: {
+          sets: new Set([...(add ? prev.selFlow.sets : []), ...flow.sets]),
+          steps: new Set([...(add ? prev.selFlow.steps : []), ...flow.steps]),
+        },
+      })),
 
     setBoxSelect: (box: EditorState["boxSelect"]) => set((prev: EditorState) => ({ ...prev, boxSelect: box })),
   };

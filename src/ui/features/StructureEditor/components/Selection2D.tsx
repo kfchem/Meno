@@ -9,6 +9,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX, QUICK_ADD_MS } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
+import { flowIn } from "../workflow/parts";
 import type { Style3D } from "../../../../lib/chem/style3d";
 import { currentStyle3D, useStyle3D } from "../style3d";
 import { lookOf, poseOf, seenBounds, solidOf, standingHeight, turnedInPlane, turnedTogether, type Turning3D } from "../utils/molecule3d";
@@ -152,8 +153,9 @@ export default function Selection2D() {
         const atoms = add ? new Set([...s.sel.atoms, ...got.atoms]) : got.atoms;
         const bonds = add ? new Set([...s.sel.bonds, ...got.bonds]) : got.bonds;
         const taken = [...got.atoms];
-        // (the molecules in 3D whose centres it takes, with the drawing)
+        // (the molecules in 3D whose centres it takes, with the drawing - and a workflow's sets and steps, likewise)
         s.selectMolecules3d(molecules3dIn(s.molecules3d, kind, points), add);
+        s.selectFlow(flowIn(s, kind, points), add);
         s.setSel({ atoms, bonds }, taken.length ? taken[taken.length - 1] : s.selAnchor);
         // the box's end is no double-click's, and no click on nothing
         s.suppressDoubleClick(DOUBLE_CLICK_MS);
