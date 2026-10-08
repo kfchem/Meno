@@ -46,7 +46,15 @@ export type AppSettings = {
 /** Who does each kind of step, by the kind: Meno, or a plugin added - unset, Meno where Meno does it. Each kind's options' defaults are the options remembered for it (`options`, as "step:<kind>"). */
 export type CalculationSettings = {
   by: Record<string, string>;
+  /** How many jobs run at once on this computer (lib/jobs); unset, one. */
+  atOnce?: number;
+  /** How many cores each job may use; unset, the computer's shared among those at once (lib/jobs `runningOf`). */
+  cores?: number;
 };
+
+/** The most jobs at once, and cores for each, Settings takes. */
+export const JOBS_AT_ONCE_MOST = 64;
+export const CORES_MOST = 1024;
 
 /** How the mouse and the trackpad work the canvas: which way a turn of the wheel zooms. */
 export type PointerSettings = {
@@ -142,14 +150,18 @@ export function acceptAppSettings(raw: unknown): AppSettings {
   };
 }
 
-/** Who does each kind of step, as the file holds it: ids only. */
+/** Who does each kind of step, as the file holds it: ids only - and how many jobs at once, and cores for each, whole numbers within reason. */
 function acceptCalculations(raw: unknown): CalculationSettings {
   const by: Record<string, string> = {};
-  const given = (raw as { by?: unknown } | null)?.by;
+  const r = raw as { by?: unknown; atOnce?: unknown; cores?: unknown } | null;
+  const given = r?.by;
   if (given && typeof given === "object" && !Array.isArray(given)) {
     for (const [kind, who] of Object.entries(given)) if (ID.test(kind) && typeof who === "string" && ID.test(who)) by[kind] = who;
   }
-  return { by };
+  const whole = (v: unknown, most: number) => (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= most ? v : undefined);
+  const atOnce = whole(r?.atOnce, JOBS_AT_ONCE_MOST);
+  const cores = whole(r?.cores, CORES_MOST);
+  return { by, ...(atOnce ? { atOnce } : {}), ...(cores ? { cores } : {}) };
 }
 
 /** How the pointer works, as the file holds it; what does not read, as it is by default. */
