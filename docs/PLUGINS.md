@@ -98,7 +98,9 @@ Everything a plugin is lives in one folder, named by its id:
   variables it is given - each a place in its installation, `{folder}`
   (where its file is) or `{parent}` (the folder above), with a path inside
   it. Meno finds it where the system finds programs, or where the chemist
-  locates it in Settings, *Plugins*.
+  locates it in Settings, *Plugins*. Such a plugin is named as an
+  interface (the *ORCA interface*), and its steps by the program's name
+  (*ORCA*).
 - **Meno carries some for now**, in `src-tauri/resources/plugins/`, and
   finds them there: no code of Meno's names one. Those fetched over the
   internet later will be folders of the same kind; how Meno trusts a list

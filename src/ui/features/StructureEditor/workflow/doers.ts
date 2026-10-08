@@ -34,12 +34,20 @@ export function kindsOf(by: string): StepKind[] {
   return KINDS.filter((k) => p.steps.some((d) => d.kind === k.kind && runsHere(d.programs))).map((k) => k.kind);
 }
 
+/**
+ * What a plugin is called where its steps are - a card, Quick Add,
+ * Settings' defaults: the program installed separately it runs, where it
+ * runs one (ORCA - its plugin, in Settings' list, the ORCA interface);
+ * else its name.
+ */
+export const doerName = (p: { name: string; installed: readonly { label: string }[] }) => p.installed[0]?.label ?? p.name;
+
 /** Those that do steps, as they are offered: the plugins added that fill any, in Meno's order - those that run a program first - then Meno. */
 export function doersAdded(): Doer[] {
   const added = useReaders.getState().state;
   const plugins = PLUGINS.filter((p) => added[p.id] === "added" && kindsOf(p.id).length);
   const programs = (id: string) => kindsOf(id).some((k) => kindInfo(k).runs === "program");
-  return [...plugins.filter((p) => programs(p.id)), ...plugins.filter((p) => !programs(p.id)), MENO].map((p) => ({ id: p.id, name: p.name }));
+  return [...[...plugins.filter((p) => programs(p.id)), ...plugins.filter((p) => !programs(p.id))].map((p) => ({ id: p.id, name: doerName(p) })), MENO];
 }
 
 /** Whether one is added, and so can run a step: Meno always. */
@@ -52,7 +60,8 @@ export const byOf = (step: Pick<WorkflowStep, "kind" | "by">): string => step.by
 export function doerOf(step: Pick<WorkflowStep, "kind" | "by">): Doer | undefined {
   const by = byOf(step);
   if (!by) return undefined;
-  return by === MENO.id ? MENO : { id: by, name: pluginById(by)?.name ?? by };
+  const p = pluginById(by);
+  return by === MENO.id ? MENO : { id: by, name: p ? doerName(p) : by };
 }
 
 /**

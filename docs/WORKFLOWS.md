@@ -841,10 +841,16 @@ Decided by the maintainer (2026-10-08), as it was built:
   with the molecules it gave, by its kind, as an opened one is. Where no
   reader of it is added, the step says which to add.
 - **Gaussian's steps are its input plugin's**: the plugin that writes
-  Gaussian's input for *Export* is now *Gaussian*, and runs it as well,
-  its input written by the same code. Its id changed with its name
-  (`gaussian`): added before, it is added again (no backward
+  Gaussian's input for *Export* is now the *Gaussian interface*, and runs
+  it as well, its input written by the same code. Its id changed with its
+  name (`gaussian`): added before, it is added again (no backward
   compatibility before 1.0).
+- **An interface, by name**: a plugin that runs a program installed
+  separately is named for what it is - the *ORCA interface*, the
+  *Gaussian interface* - in Settings, *Plugins*, so that it is not taken
+  for the program, nor its version for the program's. Where its steps are
+  - a card, Quick Add, Settings' defaults - they go by the program's name:
+  *ORCA*, *Gaussian 16*. *Plugins* stays the name of the whole.
 - **Checked with stand-ins on the Mac**: no ORCA or Gaussian is installed
   there; a run with each program itself is for the maintainer, where they
   are.

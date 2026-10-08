@@ -167,9 +167,9 @@ export async function pyEnvReady(profile: PyProfile): Promise<boolean> {
   }
 }
 
-/** What asking to set a plugin up says first: a plugin that runs a program installed separately (ORCA's) downloads that program never - only what the plugin itself needs. */
+/** What asking to set a plugin up says first: an interface to a program installed separately (the ORCA interface) downloads that program never - only what the interface itself needs. */
 const consentTitle = (plugin: { name: string; installed?: readonly unknown[] }) =>
-  plugin.installed?.length ? `Set up the ${plugin.name} plugin?` : `Download ${plugin.name}?`;
+  plugin.installed?.length ? `Set up the ${plugin.name}?` : `Download ${plugin.name}?`;
 
 export async function ensurePyEnv(
   profile: PyProfile,
