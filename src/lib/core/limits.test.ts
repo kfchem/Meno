@@ -22,14 +22,14 @@ function withKinds(...kinds: TabKind[]): State {
 
 describe("canvas budget", () => {
   it("counts canvases per view kind", () => {
-    expect(canvasCost("text")).toBe(0);
+    expect(canvasCost("settings")).toBe(0);
     expect(canvasCost("2d")).toBe(1);
     expect(canvasCost("structure")).toBe(1);
   });
 
   it("ignores views without a canvas", () => {
-    expect(countCanvases(withKinds("settings", "text", "pyconsole"))).toBe(0);
-    expect(canOpenKind(withKinds("settings", "text"), "structure")).toBe(true);
+    expect(countCanvases(withKinds("settings", "pyconsole"))).toBe(0);
+    expect(canOpenKind(withKinds("settings", "pyconsole"), "structure")).toBe(true);
   });
 
   it("allows filling the budget exactly", () => {
@@ -42,7 +42,7 @@ describe("canvas budget", () => {
   it("refuses to exceed the budget", () => {
     const full = withKinds(...Array<TabKind>(MAX_CANVASES).fill("2d"));
     expect(canOpenKind(full, "2d")).toBe(false);
-    expect(canOpenKind(full, "text")).toBe(true);
+    expect(canOpenKind(full, "settings")).toBe(true);
   });
 
   it("frees the canvases of a tab being replaced", () => {

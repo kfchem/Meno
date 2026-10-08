@@ -4,7 +4,7 @@ vi.mock("../../../../lib/calc/workers", () => ({ readerClient: () => Promise.rej
 import { connectStoreToDocument, createEditorStore } from "../store";
 import { createStructureDocument } from "../document";
 import { DEFAULT_STYLE_CHOICE } from "../../../../lib/chem/style";
-import { readWorkspace, workspaceFile, workspaceText } from "./workspace";
+import { readTexts, readWorkspace, workspaceFile, workspaceText } from "./workspace";
 import { askFor, heldOutput, outputOf, rememberOutput } from "../../../../lib/calc/asks";
 import { readMenoFile } from "../../../../lib/doc/menoFile";
 import { workspaceOfFile } from "../../../views/openFile";
@@ -158,6 +158,59 @@ describe("a workspace file", () => {
     ]);
     workspaceOfFile(bytes);
     expect(await heldOutput("f".repeat(64))).toBeUndefined();
+  });
+
+  it("keeps its texts - each once, an output's too, where they were said nowhere - and opens with them, its column as it was", async () => {
+    const output = "an output's text";
+    const source = await rememberOutput("run.out", output, "orca", "/data/run.out");
+    const doc = createStructureDocument();
+    const store = createEditorStore(doc);
+    connectStoreToDocument(store, doc);
+    store.getState().pasteModel({ atoms: [], bonds: [], molecules3d: [{ ...water3d, at: { x: 0, y: 0 }, calc: { readers: ["cclib"], source } as never }] });
+    store.getState().addTexts([
+      { name: "job.inp", text: "! B3LYP def2-SVP\n", path: "/data/job.inp" },
+      { name: "run.out", text: output, path: "/data/run.out" },
+      { name: "notes.txt", text: "a note" },
+    ]);
+    store.getState().showText(store.getState().texts[1].id);
+    const bytes = await workspaceFile(store.getState());
+    const file = readMenoFile(bytes);
+    // (the output and the text that is its words kept once; no text said to be anywhere)
+    expect(file.files.map((f) => f.name)).toEqual(["run.out", "job.inp", "notes.txt"]);
+    expect(file.workspace).not.toContain("/data/");
+    const saved = readWorkspace(workspaceOfFile(bytes)!)!;
+    expect(saved.texts.map((t) => t.name)).toEqual(["job.inp", "run.out", "notes.txt"]);
+    expect(saved.textShown).toBe(1);
+    const { ws, missing } = await readTexts(saved);
+    expect(missing).toEqual([]);
+    const otherDoc = createStructureDocument();
+    const other = createEditorStore(otherDoc);
+    connectStoreToDocument(other, otherDoc);
+    other.getState().openWorkspace(ws, true);
+    expect(otherDoc.history()).toMatchObject({ undoDepth: 0, dirty: false });
+    expect(other.getState().texts.map((t) => [t.name, t.text])).toEqual([
+      ["job.inp", "! B3LYP def2-SVP\n"],
+      ["run.out", output],
+      ["notes.txt", "a note"],
+    ]);
+    expect(other.getState().textShown).toBe(other.getState().texts[1].id);
+    expect(other.getState().textsOpen).toBe(true);
+    // (its column closed, it opens closed)
+    store.getState().closeTexts();
+    const closed = readWorkspace(workspaceText(store.getState(), new Set(), ["a", "b", "c"].map((x) => x.repeat(64))))!;
+    expect(closed.textShown).toBeUndefined();
+  });
+
+  it("opens without a text its file does not hold, and says which", async () => {
+    const saved = readWorkspace(
+      JSON.stringify({ format: "meno-workspace", version: 1, atoms: [], bonds: [], texts: [{ name: "lost.txt", sha256: "d".repeat(64) }, { name: "bad", sha256: "x" }], textShown: 0 }),
+    )!;
+    // (one not known by a SHA-256 is no text)
+    expect(saved.texts).toEqual([{ name: "lost.txt", sha256: "d".repeat(64) }]);
+    const { ws, missing } = await readTexts(saved);
+    expect(missing).toEqual(["lost.txt"]);
+    expect(ws.texts).toEqual([]);
+    expect(ws.textShown).toBeUndefined();
   });
 
   it("is not read where it is not one, or of a version this one does not read", () => {

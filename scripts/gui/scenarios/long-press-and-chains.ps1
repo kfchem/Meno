@@ -9,8 +9,8 @@
 #   honeycomb that opens out from the atom; led back - a little beside the
 #   way it went - it takes its bonds back, and closes no ring for that.
 # - Two clicks on empty space, then the pointer led with the button up: a
-#   chain from that point; led round in a loop back to it, a ring as large
-#   as the loop; a click ends it.
+#   chain from that point; led round in a loop back to it, the ring the
+#   honeycomb makes that way - a chain draws no other (0.1.8); a click ends it.
 # - Escape lets a chain go: nothing is drawn.
 # - A long press on empty space: a ring spreads where it is held, and a drag
 #   from there is a box.
@@ -54,7 +54,8 @@ Wait-MenoSettled | Out-Null
 Save-Step "chain-drawn"
 
 # two clicks on empty space; led right, round a loop about five bonds long
-# back to the chain, and on; a click to end
+# back to the chain - round a hexagon of the honeycomb, its six-membered
+# ring - and on; a click to end
 Invoke-MenoClick -X 1300 -Y 1300 -Count 2
 $way = @()
 for ($i = 1; $i -le 16; $i++) { $way += , @((1300 + 12 * $i), 1300) }

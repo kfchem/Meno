@@ -37,7 +37,8 @@ import SmilesPanel from "./SmilesPanel";
 import ExportCard, { type Offered3D } from "./ExportCard";
 import { findOutput, outputOf } from "../../../lib/calc/asks";
 import type { CalcSource } from "../../../lib/calc/output";
-import { openInTab } from "../../views/tabOpener";
+import { setTextTaker } from "../../views/texts";
+import TextColumn from "./TextColumn";
 import { knownOf, pluginWriters, WRITERS, type Writer } from "../../../lib/io/writers";
 import { WRITER_PLUGINS } from "../../../lib/calc/catalog";
 import { useReaders } from "../../../lib/calc/workers";
@@ -46,7 +47,7 @@ import { carriedOf } from "./utils/workspace";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { currentStyle3D, useStyle3D } from "./style3d";
 import { offerCommands, type CommandGroup } from "../../layouts/commands";
-import { chosenPath, frameOf, lookOf, solidOf } from "./utils/molecule3d";
+import { chosenPath, frameOf, lookOf, poseOf, seenBounds, solidOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/roles/molblock";
 
@@ -89,7 +90,7 @@ import Molecules3D from "./components/Molecules3D";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
-import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf, moleculeOf, openIn, placeRow, rowFrom, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
+import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf, moleculeOf, openIn, placeRow, rowFrom, takenOnPage, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
 import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
@@ -179,6 +180,11 @@ function StructureCanvasContent({
   // the plugins that fill the chemistry roles: their marks on the structure
   // and R/S on request; and clean-up, by Meno's own layout engine (chem/cleanUp)
   const store = useEditorStore();
+  // (a tab's own, unless it is a document's, holds texts opened while it is in front: ui/views/texts)
+  useEffect(
+    () => (ownTab && officeId == null ? setTextTaker(tabId, (texts) => store.getState().addTexts(texts)) : undefined),
+    [ownTab, officeId, tabId, store],
+  );
   // What readers reading an output as well find, joined to each molecule
   // read from it as it comes - or as the molecule comes to stand here
   // (lib/calc/readings).
@@ -236,15 +242,25 @@ function StructureCanvasContent({
         const chem = await chemWorker("conformers");
         const made: Parameters<ReturnType<typeof store.getState>["riseMolecules3d"]>[0] = [];
         let allInView = true;
+        // (what they keep clear of: the molecules in 3D there already, as they are seen now - and each row made)
+        const look3d = currentStyle3D();
+        const st = store.getState();
+        const solids = st.molecules3d.map((m) => {
+          const b = seenBounds(poseOf(m, solidOf(m, look3d), lookOf(m, look3d), st.turns3d[m.id], st.frames3d[m.id]));
+          return { x0: b.minX, x1: b.maxX, y0: b.minY, y1: b.maxY };
+        });
         for (const block of blocks) {
           const ms = (await conformersOf(chem, block, isomers)).map((c) => moleculeOf(c, block));
           const model = store.getState().model;
-          const turned = ms.map((m) => turnedOver(m, model, currentStyle3D()));
-          // beside the drawing, where they can be seen as the view is now -
-          // or, made again, where the one made before stood
+          const turned = ms.map((m) => turnedOver(m, model, look3d));
+          // beside the drawing, where they can be seen as the view is now,
+          // clear of what is on the page - or, made again, where the one
+          // made before stood
+          const taken = takenOnPage(store.getState(), block.atoms, solids);
           const row = replacing
             ? { at: rowFrom(turned, replacing.at), inView: true }
-            : placeRow(turned, boxOf(block.part), viewBox(), camRef.current ? eyeOf(camRef.current)?.z : undefined);
+            : placeRow(turned, boxOf(block.part), viewBox(), camRef.current ? eyeOf(camRef.current)?.z : undefined, taken);
+          if ("box" in row) solids.push(row.box);
           allInView &&= row.inView;
           ms.forEach((m, i) =>
             made.push({ m: { ...m, at: row.at[i] }, turn: turned[i].turn, from: turned[i].start, flat: turned[i].flat }),
@@ -457,12 +473,13 @@ function StructureCanvasContent({
   const chosen3d = useEditor((s) => s.chosen3d);
   const style3d = useStyle3D();
   const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
-  // a molecule's output shown in a tab of its own: held this session or in
-  // its workspace, read again where it was, or else found by the chemist
+  // a molecule's output shown in the column of texts, held in the
+  // workspace: held this session or in its workspace, read again where it
+  // was, or else found by the chemist
   const showOutput = async (source: CalcSource) => {
     try {
       const out = (await outputOf(source)) ?? ((await findOutput(source)) ? await outputOf(source) : undefined);
-      if (out) openInTab({ kind: "text", label: out.name, data: { text: out.text, language: "txt", filename: out.name } });
+      if (out) store.getState().addTexts([{ name: out.name, text: out.text, ...(source.path ? { path: source.path } : {}) }]);
     } catch (e) {
       setChemError(e instanceof Error ? e.message : String(e));
     }
@@ -642,8 +659,10 @@ function StructureCanvasContent({
   const [exporting, setExporting] = useState<{ writers: Writer[]; from?: string; what: Holds; molecules: Offered3D[]; selected: number[] } | null>(null);
 
   // What the canvas does besides drawing - saving, fitting, R and S, its
-  // style - offered to the app's menu while its tab is in front, and on
-  // empty space in the right-click menu; the keys say the same.
+  // style, its texts - offered to the app's menu while its tab is in front,
+  // and on empty space in the right-click menu; the keys say the same.
+  const texts = useEditor((s) => s.texts);
+  const textsOpen = useEditor((s) => s.textsOpen);
   const commandsNow = useRef<() => CommandGroup[]>(() => []);
   commandsNow.current = () => [
     {
@@ -665,6 +684,8 @@ function StructureCanvasContent({
             setExporting({ writers: [...exportKinds(what).map((k) => WRITERS[k]), ...theirs], from: exportKindOf(state, what), what, molecules, selected });
           },
         },
+        // (a text of its own, in the column of texts)
+        ...(officeId == null ? [{ name: "New text", run: () => store.getState().addTexts([{ name: "", text: "" }]) }] : []),
       ],
     },
     {
@@ -693,6 +714,13 @@ function StructureCanvasContent({
       items: [
         { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit },
         { name: chemistry.stereoLabels ? "Hide R and S" : "Show R and S", run: toggleStereoLabels },
+        ...(texts.length
+          ? [
+              textsOpen
+                ? { name: "Hide texts", run: () => store.getState().closeTexts() }
+                : { name: "Show texts", run: () => store.getState().showText(store.getState().textShown ?? texts[0].id) },
+            ]
+          : []),
       ],
     },
     {
@@ -1011,6 +1039,8 @@ export default function StructureCanvas({
           openArrowStyle={(id) => setPanel({ arrow: id })}
           openSaveAbbreviation={(ids, smiles) => setPanel({ abbreviation: { ids, smiles } })}
         />
+        {/* The texts the workspace holds, in their column */}
+        <TextColumn />
         {/* The panel beside the canvas slides open and shut, the canvas giving
             way as it does; one going as another comes takes as long, so the
             canvas keeps its width. */}

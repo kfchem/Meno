@@ -23,7 +23,10 @@ import { glideAt, partsOf, planGlide, type GlidePlan, type Pt } from "../utils/g
  * How far an atom may move in one change, while a button is held, and still
  * be drawn there at once: a drag follows the pointer. Further - a snap of a
  * turn, a drop onto an atom - or with no button held - a Clean-up, an undo -
- * the drawing goes there rather than appearing there.
+ * the drawing goes there rather than appearing there. What the pointer
+ * carries - the atoms that moved all moved alike, a selection dragged - is
+ * drawn there at once however far it went: a quick drag would otherwise
+ * glide behind the pointer the whole way (the maintainer, 2026-10-07).
  */
 const FOLLOWED = 0.35 * NOMINAL_BOND_LENGTH;
 /** Close enough to where it is going to be drawn there. */
@@ -116,11 +119,21 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
       // what changed: drawn there at once, or on its way
       planned.current = atoms;
       let far = 0;
+      // (the one way every atom that moved went, where they all went alike)
+      let shift: { dx: number; dy: number } | null | undefined;
       for (const a of atoms) {
         const s = a.id === draggedId || a.id < 0 ? undefined : was.get(a.id);
-        if (s) far = Math.max(far, Math.hypot(a.x - s.x, a.y - s.y));
+        if (!s) continue;
+        const dx = a.x - s.x;
+        const dy = a.y - s.y;
+        const d = Math.hypot(dx, dy);
+        far = Math.max(far, d);
+        if (d <= ARRIVED || shift === null) continue;
+        if (shift === undefined) shift = { dx, dy };
+        else if (Math.hypot(dx - shift.dx, dy - shift.dy) > ARRIVED) shift = null;
       }
-      const atOnce = !glide.current && (far <= ARRIVED || (held.buttons !== 0 && far <= FOLLOWED));
+      const carried = held.buttons !== 0 && shift != null;
+      const atOnce = carried || (!glide.current && (far <= ARRIVED || (held.buttons !== 0 && far <= FOLLOWED)));
       if (atOnce) {
         glide.current = null;
       } else {

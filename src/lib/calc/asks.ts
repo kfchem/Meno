@@ -34,14 +34,15 @@ export type AskError = { error: string; missing?: true };
 /** Each promise asked for, by key: being worked out, given, or what went wrong. */
 export const useAsks = create<{ state: Record<string, "asking" | "given" | AskError> }>(() => ({ state: {} }));
 
-async function sha256(text: string): Promise<string> {
+/** A text's SHA-256, of its UTF-8, in hex: what an output - or a workspace's text - is known by. */
+export async function sha256Of(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Keeps an opened output for the session: what its promises are asked for from - its name, its kind, its SHA-256, and where it is, where Open said. */
 export async function rememberOutput(name: string, text: string, kind: string, path?: string): Promise<CalcSource> {
-  const hash = await sha256(text);
+  const hash = await sha256Of(text);
   outputs.set(hash, { name, text, kind });
   return { name, sha256: hash, kind, ...(path ? { path } : {}) };
 }
@@ -52,7 +53,7 @@ export async function heldOutput(hash: string): Promise<{ name: string; text: st
   if (!held) return undefined;
   if (held.text != null) return { name: held.name, text: held.text };
   const text = held.read?.() ?? null;
-  if (text == null || (await sha256(text)) !== hash) {
+  if (text == null || (await sha256Of(text)) !== hash) {
     outputs.delete(hash);
     return undefined;
   }
@@ -101,7 +102,7 @@ const readAt: ReadAt = async (path) => {
 async function foundAt(source: CalcSource, read: ReadAt): Promise<{ name: string; text: string } | null> {
   if (!source.path) return null;
   const text = await read(source.path);
-  if (text == null || (await sha256(text)) !== source.sha256) return null;
+  if (text == null || (await sha256Of(text)) !== source.sha256) return null;
   const output = { name: source.name, text };
   outputs.set(source.sha256, { ...output, ...(source.kind ? { kind: source.kind } : {}) });
   return output;
@@ -139,7 +140,7 @@ export async function findOutput(source: CalcSource, pick: Pick = pickWithDialog
   // (what failed for want of it: said again, or asked for again as it is next wanted)
   const waited = `${source.sha256}\u0000`;
   const waiting = ([k, s]: [string, unknown]) => k.startsWith(waited) && typeof s === "object";
-  if ((await sha256(chosen.text)) !== source.sha256) {
+  if ((await sha256Of(chosen.text)) !== source.sha256) {
     const error = `That is not the ${source.name} this molecule was read from: it has changed since, or it is another file.`;
     useAsks.setState((was) => ({ state: Object.fromEntries(Object.entries(was.state).map(([k, s]) => [k, waiting([k, s]) ? { error, missing: true as const } : s])) }));
     throw new Error(error);

@@ -57,6 +57,9 @@ export default function Pluses2D() {
           onPointerDown={(e) => {
             // a right press is the menu's, or the view's to move
             if (((e as any).button ?? (e as any).nativeEvent?.button ?? 0) !== 0) return;
+            // (one press, one move: the "+" and the square round it are both
+            // under the pointer, and each would hand the press here again)
+            e.stopPropagation();
             const cx = (e as any).clientX ?? (e as any).nativeEvent?.clientX;
             const cy = (e as any).clientY ?? (e as any).nativeEvent?.clientY;
             const at = toWorld(cx, cy);

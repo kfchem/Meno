@@ -12,9 +12,10 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus } from "./store/types";
+import type { Arrow, Atom, Bond, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus, WorkspaceText } from "./store/types";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
+import { newTextName } from "./utils/texts";
 
 export type StructureDocument = {
   model: Model;
@@ -42,11 +43,14 @@ export type StructureDocument = {
    * straight after it leaves drawn out (chem/cleanUp). Not saved.
    */
   expanded?: number[];
+  /** The texts it holds, read and edited in the column beside the canvas. */
+  texts?: WorkspaceText[];
+  nextTextId?: number;
 };
 
-/** Whether nothing is drawn: no structure, arrow or "+" sign. */
+/** Whether it holds nothing: no structure, arrow or "+" sign drawn, no molecule in 3D, no text. */
 export function isBlankDocument(doc: StructureDocument): boolean {
-  return !doc.model.atoms.length && !doc.arrows.length && !doc.pluses.length;
+  return !doc.model.atoms.length && !doc.arrows.length && !doc.pluses.length && !doc.molecules3d?.length && !doc.texts?.length;
 }
 
 export function emptyStructureDocument(): StructureDocument {
@@ -67,10 +71,17 @@ export function emptyStructureDocument(): StructureDocument {
 /**
  * Builds a document for a structure tab. The tab's data may carry a file to
  * import (`payload`), which the view parses and applies, so the document
- * starts empty here.
+ * starts empty here - or files opened as text (`texts`), which it starts
+ * holding.
  */
-export function createStructureDocument(): DocumentStore<StructureDocument> {
-  return createDocument<StructureDocument>(emptyStructureDocument());
+export function createStructureDocument(data?: unknown): DocumentStore<StructureDocument> {
+  const opened = (data as { texts?: unknown } | null | undefined)?.texts;
+  const texts = (Array.isArray(opened) ? (opened as Partial<WorkspaceText>[]) : []).flatMap((t) =>
+    typeof t?.name === "string" && typeof t.text === "string"
+      ? [{ name: t.name, text: t.text, ...(typeof t.path === "string" ? { path: t.path } : {}) }]
+      : [],
+  );
+  return createDocument<StructureDocument>(addTexts(emptyStructureDocument(), texts).doc);
 }
 
 // --- atoms and bonds -------------------------------------------------------
@@ -955,4 +966,46 @@ export function setRingEnabled(
 ): StructureDocument {
   if (!!doc.aromaticRings[key] === enabled) return doc;
   return { ...doc, aromaticRings: { ...doc.aromaticRings, [key]: enabled } };
+}
+
+// --- texts -------------------------------------------------------------------
+
+/**
+ * Texts added, each after those it holds, and the id of the last: one it
+ * holds already - the same name and text - not added again, its id given;
+ * one with no name, a new one, named (utils/texts `newTextName`).
+ */
+export function addTexts(
+  doc: StructureDocument,
+  texts: readonly Omit<WorkspaceText, "id">[],
+): { doc: StructureDocument; last: number | null } {
+  const held = (doc.texts ?? []).slice();
+  let next = doc.nextTextId ?? Math.max(0, ...held.map((t) => t.id)) + 1;
+  let last: number | null = null;
+  for (const t of texts) {
+    const same = held.find((h) => h.name === t.name && h.text === t.text);
+    if (same) {
+      last = same.id;
+      continue;
+    }
+    held.push({ id: next, name: t.name || newTextName(held), text: t.text, ...(t.path ? { path: t.path } : {}) });
+    last = next++;
+  }
+  if (held.length === (doc.texts ?? []).length) return { doc, last };
+  return { doc: { ...doc, texts: held, nextTextId: next }, last };
+}
+
+/** A text changed to `text`. */
+export function editText(doc: StructureDocument, id: number, text: string): StructureDocument {
+  const at = (doc.texts ?? []).findIndex((t) => t.id === id);
+  if (at < 0 || doc.texts![at].text === text) return doc;
+  const texts = doc.texts!.slice();
+  texts[at] = { ...texts[at], text };
+  return { ...doc, texts };
+}
+
+/** A text taken out. */
+export function removeText(doc: StructureDocument, id: number): StructureDocument {
+  if (!(doc.texts ?? []).some((t) => t.id === id)) return doc;
+  return { ...doc, texts: doc.texts!.filter((t) => t.id !== id) };
 }

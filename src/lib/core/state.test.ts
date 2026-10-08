@@ -4,7 +4,7 @@ import type { State, TabInstance } from "./types";
 
 const tab = (id: string, label = id): TabInstance => ({
   meta: { id, label },
-  content: { kind: "text", data: { text: "" } },
+  content: { kind: "settings" },
 });
 
 function withTabs(...ids: string[]): State {

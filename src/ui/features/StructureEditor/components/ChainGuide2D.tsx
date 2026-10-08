@@ -133,8 +133,8 @@ export default function ChainGuide2D() {
       s.open = Math.max(0, s.open - step / FOLD_S);
     }
     shown.current = s && s.open > 0 ? s : null;
-    // the trail: where the pointer has been since the last ring
-    const trail = chain ? chain.trail.slice(chain.trailFrom) : [];
+    // the trail: where the pointer has been
+    const trail = chain ? chain.trail : [];
     if (trail.length > 1) {
       trailLine.geometry.setFromPoints(trail.map((p) => new THREE.Vector3(p.x, p.y, -0.03)));
       trailLine.visible = true;
