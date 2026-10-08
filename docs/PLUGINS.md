@@ -165,8 +165,9 @@ Every role has the same contract wherever it is used:
   that steps join. A fingerprint feeds a similarity search; a conformer
   set feeds a calculation; an output is read back.
 
-A plugin that fills a new role adds a step to the workflow editor as well
-as a command. This is what PURPOSE.md asks for: a procedure that combines
+A plugin that fills a role that is also a kind of step fills that step in
+workflows on the page as well as a command (Meno defines the kinds of
+step, plugins fill them: WORKFLOWS.md, planned). This is what PURPOSE.md asks for: a procedure that combines
 several methods and outside tools, that can be read, rearranged and run
 again.
 
