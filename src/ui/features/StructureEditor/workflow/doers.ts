@@ -9,6 +9,9 @@
 import { pluginById, PLUGINS } from "../../../../lib/calc/catalog";
 import { useReaders } from "../../../../lib/calc/workers";
 import type { Option } from "../../../../lib/options";
+import type { InstalledDecl } from "../../../../lib/plugins/manifest";
+import { whereIs } from "../../../../lib/plugins/installed";
+import { systemHere } from "../../../../lib/plugins/here";
 import type { WorkflowStep } from "../store/types";
 import { KINDS, kindInfo, MENO_DOES, type StepKind } from "./kinds";
 
@@ -16,11 +19,19 @@ export type Doer = { id: string; name: string };
 
 export const MENO: Doer = { id: "meno", name: "Meno" };
 
-/** The kinds of step one does, in Meno's order: Meno's own; a plugin's, those of Meno's its manifest says it fills. */
+/**
+ * The kinds of step one does, in Meno's order: Meno's own; a plugin's,
+ * those of Meno's its manifest says it fills - but not one that runs a
+ * program installed separately that is not made for this system (Gaussian's
+ * on Windows, where Meno does not run it).
+ */
 export function kindsOf(by: string): StepKind[] {
   if (by === MENO.id) return [...MENO_DOES];
   const p = pluginById(by);
-  return p ? KINDS.filter((k) => p.steps.some((d) => d.kind === k.kind)).map((k) => k.kind) : [];
+  if (!p) return [];
+  const here = systemHere();
+  const runsHere = (programs: readonly string[]) => here == null || p.installed.every((d) => !programs.includes(d.name) || !!d.files[here]);
+  return KINDS.filter((k) => p.steps.some((d) => d.kind === k.kind && runsHere(d.programs))).map((k) => k.kind);
 }
 
 /** Those that do steps, as they are offered: the plugins added that fill any, in Meno's order - those that run a program first - then Meno. */
@@ -60,4 +71,16 @@ export const stepOptions = (step: Pick<WorkflowStep, "kind" | "by">) => optionsF
 /** The programs a plugin runs for a kind of step; none, where it does the step in its worker - or Meno does it. */
 export function programsFor(kind: StepKind, by: string): readonly string[] {
   return pluginById(by)?.steps.find((d) => d.kind === kind)?.programs ?? [];
+}
+
+/** The programs installed separately a plugin runs for a kind of step (lib/plugins/installed): ORCA's, Gaussian's. */
+export function installedFor(kind: StepKind, by: string): readonly InstalledDecl[] {
+  const programs = programsFor(kind, by);
+  return pluginById(by)?.installed.filter((d) => programs.includes(d.name)) ?? [];
+}
+
+/** What a step cannot run without: the first program installed separately it runs that Meno looked for and found nowhere, by what it is called. */
+export function missingFor(step: Pick<WorkflowStep, "kind" | "by">): string | undefined {
+  const by = byOf(step);
+  return installedFor(step.kind, by).find((d) => whereIs(by, d.name) === null)?.label;
 }

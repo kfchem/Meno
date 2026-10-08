@@ -108,6 +108,8 @@ import { turnOnto } from "./utils/align3d";
 import type { Molecule3D } from "./store/types";
 import { resultKey, resultsOn } from "../../../lib/calc/results";
 import { titled } from "../../../lib/calc/sources";
+import { missingFor } from "./workflow/doers";
+import { openSettingsAt } from "../SettingsPanel/section";
 
 function StructureCanvasContent({
   active,
@@ -994,7 +996,11 @@ function StructureCanvasContent({
           onAddPlus={() => store.getState().addPlus(menu.at.x, menu.at.y)}
           onAddText={() => store.getState().setCaptionEdit({ id: null, at: menu.at })}
           onRunStep={() => {
-            if (menu.kind === "step" && menu.id != null) void store.getState().runStep(menu.id);
+            if (menu.kind !== "step" || menu.id == null) return;
+            // (a program installed separately found nowhere: Settings, Plugins, where it is located)
+            const s = store.getState().steps.find((x) => x.id === menu.id);
+            if (s && missingFor(s)) return openSettingsAt("plugins");
+            void store.getState().runStep(menu.id);
           }}
           step={(() => {
             const s = menu.kind === "step" ? store.getState().steps.find((x) => x.id === menu.id) : undefined;

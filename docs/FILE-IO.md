@@ -628,7 +628,8 @@ As step 7's writer was built - decided with the maintainer on
 2026-10-06:
 
 - **Gaussian's input is the first calculation's input**, written by a
-  plugin of its own, `gaussian-input`: Meno knows no program. Its worker
+  plugin of its own, `gaussian-input` (since the workflows' step 6,
+  `gaussian`, whose steps run Gaussian as well): Meno knows no program. Its worker
   needs Python alone, no package; its environment is made by uv as any
   plugin's is, and where Meno has fetched Python before, adding it
   downloads nothing.

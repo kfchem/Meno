@@ -1,13 +1,15 @@
-"""Tests for the Gaussian input plugin's worker
-(src-tauri/resources/plugins/gaussian-input/worker.py).
+"""Tests for the Gaussian plugin's worker
+(src-tauri/resources/plugins/gaussian/worker.py).
 
-The worker needs Python alone, so these run anywhere - CI runs them:
+The worker needs Python alone - Gaussian is run by Meno, not by it - so
+these run anywhere; CI runs them:
 
-    python3 -m unittest scripts/calc/test_writer_gaussian_input.py
+    python3 -m unittest scripts/calc/test_plugin_gaussian.py
 
 What a Gaussian input holds, and how it is laid out, is checked against
 Gaussian's own reference (gaussian.com, "About Gaussian 16 Input", "Link 0
-Commands", "Molecule Specifications"), not against any other program.
+Commands", "Molecule Specifications", "SCRF", "Running Gaussian"), not
+against any other program; no output of a real run is kept.
 """
 
 import importlib.util
@@ -16,9 +18,9 @@ import pathlib
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-WORKER = ROOT / "src-tauri/resources/plugins/gaussian-input/worker.py"
-MANIFEST = ROOT / "src-tauri/resources/plugins/gaussian-input/manifest.json"
-spec = importlib.util.spec_from_file_location("writer_gaussian_input", WORKER)
+WORKER = ROOT / "src-tauri/resources/plugins/gaussian/worker.py"
+MANIFEST = ROOT / "src-tauri/resources/plugins/gaussian/manifest.json"
+spec = importlib.util.spec_from_file_location("plugin_gaussian", WORKER)
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
 
@@ -120,6 +122,72 @@ class Refused(unittest.TestCase):
         r = worker.answer(json.dumps({"id": 3, "op": "write", "kind": "gaussian-input", "molecules": [WATER, WATER], "options": {}}))
         self.assertIn("one molecule", r["error"])
         self.assertEqual(worker.answer('{"id": 4, "op": "run"}')["ok"], False)
+
+
+def ask(op, **m):
+    said = worker.answer(json.dumps({"id": 1, "op": op, **m}))
+    if not said["ok"]:
+        raise AssertionError(said["error"])
+    return said["result"]
+
+
+def step_defaults(kind):
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    step = next(s for s in manifest["steps"] if s["kind"] == kind)
+    return {o["id"]: o["default"] for o in step["options"]}
+
+
+ENTRY = {**WATER, "charge": 0, "multiplicity": 1}
+
+# (after "Running Gaussian": what the output ends with when a run ends in error, the message before it)
+FAILED = """ Some atoms are too close together.
+ Error termination via Lnk1e in /Applications/g16/l202.exe at Thu Oct  8 12:00:00 2026.
+"""
+
+
+class Steps(unittest.TestCase):
+    def test_a_job_for_each_entry_run_as_g16_job_name(self):
+        jobs = ask("prepare", step="optimise", entries=[ENTRY, {**ENTRY, "name": "water 2"}], options=step_defaults("optimise"), cores=4)["jobs"]
+        self.assertEqual(len(jobs), 2)
+        job = jobs[0]
+        self.assertEqual((job["entries"], job["program"], job["args"], job["reads"]), ([0], "g16", ["input"], ["input.log"]))
+        text = job["files"][0]["text"]
+        self.assertEqual(job["files"][0]["name"], "input.gjf")
+        lines = text.splitlines()
+        # Link 0: the processors from Meno's cores, no checkpoint; the route: the method, dispersion and the job
+        self.assertEqual(lines[0], "%NProcShared=4")
+        self.assertNotIn("%Chk", text)
+        self.assertEqual(lines[1], "# B3LYP/6-31G(d) EmpiricalDispersion=GD3BJ Opt")
+        self.assertEqual(lines[3], "water")
+        self.assertEqual(lines[5], "0 1")
+
+    def test_each_kind_its_job_and_solvation_as_scrf_says(self):
+        energy = ask("prepare", step="energy", entries=[ENTRY], options={**step_defaults("energy"), "solvation": "SMD", "solvent": "TetraHydroFuran"})["jobs"][0]
+        self.assertIn("SP SCRF=(SMD,Solvent=TetraHydroFuran)", energy["files"][0]["text"].splitlines()[0])
+        freq = ask("prepare", step="frequencies", entries=[ENTRY], options={**step_defaults("frequencies"), "solvation": "PCM", "solvent": "Water", "keywords": "Int=UltraFine"})["jobs"][0]
+        self.assertTrue(freq["files"][0]["text"].splitlines()[0].endswith("Freq SCRF=(PCM,Solvent=Water) Int=UltraFine"))
+
+    def test_refuses_what_it_does_not_know(self):
+        for options in ({"solvation": "COSMO"}, {"solvation": "PCM", "solvent": "Lava"}, {"dispersion": "D9"}):
+            said = worker.answer(json.dumps({"id": 1, "op": "prepare", "step": "energy", "entries": [ENTRY], "options": {**step_defaults("energy"), **options}}))
+            self.assertFalse(said["ok"], options)
+        said = worker.answer(json.dumps({"id": 1, "op": "prepare", "step": "conformers", "entries": [ENTRY], "options": {}}))
+        self.assertFalse(said["ok"])
+
+    def test_every_option_offered_is_one_it_takes(self):
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        for step in manifest["steps"]:
+            solvents = next(o for o in step["options"] if o["id"] == "solvent")["choices"]
+            self.assertEqual({c["value"] for c in solvents}, worker.SOLVENTS)
+            self.assertEqual(step["programs"], ["g16"])
+        self.assertEqual(manifest["installed"][0]["name"], "g16")
+
+    def test_its_output_is_read_by_meno_s_readers_and_a_failure_says_why(self):
+        read = ask("collect", step="optimise", entries=[ENTRY], options={}, files={"input.log": " Normal termination of Gaussian 16"}, log="", ended="done")
+        self.assertEqual(read, {"read": [{"kind": "gaussian", "file": "input.log", "name": "water.log"}]})
+        why = ask("collect", step="optimise", entries=[ENTRY], options={}, files={"input.log": FAILED}, log="", ended="failed")
+        self.assertEqual(why, {"why": "Some atoms are too close together."})
+        self.assertEqual(ask("collect", step="energy", entries=[ENTRY], options={}, files={}, log="", ended="stopped"), {"why": "Gaussian said nothing"})
 
 
 if __name__ == "__main__":

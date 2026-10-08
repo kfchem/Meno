@@ -75,6 +75,17 @@ export type StepDecl = { kind: string; programs: string[]; options: Option[] };
 export const SYSTEMS = ["macos", "windows", "linux"] as const;
 export type System = (typeof SYSTEMS)[number];
 
+/**
+ * A program installed separately - ORCA, Gaussian - that a plugin's steps
+ * run (docs/WORKFLOWS.md, *Programs installed separately*): never fetched,
+ * found where the system finds programs or where the chemist locates it.
+ * Its name, as the steps name it; what it is called; and its file's name on
+ * each system it is made for. (What it is given as it runs - its folders,
+ * its variables - Meno's backend reads from the manifest itself:
+ * src-tauri/src/jobs.rs.)
+ */
+export type InstalledDecl = { name: string; label: string; files: Partial<Record<System, string>> };
+
 /** A plugin's manifest, as Meno reads it. */
 export type Manifest = {
   id: string;
@@ -103,6 +114,8 @@ export type Manifest = {
   steps: StepDecl[];
   /** The systems it can be added on - its programs built for those alone; none said, every one. */
   systems: System[];
+  /** The programs installed separately that its steps run. */
+  installed: InstalledDecl[];
 };
 
 const ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -155,6 +168,19 @@ function stepOf(v: unknown): StepDecl | null {
   return { kind, programs: [...new Set(programs)], options: acceptOptions(s?.options) };
 }
 
+/** A program's file, as a system has it: a name, not a path. */
+const FILE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,59}$/;
+
+function installedOf(v: unknown): InstalledDecl | null {
+  const d = v as Record<string, unknown> | null;
+  const name = typeof d?.name === "string" && PROGRAM.test(d.name) ? d.name : null;
+  const label = text(d?.label, 60);
+  const given = (d?.files ?? {}) as Record<string, unknown>;
+  const files: Partial<Record<System, string>> = {};
+  for (const s of SYSTEMS) if (typeof given[s] === "string" && FILE.test(given[s] as string)) files[s] = given[s] as string;
+  return name && label && Object.keys(files).length ? { name, label, files } : null;
+}
+
 /** A manifest as Meno reads it, or null where it does not read as one: what reads wrong in it is left out, what it cannot do without makes it none. */
 export function acceptManifest(raw: unknown): Manifest | null {
   const m = raw as Record<string, unknown> | null;
@@ -190,6 +216,10 @@ export function acceptManifest(raw: unknown): Manifest | null {
   // (a plugin that does nothing is none)
   if (!reads.length && !roles.length && !writes.length && !steps.length) return null;
   const systems = Array.isArray(m.systems) ? SYSTEMS.filter((s) => (m.systems as unknown[]).includes(s)) : [];
+  // (each program installed separately once, and only one a step runs)
+  const installed = (Array.isArray(m.installed) ? m.installed.map(installedOf).filter((d): d is InstalledDecl => d != null) : []).filter(
+    (d, i, all) => all.findIndex((e) => e.name === d.name) === i && steps.some((s) => s.programs.includes(d.name)),
+  );
   return {
     id,
     name,
@@ -206,6 +236,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
     writes,
     steps,
     systems,
+    installed,
   };
 }
 

@@ -75,10 +75,35 @@ export function readPrepared(raw: unknown, count: number): Prepared[] | string {
   return out;
 }
 
-/** What a plugin read back of a job: an output for each of its entries, in Meno's own form; or why the job did not give one. */
-export function readCollected(raw: unknown, count: number): ReaderOutput[] | { why: string } {
-  const r = raw as { outputs?: unknown; why?: unknown } | null;
+/**
+ * An output a job wrote that Meno is to read with its readers, as it reads
+ * one opened (lib/calc/read): its kind, by id; and where it is - a file the
+ * job's `prepare` said it reads back, or what the program printed, its log
+ * - and the name it goes by.
+ */
+export type ToRead = { kind: string; name: string } & ({ file: string } | { log: true });
+
+/**
+ * What a plugin read back of a job: an output for each of its entries, in
+ * Meno's own form - or, for each, an output for Meno's readers to read
+ * (ORCA's, Gaussian's: a program installed separately); or why the job did
+ * not give one.
+ */
+export function readCollected(raw: unknown, count: number): ReaderOutput[] | { read: ToRead[] } | { why: string } {
+  const r = raw as { outputs?: unknown; read?: unknown; why?: unknown } | null;
   if (typeof r?.why === "string") return { why: r.why.trim().slice(0, 300) || "It did not say why" };
+  if (r?.read !== undefined) {
+    if (!Array.isArray(r.read) || r.read.length !== count) return { why: "It read back nothing for it" };
+    const read: ToRead[] = [];
+    for (const x of r.read as Record<string, unknown>[]) {
+      const kind = typeof x?.kind === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(x.kind) ? x.kind : null;
+      const file = typeof x?.file === "string" && inside(x.file) ? x.file : null;
+      const name = typeof x?.name === "string" && inside(x.name) ? x.name : file;
+      if (!kind || !name || (!file && x?.log !== true)) return { why: "It said to read what Meno cannot" };
+      read.push(file ? { kind, name, file } : { kind, name, log: true });
+    }
+    return { read };
+  }
   if (!Array.isArray(r?.outputs) || r.outputs.length !== count) return { why: "It read back nothing for it" };
   const outs = r.outputs as ReaderOutput[];
   for (const o of outs) {
@@ -147,6 +172,9 @@ export function readKept(raw: unknown, count: number): number[] | string {
   if (!Array.isArray(kept) || !kept.every((i) => Number.isInteger(i) && i >= 0 && i < count)) return "It said nothing Meno can take";
   return [...new Set(kept as number[])].sort((a, b) => a - b);
 }
+
+/** What a step says of a program installed separately that is found nowhere: where to say where it is. */
+export const notFound = (label: string) => `${label} is not found: locate it in Settings, Plugins`;
 
 /** How long, as a clock says it: 0:42, 12:03, 1:02:03. */
 export function clock(ms: number): string {

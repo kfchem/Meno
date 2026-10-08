@@ -74,11 +74,14 @@ export type PictureSettings = { dpi: (typeof PICTURE_DPIS)[number] };
 /**
  * The plugins: those the chemist took away in Settings, Plugins - by id -
  * which are not set up again of themselves when a role they fill is
- * needed; and who fills each role, where the chemist chose (lib/plugins/roles).
+ * needed; who fills each role, where the chemist chose (lib/plugins/roles);
+ * and where the chemist located each program installed separately that a
+ * plugin's steps run, by "plugin:program" (lib/plugins/installed).
  */
 export type PluginSettings = {
   removed: string[];
   roles: Record<string, string>;
+  programs: Record<string, string>;
 };
 
 /** Who reads each kind of file, by the kind's id: its reader - unset, Meno where Meno reads it, or else the first added that reads it - and the readers that read it as well. */
@@ -120,7 +123,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   options: {},
   abbreviations: [],
   files: { read: {}, also: {} },
-  plugins: { removed: [], roles: {} },
+  plugins: { removed: [], roles: {}, programs: {} },
   pictures: { dpi: 600 },
   pointer: { wheelUp: "in" },
   calculations: {},
@@ -196,14 +199,22 @@ function acceptFiles(raw: unknown, before: unknown): FileSettings {
 
 /** The plugins taken away, and the roles' choices, that read: ids only. */
 function acceptPlugins(raw: unknown): PluginSettings {
-  const r = (raw ?? {}) as { removed?: unknown; roles?: unknown };
+  const r = (raw ?? {}) as { removed?: unknown; roles?: unknown; programs?: unknown };
   const id = (v: unknown): v is string => typeof v === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(v);
   const removed = Array.isArray(r.removed) ? [...new Set(r.removed.filter(id))] : [];
   const roles: Record<string, string> = {};
   if (r.roles && typeof r.roles === "object" && !Array.isArray(r.roles)) {
     for (const [role, plugin] of Object.entries(r.roles)) if (id(role) && id(plugin)) roles[role] = plugin;
   }
-  return { removed, roles };
+  // (each a place the chemist located: a full path, of some length)
+  const programs: Record<string, string> = {};
+  if (r.programs && typeof r.programs === "object" && !Array.isArray(r.programs)) {
+    for (const [key, path] of Object.entries(r.programs)) {
+      const [plugin, program] = key.split(":");
+      if (id(plugin) && /^[A-Za-z0-9][A-Za-z0-9._+-]{0,39}$/.test(program ?? "") && typeof path === "string" && path.length <= 1024 && /^(\/|[A-Za-z]:[\\/])/.test(path)) programs[key] = path;
+    }
+  }
+  return { removed, roles, programs };
 }
 
 /** The options remembered that read: by a role's name, each a value that is a string, a number or a switch. Whether each still fits its option is asked when it is drawn (lib/options `valuesOf`). */

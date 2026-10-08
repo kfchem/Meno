@@ -40,7 +40,7 @@ import ConsentDialog from "./ui/network/ConsentDialog";
 import NetworkToasts from "./ui/network/NetworkToasts";
 import UpdateNotice from "./ui/network/UpdateNotice";
 import { startUpdates } from "./lib/update";
-import { showSettingsSection } from "./ui/features/SettingsPanel/section";
+import { showSettingsSection, useSettingsAsked } from "./ui/features/SettingsPanel/section";
 import { letOfficeGo, officeInUse, startedForOffice, takeOfficeStructures, watchOffice } from "./lib/ole";
 
 /** How long a Meno started for Office waits for Office to ask it for something. */
@@ -454,6 +454,11 @@ export default function App() {
       dispatch({ type: "ADD_TAB", tab });
     },
   };
+
+  // (Settings asked for from inside a view - a step's card - opened as from the top bar)
+  const ctlNow = useRef(ctl);
+  ctlNow.current = ctl;
+  useEffect(() => useSettingsAsked.subscribe(() => void ctlNow.current.openByKind?.("settings", { label: "Settings" })), []);
 
   const resolveView = useCallback(
     (kind: string): ViewEntry | Promise<ViewEntry> => {

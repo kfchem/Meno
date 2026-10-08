@@ -460,7 +460,7 @@ gave), and one can be shown again.
   with xtb 6.7.1, LGPL-3.0, on conda-forge for macOS and Linux only. On
   Windows it cannot be added, and *Conformers* is filled by RDKit alone
   there. (Not 3.0.2: *As built*, step 5.)
-- **Programs installed separately** (ORCA, Gaussian): never fetched by
+- **Programs installed separately** (ORCA, Gaussian; step 6): never fetched by
   Meno - their licences do not allow it. A plugin's manifest says which
   program it needs and how to know it (its name, and the line its version
   is read from); Meno looks for it where the system finds programs, and
@@ -823,6 +823,78 @@ Not yet, and where it comes:
 - **Each conformer's population** as CREST works it out, and the
   rotamers it sets aside, are not read: Meno's own *Populations* works
   them out from the energies.
+
+### Step 6: programs installed separately (2026-10-08)
+
+Built: ORCA and Gaussian 16 - each run by a plugin, never fetched or
+shipped by Meno - filling *Optimise*, *Energy* and *Frequencies*; Meno
+finding their programs where the system finds programs, or where the
+chemist locates them in Settings, *Plugins*; and what they write read by
+Meno's readers, as an output opened is. How it works: ARCHITECTURE.md,
+*Jobs* and *Workflows*.
+
+Decided by the maintainer (2026-10-08), as it was built:
+
+- **What ORCA and Gaussian write is read by Meno's readers** - every
+  reader of its kind added (cclib, PySCF), put together, as when the
+  output is opened - not by the plugin that ran it. The output is kept
+  with the molecules it gave, by its kind, as an opened one is. Where no
+  reader of it is added, the step says which to add.
+- **Gaussian's steps are its input plugin's**: the plugin that writes
+  Gaussian's input for *Export* is now *Gaussian*, and runs it as well,
+  its input written by the same code. Its id changed with its name
+  (`gaussian`): added before, it is added again (no backward
+  compatibility before 1.0).
+- **Checked with stand-ins on the Mac**: no ORCA or Gaussian is installed
+  there; a run with each program itself is for the maintainer, where they
+  are.
+
+Decided while building it, for the maintainer to confirm:
+
+- **A manifest declares each program installed separately** that its
+  steps run (`installed`): its name, what it is called, its file on each
+  system, the folders put first where programs are looked for, and the
+  variables it is given - each a place inside its installation. Meno's
+  backend takes nothing else: no variable that loads code into a program,
+  not PATH itself, not what Meno sets.
+- **Found where the system finds programs** - PATH, as Meno was given it
+  - **or where the chemist located it**: Settings, *Plugins*, under its
+  plugin, says where it is, or *Not found*, with *Locate…*; a file
+  picked is taken only where it is that program (its file's name, and one
+  that can be run). On macOS, a Meno opened from the Dock or the Finder is
+  given the system's PATH, not a shell's: ORCA and Gaussian are usually
+  located once there.
+- **A step whose program is found nowhere** says *ORCA not found* where it
+  would say *Ready*, and its *Run* opens Settings, *Plugins*; run with
+  others, it fails saying where to locate it.
+- **ORCA** is given its input as its manual lays it out: one simple input
+  line - the method, basis set, dispersion correction (D3BJ or D4), the run
+  (SP, OPT, FREQ) and C-PCM or SMD with one of 22 solvents - `%pal nprocs`
+  where a job may use more than one core, `%maxcore` where it is set, and
+  the coordinates. It is run by its full path, its folder first where
+  programs are looked for, as the manual asks; what it prints is its
+  output.
+- **Gaussian** is given the input *Export* writes - the job of the step's
+  kind (Opt, SP, Freq), PCM or SMD with one of 22 solvents as SCRF says,
+  %NProcShared from the cores a job may use, no checkpoint file - and run
+  as `g16 input`, given `g16root` (the folder above its own) and
+  GAUSS_EXEDIR (its own folder), its scratch files where it runs. Why a
+  run failed is read from its output.
+- **The options** are the method and basis set as text - as *Export*'s
+  are - the dispersion, the solvation and its solvent, more keywords, and
+  the memory; the cores come from Settings, *Calculations*, as xTB's do.
+
+Not yet, and where it comes:
+
+- **Gaussian on Windows**: its steps are offered on macOS and Linux only,
+  until Gaussian's own documentation for running it on Windows is read;
+  *Export* writes its input everywhere.
+- **ORCA running in parallel** needs OpenMPI where programs are looked
+  for; a Meno opened from the Dock is not given a shell's PATH, so a
+  located OpenMPI comes later. With one core for each job (Settings,
+  *Calculations*), ORCA needs none.
+- **The version** of a program installed separately is what its output
+  says, as the readers read it; Settings does not ask the program itself.
 
 ## Questions
 

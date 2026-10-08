@@ -56,6 +56,28 @@ const worker = {
         },
   ),
 };
+/** Where the programs installed separately are, as the test has them; and what Meno's readers read, as the test has it. */
+const installedAt: Record<string, string | null> = {};
+vi.mock("../../../../lib/plugins/installed", async (actual) => ({
+  ...(await actual<typeof import("../../../../lib/plugins/installed")>()),
+  lookFor: vi.fn(async (_plugin: string, name: string) => installedAt[name] ?? null),
+}));
+const readOutput = vi.fn(async (_name: string, _text: string, _kind: { id: string }, _sha: string) => ({
+  output: {
+    schema: 1,
+    program: "ORCA",
+    version: "6.1.0",
+    method: "B3LYP",
+    atoms: ["O", "H", "H"],
+    frames: [[0, 0, 0, 0, 0.76, 0.59, 0, -0.76, 0.59]],
+    energies: [-76.4],
+  },
+  readers: ["cclib 1.9rc1"],
+}));
+vi.mock("../../../../lib/calc/read", async (actual) => ({
+  ...(await actual<typeof import("../../../../lib/calc/read")>()),
+  readOutput: (...args: Parameters<typeof readOutput>) => readOutput(...args),
+}));
 vi.mock("../../../../lib/calc/workers", async (actual) => ({
   ...(await actual<typeof import("../../../../lib/calc/workers")>()),
   pluginClient: async () => worker,
@@ -146,6 +168,40 @@ describe("a step that runs a plugin's program", () => {
     doc.undo();
     expect(st().molecules3d).toHaveLength(1);
     expect(st().steps.find((s) => s.id === step)!.running).toBeUndefined();
+  });
+
+  it("runs a program installed separately where it was found - and has Meno's readers read what it wrote", async () => {
+    useReaders.setState({ state: { orca: "added" }, problem: {} });
+    installedAt.orca = "/Applications/orca_6/orca";
+    worker.prepare.mockImplementationOnce(async () => ({ jobs: [{ entries: [0], program: "orca", args: ["input.inp"], files: [{ name: "input.inp", text: "! SP\n" }], reads: [] }] }) as never);
+    worker.collect.mockImplementationOnce(async () => ({ read: [{ kind: "orca", log: true, name: "water.out" }] }) as never);
+    const { st } = editor();
+    const step = st().addStep("energy", "orca", 10, 10);
+    st().connect({ set: st().sets[0].id }, step);
+    const ran = st().runStep(step);
+    await settle();
+    await settle();
+    // started with where it is
+    expect(asked.started).toEqual([expect.objectContaining({ plugin: "orca", program: "orca", path: "/Applications/orca_6/orca" })]);
+    Object.assign(jobs.get(idOf(1))!, { state: "done", started: 1000, ended: 61_000, log: "ORCA's output" });
+    await st().lookAtJobs();
+    await ran;
+    // what it printed read by Meno's readers, as an output opened is - ORCA's kind - and kept, by that kind
+    expect(readOutput).toHaveBeenCalledWith("water.out", "ORCA's output", expect.objectContaining({ id: "orca" }), expect.any(String));
+    expect(st().steps.find((s) => s.id === step)!.ran).toMatchObject({ ok: true, said: "1:00 · −76.40000 Eh" });
+    const m = st().molecules3d[st().molecules3d.length - 1];
+    expect(m.calc).toMatchObject({ program: "ORCA", readers: ["cclib 1.9rc1"], source: { name: "water.out", kind: "orca" } });
+  });
+
+  it("says where to locate a program installed separately that is found nowhere - and starts nothing", async () => {
+    useReaders.setState({ state: { orca: "added" }, problem: {} });
+    installedAt.orca = null;
+    const { st } = editor();
+    const step = st().addStep("energy", "orca", 10, 10);
+    st().connect({ set: st().sets[0].id }, step);
+    await st().runStep(step);
+    expect(st().steps.find((s) => s.id === step)!.ran).toMatchObject({ ok: false, said: "ORCA is not found: locate it in Settings, Plugins" });
+    expect(asked.started).toEqual([]);
   });
 
   it("says it was stopped, and brings nothing in", async () => {

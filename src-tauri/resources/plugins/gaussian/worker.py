@@ -1,19 +1,35 @@
-"""The Gaussian input plugin's worker: a molecule written as Gaussian 16 input.
+"""The Gaussian plugin's worker: a molecule written as Gaussian 16 input, and
+a workflow's steps done with Gaussian 16.
 
-A writer plugin's worker (docs/PLUGINS.md, docs/FILE-IO.md), run in an
-environment of its own - Python alone, no package. One JSON object per line
-on stdin, one per line back on stdout, as every plugin's:
+A plugin's worker (docs/PLUGINS.md, docs/FILE-IO.md, docs/WORKFLOWS.md),
+run in an environment of its own - Python alone, no package. Gaussian
+itself is a program installed separately, under its own licence: never
+fetched or shipped by Meno, found where the system finds programs or where
+the chemist located it (the manifest's `installed`). One JSON object per
+line on stdin, one per line back on stdout, as every plugin's:
 
     {"id": 3, "op": "write", "kind": "gaussian-input", "name": "water.gjf",
      "molecules": [{"name": "water", "atoms": [...], "bonds": [...]}],
      "options": {"job": "opt freq", "method": "B3LYP", ...}}
     {"id": 3, "ok": true, "result": {"text": "..."}}
+    {"id": 4, "op": "prepare", "step": "optimise", "entries": [...], "options": {...}, "cores": 4}
+    {"id": 4, "ok": true, "result": {"jobs": [{"entries": [0], "program": "g16", "args": ["input"], ...}]}}
+    {"id": 5, "op": "collect", "step": "optimise", "entries": [...], "files": {...}, "log": "...", "ended": "done"}
+    {"id": 5, "ok": true, "result": {"read": [{"kind": "gaussian", "file": "input.log", "name": "water.log"}]}}
     {"id": 3, "ok": false, "error": "..."}
 
 It writes what it is given and nothing else - no file of its own choosing,
-no network - and says when it is ready:
+no network - runs nothing itself, and says when it is ready:
 
-    {"event": "ready", "version": "0.1.0"}
+    {"event": "ready", "version": "0.2.0"}
+
+Its steps - Optimise, Energy, Frequencies - each make a job for an entry:
+its input written as below, run as Gaussian's "Running Gaussian" page has
+it (`g16 job-name` reads job-name.gjf and writes job-name.log, the scratch
+files where it runs, its folder `g16root` the one above Gaussian's own and
+GAUSS_EXEDIR Gaussian's own). `collect` reads nothing: it says that the
+.log is Gaussian's output, for Meno's readers to read as one opened is -
+or, where the job failed, why, as the output says.
 
 The input is laid out as Gaussian's own reference has it (gaussian.com,
 "About Gaussian 16 Input", "Link 0 Commands", "Molecule Specifications"),
@@ -37,7 +53,7 @@ import json
 import re
 import sys
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 # The elements by atomic number, from 1: what an atom's element may be.
 SYMBOLS = (
@@ -166,6 +182,91 @@ def gaussian_input(name, molecule, options):
     return "\n".join(lines) + "\n"
 
 
+# --- a workflow's steps ---------------------------------------------------------
+
+PROGRAM = "g16"
+STEM = "input"
+# what Gaussian's output is, as Meno's readers know it (their manifests' kinds)
+KIND = "gaussian"
+# each kind of step, as its job's keyword says it
+STEP_JOBS = {"optimise": "opt", "energy": "sp", "frequencies": "freq"}
+SOLVATIONS = {"none", "PCM", "SMD"}
+# the solvents offered, as Gaussian's SCRF keyword names them
+SOLVENTS = {
+    "Water", "Acetonitrile", "Acetone", "Benzene", "Chloroform", "Dichloromethane", "n,n-DiMethylFormamide",
+    "DiMethylSulfoxide", "DiethylEther", "Ethanol", "EthylEthanoate", "n-Hexane", "Methanol", "TetraHydroFuran",
+    "Toluene", "1,4-Dioxane", "CarbonTetraChloride", "Pyridine", "NitroMethane", "CycloHexane", "n-Octanol", "2-Propanol",
+}
+
+
+def step_input(step, entry, options, cores):
+    """An entry's input for a step: the job its kind is, solvated as asked - SCRF=(PCM,Solvent=...) or SMD - the processors it may use from Meno's cores, no checkpoint."""
+    job = STEP_JOBS.get(step)
+    if job is None:
+        raise Refused(f"this plugin does no {step!r}")
+    solvation = options.get("solvation", "none")
+    if solvation not in SOLVATIONS:
+        raise Refused(f"no solvation is called {solvation!r}")
+    solvent = options.get("solvent", "Water")
+    if solvation != "none" and solvent not in SOLVENTS:
+        raise Refused(f"no solvent is called {solvent!r}")
+    more = one_line(options.get("keywords", ""), "The keywords")
+    scrf = f"SCRF=({solvation},Solvent={solvent})" if solvation != "none" else ""
+    given = {
+        **options,
+        "job": job,
+        "keywords": " ".join(p for p in (scrf, more) if p),
+        "charge": entry.get("charge", 0),
+        "multiplicity": entry.get("multiplicity", 1),
+        "title": entry.get("name") or "",
+        "checkpoint": False,
+        "processors": whole(cores, "The cores", 1) if cores else 0,
+    }
+    return gaussian_input(f"{STEM}.gjf", entry, given)
+
+
+def op_prepare(m):
+    options = m.get("options") or {}
+    jobs = []
+    for i, entry in enumerate(m.get("entries") or []):
+        jobs.append({
+            "entries": [i],
+            "program": PROGRAM,
+            "args": [STEM],
+            "files": [{"name": f"{STEM}.gjf", "text": step_input(m.get("step"), entry, options, m.get("cores"))}],
+            "reads": [f"{STEM}.log"],
+        })
+    if not jobs:
+        raise Refused("nothing came in")
+    return {"jobs": jobs}
+
+
+def output_name(entry):
+    """What an entry's output is called: after the entry, as a file may be named."""
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", str(entry.get("name") or "").strip()).strip("._")
+    return f"{stem or 'gaussian'}.log"
+
+
+def why_of(output, log):
+    """Why Gaussian stopped, as its output says: the line before it says it ended in error, else that line; else what it printed last."""
+    lines = [line.strip() for line in (output or "").splitlines() if line.strip()]
+    for k in range(len(lines) - 1, -1, -1):
+        if lines[k].startswith("Error termination"):
+            return lines[k - 1] if k and not lines[k - 1].startswith("Error termination") else lines[k]
+    said = [line.strip() for line in (log or "").splitlines() if line.strip()]
+    return said[-1] if said else "Gaussian said nothing"
+
+
+def op_collect(m):
+    if m.get("step") not in STEP_JOBS:
+        raise Refused(f"this plugin does no {m.get('step')!r}")
+    files = m.get("files") or {}
+    output = files.get(f"{STEM}.log")
+    if m.get("ended") != "done" or not output:
+        return {"why": why_of(output, m.get("log") or "")}
+    return {"read": [{"kind": KIND, "file": f"{STEM}.log", "name": output_name(e)} for e in m.get("entries") or []]}
+
+
 def op_write(m):
     if m.get("kind") != "gaussian-input":
         raise Refused(f"this plugin writes no {m.get('kind')!r}")
@@ -179,7 +280,7 @@ def op_ping(_m):
     return {"version": VERSION}
 
 
-OPS = {"write": op_write, "ping": op_ping}
+OPS = {"write": op_write, "prepare": op_prepare, "collect": op_collect, "ping": op_ping}
 
 
 def answer(line):
@@ -193,9 +294,14 @@ def answer(line):
             raise Refused(f"no such request: {m.get('op')!r}")
         return {"id": m.get("id"), "ok": True, "result": op(m)}
     except Refused as e:
-        return {"id": m.get("id"), "ok": False, "error": f"The Gaussian input could not be written: {e}."}
+        return {"id": m.get("id"), "ok": False, "error": f"{what(m)}: {e}."}
     except Exception as e:  # noqa: BLE001 - said, not thrown: the worker keeps answering
-        return {"id": m.get("id"), "ok": False, "error": f"The Gaussian input could not be written: {e}"}
+        return {"id": m.get("id"), "ok": False, "error": f"{what(m)}: {e}"}
+
+
+def what(m):
+    """How a refusal begins: a file written, or a step."""
+    return "The Gaussian input could not be written" if m.get("op") == "write" else "Gaussian"
 
 
 def main():
