@@ -63,6 +63,7 @@ export default function Frames3D({
   onFrame,
   below,
   populations,
+  numbers,
   about,
   results,
   unread,
@@ -78,8 +79,10 @@ export default function Frames3D({
   onFrame: (frame: number) => void;
   /** Said just below it - a note on its molecule - and moved down as it opens. */
   below?: ReactNode;
-  /** A conformer set's: how much of it each conformer is, at room temperature. */
+  /** A conformer set's: how much of it each conformer is - at room temperature, or as a Populations step found. */
   populations?: number[];
+  /** A conformer set's: each conformer's number among its compound's, where a step set some aside (docs/WORKFLOWS.md). */
+  numbers?: number[];
   /** What the calculation it was read from was, in a line (lib/calc `calcLine`). */
   about?: string;
   /** What the calculation found (lib/calc/results): the molecule's and each frame's are said here. */
@@ -237,6 +240,7 @@ export default function Frames3D({
                   line(energies?.[0])
                 ) : (
                   <>
+                    {numbers?.[told] != null && numbers.some((k, i) => k !== i + 1) && <span className="text-gh-black">#{numbers[told]} · </span>}
                     {told + 1} / {count}
                     {above && <span className="text-gh-black"> · {relative(above[told])}</span>}
                     {populations?.[told] != null && <span className="text-gh-black"> · {share(populations[told])}</span>}

@@ -13,6 +13,7 @@ import { resultKey } from "../../../../../lib/calc/results";
 import type { Workspace } from "../../utils/workspace";
 import { StoreApi } from "zustand";
 import { DOUBLE_CLICK_MS } from "../../constants";
+import { nextIdAfter } from "../../workflow/saved";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -278,8 +279,10 @@ export const createModelSlice = (
     const shown = ws.textShown != null ? read.indexOf(ws.texts[ws.textShown]) : -1;
     const opened = (d: StructureDocument) => {
       const next = ops.withImportedScheme(ops.replaceModel(d, drawn), ops.schemeOf(drawn));
+      // (a workflow's parts by their own ids: what a set holds is what lies inside it, whatever the molecules' ids)
+      const workflow = ws.workflow ? { ...ws.workflow, nextWorkflowId: nextIdAfter(ws.workflow) } : {};
       return ops.setDocumentStyle(
-        { ...next, aromaticEnabled: ws.aromaticEnabled, aromaticRings: ws.aromaticRings, texts, nextTextId: texts.length + 1 },
+        { ...next, ...workflow, aromaticEnabled: ws.aromaticEnabled, aromaticRings: ws.aromaticRings, texts, nextTextId: texts.length + 1 },
         ws.style,
       );
     };
@@ -317,6 +320,13 @@ export const createModelSlice = (
       sel: { atoms: new Set(), bonds: new Set() },
       sel3d: new Set<number>(),
       chosen3d: null,
+      hoveredSet: null,
+      chosenSet: null,
+      hoveredStep: null,
+      hoveredWire: null,
+      openStep: null,
+      wireDrag: null,
+      workflowMenu: null,
       turns3d: {},
       frames3d: {},
       hovered3d: null,

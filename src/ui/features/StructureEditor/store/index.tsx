@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { DocumentStore } from "../../../../lib/doc";
 import { createStructureDocument, type StructureDocument } from "../document";
-import type { Caption, EditorState, WorkspaceText } from "./types";
+import type { Caption, EditorState, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
@@ -17,6 +17,7 @@ import { createUiSlice } from "./slices/uiSlice";
 import { createMolecules3dSlice, heldOf } from "./slices/molecules3dSlice";
 import { createTextsSlice } from "./slices/textsSlice";
 import { createCaptionsSlice } from "./slices/captionsSlice";
+import { createWorkflowSlice } from "./slices/workflowSlice";
 import { turnsAcross } from "./turnJournal";
 import { shownText } from "../utils/texts";
 
@@ -43,6 +44,9 @@ function mirrorOf(doc: StructureDocument) {
     captions: doc.captions ?? NO_CAPTIONS,
     nextCaptionId: doc.nextCaptionId ?? 1,
     molecules3d: doc.molecules3d ?? [],
+    sets: doc.sets ?? NO_SETS,
+    steps: doc.steps ?? NO_STEPS,
+    wires: doc.wires ?? NO_WIRES,
     docStyle: doc.style,
     texts: doc.texts ?? NO_TEXTS,
   };
@@ -50,6 +54,9 @@ function mirrorOf(doc: StructureDocument) {
 
 const NO_TEXTS: WorkspaceText[] = [];
 const NO_CAPTIONS: Caption[] = [];
+const NO_SETS: WorkflowSet[] = [];
+const NO_STEPS: WorkflowStep[] = [];
+const NO_WIRES: Wire[] = [];
 
 /**
  * Mirrors the document into the store and keeps doing so. Returns the
@@ -118,6 +125,13 @@ export function createEditorStore(
     hoveredCaption: null,
     captionEdit: null,
     quickAdd: null,
+    hoveredSet: null,
+    chosenSet: null,
+    hoveredStep: null,
+    hoveredWire: null,
+    openStep: null,
+    wireDrag: null,
+    workflowMenu: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
     pressHold: null,
     doubleClickBond: null,
@@ -145,6 +159,7 @@ export function createEditorStore(
     ...createMolecules3dSlice(doc, set, get),
     ...createTextsSlice(doc, set),
     ...createCaptionsSlice(doc, set),
+    ...createWorkflowSlice(doc, set),
   }));
 
   return store;

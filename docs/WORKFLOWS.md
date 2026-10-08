@@ -3,8 +3,8 @@
 A specification of stage 6 (WORKSPACE.md, *Stages*): calculations built as
 workflows and run, on the page itself. Written on 2026-10-08 at the
 maintainer's request - *a detailed UI specification before anything is
-built* - and revised the same day with their answers. Nothing here is
-built yet. Judge it against [PURPOSE.md](PURPOSE.md): a procedure that
+built* - and revised the same day with their answers. Step 1 is built
+(*As built*, below); the rest is not yet. Judge it against [PURPOSE.md](PURPOSE.md): a procedure that
 combines several methods, expressed in a form the chemist can read,
 rearrange and run again, with its results beside the molecule it is about.
 
@@ -535,6 +535,65 @@ gave), and one can be shown again.
 
 Each is a PR of its own, checked on the Mac; Windows is asked only where
 something is Windows' own (the job object; xTB's Windows build).
+
+## As built
+
+### Step 1: sets, steps and wires (2026-10-08)
+
+Built as specified above: sets, steps and wires as the document's items,
+undone and saved with it; an input made from the selection's port, or
+*Use as input* in its menu; wires drawn from a port that gives or back from one
+that takes, picked up off a step and put into another, replaced, and
+deleted (Delete or Backspace on one, its menu, or picked up and let go
+on nothing); a set dragged by its tab with what it holds, sized by its
+edges and corners, chosen by a click on its tab; steps dragged, opened in
+place to their options by a click; Quick Add's one button; Meno's *As
+conformers*, *Energy window*, *Duplicates* and *Populations*, run from a
+step's menu - the steps before it first, where they have not run or have
+changed - their results in a set to the right; Settings, *Calculations*.
+
+Decided while building it, for the maintainer to confirm:
+
+- **A step with nothing wired into it says *No input*** rather than
+  *Ready*. Run, it fails, saying so.
+- **A result set lists a conformer set's entries under its tab** -
+  lowest energy first, three of each compound, how far above its lowest
+  each is and its population, then how many more - with its molecules
+  below the list. Entries set aside follow, struck through, two of each
+  compound and then how many more. A compound set's result lists only those
+  set aside, by their compound's letter: its entries are on the page.
+- **Entries keep their numbers** through steps that set some aside: *a ·
+  7* stays *a · 7* (a molecule's `numbers`, shown in its frames chip as
+  *#7*). A *Populations* step's shares are the molecule's own and are
+  what its chip shows, in place of room temperature's.
+- **Duplicates in a compound set** compares entries of the same atoms in
+  the same order: a structure there twice is the same structure. In a
+  conformer set, within each compound, lowest energy first.
+- **Deleting a step keeps the set it made**, with what it holds - a set
+  like any the chemist made, so a compound set.
+- **The look, after review** (2026-10-08): frames, tabs, cards and ports
+  in Meno's palette and its cards' hairline borders, a hair on the screen
+  at any zoom; wires a hair and a quarter; Heroicons' outline icons for
+  the kinds and the states; no tint or fading for a state. The canvas's
+  hover blue only for a wire under the pointer, as for an atom.
+- **A step's card is 208 px wide** at 100 %, its ports 28 px below its
+  top: wires join where they always did as the card opens.
+- **One layer of HTML for all sets and steps**: with a layer for each, a
+  step's layer covered the ports of sets under it (ARCHITECTURE.md,
+  *Workflows*).
+
+Not yet, and where it comes:
+
+- a set growing to keep inside it a structure drawn past its edge, and
+  sets, steps and wires fading out as they are deleted (they fade in) -
+  a follow-up;
+- *Waiting*, *Running* and *Stopped*, the running wire's dash, *Stop*,
+  logs and files - step 2, the job runner;
+- plugins filling kinds (the manifest's `steps`): until step 3, only
+  Meno's own steps are offered, and Settings, *Calculations*, lists them
+  alone;
+- *Run from here*, *Run all*, runs kept in a step - step 4;
+- copying sets and steps; procedures - step 7.
 
 ## Questions
 

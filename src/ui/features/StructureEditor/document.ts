@@ -12,7 +12,7 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus, WorkspaceText } from "./store/types";
+import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
 import { newTextName } from "./utils/texts";
@@ -25,6 +25,11 @@ export type StructureDocument = {
   /** Words on the page: a reaction's reagents and conditions, or anything else. */
   captions?: Caption[];
   nextCaptionId?: number;
+  /** A workflow on the page (docs/WORKFLOWS.md): its sets, steps and wires, numbered from one counter. */
+  sets?: WorkflowSet[];
+  steps?: WorkflowStep[];
+  wires?: Wire[];
+  nextWorkflowId?: number;
   /** Legacy global aromatic circles toggle. */
   aromaticEnabled: boolean;
   /** Per-ring aromatic circle flags, keyed by ring key. */
@@ -51,9 +56,18 @@ export type StructureDocument = {
   nextTextId?: number;
 };
 
-/** Whether it holds nothing: no structure, arrow, "+" sign or words drawn, no molecule in 3D, no text. */
+/** Whether it holds nothing: no structure, arrow, "+" sign or words drawn, no molecule in 3D, no text, no workflow. */
 export function isBlankDocument(doc: StructureDocument): boolean {
-  return !doc.model.atoms.length && !doc.arrows.length && !doc.pluses.length && !doc.captions?.length && !doc.molecules3d?.length && !doc.texts?.length;
+  return (
+    !doc.model.atoms.length &&
+    !doc.arrows.length &&
+    !doc.pluses.length &&
+    !doc.captions?.length &&
+    !doc.molecules3d?.length &&
+    !doc.texts?.length &&
+    !doc.sets?.length &&
+    !doc.steps?.length
+  );
 }
 
 export function emptyStructureDocument(): StructureDocument {
@@ -619,6 +633,10 @@ export function replaceModel(
     nextCaptionId: 1,
     molecules3d: [],
     nextMolecule3dId: 1,
+    sets: [],
+    steps: [],
+    wires: [],
+    nextWorkflowId: 1,
     aromaticEnabled: false,
     aromaticRings: {},
     nextId: Math.max(1, maxId + 1),

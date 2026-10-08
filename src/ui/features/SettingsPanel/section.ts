@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type SettingsSection = "style" | "style3d" | "pointer" | "chemistry" | "files" | "plugins" | "abbreviations" | "network";
+export type SettingsSection = "style" | "style3d" | "pointer" | "chemistry" | "files" | "calculations" | "plugins" | "abbreviations" | "network";
 
 /** Which part of Settings is shown: set from elsewhere to open it at one. */
 export const useSettingsSection = create<{ section: SettingsSection }>(() => ({

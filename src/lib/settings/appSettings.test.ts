@@ -21,6 +21,7 @@ describe("the settings file", () => {
       plugins: { removed: ["rdkit"], roles: { smiles: "rdkit" } },
       pictures: { dpi: 1200 as const },
       pointer: { wheelUp: "out" as const },
+      calculations: { by: { duplicates: "rdkit" } },
     };
     const text = settingsFileText(settings);
     expect(JSON.parse(text).format).toBe(1);
@@ -45,6 +46,8 @@ describe("the settings file", () => {
     expect(acceptAppSettings({}).files).toEqual({ read: {}, also: {} });
     // which way the wheel zooms: in, upwards, unless the file says out
     expect(acceptAppSettings({ pointer: { wheelUp: "sideways" } }).pointer).toEqual({ wheelUp: "in" });
+    // who does each kind of step: ids only
+    expect(acceptAppSettings({ calculations: { by: { duplicates: "rdkit", populations: 3, "x y": "meno" } } }).calculations).toEqual({ by: { duplicates: "rdkit" } });
     expect(acceptAppSettings({ calcReaders: { chosen: { orca: "cclib", gaussian: 3, "x y": "cclib" } } }).files).toEqual({ read: { orca: "cclib" }, also: {} });
     expect(
       acceptAppSettings({ calcReaders: { chosen: { orca: "cclib" } }, files: { read: { orca: "pyscf" }, also: { orca: ["cclib", "cclib", 4], xtb: [] } } }).files,

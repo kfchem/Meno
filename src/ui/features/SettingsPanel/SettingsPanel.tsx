@@ -11,6 +11,7 @@ import ChemistrySettings from "./ChemistrySettings";
 import FileSettings from "./FileSettings";
 import PointerSettings from "./PointerSettings";
 import PictureSettings from "./PictureSettings";
+import CalculationSettings from "./CalculationSettings";
 import PluginSettings from "./PluginSettings";
 import RoleChoices from "./RoleChoices";
 import { useSettingsSection, type SettingsSection } from "./section";
@@ -21,6 +22,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
   { id: "pointer", name: "Mouse and trackpad" },
   { id: "chemistry", name: "Chemistry" },
   { id: "files", name: "Files" },
+  { id: "calculations", name: "Calculations" },
   { id: "plugins", name: "Plugins" },
   { id: "abbreviations", name: "Dictionary" },
   { id: "network", name: "Network" },
@@ -31,7 +33,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
  * in unless its document has its own, how molecules in 3D look and turn,
  * how the mouse and the trackpad work the canvas,
  * what is pointed out on a structure, who reads and writes each kind
- * of file and how sharp a copied picture is, the plugins, what the labels Meno reads stand for, and what Meno
+ * of file and how sharp a copied picture is, who does each kind of step in a workflow, the plugins, what the labels Meno reads stand for, and what Meno
  * may do on the network.
  */
 export default function SettingsPanel() {
@@ -142,6 +144,15 @@ export default function SettingsPanel() {
               What a copy puts beside a structure for other programs - Word, PowerPoint - to paste.
             </p>
             <PictureSettings />
+          </section>
+        ) : section === "calculations" ? (
+          <section className="mt-6 max-w-4xl">
+            <h2 className="text-base font-semibold text-gh-black">Calculations</h2>
+            <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
+              The steps of a workflow on the page, and who does each. A new step starts with these options; the
+              options last chosen in a step become them.
+            </p>
+            <CalculationSettings />
           </section>
         ) : section === "plugins" ? (
           <section className="mt-6 max-w-4xl">

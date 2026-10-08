@@ -93,6 +93,10 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import QuickAdd from "./QuickAdd";
 import Captions2D from "./components/Captions2D";
 import CaptionEditor2D from "./components/CaptionEditor2D";
+import Workflow2D from "./components/Workflow2D";
+import { selectionFrame } from "./workflow/selectionSet";
+import { offeredSteps } from "./workflow/offered";
+import { PORT_DOWN } from "./workflow/look";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
@@ -451,6 +455,16 @@ function StructureCanvasContent({
         // words under the pointer, and nothing else
         e.preventDefault();
         st.removeCaption(st.hoveredCaption);
+      } else if (isDeleteKey(e) && !busy && st.hoveredWire != null && st.wires.some((w) => w.id === st.hoveredWire)) {
+        // a workflow's wire, step or set under the pointer - or the set chosen
+        e.preventDefault();
+        st.removeWire(st.hoveredWire);
+      } else if (isDeleteKey(e) && !busy && st.hoveredStep != null && st.steps.some((x) => x.id === st.hoveredStep) && st.openStep !== st.hoveredStep) {
+        e.preventDefault();
+        st.removeStep(st.hoveredStep);
+      } else if (isDeleteKey(e) && !busy && (st.hoveredSet ?? st.chosenSet) != null && st.sets.some((b) => b.id === (st.hoveredSet ?? st.chosenSet))) {
+        e.preventDefault();
+        st.removeSet((st.hoveredSet ?? st.chosenSet)!);
       } else if (isDeleteKey(e) && !busy && st.hoveredPlus != null && st.pluses.some((p) => p.id === st.hoveredPlus)) {
         e.preventDefault();
         st.removePlus(st.hoveredPlus);
@@ -536,6 +550,29 @@ function StructureCanvasContent({
       }
     : undefined;
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
+  // the selection as a box would take it, where it holds whole structures or molecules in 3D
+  const selectionAsSet = () => {
+    const st = store.getState();
+    return selectionFrame(st.model, st.sel.atoms, st.molecules3d, st.sel3d, currentStyle3D(), st.turns3d, st.frames3d);
+  };
+  // a box's tab or a step's card right-clicked (Workflow2D): its menu, there
+  const workflowMenu = useEditor((s) => s.workflowMenu);
+  useEffect(() => {
+    if (!workflowMenu) return;
+    store.getState().setWorkflowView({ workflowMenu: null });
+    const box = domRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setMenu({
+      kind: workflowMenu.kind,
+      id: workflowMenu.id,
+      selection: "none",
+      at: clientToWorld(workflowMenu.clientX, workflowMenu.clientY) ?? pasteTarget(),
+      x: workflowMenu.clientX - box.left,
+      y: workflowMenu.clientY - box.top,
+      within: { width: box.width, height: box.height },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowMenu, store]);
   // A right-drag moves the view, so the menu waits for the button to come
   // up without having travelled. macOS asks for the menu as the button goes
   // down, Windows as it comes up: either way it opens only then.
@@ -613,6 +650,12 @@ function StructureCanvasContent({
       const target: MenuTarget = { kind: "arrow", id: hoveredArrow, selection: "none", ...place };
       if (r?.down) r.pending = target;
       else if (!r?.moved) setMenu(target);
+      return;
+    }
+    // likewise a workflow's wire
+    const { hoveredWire, wires } = store.getState();
+    if (!kind && hoveredWire != null && wires.some((w) => w.id === hoveredWire)) {
+      open({ kind: "wire", id: hoveredWire, selection: "none", ...place });
       return;
     }
     // likewise words on the page
@@ -865,6 +908,16 @@ function StructureCanvasContent({
             x={quickAdd.x}
             y={quickAdd.y}
             within={quickAdd.within}
+            steps={offeredSteps(store.getState(), quickAdd.wire)}
+            wired={!!quickAdd.wire}
+            onStep={(kind) => {
+              const st = store.getState();
+              const { at, wire } = quickAdd;
+              st.setQuickAdd(null);
+              // (its port that takes where Quick Add was opened - where the wire was let go)
+              const id = st.addStep(kind, at.x, at.y + PORT_DOWN);
+              if (wire) st.connect(wire, id);
+            }}
             onClose={closeQuickAdd}
             onChoose={(what) => {
               const st = store.getState();
@@ -892,6 +945,9 @@ function StructureCanvasContent({
             const st = store.getState();
             if (menu.kind === "arrow" && menu.id != null) st.removeArrow(menu.id);
             else if (menu.kind === "caption" && menu.id != null) st.removeCaption(menu.id);
+            else if (menu.kind === "set" && menu.id != null) st.removeSet(menu.id);
+            else if (menu.kind === "step" && menu.id != null) st.removeStep(menu.id);
+            else if (menu.kind === "wire" && menu.id != null) st.removeWire(menu.id);
             else if (menu.kind === "plus" && menu.id != null) st.removePlus(menu.id);
             else if (menu.kind === "measure3d" && menu.id != null && menu.measure != null) st.removeMeasure3d(menu.id, menu.measure);
             else if (menu.selection === "here") st.deleteSelection();
@@ -911,6 +967,18 @@ function StructureCanvasContent({
           }}
           onAddPlus={() => store.getState().addPlus(menu.at.x, menu.at.y)}
           onAddText={() => store.getState().setCaptionEdit({ id: null, at: menu.at })}
+          onRunStep={() => {
+            if (menu.kind === "step" && menu.id != null) store.getState().runStep(menu.id);
+          }}
+          onStepOptions={() => {
+            if (menu.kind === "step" && menu.id != null) store.getState().setWorkflowView({ openStep: menu.id });
+          }}
+          onUseAsInput={menu.selection === "here" && selectionAsSet() ? () => {
+            const frame = selectionAsSet();
+            if (!frame) return;
+            store.getState().addSet(frame);
+            store.getState().clearSel();
+          } : undefined}
           onEditText={() => {
             const c = store.getState().captions.find((x) => x.id === menu.id);
             if (c) store.getState().setCaptionEdit({ id: c.id, at: { x: c.x, y: c.y } });
@@ -1038,6 +1106,8 @@ function StructureCanvasContent({
             <Captions2D />
           </Suspense>
         </DrawnLayoutProvider>
+        {/* A workflow on the page: its sets, steps and wires */}
+        <Workflow2D />
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />
         <PanZoom2D />

@@ -1,12 +1,13 @@
 /**
  * The workspace: everything on the canvas, as it is - the drawing, its
  * arrows and pluses, the molecules in 3D with their frames, energies, looks
- * and measurements, how each is turned and which frame it shows, and the
- * document's own drawing style - so that it opens again just as it was
- * saved - and the texts it holds, and which its column showed. JSON,
- * versioned; a reader keeps what it reads and leaves out what it does not.
- * Its file, `.meno`, is a zip (lib/doc/menoFile) holding it, the
- * calculations' outputs its molecules were read from, and its texts.
+ * and measurements, how each is turned and which frame it shows, a
+ * workflow's sets, steps and wires, and the document's own drawing style -
+ * so that it opens again just as it was saved - and the texts it holds,
+ * and which its column showed. JSON, versioned; a reader keeps what it
+ * reads and leaves out what it does not. Its file, `.meno`, is a zip
+ * (lib/doc/menoFile) holding it, the calculations' outputs its molecules
+ * were read from, and its texts.
  */
 import { acceptStyleChoice } from "../../../../lib/chem/styleFields";
 import type { StyleChoice } from "../../../../lib/chem/style";
@@ -16,6 +17,7 @@ import { calcShowing, heldOutput, outputsToKeep, sha256Of } from "../../../../li
 import { writeMenoFile } from "../../../../lib/doc/menoFileWriter";
 import type { KeptData } from "../../../../lib/doc/menoFile";
 import type { CalcSource } from "../../../../lib/calc/output";
+import { readWorkflow, type SavedWorkflow } from "../workflow/saved";
 
 export const WORKSPACE = "meno-workspace";
 export const WORKSPACE_VERSION = 1;
@@ -27,6 +29,8 @@ export type Workspace = {
   style?: StyleChoice;
   aromaticEnabled: boolean;
   aromaticRings: Record<string, boolean>;
+  /** A workflow on the page: its sets, steps and wires (docs/WORKFLOWS.md). */
+  workflow?: SavedWorkflow;
   /** The texts it holds, as its file keeps them: each by its SHA-256 - and its words, once read (`readTexts`). */
   texts: SavedText[];
   /** Which of them its column showed, by its place among them; none, it was closed. */
@@ -40,7 +44,7 @@ type Saved = Pick<
   EditorState,
   "model" | "arrows" | "pluses" | "captions" | "molecules3d" | "turns3d" | "frames3d" | "lists3d" | "docStyle" | "aromaticEnabled" | "aromaticRings"
 > &
-  Partial<Pick<EditorState, "texts" | "textShown" | "textsOpen">>;
+  Partial<Pick<EditorState, "sets" | "steps" | "wires" | "texts" | "textShown" | "textsOpen">>;
 
 /**
  * The canvas's molecules in 3D as a file carries them: each turned, and
@@ -83,6 +87,7 @@ export function workspaceText(state: Saved, kept: ReadonlySet<string> = new Set(
       pluses: state.pluses,
       ...(state.captions.length ? { captions: state.captions } : {}),
       molecules3d,
+      ...(state.sets?.length || state.steps?.length ? { sets: state.sets ?? [], steps: state.steps ?? [], wires: state.wires ?? [] } : {}),
       ...(state.docStyle ? { style: state.docStyle } : {}),
       ...(state.aromaticEnabled ? { aromaticEnabled: true } : {}),
       ...(Object.keys(state.aromaticRings).length ? { aromaticRings: state.aromaticRings } : {}),
@@ -150,6 +155,7 @@ export function readWorkspace(text: string): Workspace | null {
   if (typeof r.aromaticRings === "object" && r.aromaticRings) {
     for (const [k, v] of Object.entries(r.aromaticRings)) if (typeof v === "boolean") rings[k] = v;
   }
+  const workflow = readWorkflow(data);
   const texts: SavedText[] = [];
   for (const t of Array.isArray(r.texts) ? (r.texts as Partial<SavedText>[]) : []) {
     if (typeof t?.name === "string" && typeof t.sha256 === "string" && SHA.test(t.sha256)) texts.push({ name: t.name.slice(0, 260), sha256: t.sha256 });
@@ -157,6 +163,7 @@ export function readWorkspace(text: string): Workspace | null {
   const shown = typeof r.textShown === "number" && Number.isInteger(r.textShown) && r.textShown >= 0 && r.textShown < texts.length;
   return {
     drawn,
+    ...(workflow ? { workflow } : {}),
     ...(r.style != null ? { style: acceptStyleChoice(r.style) } : {}),
     aromaticEnabled: r.aromaticEnabled === true,
     aromaticRings: rings,
