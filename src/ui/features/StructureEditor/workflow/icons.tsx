@@ -5,6 +5,7 @@ import {
   CpuChipIcon,
   CubeIcon,
   FunnelIcon,
+  QueueListIcon,
   RectangleGroupIcon,
   SignalIcon,
   Square2StackIcon,
@@ -40,4 +41,9 @@ export function StepGlyph({ icon, size = 16, stroke = 1.5 }: { icon: StepIcon; s
 /** Quick Add's button for calculations. */
 export function CalculationsGlyph({ size = 20, stroke = 1.5 }: { size?: number; stroke?: number }) {
   return <CpuChipIcon width={size} height={size} strokeWidth={stroke} aria-hidden />;
+}
+
+/** A procedure's icon, in Quick Add and Settings: steps one after another. */
+export function ProcedureGlyph({ size = 20, stroke = 1.5 }: { size?: number; stroke?: number }) {
+  return <QueueListIcon width={size} height={size} strokeWidth={stroke} aria-hidden />;
 }

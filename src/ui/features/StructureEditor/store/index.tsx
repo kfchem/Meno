@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { DocumentStore } from "../../../../lib/doc";
 import { createStructureDocument, type StructureDocument } from "../document";
-import type { Caption, EditorState, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
+import type { Caption, EditorState, SelFlow, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
@@ -52,6 +52,15 @@ function mirrorOf(doc: StructureDocument) {
   };
 }
 
+/** The sets and steps selected, kept to those the document still has. */
+function flowHeld(sel: SelFlow, sets: readonly WorkflowSet[], steps: readonly WorkflowStep[]): SelFlow {
+  if (!sel.sets.size && !sel.steps.size) return sel;
+  const setIds = new Set(sets.map((b) => b.id));
+  const stepIds = new Set(steps.map((s) => s.id));
+  if ([...sel.sets].every((id) => setIds.has(id)) && [...sel.steps].every((id) => stepIds.has(id))) return sel;
+  return { sets: new Set([...sel.sets].filter((id) => setIds.has(id))), steps: new Set([...sel.steps].filter((id) => stepIds.has(id))) };
+}
+
 const NO_TEXTS: WorkspaceText[] = [];
 const NO_CAPTIONS: Caption[] = [];
 const NO_SETS: WorkflowSet[] = [];
@@ -76,7 +85,7 @@ export function connectStoreToDocument(
       // (a turn of several as one body undone or redone: their turns too)
       const turns = turnsAcross(doc, was, now);
       was = now;
-      const held = heldOf(prev, mirrored.molecules3d);
+      const held = { ...heldOf(prev, mirrored.molecules3d), selFlow: flowHeld(prev.selFlow, mirrored.sets, mirrored.steps) };
       if (turns) {
         const turns3d = { ...(held.turns3d ?? prev.turns3d) };
         for (const [id, t] of Object.entries(turns)) {
@@ -118,6 +127,7 @@ export function createEditorStore(
     lists3d: {},
     frames3d: {},
     sel3d: new Set<number>(),
+    selFlow: { sets: new Set<number>(), steps: new Set<number>() },
     chosen3d: null,
     hoveredMeasure3d: null,
     hoveredArrow: null,

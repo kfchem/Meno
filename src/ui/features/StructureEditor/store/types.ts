@@ -44,7 +44,11 @@ export type Bond = BondChem & {
   dative?: boolean;
 };
 
+import type { FlowParts } from "../workflow/parts";
+
 export type Sel = { atoms: Set<number>; bonds: Set<number> };
+/** A workflow's parts selected, as the drawing's are (docs/WORKFLOWS.md, *Copying*): sets and steps, by id - the wires among them with them. */
+export type SelFlow = { sets: Set<number>; steps: Set<number> };
 
 export type Model = { atoms: Atom[]; bonds: Bond[] };
 export type Arrow = {
@@ -231,7 +235,8 @@ export type Rising3D = { from: { x: number; y: number }; start: number; flat?: n
 /** One of its calculation's lists, open, as a file carries it: the list, the row chosen, and the value its surface is drawn at. */
 export type CarriedList = { id: string; row: number | null; iso?: number };
 export type Carried3D = Omit<Molecule3D, "id"> & { turn?: Turn3D; frame?: number; list?: CarriedList };
-export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[]; captions?: Caption[]; molecules3d?: Carried3D[] };
+/** What is drawn, as a copy carries it: the drawing, its arrows, pluses and words, molecules in 3D - and a workflow's parts (sets, steps and the wires among them). */
+export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[]; captions?: Caption[]; molecules3d?: Carried3D[]; flow?: FlowParts };
 
 export type EditorState = {
   model: Model;
@@ -275,6 +280,12 @@ export type EditorState = {
   frames3d: Record<number, number>;
   /** The molecules in 3D selected, whole, by id: besides `sel`, which is the drawing's. */
   sel3d: Set<number>;
+  /** The sets and steps selected, with the rest - by a box, a lasso, Ctrl or ⌘ and a click, or Select all. */
+  selFlow: SelFlow;
+  /** A set or a step added to the selection, or taken out of it. */
+  toggleFlowSel: (part: { set: number } | { step: number }) => void;
+  /** The sets and steps selected: these, or (`add`) these besides those already. */
+  selectFlow: (flow: { sets: Iterable<number>; steps: Iterable<number> }, add?: boolean) => void;
   /**
    * Molecules in 3D rising out of their drawing, by id: where each started,
    * over the drawing, and when (`performance.now()`); and where each of its
@@ -426,8 +437,12 @@ export type EditorState = {
    */
   wireDrag: { from?: WireEnd; to?: number; at: { x: number; y: number }; was?: number } | null;
   setWorkflowView: (patch: Partial<Pick<EditorState, WorkflowView>>) => void;
+  /** A step's jobs forgotten, as it is deleted: stopped, and their folders taken away. */
+  forgetStepJobs: (step: Pick<WorkflowStep, "running" | "ran">) => void;
   /** A set round `frame`, as one step; its id. */
   addSet: (frame: { x0: number; y0: number; x1: number; y1: number }) => number;
+  /** A procedure saved, put down with its middle at (x, y), as one step - selected. */
+  putDownProcedure: (id: string, x: number, y: number) => void;
   /** A set's frame sized anew, or the set moved with all it holds: a run of either in one gesture one step. */
   resizeSet: (id: number, frame: { x0: number; y0: number; x1: number; y1: number }, gesture?: string) => void;
   moveSet: (id: number, dx: number, dy: number, gesture?: string) => void;

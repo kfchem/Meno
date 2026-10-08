@@ -41,7 +41,18 @@ export type AppSettings = {
   pointer: PointerSettings;
   /** How a workflow's jobs run (Settings, Calculations; docs/WORKFLOWS.md). */
   calculations: CalculationSettings;
+  /** The procedures saved (docs/WORKFLOWS.md, *Procedures*): put down again from Quick Add. */
+  procedures: SavedProcedure[];
 };
+
+/**
+ * A procedure saved: a workflow's steps, as they are set, the wires among
+ * them and the empty sets they take their input from - without their data
+ * - by an id of its own, with its name and when it was saved. Its flow is
+ * kept as data; the workflow reads it, as it reads a workspace's
+ * (StructureEditor/workflow/procedures).
+ */
+export type SavedProcedure = { id: string; name: string; saved: number; flow: { sets: unknown[]; steps: unknown[]; wires: unknown[] } };
 
 /** How a workflow's steps run (Settings, Calculations). Each kind's default options, done by each, are kept with the options (`options`, as "step:<who>:<kind>"), set there alone. */
 export type CalculationSettings = {
@@ -127,6 +138,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   pictures: { dpi: 600 },
   pointer: { wheelUp: "in" },
   calculations: {},
+  procedures: [],
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -149,6 +161,7 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     pictures: acceptPictures(r.pictures),
     pointer: acceptPointer(r.pointer),
     calculations: acceptCalculations(r.calculations),
+    procedures: acceptProcedures(r.procedures),
   };
 }
 
@@ -159,6 +172,22 @@ function acceptCalculations(raw: unknown): CalculationSettings {
   const atOnce = whole(r?.atOnce, JOBS_AT_ONCE_MOST);
   const cores = whole(r?.cores, CORES_MOST);
   return { ...(atOnce ? { atOnce } : {}), ...(cores ? { cores } : {}) };
+}
+
+/** The procedures saved, as the file holds them: each with an id, a name and its flow's parts as lists - read further as they are used. */
+function acceptProcedures(raw: unknown): SavedProcedure[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  return raw.flatMap((v): SavedProcedure[] => {
+    const r = v as { id?: unknown; name?: unknown; saved?: unknown; flow?: { sets?: unknown; steps?: unknown; wires?: unknown } } | null;
+    const id = typeof r?.id === "string" && /^[a-z0-9-]{1,40}$/.test(r.id) ? r.id : null;
+    const name = typeof r?.name === "string" && r.name.trim() && r.name.length <= 80 ? r.name.trim() : null;
+    const f = r?.flow;
+    if (!id || !name || seen.has(id) || !f || !Array.isArray(f.steps) || !f.steps.length) return [];
+    seen.add(id);
+    const list = (x: unknown) => (Array.isArray(x) ? x : []);
+    return [{ id, name, saved: typeof r.saved === "number" && Number.isFinite(r.saved) ? r.saved : 0, flow: { sets: list(f.sets), steps: f.steps, wires: list(f.wires) } }];
+  });
 }
 
 /** How the pointer works, as the file holds it; what does not read, as it is by default. */
@@ -331,6 +360,7 @@ type SettingsState = AppSettings & {
   setPictures: (pictures: PictureSettings) => void;
   setPointer: (pointer: PointerSettings) => void;
   setCalculations: (calculations: CalculationSettings) => void;
+  setProcedures: (procedures: SavedProcedure[]) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -341,9 +371,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer, calculations } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer, calculations, procedures } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer, calculations }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer, calculations, procedures }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -388,6 +418,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setCalculations: (calculations) => {
       set({ calculations });
+      scheduleSave();
+    },
+    setProcedures: (procedures) => {
+      set({ procedures });
       scheduleSave();
     },
     setUpdates: (updates) => {

@@ -13,6 +13,8 @@ import { notOneReaction, reactionFileText } from "../chem/reactionFile";
 import type { Arrow, Atom, Bond, Caption, Carried3D, CarriedList, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
 import { asSeen } from "./molecule3d";
 import { readCalc } from "../../../../lib/calc/output";
+import { readWorkflow } from "../workflow/saved";
+import { partsBounds } from "../workflow/parts";
 
 type Pt = { x: number; y: number };
 
@@ -84,7 +86,8 @@ export function clipItems(part: Drawn): ClipItem[] {
   // molecules in 3D alone: a molfile in 3D, as they are seen
   if (!part.atoms.length) {
     const ms = part.molecules3d ?? [];
-    if (!ms.length) return [];
+    // (a workflow's parts alone: Meno's record, which no other program reads)
+    if (!ms.length) return hasFlow(part) ? [{ flavor: "meno", text: recordText(part) }] : [];
     const placed = ms.length > 1;
     const seen = ms.map((m) => asSeen(m, m.turn, m.frame, placed));
     const offsets = seen.map((_, i) => seen.slice(0, i).reduce((n, a) => n + a.length, 0));
@@ -122,8 +125,12 @@ export function recordText(part: Drawn): string {
     ...(part.pluses?.length ? { pluses: part.pluses } : {}),
     ...(part.captions?.length ? { captions: part.captions } : {}),
     ...(part.molecules3d?.length ? { molecules3d: part.molecules3d } : {}),
+    ...(hasFlow(part) ? { flow: part.flow } : {}),
   });
 }
+
+/** Whether a copy carries any of a workflow's parts. */
+export const hasFlow = (part: Pick<Drawn, "flow">) => !!(part.flow?.sets.length || part.flow?.steps.length);
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -155,6 +162,7 @@ export function readDrawn(data: unknown): Drawn | null {
     pluses?: unknown;
     captions?: unknown;
     molecules3d?: unknown;
+    flow?: unknown;
   };
   if (!r || !Array.isArray(r.atoms) || !Array.isArray(r.bonds)) return null;
   const atoms = r.atoms as Partial<Atom>[];
@@ -181,6 +189,9 @@ export function readDrawn(data: unknown): Drawn | null {
     const read = readCarried3D(m);
     return read ? [read] : [];
   });
+  // (a workflow's parts, read as a workspace's are - what they did is a step's own, not a copy's)
+  const read = r.flow ? readWorkflow(r.flow) : undefined;
+  const flow = read ? { ...read, steps: read.steps.map(({ ran: _r, runs: _k, running: _g, ...s }) => s) } : undefined;
   return {
     atoms: atoms.map((a) => ({ r: 0.9, ...a }) as Atom),
     bonds: bonds as Bond[],
@@ -188,6 +199,7 @@ export function readDrawn(data: unknown): Drawn | null {
     ...(pluses.length ? { pluses } : {}),
     ...(captions.length ? { captions } : {}),
     ...(molecules3d.length ? { molecules3d } : {}),
+    ...(flow ? { flow } : {}),
   };
 }
 
@@ -299,14 +311,16 @@ export function looksLikeSmiles(text: string): boolean {
   return t.length > 0 && t.length < 5000 && /^[A-Za-z0-9@+\-=#$%:.()[\]/\\*~>]+$/.test(t);
 }
 
-/** `drawn` moved so that the middle of the box round it - its arrows and pluses too - is at `p`. */
+/** `drawn` moved so that the middle of the box round it - its arrows and pluses too, and a workflow's sets and steps - is at `p`. */
 export function centredAt<D extends Drawn>(drawn: D, p: Pt): D {
+  const flow = drawn.flow ? partsBounds(drawn.flow) : null;
   const points = [
     ...drawn.atoms,
     ...(drawn.arrows ?? []).flatMap((a) => Object.values(arrowEnds(a))),
     ...(drawn.pluses ?? []),
     ...(drawn.captions ?? []),
     ...(drawn.molecules3d ?? []).map((m) => m.at),
+    ...(flow ? [{ x: flow.x0, y: flow.y0 }, { x: flow.x1, y: flow.y1 }] : []),
   ];
   if (!points.length) return drawn;
   const xs = points.map((a) => a.x);
@@ -321,5 +335,14 @@ export function centredAt<D extends Drawn>(drawn: D, p: Pt): D {
     ...(drawn.pluses ? { pluses: drawn.pluses.map(moved) } : {}),
     ...(drawn.captions ? { captions: drawn.captions.map(moved) } : {}),
     ...(drawn.molecules3d ? { molecules3d: drawn.molecules3d.map((m) => ({ ...m, at: moved(m.at) })) } : {}),
+    ...(drawn.flow
+      ? {
+          flow: {
+            ...drawn.flow,
+            sets: drawn.flow.sets.map((b) => ({ ...b, x0: b.x0 + dx, x1: b.x1 + dx, y0: b.y0 + dy, y1: b.y1 + dy })),
+            steps: drawn.flow.steps.map(moved),
+          },
+        }
+      : {}),
   };
 }

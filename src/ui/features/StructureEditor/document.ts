@@ -935,11 +935,24 @@ export type MarkPlaces = {
   captions?: { id: number; x: number; y: number }[];
   /** Molecules in 3D moved with the rest: where each now stands. */
   molecules3d?: { id: number; at: { x: number; y: number; z?: number } }[];
+  /** A workflow's sets and steps moved with the rest: where each set's frame, and each step's card, now stands. */
+  sets?: { id: number; x0: number; y0: number; x1: number; y1: number }[];
+  steps?: { id: number; x: number; y: number }[];
 };
 
-/** `doc` with the arrows, pluses and molecules in 3D `places` names where it says. */
+/** `doc` with the arrows, pluses, molecules in 3D, sets and steps `places` names where it says. */
 export function placeMarks(doc: StructureDocument, places?: MarkPlaces): StructureDocument {
   if (places?.molecules3d?.length) return placeMarks(moveMolecules3d(doc, places.molecules3d), { ...places, molecules3d: [] });
+  if (places?.sets?.length || places?.steps?.length) {
+    const setAt = new Map((places.sets ?? []).map((b) => [b.id, b]));
+    const stepAt = new Map((places.steps ?? []).map((s) => [s.id, s]));
+    const placed = {
+      ...doc,
+      ...(doc.sets ? { sets: doc.sets.map((b) => (setAt.has(b.id) ? { ...b, ...setAt.get(b.id)!, id: b.id } : b)) } : {}),
+      ...(doc.steps ? { steps: doc.steps.map((s) => (stepAt.has(s.id) ? { ...s, x: stepAt.get(s.id)!.x, y: stepAt.get(s.id)!.y } : s)) } : {}),
+    };
+    return placeMarks(placed, { ...places, sets: [], steps: [] });
+  }
   if (!places?.arrows?.length && !places?.pluses?.length && !places?.captions?.length) return doc;
   const arrowAt = new Map((places.arrows ?? []).map((p) => [p.id, p]));
   const plusAt = new Map((places.pluses ?? []).map((p) => [p.id, p]));

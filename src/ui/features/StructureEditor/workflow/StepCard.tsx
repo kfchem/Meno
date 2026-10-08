@@ -127,6 +127,8 @@ export type StepCardProps = {
   state: StepState;
   /** Its words too small to read at this zoom: its icon and its state's icon alone. */
   compact: boolean;
+  /** Selected, with the rest: its border in the accent, as a set's chosen. */
+  selected?: boolean;
   open: boolean;
   ports: { take: PortLook; give: PortLook };
   /** How its jobs are getting on, where it runs any. */
@@ -174,7 +176,7 @@ export default function StepCard(p: StepCardProps) {
         role="group"
         aria-label={`Step: ${p.who}, ${p.info.name}`}
         onPointerDown={p.onCardDown}
-        className="rounded-xl border-gh-line bg-white shadow-sm"
+        className={`rounded-xl bg-white shadow-sm ${p.selected ? "border-accel-base" : "border-gh-line"}`}
         style={{ borderWidth: HAIR, borderStyle: "solid", cursor: "default" }}
       >
         {p.compact ? (

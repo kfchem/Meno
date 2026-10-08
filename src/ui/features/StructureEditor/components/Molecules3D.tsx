@@ -14,6 +14,7 @@ import { linkOf } from "../chem/make3d";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { eyeOf, pageAt } from "../utils/page";
 import { schemeAmong } from "../utils/copyPaste";
+import { setMembers } from "../workflow/entries";
 import CalcList3D from "./CalcList3D";
 import { isAsk, readGrid, resultKey, resultsOn, type Ask, type ListResult } from "../../../../lib/calc/results";
 import { askFor, askKey, findOutput, givenValue, useAsks, type AskError } from "../../../../lib/calc/asks";
@@ -75,6 +76,9 @@ type Gesture =
         arrows: { id: number; x: number; y: number }[];
         pluses: { id: number; x: number; y: number }[];
         captions: { id: number; x: number; y: number }[];
+        /** A workflow's sets and steps selected with it: where their frames and cards were. */
+        sets: { id: number; x0: number; y0: number; x1: number; y1: number }[];
+        steps: { id: number; x: number; y: number }[];
       };
       key: string;
     });
@@ -255,13 +259,15 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
         const dy = p.y - g.from.y;
         const by = <T extends { id: number; x: number; y: number }>(t: T) => ({ id: t.id, x: t.x + dx, y: t.y + dy });
         const solids = g.ats.map(({ id, at }) => ({ id, at: { x: at.x + dx, y: at.y + dy } }));
-        // (the drawing selected with it goes with it, in the same step)
-        if (g.drawn.atoms.length) {
+        // (the drawing selected with it goes with it, and a workflow's sets and steps, in the same step)
+        if (g.drawn.atoms.length || g.drawn.sets.length || g.drawn.steps.length) {
           store.getState().moveAtoms(g.drawn.atoms.map(by), g.key, {
             arrows: g.drawn.arrows.map(by),
             pluses: g.drawn.pluses.map(by),
             captions: g.drawn.captions.map(by),
             molecules3d: solids,
+            sets: g.drawn.sets.map((b) => ({ id: b.id, x0: b.x0 + dx, x1: b.x1 + dx, y0: b.y0 + dy, y1: b.y1 + dy })),
+            steps: g.drawn.steps.map(by),
           });
         } else store.getState().moveMolecules3d(solids, g.key);
       }
@@ -277,10 +283,15 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     // the drawing selected, and the arrows and pluses among it, too
     const moveFrom = (g: Press, e: PointerEvent): Going => {
       const st = store.getState();
-      const group = st.molecules3d.filter((x) => st.sel3d.has(x.id)).map((x) => x.id);
-      const withDrawing = st.sel.atoms.size > 0;
+      // (a set selected takes what it holds along, selected or not)
+      const sets = st.sets.filter((b) => st.selFlow.sets.has(b.id));
+      const held = sets.map((b) => setMembers(st, b));
+      const takenSolids = new Set([...st.sel3d, ...held.flatMap((h) => h.molecules)]);
+      const takenAtoms = new Set([...st.sel.atoms, ...held.flatMap((h) => h.structures.flat())]);
+      const group = st.molecules3d.filter((x) => takenSolids.has(x.id)).map((x) => x.id);
+      const withDrawing = takenAtoms.size > 0;
       const among = withDrawing
-        ? schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses, captions: st.captions }, st.sel.atoms)
+        ? schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses, captions: st.captions }, takenAtoms)
         : { arrows: [], pluses: [], captions: [] };
       for (const id of group) spins.current.delete(id);
       const r = dom.getBoundingClientRect();
@@ -292,10 +303,12 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
         from: { x: from.x, y: from.y },
         ats: st.molecules3d.filter((x) => group.includes(x.id)).map((x) => ({ id: x.id, at: { ...x.at } })),
         drawn: {
-          atoms: withDrawing ? st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y })) : [],
+          atoms: withDrawing ? st.model.atoms.filter((a) => takenAtoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y })) : [],
           arrows: among.arrows.map((a) => ({ id: a.id, x: a.x, y: a.y })),
           pluses: among.pluses.map((x) => ({ id: x.id, x: x.x, y: x.y })),
           captions: among.captions.map((x) => ({ id: x.id, x: x.x, y: x.y })),
+          sets: sets.map((b) => ({ id: b.id, x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 })),
+          steps: st.steps.filter((s) => st.selFlow.steps.has(s.id)).map((s) => ({ id: s.id, x: s.x, y: s.y })),
         },
         key: `move-3d-${g.id}-${e.timeStamp}`,
       };

@@ -139,7 +139,7 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
         // (alone: the drawing's selection goes, as a click on one part lets the others go)
         return add
           ? { ...prev, sel3d }
-          : { ...prev, sel3d, sel: { atoms: new Set(), bonds: new Set() }, selAnchor: null, chosen3d: null };
+          : { ...prev, sel3d, sel: { atoms: new Set(), bonds: new Set() }, selAnchor: null, chosen3d: null, selFlow: { sets: new Set(), steps: new Set() } };
       }),
     toggleMolecule3dSel: (id: number) =>
       set((prev) => {

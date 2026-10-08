@@ -13,6 +13,7 @@ import PointerSettings from "./PointerSettings";
 import PictureSettings from "./PictureSettings";
 import CalculationSettings from "./CalculationSettings";
 import JobSettings from "./JobSettings";
+import ProcedureSettings from "./ProcedureSettings";
 import PluginSettings from "./PluginSettings";
 import RoleChoices from "./RoleChoices";
 import { useSettingsSection, type SettingsSection } from "./section";
@@ -159,6 +160,12 @@ export default function SettingsPanel() {
               The programs steps run, on this computer. They go on when Meno closes, and those waiting start in turn.
             </p>
             <JobSettings />
+            <h3 className="mt-6 text-sm font-semibold text-gh-black">Procedures</h3>
+            <p className="mt-1 mb-3 text-sm text-gh-gray max-w-2xl">
+              Workflows saved without their molecules - their steps, as they are set, and the sets they take their input
+              from - to put down again from Quick Add, or to share as a workspace file.
+            </p>
+            <ProcedureSettings />
           </section>
         ) : section === "plugins" ? (
           <section className="mt-6 max-w-4xl">
