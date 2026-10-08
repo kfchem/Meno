@@ -35,6 +35,14 @@ export type AppSettings = {
   files: FileSettings;
   /** The plugins and the roles they fill (docs/PLUGINS.md). */
   plugins: PluginSettings;
+  /** How the mouse and the trackpad work the canvas. */
+  pointer: PointerSettings;
+};
+
+/** How the mouse and the trackpad work the canvas: which way a turn of the wheel zooms. */
+export type PointerSettings = {
+  /** A turn of the wheel upwards zooms in (as maps do), or out. */
+  wheelUp: "in" | "out";
 };
 
 /**
@@ -87,6 +95,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   abbreviations: [],
   files: { read: {}, also: {} },
   plugins: { removed: [], roles: {} },
+  pointer: { wheelUp: "in" },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -106,7 +115,14 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     abbreviations: acceptAbbreviations(r.abbreviations),
     files: acceptFiles(r.files, r.calcReaders),
     plugins: acceptPlugins(r.plugins),
+    pointer: acceptPointer(r.pointer),
   };
+}
+
+/** How the pointer works, as the file holds it; what does not read, as it is by default. */
+function acceptPointer(raw: unknown): PointerSettings {
+  const r = (raw ?? {}) as { wheelUp?: unknown };
+  return { wheelUp: r.wheelUp === "out" ? "out" : "in" };
 }
 
 const ID = /^[a-z0-9-]{1,40}$/;
@@ -257,6 +273,7 @@ type SettingsState = AppSettings & {
   setAbbreviations: (abbreviations: CustomAbbreviation[]) => void;
   setFiles: (files: FileSettings) => void;
   setPlugins: (plugins: PluginSettings) => void;
+  setPointer: (pointer: PointerSettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -267,9 +284,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pointer } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pointer }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -302,6 +319,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setPlugins: (plugins) => {
       set({ plugins });
+      scheduleSave();
+    },
+    setPointer: (pointer) => {
+      set({ pointer });
       scheduleSave();
     },
     setUpdates: (updates) => {

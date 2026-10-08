@@ -6,6 +6,8 @@ import { isPinch, wheelReader, zoomTaken } from "../../../../lib/input/wheel";
 import { useEditor, useEditorStore } from "../store";
 import { letViewGoalGo, viewGoalOf } from "./viewGoal";
 import { TAU, follow } from "../../../theme/motion";
+import { glideSpeed, recentMoves, type Move } from "../../../../lib/input/glide";
+import { useAppSettings } from "../../../../lib/settings/appSettings";
 
 /** WebKit's pinch on a trackpad, which it gives as gestures, not wheels. */
 type GestureLike = Event & { scale: number; clientX: number; clientY: number };
@@ -34,6 +36,15 @@ const ZOOM_RATE = 10;
 const RECENT_MS = 64;
 const HELD_MS = 80;
 const GLIDE_FRICTION = 4;
+/**
+ * A pinch let go while still zooming goes on zooming likewise, slowing by
+ * ZOOM_FRICTION a second, at most ZOOM_GLIDE_MOST a second (by the log of
+ * the ratio). Chromium's pinch, as the wheel with Ctrl, has no end of its
+ * own: it ends once no step has come for PINCH_END_MS.
+ */
+const ZOOM_FRICTION = 5;
+const ZOOM_GLIDE_MOST = 4;
+const PINCH_END_MS = 80;
 
 export function PanZoom2D() {
   const { camera, gl, invalidate, events } = useThree();
@@ -65,13 +76,17 @@ export function PanZoom2D() {
   const recent = useRef<{ t: number; dx: number; dy: number }[]>([]);
   // how far the wheel has yet to zoom, by the log of the ratio
   const zoomLeft = useRef(0);
+  // how fast a pinch let go goes on zooming, by the log of the ratio a second; and the pinch's latest steps
+  const zoomGlide = useRef(0);
+  const pinchSteps = useRef<Move[]>([]);
   const anchor = useRef({ cx: 0, cy: 0 });
   // (the camera's zoom: CSS pixels per world unit on the page, whether it is
   // orthographic - the canvas's - or in perspective, as PageCamera keeps it)
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
-      // (the user takes the view: a fit on its way gives way)
+      // (the user takes the view: a fit on its way gives way, and a pinch's glide)
       letViewGoalGo(camera);
+      zoomGlide.current = 0;
       // disable pan during bond extension or on a double-click down
       if (extendRef.current) return;
       const btn = (e as any).button;
@@ -179,8 +194,11 @@ export function PanZoom2D() {
       } catch {}
     };
     // The view zoomed at once by `factor`, keeping the point under the
-    // pointer where it is.
+    // pointer where it is - a pinch's step, kept to glide on from.
     const zoomAt = (factor: number, clientX: number, clientY: number) => {
+      const now = performance.now();
+      pinchSteps.current = [...recentMoves(pinchSteps.current, now, RECENT_MS), { t: now, d: Math.log(factor) }];
+      zoomGlide.current = 0;
       const cam = camera as THREE.OrthographicCamera;
       const rect = dom.getBoundingClientRect();
       const v = new THREE.Vector3(
@@ -196,13 +214,25 @@ export function PanZoom2D() {
       pos.current.y += before.y - after.y;
       vel.current.set(0, 0);
       zoomLeft.current = 0;
+      anchor.current.cx = v.x;
+      anchor.current.cy = v.y;
       invalidate();
     };
+    // A pinch let go: on it zooms, as fast as it was zooming, and slows.
+    const pinchLetGo = () => {
+      const speed = glideSpeed(pinchSteps.current, performance.now(), HELD_MS);
+      zoomGlide.current = Math.max(-ZOOM_GLIDE_MOST, Math.min(ZOOM_GLIDE_MOST, speed));
+      pinchSteps.current = [];
+      invalidate();
+    };
+    let pinchEnd: number | null = null;
     // A pinch in WebKit: gestures, while they last, rather than wheels.
     let pinch: number | null = null;
     const onGestureStart = (e: Event) => {
       e.preventDefault();
       letViewGoalGo(camera);
+      zoomGlide.current = 0;
+      pinchSteps.current = [];
       pinch = 1;
     };
     const onGestureChange = (e: Event) => {
@@ -215,6 +245,7 @@ export function PanZoom2D() {
     const onGestureEnd = (e: Event) => {
       e.preventDefault();
       pinch = null;
+      pinchLetGo();
     };
     const readWheel = wheelReader();
     const onWheel = (e: WheelEvent) => {
@@ -227,18 +258,28 @@ export function PanZoom2D() {
         pos.current.x += e.deltaX / cz;
         pos.current.y -= e.deltaY / cz;
         vel.current.set(0, 0);
+        zoomGlide.current = 0;
         invalidate();
         return;
       }
       if (isPinch(e)) {
         // a pinch in Chromium: small steps, followed as they come (Ctrl with
-        // a mouse's notch goes on below, and zooms as the wheel does)
+        // a mouse's notch goes on below, and zooms as the wheel does) - let
+        // go once they stop coming
         zoomAt(Math.exp(-e.deltaY * PINCH_PER_PX), e.clientX, e.clientY);
+        if (pinchEnd != null) window.clearTimeout(pinchEnd);
+        pinchEnd = window.setTimeout(() => {
+          pinchEnd = null;
+          pinchLetGo();
+        }, PINCH_END_MS);
         return;
       }
+      zoomGlide.current = 0;
       // (a notch zooms at least as far as a plain wheel's line of 40 px
       // does: a smoothly scrolling mouse's notch is only 13 px)
-      const step = Math.sign(e.deltaY) * Math.max(Math.abs(e.deltaY), NOTCH_MIN_PX);
+      // (upwards, in - or out, where Settings says so)
+      const way = useAppSettings.getState().pointer.wheelUp === "out" ? -1 : 1;
+      const step = way * Math.sign(e.deltaY) * Math.max(Math.abs(e.deltaY), NOTCH_MIN_PX);
       zoomLeft.current = Math.max(-ZOOM_LEFT_MOST, Math.min(ZOOM_LEFT_MOST, zoomLeft.current - step * ZOOM_PER_PX));
       const rect = dom.getBoundingClientRect();
       anchor.current.cx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -258,6 +299,7 @@ export function PanZoom2D() {
     box.addEventListener("gesturechange", onGestureChange);
     box.addEventListener("gestureend", onGestureEnd);
     return () => {
+      if (pinchEnd != null) window.clearTimeout(pinchEnd);
       dom.removeEventListener("pointerdown", onDown);
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerup", onUp);
@@ -349,12 +391,31 @@ export function PanZoom2D() {
       zoomLeft.current = next === old * Math.exp(take) ? zoomLeft.current - take : 0;
     }
 
+    // a pinch let go, zooming on about where it was, slowing; at a limit, it stops
+    if (zoomGlide.current !== 0) {
+      const step = Math.min(dt, 1 / 30);
+      zoomGlide.current *= Math.exp(-ZOOM_FRICTION * step);
+      const take = zoomGlide.current * step;
+      const old = cam.zoom || 1;
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, old * Math.exp(take)));
+      const v = new THREE.Vector3(anchor.current.cx, anchor.current.cy, 0);
+      const before = pageAt(v.x, v.y, cam);
+      cam.zoom = next;
+      cam.updateProjectionMatrix?.();
+      const after = pageAt(v.x, v.y, cam);
+      cam.position.x += before.x - after.x;
+      cam.position.y += before.y - after.y;
+      pos.current.set(cam.position.x, cam.position.y);
+      if (Math.abs(zoomGlide.current) < 0.02 || next !== old * Math.exp(take)) zoomGlide.current = 0;
+    }
+
     // On-demand rendering: request the next frame while the camera is still
     // moving, otherwise dragging and inertia would stop after one frame.
     if (
       dragging.current ||
       vel.current.lengthSq() > 1e-8 ||
-      Math.abs(zoomLeft.current) > 1e-4
+      Math.abs(zoomLeft.current) > 1e-4 ||
+      zoomGlide.current !== 0
     ) {
       invalidate();
     }

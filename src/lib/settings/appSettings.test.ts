@@ -19,6 +19,7 @@ describe("the settings file", () => {
       abbreviations: [{ label: "Mmt", name: "4-methoxytrityl", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1", also: ["MMTr"] }],
       files: { read: { orca: "cclib" }, also: { orca: ["pyscf"] } },
       plugins: { removed: ["rdkit"], roles: { smiles: "rdkit" } },
+      pointer: { wheelUp: "out" as const },
     };
     const text = settingsFileText(settings);
     expect(JSON.parse(text).format).toBe(1);
@@ -41,6 +42,8 @@ describe("the settings file", () => {
     // a file from before readers were chosen: none chosen; one from before Files, its readers chosen as they were;
     // a choice that is not an id, left out
     expect(acceptAppSettings({}).files).toEqual({ read: {}, also: {} });
+    // which way the wheel zooms: in, upwards, unless the file says out
+    expect(acceptAppSettings({ pointer: { wheelUp: "sideways" } }).pointer).toEqual({ wheelUp: "in" });
     expect(acceptAppSettings({ calcReaders: { chosen: { orca: "cclib", gaussian: 3, "x y": "cclib" } } }).files).toEqual({ read: { orca: "cclib" }, also: {} });
     expect(
       acceptAppSettings({ calcReaders: { chosen: { orca: "cclib" } }, files: { read: { orca: "pyscf" }, also: { orca: ["cclib", "cclib", 4], xtb: [] } } }).files,
