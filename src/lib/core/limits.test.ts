@@ -25,20 +25,18 @@ describe("canvas budget", () => {
     expect(canvasCost("text")).toBe(0);
     expect(canvasCost("2d")).toBe(1);
     expect(canvasCost("structure")).toBe(1);
-    // a workflow tab embeds two canvases: a sketch, and one in 3D
-    expect(canvasCost("node")).toBe(2);
   });
 
   it("ignores views without a canvas", () => {
     expect(countCanvases(withKinds("settings", "text", "pyconsole"))).toBe(0);
-    expect(canOpenKind(withKinds("settings", "text"), "node")).toBe(true);
+    expect(canOpenKind(withKinds("settings", "text"), "structure")).toBe(true);
   });
 
   it("allows filling the budget exactly", () => {
     const s = withKinds(...Array<TabKind>(MAX_CANVASES - 1).fill("2d"));
     expect(countCanvases(s)).toBe(MAX_CANVASES - 1);
     expect(canOpenKind(s, "structure")).toBe(true);
-    expect(canOpenKind(s, "node")).toBe(false);
+    expect(canOpenKind(withKinds(...Array<TabKind>(MAX_CANVASES).fill("2d")), "structure")).toBe(false);
   });
 
   it("refuses to exceed the budget", () => {
@@ -53,9 +51,11 @@ describe("canvas budget", () => {
       "structure",
     );
     const blankId = s.tabOrder[s.tabOrder.length - 1];
-    // a workflow tab in place of a canvas needs 2 canvases: one too many
-    expect(canOpenKind(s, "node", blankId)).toBe(false);
+    // a canvas in place of a canvas: its own freed first
     expect(canOpenKind(s, "structure", blankId)).toBe(true);
+    // in place of a tab with none, one too many
+    const settings = withKinds(...Array<TabKind>(MAX_CANVASES).fill("2d"), "settings");
+    expect(canOpenKind(settings, "structure", settings.tabOrder[MAX_CANVASES])).toBe(false);
     // a 2D tab in place of another frees its own canvas first
     expect(canOpenKind(s, "2d", s.tabOrder[0])).toBe(true);
   });

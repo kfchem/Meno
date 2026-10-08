@@ -12,7 +12,6 @@ export type TabKind =
   | "text"
   | "settings"
   | "pyconsole"
-  | "node"
   | "structure";
 
 export type TabContentBase = {

@@ -162,8 +162,8 @@ export function EditorProvider({
     [document, tabId],
   );
   // One store per provider instance. Deliberately not a module-level registry
-  // keyed by tabId: ids are not globally unique (the workflow editor's sketch
-  // node is "mol2d" in every Workflow Builder tab).
+  // keyed by tabId: an id is not bound to be unique (a canvas embedded in
+  // another view may share one with another).
   const store = useMemo(() => createEditorStore(doc), [doc]);
   useEffect(() => connectStoreToDocument(store, doc), [store, doc]);
   return (
