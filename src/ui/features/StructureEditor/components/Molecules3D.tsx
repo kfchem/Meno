@@ -74,6 +74,7 @@ type Gesture =
         atoms: { id: number; x: number; y: number }[];
         arrows: { id: number; x: number; y: number }[];
         pluses: { id: number; x: number; y: number }[];
+        captions: { id: number; x: number; y: number }[];
       };
       key: string;
     });
@@ -259,6 +260,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           store.getState().moveAtoms(g.drawn.atoms.map(by), g.key, {
             arrows: g.drawn.arrows.map(by),
             pluses: g.drawn.pluses.map(by),
+            captions: g.drawn.captions.map(by),
             molecules3d: solids,
           });
         } else store.getState().moveMolecules3d(solids, g.key);
@@ -278,8 +280,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       const group = st.molecules3d.filter((x) => st.sel3d.has(x.id)).map((x) => x.id);
       const withDrawing = st.sel.atoms.size > 0;
       const among = withDrawing
-        ? schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses }, st.sel.atoms)
-        : { arrows: [], pluses: [] };
+        ? schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses, captions: st.captions }, st.sel.atoms)
+        : { arrows: [], pluses: [], captions: [] };
       for (const id of group) spins.current.delete(id);
       const r = dom.getBoundingClientRect();
       const from = pageAt(((g.sx - r.left) / r.width) * 2 - 1, -(((g.sy - r.top) / r.height) * 2 - 1), camera);
@@ -293,6 +295,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           atoms: withDrawing ? st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y })) : [],
           arrows: among.arrows.map((a) => ({ id: a.id, x: a.x, y: a.y })),
           pluses: among.pluses.map((x) => ({ id: x.id, x: x.x, y: x.y })),
+          captions: among.captions.map((x) => ({ id: x.id, x: x.x, y: x.y })),
         },
         key: `move-3d-${g.id}-${e.timeStamp}`,
       };

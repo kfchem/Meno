@@ -12,7 +12,7 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus, WorkspaceText } from "./store/types";
+import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus, WorkspaceText } from "./store/types";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
 import { newTextName } from "./utils/texts";
@@ -22,6 +22,9 @@ export type StructureDocument = {
   arrows: Arrow[];
   /** The "+" signs of a reaction scheme. */
   pluses: Plus[];
+  /** Words on the page: a reaction's reagents and conditions, or anything else. */
+  captions?: Caption[];
+  nextCaptionId?: number;
   /** Legacy global aromatic circles toggle. */
   aromaticEnabled: boolean;
   /** Per-ring aromatic circle flags, keyed by ring key. */
@@ -48,9 +51,9 @@ export type StructureDocument = {
   nextTextId?: number;
 };
 
-/** Whether it holds nothing: no structure, arrow or "+" sign drawn, no molecule in 3D, no text. */
+/** Whether it holds nothing: no structure, arrow, "+" sign or words drawn, no molecule in 3D, no text. */
 export function isBlankDocument(doc: StructureDocument): boolean {
-  return !doc.model.atoms.length && !doc.arrows.length && !doc.pluses.length && !doc.molecules3d?.length && !doc.texts?.length;
+  return !doc.model.atoms.length && !doc.arrows.length && !doc.pluses.length && !doc.captions?.length && !doc.molecules3d?.length && !doc.texts?.length;
 }
 
 export function emptyStructureDocument(): StructureDocument {
@@ -612,6 +615,8 @@ export function replaceModel(
     nextArrowId: 1,
     pluses: [],
     nextPlusId: 1,
+    captions: [],
+    nextCaptionId: 1,
     molecules3d: [],
     nextMolecule3dId: 1,
     aromaticEnabled: false,
@@ -674,6 +679,8 @@ export function appendModel(
 export type ImportedScheme = {
   arrows?: Omit<Arrow, "id">[];
   pluses?: Omit<Plus, "id">[];
+  /** Words, each over or under an arrow it brings by its place among them (`arrowAt`), where it is. */
+  captions?: (Omit<Caption, "id" | "arrow"> & { arrowAt?: number })[];
   /** Molecules in 3D a file brings, where they are to stand - and, where it says, the frame each shows (an optimisation's last). */
   molecules3d?: (Omit<Molecule3D, "id"> & { frame?: number; list?: CarriedList })[];
 };
@@ -683,6 +690,10 @@ export function schemeOf(part: Drawn): ImportedScheme {
   return {
     arrows: (part.arrows ?? []).map(({ id: _id, ...a }) => a),
     pluses: (part.pluses ?? []).map(({ id: _id, ...p }) => p),
+    captions: (part.captions ?? []).map(({ id: _id, arrow, ...c }) => {
+      const at = arrow == null ? -1 : (part.arrows ?? []).findIndex((a) => a.id === arrow);
+      return at < 0 ? c : { ...c, arrowAt: at };
+    }),
     // (how one was turned, and its frame, are the view's: not the document's)
     molecules3d: (part.molecules3d ?? []).map(({ turn: _turn, frame: _frame, list: _list, ...m }) => m),
   };
@@ -694,11 +705,14 @@ export function withImportedScheme(
   scheme?: ImportedScheme,
 ): StructureDocument {
   let next = doc;
+  // (the words over an arrow it brings are over that arrow, as it is numbered here)
+  const firstArrow = doc.nextArrowId;
   for (const a of scheme?.arrows ?? []) {
     next = addArrow(next, a.x, a.y, a.angle, a.length);
     if (a.look) next = setArrowLook(next, next.nextArrowId - 1, a.look);
   }
   for (const p of scheme?.pluses ?? []) next = addPlus(next, p.x, p.y);
+  for (const { arrowAt, ...c } of scheme?.captions ?? []) next = addCaption(next, { ...c, ...(arrowAt != null ? { arrow: firstArrow + arrowAt } : {}) });
   // (the frame each shows is the canvas's to keep, not the document's)
   for (const { frame: _frame, list: _list, ...m } of scheme?.molecules3d ?? []) next = addMolecule3d(next, m);
   return next;
@@ -848,8 +862,10 @@ export function updateArrow(
   const index = doc.arrows.findIndex((a) => a.id === id);
   if (index < 0) return doc;
   const next = doc.arrows.slice();
-  next[index] = { ...next[index], ...patch };
-  return { ...doc, arrows: next };
+  const was = next[index];
+  next[index] = { ...was, ...patch };
+  // (the words over it, or under it, go where its middle goes)
+  return withCaptionsBy({ ...doc, arrows: next }, new Map([[id, { x: next[index].x - was.x, y: next[index].y - was.y }]]));
 }
 
 /** `doc` with the arrow setting `look` for itself, in place of what it set. */
@@ -871,7 +887,7 @@ export function removeArrow(
   id: number,
 ): StructureDocument {
   const arrows = doc.arrows.filter((a) => a.id !== id);
-  return arrows.length === doc.arrows.length ? doc : { ...doc, arrows };
+  return arrows.length === doc.arrows.length ? doc : withoutArrowsOf({ ...doc, arrows }, new Set([id]));
 }
 
 export function addPlus(doc: StructureDocument, x: number, y: number): StructureDocument {
@@ -894,10 +910,11 @@ export function removePlus(doc: StructureDocument, id: number): StructureDocumen
   return pluses.length === (doc.pluses ?? []).length ? doc : { ...doc, pluses };
 }
 
-/** Where arrows and pluses go, by id. */
+/** Where arrows, pluses and words go, by id. */
 export type MarkPlaces = {
   arrows?: { id: number; x: number; y: number }[];
   pluses?: { id: number; x: number; y: number }[];
+  captions?: { id: number; x: number; y: number }[];
   /** Molecules in 3D moved with the rest: where each now stands. */
   molecules3d?: { id: number; at: { x: number; y: number; z?: number } }[];
 };
@@ -905,34 +922,109 @@ export type MarkPlaces = {
 /** `doc` with the arrows, pluses and molecules in 3D `places` names where it says. */
 export function placeMarks(doc: StructureDocument, places?: MarkPlaces): StructureDocument {
   if (places?.molecules3d?.length) return placeMarks(moveMolecules3d(doc, places.molecules3d), { ...places, molecules3d: [] });
-  if (!places?.arrows?.length && !places?.pluses?.length) return doc;
+  if (!places?.arrows?.length && !places?.pluses?.length && !places?.captions?.length) return doc;
   const arrowAt = new Map((places.arrows ?? []).map((p) => [p.id, p]));
   const plusAt = new Map((places.pluses ?? []).map((p) => [p.id, p]));
+  const captionAt = new Map((places.captions ?? []).map((p) => [p.id, p]));
   const at = <T extends { id: number; x: number; y: number }>(t: T, m: Map<number, { x: number; y: number }>): T => {
     const p = m.get(t.id);
     return p ? { ...t, x: p.x, y: p.y } : t;
   };
-  return {
+  // (words over an arrow moved, and not moved themselves, go as far as it went)
+  const by = new Map<number, { x: number; y: number }>();
+  for (const a of doc.arrows) {
+    const p = arrowAt.get(a.id);
+    if (p) by.set(a.id, { x: p.x - a.x, y: p.y - a.y });
+  }
+  const moved = {
     ...doc,
     arrows: doc.arrows.map((a) => at(a, arrowAt)),
     pluses: (doc.pluses ?? []).map((p) => at(p, plusAt)),
+    ...(doc.captions ? { captions: doc.captions.map((c) => at(c, captionAt)) } : {}),
   };
+  return withCaptionsBy(moved, by, new Set(captionAt.keys()));
 }
 
-/** `doc` without the atoms and bonds given, nor the arrows and pluses: what a cut takes. */
+/** `doc` without the atoms and bonds given, nor the arrows, pluses and words: what a cut takes. */
 export function deleteDrawn(
   doc: StructureDocument,
   atoms: Set<number>,
   bonds: Set<number>,
   arrows: Set<number>,
   pluses: Set<number>,
+  captions: Set<number> = new Set(),
 ): StructureDocument {
   const rest = atoms.size || bonds.size ? deleteParts(doc, atoms, bonds) : doc;
   const keptArrows = rest.arrows.filter((a) => !arrows.has(a.id));
   const keptPluses = (rest.pluses ?? []).filter((p) => !pluses.has(p.id));
-  return keptArrows.length === rest.arrows.length && keptPluses.length === (rest.pluses ?? []).length
-    ? rest
-    : { ...rest, arrows: keptArrows, pluses: keptPluses };
+  const keptCaptions = (rest.captions ?? []).filter((c) => !captions.has(c.id));
+  if (
+    keptArrows.length === rest.arrows.length &&
+    keptPluses.length === (rest.pluses ?? []).length &&
+    keptCaptions.length === (rest.captions ?? []).length
+  ) {
+    return rest;
+  }
+  return withoutArrowsOf({ ...rest, arrows: keptArrows, pluses: keptPluses, captions: keptCaptions }, arrows);
+}
+
+// --- words ---------------------------------------------------------------------
+
+/** `doc` with words added where `c` says; they are numbered `nextCaptionId`. */
+export function addCaption(doc: StructureDocument, c: Omit<Caption, "id">): StructureDocument {
+  const id = doc.nextCaptionId ?? 1;
+  return { ...doc, nextCaptionId: id + 1, captions: [...(doc.captions ?? []), { ...c, id }] };
+}
+
+/** `doc` with the words `id` changed: written anew, moved, put over an arrow or (null) taken from it. */
+export function updateCaption(
+  doc: StructureDocument,
+  id: number,
+  patch: { text?: string; x?: number; y?: number; arrow?: number | null },
+): StructureDocument {
+  const captions = doc.captions ?? [];
+  const index = captions.findIndex((c) => c.id === id);
+  if (index < 0) return doc;
+  const { arrow, ...rest } = patch;
+  const was = captions[index];
+  // (over the arrow it was over, unless said)
+  const link = arrow === undefined ? was.arrow : (arrow ?? undefined);
+  const { arrow: _was, ...kept } = was;
+  const next: Caption = { ...kept, ...rest, ...(link != null ? { arrow: link } : {}) };
+  if (next.text === was.text && next.x === was.x && next.y === was.y && next.arrow === was.arrow) return doc;
+  const out = captions.slice();
+  out[index] = next;
+  return { ...doc, captions: out };
+}
+
+export function removeCaption(doc: StructureDocument, id: number): StructureDocument {
+  const captions = (doc.captions ?? []).filter((c) => c.id !== id);
+  return captions.length === (doc.captions ?? []).length ? doc : { ...doc, captions };
+}
+
+/** `doc` with the words over each arrow `by` names moved as far as it says - but those `still` - as their arrow went. */
+function withCaptionsBy(doc: StructureDocument, by: Map<number, { x: number; y: number }>, still: ReadonlySet<number> = new Set()): StructureDocument {
+  if (!doc.captions?.some((c) => c.arrow != null && by.has(c.arrow) && !still.has(c.id))) return doc;
+  return {
+    ...doc,
+    captions: doc.captions.map((c) => {
+      const d = c.arrow != null && !still.has(c.id) ? by.get(c.arrow) : undefined;
+      return d && (d.x || d.y) ? { ...c, x: c.x + d.x, y: c.y + d.y } : c;
+    }),
+  };
+}
+
+/** `doc` with the words over the arrows `gone` left where they are, over nothing. */
+function withoutArrowsOf(doc: StructureDocument, gone: ReadonlySet<number>): StructureDocument {
+  if (!doc.captions?.some((c) => c.arrow != null && gone.has(c.arrow))) return doc;
+  return {
+    ...doc,
+    captions: doc.captions.map((c) => {
+      if (c.arrow == null || !gone.has(c.arrow)) return c;
+      const { arrow: _arrow, ...rest } = c;
+      return rest;
+    }),
+  };
 }
 
 // --- aromatic circles ------------------------------------------------------

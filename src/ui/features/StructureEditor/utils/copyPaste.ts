@@ -10,7 +10,7 @@ import { arrowEnds } from "../../../../lib/chem/reactionScheme";
 import { fragmentOf, partOf } from "../chem/cleanUp";
 import { forFlatReaders } from "../chem/drawing";
 import { notOneReaction, reactionFileText } from "../chem/reactionFile";
-import type { Arrow, Atom, Bond, Carried3D, CarriedList, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
+import type { Arrow, Atom, Bond, Caption, Carried3D, CarriedList, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
 import { asSeen } from "./molecule3d";
 import { readCalc } from "../../../../lib/calc/output";
 
@@ -32,22 +32,24 @@ export function partToCopy(drawn: Drawn, sel: Sel, around: number | null): Drawn
   if (!atoms.size) return null;
   const part = partOf(model, atoms);
   if (!sel.atoms.size) return part;
-  const { arrows, pluses } = schemeAmong(drawn, atoms);
+  const { arrows, pluses, captions } = schemeAmong(drawn, atoms);
   return {
     ...part,
     ...(arrows.length ? { arrows } : {}),
     ...(pluses.length ? { pluses } : {}),
+    ...(captions.length ? { captions } : {}),
   };
 }
 
 /**
- * The arrows and "+" signs drawn among the atoms `ids`: within half a bond
- * of the box round them, an arrow from end to end. What goes with a
- * selection that is copied, cut, deleted or moved.
+ * The arrows, "+" signs and words drawn among the atoms `ids`: within half
+ * a bond of the box round them, an arrow from end to end, words by their
+ * middle - or over an arrow that is. What goes with a selection that is
+ * copied, cut, deleted or moved.
  */
-export function schemeAmong(drawn: Drawn, ids: Set<number>): { arrows: Arrow[]; pluses: Plus[] } {
+export function schemeAmong(drawn: Drawn, ids: Set<number>): { arrows: Arrow[]; pluses: Plus[]; captions: Caption[] } {
   const atoms = drawn.atoms.filter((a) => ids.has(a.id));
-  if (!atoms.length) return { arrows: [], pluses: [] };
+  if (!atoms.length) return { arrows: [], pluses: [], captions: [] };
   const reach = NOMINAL_BOND_LENGTH / 2;
   const xs = atoms.map((a) => a.x);
   const ys = atoms.map((a) => a.y);
@@ -56,12 +58,15 @@ export function schemeAmong(drawn: Drawn, ids: Set<number>): { arrows: Arrow[]; 
     p.x <= Math.max(...xs) + reach &&
     p.y >= Math.min(...ys) - reach &&
     p.y <= Math.max(...ys) + reach;
+  const arrows = (drawn.arrows ?? []).filter((a) => {
+    const { from, to } = arrowEnds(a);
+    return within(from) && within(to);
+  });
+  const taken = new Set(arrows.map((a) => a.id));
   return {
-    arrows: (drawn.arrows ?? []).filter((a) => {
-      const { from, to } = arrowEnds(a);
-      return within(from) && within(to);
-    }),
+    arrows,
     pluses: (drawn.pluses ?? []).filter(within),
+    captions: (drawn.captions ?? []).filter((c) => within(c) || (c.arrow != null && taken.has(c.arrow))),
   };
 }
 
@@ -115,6 +120,7 @@ export function recordText(part: Drawn): string {
     bonds: part.bonds,
     ...(part.arrows?.length ? { arrows: part.arrows } : {}),
     ...(part.pluses?.length ? { pluses: part.pluses } : {}),
+    ...(part.captions?.length ? { captions: part.captions } : {}),
     ...(part.molecules3d?.length ? { molecules3d: part.molecules3d } : {}),
   });
 }
@@ -147,6 +153,7 @@ export function readDrawn(data: unknown): Drawn | null {
     bonds?: unknown;
     arrows?: unknown;
     pluses?: unknown;
+    captions?: unknown;
     molecules3d?: unknown;
   };
   if (!r || !Array.isArray(r.atoms) || !Array.isArray(r.bonds)) return null;
@@ -164,6 +171,12 @@ export function readDrawn(data: unknown): Drawn | null {
   const pluses = (Array.isArray(r.pluses) ? (r.pluses as Partial<Plus>[]) : []).filter(
     (p) => isNum(p.id) && isNum(p.x) && isNum(p.y),
   ) as Plus[];
+  // (words over an arrow that is not there are over none)
+  const arrowIds = new Set(arrows.map((a) => a.id));
+  const captions = (Array.isArray(r.captions) ? (r.captions as Partial<Caption>[]) : []).flatMap((c): Caption[] => {
+    if (!isNum(c.id) || !isNum(c.x) || !isNum(c.y) || typeof c.text !== "string" || !c.text.trim()) return [];
+    return [{ id: c.id, x: c.x, y: c.y, text: c.text, ...(isNum(c.arrow) && arrowIds.has(c.arrow) ? { arrow: c.arrow } : {}) }];
+  });
   const molecules3d = (Array.isArray(r.molecules3d) ? r.molecules3d : []).flatMap((m) => {
     const read = readCarried3D(m);
     return read ? [read] : [];
@@ -173,6 +186,7 @@ export function readDrawn(data: unknown): Drawn | null {
     bonds: bonds as Bond[],
     ...(arrows.length ? { arrows } : {}),
     ...(pluses.length ? { pluses } : {}),
+    ...(captions.length ? { captions } : {}),
     ...(molecules3d.length ? { molecules3d } : {}),
   };
 }
@@ -288,6 +302,7 @@ export function centredAt<D extends Drawn>(drawn: D, p: Pt): D {
     ...drawn.atoms,
     ...(drawn.arrows ?? []).flatMap((a) => Object.values(arrowEnds(a))),
     ...(drawn.pluses ?? []),
+    ...(drawn.captions ?? []),
     ...(drawn.molecules3d ?? []).map((m) => m.at),
   ];
   if (!points.length) return drawn;
@@ -301,6 +316,7 @@ export function centredAt<D extends Drawn>(drawn: D, p: Pt): D {
     atoms: drawn.atoms.map(moved),
     ...(drawn.arrows ? { arrows: drawn.arrows.map(moved) } : {}),
     ...(drawn.pluses ? { pluses: drawn.pluses.map(moved) } : {}),
+    ...(drawn.captions ? { captions: drawn.captions.map(moved) } : {}),
     ...(drawn.molecules3d ? { molecules3d: drawn.molecules3d.map((m) => ({ ...m, at: moved(m.at) })) } : {}),
   };
 }

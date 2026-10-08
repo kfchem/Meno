@@ -51,10 +51,12 @@ and in particular:
   - A bond led within reach of an atom closes onto it, and so does one led
     onto an atom however far away - a long bond closes a ring too; the
     preview shows it closed before the button comes up.
-  - **Chains** (agreed 2026-10-03): three clicks on an atom, or two on
-    empty space, draw a chain - led by a drag, or, the last click let go
-    where it was, traced with the button up until a click ends it; Escape
-    lets it go. The third click takes back the bond the double-click drew.
+  - **Chains** (agreed 2026-10-03): three clicks on an atom, or on empty
+    space, draw a chain - led by a drag, or, the last click let go where it
+    was, traced with the button up until a click ends it; Escape lets it
+    go. The third click takes back the bond the double-click drew. (Two on
+    empty space drew one until 2026-10-08, when the maintainer gave the
+    double-click there to *Quick Add*, below.)
     - It runs on a honeycomb of the drawing's own lengths and angles laid
       out from its start (`utils/honeycomb`), turned so that a bond the
       atom already has is one of its own; across at 30 degrees from empty
@@ -167,8 +169,19 @@ as it comes (`suppressDoubleClick`), not when the edit would begin. On a
 trackpad that taps to click, a long press is a press of
 the pad held.
 
-A double-click on empty space begins a chain (above); a double-click and
-a drag that starts on an atom draws one bond out of it. On a trackpad a
+A triple-click on empty space begins a chain (above); a double-click and
+a drag that starts on an atom draws one bond out of it.
+
+**Quick Add** (the maintainer, 2026-10-08). A double-click on empty space
+opens, up and to the right of it, what can be put down there, each an
+icon - named as the pointer rests on it - and none in words: a bond
+(across at 30 degrees, as a chain from empty space begins), text, a
+reaction arrow and a "+". A choice puts it down where the double-click
+was; Escape, a press elsewhere or a turn of the wheel closes it. It opens
+QUICK_ADD_MS (0.28 s) after the double-click, a third click not having
+come: a quicker third click draws a chain instead, and a slower one still
+closes it and draws the chain. A double-click on an atom still draws one
+bond; on an arrow, a "+" or text, none of this (`Selection2D`, `QuickAdd`). On a trackpad a
 double-tap and drag does the same as a double-click and drag.
 A box or a lasso drawn with Ctrl (⌘) held adds what it takes to the
 selection; drawn without, it replaces it.
@@ -232,7 +245,7 @@ V, as everywhere, and the same from the menus.
 - On empty space with nothing selected, a right-click opens *Paste* and
   *Select all*; the selection's menu starts with *Cut*, *Copy* and *Copy
   as SMILES*, and *Paste* when it was opened on empty space. Either, opened
-  on empty space, ends with *Add reaction arrow* and *Add plus*.
+  on empty space, ends with *Add reaction arrow*, *Add plus* and *Add text*.
 
 ## Who does what
 
@@ -431,8 +444,32 @@ All hover-based, as above.
   stays, its direction in steps of 15 degrees, as a bond's, or freely after
   a pause - one undo step. An arrow sets its own line and head, as above.
   They come from an RXN file too, and are saved - as an RXN file - copied
-  and in an exported picture: docs/CTFILE.md, "Reaction schemes". Text is
-  still to come.)
+  and in an exported picture: docs/CTFILE.md, "Reaction schemes".)
+- **Text** (the maintainer, 2026-10-08: reagents' labels): words on the
+  page - a reaction's reagents and conditions, or anything else
+  (`lib/chem/captions`, `Captions2D`, `CaptionEditor2D`).
+  - Written in place, from Quick Add or the menu on empty space (*Add
+    text*); written anew by a double-click on it or its menu's *Edit text*.
+    Enter keeps them, Shift+Enter starts another line, Escape lets them go,
+    a press elsewhere keeps them; written away, they are gone. As they are
+    written, undo is the box's own; kept, one undo step.
+  - Set as a label is set, word by word: a formula's counts low (K₂CO₃,
+    Pd₂(dba)₃, Pd(PPh₃)₄), a prefix's t- in italics at a word's start
+    (*t*-BuOK, not the o of co-solvent), a sign at a formula's end its
+    charge (NH₄⁺); what has no letter in it - 60 °C, 12 h, (1:1), + - as
+    typed. Line under line, each centred, in the labels' typeface and size.
+  - Put down near an arrow - within its length and two and a half ems of
+    it - they go over it or under it, on the side they were put, centred on
+    its middle and half an em clear of it, beyond any words already there;
+    and go where the arrow goes, moved or drawn out, until they are dragged
+    off it. Put down elsewhere, they stay where they are put.
+  - Lit from behind under the pointer, dragged to move, deleted by Delete
+    or Backspace under the pointer or from their menu.
+  - With a selection when among it, or over an arrow among it: copied,
+    cut, deleted and moved with it (not turned). Saved in the workspace,
+    kept by a copy's record, drawn in an exported SVG and in the pictures a
+    copy puts on the clipboard; taken into a fit. An RXN or MOL file has no
+    place for them, and does not keep them.
 - Copy and paste, within Meno and between tabs. (PR #68, as above; and
   between Meno and other programs, through the system clipboard.)
 

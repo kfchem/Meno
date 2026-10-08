@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import {
+  labelSetOf,
   layoutMolecule,
   type Atom as LAtom,
   type Bond as LBond,
@@ -15,6 +16,7 @@ import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
 import { eyeOf } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
 import { opensWith } from "./openingFit";
+import { captionSet } from "../../../../lib/chem/captions";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -25,6 +27,7 @@ export default function FitToContent2D({
 }) {
   const { model, autoFitSuspended } = useEditor();
   const molecules3d = useEditor((s) => s.molecules3d);
+  const captions = useEditor((s) => s.captions);
   const store = useEditorStore();
   const style = useDrawingStyle();
   const { camera, size, invalidate } = useThree();
@@ -47,7 +50,7 @@ export default function FitToContent2D({
     const cam = camera as THREE.OrthographicCamera;
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
-    const empty = atoms.length === 0 && molecules3d.length === 0;
+    const empty = atoms.length === 0 && molecules3d.length === 0 && captions.length === 0;
     const firstView = !opened.current;
     opened.current = true;
     const firstContent = !held.current && !empty;
@@ -75,6 +78,12 @@ export default function FitToContent2D({
     const bounds = atoms.length
       ? layoutMolecule(la, lb, opts, cam.zoom || 1).bounds
       : { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
+    // and the words on the page, as they are set
+    for (const c of captions) {
+      const set = captionSet(c.text, c.x, c.y, opts.fontPx, labelSetOf(opts));
+      bounds.min = { x: Math.min(bounds.min.x, c.x - set.halfW), y: Math.min(bounds.min.y, c.y - set.halfH) };
+      bounds.max = { x: Math.max(bounds.max.x, c.x + set.halfW), y: Math.max(bounds.max.y, c.y + set.halfH) };
+    }
     // and the molecules in 3D, as each is turned and shown now, as the
     // camera sees them: straight from above, by an orthographic camera (the
     // canvas's); in perspective, first from straight above each, then - as
@@ -128,6 +137,7 @@ export default function FitToContent2D({
     model.atoms,
     model.bonds,
     molecules3d,
+    captions,
     style,
     camera,
     size.width,

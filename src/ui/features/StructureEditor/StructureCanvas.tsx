@@ -89,6 +89,10 @@ import type { DocumentStore } from "../../../lib/doc";
 import type { StructureDocument } from "./document";
 import { EYE_HEIGHT, eyeOf } from "./utils/page";
 import Molecules3D from "./components/Molecules3D";
+import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
+import QuickAdd from "./QuickAdd";
+import Captions2D from "./components/Captions2D";
+import CaptionEditor2D from "./components/CaptionEditor2D";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
@@ -443,6 +447,10 @@ function StructureCanvasContent({
         e.preventDefault();
         st.removeArrow(st.hoveredArrow);
         st.setHoveredArrow(null);
+      } else if (isDeleteKey(e) && !busy && st.hoveredCaption != null && st.captions.some((c) => c.id === st.hoveredCaption)) {
+        // words under the pointer, and nothing else
+        e.preventDefault();
+        st.removeCaption(st.hoveredCaption);
       } else if (isDeleteKey(e) && !busy && st.hoveredPlus != null && st.pluses.some((p) => p.id === st.hoveredPlus)) {
         e.preventDefault();
         st.removePlus(st.hoveredPlus);
@@ -473,6 +481,9 @@ function StructureCanvasContent({
   }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget, requestFit]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
+  // and what a double-click on empty space can put down there (QuickAdd)
+  const quickAdd = useEditor((s) => s.quickAdd);
+  const closeQuickAdd = useCallback(() => store.getState().setQuickAdd(null), [store]);
   // a molecule in 3D right-clicked: what its menu does to it
   const molecules3d = useEditor((s) => s.molecules3d);
   const chosen3d = useEditor((s) => s.chosen3d);
@@ -564,7 +575,7 @@ function StructureCanvasContent({
     // A card's text field keeps the system's own menu - cut, copy, paste.
     if (e.target !== domRef.current) return;
     e.preventDefault(); // no browser menu over the drawing
-    const { hovered, hoveredArrow, arrows, hoveredPlus, pluses, hovered3d, sel3d, hoveredMeasure3d } = store.getState();
+    const { hovered, hoveredArrow, arrows, hoveredPlus, pluses, hoveredCaption, captions, hovered3d, sel3d, hoveredMeasure3d } = store.getState();
     const box = e.currentTarget.getBoundingClientRect();
     const place = {
       at: clientToWorld(e.clientX, e.clientY) ?? pasteTarget(),
@@ -600,6 +611,13 @@ function StructureCanvasContent({
     // on a reaction arrow, and nothing else: the arrow's menu
     if (!kind && hoveredArrow != null && arrows.some((a) => a.id === hoveredArrow)) {
       const target: MenuTarget = { kind: "arrow", id: hoveredArrow, selection: "none", ...place };
+      if (r?.down) r.pending = target;
+      else if (!r?.moved) setMenu(target);
+      return;
+    }
+    // likewise words on the page
+    if (!kind && hoveredCaption != null && captions.some((c) => c.id === hoveredCaption)) {
+      const target: MenuTarget = { kind: "caption", id: hoveredCaption, selection: "none", ...place };
       if (r?.down) r.pending = target;
       else if (!r?.moved) setMenu(target);
       return;
@@ -839,6 +857,31 @@ function StructureCanvasContent({
           />
         )}
       </AnimatePresence>
+      {/* a double-click on empty space: what can be put down there */}
+      <AnimatePresence>
+        {quickAdd && (
+          <QuickAdd
+            key={`${quickAdd.x},${quickAdd.y}`}
+            x={quickAdd.x}
+            y={quickAdd.y}
+            within={quickAdd.within}
+            onClose={closeQuickAdd}
+            onChoose={(what) => {
+              const st = store.getState();
+              const { at } = quickAdd;
+              st.setQuickAdd(null);
+              if (what === "bond") {
+                // (across at 30 degrees, as a chain from empty space begins)
+                const dx = (Math.cos(Math.PI / 6) * NOMINAL_BOND_LENGTH) / 2;
+                const dy = (Math.sin(Math.PI / 6) * NOMINAL_BOND_LENGTH) / 2;
+                st.addBondedPair({ x: at.x - dx, y: at.y - dy }, { x: at.x + dx, y: at.y + dy });
+              } else if (what === "text") st.setCaptionEdit({ id: null, at });
+              else if (what === "arrow") st.addArrow(at.x, at.y);
+              else st.addPlus(at.x, at.y);
+            }}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
       {menu && (
         <PartMenu
@@ -848,6 +891,7 @@ function StructureCanvasContent({
           onDelete={() => {
             const st = store.getState();
             if (menu.kind === "arrow" && menu.id != null) st.removeArrow(menu.id);
+            else if (menu.kind === "caption" && menu.id != null) st.removeCaption(menu.id);
             else if (menu.kind === "plus" && menu.id != null) st.removePlus(menu.id);
             else if (menu.kind === "measure3d" && menu.id != null && menu.measure != null) st.removeMeasure3d(menu.id, menu.measure);
             else if (menu.selection === "here") st.deleteSelection();
@@ -866,6 +910,11 @@ function StructureCanvasContent({
             else openSaveAbbreviation([...sel.atoms], made.smiles);
           }}
           onAddPlus={() => store.getState().addPlus(menu.at.x, menu.at.y)}
+          onAddText={() => store.getState().setCaptionEdit({ id: null, at: menu.at })}
+          onEditText={() => {
+            const c = store.getState().captions.find((x) => x.id === menu.id);
+            if (c) store.getState().setCaptionEdit({ id: c.id, at: { x: c.x, y: c.y } });
+          }}
           onCleanUp={() =>
             runCleanUp(
               menu.selection === "here"
@@ -972,6 +1021,8 @@ function StructureCanvasContent({
           <OpenStereo2D atoms={ask3d?.open.flatMap((o) => o.atoms) ?? NO_IDS} bonds={ask3d?.open.flatMap((o) => o.bonds) ?? NO_IDS} />
           {/* Label editor */}
           <LabelEditor2D />
+          {/* Words being written, in place */}
+          <CaptionEditor2D />
           {/* Hover overlay */}
           <ExtendPreview2D />
           {/* The 120-degree arc while a bond snaps to it */}
@@ -982,6 +1033,10 @@ function StructureCanvasContent({
           {/* A reaction scheme's arrows and "+" signs */}
           <Arrows2D />
           <Pluses2D />
+          {/* Words on the page: a reaction's reagents and conditions, or anything else */}
+          <Suspense fallback={null}>
+            <Captions2D />
+          </Suspense>
         </DrawnLayoutProvider>
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />

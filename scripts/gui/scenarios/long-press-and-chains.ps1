@@ -8,7 +8,7 @@
 # - Three clicks on an atom, the third dragged: a chain out of it along the
 #   honeycomb that opens out from the atom; led back - a little beside the
 #   way it went - it takes its bonds back, and closes no ring for that.
-# - Two clicks on empty space, then the pointer led with the button up: a
+# - Three clicks on empty space, then the pointer led with the button up: a
 #   chain from that point; led round in a loop back to it, the ring the
 #   honeycomb makes that way - a chain draws no other (0.1.8); a click ends it.
 # - Escape lets a chain go: nothing is drawn.
@@ -53,10 +53,10 @@ Invoke-MenoDrag -FromX 772 -FromY 877 -Via @(, @(1172, 900)) -ToX 960 -ToY 905 -
 Wait-MenoSettled | Out-Null
 Save-Step "chain-drawn"
 
-# two clicks on empty space; led right, round a loop about five bonds long
+# three clicks on empty space; led right, round a loop about five bonds long
 # back to the chain - round a hexagon of the honeycomb, its six-membered
 # ring - and on; a click to end
-Invoke-MenoClick -X 1300 -Y 1300 -Count 2
+Invoke-MenoClick -X 1300 -Y 1300 -Count 3
 $way = @()
 for ($i = 1; $i -le 16; $i++) { $way += , @((1300 + 12 * $i), 1300) }
 for ($k = 0; $k -le 40; $k++) {
@@ -73,7 +73,7 @@ Wait-MenoSettled | Out-Null
 Save-Step "chain-with-ring"
 
 # a chain begun and let go
-Invoke-MenoClick -X 400 -Y 1450 -Count 2
+Invoke-MenoClick -X 400 -Y 1450 -Count 3
 Move-MenoPointerAlong -Path @(@(450, 1450), @(500, 1450), @(550, 1450), @(600, 1450), @(650, 1450))
 Save-Step "before-escape"
 Send-MenoKey Escape

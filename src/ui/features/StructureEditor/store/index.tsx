@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { DocumentStore } from "../../../../lib/doc";
 import { createStructureDocument, type StructureDocument } from "../document";
-import type { EditorState, WorkspaceText } from "./types";
+import type { Caption, EditorState, WorkspaceText } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
@@ -16,6 +16,7 @@ import { createInteractionSlice } from "./slices/interactionSlice";
 import { createUiSlice } from "./slices/uiSlice";
 import { createMolecules3dSlice, heldOf } from "./slices/molecules3dSlice";
 import { createTextsSlice } from "./slices/textsSlice";
+import { createCaptionsSlice } from "./slices/captionsSlice";
 import { turnsAcross } from "./turnJournal";
 import { shownText } from "../utils/texts";
 
@@ -39,6 +40,8 @@ function mirrorOf(doc: StructureDocument) {
     nextId: doc.nextId,
     nextArrowId: doc.nextArrowId,
     nextPlusId: doc.nextPlusId ?? 1,
+    captions: doc.captions ?? NO_CAPTIONS,
+    nextCaptionId: doc.nextCaptionId ?? 1,
     molecules3d: doc.molecules3d ?? [],
     docStyle: doc.style,
     texts: doc.texts ?? NO_TEXTS,
@@ -46,6 +49,7 @@ function mirrorOf(doc: StructureDocument) {
 }
 
 const NO_TEXTS: WorkspaceText[] = [];
+const NO_CAPTIONS: Caption[] = [];
 
 /**
  * Mirrors the document into the store and keeps doing so. Returns the
@@ -111,6 +115,9 @@ export function createEditorStore(
     hoveredMeasure3d: null,
     hoveredArrow: null,
     hoveredPlus: null,
+    hoveredCaption: null,
+    captionEdit: null,
+    quickAdd: null,
     hoverPulse: { id: null, nonce: 0, until: 0 },
     pressHold: null,
     doubleClickBond: null,
@@ -137,6 +144,7 @@ export function createEditorStore(
     ...createInteractionSlice(set, get),
     ...createMolecules3dSlice(doc, set, get),
     ...createTextsSlice(doc, set),
+    ...createCaptionsSlice(doc, set),
   }));
 
   return store;
