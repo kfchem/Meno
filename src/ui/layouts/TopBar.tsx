@@ -29,6 +29,8 @@ export type TabsController = {
   openByKind?: (kind: TabKind, opts?: { label?: string }) => void;
   /** Files picked in the system's dialog, each opened in a tab (Open…). */
   openFiles: () => void;
+  /** A new text, in the column of the workspace in front - or of a canvas of its own. */
+  newText?: () => void;
 };
 
 export default function TopBar({ ctl }: { ctl: TabsController }) {
@@ -75,7 +77,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
   ) => {
     setMenuOpen(false);
     if (!openByKind) return;
-    if (profile === "texteditor") openByKind("text", { label: "New Text" });
+    if (profile === "texteditor") ctl.newText?.();
     if (profile === "pyconsole")
       openByKind("pyconsole", { label: "Python Console" });
     if (profile === "node") openByKind("node", { label: "Workflow Builder" });
@@ -224,7 +226,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
                   className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
                   onClick={() => onSelectMenu("texteditor")}
                 >
-                  <span>Text Editor</span>
+                  <span>Text</span>
                   <span className="text-xs text-gray-500">new</span>
                 </button>
                 <button

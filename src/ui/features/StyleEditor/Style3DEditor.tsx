@@ -1,4 +1,5 @@
 import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
+import { setCursor } from "../../theme/cursors";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -312,7 +313,7 @@ function Turnable({ style }: { style: Style3D }) {
       dom.setPointerCapture(e.pointerId);
       spin.current = null;
       drag = { x: e.clientX, y: e.clientY, t: e.timeStamp, recent: [], axis: new THREE.Vector3(0, 1, 0) };
-      dom.style.cursor = "grabbing";
+      setCursor(dom, "turning");
     };
     const onMove = (e: PointerEvent) => {
       if (!drag) return;
@@ -334,10 +335,10 @@ function Turnable({ style }: { style: Style3D }) {
       const speed = drag.recent.reduce((a, r) => a + r.angle, 0) / (Math.max(took, 16) / 1000);
       if (e.timeStamp - drag.t < 80 && speed > STILL) spin.current = { axis: drag.axis, speed };
       drag = null;
-      dom.style.cursor = "grab";
+      setCursor(dom, "turn");
       invalidate();
     };
-    dom.style.cursor = "grab";
+    setCursor(dom, "turn");
     dom.addEventListener("pointerdown", onDown);
     dom.addEventListener("pointermove", onMove);
     dom.addEventListener("pointerup", onUp);
