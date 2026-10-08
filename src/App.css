@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* The page itself never scrolls - not by the wheel, nor by an element
+   scrolled into view - and does not bounce: only what is inside it does. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /*
  * IBM Plex Sans, Meno's typeface, with Plex Sans JP for Japanese and Plex
  * Mono for code, from Meno's own files - nothing is fetched - under the SIL
