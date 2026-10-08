@@ -167,6 +167,31 @@ moves together, in the same time and the same way.
   itself goes from shape to shape in `DrawnLayout` (`utils/glide.ts`), and
   a fit goes there through `components/viewGoal.ts`.
 
+## Pointers
+
+Meno draws its own pointers wherever it shows one other than the plain
+arrow (asked for by the maintainer, 2026-10-07: the system's hands looked
+poor, and on a Windows machine the dragging hand showed white). Each says
+what a drag there does, not what grabs it, and none is a hand:
+
+| Pointer | Where | The system's behind it |
+| --- | --- | --- |
+| `turn`, a ring with its arrowhead | over a molecule in 3D, which a drag turns | `grab` |
+| `turning`, the same in Meno's accent | while it turns | `grabbing` |
+| `move`, four arrowheads | over a molecule in 3D selected, which a drag moves, and while it moves | `move` |
+| `sideways`, a double arrowhead | a slider, and a chip's bars, dragged along | `ew-resize` |
+
+- **One place**: `ui/theme/cursors.ts` draws each as SVG on a 24-pixel
+  grid, dark with a white edge to be seen on anything, its spot in the
+  middle, and writes their rules once as Meno starts (`installCursors`).
+  An element asks for one with `data-cursor` (`setCursor`).
+- **Sharp on any screen**: each rule gives the SVG at 1x, then
+  `-webkit-image-set` at 1x, 2x and 3x, which WebKit and Chromium read;
+  the system's pointer stands behind it.
+- **The arrow and the text cursor stay the system's**, as the chemist has
+  set them up (size, colour). Clickable rows and buttons show the arrow,
+  as a desktop program's do, not a pointing hand.
+
 ## 2D structure editor (`ui/features/StructureEditor`)
 
 What is left before the editor counts as finished, and in what order, is in
