@@ -70,13 +70,26 @@ function Save-Step {
     Write-Host "  shot $("{0:d2}" -f $script:StepNo): $Name"
 }
 
+function Get-MenoApp {
+    <#
+      .SYNOPSIS
+      The copies of Meno running as the app - not those running a job
+      (`Meno --job <folder>`, src-tauri/src/jobs.rs), which outlive the
+      app and are left to finish.
+    #>
+    Get-Process -Name Meno -ErrorAction SilentlyContinue | Where-Object {
+        $line = if ($IsWindows) { $_.CommandLine } else { (& /bin/ps -o command= -p $_.Id) -join " " }
+        -not ($line -match "\s--job\s")
+    }
+}
+
 function Start-Meno {
     <#
       .SYNOPSIS
       Start the app under test, and see off any copy already running: a
       second instance would put its window over the one being driven.
     #>
-    Get-Process -Name Meno -ErrorAction SilentlyContinue | ForEach-Object {
+    Get-MenoApp | ForEach-Object {
         Write-Host "  closing a Meno that was already running (pid $($_.Id))"
         Close-MenoProcess -Process $_
     }
@@ -167,7 +180,7 @@ try {
     Write-Host "done: $($script:ShotFiles.Count) shots in $Out"
 } finally {
     if (-not $KeepOpen) {
-        Get-Process -Name Meno -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-MenoApp | ForEach-Object {
             Close-MenoProcess -Process $_
         }
     }

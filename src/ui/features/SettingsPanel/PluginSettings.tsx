@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { manifestOf, OFFERED, PLUGINS, type PythonPlugin } from "../../../lib/calc/catalog";
 import { addedReaders, addPlugin, removePlugin, useReaders } from "../../../lib/calc/workers";
 import { ROLES } from "../../../lib/plugins/roles";
+import { KINDS } from "../StructureEditor/workflow/kinds";
 import { kindById } from "../../../lib/io/kinds";
+
+/** The kinds of a workflow's step a plugin fills, by their names - those Meno defines. */
+const stepNames = (p: { steps: readonly { kind: string }[] }) => KINDS.filter((k) => p.steps.some((d) => d.kind === k.kind)).map((k) => k.name);
 
 /**
  * Plugins in Settings: every plugin on offer, added or not - what it
@@ -49,6 +53,7 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonPlugin; state?: s
         {p.reads.length > 0 && <p className="text-xs text-gh-gray mt-1">Reads {p.reads.map(named).join(", ")}.</p>}
         {p.writes.length > 0 && <p className="text-xs text-gh-gray mt-1">Writes {p.writes.map((w) => `${w.name} (${w.extensions.join(", ")})`).join(", ")}.</p>}
         {p.roles.length > 0 && <p className="text-xs text-gh-gray mt-1">{p.roles.map((r) => ROLES[r].name).join("; ")}.</p>}
+        {stepNames(p).length > 0 && <p className="text-xs text-gh-gray mt-1">In a workflow: {stepNames(p).join(", ")}.</p>}
         <p className="text-xs text-gh-gray mt-1">
           {p.licence} · {p.homepage.replace(/^https?:\/\//, "")}
         </p>

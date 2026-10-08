@@ -106,6 +106,10 @@ Two things worth knowing:
 - **A scenario shares `run.ps1`'s scope.** It is dot-sourced, so a variable
   named like one of that script's own quietly replaces it. Names in a scenario
   should be its own.
+- **Jobs outlive the run.** A workflow's job runs as Meno's own executable
+  (`Meno --job <folder>`); `run.ps1` closes only the app (`Get-MenoApp`),
+  so that a job goes on as it would when the chemist closes Meno - and a
+  scenario that starts jobs leaves them running, to be stopped or waited for.
 
 ## What a platform module provides
 
