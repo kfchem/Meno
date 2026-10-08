@@ -361,9 +361,10 @@ not taken from either.
 - **Who does a step** (`workflow/doers.ts`): a step is a plugin's - or
   Meno's, which stands among them for the steps on entries alone - and
   of one of the kinds its manifest's `steps` fill (`kindsOf`); who does
-  it says what options it takes (`optionsFor`), remembered by plugin and
-  kind (`step:<who>:<kind>`). Quick Add offers the plugins added, each
-  with its kinds (`workflow/offered.ts`).
+  it says what options it takes (`optionsFor`); their defaults are set in
+  Settings alone, by plugin and kind (`step:<who>:<kind>`), and a step
+  starts with them, its own changes never written back. Quick Add offers
+  the plugins added, each with its kinds (`workflow/offered.ts`).
 - **Running** (`store/slices/stepRuns.ts`): the steps before it first,
   then the step - Meno's at once, as one edit; a plugin's in its worker
   (RDKit's 3D structure, through the roles' `conformers`); a plugin's

@@ -56,6 +56,7 @@ vi.mock("../../../../lib/calc/workers", async (actual) => ({
 
 import { connectStoreToDocument, createEditorStore } from ".";
 import { useReaders } from "../../../../lib/calc/workers";
+import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { createStructureDocument, addMolecule3d } from "../document";
 import { readWorkflow } from "../workflow/saved";
 
@@ -168,6 +169,8 @@ describe("a step that runs a plugin's program", () => {
   it("is its plugin's: its calculation changed to another the plugin does, with the options it takes for that one, those they share kept - never to one it does not", () => {
     const { st, step } = editor();
     st().updateStep(step, { options: { method: "gfn1", solvent: "water", level: "tight" } });
+    // (the step's own: the defaults are Settings', and stay as they were)
+    expect(useAppSettings.getState().options["step:xtb:optimise"]).toBeUndefined();
     st().updateStep(step, { kind: "frequencies" });
     const s = st().steps.find((x) => x.id === step)!;
     expect(s.kind).toBe("frequencies");

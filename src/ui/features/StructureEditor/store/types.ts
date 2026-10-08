@@ -414,10 +414,10 @@ export type EditorState = {
   resizeSet: (id: number, frame: { x0: number; y0: number; x1: number; y1: number }, gesture?: string) => void;
   moveSet: (id: number, dx: number, dy: number, gesture?: string) => void;
   removeSet: (id: number) => void;
-  /** A step of `kind`, done by `by` - Meno, or a plugin - put down, its card's top left at (x, y), with the options last chosen for its kind done by it; its id. */
+  /** A step of `kind`, done by `by` - Meno, or a plugin - put down, its card's top left at (x, y), with the defaults Settings has for its kind done by it; its id. */
   addStep: (kind: StepKind, by: string, x: number, y: number) => number;
   moveStep: (id: number, x: number, y: number, gesture?: string) => void;
-  /** A step's options changed - remembered for its kind, done by who does it - or its kind, to another who does it fills. */
+  /** A step's options changed - its own, the defaults left as they are - or its kind, to another who does it fills. */
   updateStep: (id: number, patch: { options?: OptionValues; kind?: StepKind }) => void;
   /** A step deleted - its jobs stopped and their files taken away; one running, only once asked about (`askDeleteStep`), `asked`. */
   removeStep: (id: number, asked?: boolean) => void;

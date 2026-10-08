@@ -1,12 +1,12 @@
 import type { StoreApi } from "zustand";
 import type { DocumentStore } from "../../../../../lib/doc";
-import { rememberable, valuesOf } from "../../../../../lib/options";
+import { valuesOf } from "../../../../../lib/options";
 import { useAppSettings } from "../../../../../lib/settings/appSettings";
 import type { StructureDocument } from "../../document";
 import { currentStyle3D } from "../../style3d";
 import { lookOf, poseOf, seenBounds, solidOf } from "../../utils/molecule3d";
 import type { Style3D } from "../../../../../lib/chem/style3d";
-import { byOf, kindsOf, optionsFor, stepOptions } from "../../workflow/doers";
+import { byOf, kindsOf, optionsFor } from "../../workflow/doers";
 import type { StepKind } from "../../workflow/kinds";
 import * as wf from "../../workflow/model";
 import type { EditorState, Molecule3D, WorkflowView } from "../types";
@@ -29,7 +29,7 @@ function extentOf(m: Molecule3D, style: Style3D): { w: number; h: number } {
   return { w, h };
 }
 
-/** The role a kind of step's options are remembered by, as who does it takes them (lib/settings/appSettings `options`). */
+/** The role a kind of step's defaults are kept under, as who does it takes them - set in Settings, Calculations (lib/settings/appSettings `options`). */
 export const stepRole = (kind: StepKind, by: string) => `step:${by}:${kind}`;
 
 /**
@@ -61,7 +61,7 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
     },
     addStep: (kind: StepKind, by: string, x: number, y: number) => {
       const id = doc.getState().nextWorkflowId ?? 1;
-      // (with the options last chosen for its kind, done by it)
+      // (with the defaults Settings has for its kind, done by it)
       const options = valuesOf(optionsFor(kind, by), useAppSettings.getState().options[stepRole(kind, by)]);
       doc.edit("add step", (d) => wf.addStep(d, kind, x, y, options, by));
       return id;
@@ -72,16 +72,15 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
       if (!step) return;
       const by = byOf(step);
       if (patch.kind && patch.kind !== step.kind) {
-        // (another kind its plugin fills: with the options last chosen for that one - those it shares with the step's, as the step has them)
+        // (another kind its plugin fills: with the defaults Settings has for that one - those it shares with the step's, as the step has them)
         const kind = patch.kind;
         if (!kindsOf(by).includes(kind)) return;
         const options = valuesOf(optionsFor(kind, by), { ...useAppSettings.getState().options[stepRole(kind, by)], ...step.options });
         doc.edit("change calculation", (d) => wf.updateStep(d, id, { kind, options }));
         return;
       }
-      if (!patch.options) return;
-      doc.edit("change options", (d) => wf.updateStep(d, id, { options: patch.options }));
-      useAppSettings.getState().rememberOptions(stepRole(step.kind, by), rememberable(stepOptions(step), patch.options));
+      // (the step's alone: the defaults are Settings', and stay as they are)
+      if (patch.options) doc.edit("change options", (d) => wf.updateStep(d, id, { options: patch.options }));
     },
     removeStep: (id: number, asked = false) => {
       const step = doc.getState().steps?.find((s) => s.id === id);

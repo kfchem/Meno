@@ -150,8 +150,8 @@ export default function SettingsPanel() {
           <section className="mt-6 max-w-4xl">
             <h2 className="text-base font-semibold text-gh-black">Calculations</h2>
             <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
-              The calculations of a workflow on the page, by what does them: each plugin added, and Meno. A new
-              step starts with these options; the options last chosen in a step become them.
+              Default options for each calculation in a workflow, by what does it: each plugin added, and Meno. A
+              step put on the page starts with these; options changed in a step are that step's alone.
             </p>
             <CalculationSettings />
             <h3 className="mt-6 text-sm font-semibold text-gh-black">Jobs</h3>

@@ -73,6 +73,10 @@ rearrange and run again, with its results beside the molecule it is about.
     those the plugin does. Meno stands among them, for the steps it does
     itself. This replaces choosing who does a kind in Settings (12): RDKit's
     *Duplicates* and Meno's are two steps to choose between.
+17. **Settings holds the defaults; a step customises them** (the
+    maintainer, 2026-10-08): Settings, *Calculations*, sets each kind's
+    default options, by plugin; a step starts with them, and its options
+    changed are its own - never written back as the defaults.
 
 No question is left open; the whole is for the maintainer to read and
 agree before step 1 is built.
@@ -234,7 +238,7 @@ one of the kinds of calculation it does (decided: 16):
 - **The chemist chooses** in Quick Add - a plugin, then one of its
   kinds - and may change a step's calculation in it, to another its
   plugin does. Settings, *Calculations*, lists the plugins added and
-  Meno, each with its kinds and their options' defaults.
+  Meno, each with its kinds and their default options.
 - **Steps that run a program** are done by plugins only: Meno runs no
   program of its own.
 
@@ -291,7 +295,10 @@ frames chip opens to its slider:
 - *Show log* and *Show files* once it has run.
 
 Another click on its title, Escape, or a press elsewhere closes it. The
-last options chosen for each kind are what a new step starts with.
+step's options are its own: it starts with the defaults Settings,
+*Calculations*, has for its kind done by its plugin, and what is changed
+in it changes it alone - the defaults are set in Settings and nowhere
+else (decided: 17).
 
 ## Compound sets and conformer sets
 
@@ -717,7 +724,8 @@ is its plugin's. Quick Add lists the plugins added, then Meno, each with
 its kinds; a step's card is titled with its plugin and says its
 calculation under it; opened, it offers the plugin's other kinds;
 Settings, *Calculations*, is by plugin, and no longer chooses who does a
-kind. A step's options are remembered by plugin and kind.
+kind. Settings sets each kind's defaults, by plugin and kind; a step
+starts with them, and what is changed in it is its own (decided: 17).
 
 Not yet, and where it comes:
 

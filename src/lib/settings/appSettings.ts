@@ -43,7 +43,7 @@ export type AppSettings = {
   calculations: CalculationSettings;
 };
 
-/** How a workflow's steps run (Settings, Calculations). Each kind's options' defaults, done by each, are the options remembered for it (`options`, as "step:<who>:<kind>"). */
+/** How a workflow's steps run (Settings, Calculations). Each kind's default options, done by each, are kept with the options (`options`, as "step:<who>:<kind>"), set there alone. */
 export type CalculationSettings = {
   /** How many jobs run at once on this computer (lib/jobs); unset, one. */
   atOnce?: number;

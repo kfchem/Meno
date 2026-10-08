@@ -8,11 +8,12 @@ import { StepGlyph } from "../StructureEditor/workflow/icons";
 import { kindInfo } from "../StructureEditor/workflow/kinds";
 
 /**
- * Calculations in Settings (docs/WORKFLOWS.md, *Who does a step*), laid
- * out as the settings beside them are: each plugin added that does steps,
- * then Meno - each its name, and a card of the kinds of step it fills, a
- * row each, with under it its options as a new step starts with them: the
- * last chosen in a step, or changed here.
+ * Calculations in Settings (docs/WORKFLOWS.md, *Its options*): the
+ * defaults, laid out as the settings beside them are - each plugin added
+ * that does steps, then Meno, each its name and a card of the kinds of
+ * step it fills, a row each, with under it its default options: what a
+ * step put on the page starts with. Set here alone - a step's own options
+ * are its own.
  */
 export default function CalculationSettings() {
   const remembered = useAppSettings((s) => s.options);

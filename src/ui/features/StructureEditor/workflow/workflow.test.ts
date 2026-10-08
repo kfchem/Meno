@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { useReaders } from "../../../../lib/calc/workers";
-import { addMolecule3d, emptyStructureDocument, type StructureDocument } from "../document";
+import { useAppSettings } from "../../../../lib/settings/appSettings";
+import { connectStoreToDocument, createEditorStore } from "../store";
+import { addMolecule3d, createStructureDocument, emptyStructureDocument, type StructureDocument } from "../document";
 import type { Molecule3D } from "../store/types";
 import { setMembers, countOf, setEntries, holdsOf } from "./entries";
 import { canWire, givesOf, inputOf, resultOf, stateOf, stepsBefore } from "./flow";
@@ -252,6 +254,19 @@ describe("saving", () => {
 describe("Quick Add's calculations", () => {
   const offered = (...a: Parameters<typeof offeredSteps>) => offeredSteps(...a).map((g) => [g.name, g.steps.map((k) => k.kind)]);
   afterEach(() => useReaders.setState({ state: {}, problem: {} }));
+
+  it("put down, start with the defaults Settings has for their kind, done by what does them", () => {
+    useAppSettings.getState().rememberOptions("step:meno:energy-window", { window: 1.5 });
+    try {
+      const doc = createStructureDocument();
+      const store = createEditorStore(doc);
+      connectStoreToDocument(store, doc);
+      const id = store.getState().addStep("energy-window", "meno", 0, 0);
+      expect(store.getState().steps.find((s) => s.id === id)).toMatchObject({ by: "meno", options: { window: 1.5 } });
+    } finally {
+      useAppSettings.setState({ options: {} });
+    }
+  });
 
   it("are by who does them - each plugin added, then Meno - each with the kinds it fills; As conformers only from a compound set's wire", () => {
     let doc = addStep(page(), "as-conformers", 5, 0);
