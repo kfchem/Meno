@@ -39,6 +39,8 @@ export type JobAsk = {
   files?: JobFile[];
   slots?: number;
   cores?: number;
+  /** Where its program is, where it is one installed separately (lib/plugins/installed). */
+  path?: string;
 };
 
 /** Whether a job is over - and will say nothing more. */

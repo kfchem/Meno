@@ -382,7 +382,12 @@ not taken from either.
   results brought in as one edit - a conformer search's as a conformer
   set, each geometry it gave a conformer of its entry's compound, and on
   a conformer set one job for each compound (`jobEntries`,
-  `conformersWorked`). A workspace opened with steps running
+  `conformersWorked`) - or, where its plugin says so (`collect`'s `read`),
+  read by Meno's readers as an output opened is, every reader of its kind
+  added put together, and kept by its kind as what the molecules were read
+  from (`readWithReaders`): ORCA's and Gaussian's. A step whose program
+  installed separately is found nowhere says so on its card, and its *Run*
+  opens Settings, Plugins. A workspace opened with steps running
   is looked at the same way, and picks them up. What a plugin sends and
   reads back is checked as data (`workflow/programs.ts`). A step keeps
   its earlier runs, with what each gave (`keepRun`, `showRun` in
@@ -420,6 +425,18 @@ closes*).
   running whose lock nobody holds was left by a runner that went without
   saying how it ended - the computer restarted - and reads as *gone*. A
   process id would be another program's after a restart.
+- **A program installed separately** - ORCA, Gaussian - is one a plugin's
+  manifest declares in `installed`: its name, its file on each system, the
+  folders put first where programs are looked for, and the variables it is
+  given, each a place in its installation (`{folder}`, where its file is;
+  `{parent}`, the folder above). `installed_program` takes it where the
+  chemist located it, where that is still a program of that file's name,
+  or else where PATH finds it (`installed_where`), and gives it its folders
+  and variables (`installed_env`) - never one that loads code into it, nor
+  PATH itself, nor what Meno sets. `program_where` answers the page's
+  question of where it is (`lib/plugins/installed.ts`, which keeps the
+  answers for the step cards and Settings, Plugins, and what was located
+  in the settings' `plugins.programs`).
 
 ## Python console and sidecar
 
@@ -489,8 +506,8 @@ which plugin would read a file no plugin added reads
   the worker is asked `{"op": "write", "kind", "name", "molecules",
   "options"}` through the same client, and the text it gives back is
   written where the chemist chose. The first is Gaussian's input
-  (`resources/plugins/gaussian-input/`, Python alone; its tests,
-  `scripts/calc/test_writer_gaussian_input.py`, run in CI).
+  (`resources/plugins/gaussian/`, Python alone, whose steps run Gaussian
+  as well; its tests, `scripts/calc/test_plugin_gaussian.py`, run in CI).
 - Where the line is between a plugin and Meno: a plugin knows the file,
   Meno where and how what it found shows, and what can be done with it.
   What Meno does something with has a form of its own in `ReaderOutput` -
@@ -842,7 +859,7 @@ that every kind of these is in this table, by its id, and no other.
 | SVG picture | `svg` | `.svg` | - | never | Export (`drawingSvg`) | - |
 | Calculation programs' outputs (cclib's) | `adf`, `cfour`, `dalton`, `gamess`, `gamess-uk`, `gaussian`, `gaussian-fchk`, `jaguar`, `molcas`, `molpro`, `mopac`, `nwchem`, `orca`, `psi4`, `qchem`, `turbomole`, `xtb` | each its own: `.out`, `.log`, `.fchk`... | each program's banner, as cclib's manifest brings it | cclib (plugin, uv); `orca`, `gaussian` and `gaussian-fchk` also PySCF | never | a molecule in 3D, each geometry a frame - its bonds by distance, frame by frame - and what the calculation found |
 | Molden file | `molden` | `.molden`, `.mld` | `[Molden Format]`, as PySCF's manifest brings it | PySCF (plugin, pixi) | never | a molecule in 3D, its orbitals and densities promises |
-| Gaussian input | `gaussian-input` | `.gjf`, `.com` | - | never | Export, by the Gaussian input plugin (uv, Python alone) | - |
+| Gaussian input | `gaussian-input` | `.gjf`, `.com` | - | never | Export, by the Gaussian plugin (uv, Python alone) | - |
 | KET | - | `.ket` | - | not read | never | Open does not offer it; one dropped says "not supported yet" |
 | Text | - | anything not told otherwise | its name, or nothing else telling it; dropped, no NUL in its start (`opensAsText`) | the workspace, as it is | Export, from the column of texts (`TextColumn.tsx`) | a text the workspace holds, in its column; saved in `.meno` |
 

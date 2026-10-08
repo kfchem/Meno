@@ -11,6 +11,8 @@ import { KCAL_PER_HARTREE, boltzmann, runMeno } from "./meno";
 import { addSet, addStep, connect, moveSet, removeSet, removeStep, removeWire, updateStep } from "./model";
 import { runStep, type RunWith } from "./run";
 import { offeredSteps } from "./offered";
+import { doerOf } from "./doers";
+import { pluginById } from "../../../../lib/calc/catalog";
 import { selectionFrame } from "./selectionSet";
 import { readWorkflow } from "./saved";
 
@@ -330,6 +332,11 @@ describe("Quick Add's calculations", () => {
       ["xTB", ["optimise", "energy", "frequencies"]],
       ["Meno", ["duplicates", "as-conformers"]],
     ]);
+    // an interface to a program installed separately: under the program's name, not the interface's
+    useReaders.setState({ state: { orca: "added" }, problem: {} });
+    expect(offered(doc)[0]).toEqual(["ORCA", ["optimise", "energy", "frequencies"]]);
+    expect(pluginById("orca")?.name).toBe("ORCA interface");
+    expect(doerOf({ kind: "energy", by: "orca" })).toEqual({ id: "orca", name: "ORCA" });
   });
 });
 

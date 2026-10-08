@@ -70,6 +70,17 @@ describe("what a plugin reads back of a job", () => {
     expect(readCollected({ outputs: [{ ...out, frames: [[1, 2]] }] }, 1)).toEqual({ why: "It read back no geometry" });
   });
 
+  it("or, for each entry, an output for Meno's readers: its kind, and a file it read back or what the program printed - by a name inside its folder", () => {
+    expect(readCollected({ read: [{ kind: "gaussian", file: "input.log", name: "water.log" }] }, 1)).toEqual({ read: [{ kind: "gaussian", file: "input.log", name: "water.log" }] });
+    expect(readCollected({ read: [{ kind: "orca", log: true, name: "water.out" }] }, 1)).toEqual({ read: [{ kind: "orca", log: true, name: "water.out" }] });
+    // (a file's name goes by its own, where none is given)
+    expect(readCollected({ read: [{ kind: "gaussian", file: "input.log" }] }, 1)).toEqual({ read: [{ kind: "gaussian", file: "input.log", name: "input.log" }] });
+    expect(readCollected({ read: [] }, 1)).toEqual({ why: "It read back nothing for it" });
+    for (const bad of [{ kind: "Not A Kind", log: true, name: "a.out" }, { kind: "orca", file: "../secret" }, { kind: "orca", name: "a.out" }, { kind: "orca", log: true, name: "/etc/a.out" }]) {
+      expect(readCollected({ read: [bad] }, 1)).toEqual({ why: "It said to read what Meno cannot" });
+    }
+  });
+
   it("makes the entry worked out: its last geometry and energy; an optimisation's path before it; what the calculation was", () => {
     const w = workedOf("optimise", WATER, out, ["xtb 6.7.1"]);
     if (typeof w === "string") throw new Error(w);

@@ -18,7 +18,8 @@ import { useReaders } from "../../../../lib/calc/workers";
 import { finished } from "../../../../lib/jobs";
 import { setList } from "../workflow/list";
 import { CARD_W, HTML_DISTANCE, PORT_DOWN, PX } from "../workflow/look";
-import { byOf, doerOf, kindsOf, optionsFor, stepOptions } from "../workflow/doers";
+import { byOf, doerOf, installedFor, kindsOf, missingFor, optionsFor, stepOptions } from "../workflow/doers";
+import { lookFor, useInstalled } from "../../../../lib/plugins/installed";
 
 type Pt = { x: number; y: number };
 
@@ -213,6 +214,17 @@ export default function Workflow2D() {
   const { camera, gl, invalidate } = useThree();
   // (who does a kind of step changes as plugins are added and taken away)
   useReaders((r) => r.state);
+  // (where the programs installed separately that steps run are: looked for as such steps are put down, opened, changed)
+  useInstalled((s) => s.where);
+  const programsRun = useEditor((s) =>
+    [...new Set(s.steps.flatMap((x) => installedFor(x.kind, byOf(x)).map((d) => `${byOf(x)}:${d.name}`)))].sort().join(" "),
+  );
+  useEffect(() => {
+    for (const key of programsRun.split(" ").filter(Boolean)) {
+      const [plugin, name] = key.split(":");
+      void lookFor(plugin, name);
+    }
+  }, [programsRun]);
 
   // the jobs of the steps that run any, looked at while there are any - and
   // at once, so that a workspace opened with jobs under way picks them up
@@ -610,6 +622,7 @@ export default function Workflow2D() {
                   how={how}
                   state={run?.waiting ? "waiting" : (states.get(s.id) ?? "ready")}
                   run={run?.view}
+                  missing={missingFor(s)}
                   compact={compact}
                   open={openStep === s.id}
                   ports={{ take: portLook("take", s.id), give: portLook("give", { step: s.id }) }}

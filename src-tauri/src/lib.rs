@@ -857,6 +857,7 @@ pub fn run() {
             ext_kill,
             // jobs: programs run for a workflow's steps, apart from Meno
             jobs::job_start,
+            jobs::program_where,
             jobs::job_state,
             jobs::jobs_list,
             jobs::job_log,

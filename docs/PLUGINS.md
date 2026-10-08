@@ -79,7 +79,8 @@ Everything a plugin is lives in one folder, named by its id:
                      the kinds of a workflow's step it fills, each with the
                      programs it runs and its options (`steps`); the
                      systems it can be added on, where not every one
-                     (`systems`: macos, windows, linux)
+                     (`systems`: macos, windows, linux); and the programs
+                     installed separately its steps run (`installed`)
   worker.py          its worker, spoken to in JSON lines under the contract
   requirements.lock  its environment, made by uv from PyPI - or, where it
   (or pixi.toml and  needs conda-forge, by pixi
@@ -90,6 +91,16 @@ Everything a plugin is lives in one folder, named by its id:
   names them - CREST, whose program conda-forge builds for macOS and
   Linux - and elsewhere Settings, *Plugins*, says so in place of *Add*.
   None named, it is for every one.
+- **A plugin may run a program installed separately** - ORCA, Gaussian -
+  which Meno never fetches or ships: its manifest's `installed` says, for
+  each, its name as its steps name it, what it is called, its file on each
+  system, the folders put first where programs are looked for and the
+  variables it is given - each a place in its installation, `{folder}`
+  (where its file is) or `{parent}` (the folder above), with a path inside
+  it. Meno finds it where the system finds programs, or where the chemist
+  locates it in Settings, *Plugins*. Such a plugin is named as an
+  interface (the *ORCA interface*), and its steps by the program's name
+  (*ORCA*).
 - **Meno carries some for now**, in `src-tauri/resources/plugins/`, and
   finds them there: no code of Meno's names one. Those fetched over the
   internet later will be folders of the same kind; how Meno trusts a list
@@ -205,6 +216,11 @@ The same for every plugin and for Meno's own parts:
     entries, options, files, log, ended}` - a kind of step its program
     does (WORKFLOWS.md, *What changes in the contract*): the jobs Meno is
     to run, and what one gave, read back;
+  - `collect` may answer, for each entry, not an output but which of
+    what the job wrote is an output of a kind Meno's readers read -
+    `{"read": [{"kind": "orca", "log": true, "name": "water.out"}]}`, or
+    a file it read back - for them to read as an opened one is (ORCA's,
+    Gaussian's);
   - `run {step, entries, options, holds}` - a kind of step it does at
     once, in its worker, with no job: the entries it kept, by their
     place (RDKit's *Duplicates*). `holds` says whether they came as a

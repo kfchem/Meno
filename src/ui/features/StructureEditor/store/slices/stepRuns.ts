@@ -1,23 +1,26 @@
 import type { StoreApi } from "zustand";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { DocumentStore } from "../../../../../lib/doc";
-import { pluginById, type PythonPlugin } from "../../../../../lib/calc/catalog";
+import { anyKindById, pluginById, type PythonPlugin } from "../../../../../lib/calc/catalog";
+import type { CalcSource, ReaderOutput } from "../../../../../lib/calc/output";
+import { readOutput } from "../../../../../lib/calc/read";
 import { rememberOutput } from "../../../../../lib/calc/asks";
 import { pluginClient } from "../../../../../lib/calc/workers";
 import { finished, jobFiles, jobFolder, jobOf, listJobs, readJobFile, readJobLog, removeJob, runningOf, startJob, stopJob, type Job } from "../../../../../lib/jobs";
 import type { OptionValues } from "../../../../../lib/options";
 import { roleOptionsRole } from "../../../../../lib/plugins/roles";
+import { lookFor } from "../../../../../lib/plugins/installed";
 import { pluginWorker } from "../../../../../lib/roles/worker";
 import { useAppSettings } from "../../../../../lib/settings/appSettings";
 import * as ops from "../../document";
 import type { StructureDocument } from "../../document";
 import { blocksOf, moleculeOf } from "../../chem/make3d";
-import { byOf, optionsFor, programsFor } from "../../workflow/doers";
+import { byOf, installedFor, optionsFor, programsFor } from "../../workflow/doers";
 import { setEntries, type SetEntry } from "../../workflow/entries";
 import { findSet, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "../../workflow/flow";
 import { kindInfo, optionsOf, type SetKind } from "../../workflow/kinds";
 import { setRan, setRunning } from "../../workflow/model";
-import { clock, conformersWorked, doneSaid, jobEntries, pluginEntry, readCollected, readKept, readPrepared, workedOf } from "../../workflow/programs";
+import { clock, conformersWorked, doneSaid, jobEntries, notFound, pluginEntry, readCollected, readKept, readPrepared, workedOf, type ToRead } from "../../workflow/programs";
 import { keepRun, runStep as runMenoStep, showRun, whyNot, withResults, type RunWith, type Worked } from "../../workflow/run";
 import type { EditorState, JobSeen, StepJob, StepRan } from "../types";
 
@@ -264,6 +267,13 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     if (!entries.length) return void fail(id, "Nothing came in", at, key);
     const options: OptionValues = optionsOf(optionsFor(step.kind, plugin.id), step.options);
     const { slots, cores } = runningOf(useAppSettings.getState().calculations);
+    // (a program installed separately: where it is, looked for again - and found, or said not to be)
+    const paths = new Map<string, string>();
+    for (const decl of installedFor(step.kind, plugin.id)) {
+      const where = await lookFor(plugin.id, decl.name);
+      if (!where) return void fail(id, notFound(decl.label), at, key);
+      paths.set(decl.name, where);
+    }
     let prepared;
     try {
       const client = await pluginClient(plugin);
@@ -274,7 +284,10 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     if (typeof prepared === "string") return void fail(id, prepared, at, key);
     const jobs: StepJob[] = [];
     try {
-      for (const p of prepared) jobs.push({ id: await startJob({ plugin: plugin.id, program: p.program, args: p.args, files: p.files, slots, cores }), entries: p.entries, reads: p.reads });
+      for (const p of prepared) {
+        const path = paths.get(p.program);
+        jobs.push({ id: await startJob({ plugin: plugin.id, program: p.program, args: p.args, files: p.files, slots, cores, ...(path ? { path } : {}) }), entries: p.entries, reads: p.reads });
+      }
     } catch (e) {
       for (const j of jobs) void stopJob(j.id).catch(() => {});
       return void fail(id, `It could not be started: ${message(e)}`, at, key);
@@ -374,7 +387,8 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
         }
         const log = await wholeLog(j.id);
         const files: Record<string, string> = {};
-        if (record.state === "done") {
+        // (what it wrote, ended well or not: a program may say why it failed in its output - Gaussian does)
+        if (record.state === "done" || record.state === "failed") {
           const there = new Set(await jobFiles(j.id).catch(() => []));
           for (const name of j.reads) if (there.has(name)) files[name] = await readJobFile(j.id, name).catch(() => "");
         }
@@ -387,6 +401,22 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
         }
         if ("why" in said) {
           whys.push(said.why);
+          continue;
+        }
+        // (an output for Meno's readers: read as one opened is, and kept as it is)
+        if ("read" in said) {
+          for (const [i, r] of said.read.entries()) {
+            const text = "log" in r ? log : files[r.file];
+            const read = text ? await readWithReaders(r, text) : `It wrote no ${r.name}`;
+            if (typeof read === "string") {
+              whys.push(read);
+              continue;
+            }
+            const made =
+              kind === "conformers" ? conformersWorked(mine[i], read.output, read.readers, read.source) : workedOf(kind, mine[i], read.output, read.readers, read.source);
+            if (typeof made === "string") whys.push(made);
+            else worked.push(...(Array.isArray(made) ? made : [made]));
+          }
           continue;
         }
         // (its log kept with the workspace, as an output it was read from)
@@ -409,6 +439,19 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
       close();
     } finally {
       finishing.delete(id);
+    }
+  }
+
+  /** An output a job wrote, read by Meno's readers as one opened is (lib/calc/read) - every reader of its kind added, put together - and kept, by its kind, as what the molecules it gave were read from; why not, where nothing added reads it. */
+  async function readWithReaders(r: ToRead, text: string): Promise<{ output: ReaderOutput; readers: string[]; source: CalcSource } | string> {
+    const kind = anyKindById(r.kind);
+    if (!kind) return `${r.name} is read by no reader Meno knows of`;
+    const source = await rememberOutput(r.name, text, kind.id);
+    try {
+      const { output, readers } = await readOutput(r.name, text, kind, source.sha256);
+      return { output, readers, source };
+    } catch (e) {
+      return message(e);
     }
   }
 

@@ -18,13 +18,14 @@ const good = {
   roleOptions: {},
   steps: [],
   systems: [],
+  installed: [],
 };
 
 describe("a plugin's manifest", () => {
   it("is read as data: what it is, what makes its environment and runs its worker, what it reads, and the kinds it brings", () => {
     expect(acceptManifest(good)).toEqual(good);
     // (each plugin Meno carries, from its folder: Meno names none of them)
-    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "crest", "gaussian-input", "pyscf", "rdkit", "xtb"]);
+    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "crest", "gaussian", "orca", "pyscf", "rdkit", "xtb"]);
   });
 
   it("may write kinds rather than read them: each named, its files' names, what it is given, and its options as data", () => {
@@ -52,7 +53,7 @@ describe("a plugin's manifest", () => {
       { id: "nbo-input", name: "NBO input", extensions: [".47"], takes: "molecule", options: [{ id: "charge", label: "Charge", type: "number", default: 0, from: "charge" }] },
     ]);
     // (the plugin Meno carries that writes Gaussian's input: read as any would be)
-    const gaussian = MANIFESTS.find((m) => m.id === "gaussian-input")!;
+    const gaussian = MANIFESTS.find((m) => m.id === "gaussian")!;
     expect(gaussian.writes.map((w) => [w.id, w.extensions, w.takes])).toEqual([["gaussian-input", [".gjf", ".com"], "molecule"]]);
     expect(gaussian.writes[0].options.map((o) => o.id)).toEqual(["job", "method", "basis", "dispersion", "keywords", "charge", "multiplicity", "title", "checkpoint", "processors", "memory"]);
   });
@@ -99,6 +100,19 @@ describe("a plugin's manifest", () => {
     // (CREST's, as Meno carries it: conda-forge has it for macOS and Linux)
     expect(MANIFESTS.find((m) => m.id === "crest")?.systems).toEqual(["macos", "linux"]);
     expect(MANIFESTS.find((m) => m.id === "xtb")?.systems).toEqual([]);
+  });
+
+  it("may run programs installed separately: each by its name, what it is called and its file on each system - only those its steps run", () => {
+    const steps = { ...good, reads: [], kinds: [], steps: [{ kind: "energy", programs: ["orca"] }] };
+    const installed = [
+      { name: "orca", label: "ORCA", files: { macos: "orca", linux: "orca", windows: "orca.exe", beos: "orca" } },
+      { name: "orca", label: "Again", files: { linux: "orca" } },
+      { name: "unrun", label: "Not run by a step", files: { linux: "unrun" } },
+      { name: "pathed", label: "A path", files: { linux: "/usr/bin/pathed" } },
+      { name: "../x", label: "X", files: { linux: "x" } },
+    ];
+    expect(acceptManifest({ ...steps, installed })?.installed).toEqual([{ name: "orca", label: "ORCA", files: { macos: "orca", windows: "orca.exe", linux: "orca" } }]);
+    expect(acceptManifest(steps)?.installed).toEqual([]);
   });
 
   it("may fill roles rather than read files - but a plugin that does neither is none", () => {

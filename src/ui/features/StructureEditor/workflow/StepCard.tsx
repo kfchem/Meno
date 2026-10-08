@@ -83,7 +83,15 @@ function when(at: number, now = Date.now()): string {
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
 
 /** What a state says, with its icon and its words' colour (Meno's palette: the accent for done and running, the attention colour for failed). */
-function stateLine(state: StepState, said: string | undefined, run: RunView | undefined, now: number): { Icon?: typeof CheckCircleIcon; text: string; tone: string; turning?: true } {
+function stateLine(
+  state: StepState,
+  said: string | undefined,
+  run: RunView | undefined,
+  now: number,
+  missing?: string,
+): { Icon?: typeof CheckCircleIcon; text: string; tone: string; turning?: true } {
+  // (a program installed separately that is found nowhere: said where Ready would be)
+  if (missing && (state === "ready" || state === "changed")) return { Icon: ExclamationCircleIcon, text: `${missing} not found`, tone: "text-gh-gray" };
   switch (state) {
     case "no-input":
       return { text: "No input", tone: "text-gh-gray" };
@@ -123,6 +131,8 @@ export type StepCardProps = {
   ports: { take: PortLook; give: PortLook };
   /** How its jobs are getting on, where it runs any. */
   run?: RunView;
+  /** A program installed separately it runs, found nowhere, by what it is called: its *Run* opens Settings, Plugins, to locate it. */
+  missing?: string;
   /** The options it takes, as who does it declares them; and their values. */
   optionList: readonly Option[];
   options: OptionValues;
@@ -149,7 +159,7 @@ export type StepCardProps = {
  * does it fills - and its options.
  */
 export default function StepCard(p: StepCardProps) {
-  const line = stateLine(p.state, p.step.ran?.said, p.run, Date.now());
+  const line = stateLine(p.state, p.step.ran?.said, p.run, Date.now(), p.missing);
   const said = p.state === "running" && p.run?.line ? p.run.line : undefined;
   const w = CARD_W / PX;
   return (

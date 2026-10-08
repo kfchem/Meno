@@ -167,6 +167,10 @@ export async function pyEnvReady(profile: PyProfile): Promise<boolean> {
   }
 }
 
+/** What asking to set a plugin up says first: an interface to a program installed separately (the ORCA interface) downloads that program never - only what the interface itself needs. */
+const consentTitle = (plugin: { name: string; installed?: readonly unknown[] }) =>
+  plugin.installed?.length ? `Set up the ${plugin.name}?` : `Download ${plugin.name}?`;
+
 export async function ensurePyEnv(
   profile: PyProfile,
   opts?: EnvOptions
@@ -184,7 +188,7 @@ export async function ensurePyEnv(
     const mb = Math.round(download.bytes / 1e6 / 10) * 10;
     const allowed = await askToConnect({
       purpose: info.purpose,
-      title: `Download ${plugin.name}?`,
+      title: consentTitle(plugin),
       detail:
         `${plugin.description} It runs in a Python of its own, ` +
         `with the ${download.packages} packages it needs` +
@@ -211,7 +215,7 @@ export async function ensurePyEnv(
     const plugin = pluginOf(profile);
     const allowed = await askToConnect({
       purpose: info.purpose,
-      title: plugin ? `Download ${plugin.name}?` : `Download Python for ${PROFILE_USE[profile as keyof typeof PROFILE_USE]}?`,
+      title: plugin ? consentTitle(plugin) : `Download Python for ${PROFILE_USE[profile as keyof typeof PROFILE_USE]}?`,
       detail:
         (plugin
           ? `${plugin.description} It runs in a Python ${info.pythonVersion} of its own, `

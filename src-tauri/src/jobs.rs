@@ -434,11 +434,13 @@ fn programs_named(manifest: &serde_json::Value) -> Vec<String> {
         .collect()
 }
 
-/// A program a job may run, found, and the activation its environment wants.
+/// A program a job may run, found, and the activation its environment wants
+/// - or, installed separately, what it is given besides.
 #[derive(Debug)]
 pub struct Found {
     pub program: PathBuf,
     pub activation: Option<pixienv::Activation>,
+    pub env: Vec<(String, String)>,
 }
 
 /// The program `name` of plugin `id` (its folder `plugin_dir`), from the
@@ -489,7 +491,181 @@ pub fn plugin_program(data: &Path, plugin_dir: &Path, id: &str, name: &str, args
         let scripts = plugin_dir.canonicalize().map_err(|e| format!("{id}'s folder: {e}"))?;
         crate::validate_sidecar(&program, args, &root, &[scripts])?;
     }
-    Ok(Found { program, activation })
+    Ok(Found { program, activation, env: Vec::new() })
+}
+
+// --- a program installed separately ------------------------------------------
+
+/// The system Meno runs on, as a manifest names it.
+pub fn system() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(windows) {
+        "windows"
+    } else {
+        "linux"
+    }
+}
+
+/// What a plugin may not set for a program installed separately: where
+/// programs are looked for (its folders are said apart), what loads code
+/// into a program, and what Meno sets itself.
+const ENV_NEVER: &[&str] = &[
+    "PATH", "LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+];
+
+/// A program installed separately - ORCA, Gaussian - as its plugin's
+/// manifest says how to know it (`installed`): its name, as its steps name
+/// it; its file on this system; the folders put before the others where
+/// programs are looked for; and the variables it is given besides. Each
+/// folder is a place in its installation: `{folder}`, where its file is,
+/// or `{parent}`, the folder above, with a path inside it after.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Installed {
+    pub name: String,
+    pub file: String,
+    pub path: Vec<String>,
+    pub env: Vec<(String, Vec<String>)>,
+}
+
+/// Whether `t` is a place in a program's installation: `{folder}` or
+/// `{parent}`, and after it, if anything, a path inside that, never above.
+fn place_ok(t: &str) -> bool {
+    match t.strip_prefix("{folder}").or_else(|| t.strip_prefix("{parent}")) {
+        Some("") => true,
+        Some(rest) => rest.strip_prefix('/').is_some_and(inside_name),
+        None => false,
+    }
+}
+
+/// Whether a plugin may give a program installed separately the variable `n`.
+fn env_name_ok(n: &str) -> bool {
+    let mut chars = n.chars();
+    let shaped = n.len() <= 64
+        && chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    shaped && !ENV_NEVER.iter().chain(THREADS).any(|x| x.eq_ignore_ascii_case(n))
+}
+
+/// The program installed separately that a manifest declares as `name`, on
+/// `system`: none, where it declares none so named; why not, where what it
+/// declares cannot be taken - a file that is a path, a shell, Python; a
+/// place outside its installation; a variable it may not set.
+pub fn installed_named(manifest: &serde_json::Value, name: &str, system: &str) -> Result<Option<Installed>, String> {
+    let declared = manifest.get("installed").and_then(|v| v.as_array()).map(Vec::as_slice).unwrap_or_default();
+    let Some(decl) = declared.iter().find(|d| d.get("name").and_then(|n| n.as_str()) == Some(name)) else {
+        return Ok(None);
+    };
+    let file = decl
+        .get("files")
+        .and_then(|f| f.get(system))
+        .and_then(|f| f.as_str())
+        .ok_or_else(|| format!("{name} is not made for this system"))?;
+    let single = Path::new(file).file_name().and_then(|n| n.to_str()) == Some(file);
+    let stem = Path::new(file).file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_ascii_lowercase();
+    if !single || !inside_name(file) || NEVER.contains(&stem.as_str()) || stem.starts_with("python") {
+        return Err(format!("not a program a job runs: {file}"));
+    }
+    let places = |v: Option<&serde_json::Value>| -> Result<Vec<String>, String> {
+        let list = match v {
+            None => return Ok(Vec::new()),
+            Some(serde_json::Value::String(s)) => vec![s.as_str()],
+            Some(serde_json::Value::Array(a)) => a.iter().map(|x| x.as_str().ok_or("not a place")).collect::<Result<_, _>>()?,
+            Some(_) => return Err("not a place".into()),
+        };
+        list.into_iter().map(|t| if place_ok(t) { Ok(t.to_string()) } else { Err(format!("not a place in {name}'s installation: {t}")) }).collect()
+    };
+    let path = places(decl.get("path"))?;
+    let mut env = Vec::new();
+    if let Some(vars) = decl.get("env").and_then(|e| e.as_object()) {
+        for (k, v) in vars {
+            if !env_name_ok(k) {
+                return Err(format!("{name} may not be given {k}"));
+            }
+            env.push((k.clone(), places(Some(v))?));
+        }
+    }
+    Ok(Some(Installed { name: name.to_string(), file: file.to_string(), path, env }))
+}
+
+/// Whether `p` is a program that can be run: a file, executable where that is said.
+fn runnable(p: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        p.is_file()
+    }
+}
+
+/// Where a program installed separately is: where the chemist located it,
+/// where that is still a program of its file's name; else the first of its
+/// file's name where the system finds programs (`path_var`: PATH, as Meno
+/// was given it).
+pub fn installed_where(decl: &Installed, located: Option<&str>, path_var: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    let located = located.map(Path::new).filter(|p| {
+        p.is_absolute() && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.eq_ignore_ascii_case(&decl.file)) && runnable(p)
+    });
+    if let Some(p) = located {
+        return Some(p.to_path_buf());
+    }
+    std::env::split_paths(path_var?).filter(|d| d.is_absolute()).map(|d| d.join(&decl.file)).find(|p| runnable(p))
+}
+
+/// What a program installed separately is given, found at `program`: its
+/// folders before the others where programs are looked for (`path_var`),
+/// and its variables, each its places in its installation.
+pub fn installed_env(decl: &Installed, program: &Path, path_var: Option<&std::ffi::OsStr>) -> Result<Vec<(String, String)>, String> {
+    let folder = program.parent().ok_or("a program in no folder")?;
+    let parent = folder.parent().unwrap_or(folder);
+    let fill = |t: &String| -> PathBuf {
+        let (base, rest) = match t.strip_prefix("{folder}") {
+            Some(rest) => (folder, rest),
+            None => (parent, t.strip_prefix("{parent}").unwrap_or_default()),
+        };
+        let rest = rest.trim_start_matches('/');
+        if rest.is_empty() { base.to_path_buf() } else { base.join(rest) }
+    };
+    let joined = |places: Vec<PathBuf>| -> Result<String, String> {
+        std::env::join_paths(places).map_err(|e| e.to_string())?.into_string().map_err(|_| "a place that is not text".to_string())
+    };
+    let mut path: Vec<PathBuf> = decl.path.iter().map(fill).collect();
+    path.extend(path_var.map(std::env::split_paths).into_iter().flatten());
+    let mut out = vec![("PATH".to_string(), joined(path)?)];
+    for (k, places) in &decl.env {
+        out.push((k.clone(), joined(places.iter().map(fill).collect())?));
+    }
+    Ok(out)
+}
+
+/// Reads a plugin's manifest from its folder.
+fn manifest_of(plugin_dir: &Path, id: &str) -> Result<serde_json::Value, String> {
+    let text = fs::read_to_string(plugin_dir.join("manifest.json")).map_err(|e| format!("{id}'s manifest: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("{id}'s manifest: {e}"))
+}
+
+/// The program `name` of plugin `id` installed separately, where its
+/// manifest declares it so, and one of its steps names it: found where the
+/// chemist located it (`located`) or where the system finds programs, with
+/// what it is given. None, where the manifest declares no such program.
+pub fn installed_program(plugin_dir: &Path, id: &str, name: &str, located: Option<&str>) -> Result<Option<Found>, String> {
+    if !plugin_id(id) {
+        return Err(format!("not a plugin: {id}"));
+    }
+    let manifest = manifest_of(plugin_dir, id)?;
+    let Some(decl) = installed_named(&manifest, name, system())? else {
+        return Ok(None);
+    };
+    if !programs_named(&manifest).iter().any(|p| p == name) {
+        return Err(format!("{id} names no program {name}"));
+    }
+    let path_var = std::env::var_os("PATH");
+    let program = installed_where(&decl, located, path_var.as_deref()).ok_or_else(|| format!("{name} is not found"))?;
+    let env = installed_env(&decl, &program, path_var.as_deref())?;
+    Ok(Some(Found { program, activation: None, env }))
 }
 
 // --- a job's folder ----------------------------------------------------------
@@ -629,6 +805,9 @@ pub struct JobAsk {
     pub slots: Option<u32>,
     #[serde(default)]
     pub cores: Option<u32>,
+    /// Where the chemist located its program, where it is one installed separately.
+    #[serde(default)]
+    pub path: Option<String>,
 }
 
 /// A job made and its runner started: its id. It waits its turn.
@@ -639,14 +818,19 @@ pub async fn job_start(app: AppHandle, net: State<'_, crate::net::Net>, payload:
         return Err(format!("not a plugin: {}", payload.plugin));
     }
     let plugin_dir = crate::resource_path(&app, &Path::new("resources/plugins").join(&payload.plugin))?;
-    let found = plugin_program(&data, &plugin_dir, &payload.plugin, &payload.program, &payload.args)?;
+    let found = match installed_program(&plugin_dir, &payload.plugin, &payload.program, payload.path.as_deref())? {
+        Some(found) => found,
+        None => plugin_program(&data, &plugin_dir, &payload.plugin, &payload.program, &payload.args)?,
+    };
 
-    // what it is given: its environment's activation, a network that refuses
-    // it (and, while Meno is open, says so), the cores it may use
+    // what it is given: its environment's activation - or, installed
+    // separately, its folders and variables - a network that refuses it
+    // (and, while Meno is open, says so), the cores it may use
     let mut given = Command::new(&found.program);
     if let Some(activation) = &found.activation {
         pixienv::activate(&mut given, activation);
     }
+    given.envs(found.env.iter().map(|(k, v)| (k, v)));
     net.route_nowhere(&mut given);
     if let Some(cores) = payload.cores {
         for key in THREADS {
@@ -675,6 +859,20 @@ pub async fn job_start(app: AppHandle, net: State<'_, crate::net::Net>, payload:
         return Err(why);
     }
     Ok(id)
+}
+
+/// Where plugin `plugin`'s program `name`, installed separately, is: where
+/// the chemist located it (`located`), where that is still it, or where the
+/// system finds programs. None, where it is found nowhere.
+#[tauri::command]
+pub async fn program_where(app: AppHandle, plugin: String, name: String, located: Option<String>) -> Result<Option<String>, String> {
+    if !plugin_id(&plugin) {
+        return Err(format!("not a plugin: {plugin}"));
+    }
+    let plugin_dir = crate::resource_path(&app, &Path::new("resources/plugins").join(&plugin))?;
+    let decl = installed_named(&manifest_of(&plugin_dir, &plugin)?, &name, system())?.ok_or_else(|| format!("{plugin} declares no program {name}"))?;
+    let path_var = std::env::var_os("PATH");
+    Ok(installed_where(&decl, located.as_deref(), path_var.as_deref()).map(|p| p.to_string_lossy().into_owned()))
 }
 
 /// A job, as Meno lists it.
@@ -1043,6 +1241,109 @@ mod tests {
         assert!(found.program.ends_with(exe));
         assert_eq!(found.activation, Some(activation));
         let _ = fs::remove_dir_all(data.parent().unwrap());
+    }
+
+    /// A program file named `name` in `dir`, which can be run.
+    fn program_file(dir: &Path, name: &str) -> PathBuf {
+        fs::create_dir_all(dir).unwrap();
+        let p = dir.join(name);
+        fs::write(&p, "").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        p
+    }
+
+    #[test]
+    fn reads_a_program_installed_separately_as_its_manifest_declares_it() {
+        let m = serde_json::json!({"installed": [{
+            "name": "g16", "files": {"macos": "g16", "linux": "g16"},
+            "path": ["{folder}"], "env": {"g16root": "{parent}", "GAUSS_EXEDIR": ["{folder}/bsd", "{folder}"]}
+        }]});
+        let decl = installed_named(&m, "g16", "linux").unwrap().unwrap();
+        assert_eq!(decl.file, "g16");
+        assert_eq!(decl.path, vec!["{folder}"]);
+        assert_eq!(decl.env, vec![("GAUSS_EXEDIR".to_string(), vec!["{folder}/bsd".to_string(), "{folder}".to_string()]), ("g16root".to_string(), vec!["{parent}".to_string()])]);
+        // not declared; not made for this system
+        assert_eq!(installed_named(&m, "orca", "linux").unwrap(), None);
+        assert!(installed_named(&m, "g16", "windows").unwrap_err().contains("not made"));
+        // never a path, a shell or Python; never a place outside its installation; never a variable it may not set
+        let one = |decl: serde_json::Value| installed_named(&serde_json::json!({"installed": [decl]}), "p", "linux");
+        for file in ["../g16", "/bin/g16", "sh", "bash.exe", "python3"] {
+            assert!(one(serde_json::json!({"name": "p", "files": {"linux": file}})).is_err(), "{file}");
+        }
+        for place in ["/usr/lib", "{folder}/../x", "{home}", "{folder}x", "bsd"] {
+            assert!(one(serde_json::json!({"name": "p", "files": {"linux": "p"}, "path": [place]})).is_err(), "{place}");
+        }
+        for var in ["PATH", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "omp_num_threads", "HTTP_PROXY", "1X", "A-B"] {
+            assert!(one(serde_json::json!({"name": "p", "files": {"linux": "p"}, "env": {var: "{folder}"}})).is_err(), "{var}");
+        }
+    }
+
+    #[test]
+    fn finds_a_program_installed_separately_where_it_was_located_or_where_programs_are() {
+        let base = temp();
+        let decl = Installed { name: "orca".into(), file: "orca".into(), path: vec!["{folder}".into()], env: vec![("ORCA_HOME".into(), vec!["{parent}".into()])] };
+        let installed = program_file(&base.join("apps").join("orca_6"), "orca");
+        let on_path = program_file(&base.join("bin"), "orca");
+        let path_var = std::env::join_paths([base.join("nowhere"), base.join("bin")]).unwrap();
+        // where it was located; else where the system finds programs
+        assert_eq!(installed_where(&decl, installed.to_str(), Some(&path_var)), Some(installed.clone()));
+        assert_eq!(installed_where(&decl, None, Some(&path_var)), Some(on_path.clone()));
+        // a place located that is not it - another file's name, gone, not absolute - is passed over
+        let other = program_file(&base.join("apps"), "other");
+        assert_eq!(installed_where(&decl, other.to_str(), Some(&path_var)), Some(on_path));
+        assert_eq!(installed_where(&decl, Some("orca"), None), None);
+        assert_eq!(installed_where(&decl, base.join("gone").join("orca").to_str(), None), None);
+        // what it is given: its folder first where programs are looked for, its variables in its installation
+        let env = installed_env(&decl, &installed, Some(&path_var)).unwrap();
+        let path: Vec<PathBuf> = std::env::split_paths(&env[0].1).collect();
+        assert_eq!(env[0].0, "PATH");
+        assert_eq!(path, vec![base.join("apps").join("orca_6"), base.join("nowhere"), base.join("bin")]);
+        assert_eq!(env[1], ("ORCA_HOME".to_string(), base.join("apps").to_string_lossy().into_owned()));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_program_installed_separately_is_found_only_where_it_can_be_run() {
+        let base = temp();
+        let decl = Installed { name: "g16".into(), file: "g16".into(), path: vec![], env: vec![] };
+        let p = base.join("g16");
+        fs::create_dir_all(&base).unwrap();
+        fs::write(&p, "").unwrap();
+        assert_eq!(installed_where(&decl, p.to_str(), None), None);
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn runs_a_program_installed_separately_only_as_its_plugin_declares_and_names_it() {
+        let base = temp();
+        let plugin = base.join("plugins").join("demo");
+        fs::create_dir_all(&plugin).unwrap();
+        let exe = if cfg!(windows) { "orca.exe" } else { "orca" };
+        let manifest = serde_json::json!({
+            "id": "demo",
+            "installed": [
+                {"name": "orca", "files": {system(): exe}, "path": ["{folder}"]},
+                {"name": "unused", "files": {system(): "unused"}},
+                {"name": "nowhere", "files": {system(): "meno-test-not-a-program"}}
+            ],
+            "steps": [{"kind": "energy", "programs": ["orca", "nowhere"]}]
+        });
+        fs::write(plugin.join("manifest.json"), manifest.to_string()).unwrap();
+        let orca = program_file(&base.join("orca_6"), exe);
+        let found = installed_program(&plugin, "demo", "orca", orca.to_str()).unwrap().unwrap();
+        assert_eq!(found.program, orca);
+        assert!(found.activation.is_none());
+        assert_eq!(found.env[0].0, "PATH");
+        // not declared installed: the plugin's environment's, as before; declared but named by no step; not found
+        assert!(installed_program(&plugin, "demo", "xtb", None).unwrap().is_none());
+        assert!(installed_program(&plugin, "demo", "unused", None).unwrap_err().contains("names no program"));
+        assert!(installed_program(&plugin, "demo", "nowhere", None).unwrap_err().contains("not found"));
+        let _ = fs::remove_dir_all(base);
     }
 
     #[test]

@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { manifestOf, OFFERED, PLUGINS, type PythonPlugin } from "../../../lib/calc/catalog";
 import { addedReaders, addPlugin, removePlugin, useReaders } from "../../../lib/calc/workers";
 import { ROLES } from "../../../lib/plugins/roles";
-import { forThisSystem, SYSTEM_NAMES } from "../../../lib/plugins/here";
+import { forThisSystem, systemHere, SYSTEM_NAMES } from "../../../lib/plugins/here";
+import { locate, lookForAll, programKey, useInstalled } from "../../../lib/plugins/installed";
+import { SYSTEMS, type InstalledDecl } from "../../../lib/plugins/manifest";
 import { KINDS } from "../StructureEditor/workflow/kinds";
 import { kindById } from "../../../lib/io/kinds";
 
@@ -20,6 +22,8 @@ export default function PluginSettings() {
   const problems = useReaders((s) => s.problem);
   useEffect(() => {
     void addedReaders(PLUGINS);
+    // (where the programs installed separately are, looked for afresh as Plugins is shown)
+    void lookForAll(PLUGINS);
   }, []);
   return (
     <div className="space-y-3">
@@ -46,7 +50,7 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonPlugin; state?: s
   const named = (id: string) => manifestOf(p.id)?.kinds.find((k) => k.id === id)?.name ?? kindById(id)?.name ?? id;
   return (
     <div className="rounded-lg border border-gh-line bg-white px-4 py-3 flex items-start gap-4">
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <div className="text-sm text-gh-black">
           {p.name} <span className="text-gh-gray">{p.version}</span>
         </div>
@@ -55,6 +59,9 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonPlugin; state?: s
         {p.writes.length > 0 && <p className="text-xs text-gh-gray mt-1">Writes {p.writes.map((w) => `${w.name} (${w.extensions.join(", ")})`).join(", ")}.</p>}
         {p.roles.length > 0 && <p className="text-xs text-gh-gray mt-1">{p.roles.map((r) => ROLES[r].name).join("; ")}.</p>}
         {stepNames(p).length > 0 && <p className="text-xs text-gh-gray mt-1">In a workflow: {stepNames(p).join(", ")}.</p>}
+        {p.installed.map((d) => (
+          <Installed key={d.name} plugin={p.id} decl={d} />
+        ))}
         <p className="text-xs text-gh-gray mt-1">
           {p.licence} · {p.homepage.replace(/^https?:\/\//, "")}
         </p>
@@ -81,6 +88,44 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonPlugin; state?: s
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** The systems Meno runs a program installed separately on, by name: "macOS and Linux". */
+const runsOn = (decl: InstalledDecl) =>
+  SYSTEMS.filter((s) => decl.files[s])
+    .map((s) => SYSTEM_NAMES[s])
+    .join(" and ");
+
+/**
+ * A program installed separately that a plugin's steps run - ORCA,
+ * Gaussian - never downloaded by Meno: where it is, found where the system
+ * finds programs or located here; or that it is found nowhere.
+ */
+function Installed({ plugin, decl }: { plugin: string; decl: InstalledDecl }) {
+  const where = useInstalled((s) => s.where[programKey(plugin, decl.name)]);
+  const [problem, setProblem] = useState<string>();
+  const here = systemHere();
+  const made = here == null || !!decl.files[here];
+  const pick = () => {
+    setProblem(undefined);
+    locate(plugin, decl).catch((e: unknown) => setProblem(e instanceof Error ? e.message : String(e)));
+  };
+  return (
+    <div className="mt-2 text-xs">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="shrink-0 text-gh-gray">{decl.label}, installed separately:</span>
+        <span key={where ?? String(where)} className={`meno-fade-in min-w-0 truncate ${where ? "font-mono text-gh-black" : "text-gh-gray"}`} title={where ?? undefined}>
+          {!made ? `run on ${runsOn(decl)} only` : where === undefined ? "Looking…" : (where ?? "Not found")}
+        </span>
+        {made && (
+          <button onClick={pick} className="h-6 shrink-0 rounded-md border border-gh-line bg-white px-2 text-xs text-gh-black hover:bg-gh-base">
+            Locate…
+          </button>
+        )}
+      </div>
+      {problem && <p className="mt-1 text-accel-accent meno-fade-in">{problem}</p>}
     </div>
   );
 }
