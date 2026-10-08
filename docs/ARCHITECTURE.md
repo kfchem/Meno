@@ -304,28 +304,33 @@ The Workflow Builder tab, a prototype on React Flow, was removed with
 React Flow on 2026-10-08: the workspace's editor is written anew, its code
 not taken from either.
 
-- **The document holds it** (`StructureEditor/document.ts`): `boxes`,
+- **The document holds it** (`StructureEditor/document.ts`): `sets`,
   `steps` and `wires`, numbered from `nextWorkflowId`; each change is an
   edit (`workflow/model.ts`), so undo takes it back and the workspace file
   keeps it (`utils/workspace.ts`, read back by `workflow/saved.ts`).
-- **What a box holds is what lies inside its frame** (`workflow/entries.ts`):
+- **What a set holds is what lies inside its frame** (`workflow/entries.ts`):
   never a list of ids, so moving a molecule in or out is all it takes, and
-  a workspace opened again needs no ids mapped. A box the chemist draws is
-  a compound set; a box a step made says what set it holds (`made`).
+  a workspace opened again needs no ids mapped. A set the chemist makes is
+  a compound set; a set a step made says what it holds (`made.holds`).
 - **How parts join** (`workflow/flow.ts`): what a port gives, what may be
   wired to what (`canWire`), what comes into a step, and its state - the
   key of what it ran on, kept with the run, tells *Changed*.
 - **Kinds and who does them** (`workflow/kinds.ts`, `workflow/doers.ts`):
   Meno's table of kinds; Meno does the steps on entries alone
   (`workflow/meno.ts`, the RMSD in `workflow/rmsd.ts`), and a run
-  (`workflow/run.ts`) puts what it gave in a result box to the right of
+  (`workflow/run.ts`) puts what it gave in a result set to the right of
   its step, in one edit.
 - **Drawn** by `components/Workflow2D.tsx`: wires are the canvas's own
-  ribbons; boxes, step cards (`workflow/BoxFrame.tsx`, `StepCard.tsx`) and
+  ribbons; sets, step cards (`workflow/SetFrame.tsx`, `StepCard.tsx`) and
   ports are HTML on **one** layer laid on the page at its scale (drei's
   `Html` in transform mode, `workflow/look.ts` `PX`). One layer, not one
   per part: WebKit finds what is under the pointer among layers in their
   order, and a part's layer covered the parts on the layers below it.
+  Lines are a hair on the screen at any zoom: the layer's `--hair` is set
+  each frame from the zoom, and wires are made as wide on the screen for
+  it. Colours, cards and icons are Meno's own (WORKFLOWS.md, *How it
+  looks*): its palette, its cards' hairline borders, Heroicons' outline
+  icons (`workflow/icons.tsx`).
 - Quick Add's calculations come from `workflow/offered.ts`; Settings,
   Calculations, is `SettingsPanel/CalculationSettings.tsx`.
 
