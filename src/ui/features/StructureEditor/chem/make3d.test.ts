@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { STYLE_3D } from "../../../../lib/chem/style3d";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import type { Conformers } from "../../../../lib/roles/client";
 import type { Model } from "../store/types";
 import { solidOf } from "../utils/molecule3d";
-import { blocksOf, likeOf, linkOf, moleculeOf, placeRow, rowFrom, signatureOf, turnedOver, type Box, type Turned } from "./make3d";
+import { blocksOf, likeOf, linkOf, moleculeOf, placeRow, rowFrom, signatureOf, takenOnPage, turnedOver, type Box, type Turned } from "./make3d";
 
 /** Ethanol drawn: C1-C2-O3, a bond's length apart. */
 const ethanol: Model = {
@@ -54,6 +55,10 @@ describe("making a drawn structure in 3D", () => {
     expect(m.energies).toEqual(answer.energies);
     expect(m.drawnFrom).toEqual([11, 12, 13, null, null]);
     expect(m.stereo).toEqual({ atoms: {}, bonds: {} });
+    // (how they were made, kept where the plugin says: none here)
+    expect(m.made).toBeUndefined();
+    const how = [{ label: "Optimised", text: "MMFF94s, at most 300 steps" }];
+    expect(moleculeOf({ ...answer, how }, blocksOf(ethanol, [11])[0]).made).toEqual({ how });
   });
 
   it("keeps each centre's label, and which were left open, so that stereoisomers are told apart", () => {
@@ -119,6 +124,23 @@ describe("placeRow", () => {
     expect(placeRow([item(6, 12)], drawing, view).at[0].x).toBeGreaterThan(4);
   });
 
+  it("keeps clear of what stands on the page, going on out past it, or to another side", () => {
+    const view = { x0: -30, x1: 30, y0: -20, y1: 20 };
+    // (a molecule in 3D just right of the drawing: the row goes on past it)
+    const past = placeRow([item(2)], drawing, view, undefined, [{ x0: 5, x1: 12, y0: -1, y1: 3 }]);
+    expect(past.inView).toBe(true);
+    // (a gap of a bond and a half beyond it, as beside the drawing)
+    expect(past.box.x0).toBeCloseTo(12 + 1.5 * NOMINAL_BOND_LENGTH);
+    // (two in a row in its way: past both)
+    const both = placeRow([item(2)], drawing, view, undefined, [{ x0: 5, x1: 9, y0: -1, y1: 3 }, { x0: 9.5, x1: 20, y0: 0, y1: 2 }]);
+    expect(both.box.x0).toBeGreaterThanOrEqual(20);
+    // (so far right it would be out of view: to the left instead)
+    const left = placeRow([item(2)], drawing, view, undefined, [{ x0: 5, x1: 29, y0: -1, y1: 3 }]);
+    expect(left.at[0].x).toBeLessThan(0);
+    // (what is not in its way - above the row - changes nothing)
+    expect(placeRow([item(2)], drawing, view, undefined, [{ x0: 5, x1: 12, y0: 5, y1: 8 }]).at).toEqual(placeRow([item(2)], drawing, view).at);
+  });
+
   it("says so where it is in view nowhere, and goes to the right", () => {
     const row = placeRow([item(30)], drawing, { x0: -1, x1: 5, y0: -1, y1: 3 });
     expect(row.inView).toBe(false);
@@ -161,5 +183,28 @@ describe("how a molecule in 3D stands to its drawing", () => {
     expect(at[0]).toEqual({ x: 10, y: 3 });
     expect(at[1].x).toBeGreaterThan(10 + 1 + 2);
     expect(at[1].y).toBe(3);
+  });
+});
+
+describe("takenOnPage", () => {
+  it("is each other structure drawn, each arrow and \"+\", and the molecules in 3D given", () => {
+    const atom = (id: number, x: number, y: number) => ({ id, x, y, r: 0.9, el: "C" });
+    const model = {
+      atoms: [atom(1, 0, 0), atom(2, 1.5, 0), atom(3, 10, 0), atom(4, 11.5, 0), atom(5, 20, 0)],
+      bonds: [
+        { id: 6, a: 1, b: 2, order: 1 as const, stereo: "none" as const, stereoOrient: "principle" as const },
+        { id: 7, a: 3, b: 4, order: 1 as const, stereo: "none" as const, stereoOrient: "principle" as const },
+      ],
+    };
+    const solid = { x0: 30, x1: 35, y0: -2, y1: 2 };
+    const boxes = takenOnPage({ model: model as never, arrows: [{ id: 1, x: 5, y: 5, angle: 0, length: 4 } as never], pluses: [{ id: 1, x: 5, y: -5 } as never] }, [1, 2], [solid]);
+    // (the drawing it was made from left out; the other two structures, the arrow, the "+" and the molecule)
+    expect(boxes).toHaveLength(5);
+    const pad = 0.4 * NOMINAL_BOND_LENGTH;
+    expect(boxes[0]).toEqual({ x0: 10 - pad, x1: 11.5 + pad, y0: -pad, y1: pad });
+    expect(boxes[1]).toEqual({ x0: 20 - pad, x1: 20 + pad, y0: -pad, y1: pad });
+    expect(boxes[2].x0).toBeCloseTo(3 - pad);
+    expect(boxes[2].x1).toBeCloseTo(7 + pad);
+    expect(boxes[4]).toBe(solid);
   });
 });

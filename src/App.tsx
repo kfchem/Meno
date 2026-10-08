@@ -12,8 +12,8 @@ import {
 } from "./lib/core";
 import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
-import { openedAs, OPENABLE, workspaceOfFile, type Opened } from "./ui/views/openFile";
-import { setTabOpener } from "./ui/views/tabOpener";
+import { openedAs, openedTexts, OPENABLE, textsOf, workspaceOfFile, type Opened } from "./ui/views/openFile";
+import { textTakerOf, type OpenedText } from "./ui/views/texts";
 import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
 import { keepClipboard, keepPageUnselected, openIntent, undoIntent } from "./lib/doc/shortcuts";
@@ -195,20 +195,33 @@ export default function App() {
     return true;
   };
 
+  // Texts opened - files, or a new one - held in the workspace `into`, the
+  // tab that was in front as they were opened, and shown in its column; on
+  // a canvas of their own where it takes none (ui/views/texts).
+  const openTexts = (texts: OpenedText[], into: string | null): boolean => {
+    const take = into ? textTakerOf(into) : undefined;
+    if (!take) return openTab(openedTexts(texts));
+    take(texts);
+    return true;
+  };
+
   // Open (Ctrl/Cmd+O, or the menu): files picked in the system's dialog,
-  // each in a tab, by what it is (openFile). Tauri's dialog gives each
-  // file's path, which goes with it; outside Tauri - the browser dev
-  // server - the page's own picker stands in, and gives none.
+  // each in a tab, by what it is (openFile) - text in the workspace in
+  // front. Tauri's dialog gives each file's path, which goes with it;
+  // outside Tauri - the browser dev server - the page's own picker stands
+  // in, and gives none.
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickFiles = async () => {
     if (!isTauri()) {
       fileInputRef.current?.click();
       return;
     }
+    const into = stateRef.current.activeId;
     const picked = await openDialog({
       multiple: true,
       filters: [{ name: "Files Meno opens", extensions: OPENABLE.map((ext) => ext.slice(1)) }],
     }).catch(() => null);
+    const texts: OpenedText[] = [];
     for (const path of picked ?? []) {
       const name = path.split(/[\\/]/).pop() || path;
       try {
@@ -221,14 +234,18 @@ export default function App() {
         }
         const text = new TextDecoder().decode(bytes);
         // (what it is: told by what it holds - or, where nothing tells it, by a plugin asked)
-        openTab(openedAs(name, text, path, await kindOfFile(name, text)));
+        const opened = openedAs(name, text, path, await kindOfFile(name, text));
+        const asText = textsOf(opened);
+        if (asText) texts.push(...asText);
+        else openTab(opened);
       } catch (e) {
         setNotice(`${name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
+    if (texts.length) openTexts(texts, into);
   };
   // Closing with unsaved changes: the tabs that hold them, and whether
-  // each can be saved (lib/doc/savers) - a text tab cannot, yet.
+  // each can be saved (lib/doc/savers).
   const unsavedOf = (p: { kind: "tab"; id: string } | { kind: "window" }): string[] =>
     p.kind === "tab"
       ? [p.id]
@@ -248,18 +265,20 @@ export default function App() {
     else void getCurrentWindow().destroy();
   };
   const openFiles = async (files: File[]) => {
+    const into = stateRef.current.activeId;
+    const texts: OpenedText[] = [];
     for (const f of files) {
       const workspace = workspaceOfFile(new Uint8Array(await f.arrayBuffer()));
-      openTab(workspace != null ? openedAs(f.name, workspace, undefined, MENO_KINDS.workspace) : openedAs(f.name, await f.text()));
+      const opened = workspace != null ? openedAs(f.name, workspace, undefined, MENO_KINDS.workspace) : openedAs(f.name, await f.text());
+      const asText = textsOf(opened);
+      if (asText) texts.push(...asText);
+      else openTab(opened);
     }
+    if (texts.length) openTexts(texts, into);
   };
   // (the key listened for once; what it does is this render's)
   const pickRef = useRef(pickFiles);
   pickRef.current = pickFiles;
-  // Tabs opened from inside others (ui/views/tabOpener): as a file opened is
-  const openRef = useRef(openTab);
-  openRef.current = openTab;
-  useEffect(() => setTabOpener((o) => openRef.current(o)), []);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!openIntent(e)) return;
@@ -392,6 +411,9 @@ export default function App() {
       dispatch({ type: "ADD_TAB", tab: viewRegistry.structure.create("Structure Canvas") });
     },
     openFiles: pickFiles,
+    newText: () => {
+      openTexts([{ name: "", text: "" }], state.activeId);
+    },
     openByKind: async (kind: TabKind, opts?: { label?: string }) => {
       // There is one Settings tab: asking again brings it to the front.
       if (kind === "settings") {
@@ -431,7 +453,10 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col relative">
+    // (the window is the app: it never scrolls as a whole - fixed to the
+    // window and clipped, nothing in it can scroll it, a section scrolled
+    // into view in Settings included; only what is inside it scrolls)
+    <div className="fixed inset-0 flex flex-col overflow-clip">
       <TopBar ctl={ctl} />
       <input
         ref={fileInputRef}

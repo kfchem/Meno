@@ -72,6 +72,7 @@ describe("the readers Meno knows of", () => {
       worker: "worker.py",
       reads: ["nbo-47", "xyz", "gaussian"],
       roles: [],
+      roleOptions: {},
       writes: [],
       kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO" }] }],
     });

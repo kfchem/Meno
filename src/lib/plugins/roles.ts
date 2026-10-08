@@ -26,3 +26,6 @@ export type RoleId = keyof typeof ROLES;
 
 /** Whether an id is a role Meno defines. */
 export const isRole = (id: string): id is RoleId => Object.prototype.hasOwnProperty.call(ROLES, id);
+
+/** The role a role's options are remembered under (lib/settings/appSettings `options`): the plugin's that fills it, as Settings draws them. */
+export const roleOptionsRole = (role: RoleId) => `role:${role}`;

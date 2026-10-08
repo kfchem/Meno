@@ -8,16 +8,18 @@ import {
 } from "react";
 import type { DocumentStore } from "../../../../lib/doc";
 import { createStructureDocument, type StructureDocument } from "../document";
-import type { Caption, EditorState, Wire, WorkflowSet, WorkflowStep } from "./types";
+import type { Caption, EditorState, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
 import { createInteractionSlice } from "./slices/interactionSlice";
 import { createUiSlice } from "./slices/uiSlice";
 import { createMolecules3dSlice, heldOf } from "./slices/molecules3dSlice";
+import { createTextsSlice } from "./slices/textsSlice";
 import { createCaptionsSlice } from "./slices/captionsSlice";
 import { createWorkflowSlice } from "./slices/workflowSlice";
 import { turnsAcross } from "./turnJournal";
+import { shownText } from "../utils/texts";
 
 // Re-export types for backward compatibility
 export * from "./types";
@@ -46,9 +48,11 @@ function mirrorOf(doc: StructureDocument) {
     steps: doc.steps ?? NO_STEPS,
     wires: doc.wires ?? NO_WIRES,
     docStyle: doc.style,
+    texts: doc.texts ?? NO_TEXTS,
   };
 }
 
+const NO_TEXTS: WorkspaceText[] = [];
 const NO_CAPTIONS: Caption[] = [];
 const NO_SETS: WorkflowSet[] = [];
 const NO_STEPS: WorkflowStep[] = [];
@@ -81,7 +85,10 @@ export function connectStoreToDocument(
         }
         held.turns3d = turns3d;
       }
-      return { ...prev, ...mirrored, ...held };
+      // (the text its column shows, as texts come and go: utils/texts)
+      const texts = shownText(prev.texts, mirrored.texts, prev.textShown);
+      const textsOpen = texts.shown != null && (texts.open ?? prev.textsOpen);
+      return { ...prev, ...mirrored, ...held, textShown: texts.shown, textsOpen };
     });
   sync();
   return doc.subscribe(sync);
@@ -94,6 +101,9 @@ export function createEditorStore(
     // Document state, mirrored. Never written directly: the slices edit the
     // document and the subscription below brings the change back here.
     ...mirrorOf(doc.getState()),
+    // (a canvas opened for a text shows it)
+    textShown: doc.getState().texts?.slice(-1)[0]?.id ?? null,
+    textsOpen: !!doc.getState().texts?.length,
 
     // Ephemeral view state: hover, gestures, camera requests, edit buffers.
     sel: { atoms: new Set<number>(), bonds: new Set<number>() },
@@ -147,6 +157,7 @@ export function createEditorStore(
     ...createUiSlice(doc, set, get),
     ...createInteractionSlice(set, get),
     ...createMolecules3dSlice(doc, set, get),
+    ...createTextsSlice(doc, set),
     ...createCaptionsSlice(doc, set),
     ...createWorkflowSlice(doc, set),
   }));

@@ -40,7 +40,7 @@ export const MOV_PX = 5;
  * DOUBLE_CLICK_MS after it comes up - and only on the first press of
  * clicks: the second of a double-click held still waits to be dragged.
  */
-export const LONG_PRESS_MS = 400;
+export const LONG_PRESS_MS = 320;
 /** A long press shows nothing for its first part, so that a click shows nothing. */
 export const LONG_PRESS_SHOW_MS = 120;
 

@@ -1,4 +1,5 @@
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
+import { setCursor } from "../../../theme/cursors";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
@@ -405,17 +406,19 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     [],
   );
 
-  // the pointer says what a drag does: a molecule selected moves, another turns
+  // the pointer says what a drag does: a molecule selected moves, another
+  // turns - Meno's own pointers (theme/cursors)
   useEffect(() => {
-    const cursor =
+    setCursor(
+      dom,
       active?.kind === "turn"
-        ? "grabbing"
+        ? "turning"
         : active?.kind === "move" || (hovered && sel3d.has(hovered.id))
           ? "move"
           : hovered
-            ? "grab"
-            : "";
-    dom.style.cursor = cursor;
+            ? "turn"
+            : null,
+    );
   }, [dom, hovered, active, sel3d]);
 
   // a molecule let go while turning turns on, slowing to a stop

@@ -18,10 +18,10 @@ type KeyLike = {
  * Fields where the browser's own editing should keep Ctrl+Z: single-line
  * inputs (the 2D editor's atom label editor) and rich-text hosts.
  *
- * A `<textarea>` is deliberately **not** in this list: the text view's textarea
- * is backed by a document, so its undo has to be the document's - unless it
- * says otherwise (`data-native-undo`), its words not the document's until
- * they are kept.
+ * A `<textarea>` is deliberately **not** in this list: the textarea of a
+ * workspace's column of texts is backed by its document, so its undo has to
+ * be the document's - unless it says otherwise (`data-native-undo`), its
+ * words not the document's until they are kept.
  */
 function isNativeEditingTarget(target: unknown): boolean {
   const el = target as { tagName?: string; isContentEditable?: boolean; dataset?: { nativeUndo?: string } } | null;

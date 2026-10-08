@@ -273,12 +273,16 @@ export const createModelSlice = (
 
   openWorkspace: (ws: Workspace, start = false) => {
     const { drawn } = ws;
+    // (its texts, those read - utils/workspace `readTexts` - numbered from the first)
+    const read = ws.texts.filter((t) => t.text != null);
+    const texts = read.map((t, i) => ({ id: i + 1, name: t.name, text: t.text! }));
+    const shown = ws.textShown != null ? read.indexOf(ws.texts[ws.textShown]) : -1;
     const opened = (d: StructureDocument) => {
       const next = ops.withImportedScheme(ops.replaceModel(d, drawn), ops.schemeOf(drawn));
       // (a workflow's parts by their own ids: what a set holds is what lies inside it, whatever the molecules' ids)
       const workflow = ws.workflow ? { ...ws.workflow, nextWorkflowId: nextIdAfter(ws.workflow) } : {};
       return ops.setDocumentStyle(
-        { ...next, ...workflow, aromaticEnabled: ws.aromaticEnabled, aromaticRings: ws.aromaticRings },
+        { ...next, ...workflow, aromaticEnabled: ws.aromaticEnabled, aromaticRings: ws.aromaticRings, texts, nextTextId: texts.length + 1 },
         ws.style,
       );
     };
@@ -296,7 +300,8 @@ export const createModelSlice = (
       // (a list open as it was saved, its row chosen and its surface's value)
       if (m.list) lists3d[i + 1] = { list: m.list.id, row: m.list.row, pointed: null, ...(m.list.iso != null ? { iso: m.list.iso } : {}) };
     });
-    set((prev: EditorState) => ({ ...prev, turns3d, frames3d, lists3d }));
+    // (and its column showing the text it showed, or closed)
+    set((prev: EditorState) => ({ ...prev, turns3d, frames3d, lists3d, textShown: texts[Math.max(shown, 0)]?.id ?? null, textsOpen: shown >= 0 }));
   },
 
   /** A file opened over what the canvas holds: one step, arrow and all. */

@@ -19,6 +19,8 @@ describe("the settings file", () => {
       abbreviations: [{ label: "Mmt", name: "4-methoxytrityl", smiles: "*C(c1ccccc1)(c1ccccc1)c1ccc(OC)cc1", also: ["MMTr"] }],
       files: { read: { orca: "cclib" }, also: { orca: ["pyscf"] } },
       plugins: { removed: ["rdkit"], roles: { smiles: "rdkit" } },
+      pictures: { dpi: 1200 as const },
+      pointer: { wheelUp: "out" as const },
       calculations: { by: { duplicates: "rdkit" } },
     };
     const text = settingsFileText(settings);
@@ -42,6 +44,8 @@ describe("the settings file", () => {
     // a file from before readers were chosen: none chosen; one from before Files, its readers chosen as they were;
     // a choice that is not an id, left out
     expect(acceptAppSettings({}).files).toEqual({ read: {}, also: {} });
+    // which way the wheel zooms: in, upwards, unless the file says out
+    expect(acceptAppSettings({ pointer: { wheelUp: "sideways" } }).pointer).toEqual({ wheelUp: "in" });
     // who does each kind of step: ids only
     expect(acceptAppSettings({ calculations: { by: { duplicates: "rdkit", populations: 3, "x y": "meno" } } }).calculations).toEqual({ by: { duplicates: "rdkit" } });
     expect(acceptAppSettings({ calcReaders: { chosen: { orca: "cclib", gaussian: 3, "x y": "cclib" } } }).files).toEqual({ read: { orca: "cclib" }, also: {} });
@@ -58,6 +62,10 @@ describe("the settings file", () => {
     // the plugins taken away and the roles chosen: ids only
     expect(acceptAppSettings({ plugins: { removed: ["rdkit", "rdkit", "Not An Id", 3], roles: { smiles: "rdkit", checks: 4 } } }).plugins).toEqual({ removed: ["rdkit"], roles: { smiles: "rdkit" } });
     expect(acceptAppSettings({}).plugins).toEqual({ removed: [], roles: {} });
+    // copied pictures: at a resolution offered, or else 600 dpi - a file from before there was a choice too
+    expect(acceptAppSettings({}).pictures).toEqual({ dpi: 600 });
+    expect(acceptAppSettings({ pictures: { dpi: 300 } }).pictures).toEqual({ dpi: 300 });
+    expect(acceptAppSettings({ pictures: { dpi: 450 } }).pictures).toEqual({ dpi: 600 });
     // a file from before Meno updated itself: not asked yet
     expect(acceptAppSettings({ updates: { asked: "yes" } }).updates).toEqual({ asked: false });
     // the user's abbreviations: those with a label and a structure that reads

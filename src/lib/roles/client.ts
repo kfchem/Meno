@@ -8,6 +8,7 @@
  * The transport is handed in, so that the client knows nothing of how the
  * worker runs (a sidecar, here; anything that carries lines, in tests).
  */
+import type { OptionValues } from "../options";
 
 /** The requests the worker answers, and what each answers with. */
 export type ChemRequests = {
@@ -28,7 +29,8 @@ export type ChemRequests = {
    * other's mirror image.
    */
   conformers: {
-    args: { molblock: string; isomers?: "one" | "all"; count?: number; like?: Like };
+    /** `options`: those the plugin declares for the role (its manifest's roleOptions), as chosen in Settings. */
+    args: { molblock: string; isomers?: "one" | "all"; count?: number; like?: Like; options?: OptionValues };
     result: { isomers: Conformers[] };
   };
   /**
@@ -62,6 +64,8 @@ export type Conformers = {
   frames: number[][];
   energies: number[];
   field: string;
+  /** How they were made, as rows to show - what made them, the method, the force field - in the plugin's words. */
+  how?: { label: string; text: string }[];
   cip: { atoms: Record<string, string>; bonds: Record<string, string> };
   chosen: { atoms: Record<string, string>; bonds: Record<string, string> };
   smiles: string;

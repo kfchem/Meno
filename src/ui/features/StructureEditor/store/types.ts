@@ -108,6 +108,14 @@ export type Molecule3D = {
   drawnAs?: string;
   /** Its frames are conformers - not a path through time - so each is as likely as its energy says (`populations`). */
   conformerSet?: boolean;
+  /** How it was made, where something made it - its conformers' method and force field - as rows to show, in the words of what made it. */
+  made?: { how: { label: string; text: string }[] };
+  /**
+   * Its bonds are where its atoms stand close enough, as its file gives no
+   * bonds - an XYZ file's, a calculation's: frame by frame, so that a bond
+   * forms and breaks as its frames go (utils/molecule3d `frameBondsOf`).
+   */
+  bondsFrom?: "distance";
   /**
    * Its stereocentres' and double bonds' CIP labels, by atom and bond index;
    * and which of them its drawing left open - one stereoisomer of several
@@ -125,6 +133,12 @@ export type Molecule3D = {
   /** Each frame's share of its compound, as a *Populations* step worked it out; unset, by Boltzmann at room temperature where it is a conformer set. */
   shares?: number[];
 };
+/**
+ * A text the workspace holds - a file opened as text, an output shown -
+ * read and edited in the column beside the canvas (docs/WORKSPACE.md,
+ * *Texts*): its name, and where it was opened from, where Open said.
+ */
+export type WorkspaceText = { id: number; name: string; text: string; path?: string };
 /**
  * A set on the page (docs/WORKFLOWS.md): its frame, in world units, x0 to
  * x1 and y0 (its foot) to y1 (its top) - what lies inside it its entries.
@@ -187,6 +201,25 @@ export type EditorState = {
   hoveredAtom3d: { id: number; atom: number } | null;
   /** The molecules in 3D on the page. */
   molecules3d: Molecule3D[];
+  /** The texts the workspace holds, in their column's order. */
+  texts: WorkspaceText[];
+  /** The text its column shows, or showed as it was closed, by id; null, none. */
+  textShown: number | null;
+  /** Whether the column of texts is open beside the canvas. */
+  textsOpen: boolean;
+  /**
+   * Texts added to the workspace, as one undo step, the last shown: each
+   * one the workspace holds already - the same name and text - shown instead.
+   */
+  addTexts: (texts: Omit<WorkspaceText, "id">[]) => void;
+  /** A text as typed: a run of typing in it is one undo step. */
+  editText: (id: number, text: string) => void;
+  /** A text taken out of the workspace, as one undo step. */
+  removeText: (id: number) => void;
+  /** A text shown in its column, which opens. */
+  showText: (id: number) => void;
+  /** The column of texts closed: the texts kept. */
+  closeTexts: () => void;
   /** How each molecule in 3D is turned, by id; unturned if absent. */
   turns3d: Record<number, Turn3D>;
   /** Which frame each molecule in 3D shows, by id; the first if absent. */

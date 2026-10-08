@@ -65,6 +65,11 @@ built the way the 2D layers are, rather than the viewer moved in as it is.
      perspective (stage 1's spike); since 2026-10-05 it is orthographic
      (see Decisions), and a view that is to show depth can still have a
      camera in perspective.
+   - A molecule rising out of a drawing is seen in perspective for the
+     moment of its rise, and back, by a dolly zoom that leaves the page as
+     it was: it alone, the other molecules in 3D staying as they are (the
+     maintainer's trial, 2026-10-07, and their choice of 2026-10-08:
+     `utils/rise.ts` `dollyMatrix`, through which `Molecule3DView` draws it).
 2. **The molecule relates everything.** A structure's 2D drawing, its 3D
    structures, its conformers and the results of its calculations are
    tied by which atom is which (a 2D atom's id, a 3D atom's index).
@@ -142,7 +147,8 @@ for each topic (one pull request per dependent chain).
   the clipboard and the workspace file.
 - Pictures: in a copy's EMF, SVG and PNG, molecules in 3D are drawn as the
   canvas draws them - lit, in depth - each seen from straight above its
-  centre, a bitmap at 300 dpi. A structure opened from Word or PowerPoint
+  centre, a bitmap at the resolution copied pictures are made at (Settings,
+  Files; 600 dpi unless changed). A structure opened from Word or PowerPoint
   goes back with its molecules in 3D, turned as they are, and one holding
   only molecules in 3D is updated too.
 - Opening: XYZ files, and 3D MOL and SD records, by Open, a drop or a new
@@ -211,7 +217,7 @@ Taken on 2026-10-03:
     the pointer swells a little on a spring. No frame: the maintainer
     asked for a highlight along the outline, in a modern way, rather than
     a rectangle round it.
-  - **Held still, a press selects the molecule** (0.4 s, as in 2D), the
+  - **Held still, a press selects the molecule** (0.32 s, as in 2D), the
     selection's outline spreading out from the atom pressed on as it is
     held; a drag from there moves it. A molecule selected moves when
     dragged, with all that is selected; one not selected turns. (Agreed
@@ -337,6 +343,26 @@ Taken on 2026-10-04:
   commands do not go into it. A Mac's window is to get its own controls
   (the close button and its neighbours) at some stage.
 - **Closing the last tab quits Meno.**
+
+Taken on 2026-10-07:
+
+- **Texts.** A workspace is a tab, and a tab is a workspace: text no
+  longer opens in a tab of its own. A text file opened, or dropped on the
+  canvas, a molecule's output shown and a new text (Meno's menu, *New
+  text*; the New… menu, *Text*) are held in the workspace in front - one
+  of its own where none is in front - and shown in a column on the
+  canvas's right (the maintainer chose the column over a window inside
+  Meno's). It is the workspace's:
+  - edited there, its typing undone as any edit, and saved with it in
+    `.meno` (docs/FILE-IO.md, *The workspace file*);
+  - written to a file by Export, the column's button: beside the file it
+    came from, numbered from 2, never over it unasked;
+  - closed from the workspace by its name's ×, and back with an undo; the
+    column hidden (*Hide texts*, its own button) keeps them all, and
+    *Show texts* in Meno's menu brings it back;
+  - the column slides open and shut as the panels beside the canvas do,
+    and is as wide as its left edge is dragged.
+  The small previews on the page, decided on 2026-10-04, are not made yet.
 
 ## Stage 2, as built
 
