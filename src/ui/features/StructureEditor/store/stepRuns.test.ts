@@ -38,6 +38,7 @@ const worker = {
       reads: ["xtbopt.log"],
     })),
   })),
+  run: vi.fn(async (_step: string, entries: unknown[]) => ({ kept: entries.length > 1 ? [0] : [] })),
   collect: vi.fn(async (_step: string, entries: { atoms: { el: string; x: number; y: number; z: number }[] }[], _o: unknown, files: Record<string, string>, _log: string, ended: string) =>
     ended !== "done"
       ? { why: "Some atoms are very close" }
@@ -294,5 +295,45 @@ describe("running a workflow's steps", () => {
     expect(doc.history().undoLabel).toBe("show run");
     doc.undo();
     expect(step().ran!.said).toBe("1 of 3 kept");
+  });
+});
+
+describe("a plugin's conformer search, and its duplicates", () => {
+  beforeEach(() => {
+    jobs.clear();
+    next = 1;
+    useReaders.setState({ state: { rdkit: "added" }, problem: {} });
+  });
+
+  it("brings each compound's conformers in as a conformer set - numbered, with their energies", async () => {
+    const { st } = editor();
+    const set = st().sets[0].id;
+    const step = st().addStep("conformers", "rdkit", 10, 20);
+    st().connect({ set }, step);
+    const ran = st().runStep(step);
+    await settle();
+    await settle();
+    Object.assign(jobs.get(idOf(1))!, { state: "done", started: 1000, ended: 9000, files: { "xtbopt.log": "-5.0705" } });
+    await st().lookAtJobs();
+    await ran;
+    expect(st().steps.find((s) => s.id === step)!.ran).toMatchObject({ ok: true, said: "0:08 \u00b7 2 conformers" });
+    const made = st().sets.find((b) => b.made?.step === step)!;
+    expect(made.made!.holds).toBe("conformers");
+    const m = st().molecules3d[1];
+    expect(m).toMatchObject({ conformerSet: true, numbers: [1, 2], energies: [-5.0703, -5.0705] });
+    expect(m.frames).toHaveLength(1);
+  });
+
+  it("sets aside what a plugin's Duplicates says is alike, at once", async () => {
+    const { doc, st } = editor();
+    // (a second water in the set: two entries)
+    doc.edit("water", (d) => addMolecule3d(d, { ...d.molecules3d![0], at: { x: 1, y: 1 } }));
+    const set = st().sets[0].id;
+    const step = st().addStep("duplicates", "rdkit", 10, 20);
+    st().connect({ set }, step);
+    await st().runStep(step);
+    expect(worker.run).toHaveBeenCalledWith("duplicates", expect.arrayContaining([expect.objectContaining({ compound: 0, charge: 0 })]), { rmsd: 0.125 }, "molecules");
+    expect(st().steps.find((s) => s.id === step)!.ran).toMatchObject({ ok: true, said: "1 of 2 kept" });
+    expect(st().sets.find((b) => b.made?.step === step)!.aside).toHaveLength(1);
   });
 });

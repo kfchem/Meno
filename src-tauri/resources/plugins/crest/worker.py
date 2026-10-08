@@ -1,0 +1,277 @@
+"""The CREST plugin's worker: a workflow's conformer search done with CREST.
+
+A plugin's worker (docs/PLUGINS.md, docs/WORKFLOWS.md), run in a pixi
+environment of its own - CREST, the xtb it runs, and Python from
+conda-forge, for macOS and Linux. One JSON object per line each way, as
+every plugin's:
+
+    {"id": 4, "op": "prepare", "step": "conformers", "entries": [...], "options": {...}, "cores": 4}
+    {"id": 4, "ok": true, "result": {"jobs": [{"entries": [0], "program": "crest", "args": [...], "files": [...], "reads": [...]}]}}
+    {"id": 5, "op": "collect", "step": "conformers", "entries": [...], "options": {...}, "files": {...}, "log": "...", "ended": "done"}
+    {"id": 5, "ok": true, "result": {"outputs": [{...}]}}
+
+It fills one kind of step - Conformers - and runs nothing itself:
+`prepare` says what each job is - its input, and the command Meno runs,
+apart from Meno, in the job's folder - and `collect` reads back what a job
+wrote, as Meno's own output form (lib/calc/output), or says why it failed.
+One job for each entry.
+
+What CREST is asked, and what is read of what it writes, are as CREST's
+own documentation has them (crest-lab.github.io/crest-docs: "Command Line
+Keywords", "Coordinate Files", "Conformational Sampling"), and from
+nothing else:
+
+- the input as Xmol (XYZ) coordinates in angstroms; `--chrg` the charge,
+  `--uhf` the unpaired electrons; `--gfn1`, `--gfn2`, `--gfnff` or
+  `--gfn2//gfnff`; `--alpb` a solvent; `--quick`, `--squick` or
+  `--mquick` a quicker search; `--ewin` the energy window in kcal/mol;
+  `--T` the cores;
+- the conformers in `crest_conformers.xyz`, an ensemble file: Xmol
+  frames, in angstroms, each one's comment line its energy in hartrees,
+  lowest first.
+
+It keeps nothing between requests, and reaches no network.
+"""
+
+import json
+import math
+import re
+import sys
+
+# the CREST its environment's lock pins
+VERSION = "2.12"
+PROGRAM = "crest"
+SCHEMA = 1
+
+INPUT = "input.xyz"
+CONFORMERS = "crest_conformers.xyz"
+
+METHODS = {
+    "gfn2": (["--gfn2"], "GFN2-xTB"),
+    "gfn1": (["--gfn1"], "GFN1-xTB"),
+    "gfnff": (["--gfnff"], "GFN-FF"),
+    "gfn2//gfnff": (["--gfn2//gfnff"], "GFN2-xTB//GFN-FF"),
+}
+# the solvents ALPB is parametrised for, with GFN1-xTB, GFN2-xTB and GFN-FF alike
+SOLVENTS = {
+    "acetone", "acetonitrile", "aniline", "benzaldehyde", "benzene", "ch2cl2", "chcl3", "cs2", "dioxane", "dmf", "dmso",
+    "ether", "ethylacetate", "furane", "hexadecane", "hexane", "methanol", "nitromethane", "octanol", "woctanol",
+    "phenol", "toluene", "thf", "water",
+}
+SEARCHES = {"full": [], "quick": ["--quick"], "squick": ["--squick"], "mquick": ["--mquick"]}
+# the energy window CREST's conformer search keeps by default (kcal/mol)
+EWIN = 6.0
+STEPS = {"conformers"}
+FLOAT = r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eEdD][-+]?\d+)?"
+
+
+class Refused(Exception):
+    """What was asked cannot be done: said, not thrown."""
+
+
+def number(text):
+    return float(text.replace("D", "E").replace("d", "e"))
+
+
+def elements_of(entry):
+    atoms = entry.get("atoms") or []
+    if not atoms:
+        raise Refused("an entry has no atoms")
+    out = []
+    for a in atoms:
+        el = str(a.get("el", "")).strip()
+        if not re.fullmatch(r"[A-Z][a-z]?", el):
+            raise Refused(f"no element is called {el!r}")
+        out.append(el)
+    return out
+
+
+def xyz_of(entry):
+    """An entry as Xmol coordinates, in angstroms: the count, a comment line, an atom a line."""
+    elements = elements_of(entry)
+    lines = [str(len(elements)), str(entry.get("name") or "").replace("\n", " ")[:80]]
+    for el, a in zip(elements, entry["atoms"]):
+        x, y, z = (float(a.get(k, 0.0)) for k in ("x", "y", "z"))
+        if not all(math.isfinite(v) for v in (x, y, z)):
+            raise Refused("an atom has no place")
+        lines.append(f"{el:<3}{x:>18.10f}{y:>18.10f}{z:>18.10f}")
+    return "\n".join(lines) + "\n"
+
+
+def whole(v, what):
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v != int(v):
+        raise Refused(f"{what} is not a whole number")
+    return int(v)
+
+
+def window_of(options):
+    ewin = options.get("ewin", EWIN)
+    if isinstance(ewin, bool) or not isinstance(ewin, (int, float)) or not math.isfinite(ewin) or ewin <= 0:
+        raise Refused("the energy window is not a number above nought")
+    return float(ewin)
+
+
+def args_for(options, entry, cores):
+    method = METHODS.get(options.get("method", "gfn2"))
+    if method is None:
+        raise Refused(f"no method is called {options.get('method')!r}")
+    solvent = options.get("solvent", "none")
+    if solvent != "none" and solvent not in SOLVENTS:
+        raise Refused(f"no solvent is called {solvent!r}")
+    search = SEARCHES.get(options.get("search", "full"))
+    if search is None:
+        raise Refused(f"no search is called {options.get('search')!r}")
+    charge = whole(entry.get("charge", 0), "The charge")
+    multiplicity = whole(entry.get("multiplicity", 1), "The multiplicity")
+    if multiplicity < 1:
+        raise Refused("the multiplicity is less than one")
+    args = [INPUT] + method[0] + ["--chrg", str(charge), "--uhf", str(multiplicity - 1)]
+    if solvent != "none":
+        args += ["--alpb", solvent]
+    args += search + ["--ewin", f"{window_of(options):g}"]
+    if cores:
+        args += ["--T", str(whole(cores, "The cores"))]
+    return args
+
+
+def op_prepare(m):
+    step = m.get("step")
+    if step not in STEPS:
+        raise Refused(f"this plugin does no {step!r}")
+    options = m.get("options") or {}
+    jobs = []
+    for i, entry in enumerate(m.get("entries") or []):
+        jobs.append({
+            "entries": [i],
+            "program": PROGRAM,
+            "args": args_for(options, entry, m.get("cores")),
+            "files": [{"name": INPUT, "text": xyz_of(entry)}],
+            "reads": [CONFORMERS],
+        })
+    if not jobs:
+        raise Refused("nothing came in")
+    return {"jobs": jobs}
+
+
+# --- what a job wrote ---------------------------------------------------------
+
+
+def frames_of(text, count):
+    """Xmol frames: each one's elements, its coordinates as x, y, z of every atom, and its comment line."""
+    lines = text.splitlines()
+    frames = []
+    i = 0
+    while i < len(lines):
+        head = lines[i].strip()
+        if not head:
+            i += 1
+            continue
+        if not head.isdigit() or int(head) != count or i + 2 + count > len(lines):
+            break
+        comment = lines[i + 1]
+        elements = []
+        xyz = []
+        for line in lines[i + 2: i + 2 + count]:
+            parts = line.split()
+            if len(parts) < 4:
+                return frames
+            elements.append(parts[0].capitalize())
+            xyz += [number(p) for p in parts[1:4]]
+        frames.append((elements, xyz, comment))
+        i += 2 + count
+    return frames
+
+
+def energy_in(comment):
+    """The energy an ensemble frame's comment line holds, in hartrees: its first number."""
+    m = re.search(FLOAT, comment)
+    return number(m.group(0)) if m else None
+
+
+def version_in(log):
+    """The version CREST says it is, as it starts."""
+    m = re.search(r"\bVersion\s+(\d+(?:\.\d+)+)", log)
+    return m.group(1) if m else VERSION
+
+
+def why_of(log):
+    """Why CREST stopped, as it says: the first line it marks an error or a failure - not the Fortran
+    runtime's own, as it stops, nor its backtrace; else its last."""
+    lines = [line.strip() for line in log.splitlines() if line.strip()]
+    said = [line for line in lines if not re.match(r"ERROR STOP|Error termination|#\d", line)]
+    for line in said:
+        if re.search(r"error|failed|abnormal", line, re.I):
+            return line.strip("* ").strip() or line
+    return said[-1] if said else lines[-1] if lines else "CREST said nothing"
+
+
+def output_of(entry, options, files, log):
+    elements = elements_of(entry)
+    n = len(elements)
+    found = frames_of(files.get(CONFORMERS) or "", n)
+    if not found:
+        raise Refused("CREST wrote no conformers")
+    if any(els != elements for els, _, _ in found):
+        raise Refused("CREST wrote conformers of another molecule")
+    energies = [energy_in(c) for _, _, c in found]
+    method = METHODS.get(options.get("method", "gfn2"), (None, None))[1]
+    solvent = options.get("solvent", "none")
+    return {
+        "schema": SCHEMA,
+        "program": "CREST",
+        "version": version_in(log),
+        "method": f"iMTD-GC, {method}" + (f" (ALPB, {solvent})" if solvent != "none" else "") if method else None,
+        "charge": whole(entry.get("charge", 0), "The charge"),
+        "multiplicity": whole(entry.get("multiplicity", 1), "The multiplicity"),
+        "atoms": elements,
+        "frames": [xyz for _, xyz, _ in found],
+        "energies": None if any(e is None for e in energies) else energies,
+        "results": [],
+    }
+
+
+def op_collect(m):
+    step = m.get("step")
+    if step not in STEPS:
+        raise Refused(f"this plugin does no {step!r}")
+    files = m.get("files") or {}
+    log = m.get("log") or ""
+    entries = m.get("entries") or []
+    if m.get("ended") != "done" or CONFORMERS not in files:
+        return {"why": why_of(log)}
+    return {"outputs": [output_of(e, m.get("options") or {}, files, log) for e in entries]}
+
+
+def op_ping(_m):
+    return {"version": VERSION}
+
+
+OPS = {"prepare": op_prepare, "collect": op_collect, "ping": op_ping}
+
+
+def answer(line):
+    try:
+        m = json.loads(line)
+    except ValueError:
+        return {"ok": False, "error": "not JSON"}
+    op = OPS.get(m.get("op"))
+    try:
+        if op is None:
+            raise Refused(f"no such request: {m.get('op')!r}")
+        return {"id": m.get("id"), "ok": True, "result": op(m)}
+    except Refused as e:
+        return {"id": m.get("id"), "ok": False, "error": f"CREST: {e}."}
+    except Exception as e:  # noqa: BLE001 - said, not thrown: the worker keeps answering
+        return {"id": m.get("id"), "ok": False, "error": f"CREST: {e}"}
+
+
+def main():
+    print(json.dumps({"event": "ready", "version": VERSION}), flush=True)
+    for line in sys.stdin:
+        line = line.strip()
+        if line:
+            print(json.dumps(answer(line)), flush=True)
+
+
+if __name__ == "__main__":
+    main()

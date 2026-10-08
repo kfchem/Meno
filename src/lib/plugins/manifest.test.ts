@@ -17,13 +17,14 @@ const good = {
   writes: [],
   roleOptions: {},
   steps: [],
+  systems: [],
 };
 
 describe("a plugin's manifest", () => {
   it("is read as data: what it is, what makes its environment and runs its worker, what it reads, and the kinds it brings", () => {
     expect(acceptManifest(good)).toEqual(good);
     // (each plugin Meno carries, from its folder: Meno names none of them)
-    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "gaussian-input", "pyscf", "rdkit", "xtb"]);
+    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "crest", "gaussian-input", "pyscf", "rdkit", "xtb"]);
   });
 
   it("may write kinds rather than read them: each named, its files' names, what it is given, and its options as data", () => {
@@ -89,6 +90,15 @@ describe("a plugin's manifest", () => {
       ["frequencies", ["xtb"]],
     ]);
     expect(xtb.steps[0].options.map((o) => o.id)).toEqual(["method", "solvent", "level"]);
+  });
+
+  it("may say the systems it can be added on - those Meno knows of; none said, every one", () => {
+    const steps = { ...good, reads: [], kinds: [], steps: [{ kind: "conformers", programs: ["crest"] }] };
+    expect(acceptManifest({ ...steps, systems: ["macos", "linux", "beos"] })?.systems).toEqual(["macos", "linux"]);
+    expect(acceptManifest(steps)?.systems).toEqual([]);
+    // (CREST's, as Meno carries it: conda-forge has it for macOS and Linux)
+    expect(MANIFESTS.find((m) => m.id === "crest")?.systems).toEqual(["macos", "linux"]);
+    expect(MANIFESTS.find((m) => m.id === "xtb")?.systems).toEqual([]);
   });
 
   it("may fill roles rather than read files - but a plugin that does neither is none", () => {

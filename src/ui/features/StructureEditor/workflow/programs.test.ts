@@ -3,7 +3,7 @@ import { addMolecule3d, emptyStructureDocument } from "../document";
 import type { Molecule3D } from "../store/types";
 import { countOf, setEntries } from "./entries";
 import { addSet } from "./model";
-import { clock, doneSaid, hartrees, pluginEntry, readCollected, readPrepared, workedOf } from "./programs";
+import { clock, conformersWorked, doneSaid, hartrees, jobEntries, pluginEntry, readCollected, readKept, readPrepared, workedOf } from "./programs";
 import type { SetEntry } from "./entries";
 
 const WATER: SetEntry = {
@@ -82,6 +82,35 @@ describe("what a plugin reads back of a job", () => {
     const energy = workedOf("energy", WATER, { ...out, frames: [WATER.xyz as number[]], energies: [-5.07] }, ["xtb 6.7.1"]);
     expect(typeof energy !== "string" && energy.path).toBeFalsy();
     expect(workedOf("energy", WATER, { ...out, atoms: ["O", "H", "C"] }, ["xtb 6.7.1"])).toBe("What came back is not the molecule that went");
+  });
+});
+
+describe("a conformer search", () => {
+  it("searches each compound of a conformer set once, from its first conformer - each entry of a compound set", () => {
+    const e = (compound: number, number: number) => ({ ...WATER, compound, number });
+    expect(jobEntries("conformers", [e(0, 1), e(0, 2), e(1, 1)], "conformers").map((x) => [x.compound, x.number])).toEqual([
+      [0, 1],
+      [1, 1],
+    ]);
+    expect(jobEntries("conformers", [e(0, 1), e(1, 1)], "molecules")).toHaveLength(2);
+    expect(jobEntries("optimise", [e(0, 1), e(0, 2)], "conformers")).toHaveLength(2);
+  });
+
+  it("makes each geometry it gave a conformer of the compound, numbered in order", () => {
+    const out = { schema: 1, program: "RDKit", atoms: ["O", "H", "H"], frames: [WATER.xyz as number[], [0, 0, 0.1, 0, 0.7, 0.6, 0, -0.7, 0.6]], energies: [-1, -0.99] };
+    const made = conformersWorked({ ...WATER, compound: 3 }, out, ["rdkit 2026.03.6"]);
+    if (typeof made === "string") throw new Error(made);
+    expect(made.map((w) => [w.compound, w.number, w.energy])).toEqual([
+      [3, 1, -1],
+      [3, 2, -0.99],
+    ]);
+    expect(made[0].calc).toMatchObject({ program: "RDKit" });
+  });
+
+  it("takes what a plugin kept at once by place - never one it was not given", () => {
+    expect(readKept({ kept: [2, 0, 2] }, 3)).toEqual([0, 2]);
+    expect(readKept({ kept: [3] }, 3)).toBe("It said nothing Meno can take");
+    expect(readKept({}, 3)).toBe("It said nothing Meno can take");
   });
 });
 

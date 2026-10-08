@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { manifestOf, OFFERED, PLUGINS, type PythonPlugin } from "../../../lib/calc/catalog";
 import { addedReaders, addPlugin, removePlugin, useReaders } from "../../../lib/calc/workers";
 import { ROLES } from "../../../lib/plugins/roles";
+import { forThisSystem, SYSTEM_NAMES } from "../../../lib/plugins/here";
 import { KINDS } from "../StructureEditor/workflow/kinds";
 import { kindById } from "../../../lib/io/kinds";
 
@@ -68,7 +69,9 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonPlugin; state?: s
         <span key={status} className="text-xs text-gh-gray meno-fade-in">
           {status}
         </span>
-        {(state === "added" || state === "absent") && (
+        {state === "absent" && !forThisSystem(p) ? (
+          <span className="max-w-[10rem] text-right text-xs text-gh-gray">For {p.systems.map((s) => SYSTEM_NAMES[s]).join(" and ")} only</span>
+        ) : (state === "added" || state === "absent") && (
           <button
             disabled={busy}
             onClick={() => run(state === "added" ? removePlugin : addPlugin)}

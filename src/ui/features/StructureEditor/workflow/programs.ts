@@ -113,6 +113,41 @@ export function workedOf(kind: StepKind, entry: SetEntry, out: ReaderOutput, rea
   };
 }
 
+/**
+ * An entry's conformers, as a conformer search worked them out: each
+ * geometry it gave a conformer of the entry's compound, numbered in order,
+ * with its energy - what the calculation was kept with the first.
+ */
+export function conformersWorked(entry: SetEntry, out: ReaderOutput, readers: readonly string[], source?: CalcSource): Worked[] | string {
+  const n = entry.atoms.length;
+  if (out.atoms.length !== n || out.atoms.some((el, i) => el !== entry.atoms[i].el)) return "What came back is not the molecule that went";
+  const frames = out.frames.filter((f) => f.length === 3 * n && f.every(Number.isFinite));
+  if (!frames.length) return "It found no conformer";
+  const energies = out.energies?.length === frames.length && out.energies.every(Number.isFinite) ? out.energies : undefined;
+  const calc = calcOf(out, readers, source);
+  return frames.map((f, k) => ({
+    ...entry,
+    number: k + 1,
+    xyz: [...f],
+    ...(energies ? { energy: energies[k] } : {}),
+    ...(k === 0 ? { calc } : {}),
+  }));
+}
+
+/** The entries a step's jobs are prepared for: each that came in - but a conformer search on a conformer set searches each compound once, from its first conformer. */
+export function jobEntries(kind: StepKind, entries: readonly SetEntry[], holds: string): SetEntry[] {
+  if (kind !== "conformers" || holds !== "conformers") return [...entries];
+  const seen = new Set<number>();
+  return entries.filter((e) => !seen.has(e.compound) && !!seen.add(e.compound));
+}
+
+/** What a plugin did at once (`run`): the entries it kept, by their place among those it was given; why not, where it said nothing it can be taken at. */
+export function readKept(raw: unknown, count: number): number[] | string {
+  const kept = (raw as { kept?: unknown } | null)?.kept;
+  if (!Array.isArray(kept) || !kept.every((i) => Number.isInteger(i) && i >= 0 && i < count)) return "It said nothing Meno can take";
+  return [...new Set(kept as number[])].sort((a, b) => a - b);
+}
+
 /** How long, as a clock says it: 0:42, 12:03, 1:02:03. */
 export function clock(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));

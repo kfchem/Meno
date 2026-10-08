@@ -371,13 +371,18 @@ not taken from either.
   wait on one another at once (`runSteps`; *Run from here* adds the steps
   after, *Run all* every step not done); each run - Meno's at once, as
   one edit; a plugin's in its worker (RDKit's 3D structure, through the
-  roles' `conformers`); a plugin's
+  roles' `conformers`); a plugin's step on entries alone at once, `run`
+  asked of its worker and the entries it kept brought in, the rest set
+  aside (RDKit's *Duplicates*); a plugin's
   program as jobs: `prepare` asked of its worker, a job started for each
   (lib/jobs), the run kept in the document as `running` - amended in, so
   that undo does not take a run back, but the workspace is unsaved until
   saved, and saved keeps it - its jobs looked at each second while there
   are any (Workflow2D), and, all ended, `collect` asked for each and the
-  results brought in as one edit. A workspace opened with steps running
+  results brought in as one edit - a conformer search's as a conformer
+  set, each geometry it gave a conformer of its entry's compound, and on
+  a conformer set one job for each compound (`jobEntries`,
+  `conformersWorked`). A workspace opened with steps running
   is looked at the same way, and picks them up. What a plugin sends and
   reads back is checked as data (`workflow/programs.ts`). A step keeps
   its earlier runs, with what each gave (`keepRun`, `showRun` in
