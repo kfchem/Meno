@@ -67,7 +67,7 @@ export default function OptionRows({
                   o.type === "number" ? "w-24 text-right" : "w-48",
                 )}
               />
-              {o.type === "number" && <span className="w-6 text-xs text-gh-gray">{o.unit ?? ""}</span>}
+              {o.type === "number" && <span className="min-w-14 whitespace-nowrap text-xs text-gh-gray">{o.unit ?? ""}</span>}
             </span>
           )}
         </div>
