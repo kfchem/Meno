@@ -198,15 +198,30 @@ def energy_in(comment):
     return number(m.group(0)) if m else None
 
 
+# an escape JSON knows, or else a backslash on its own: a path's, as xtb writes one unescaped
+ESCAPE_OR_LONE = re.compile(r'\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})|\\')
+
+
+def lone_backslashes_escaped(text):
+    """`text` with each backslash that begins no escape JSON knows written as JSON writes one; its escapes as they were."""
+    return ESCAPE_OR_LONE.sub(lambda m: m.group(0) if len(m.group(0)) > 1 else "\\\\", text)
+
+
 def dump_of(files):
+    """xtb's dump, read: on Windows the command line it records holds the
+    program's path with its backslashes as they are, which JSON does not
+    take - so where it does not read, it is read again with each lone
+    backslash written as JSON writes one."""
     text = files.get(DUMP)
     if not text:
         return {}
-    try:
-        data = json.loads(text)
-    except ValueError:
-        return {}
-    return data if isinstance(data, dict) else {}
+    for attempt in (text, lone_backslashes_escaped(text)):
+        try:
+            data = json.loads(attempt)
+        except ValueError:
+            continue
+        return data if isinstance(data, dict) else {}
+    return {}
 
 
 def floats(v, n=None):
