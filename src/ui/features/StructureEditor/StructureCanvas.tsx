@@ -47,7 +47,7 @@ import { carriedOf } from "./utils/workspace";
 import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { currentStyle3D, useStyle3D } from "./style3d";
 import { offerCommands, type CommandGroup } from "../../layouts/commands";
-import { chosenPath, frameOf, lookOf, solidOf } from "./utils/molecule3d";
+import { chosenPath, frameOf, lookOf, poseOf, seenBounds, solidOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/roles/molblock";
 
@@ -90,7 +90,7 @@ import Molecules3D from "./components/Molecules3D";
 import OpenStereo2D from "./components/OpenStereo2D";
 import LinkedHover2D from "./components/LinkedHover2D";
 import Ask3D from "./Ask3D";
-import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf, moleculeOf, openIn, placeRow, rowFrom, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
+import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf, moleculeOf, openIn, placeRow, rowFrom, takenOnPage, turnedOver, type Block, type Box, type Open } from "./chem/make3d";
 import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
@@ -242,15 +242,25 @@ function StructureCanvasContent({
         const chem = await chemWorker("conformers");
         const made: Parameters<ReturnType<typeof store.getState>["riseMolecules3d"]>[0] = [];
         let allInView = true;
+        // (what they keep clear of: the molecules in 3D there already, as they are seen now - and each row made)
+        const look3d = currentStyle3D();
+        const st = store.getState();
+        const solids = st.molecules3d.map((m) => {
+          const b = seenBounds(poseOf(m, solidOf(m, look3d), lookOf(m, look3d), st.turns3d[m.id], st.frames3d[m.id]));
+          return { x0: b.minX, x1: b.maxX, y0: b.minY, y1: b.maxY };
+        });
         for (const block of blocks) {
           const ms = (await conformersOf(chem, block, isomers)).map((c) => moleculeOf(c, block));
           const model = store.getState().model;
-          const turned = ms.map((m) => turnedOver(m, model, currentStyle3D()));
-          // beside the drawing, where they can be seen as the view is now -
-          // or, made again, where the one made before stood
+          const turned = ms.map((m) => turnedOver(m, model, look3d));
+          // beside the drawing, where they can be seen as the view is now,
+          // clear of what is on the page - or, made again, where the one
+          // made before stood
+          const taken = takenOnPage(store.getState(), block.atoms, solids);
           const row = replacing
             ? { at: rowFrom(turned, replacing.at), inView: true }
-            : placeRow(turned, boxOf(block.part), viewBox(), camRef.current ? eyeOf(camRef.current)?.z : undefined);
+            : placeRow(turned, boxOf(block.part), viewBox(), camRef.current ? eyeOf(camRef.current)?.z : undefined, taken);
+          if ("box" in row) solids.push(row.box);
           allInView &&= row.inView;
           ms.forEach((m, i) =>
             made.push({ m: { ...m, at: row.at[i] }, turn: turned[i].turn, from: turned[i].start, flat: turned[i].flat }),
