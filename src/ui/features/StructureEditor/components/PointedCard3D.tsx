@@ -19,11 +19,12 @@ export function ResultGroups({ groups }: { groups: CardGroups }) {
         <div key={`${k}:${g.group}`} className="mt-1">
           {g.source && <div className="mt-1.5 text-[10px] font-medium text-gh-black">{g.source}</div>}
           <div className="text-[10px] text-gh-gray">{g.group}</div>
-          <div className="grid grid-cols-[auto_auto] gap-x-3">
+          {/* (a value too long for the card goes on to another line, inside it) */}
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3">
             {g.rows.map((r, k) => (
               <div key={k} className="contents">
                 <span className="text-gh-gray whitespace-nowrap">{r.label}</span>
-                <span className={`text-right whitespace-nowrap ${r.marked ? "text-accel-accent" : "text-gh-black"}`}>{r.text}</span>
+                <span className={`text-right ${r.marked ? "text-accel-accent" : "text-gh-black"}`}>{r.text}</span>
               </div>
             ))}
           </div>

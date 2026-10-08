@@ -206,9 +206,11 @@ class ChemWorkerTest(unittest.TestCase):
         made = ask("conformers", molblock=PCPA, options={"count": 5, "field": "MMFF94s", "iters": 300, "same": 0.3, "seed": 7})["result"]["isomers"][0]
         self.assertEqual(made["field"], "MMFF94s")
         how = {r["label"]: r["text"] for r in made["how"]}
-        self.assertEqual(how["Embedded"], "ETKDG v3, random seed 7")
+        self.assertEqual(how["Embedded"], "ETKDG v3")
+        self.assertEqual(how["Random seed"], "7")
         self.assertEqual(how["Optimised"], "MMFF94s, at most 300 steps")
-        self.assertIn("of 5 sought, none within 0.3", how["Kept"])
+        self.assertRegex(how["Kept"], r"^\d+ of 5 sought$")
+        self.assertEqual(how["Alike within"], "0.3 \u00c5 (heavy atoms' RMSD)")
         self.assertTrue(how["Made by"].startswith("RDKit "))
         self.assertLessEqual(len(made["frames"]), 5)
         # (what it may not be, kept to what it may: a force field it does not know, the default)

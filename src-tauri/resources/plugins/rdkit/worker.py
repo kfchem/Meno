@@ -390,14 +390,14 @@ def conformers(mol, count=CONFORMERS, seed=SEED, field="MMFF94", same=SAME_SHAPE
         ],
         "energies": [energy[cid] / KCAL_PER_HARTREE for cid in kept],
         "field": field,
+        # (short rows: the chip says them in a narrow card)
         "how": [
-            {"label": "Embedded", "text": f"ETKDG v3, random seed {seed}"},
-            {
-                "label": "Optimised",
-                "text": f"{field}, at most {iters} steps"
-                + (f" ({asked} has no parameters for it)" if field != asked else ""),
-            },
-            {"label": "Kept", "text": f"{len(kept)} of {count} sought, none within {same:g} \u00c5 of another (heavy atoms' RMSD)"},
+            {"label": "Embedded", "text": "ETKDG v3"},
+            {"label": "Random seed", "text": f"{seed}"},
+            {"label": "Optimised", "text": f"{field}, at most {iters} steps"},
+            *([{"label": "Asked for", "text": f"{asked}, which has no parameters for it"}] if field != asked else []),
+            {"label": "Kept", "text": f"{len(kept)} of {count} sought"},
+            {"label": "Alike within", "text": f"{same:g} \u00c5 (heavy atoms' RMSD)"},
             {"label": "Made by", "text": f"RDKit {rdBase.rdkitVersion}"},
         ],
     }

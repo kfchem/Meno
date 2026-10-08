@@ -1,7 +1,7 @@
 import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import clsx from "clsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import {
   KEY_LIGHT_FROM,
@@ -27,9 +27,12 @@ import { SAMPLE_3D } from "./sample3d";
 export default function Style3DEditor({
   choice,
   onChange,
+  children,
 }: {
   choice: Style3DChoice;
   onChange: (next: Style3DChoice) => void;
+  /** More settings, laid out with these: who makes molecules in 3D, say. */
+  children?: ReactNode;
 }) {
   const style = useMemo(() => style3dOf(choice), [choice]);
   const changed = Object.keys(choice.changes).length;
@@ -59,6 +62,7 @@ export default function Style3DEditor({
             </div>
           </section>
         ))}
+        {children}
       </div>
       <div className="w-[26rem] shrink-0 sticky top-4">
         <div className="text-xs font-semibold uppercase tracking-wider text-gh-gray">Preview</div>
