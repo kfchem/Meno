@@ -4,31 +4,31 @@
  * what state a step is in.
  */
 import type { StructureDocument } from "../document";
-import type { Molecule3D, Wire, WireEnd, WorkflowBox, WorkflowStep } from "../store/types";
-import { boxMembers, setOf } from "./entries";
+import type { Molecule3D, Wire, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
+import { holdsOf, setMembers } from "./entries";
 import { kindInfo, optionsOf, takes, type SetKind } from "./kinds";
 
-type Flow = Pick<StructureDocument, "model" | "molecules3d" | "boxes" | "steps" | "wires">;
+type Flow = Pick<StructureDocument, "model" | "molecules3d" | "sets" | "steps" | "wires">;
 
 export const stepOf = (doc: Flow, id: number): WorkflowStep | undefined => doc.steps?.find((s) => s.id === id);
-export const boxOf = (doc: Flow, id: number): WorkflowBox | undefined => doc.boxes?.find((b) => b.id === id);
+export const findSet = (doc: Flow, id: number): WorkflowSet | undefined => doc.sets?.find((b) => b.id === id);
 
 /** The wire into a step, where it has one. */
 export const wireInto = (doc: Flow, step: number): Wire | undefined => doc.wires?.find((w) => w.to === step);
 
-/** The box a step made, where it has run. */
-export const resultOf = (doc: Flow, step: number): WorkflowBox | undefined => doc.boxes?.find((b) => b.made?.step === step);
+/** The set a step made, where it has run. */
+export const resultOf = (doc: Flow, step: number): WorkflowSet | undefined => doc.sets?.find((b) => b.made?.step === step);
 
-/** What a port gives: a box, the kind of set it holds; a step, what it made - or, not run, what it will make of what comes into it. Null where that is not known yet. */
+/** What a port gives: a set, the kind of set it holds; a step, what it made - or, not run, what it will make of what comes into it. Null where that is not known yet. */
 export function givesOf(doc: Flow, end: WireEnd, seen: ReadonlySet<number> = new Set()): SetKind | null {
-  if ("box" in end) {
-    const box = boxOf(doc, end.box);
-    return box ? setOf(doc, box) : null;
+  if ("set" in end) {
+    const set = findSet(doc, end.set);
+    return set ? holdsOf(doc, set) : null;
   }
   const step = stepOf(doc, end.step);
   if (!step || seen.has(step.id)) return null;
   const made = resultOf(doc, step.id);
-  if (made?.made) return made.made.set;
+  if (made?.made) return made.made.holds;
   const g = kindInfo(step.kind).gives;
   if (g !== "same") return g;
   const into = wireInto(doc, step.id);
@@ -40,8 +40,8 @@ export function stepsBefore(doc: Flow, step: number): number[] {
   const out: number[] = [];
   let at = wireInto(doc, step)?.from;
   for (let guard = 0; at && guard < 1000; guard++) {
-    if ("box" in at) {
-      const made = boxOf(doc, at.box)?.made?.step;
+    if ("set" in at) {
+      const made = findSet(doc, at.set)?.made?.step;
       if (made == null || out.includes(made) || made === step) break;
       out.push(made);
       at = wireInto(doc, made)?.from;
@@ -59,26 +59,26 @@ export function canWire(doc: Flow, from: WireEnd, to: number): boolean {
   const step = stepOf(doc, to);
   if (!step) return false;
   if ("step" in from && (from.step === to || !stepOf(doc, from.step))) return false;
-  if ("box" in from) {
-    const box = boxOf(doc, from.box);
-    if (!box || box.made?.step === to) return false;
+  if ("set" in from) {
+    const set = findSet(doc, from.set);
+    if (!set || set.made?.step === to) return false;
   }
   // (nothing it gives may come back round to it)
-  const madeBy = "step" in from ? from.step : boxOf(doc, from.box)?.made?.step;
+  const madeBy = "step" in from ? from.step : findSet(doc, from.set)?.made?.step;
   if (madeBy != null && [madeBy, ...stepsBefore(doc, madeBy)].includes(to)) return false;
-  const set = givesOf(doc, from);
-  return set == null || takes(step.kind, set);
+  const holds = givesOf(doc, from);
+  return holds == null || takes(step.kind, holds);
 }
 
 /** What comes into a step: the kind of set, and its molecules in 3D and structures drawn, in order. Null where nothing does - or what would has not been made yet. */
-export function inputOf(doc: Flow, step: number): { set: SetKind; molecules: Molecule3D[]; structures: number[][] } | null {
+export function inputOf(doc: Flow, step: number): { holds: SetKind; molecules: Molecule3D[]; structures: number[][] } | null {
   const from = wireInto(doc, step)?.from;
   if (!from) return null;
-  const box = "box" in from ? boxOf(doc, from.box) : resultOf(doc, from.step);
-  if (!box) return null;
-  const { structures, molecules } = boxMembers(doc, box);
+  const set = "set" in from ? findSet(doc, from.set) : resultOf(doc, from.step);
+  if (!set) return null;
+  const { structures, molecules } = setMembers(doc, set);
   const byId = new Map((doc.molecules3d ?? []).map((m) => [m.id, m]));
-  return { set: setOf(doc, box), molecules: molecules.map((id) => byId.get(id)!), structures };
+  return { holds: holdsOf(doc, set), molecules: molecules.map((id) => byId.get(id)!), structures };
 }
 
 /** FNV-1a over a string: a short key for what came into a step. */
@@ -94,7 +94,7 @@ function hash(text: string, h = 0x811c9dc5): number {
 export function inputKey(doc: Flow, step: WorkflowStep, by: string): string {
   const input = inputOf(doc, step.id);
   if (!input) return "";
-  let h = hash(`${input.set}|${by}|${JSON.stringify(optionsOf(step.kind, step.options))}`);
+  let h = hash(`${input.holds}|${by}|${JSON.stringify(optionsOf(step.kind, step.options))}`);
   for (const m of input.molecules) {
     h = hash(m.atoms.map((a) => `${a.el}${a.x.toFixed(5)},${a.y.toFixed(5)},${a.z.toFixed(5)}`).join(";"), h);
     h = hash(`${m.bonds.map((b) => `${b.a1}-${b.a2}:${b.order}`).join(";")}|${(m.frames ?? []).map((f) => f.map((v) => v.toFixed(5)).join(",")).join(";")}`, h);

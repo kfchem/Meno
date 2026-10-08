@@ -20,8 +20,8 @@ export type StepKind =
   | "populations"
   | "as-conformers";
 
-/** What a kind's icon shows (QuickAdd, a step's card). */
-export type StepIcon = "cube" | "rings" | "curve" | "level" | "wave" | "band" | "twins" | "bars" | "boxed-rings";
+/** Which icon a kind has (workflow/icons: QuickAdd, a step's card): a cube, a stack, a trend downwards, a bolt, a signal, a funnel, two squares, bars, shapes grouped. */
+export type StepIcon = "cube" | "rings" | "curve" | "level" | "wave" | "band" | "twins" | "bars" | "grouped";
 
 export type KindInfo = {
   kind: StepKind;
@@ -35,7 +35,7 @@ export type KindInfo = {
   runs: "program" | "entries";
   /** Its options, where Meno does it. */
   options?: readonly Option[];
-  /** What its result box is called; `{id}`, an option's value. */
+  /** What its result set is called; `{id}`, an option's value. */
   made: string;
 };
 
@@ -75,13 +75,13 @@ export const KINDS: readonly KindInfo[] = [
     made: "Populations at {temperature} K",
     options: [{ id: "temperature", label: "At", type: "number", default: 298.15, min: 1, step: 1, unit: "K" }],
   },
-  { kind: "as-conformers", name: "As conformers", icon: "boxed-rings", takes: ["molecules"], gives: "conformers", runs: "entries", made: "Conformers" },
+  { kind: "as-conformers", name: "As conformers", icon: "grouped", takes: ["molecules"], gives: "conformers", runs: "entries", made: "Conformers" },
 ];
 
 export const kindInfo = (kind: StepKind): KindInfo => KINDS.find((k) => k.kind === kind)!;
 
-/** Whether a step of `kind` takes a set of `set`. */
-export const takes = (kind: StepKind, set: SetKind): boolean => kindInfo(kind).takes.includes(set);
+/** Whether a step of `kind` takes a set that holds `holds`. */
+export const takes = (kind: StepKind, holds: SetKind): boolean => kindInfo(kind).takes.includes(holds);
 
 /** The kinds Meno does itself (docs/WORKFLOWS.md, *Who does a step*): those on entries alone. */
 export const MENO_DOES: readonly StepKind[] = KINDS.filter((k) => k.runs === "entries").map((k) => k.kind);
@@ -93,7 +93,7 @@ export function optionsOf(kind: StepKind, own: Record<string, string | number | 
   return values;
 }
 
-/** What a step's result box is called, its options' values put in. */
+/** What a step's result set is called, its options' values put in. */
 export function madeName(kind: StepKind, own: Record<string, string | number | boolean> | undefined): string {
   const values = optionsOf(kind, own);
   return kindInfo(kind).made.replace(/\{([a-z0-9-]+)\}/g, (_, id: string) => String(values[id] ?? ""));

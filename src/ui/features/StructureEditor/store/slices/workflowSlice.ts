@@ -32,7 +32,7 @@ function extentOf(m: Molecule3D, style: Style3D): { w: number; h: number } {
 export const stepRole = (kind: StepKind) => `step:${kind}`;
 
 /**
- * A workflow on the page (docs/WORKFLOWS.md): its boxes, steps and wires,
+ * A workflow on the page (docs/WORKFLOWS.md): its sets, steps and wires,
  * edits to the document - so that undo takes each back and Save keeps it;
  * what is under the pointer, chosen, open or being drawn, the view's.
  */
@@ -40,20 +40,20 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
   const coalesce = (what: string, id: number, gesture?: string) => (gesture ? { coalesceKey: `${what}:${id}:${gesture}` } : {});
   return {
     setWorkflowView: (patch: Partial<Pick<EditorState, WorkflowView>>) => set(patch),
-    addBox: (frame: { x0: number; y0: number; x1: number; y1: number }) => {
+    addSet: (frame: { x0: number; y0: number; x1: number; y1: number }) => {
       const id = doc.getState().nextWorkflowId ?? 1;
-      doc.edit("add box", (d) => wf.addBox(d, frame));
+      doc.edit("add set", (d) => wf.addSet(d, frame));
       return id;
     },
-    setBoxFrame: (id: number, frame: { x0: number; y0: number; x1: number; y1: number }, gesture?: string) =>
-      doc.edit("size box", (d) => wf.setBoxFrame(d, id, frame), coalesce("box-size", id, gesture)),
-    moveBox: (id: number, dx: number, dy: number, gesture?: string) => doc.edit("move box", (d) => wf.moveBox(d, id, dx, dy), coalesce("box-move", id, gesture)),
-    removeBox: (id: number) => {
-      if (doc.edit("delete box", (d) => wf.removeBox(d, id)))
+    resizeSet: (id: number, frame: { x0: number; y0: number; x1: number; y1: number }, gesture?: string) =>
+      doc.edit("size set", (d) => wf.resizeSet(d, id, frame), coalesce("set-size", id, gesture)),
+    moveSet: (id: number, dx: number, dy: number, gesture?: string) => doc.edit("move set", (d) => wf.moveSet(d, id, dx, dy), coalesce("set-move", id, gesture)),
+    removeSet: (id: number) => {
+      if (doc.edit("delete set", (d) => wf.removeSet(d, id)))
         set((prev: EditorState) => ({
           ...prev,
-          hoveredBox: prev.hoveredBox === id ? null : prev.hoveredBox,
-          chosenBox: prev.chosenBox === id ? null : prev.chosenBox,
+          hoveredSet: prev.hoveredSet === id ? null : prev.hoveredSet,
+          chosenSet: prev.chosenSet === id ? null : prev.chosenSet,
         }));
     },
     addStep: (kind: StepKind, x: number, y: number) => {

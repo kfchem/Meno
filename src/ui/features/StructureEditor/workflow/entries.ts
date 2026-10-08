@@ -1,15 +1,15 @@
 /**
- * What a box holds (docs/WORKFLOWS.md, *An input: boxing molecules*): what
+ * What a set holds (docs/WORKFLOWS.md, *An input: a set from the selection*): what
  * lies inside its frame - each structure drawn, and each molecule in 3D,
  * whose middle is inside it - in the order they lie; what kind of set that
  * is; and its entries, each a structure with what has been found of it.
  */
 import type { ParsedAtom, ParsedBond } from "../../../../lib/chem/molecule";
-import type { Model, Molecule3D, WorkflowBox } from "../store/types";
+import type { Model, Molecule3D, WorkflowSet } from "../store/types";
 import type { SetKind } from "./kinds";
 
 type Pt = { x: number; y: number };
-export type Frame = Pick<WorkflowBox, "x0" | "y0" | "x1" | "y1">;
+export type Frame = Pick<WorkflowSet, "x0" | "y0" | "x1" | "y1">;
 export type Page = { model: Model; molecules3d?: readonly Molecule3D[] };
 
 /** Whether `p` is inside a frame. */
@@ -61,33 +61,33 @@ export function middleOfAtoms(model: Model, ids: readonly number[]): Pt {
 const before = (p: Pt, q: Pt) => (Math.abs(p.y - q.y) > 0.9 ? q.y - p.y : p.x - q.x);
 
 /** What lies inside a frame: the structures drawn (each its atoms' ids) and the molecules in 3D (by id) whose middles are inside it, each in the order they lie. */
-export function boxMembers(page: Page, box: Frame): { structures: number[][]; molecules: number[] } {
+export function setMembers(page: Page, set: Frame): { structures: number[][]; molecules: number[] } {
   const structures = structuresOf(page.model)
     .map((ids) => ({ ids, at: middleOfAtoms(page.model, ids) }))
-    .filter((s) => inside(box, s.at))
+    .filter((s) => inside(set, s.at))
     .sort((p, q) => before(p.at, q.at))
     .map((s) => s.ids);
   const molecules = (page.molecules3d ?? [])
-    .filter((m) => inside(box, m.at))
+    .filter((m) => inside(set, m.at))
     .sort((p, q) => before(p.at, q.at))
     .map((m) => m.id);
   return { structures, molecules };
 }
 
-/** What kind of set a box holds: what made it says; drawn by the chemist, molecules in 3D - or structures, where any is drawn. */
-export function setOf(page: Page, box: WorkflowBox): SetKind {
-  if (box.made) return box.made.set;
-  return boxMembers(page, box).structures.length ? "structures" : "molecules";
+/** What a set holds: what made it says; made by the chemist, molecules in 3D - or structures, where any is drawn. */
+export function holdsOf(page: Page, set: WorkflowSet): SetKind {
+  if (set.made) return set.made.holds;
+  return setMembers(page, set).structures.length ? "structures" : "molecules";
 }
 
-/** How many entries a box holds, of what kind of set: a structure each, a frame each of a molecule in 3D. */
-export function countOf(page: Page, box: WorkflowBox): { set: SetKind; entries: number; compounds: number } {
-  const set = setOf(page, box);
-  const { structures, molecules } = boxMembers(page, box);
+/** How many entries a set holds, of what kind of set: a structure each, a frame each of a molecule in 3D. */
+export function countOf(page: Page, set: WorkflowSet): { holds: SetKind; entries: number; compounds: number } {
+  const holds = holdsOf(page, set);
+  const { structures, molecules } = setMembers(page, set);
   const byId = new Map((page.molecules3d ?? []).map((m) => [m.id, m]));
   const frames = molecules.reduce((n, id) => n + framesOf(byId.get(id)!), 0);
   const entries = structures.length + frames;
-  return { set, entries, compounds: set === "conformers" ? molecules.length : entries };
+  return { holds, entries, compounds: holds === "conformers" ? molecules.length : entries };
 }
 
 /** How many frames a molecule in 3D has: its own geometry, and the rest. */
@@ -118,15 +118,15 @@ export function frameXyz(m: Pick<Molecule3D, "atoms" | "frames">, f: number): nu
  * (docs/WORKFLOWS.md, *Compound sets and conformer sets*); in a conformer
  * set each molecule is a compound, its frames its conformers.
  */
-export function setEntries(molecules: readonly Molecule3D[], set: "molecules" | "conformers"): SetEntry[] {
+export function setEntries(molecules: readonly Molecule3D[], holds: "molecules" | "conformers"): SetEntry[] {
   const out: SetEntry[] = [];
   molecules.forEach((m, i) => {
     const n = framesOf(m);
     const energies = m.energies?.length === n ? m.energies : undefined;
     for (let f = 0; f < n; f++) {
       out.push({
-        compound: set === "conformers" ? i : out.length,
-        number: set === "conformers" ? (m.numbers?.[f] ?? f + 1) : 1,
+        compound: holds === "conformers" ? i : out.length,
+        number: holds === "conformers" ? (m.numbers?.[f] ?? f + 1) : 1,
         atoms: m.atoms,
         bonds: m.bonds,
         xyz: frameXyz(m, f),

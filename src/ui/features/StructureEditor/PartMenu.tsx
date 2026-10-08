@@ -11,7 +11,7 @@ export type MenuTarget = {
    * The atom, bond, reaction arrow or "+" right-clicked, or a molecule in 3D
    * or a measurement on one; null, when it was nothing.
    */
-  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "molecule3d" | "measure3d" | "box" | "step" | "wire" | null;
+  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "molecule3d" | "measure3d" | "set" | "step" | "wire" | null;
   /** Its id: for a measurement, its molecule's. */
   id: number | null;
   /** A measurement's own id. */
@@ -105,7 +105,7 @@ export default function PartMenu({
   onEditText,
   onRunStep,
   onStepOptions,
-  onBoxAsInput,
+  onUseAsInput,
   onSaveAbbreviation,
   canvas = [],
   clipboard,
@@ -141,8 +141,8 @@ export default function PartMenu({
   /** A workflow's step right-clicked: run, or opened to its options. */
   onRunStep: () => void;
   onStepOptions: () => void;
-  /** The selection boxed as a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
-  onBoxAsInput?: () => void;
+  /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
+  onUseAsInput?: () => void;
   /** The selection saved as an abbreviation of the user's own. */
   onSaveAbbreviation: () => void;
   /** What the canvas does as a whole - fit, R and S, its style - offered on empty space. */
@@ -247,8 +247,8 @@ export default function PartMenu({
           { name: "Edit text", keys: "", run: onEditText },
           { name: "Delete text", keys: deleteKey, run: onDelete },
         ]
-      : target.kind === "box"
-      ? [{ name: "Delete box", keys: deleteKey, run: onDelete }]
+      : target.kind === "set"
+      ? [{ name: "Delete set", keys: deleteKey, run: onDelete }]
       : target.kind === "step"
       ? [
           { name: "Run", keys: "", run: onRunStep },
@@ -266,7 +266,7 @@ export default function PartMenu({
           // (on empty space, a paste goes there)
           ...(target.kind == null ? [paste] : []),
           { name: "Delete selection", keys: deleteKey, run: onDelete, divider: true },
-          ...(onBoxAsInput ? [{ name: "Box as input", keys: "", run: onBoxAsInput, divider: true }] : []),
+          ...(onUseAsInput ? [{ name: "Use as input", keys: "", run: onUseAsInput, divider: true }] : []),
           // (what only a drawing has: none, for molecules in 3D alone)
           ...(drawing
             ? [
@@ -328,8 +328,8 @@ export default function PartMenu({
                   ? "Plus"
                   : target.kind === "caption"
                     ? "Text"
-                  : target.kind === "box"
-                    ? "Box"
+                  : target.kind === "set"
+                    ? "Set"
                   : target.kind === "step"
                     ? "Step"
                   : target.kind === "wire"

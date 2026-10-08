@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { DocumentStore } from "../../../../lib/doc";
 import { createStructureDocument, type StructureDocument } from "../document";
-import type { Caption, EditorState, Wire, WorkflowBox, WorkflowStep } from "./types";
+import type { Caption, EditorState, Wire, WorkflowSet, WorkflowStep } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
@@ -42,7 +42,7 @@ function mirrorOf(doc: StructureDocument) {
     captions: doc.captions ?? NO_CAPTIONS,
     nextCaptionId: doc.nextCaptionId ?? 1,
     molecules3d: doc.molecules3d ?? [],
-    boxes: doc.boxes ?? NO_BOXES,
+    sets: doc.sets ?? NO_SETS,
     steps: doc.steps ?? NO_STEPS,
     wires: doc.wires ?? NO_WIRES,
     docStyle: doc.style,
@@ -50,7 +50,7 @@ function mirrorOf(doc: StructureDocument) {
 }
 
 const NO_CAPTIONS: Caption[] = [];
-const NO_BOXES: WorkflowBox[] = [];
+const NO_SETS: WorkflowSet[] = [];
 const NO_STEPS: WorkflowStep[] = [];
 const NO_WIRES: Wire[] = [];
 
@@ -115,8 +115,8 @@ export function createEditorStore(
     hoveredCaption: null,
     captionEdit: null,
     quickAdd: null,
-    hoveredBox: null,
-    chosenBox: null,
+    hoveredSet: null,
+    chosenSet: null,
     hoveredStep: null,
     hoveredWire: null,
     openStep: null,

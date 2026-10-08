@@ -91,7 +91,7 @@ import QuickAdd from "./QuickAdd";
 import Captions2D from "./components/Captions2D";
 import CaptionEditor2D from "./components/CaptionEditor2D";
 import Workflow2D from "./components/Workflow2D";
-import { selectionFrame } from "./workflow/boxing";
+import { selectionFrame } from "./workflow/selectionSet";
 import { offeredSteps } from "./workflow/offered";
 import { PORT_DOWN } from "./workflow/look";
 import OpenStereo2D from "./components/OpenStereo2D";
@@ -435,15 +435,15 @@ function StructureCanvasContent({
         e.preventDefault();
         st.removeCaption(st.hoveredCaption);
       } else if (isDeleteKey(e) && !busy && st.hoveredWire != null && st.wires.some((w) => w.id === st.hoveredWire)) {
-        // a workflow's wire, step or box under the pointer - or the box chosen
+        // a workflow's wire, step or set under the pointer - or the set chosen
         e.preventDefault();
         st.removeWire(st.hoveredWire);
       } else if (isDeleteKey(e) && !busy && st.hoveredStep != null && st.steps.some((x) => x.id === st.hoveredStep) && st.openStep !== st.hoveredStep) {
         e.preventDefault();
         st.removeStep(st.hoveredStep);
-      } else if (isDeleteKey(e) && !busy && (st.hoveredBox ?? st.chosenBox) != null && st.boxes.some((b) => b.id === (st.hoveredBox ?? st.chosenBox))) {
+      } else if (isDeleteKey(e) && !busy && (st.hoveredSet ?? st.chosenSet) != null && st.sets.some((b) => b.id === (st.hoveredSet ?? st.chosenSet))) {
         e.preventDefault();
-        st.removeBox((st.hoveredBox ?? st.chosenBox)!);
+        st.removeSet((st.hoveredSet ?? st.chosenSet)!);
       } else if (isDeleteKey(e) && !busy && st.hoveredPlus != null && st.pluses.some((p) => p.id === st.hoveredPlus)) {
         e.preventDefault();
         st.removePlus(st.hoveredPlus);
@@ -529,7 +529,7 @@ function StructureCanvasContent({
     : undefined;
   useEffect(() => setMenu(null), [model]); // what it was about may be gone
   // the selection as a box would take it, where it holds whole structures or molecules in 3D
-  const boxableSelection = () => {
+  const selectionAsSet = () => {
     const st = store.getState();
     return selectionFrame(st.model, st.sel.atoms, st.molecules3d, st.sel3d, currentStyle3D(), st.turns3d, st.frames3d);
   };
@@ -912,7 +912,7 @@ function StructureCanvasContent({
             const st = store.getState();
             if (menu.kind === "arrow" && menu.id != null) st.removeArrow(menu.id);
             else if (menu.kind === "caption" && menu.id != null) st.removeCaption(menu.id);
-            else if (menu.kind === "box" && menu.id != null) st.removeBox(menu.id);
+            else if (menu.kind === "set" && menu.id != null) st.removeSet(menu.id);
             else if (menu.kind === "step" && menu.id != null) st.removeStep(menu.id);
             else if (menu.kind === "wire" && menu.id != null) st.removeWire(menu.id);
             else if (menu.kind === "plus" && menu.id != null) st.removePlus(menu.id);
@@ -940,10 +940,10 @@ function StructureCanvasContent({
           onStepOptions={() => {
             if (menu.kind === "step" && menu.id != null) store.getState().setWorkflowView({ openStep: menu.id });
           }}
-          onBoxAsInput={menu.selection === "here" && boxableSelection() ? () => {
-            const frame = boxableSelection();
+          onUseAsInput={menu.selection === "here" && selectionAsSet() ? () => {
+            const frame = selectionAsSet();
             if (!frame) return;
-            store.getState().addBox(frame);
+            store.getState().addSet(frame);
             store.getState().clearSel();
           } : undefined}
           onEditText={() => {
@@ -1073,7 +1073,7 @@ function StructureCanvasContent({
             <Captions2D />
           </Suspense>
         </DrawnLayoutProvider>
-        {/* A workflow on the page: its boxes, steps and wires */}
+        {/* A workflow on the page: its sets, steps and wires */}
         <Workflow2D />
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />

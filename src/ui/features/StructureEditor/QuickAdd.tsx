@@ -136,7 +136,8 @@ export default function QuickAdd({
             className={`rounded-md flex items-center justify-center text-gh-black transition-colors duration-150 ease-meno ${calcOpen ? "bg-gh-base" : "hover:bg-gh-base"}`}
             style={{ width: SIZE, height: SIZE }}
           >
-            <CalculationsGlyph />
+            {/* (as heavy as the glyphs beside it, drawn on a 20-unit square) */}
+            <CalculationsGlyph stroke={2.1} />
           </button>
         </div>
       )}
@@ -154,7 +155,7 @@ export default function QuickAdd({
                   className={`rounded-md flex items-center justify-center text-gh-black hover:bg-gh-base ${i > 0 && k.runs !== steps[i - 1].runs ? "ml-2" : ""}`}
                   style={{ width: SIZE, height: SIZE }}
                 >
-                  <StepGlyph icon={k.icon} />
+                  <StepGlyph icon={k.icon} size={20} stroke={2.1} />
                 </button>
               ))
             ) : (

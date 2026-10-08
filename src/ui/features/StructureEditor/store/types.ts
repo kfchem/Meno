@@ -126,19 +126,19 @@ export type Molecule3D = {
   shares?: number[];
 };
 /**
- * A box on the page (docs/WORKFLOWS.md): its frame, in world units, x0 to
+ * A set on the page (docs/WORKFLOWS.md): its frame, in world units, x0 to
  * x1 and y0 (its foot) to y1 (its top) - what lies inside it its entries.
  * Made by a step: the step, the kind of set it holds, and the entries the
- * step set aside, listed struck through. Drawn by the chemist, a box is a
+ * step set aside, listed struck through. Made by the chemist, a set is a
  * compound set.
  */
-export type WorkflowBox = {
+export type WorkflowSet = {
   id: number;
   x0: number;
   y0: number;
   x1: number;
   y1: number;
-  made?: { step: number; set: SetKind };
+  made?: { step: number; holds: SetKind };
   aside?: AsideEntry[];
 };
 /** An entry a step set aside: its compound, by its place among the set's (a, b...); its number among that compound's conformers; its energy, in hartrees. */
@@ -147,12 +147,12 @@ export type AsideEntry = { compound: number; number: number; energy?: number };
 export type StepRan = { at: number; ok: boolean; said: string; input: string };
 /** A step on the page: its kind, where its card's top left stands, who does it (unset: as Settings says), its options, what it last did. */
 export type WorkflowStep = { id: number; kind: StepKind; x: number; y: number; by?: string; options?: OptionValues; ran?: StepRan };
-/** Where a wire starts: a box, or a step - what it gave. */
-export type WireEnd = { box: number } | { step: number };
+/** Where a wire starts: a set, or a step - what it gave. */
+export type WireEnd = { set: number } | { step: number };
 /** A wire, from what gives to the step that takes it. */
 export type Wire = { id: number; from: WireEnd; to: number };
 /** What of a workflow is the view's, not the document's. */
-export type WorkflowView = "hoveredBox" | "chosenBox" | "hoveredStep" | "hoveredWire" | "openStep" | "wireDrag" | "workflowMenu";
+export type WorkflowView = "hoveredSet" | "chosenSet" | "hoveredStep" | "hoveredWire" | "openStep" | "wireDrag" | "workflowMenu";
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];
 /** A molecule in 3D rising out of its drawing (EditorState `rising3d`). */
@@ -325,18 +325,18 @@ export type EditorState = {
     wire?: WireEnd;
   } | null;
   setQuickAdd: (q: EditorState["quickAdd"]) => void;
-  /** A workflow on the page (docs/WORKFLOWS.md): its boxes, steps and wires. */
-  boxes: WorkflowBox[];
+  /** A workflow on the page (docs/WORKFLOWS.md): its sets, steps and wires. */
+  sets: WorkflowSet[];
   steps: WorkflowStep[];
   wires: Wire[];
-  /** The box whose tab is under the pointer; the box chosen (its tab clicked); the step and the wire under the pointer; the step open to its options. */
-  hoveredBox: number | null;
-  chosenBox: number | null;
+  /** The set whose tab is under the pointer; the set chosen (its tab clicked); the step and the wire under the pointer; the step open to its options. */
+  hoveredSet: number | null;
+  chosenSet: number | null;
   hoveredStep: number | null;
   hoveredWire: number | null;
   openStep: number | null;
-  /** A box's tab or a step's card right-clicked: its menu asked for, there (StructureCanvas opens it). */
-  workflowMenu: { kind: "box" | "step"; id: number; clientX: number; clientY: number } | null;
+  /** A set's tab or a step's card right-clicked: its menu asked for, there (StructureCanvas opens it). */
+  workflowMenu: { kind: "set" | "step"; id: number; clientX: number; clientY: number } | null;
   /**
    * A wire being drawn, to where the pointer is: from what gives, or back
    * from a step that takes (`to`); picked up off the step it went into,
@@ -344,12 +344,12 @@ export type EditorState = {
    */
   wireDrag: { from?: WireEnd; to?: number; at: { x: number; y: number }; was?: number } | null;
   setWorkflowView: (patch: Partial<Pick<EditorState, WorkflowView>>) => void;
-  /** A box round `frame`, as one step; its id. */
-  addBox: (frame: { x0: number; y0: number; x1: number; y1: number }) => number;
-  /** A box's frame sized anew, or the box moved with all it holds: a run of either in one gesture one step. */
-  setBoxFrame: (id: number, frame: { x0: number; y0: number; x1: number; y1: number }, gesture?: string) => void;
-  moveBox: (id: number, dx: number, dy: number, gesture?: string) => void;
-  removeBox: (id: number) => void;
+  /** A set round `frame`, as one step; its id. */
+  addSet: (frame: { x0: number; y0: number; x1: number; y1: number }) => number;
+  /** A set's frame sized anew, or the set moved with all it holds: a run of either in one gesture one step. */
+  resizeSet: (id: number, frame: { x0: number; y0: number; x1: number; y1: number }, gesture?: string) => void;
+  moveSet: (id: number, dx: number, dy: number, gesture?: string) => void;
+  removeSet: (id: number) => void;
   /** A step of `kind` put down, its card's top left at (x, y), with the options last chosen for its kind; its id. */
   addStep: (kind: StepKind, x: number, y: number) => number;
   moveStep: (id: number, x: number, y: number, gesture?: string) => void;

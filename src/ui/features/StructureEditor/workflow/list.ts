@@ -1,5 +1,5 @@
 /**
- * A box's list of entries (docs/WORKFLOWS.md, *Compound sets and conformer
+ * A set's list of entries (docs/WORKFLOWS.md, *Compound sets and conformer
  * sets*): in a conformer set, each compound's conformers - lowest energy
  * first, how far above the lowest each is and its population - and those
  * set aside, struck through; in a compound set, those set aside alone (its
@@ -20,8 +20,8 @@ type Listed = Pick<Molecule3D, "atoms" | "frames" | "energies" | "numbers" | "sh
 const kcal = (e: number, lowest: number) => ((e - lowest) * KCAL_PER_HARTREE).toFixed(2);
 const percent = (s: number) => (s < 0.005 ? "<1 %" : `${Math.round(s * 100)} %`);
 
-/** The rows of a box of `set` holding `molecules` (in order), with the entries a step set aside. */
-export function boxList(molecules: readonly Listed[], aside: readonly AsideEntry[], set: SetKind): ListRow[] {
+/** The rows of a set of `set` holding `molecules` (in order), with the entries a step set aside. */
+export function setList(molecules: readonly Listed[], aside: readonly AsideEntry[], set: SetKind): ListRow[] {
   const rows: ListRow[] = [];
   if (set !== "conformers") {
     aside.slice(0, LIST_MOST + ASIDE_MOST).forEach((a) => rows.push({ label: compoundLetter(a.compound), aside: true }));

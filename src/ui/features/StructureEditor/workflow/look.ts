@@ -18,15 +18,15 @@ export const PORT_DOWN = 28 * PX;
 /** A port's diameter. */
 export const PORT = 11 * PX;
 
-/** How far inside a box what it holds stays from its frame, and how far below its top - under its tab - it begins. */
-export const BOX_PAD = 18 * PX;
-export const BOX_TOP = 30 * PX;
-/** A result box's distance from its step, and between molecules in it. */
+/** How far inside a set what it holds stays from its frame, and how far below its top - under its tab - it begins. */
+export const SET_PAD = 18 * PX;
+export const SET_TOP = 30 * PX;
+/** A result set's distance from its step, and between molecules in it. */
 export const GAP = 64 * PX;
 export const BETWEEN = 24 * PX;
 /** The room a molecule's frames chip takes below it, where it has one. */
 export const CHIP = 30 * PX;
-/** A box's list of entries: a row's height, and its width. */
+/** A set's list of entries: a row's height, and its width. */
 export const ROW = 17 * PX;
 export const LIST_W = 196 * PX;
 /** How many of a compound's entries its list shows, and of those set aside, before it says how many more. */

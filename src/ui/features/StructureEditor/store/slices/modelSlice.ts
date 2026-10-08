@@ -275,7 +275,7 @@ export const createModelSlice = (
     const { drawn } = ws;
     const opened = (d: StructureDocument) => {
       const next = ops.withImportedScheme(ops.replaceModel(d, drawn), ops.schemeOf(drawn));
-      // (a workflow's parts by their own ids: what a box holds is what lies inside it, whatever the molecules' ids)
+      // (a workflow's parts by their own ids: what a set holds is what lies inside it, whatever the molecules' ids)
       const workflow = ws.workflow ? { ...ws.workflow, nextWorkflowId: nextIdAfter(ws.workflow) } : {};
       return ops.setDocumentStyle(
         { ...next, ...workflow, aromaticEnabled: ws.aromaticEnabled, aromaticRings: ws.aromaticRings },
@@ -315,8 +315,8 @@ export const createModelSlice = (
       sel: { atoms: new Set(), bonds: new Set() },
       sel3d: new Set<number>(),
       chosen3d: null,
-      hoveredBox: null,
-      chosenBox: null,
+      hoveredSet: null,
+      chosenSet: null,
       hoveredStep: null,
       hoveredWire: null,
       openStep: null,

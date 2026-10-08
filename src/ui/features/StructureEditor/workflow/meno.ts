@@ -15,15 +15,15 @@ export const KCAL_PER_HARTREE = 627.5094740631;
 /** The gas constant in hartrees per kelvin: R over the joules per mole in a hartree (CODATA 2018). */
 const R_HARTREE = 8.314462618 / 2625499.6;
 
-/** What a step did: the entries it kept - with their shares, where it found them - and those it set aside, as a set of `set`; or why it could not. */
+/** What a step did: the entries it kept - with their shares, where it found them - and those it set aside, as a set that holds `holds`; or why it could not. */
 export type Outcome =
-  | { ok: true; set: SetKind; kept: SetEntry[]; aside: SetEntry[]; shares?: number[]; said: string }
+  | { ok: true; holds: SetKind; kept: SetEntry[]; aside: SetEntry[]; shares?: number[]; said: string }
   | { ok: false; said: string };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** A Meno step of `kind` on `entries`, a set of `set`, with its options (over its kind's defaults). */
-export function runMeno(kind: StepKind, entries: readonly SetEntry[], set: SetKind, own?: OptionValues): Outcome {
+/** A Meno step of `kind` on `entries`, of a set that holds `holds`, with its options (over its kind's defaults). */
+export function runMeno(kind: StepKind, entries: readonly SetEntry[], holds: SetKind, own?: OptionValues): Outcome {
   if (!entries.length) return { ok: false, said: "Nothing came in" };
   const options = optionsOf(kind, own);
   switch (kind) {
@@ -32,7 +32,7 @@ export function runMeno(kind: StepKind, entries: readonly SetEntry[], set: SetKi
     case "energy-window":
       return energyWindow(entries, Number(options.window));
     case "duplicates":
-      return duplicates(entries, set, Number(options.rmsd));
+      return duplicates(entries, holds, Number(options.rmsd));
     case "populations":
       return populations(entries, Number(options.temperature));
     default:
@@ -58,7 +58,7 @@ function asConformers(entries: readonly SetEntry[]): Outcome {
     groups.set(key, [...(groups.get(key) ?? []), e]);
   }
   const kept = [...groups.values()].flatMap((g, compound) => g.map((e, i) => ({ ...e, compound, number: i + 1 })));
-  return { ok: true, set: "conformers", kept, aside: [], said: `${plural(groups.size, "compound")} · ${kept.length}` };
+  return { ok: true, holds: "conformers", kept, aside: [], said: `${plural(groups.size, "compound")} · ${kept.length}` };
 }
 
 /** The entries of each compound, in the order they came. */
@@ -79,7 +79,7 @@ function energyWindow(entries: readonly SetEntry[], kcal: number): Outcome {
     const lowest = Math.min(...g.map((e) => e.energy!));
     for (const e of g) ((e.energy! - lowest) * KCAL_PER_HARTREE <= kcal + 1e-9 ? kept : aside).push(e);
   }
-  return { ok: true, set: "conformers", kept, aside, said: `${kept.length} of ${entries.length} kept` };
+  return { ok: true, holds: "conformers", kept, aside, said: `${kept.length} of ${entries.length} kept` };
 }
 
 /**
@@ -90,9 +90,9 @@ function energyWindow(entries: readonly SetEntry[], kcal: number): Outcome {
  * with those of the same atoms in the same order - a structure there
  * twice is the same structure, not two compounds.
  */
-function duplicates(entries: readonly SetEntry[], set: SetKind, most: number): Outcome {
+function duplicates(entries: readonly SetEntry[], holds: SetKind, most: number): Outcome {
   const groups =
-    set === "conformers"
+    holds === "conformers"
       ? byCompound(entries)
       : [...entries.reduce((m, e) => m.set(atomsOf(e), [...(m.get(atomsOf(e)) ?? []), e]), new Map<string, SetEntry[]>()).values()];
   const energies = entries.every((e) => e.energy != null);
@@ -109,7 +109,7 @@ function duplicates(entries: readonly SetEntry[], set: SetKind, most: number): O
   // (in the order they came)
   const kept = entries.filter((e) => keptSet.has(e));
   const aside = entries.filter((e) => !keptSet.has(e));
-  return { ok: true, set, kept, aside, said: `${kept.length} of ${entries.length} kept` };
+  return { ok: true, holds, kept, aside, said: `${kept.length} of ${entries.length} kept` };
 }
 
 const atomsOf = (e: SetEntry) => e.atoms.map((a) => a.el).join(" ");
@@ -125,7 +125,7 @@ function populations(entries: readonly SetEntry[], kelvin: number): Outcome {
   const compounds = byCompound(entries).length;
   return {
     ok: true,
-    set: "conformers",
+    holds: "conformers",
     kept: [...entries],
     aside: [],
     shares: entries.map((e) => shares.get(e)!),

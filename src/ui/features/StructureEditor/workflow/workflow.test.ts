@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { addMolecule3d, emptyStructureDocument, type StructureDocument } from "../document";
 import type { Molecule3D } from "../store/types";
-import { boxMembers, countOf, setEntries, setOf } from "./entries";
+import { setMembers, countOf, setEntries, holdsOf } from "./entries";
 import { canWire, givesOf, inputOf, resultOf, stateOf, stepsBefore } from "./flow";
-import { boxList } from "./list";
+import { setList } from "./list";
 import { KCAL_PER_HARTREE, boltzmann, runMeno } from "./meno";
-import { addBox, addStep, connect, moveBox, removeBox, removeStep, removeWire, updateStep } from "./model";
+import { addSet, addStep, connect, moveSet, removeSet, removeStep, removeWire, updateStep } from "./model";
 import { runStep, type RunWith } from "./run";
 import { offeredSteps } from "./offered";
-import { selectionFrame } from "./boxing";
+import { selectionFrame } from "./selectionSet";
 
 /** Three atoms, bent, at `at` on the page: frame k opened out by k * `step` ångströms, with energies `e` (hartrees). */
 function bent(at: { x: number; y: number }, n = 1, e?: number[], step = 0.4, el = "O"): Omit<Molecule3D, "id"> {
@@ -26,43 +26,43 @@ function bent(at: { x: number; y: number }, n = 1, e?: number[], step = 0.4, el 
 const kcal = (k: number) => k / KCAL_PER_HARTREE;
 const W: RunWith = { extentOf: () => ({ w: 1, h: 1 }), byOf: () => "meno", now: 1000 };
 
-/** A page with one molecule of five frames - energies 0, 0.5, 2, 4 and 0.5 kcal/mol above -76 - boxed: box 1. */
+/** A page with one molecule of five frames - energies 0, 0.5, 2, 4 and 0.5 kcal/mol above -76 - in a set: set 1. */
 function page(): StructureDocument {
   let doc = addMolecule3d(emptyStructureDocument(), bent({ x: 0, y: 0 }, 5, [0, 0.5, 2, 4, 0.5].map((k) => -76 + kcal(k))));
-  doc = addBox(doc, { x0: -3, y0: -3, x1: 3, y1: 3 });
+  doc = addSet(doc, { x0: -3, y0: -3, x1: 3, y1: 3 });
   return doc;
 }
 
-describe("what a box holds", () => {
+describe("what a set holds", () => {
   it("is what lies inside its frame, in the order it lies", () => {
     let doc = addMolecule3d(emptyStructureDocument(), bent({ x: 4, y: 0 }));
     doc = addMolecule3d(doc, bent({ x: 0, y: 5 }));
     doc = addMolecule3d(doc, bent({ x: 20, y: 0 }));
-    doc = addBox(doc, { x0: -2, y0: -2, x1: 6, y1: 7 });
-    const box = doc.boxes![0];
+    doc = addSet(doc, { x0: -2, y0: -2, x1: 6, y1: 7 });
+    const set = doc.sets![0];
     // (the one higher on the page first; the one outside left out)
-    expect(boxMembers(doc, box).molecules).toEqual([2, 1]);
-    expect(setOf(doc, box)).toBe("molecules");
-    expect(countOf(doc, box)).toEqual({ set: "molecules", entries: 2, compounds: 2 });
+    expect(setMembers(doc, set).molecules).toEqual([2, 1]);
+    expect(holdsOf(doc, set)).toBe("molecules");
+    expect(countOf(doc, set)).toEqual({ holds: "molecules", entries: 2, compounds: 2 });
   });
 
   it("is a set of structures where any is drawn in it", () => {
     let doc = emptyStructureDocument();
     doc = { ...doc, model: { atoms: [{ id: 1, el: "C", x: 0, y: 0, r: 0.9 } as never], bonds: [] }, nextId: 2 };
     doc = addMolecule3d(doc, bent({ x: 1, y: 0 }));
-    doc = addBox(doc, { x0: -2, y0: -2, x1: 2, y1: 2 });
-    expect(setOf(doc, doc.boxes![0])).toBe("structures");
+    doc = addSet(doc, { x0: -2, y0: -2, x1: 2, y1: 2 });
+    expect(holdsOf(doc, doc.sets![0])).toBe("structures");
   });
 
-  it("goes with it when its box is moved", () => {
-    const doc = moveBox(page(), 1, 10, -2);
-    expect(doc.boxes![0]).toMatchObject({ x0: 7, x1: 13, y0: -5, y1: 1 });
+  it("goes with it when its set is moved", () => {
+    const doc = moveSet(page(), 1, 10, -2);
+    expect(doc.sets![0]).toMatchObject({ x0: 7, x1: 13, y0: -5, y1: 1 });
     expect(doc.molecules3d![0].at).toMatchObject({ x: 10, y: -2 });
   });
 
-  it("stays where it is when its box is deleted", () => {
-    const doc = removeBox(page(), 1);
-    expect(doc.boxes).toEqual([]);
+  it("stays where it is when its set is deleted", () => {
+    const doc = removeSet(page(), 1);
+    expect(doc.sets).toEqual([]);
     expect(doc.molecules3d).toHaveLength(1);
   });
 
@@ -78,13 +78,13 @@ describe("wires", () => {
     let doc = addStep(page(), "energy-window", 5, 0);
     doc = addStep(doc, "as-conformers", 5, 5);
     // (a compound set does not go into an energy window: As conformers goes between)
-    expect(canWire(doc, { box: 1 }, 2)).toBe(false);
-    expect(connect(doc, { box: 1 }, 2)).toBe(doc);
-    expect(canWire(doc, { box: 1 }, 3)).toBe(true);
-    doc = connect(doc, { box: 1 }, 3);
+    expect(canWire(doc, { set: 1 }, 2)).toBe(false);
+    expect(connect(doc, { set: 1 }, 2)).toBe(doc);
+    expect(canWire(doc, { set: 1 }, 3)).toBe(true);
+    doc = connect(doc, { set: 1 }, 3);
     expect(givesOf(doc, { step: 3 })).toBe("conformers");
     doc = connect(doc, { step: 3 }, 2);
-    expect(doc.wires!.map((w) => [w.from, w.to])).toEqual([[{ box: 1 }, 3], [{ step: 3 }, 2]]);
+    expect(doc.wires!.map((w) => [w.from, w.to])).toEqual([[{ set: 1 }, 3], [{ step: 3 }, 2]]);
     expect(stepsBefore(doc, 2)).toEqual([3]);
     // (no loop)
     expect(canWire(doc, { step: 2 }, 3)).toBe(false);
@@ -92,25 +92,25 @@ describe("wires", () => {
 
   it("into a step replace the one it had; deleted, go", () => {
     let doc = addStep(page(), "duplicates", 5, 0);
-    doc = addBox(doc, { x0: 30, y0: 0, x1: 31, y1: 1 });
-    doc = connect(doc, { box: 1 }, 2);
-    doc = connect(doc, { box: 3 }, 2);
-    expect(doc.wires!.map((w) => w.from)).toEqual([{ box: 3 }]);
+    doc = addSet(doc, { x0: 30, y0: 0, x1: 31, y1: 1 });
+    doc = connect(doc, { set: 1 }, 2);
+    doc = connect(doc, { set: 3 }, 2);
+    expect(doc.wires!.map((w) => w.from)).toEqual([{ set: 3 }]);
     doc = removeWire(doc, doc.wires![0].id);
     expect(doc.wires).toEqual([]);
   });
 
   it("go with the step they join", () => {
     let doc = addStep(page(), "as-conformers", 5, 0);
-    doc = connect(doc, { box: 1 }, 2);
+    doc = connect(doc, { set: 1 }, 2);
     doc = runStep(doc, 2, W);
     expect(resultOf(doc, 2)).toBeTruthy();
     doc = removeStep(doc, 2);
     expect(doc.wires).toEqual([]);
-    // (what it made stays, a box like any the chemist drew: a compound set)
-    expect(doc.boxes).toHaveLength(2);
-    expect(doc.boxes![1].made).toBeUndefined();
-    expect(setOf(doc, doc.boxes![1])).toBe("molecules");
+    // (what it made stays, a set like any the chemist drew: a compound set)
+    expect(doc.sets).toHaveLength(2);
+    expect(doc.sets![1].made).toBeUndefined();
+    expect(holdsOf(doc, doc.sets![1])).toBe("molecules");
   });
 });
 
@@ -121,7 +121,7 @@ describe("Meno's own steps", () => {
     const water = setEntries([{ ...bent({ x: 0, y: 0 }, 2), id: 1 }], "molecules");
     const sulfane = setEntries([{ ...bent({ x: 0, y: 0 }, 1, undefined, 0.4, "S"), id: 2 }], "molecules").map((e) => ({ ...e, compound: 2 }));
     const out = runMeno("as-conformers", [...water, ...sulfane], "molecules");
-    expect(out.ok && out.set).toBe("conformers");
+    expect(out.ok && out.holds).toBe("conformers");
     expect(out.ok && out.kept.map((e) => [e.compound, e.number])).toEqual([[0, 1], [0, 2], [1, 1]]);
     expect(out.said).toBe("2 compounds · 3");
   });
@@ -161,29 +161,29 @@ describe("Meno's own steps", () => {
 });
 
 describe("running", () => {
-  /** box 1 → As conformers (2) → Energy window (3), 1 kcal/mol. */
+  /** set 1 → As conformers (2) → Energy window (3), 1 kcal/mol. */
   function chain(): StructureDocument {
     let doc = addStep(page(), "as-conformers", 5, 0);
     doc = addStep(doc, "energy-window", 20, 0, { window: 1 });
-    doc = connect(doc, { box: 1 }, 2);
+    doc = connect(doc, { set: 1 }, 2);
     return connect(doc, { step: 2 }, 3);
   }
 
-  it("runs the steps before a step first, each making its result box", () => {
+  it("runs the steps before a step first, each making its result set", () => {
     const doc = runStep(chain(), 3, W);
     const by = () => "meno";
     expect(stateOf(doc, doc.steps![0], by())).toBe("done");
     expect(stateOf(doc, doc.steps![1], by())).toBe("done");
     expect(doc.steps![1].ran).toMatchObject({ ok: true, said: "3 of 5 kept", at: 1000 });
     const made = resultOf(doc, 3)!;
-    expect(made.made).toEqual({ step: 3, set: "conformers" });
+    expect(made.made).toEqual({ step: 3, holds: "conformers" });
     expect(made.aside).toEqual([
       { compound: 0, number: 3, energy: -76 + kcal(2) },
       { compound: 0, number: 4, energy: -76 + kcal(4) },
     ]);
     // a conformer set: one molecule, its conformers in play as frames, numbered as they were
-    const input = inputOf({ ...doc, wires: [{ id: 99, from: { box: made.id }, to: 3 }] }, 3)!;
-    expect(input.set).toBe("conformers");
+    const input = inputOf({ ...doc, wires: [{ id: 99, from: { set: made.id }, to: 3 }] }, 3)!;
+    expect(input.holds).toBe("conformers");
     expect(input.molecules).toHaveLength(1);
     expect(input.molecules[0]).toMatchObject({ conformerSet: true, numbers: [1, 2, 5] });
     // (to the right of its step, clear of it)
@@ -198,7 +198,7 @@ describe("running", () => {
     doc = runStep(doc, 3, W);
     expect(stateOf(doc, doc.steps![1], "meno")).toBe("done");
     expect(doc.steps![1].ran!.said).toBe("5 of 5 kept");
-    // (its result box's entries replaced, not added to)
+    // (its result set's entries replaced, not added to)
     expect(doc.molecules3d!.length).toBe(before);
     expect(resultOf(doc, 3)!.aside).toBeUndefined();
   });
@@ -207,7 +207,7 @@ describe("running", () => {
     let doc = addStep(page(), "energy-window", 5, 0);
     doc = runStep(doc, 2, W);
     expect(doc.steps![0].ran).toMatchObject({ ok: false, said: "Nothing comes into it" });
-    doc = connect(addStep(doc, "as-conformers", 5, 9), { box: 1 }, 3);
+    doc = connect(addStep(doc, "as-conformers", 5, 9), { set: 1 }, 3);
     doc = runStep(doc, 3, { ...W, byOf: () => "some-plugin" });
     expect(doc.steps![1].ran).toMatchObject({ ok: false, said: "Nothing added does this step" });
   });
@@ -215,8 +215,8 @@ describe("running", () => {
   it("lists a conformer set's entries, lowest first, and those set aside", () => {
     const doc = runStep(chain(), 3, W);
     const made = resultOf(doc, 3)!;
-    const molecules = boxMembers(doc, made).molecules.map((id) => doc.molecules3d!.find((m) => m.id === id)!);
-    expect(boxList(molecules, made.aside!, "conformers")).toEqual([
+    const molecules = setMembers(doc, made).molecules.map((id) => doc.molecules3d!.find((m) => m.id === id)!);
+    expect(setList(molecules, made.aside!, "conformers")).toEqual([
       { label: "a · 1", energy: "0.00", share: expect.stringMatching(/%$/) },
       { label: "a · 2", energy: "0.50", share: expect.stringMatching(/%$/) },
       { label: "a · 5", energy: "0.50", share: expect.stringMatching(/%$/) },
@@ -227,23 +227,23 @@ describe("running", () => {
 });
 
 describe("saving", () => {
-  it("keeps boxes, steps and wires as they are, and leaves out what does not read", async () => {
+  it("keeps sets, steps and wires as they are, and leaves out what does not read", async () => {
     const { readWorkflow, nextIdAfter } = await import("./saved");
     const doc = runStep(
-      connect(addStep(page(), "as-conformers", 5, 0), { box: 1 }, 2),
+      connect(addStep(page(), "as-conformers", 5, 0), { set: 1 }, 2),
       2,
       W,
     );
-    const saved = JSON.parse(JSON.stringify({ boxes: doc.boxes, steps: doc.steps, wires: doc.wires }));
-    expect(readWorkflow(saved)).toEqual({ boxes: doc.boxes, steps: doc.steps, wires: doc.wires });
+    const saved = JSON.parse(JSON.stringify({ sets: doc.sets, steps: doc.steps, wires: doc.wires }));
+    expect(readWorkflow(saved)).toEqual({ sets: doc.sets, steps: doc.steps, wires: doc.wires });
     expect(nextIdAfter(readWorkflow(saved)!)).toBe(doc.nextWorkflowId);
-    // a wire into a step not there, a step of a kind Meno does not know, a box made by nothing there
+    // a wire into a step not there, a step of a kind Meno does not know, a set made by nothing there
     const odd = readWorkflow({
-      boxes: [{ id: 1, x0: 2, y0: 2, x1: 0, y1: 0, made: { step: 9, set: "conformers" } }],
+      sets: [{ id: 1, x0: 2, y0: 2, x1: 0, y1: 0, made: { step: 9, holds: "conformers" } }],
       steps: [{ id: 2, kind: "teleport", x: 0, y: 0 }],
-      wires: [{ id: 3, from: { box: 1 }, to: 2 }],
+      wires: [{ id: 3, from: { set: 1 }, to: 2 }],
     });
-    expect(odd).toEqual({ boxes: [{ id: 1, x0: 0, y0: 0, x1: 2, y1: 2 }], steps: [], wires: [] });
+    expect(odd).toEqual({ sets: [{ id: 1, x0: 0, y0: 0, x1: 2, y1: 2 }], steps: [], wires: [] });
     expect(readWorkflow({})).toBeUndefined();
   });
 });
@@ -251,18 +251,18 @@ describe("saving", () => {
 describe("Quick Add's calculations", () => {
   it("are the kinds something added does, As conformers only from a compound set's wire", () => {
     let doc = addStep(page(), "as-conformers", 5, 0);
-    doc = connect(doc, { box: 1 }, 2);
+    doc = connect(doc, { set: 1 }, 2);
     // (no plugin added runs a program: Meno's own steps on entries)
     expect(offeredSteps(doc).map((k) => k.kind)).toEqual(["energy-window", "duplicates", "populations"]);
     expect(offeredSteps(doc).every((k) => k.who === "Meno")).toBe(true);
     // a compound set's wire: what takes it, then the conversion
-    expect(offeredSteps(doc, { box: 1 }).map((k) => k.kind)).toEqual(["duplicates", "as-conformers"]);
+    expect(offeredSteps(doc, { set: 1 }).map((k) => k.kind)).toEqual(["duplicates", "as-conformers"]);
     // a conformer set's
     expect(offeredSteps(doc, { step: 2 }).map((k) => k.kind)).toEqual(["energy-window", "duplicates", "populations"]);
   });
 });
 
-describe("boxing the selection", () => {
+describe("the selection as a set", () => {
   it("takes whole structures, not a few atoms of one", () => {
     const model = {
       atoms: [

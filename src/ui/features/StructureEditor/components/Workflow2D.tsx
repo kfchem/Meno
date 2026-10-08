@@ -1,36 +1,46 @@
 import * as THREE from "three";
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import PageHtml from "./PageHtml";
 import { useEditor, useEditorStore } from "../store";
-import type { EditorState, WireEnd, WorkflowBox, WorkflowStep } from "../store/types";
+import type { EditorState, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
 import { pageAt } from "../utils/page";
 import { COLORS } from "../../../theme/colors";
 import { MOV_PX } from "../constants";
 import { useStyle3D } from "../style3d";
-import BoxFrame, { type Edge } from "../workflow/BoxFrame";
-import StepCard, { FRAME_GREY, Port, type PortLook } from "../workflow/StepCard";
-import { boxMembers, countOf, type Frame } from "../workflow/entries";
-import { selectionFrame } from "../workflow/boxing";
+import SetFrame, { type Edge } from "../workflow/SetFrame";
+import StepCard, { Port, type PortLook } from "../workflow/StepCard";
+import { setMembers, countOf, type Frame } from "../workflow/entries";
+import { selectionFrame } from "../workflow/selectionSet";
 import { canWire, stateOf } from "../workflow/flow";
 import { howOf, kindInfo, madeName, optionsOf } from "../workflow/kinds";
-import { boxList } from "../workflow/list";
+import { setList } from "../workflow/list";
 import { CARD_W, HTML_DISTANCE, PORT_DOWN, PX } from "../workflow/look";
 import { byOf, doerOf, doersOf } from "../workflow/doers";
 
 type Pt = { x: number; y: number };
 
-/** The least a box is sized to, each way. */
+/** The least a set is sized to, each way. */
 const LEAST = 48 * PX;
 /** The smallest of a card's words, in px at 100 %: below 9 px on the screen it shows its icon and its state's mark alone. */
 const SMALLEST = 11.5;
+/**
+ * A wire's colours, from Meno's palette (docs/WORKFLOWS.md, *How it looks*):
+ * its grey; the accent while it is drawn; the attention colour into a step
+ * that failed; and, under the pointer, the canvas's own hover blue.
+ */
+const WIRE = "rgb(89, 99, 110)";
+const ACCENT = "rgb(49, 118, 137)";
 const ATTENTION = "rgb(205, 69, 96)";
+/** A wire's width on the screen, in px, at any zoom; and the band round it the pointer takes. */
+const WIRE_PX = 1.25;
+const WIRE_HIT_PX = 10;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Where a box gives; where a result box takes. */
-const boxGives = (b: Frame): Pt => ({ x: b.x1, y: (b.y0 + b.y1) / 2 });
-const boxTakes = (b: Frame): Pt => ({ x: b.x0, y: (b.y0 + b.y1) / 2 });
+/** Where a set gives; where a result set takes. */
+const setGives = (b: Frame): Pt => ({ x: b.x1, y: (b.y0 + b.y1) / 2 });
+const setTakes = (b: Frame): Pt => ({ x: b.x0, y: (b.y0 + b.y1) / 2 });
 /** Where a step takes, and gives. */
 const stepTakes = (s: Pick<WorkflowStep, "x" | "y">): Pt => ({ x: s.x, y: s.y - PORT_DOWN });
 const stepGives = (s: Pick<WorkflowStep, "x" | "y">): Pt => ({ x: s.x + CARD_W, y: s.y - PORT_DOWN });
@@ -67,9 +77,10 @@ function ribbon(p: Pt, q: Pt, width: number): THREE.BufferGeometry {
 }
 
 /** A wire drawn from `p` to `q`; where it can be pointed at, a wider band round it that the pointer takes. */
-function WireLine({ p, q, color, onHover }: { p: Pt; q: Pt; color: string; onHover?: (on: boolean) => void }) {
-  const line = useMemo(() => ribbon(p, q, 1.6 * PX), [p.x, p.y, q.x, q.y]); // eslint-disable-line react-hooks/exhaustive-deps
-  const hit = useMemo(() => (onHover ? ribbon(p, q, 10 * PX) : null), [p.x, p.y, q.x, q.y, !!onHover]); // eslint-disable-line react-hooks/exhaustive-deps
+function WireLine({ p, q, color, zoom, onHover }: { p: Pt; q: Pt; color: string; zoom: number; onHover?: (on: boolean) => void }) {
+  // (as wide on the screen at any zoom: a hair, as the frames' lines are)
+  const line = useMemo(() => ribbon(p, q, WIRE_PX / zoom), [p.x, p.y, q.x, q.y, zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hit = useMemo(() => (onHover ? ribbon(p, q, WIRE_HIT_PX / zoom) : null), [p.x, p.y, q.x, q.y, zoom, !!onHover]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => line.dispose(), [line]);
   useEffect(() => () => hit?.dispose(), [hit]);
   return (
@@ -100,22 +111,22 @@ function WireLine({ p, q, color, onHover }: { p: Pt; q: Pt; color: string; onHov
 const onLayer = (x: number, y: number): React.CSSProperties => ({ position: "absolute", left: x / PX, top: -y / PX });
 
 /**
- * A workflow on the page (docs/WORKFLOWS.md): its boxes, its steps and the
+ * A workflow on the page (docs/WORKFLOWS.md): its sets, its steps and the
  * wires between them, drawn at the page's scale - and the port on the
  * selection's right edge that makes it an input, while it holds whole
- * structures or molecules in 3D. Boxes and steps are HTML laid on the
+ * structures or molecules in 3D. Sets and steps are HTML laid on the
  * page, wires the canvas's own; what is dragged, drawn or pointed at is
  * worked here, and what changes the page is an edit to the document.
  */
 export default function Workflow2D() {
   const store = useEditorStore();
-  const boxes = useEditor((s) => s.boxes);
+  const sets = useEditor((s) => s.sets);
   const steps = useEditor((s) => s.steps);
   const wires = useEditor((s) => s.wires);
   const model = useEditor((s) => s.model);
   const molecules3d = useEditor((s) => s.molecules3d);
-  const hoveredBox = useEditor((s) => s.hoveredBox);
-  const chosenBox = useEditor((s) => s.chosenBox);
+  const hoveredSet = useEditor((s) => s.hoveredSet);
+  const chosenSet = useEditor((s) => s.chosenSet);
   const hoveredWire = useEditor((s) => s.hoveredWire);
   const openStep = useEditor((s) => s.openStep);
   const wireDrag = useEditor((s) => s.wireDrag);
@@ -126,11 +137,18 @@ export default function Workflow2D() {
   const style3d = useStyle3D();
   const { camera, gl, invalidate } = useThree();
 
-  // the zoom, where it crosses what a card's words need to be read
+  // the zoom: where it crosses what a card's words need to be read; what
+  // a hair on the screen is on the page's layer of HTML (`--hair`); and, by
+  // steps of a few per cent, what the wires are made as wide on the screen for
   const [compact, setCompact] = useState(false);
+  const [zoom, setZoom] = useState((camera as THREE.OrthographicCamera).zoom || 1);
+  const layer = useRef<HTMLDivElement>(null);
   useFrame(() => {
-    const small = SMALLEST * PX * (camera as THREE.OrthographicCamera).zoom < 9;
+    const z = (camera as THREE.OrthographicCamera).zoom || 1;
+    const small = SMALLEST * PX * z < 9;
     if (small !== compact) setCompact(small);
+    if (Math.abs(Math.log(z / zoom)) > 0.03) setZoom(z);
+    layer.current?.style.setProperty("--hair", `${1 / (z * PX)}px`);
   });
 
   const worldOf = (cx: number, cy: number): Pt => {
@@ -179,8 +197,8 @@ export default function Workflow2D() {
     const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
     const take = el?.closest("[data-take]")?.getAttribute("data-take");
     if (take) return { take: Number(take) };
-    const giveBox = el?.closest("[data-give-box]")?.getAttribute("data-give-box");
-    if (giveBox) return { give: { box: Number(giveBox) } };
+    const giveSet = el?.closest("[data-give-set]")?.getAttribute("data-give-set");
+    if (giveSet) return { give: { set: Number(giveSet) } };
     const giveStep = el?.closest("[data-give-step]")?.getAttribute("data-give-step");
     if (giveStep) return { give: { step: Number(giveStep) } };
     if (el !== gl.domElement) return null;
@@ -235,28 +253,28 @@ export default function Workflow2D() {
     );
   };
 
-  /** A box dragged by its tab, with all it holds; clicked, chosen. */
-  const dragBox = (e: ReactPointerEvent, box: WorkflowBox) => {
+  /** A set dragged by its tab, with all it holds; clicked, chosen. */
+  const dragSet = (e: ReactPointerEvent, set: WorkflowSet) => {
     if (e.button !== 0) return;
     let last = worldOf(e.clientX, e.clientY);
     const gesture = `${performance.now()}`;
     follow(
       e,
       (p) => {
-        store.getState().moveBox(box.id, p.x - last.x, p.y - last.y, gesture);
+        store.getState().moveSet(set.id, p.x - last.x, p.y - last.y, gesture);
         last = p;
       },
       (moved) => {
-        if (!moved) store.getState().setWorkflowView({ chosenBox: box.id });
+        if (!moved) store.getState().setWorkflowView({ chosenSet: set.id });
       },
     );
   };
 
-  /** A box sized by an edge or a corner: what it holds is what then lies inside it. */
-  const sizeBox = (edge: Edge, e: ReactPointerEvent, box: WorkflowBox) => {
+  /** A set sized by an edge or a corner: what it holds is what then lies inside it. */
+  const sizeSet = (edge: Edge, e: ReactPointerEvent, set: WorkflowSet) => {
     if (e.button !== 0) return;
     const start = worldOf(e.clientX, e.clientY);
-    const was = { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 };
+    const was = { x0: set.x0, y0: set.y0, x1: set.x1, y1: set.y1 };
     const gesture = `${performance.now()}`;
     follow(
       e,
@@ -268,7 +286,7 @@ export default function Workflow2D() {
         if (edge.includes("w")) f.x0 = Math.min(was.x0 + dx, was.x1 - LEAST);
         if (edge.includes("n")) f.y1 = Math.max(was.y1 + dy, was.y0 + LEAST);
         if (edge.includes("s")) f.y0 = Math.min(was.y0 + dy, was.y1 - LEAST);
-        store.getState().setBoxFrame(box.id, f, gesture);
+        store.getState().resizeSet(set.id, f, gesture);
       },
       () => {},
     );
@@ -290,8 +308,8 @@ export default function Workflow2D() {
     );
   };
 
-  /** A right-click on a box's tab or a step's card: its menu. */
-  const menuOf = (kind: "box" | "step", id: number) => (e: ReactMouseEvent) => {
+  /** A right-click on a set's tab or a step's card: its menu. */
+  const menuOf = (kind: "set" | "step", id: number) => (e: ReactMouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     store.getState().setWorkflowView({ workflowMenu: { kind, id, clientX: e.clientX, clientY: e.clientY } });
@@ -318,12 +336,12 @@ export default function Workflow2D() {
     };
   }, [openStep, store]);
 
-  // a box chosen: let go by a press anywhere but its tab, or Escape
+  // a set chosen: let go by a press anywhere but its tab, or Escape
   useEffect(() => {
-    if (chosenBox == null) return;
-    const letGo = () => store.getState().setWorkflowView({ chosenBox: null });
+    if (chosenSet == null) return;
+    const letGo = () => store.getState().setWorkflowView({ chosenSet: null });
     const onPress = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement | null)?.closest?.(`[data-box-tab="${chosenBox}"]`)) letGo();
+      if (!(e.target as HTMLElement | null)?.closest?.(`[data-set-tab="${chosenSet}"]`)) letGo();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") letGo();
@@ -334,69 +352,69 @@ export default function Workflow2D() {
       window.removeEventListener("pointerdown", onPress, true);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [chosenBox, store]);
+  }, [chosenSet, store]);
 
   // --- what is drawn ---------------------------------------------------------
-  const flow = useMemo(() => ({ model, molecules3d, boxes, steps, wires }), [model, molecules3d, boxes, steps, wires]);
+  const flow = useMemo(() => ({ model, molecules3d, sets, steps, wires }), [model, molecules3d, sets, steps, wires]);
   const stepById = useMemo(() => new Map(steps.map((s) => [s.id, s])), [steps]);
-  const boxById = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+  const setById = useMemo(() => new Map(sets.map((b) => [b.id, b])), [sets]);
   const gives = (end: WireEnd): Pt | null => {
-    if ("box" in end) {
-      const b = boxById.get(end.box);
-      return b ? boxGives(b) : null;
+    if ("set" in end) {
+      const b = setById.get(end.set);
+      return b ? setGives(b) : null;
     }
     const s = stepById.get(end.step);
     return s ? stepGives(s) : null;
   };
   const states = useMemo(() => new Map(steps.map((s) => [s.id, stateOf(flow, s, byOf(s))])), [flow, steps]);
-  // each box's tab and list: what it holds, worked out as the page changes, not as the pointer moves
-  const boxInfo = useMemo(
+  // each set's tab and list: what it holds, worked out as the page changes, not as the pointer moves
+  const setInfo = useMemo(
     () =>
       new Map(
-        boxes.map((b) => {
+        sets.map((b) => {
           const count = countOf(flow, b);
-          const molecules = boxMembers(flow, b).molecules.map((id) => molecules3d.find((m) => m.id === id)!);
+          const molecules = setMembers(flow, b).molecules.map((id) => molecules3d.find((m) => m.id === id)!);
           const made = b.made ? steps.find((s) => s.id === b.made!.step) : undefined;
           const aside = b.aside?.length ?? 0;
           const counted = !count.entries
             ? "Empty"
-            : count.set === "structures"
+            : count.holds === "structures"
               ? plural(count.entries, "structure")
-              : count.set === "molecules"
+              : count.holds === "molecules"
                 ? `${plural(count.compounds, "compound")}${aside ? ` · ${count.entries} of ${count.entries + aside}` : ""}`
                 : `${plural(count.compounds, "compound")} · ${aside ? `${count.entries} of ${count.entries + aside}` : count.entries}`;
-          return [b.id, { name: made ? madeName(made.kind, made.options) : "Input", count: counted, rows: boxList(molecules, b.aside ?? [], count.set) }];
+          return [b.id, { name: made ? madeName(made.kind, made.options) : "Input", count: counted, rows: setList(molecules, b.aside ?? [], count.holds) }];
         }),
       ),
-    [flow, boxes, steps, molecules3d],
+    [flow, sets, steps, molecules3d],
   );
 
   // while a wire is drawn: the ports that would take it lit, the others faint
   const portLook = (side: "take" | "give", id: WireEnd | number): PortLook => {
     if (!wireDrag) return "plain";
-    if (side === "take" && wireDrag.from && typeof id === "number") return canWire(flow, wireDrag.from, id) ? "lit" : "dim";
-    if (side === "give" && wireDrag.to != null && typeof id !== "number") return canWire(flow, id, wireDrag.to) ? "lit" : "dim";
+    if (side === "take" && wireDrag.from && typeof id === "number") return canWire(flow, wireDrag.from, id) ? "lit" : "plain";
+    if (side === "give" && wireDrag.to != null && typeof id !== "number") return canWire(flow, id, wireDrag.to) ? "lit" : "plain";
     if (side === "give" && wireDrag.from && typeof id !== "number" && JSON.stringify(id) === JSON.stringify(wireDrag.from)) return "lit";
-    return "dim";
+    return "plain";
   };
 
-  // the selection, where it holds whole structures or molecules in 3D: the frame an input box would take
-  const boxable = useMemo(
+  // the selection, where it holds whole structures or molecules in 3D: the frame an input set would take
+  const asSet = useMemo(
     () => selectionFrame(model, sel.atoms, molecules3d, sel3d, style3d, turns3d, frames3d),
     [sel, sel3d, model, molecules3d, style3d, turns3d, frames3d],
   );
 
-  /** The selection boxed as an input, and a wire drawn out of it. */
-  const boxSelection = (e: ReactPointerEvent) => {
-    if (e.button !== 0 || !boxable) return;
+  /** The selection made a set, an input, and a wire drawn out of it. */
+  const setFromSelection = (e: ReactPointerEvent) => {
+    if (e.button !== 0 || !asSet) return;
     const st = store.getState();
-    const id = st.addBox(boxable);
+    const id = st.addSet(asSet);
     st.clearSel();
-    drawFrom(e, { box: id });
+    drawFrom(e, { set: id });
   };
 
-  const hover = (patch: Partial<Pick<EditorState, "hoveredBox" | "hoveredStep" | "hoveredWire">>) => store.getState().setWorkflowView(patch);
-  const unhover = (key: "hoveredBox" | "hoveredStep" | "hoveredWire", id: number) => {
+  const hover = (patch: Partial<Pick<EditorState, "hoveredSet" | "hoveredStep" | "hoveredWire">>) => store.getState().setWorkflowView(patch);
+  const unhover = (key: "hoveredSet" | "hoveredStep" | "hoveredWire", id: number) => {
     if (store.getState()[key] === id) hover({ [key]: null });
   };
 
@@ -413,7 +431,7 @@ export default function Workflow2D() {
 
   return (
     <group>
-      {/* wires: those drawn, and each step's to the box it made */}
+      {/* wires: those drawn, and each step's to the set it made */}
       {wires.map((w) => {
         if (w.id === wireDrag?.was) return null;
         const p = gives(w.from);
@@ -425,40 +443,41 @@ export default function Workflow2D() {
             key={`w${w.id}`}
             p={p}
             q={stepTakes(s)}
-            color={hoveredWire === w.id ? COLORS.highlight : failed ? ATTENTION : FRAME_GREY}
+            color={hoveredWire === w.id ? COLORS.highlight : failed ? ATTENTION : WIRE}
+            zoom={zoom}
             onHover={(on) => (on ? hover({ hoveredWire: w.id }) : unhover("hoveredWire", w.id))}
           />
         );
       })}
-      {boxes.map((b) => {
+      {sets.map((b) => {
         const s = b.made ? stepById.get(b.made.step) : undefined;
-        return s ? <WireLine key={`m${b.id}`} p={stepGives(s)} q={boxTakes(b)} color={FRAME_GREY} /> : null;
+        return s ? <WireLine key={`m${b.id}`} p={stepGives(s)} q={setTakes(b)} color={WIRE} zoom={zoom} /> : null;
       })}
-      {drawn && <WireLine p={drawn.p} q={drawn.q} color={COLORS.highlight} />}
+      {drawn && <WireLine p={drawn.p} q={drawn.q} color={ACCENT} zoom={zoom} />}
 
-      {/* Boxes and steps drawn in HTML on one layer laid on the page at its
+      {/* Sets and steps drawn in HTML on one layer laid on the page at its
           scale: one, so that what is under the pointer is found among them
-          in the order they are drawn - boxes, then steps, then the
+          in the order they are drawn - sets, then steps, then the
           selection's port - and not behind a layer of another's. */}
       <PageHtml transform distanceFactor={HTML_DISTANCE} position={[0, 0, 0]} zIndexRange={[18, 18]} pointerEvents="none">
-        <div style={{ position: "relative", width: 0, height: 0 }}>
-          {boxes.map((b) => {
-            const info = boxInfo.get(b.id)!;
+        <div ref={layer} style={{ position: "relative", width: 0, height: 0 }}>
+          {sets.map((b) => {
+            const info = setInfo.get(b.id)!;
             return (
               <div key={`b${b.id}`} style={onLayer(b.x0, b.y1)}>
-                <BoxFrame
-                  box={b}
+                <SetFrame
+                  set={b}
                   name={info.name}
                   count={info.count}
                   rows={info.rows}
-                  hovered={hoveredBox === b.id}
-                  chosen={chosenBox === b.id}
-                  give={portLook("give", { box: b.id })}
-                  onTabDown={(e) => dragBox(e, b)}
-                  onEdgeDown={(edge, e) => sizeBox(edge, e, b)}
-                  onGiveDown={(e) => drawFrom(e, { box: b.id })}
-                  onContextMenu={menuOf("box", b.id)}
-                  onHover={(on) => (on ? hover({ hoveredBox: b.id }) : unhover("hoveredBox", b.id))}
+                  hovered={hoveredSet === b.id}
+                  chosen={chosenSet === b.id}
+                  give={portLook("give", { set: b.id })}
+                  onTabDown={(e) => dragSet(e, b)}
+                  onEdgeDown={(edge, e) => sizeSet(edge, e, b)}
+                  onGiveDown={(e) => drawFrom(e, { set: b.id })}
+                  onContextMenu={menuOf("set", b.id)}
+                  onHover={(on) => (on ? hover({ hoveredSet: b.id }) : unhover("hoveredSet", b.id))}
                 />
               </div>
             );
@@ -494,10 +513,10 @@ export default function Workflow2D() {
             );
           })}
     
-          {/* the selection's port: pulled, the selection becomes an input box */}
-          {boxable && !wireDrag && (
-            <div className="meno-fade-in" style={{ ...onLayer(boxable.x1, (boxable.y0 + boxable.y1) / 2), width: 0, height: 0 }}>
-              <Port look="plain" label="Box as input" data={{}} onPointerDown={boxSelection} style={{ left: 0, top: 0 }} />
+          {/* the selection's port: pulled, the selection becomes an input set */}
+          {asSet && !wireDrag && (
+            <div className="meno-fade-in" style={{ ...onLayer(asSet.x1, (asSet.y0 + asSet.y1) / 2), width: 0, height: 0 }}>
+              <Port look="plain" label="Set as input" data={{}} onPointerDown={setFromSelection} style={{ left: 0, top: 0 }} />
             </div>
           )}
         </div>
