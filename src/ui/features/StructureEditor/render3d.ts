@@ -195,22 +195,27 @@ export function rendered3d(
   return { canvas: out, bounds };
 }
 
-/** Pixels to the inch a picture's molecules in 3D are drawn at - a PNG's 300 dpi - and the most pixels across they take, either way. */
-const PICTURE_DPI = 300;
+/** The most pixels across a picture's molecules in 3D take, either way, for each 300 dpi they are drawn at. */
 const PICTURE_MOST_PX = 1600;
 
 /**
  * A picture's molecules in 3D (`ms`, laid out in `layout`) drawn as the
- * canvas draws them, at 300 dpi or at most 1600 px across: set on the
- * layout, for its SVG and anything drawn from that, and given as a bitmap,
- * for an EMF. Null, the layout as it was, where there are none or no WebGL.
+ * canvas draws them, at `dpi` (a copied picture's, as Settings says) or at
+ * most 1600 px across for each 300 of it: set on the layout, for its SVG
+ * and anything drawn from that, and given as a bitmap, for an EMF. Null,
+ * the layout as it was, where there are none or no WebGL.
  */
-export function withSolidsImage(ms: readonly Carried3D[], layout: { zoom: number; solids?: Parameters<typeof solidsBounds>[0]; solidsImage?: { href: string; bounds: Bounds } }, style: Style3D) {
+export function withSolidsImage(
+  ms: readonly Carried3D[],
+  layout: { zoom: number; solids?: Parameters<typeof solidsBounds>[0]; solidsImage?: { href: string; bounds: Bounds } },
+  style: Style3D,
+  dpi = 300,
+) {
   const marks = solidsBounds(layout.solids ?? []);
   if (!marks || !ms.length) return null;
   const zoom = layout.zoom > 0 ? layout.zoom : 1;
   const across = Math.max(marks.max.x - marks.min.x, marks.max.y - marks.min.y) * zoom;
-  const scale = Math.min(PICTURE_DPI / 96, PICTURE_MOST_PX / Math.max(across, 1));
+  const scale = Math.min(dpi / 96, (PICTURE_MOST_PX * dpi) / 300 / Math.max(across, 1));
   const drawn = rendered3d(ms, style, zoom * scale);
   if (!drawn) return null;
   const { canvas, bounds } = drawn;

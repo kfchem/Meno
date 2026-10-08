@@ -302,7 +302,8 @@ export function drawingSvg(
   const { layout, opts } = drawingLayout(model, aromatic, style);
   if (seen) {
     try {
-      withSolidsImage(model.molecules3d ?? [], layout, currentStyle3D());
+      // (at the resolution copied pictures are made at)
+      withSolidsImage(model.molecules3d ?? [], layout, currentStyle3D(), useAppSettings.getState().pictures.dpi);
     } catch {
       // (the marks, then)
     }
