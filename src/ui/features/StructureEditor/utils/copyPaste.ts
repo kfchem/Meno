@@ -242,6 +242,8 @@ export function readCarried3D(given: unknown): Carried3D | null {
     ...(drawnFrom ? { drawnFrom } : {}),
     ...(drawnFrom && typeof m.drawnAs === "string" ? { drawnAs: m.drawnAs } : {}),
     ...(m.conformerSet === true ? { conformerSet: true } : {}),
+    ...(Array.isArray(m.numbers) && m.numbers.length === 1 + frames.length && m.numbers.every((k) => Number.isInteger(k)) ? { numbers: m.numbers as number[] } : {}),
+    ...(Array.isArray(m.shares) && m.shares.length === 1 + frames.length && m.shares.every(isNum) ? { shares: m.shares as number[] } : {}),
     ...(stereo ? { stereo } : {}),
     ...(calc ? { calc } : {}),
   };

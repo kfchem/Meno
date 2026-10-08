@@ -288,10 +288,15 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const [measureTexts, setMeasureTexts] = useState<Record<number, string>>({});
   const [shownMeasures, setShownMeasures] = useState<Measure3D[]>(m.measures ?? []);
   const dirty = useRef(true);
-  // a conformer set's shares, by Boltzmann; and its atoms' elements
+  // a conformer set's shares: as a Populations step found them, or by Boltzmann; and its atoms' elements
   const shares = useMemo(
-    () => (m.conformerSet && m.energies?.length === solid.frames.length ? populations(m.energies) : undefined),
-    [m.conformerSet, m.energies, solid.frames.length],
+    () =>
+      m.shares?.length === solid.frames.length
+        ? m.shares
+        : m.conformerSet && m.energies?.length === solid.frames.length
+          ? populations(m.energies)
+          : undefined,
+    [m.shares, m.conformerSet, m.energies, solid.frames.length],
   );
   const els = useMemo(() => m.atoms.map((a) => a.el), [m.atoms]);
   // where the frame shown is centred, in ångströms: what a surface on it is placed about
@@ -1115,6 +1120,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
                 )
               }
               populations={shares}
+              numbers={m.numbers?.length === solid.frames.length ? m.numbers : undefined}
               about={m.calc ? calcLine(m.calc) : undefined}
               results={m.calc?.results}
               unread={m.calc?.unread}

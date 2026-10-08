@@ -35,6 +35,13 @@ export type AppSettings = {
   files: FileSettings;
   /** The plugins and the roles they fill (docs/PLUGINS.md). */
   plugins: PluginSettings;
+  /** Who does each kind of step in a workflow (Settings, Calculations; docs/WORKFLOWS.md). */
+  calculations: CalculationSettings;
+};
+
+/** Who does each kind of step, by the kind: Meno, or a plugin added - unset, Meno where Meno does it. Each kind's options' defaults are the options remembered for it (`options`, as "step:<kind>"). */
+export type CalculationSettings = {
+  by: Record<string, string>;
 };
 
 /**
@@ -87,6 +94,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   abbreviations: [],
   files: { read: {}, also: {} },
   plugins: { removed: [], roles: {} },
+  calculations: { by: {} },
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -106,7 +114,18 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     abbreviations: acceptAbbreviations(r.abbreviations),
     files: acceptFiles(r.files, r.calcReaders),
     plugins: acceptPlugins(r.plugins),
+    calculations: acceptCalculations(r.calculations),
   };
+}
+
+/** Who does each kind of step, as the file holds it: ids only. */
+function acceptCalculations(raw: unknown): CalculationSettings {
+  const by: Record<string, string> = {};
+  const given = (raw as { by?: unknown } | null)?.by;
+  if (given && typeof given === "object" && !Array.isArray(given)) {
+    for (const [kind, who] of Object.entries(given)) if (ID.test(kind) && typeof who === "string" && ID.test(who)) by[kind] = who;
+  }
+  return { by };
 }
 
 const ID = /^[a-z0-9-]{1,40}$/;
@@ -257,6 +276,7 @@ type SettingsState = AppSettings & {
   setAbbreviations: (abbreviations: CustomAbbreviation[]) => void;
   setFiles: (files: FileSettings) => void;
   setPlugins: (plugins: PluginSettings) => void;
+  setCalculations: (calculations: CalculationSettings) => void;
 };
 
 /** How long after the last change the file is written. */
@@ -267,9 +287,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, calculations } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, calculations }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -302,6 +322,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setPlugins: (plugins) => {
       set({ plugins });
+      scheduleSave();
+    },
+    setCalculations: (calculations) => {
+      set({ calculations });
       scheduleSave();
     },
     setUpdates: (updates) => {

@@ -1,4 +1,6 @@
 import type { ImportedScheme, MarkPlaces, Relayout, WrittenAsLabel } from "../document";
+import type { SetKind, StepKind } from "../workflow/kinds";
+import type { OptionValues } from "../../../../lib/options";
 import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
 import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
@@ -114,7 +116,41 @@ export type Molecule3D = {
   stereo?: { atoms: Record<number, string>; bonds: Record<number, string>; chosen?: { atoms: number[]; bonds: number[] } };
   /** What the calculation it was read from says of it, besides its geometries and energies (lib/calc). */
   calc?: CalcInfo;
+  /**
+   * Each frame's number among its compound's conformers, as its conformer
+   * set was first made (docs/WORKFLOWS.md): kept by a step that sets some
+   * aside, so that a 7 stays a 7. Unset, they are numbered in order.
+   */
+  numbers?: number[];
+  /** Each frame's share of its compound, as a *Populations* step worked it out; unset, by Boltzmann at room temperature where it is a conformer set. */
+  shares?: number[];
 };
+/**
+ * A box on the page (docs/WORKFLOWS.md): its frame, in world units, x0 to
+ * x1 and y0 (its foot) to y1 (its top) - what lies inside it its entries.
+ * Made by a step: the step, the kind of set it holds, and the entries the
+ * step set aside, listed struck through. Drawn by the chemist, a box is a
+ * compound set.
+ */
+export type WorkflowBox = {
+  id: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  made?: { step: number; set: SetKind };
+  aside?: AsideEntry[];
+};
+/** An entry a step set aside: its compound, by its place among the set's (a, b...); its number among that compound's conformers; its energy, in hartrees. */
+export type AsideEntry = { compound: number; number: number; energy?: number };
+/** What a step did when it last ran: when, whether it did, what it says, and what came into it (`inputKey`: so that it shows when that has changed). */
+export type StepRan = { at: number; ok: boolean; said: string; input: string };
+/** A step on the page: its kind, where its card's top left stands, who does it (unset: as Settings says), its options, what it last did. */
+export type WorkflowStep = { id: number; kind: StepKind; x: number; y: number; by?: string; options?: OptionValues; ran?: StepRan };
+/** Where a wire starts: a box, or a step - what it gave. */
+export type WireEnd = { box: number } | { step: number };
+/** A wire, from what gives to the step that takes it. */
+export type Wire = { id: number; from: WireEnd; to: number };
 /** A turn, as a quaternion's x, y, z and w. */
 export type Turn3D = [number, number, number, number];
 /** A molecule in 3D rising out of its drawing (EditorState `rising3d`). */
@@ -278,8 +314,48 @@ export type EditorState = {
    * on the page and in the canvas, and how big the canvas is, for them to
    * stay inside it.
    */
-  quickAdd: { at: { x: number; y: number }; x: number; y: number; within: { width: number; height: number } } | null;
+  quickAdd: {
+    at: { x: number; y: number };
+    x: number;
+    y: number;
+    within: { width: number; height: number };
+    /** Opened by a wire let go on empty space, from what gives: at its calculations, those that take it. */
+    wire?: WireEnd;
+  } | null;
   setQuickAdd: (q: EditorState["quickAdd"]) => void;
+  /** A workflow on the page (docs/WORKFLOWS.md): its boxes, steps and wires. */
+  boxes: WorkflowBox[];
+  steps: WorkflowStep[];
+  wires: Wire[];
+  /** The box whose tab is under the pointer; the box chosen (its tab clicked); the wire under the pointer; the step open to its options. */
+  hoveredBox: number | null;
+  chosenBox: number | null;
+  hoveredWire: number | null;
+  openStep: number | null;
+  /**
+   * A wire being drawn, to where the pointer is: from what gives, or back
+   * from a step that takes (`to`); picked up off the step it went into,
+   * the wire it was (`was`).
+   */
+  wireDrag: { from?: WireEnd; to?: number; at: { x: number; y: number }; was?: number } | null;
+  setWorkflowView: (patch: Partial<Pick<EditorState, "hoveredBox" | "chosenBox" | "hoveredWire" | "openStep" | "wireDrag">>) => void;
+  /** A box round `frame`, as one step; its id. */
+  addBox: (frame: { x0: number; y0: number; x1: number; y1: number }) => number;
+  /** A box's frame sized anew, or the box moved with all it holds: a run of either in one gesture one step. */
+  setBoxFrame: (id: number, frame: { x0: number; y0: number; x1: number; y1: number }, gesture?: string) => void;
+  moveBox: (id: number, dx: number, dy: number, gesture?: string) => void;
+  removeBox: (id: number) => void;
+  /** A step of `kind` put down, its card's top left at (x, y), with the options last chosen for its kind; its id. */
+  addStep: (kind: StepKind, x: number, y: number) => number;
+  moveStep: (id: number, x: number, y: number, gesture?: string) => void;
+  /** A step's options, or who does it (null: as Settings says), changed: the options remembered for its kind. */
+  updateStep: (id: number, patch: { options?: OptionValues; by?: string | null }) => void;
+  removeStep: (id: number) => void;
+  /** A wire from what gives into a step, where it may go (workflow/flow `canWire`); whether it went. */
+  connect: (from: WireEnd, to: number) => boolean;
+  removeWire: (id: number) => void;
+  /** A step run, and first the steps before it that need it: one step to undo. */
+  runStep: (id: number) => void;
   hoverPulse: { id: number | null; nonce: number; until: number };
   arrows: Arrow[];
   pluses: Plus[];
