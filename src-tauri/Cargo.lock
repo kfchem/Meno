@@ -9,6 +9,7 @@ dependencies = [
  "base64 0.22.1",
  "flate2",
  "fontdb",
+ "libc",
  "objc2-app-kit",
  "objc2-foundation",
  "reqwest",
