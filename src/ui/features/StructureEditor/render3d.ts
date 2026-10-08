@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { atomColour, KEY_LIGHT_FROM, type Style3D } from "../../../lib/chem/style3d";
 import { solidsBounds } from "../../../lib/chem/layout2d";
 import { EYE_HEIGHT } from "./utils/page";
-import { bondLines, frameOf, heightOf, lookOf, pictureMarks, solidOf, WORLD_PER_ANGSTROM } from "./utils/molecule3d";
+import { bondLines, bondsAt, frameOf, heightOf, lookOf, pictureMarks, solidOf, WORLD_PER_ANGSTROM } from "./utils/molecule3d";
 import { MEASURE_FAN_OPACITY, MEASURE_RADIUS, measureMarks, piecesOf } from "./utils/measure3d";
 import { COLORS } from "../../theme/colors";
 import type { Carried3D, Molecule3D } from "./store/types";
@@ -105,7 +105,8 @@ export function rendered3d(
         group.add(mesh);
       });
       if (look === "balls") {
-        for (const line of bondLines(molecule, places, style.bondRadius * WORLD_PER_ANGSTROM)) {
+        // (the bonds the frame shown has, where they go frame by frame)
+        for (const line of bondLines({ ...molecule, bonds: bondsAt(molecule, frameOf(solid, m.frame)) }, places, style.bondRadius * WORLD_PER_ANGSTROM)) {
           const along = line.b.clone().sub(line.a);
           const length = along.length();
           if (length < 1e-9) continue;
@@ -194,22 +195,27 @@ export function rendered3d(
   return { canvas: out, bounds };
 }
 
-/** Pixels to the inch a picture's molecules in 3D are drawn at - a PNG's 300 dpi - and the most pixels across they take, either way. */
-const PICTURE_DPI = 300;
+/** The most pixels across a picture's molecules in 3D take, either way, for each 300 dpi they are drawn at. */
 const PICTURE_MOST_PX = 1600;
 
 /**
  * A picture's molecules in 3D (`ms`, laid out in `layout`) drawn as the
- * canvas draws them, at 300 dpi or at most 1600 px across: set on the
- * layout, for its SVG and anything drawn from that, and given as a bitmap,
- * for an EMF. Null, the layout as it was, where there are none or no WebGL.
+ * canvas draws them, at `dpi` (a copied picture's, as Settings says) or at
+ * most 1600 px across for each 300 of it: set on the layout, for its SVG
+ * and anything drawn from that, and given as a bitmap, for an EMF. Null,
+ * the layout as it was, where there are none or no WebGL.
  */
-export function withSolidsImage(ms: readonly Carried3D[], layout: { zoom: number; solids?: Parameters<typeof solidsBounds>[0]; solidsImage?: { href: string; bounds: Bounds } }, style: Style3D) {
+export function withSolidsImage(
+  ms: readonly Carried3D[],
+  layout: { zoom: number; solids?: Parameters<typeof solidsBounds>[0]; solidsImage?: { href: string; bounds: Bounds } },
+  style: Style3D,
+  dpi = 300,
+) {
   const marks = solidsBounds(layout.solids ?? []);
   if (!marks || !ms.length) return null;
   const zoom = layout.zoom > 0 ? layout.zoom : 1;
   const across = Math.max(marks.max.x - marks.min.x, marks.max.y - marks.min.y) * zoom;
-  const scale = Math.min(PICTURE_DPI / 96, PICTURE_MOST_PX / Math.max(across, 1));
+  const scale = Math.min(dpi / 96, (PICTURE_MOST_PX * dpi) / 300 / Math.max(across, 1));
   const drawn = rendered3d(ms, style, zoom * scale);
   if (!drawn) return null;
   const { canvas, bounds } = drawn;

@@ -7,11 +7,11 @@ import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS } from "../constants";
 import { calculateNewBondPosition } from "../utils/geometry";
 import { clickClock, doubleClickedSince, noteClick } from "../utils/clickCount";
 import { endsDrag, movePress, startPress, type Press } from "../utils/press";
-import { editorModelOf, processFileContent, type ProcessedFileResult } from "../utils/io";
+import { editorModelOf, opensAsText, processFileContent, type ProcessedFileResult } from "../utils/io";
 import { schemeOf, type ImportedScheme } from "../document";
 import { structureInDrop } from "../chem/fromClipboard";
 import { centredAt } from "../utils/copyPaste";
-import { isWorkspaceFile, readWorkspace } from "../utils/workspace";
+import { isWorkspaceFile, readTexts, readWorkspace } from "../utils/workspace";
 import { isMenoFile } from "../../../../lib/doc/menoFile";
 import { workspaceOfFile } from "../../../views/openFile";
 import type { Drawn } from "../store/types";
@@ -112,7 +112,12 @@ export function useStructureEvents(
   const importedInitial = useRef(false);
   useEffect(() => {
     (async () => {
-      if (!initialPayload || importedInitial.current) return;
+      if (importedInitial.current) return;
+      if (!initialPayload) {
+        // (a canvas opened for a text: Save suggests its name, beside it)
+        if (openedFile && initialFilename) store.getState().markOpenedOver(initialPath ?? initialFilename);
+        return;
+      }
       // One import per canvas: this effect runs twice under StrictMode, and
       // importing twice would leave two undo steps for a single file.
       importedInitial.current = true;
@@ -120,9 +125,12 @@ export function useStructureEvents(
       const kind = (initialKind ? anyKindById(initialKind) : undefined) ?? kindOf(initialFilename ?? "", initialPayload);
       // A workspace file, as it was saved
       if (kind?.id === MENO_KINDS.workspace.id) {
-        const ws = readWorkspace(initialPayload);
-        if (ws) {
+        const saved = readWorkspace(initialPayload);
+        if (saved) {
+          // (its texts read from its file, held as it was opened)
+          const { ws, missing } = await readTexts(saved);
           store.getState().openWorkspace(ws, true);
+          if (missing.length) reportImportError("initial payload", new Error(`${missing.join(", ")} could not be read from the workspace.`));
           // (opened from its own file, it is saved back to it; else Save asks where)
           if (openedFile && initialPath && isWorkspaceFile(initialPath)) store.getState().markSavedAs(initialPath);
           else if (openedFile && initialFilename) store.getState().markOpenedOver(initialPath ?? initialFilename);
@@ -420,6 +428,12 @@ export function useStructureEvents(
       } catch (e) {
         reportImportError("append", e);
       }
+      return;
+    }
+    // a text: held in the workspace, shown in its column
+    if (!kind && opensAsText(f.name, head)) {
+      store.getState().addTexts([{ name: f.name, text: await f.text() }]);
+      setImportError(null);
       return;
     }
     const text = await f.text();

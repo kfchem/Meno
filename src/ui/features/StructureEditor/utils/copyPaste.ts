@@ -239,6 +239,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
     ...(drawnFrom ? { drawnFrom } : {}),
     ...(drawnFrom && typeof m.drawnAs === "string" ? { drawnAs: m.drawnAs } : {}),
     ...(m.conformerSet === true ? { conformerSet: true } : {}),
+    ...(m.bondsFrom === "distance" ? { bondsFrom: "distance" as const } : {}),
     ...(madeOf(m.made) ? { made: madeOf(m.made) } : {}),
     ...(stereo ? { stereo } : {}),
     ...(calc ? { calc } : {}),

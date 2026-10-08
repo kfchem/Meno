@@ -627,7 +627,7 @@ function Control({
             value={value as string}
             aria-label={field.label}
             onChange={(e) => set(e.target.value)}
-            className="h-7 w-9 rounded-md border border-gh-line bg-white p-0.5 cursor-pointer"
+            className="h-7 w-9 rounded-md border border-gh-line bg-white p-0.5"
           />
           <span className="font-mono text-xs text-gh-gray w-16">
             {value as string}

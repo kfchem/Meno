@@ -133,9 +133,10 @@ must not need one undo per frame), and the stack is capped.
 `subscribe` matches React's `useSyncExternalStore`; nothing in `lib/doc`
 imports React.
 
-Adoption is incremental. The text view and the structure canvas, with its
-molecules in 3D, are on documents; the workflow editor still keeps its
-content in component state, and it is still lost when its tab closes.
+Adoption is incremental. The structure canvas, with its molecules in 3D
+and the texts in its column, is on a document; the workflow editor still
+keeps its content in component state, and it is still lost when its tab
+closes.
 
 ## How things move
 
@@ -165,6 +166,31 @@ moves together, in the same time and the same way.
   invalidates only while something moves (see *Frame loop*). The drawing
   itself goes from shape to shape in `DrawnLayout` (`utils/glide.ts`), and
   a fit goes there through `components/viewGoal.ts`.
+
+## Pointers
+
+Meno draws its own pointers wherever it shows one other than the plain
+arrow (asked for by the maintainer, 2026-10-07: the system's hands looked
+poor, and on a Windows machine the dragging hand showed white). Each says
+what a drag there does, not what grabs it, and none is a hand:
+
+| Pointer | Where | The system's behind it |
+| --- | --- | --- |
+| `turn`, a ring with its arrowhead | over a molecule in 3D, which a drag turns | `grab` |
+| `turning`, the same in Meno's accent | while it turns | `grabbing` |
+| `move`, four arrowheads | over a molecule in 3D selected, which a drag moves, and while it moves | `move` |
+| `sideways`, a double arrowhead | a slider, and a chip's bars, dragged along | `ew-resize` |
+
+- **One place**: `ui/theme/cursors.ts` draws each as SVG on a 24-pixel
+  grid, dark with a white edge to be seen on anything, its spot in the
+  middle, and writes their rules once as Meno starts (`installCursors`).
+  An element asks for one with `data-cursor` (`setCursor`).
+- **Sharp on any screen**: each rule gives the SVG at 1x, then
+  `-webkit-image-set` at 1x, 2x and 3x, which WebKit and Chromium read;
+  the system's pointer stands behind it.
+- **The arrow and the text cursor stay the system's**, as the chemist has
+  set them up (size, colour). Clickable rows and buttons show the arrow,
+  as a desktop program's do, not a pointing hand.
 
 ## 2D structure editor (`ui/features/StructureEditor`)
 
@@ -705,15 +731,15 @@ that every kind of these is in this table, by its id, and no other.
 | RXN file | `rxn` | `.rxn` | `$RXN` | Meno, in its worker (`readStructures`) | Export (`reactionFileText`), Copy | a drawing with its arrow and "+" signs |
 | MOL file | `mol` | `.mol` | `V2000` / `V3000`, `M  END` | Meno, in its worker | Export, Copy (`molWriter.ts`) | a drawing; a molecule in 3D where it says it is 3D or spreads in depth |
 | SD file | `sdf` | `.sdf` | the same, and its name | Meno, in its worker | Export: the drawing as one record, each molecule in 3D as one, or each frame | a drawing, and each 3D record a molecule in 3D beside it |
-| XYZ file | `xyz` | `.xyz` | its layout: an atom count, a comment, atoms | Meno, in its worker | never | a molecule in 3D, its frames and their energies (`utils/xyzEnergies.ts`); bonds from covalent radii (`bondsByDistance`) |
+| XYZ file | `xyz` | `.xyz` | its layout: an atom count, a comment, atoms | Meno, in its worker | never | a molecule in 3D, its frames and their energies (`utils/xyzEnergies.ts`); bonds from covalent radii (`bondsByDistance`), frame by frame - forming and breaking as the frames go (`frameBondsOf`) |
 | PDB file | `pdb` | `.pdb` | its records (`RECORD_NAMES`), an atom's coordinates in their columns | Meno, in its worker (`lib/chem/pdb.ts`) | Export: molecules in 3D as HETATM and CONECT records, a MODEL for each frame where asked | a molecule in 3D: every atom, MODELs as frames, bonds from CONECT and distances (FILE-IO.md, *As step 7 was built*) |
 | Cube file | `cube` | `.cube`, `.cub` | its layout (`CUBE_MARK`) | Meno, under the readers' contract, in its worker (`lib/calc/cube.ts`) | never | a molecule in 3D, its grids promises drawn as surfaces |
 | SVG picture | `svg` | `.svg` | - | never | Export (`drawingSvg`) | - |
-| Calculation programs' outputs (cclib's) | `adf`, `cfour`, `dalton`, `gamess`, `gamess-uk`, `gaussian`, `gaussian-fchk`, `jaguar`, `molcas`, `molpro`, `mopac`, `nwchem`, `orca`, `psi4`, `qchem`, `turbomole`, `xtb` | each its own: `.out`, `.log`, `.fchk`... | each program's banner, as cclib's manifest brings it | cclib (plugin, uv); `orca`, `gaussian` and `gaussian-fchk` also PySCF | never | a molecule in 3D, each geometry a frame, and what the calculation found |
+| Calculation programs' outputs (cclib's) | `adf`, `cfour`, `dalton`, `gamess`, `gamess-uk`, `gaussian`, `gaussian-fchk`, `jaguar`, `molcas`, `molpro`, `mopac`, `nwchem`, `orca`, `psi4`, `qchem`, `turbomole`, `xtb` | each its own: `.out`, `.log`, `.fchk`... | each program's banner, as cclib's manifest brings it | cclib (plugin, uv); `orca`, `gaussian` and `gaussian-fchk` also PySCF | never | a molecule in 3D, each geometry a frame - its bonds by distance, frame by frame - and what the calculation found |
 | Molden file | `molden` | `.molden`, `.mld` | `[Molden Format]`, as PySCF's manifest brings it | PySCF (plugin, pixi) | never | a molecule in 3D, its orbitals and densities promises |
 | Gaussian input | `gaussian-input` | `.gjf`, `.com` | - | never | Export, by the Gaussian input plugin (uv, Python alone) | - |
 | KET | - | `.ket` | - | not read | never | Open does not offer it; one dropped says "not supported yet" |
-| Text | - | anything not told otherwise | its name, or nothing else telling it | the text editor | the text editor | a text tab |
+| Text | - | anything not told otherwise | its name, or nothing else telling it; dropped, no NUL in its start (`opensAsText`) | the workspace, as it is | Export, from the column of texts (`TextColumn.tsx`) | a text the workspace holds, in its column; saved in `.meno` |
 
 ## Verification commands
 

@@ -1,5 +1,5 @@
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { exists, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { useCallback, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import { createSVG, labelSetOf, layoutMolecule, measureLabelBox, type Layout, type LayoutOptions } from "../../../lib/chem/layout2d";
@@ -12,7 +12,7 @@ import { editorLayoutOptions, layoutBonds } from "./layoutOptions";
 import { useEditorStore } from "./store";
 import type { Carried3D, Drawn, EditorState } from "./store/types";
 import { carriedOf, isWorkspaceFile, workspaceFile } from "./utils/workspace";
-import { pictureMarks } from "./utils/molecule3d";
+import { bondsAt, pictureMarks } from "./utils/molecule3d";
 import { measurePictureMarks } from "./utils/measure3d";
 import { MARK_SCALE } from "./chem/marks";
 import { currentStyle3D } from "./style3d";
@@ -86,17 +86,42 @@ export function exportKindOf(state: Pick<EditorState, "savedPath" | "openedName"
  * Where Export suggests writing the canvas as a kind, by its extension
  * `ext` - unless said, the kind of the file it came from, or else the first
  * it can be exported as: the canvas's name - where it was saved, or the file
- * opened over it - as that kind; else a name for what is on it.
+ * opened over it - as that kind; else a name for what is on it. Never the
+ * file it was opened from, as Save never is (docs/FILE-IO.md): beside it,
+ * numbered from 2, the first name `taken` does not say is there.
  */
 export function suggestedExportPath(
   state: Pick<EditorState, "savedPath" | "openedName">,
   what: Holds,
   /** The kind's extension, without its dot: Meno's kinds go by their ids. */
   ext: string = exportKindOf(state, what) ?? exportKinds(what)[0],
+  /** Whether a file is there already, by its path; nothing is, unless said. */
+  taken: (path: string) => boolean = () => false,
 ): string {
   const from = state.savedPath ?? state.openedName;
-  if (from) return from.toLowerCase().endsWith(`.${ext}`) ? from : withExtension(from, ext);
-  return `${what.reaction ? "reaction" : what.solid && !what.drawn ? "molecules" : "structure"}.${ext}`;
+  if (!from) return `${what.reaction ? "reaction" : what.solid && !what.drawn ? "molecules" : "structure"}.${ext}`;
+  const path = from.toLowerCase().endsWith(`.${ext}`) ? from : withExtension(from, ext);
+  if (!state.openedName || path.toLowerCase() !== state.openedName.toLowerCase()) return path;
+  for (let n = 2; n < 1000; n++) {
+    const beside = numbered(path, n, ext);
+    if (!taken(beside)) return beside;
+  }
+  return path;
+}
+
+/** `path` numbered `n`, as Export suggests a file beside the one it came from: "a.pdb" as "a-2.pdb". */
+const numbered = (path: string, n: number, ext: string) => `${path.replace(/\.[^.\\/]*$/, "")}-${n}.${ext}`;
+
+/** The names beside `path` Export might suggest, and whether each is there: asked of the file system, none taken where it may not be asked. */
+async function takenBeside(path: string, ext: string): Promise<(p: string) => boolean> {
+  const there = new Set<string>();
+  for (let n = 2; n < 100; n++) {
+    const beside = numbered(path, n, ext);
+    const is = await exists(beside).catch(() => false);
+    if (!is) break;
+    there.add(beside);
+  }
+  return (p) => there.has(p);
 }
 
 /**
@@ -126,7 +151,8 @@ export function structureFileText(drawn: Drawn, path: string, options: OptionVal
     return Array.from({ length: frames }, (_, i) => {
       const energy = m.energies?.[i];
       const data = energy != null && Number.isFinite(energy) ? `> <Energy (Eh)>\n${energy}\n\n` : "";
-      return writeMolfile3d(frameAtoms(m, i), m.bonds, { title: `${name} ${i + 1}` }) + data + "$$$$\n";
+      // (each frame with the bonds it has, where they go frame by frame)
+      return writeMolfile3d(frameAtoms(m, i), bondsAt(m, i), { title: `${name} ${i + 1}` }) + data + "$$$$\n";
     });
   });
   return (drawn.atoms.length ? writeSdf(flat, { title, version }) : "") + records.join("");
@@ -276,7 +302,8 @@ export function drawingSvg(
   const { layout, opts } = drawingLayout(model, aromatic, style);
   if (seen) {
     try {
-      withSolidsImage(model.molecules3d ?? [], layout, currentStyle3D());
+      // (at the resolution copied pictures are made at)
+      withSolidsImage(model.molecules3d ?? [], layout, currentStyle3D(), useAppSettings.getState().pictures.dpi);
     } catch {
       // (the marks, then)
     }
@@ -358,7 +385,7 @@ export function useFileActions(nameTab?: (label: string) => void) {
         const ext = extensionOf(writer);
         const picked = await saveDialog({
           title: "Export",
-          defaultPath: suggestedExportPath(state, holdsOf(state), ext),
+          defaultPath: suggestedExportPath(state, holdsOf(state), ext, await takenBeside(state.openedName ?? "", ext)),
           filters: [{ name: writer.name, extensions: writer.extensions.map((e) => e.slice(1)) }],
         });
         if (!picked) return;

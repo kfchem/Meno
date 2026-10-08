@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcResult, editorModelOf, processFileContent, xyzComments } from "./io";
+import { calcResult, editorModelOf, opensAsText, processFileContent, xyzComments } from "./io";
 import sampleSdf from "../../../../samples/cholesterol.sdf?raw";
 import sampleRxn from "../../../../samples/esterification.rxn?raw";
 import sampleXyz from "../../../../samples/cholesterol.xyz?raw";
@@ -37,6 +37,15 @@ describe("processFileContent", () => {
     await expect(processFileContent("", "hello")).rejects.toThrow(
       "No molecules found in the file.",
     );
+  });
+});
+
+describe("opensAsText", () => {
+  it("takes a file of no kind as text, as Open does - not one Meno does not read yet, nor bytes", () => {
+    expect(opensAsText("job.inp", "! B3LYP def2-SVP\n")).toBe(true);
+    expect(opensAsText("README", "words")).toBe(true);
+    expect(opensAsText("scheme.KET", '{"root":{}}')).toBe(false);
+    expect(opensAsText("picture.png", "\u0089PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR")).toBe(false);
   });
 });
 
@@ -144,6 +153,8 @@ describe("a calculation's output, as a reader read it", () => {
     const [m] = calcResult(out, ["cclib 1.9rc1"], "water_opt.out").molecules3d!;
     expect(m.atoms.map((a) => a.el)).toEqual(["O", "H", "H"]);
     expect(m.bonds).toHaveLength(2);
+    // (its bonds by distance, frame by frame: an output gives none)
+    expect(m.bondsFrom).toBe("distance");
     expect(m.frames).toHaveLength(2);
     expect(m.frame).toBe(2);
     expect(m.energies).toEqual([-76.30, -76.31, -76.32]);

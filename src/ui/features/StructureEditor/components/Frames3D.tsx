@@ -220,7 +220,8 @@ export default function Frames3D({
                       step={1}
                       value={frame}
                       onChange={(e) => onFrame(parseInt(e.target.value, 10))}
-                      className="my-1.5 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
+                      data-cursor="sideways"
+                      className="my-1.5 h-2 rounded-full appearance-none bg-white/60 border border-gh-line"
                       style={{ width }}
                     />
                   )}
@@ -292,7 +293,8 @@ function Energies({
     <svg
       width={width}
       height={BARS}
-      className="mt-1.5 block cursor-pointer touch-none"
+      data-cursor="sideways"
+      className="mt-1.5 block touch-none"
       role="img"
       aria-label="Energy of each frame"
       onPointerDown={(e) => {

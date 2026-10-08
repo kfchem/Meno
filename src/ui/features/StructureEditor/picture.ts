@@ -12,7 +12,8 @@
  * - on Windows, an object for Office to embed, showing that EMF, which a
  *   double-click opens in Meno (made from the record and the EMF by the
  *   app: src-tauri/src/ole.rs);
- * - a PNG at 300 dpi for everything else, the record in a text chunk;
+ * - a PNG for everything else, at the resolution Settings says (Files,
+ *   *Copied pictures*: 600 dpi unless changed), the record in a text chunk;
  * - the same picture as a DIB, for Windows' programs that take only a bitmap.
  *
  * Where Meno serves its objects (Windows, installed), the app hands over the
@@ -32,11 +33,25 @@ import { drawingLayout } from "./fileActions";
 import type { Drawn, EditorState } from "./store/types";
 import { readRecord, recordText } from "./utils/copyPaste";
 import { withSolidsImage } from "./render3d";
+import { useAppSettings } from "../../../lib/settings/appSettings";
 
 /** What marks Meno's record in an EMF's comment, and names it in a PNG. */
 const EMF_MARK = "MENO";
 const PNG_KEY = "meno-structure";
-const PNG_DPI = 300;
+/** The most pixels a copied picture is made of: past it, its resolution is lowered to fit (a canvas has its limits). */
+const MOST_PIXELS = 48_000_000;
+
+/** The resolution copied pictures are made at, as Settings says. */
+const pictureDpi = () => useAppSettings.getState().pictures.dpi;
+
+/**
+ * The resolution a picture `width` by `height` CSS pixels is made at:
+ * `dpi`, or lower where that would come to more than `MOST_PIXELS`.
+ */
+export function pictureDpiFor(width: number, height: number, dpi: number): number {
+  const area = Math.max(width, 1) * Math.max(height, 1) * (dpi / 96) ** 2;
+  return area <= MOST_PIXELS ? dpi : Math.floor(dpi * Math.sqrt(MOST_PIXELS / area));
+}
 
 const utf8 = new TextEncoder();
 
@@ -49,13 +64,13 @@ type Aromatic = Pick<EditorState, "aromaticEnabled" | "aromaticRings">;
  * are in both; molecules in 3D are a bitmap in the EMF, where there is a page
  * to draw one in.
  */
-export async function structurePicture(part: Drawn, aromatic: Aromatic, style: DrawingStyle) {
+export async function structurePicture(part: Drawn, aromatic: Aromatic, style: DrawingStyle, dpi = pictureDpi()) {
   const record = recordText(part);
   const { layout, opts } = drawingLayout(part, aromatic, style);
   // (the layout then draws them so too, for the PNG)
   let solids: SolidsPicture | null = null;
   try {
-    solids = withSolidsImage(part.molecules3d ?? [], layout, currentStyle3D());
+    solids = withSolidsImage(part.molecules3d ?? [], layout, currentStyle3D(), dpi);
   } catch {
     solids = null;
   }
@@ -72,10 +87,11 @@ export async function pictureItems(
   aromatic: Aromatic,
   style: DrawingStyle,
   platformTakes?: Set<Flavor> | null,
+  dpi = pictureDpi(),
 ): Promise<ClipItem[]> {
   const takes = platformTakes === undefined ? await clipboardTakes() : platformTakes;
   const wanted = (f: ClipItem["flavor"]) => !takes || takes.has(f);
-  const { record, layout, opts, emf, widthPt, heightPt } = await structurePicture(part, aromatic, style);
+  const { record, layout, opts, emf, widthPt, heightPt } = await structurePicture(part, aromatic, style, dpi);
   const items: ClipItem[] = [
     { flavor: "gvml", bytes: gvmlPicture(emf, "emf", widthPt, heightPt, "Structure") },
     { flavor: "emf", bytes: emf },
@@ -83,8 +99,8 @@ export async function pictureItems(
     { flavor: "embed", text: record },
   ].filter((i) => wanted(i.flavor as ClipItem["flavor"])) as ClipItem[];
   if (wanted("png") || wanted("dib")) {
-    const raster = await rasterized(createSVG(layout, opts), PNG_DPI / 96, wanted("dib")).catch(() => null);
-    if (raster && wanted("png")) items.push({ flavor: "png", bytes: withText(withDpi(raster.png, PNG_DPI), PNG_KEY, record) });
+    const raster = await rasterized(createSVG(layout, opts), dpi, wanted("dib")).catch(() => null);
+    if (raster && wanted("png")) items.push({ flavor: "png", bytes: withText(withDpi(raster.png, raster.dpi), PNG_KEY, record) });
     if (raster?.dib && wanted("dib")) items.push({ flavor: "dib", bytes: raster.dib });
   }
   return items;
@@ -133,21 +149,24 @@ function fromPng(png: Uint8Array): Drawn | null {
 }
 
 /**
- * An SVG drawn at `scale` pixels to the SVG's pixel: as a PNG, and - `dib`
- * asked for - as a DIB for Windows' bitmap-only programs; null where there
- * is no page to draw it in.
+ * An SVG drawn at `dpi` - its pixels CSS pixels, 96 to the inch - or lower
+ * where it is large (`pictureDpiFor`): as a PNG, and - `dib` asked for - as
+ * a DIB for Windows' bitmap-only programs, and the resolution it was drawn
+ * at; null where there is no page to draw it in.
  */
 async function rasterized(
   svg: string,
-  scale: number,
+  wantedDpi: number,
   dib: boolean,
-): Promise<{ png: Uint8Array; dib: Uint8Array | null } | null> {
+): Promise<{ png: Uint8Array; dib: Uint8Array | null; dpi: number } | null> {
   if (typeof document === "undefined") return null;
   const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   try {
     const img = new Image();
     img.src = url;
     await img.decode();
+    const dpi = pictureDpiFor(img.naturalWidth, img.naturalHeight, wantedDpi);
+    const scale = dpi / 96;
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.ceil(img.naturalWidth * scale));
     canvas.height = Math.max(1, Math.ceil(img.naturalHeight * scale));
@@ -158,7 +177,8 @@ async function rasterized(
     if (!blob) return null;
     return {
       png: new Uint8Array(await blob.arrayBuffer()),
-      dib: dib ? dibOf(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, PNG_DPI) : null,
+      dib: dib ? dibOf(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, dpi) : null,
+      dpi,
     };
   } finally {
     URL.revokeObjectURL(url);

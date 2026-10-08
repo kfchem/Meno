@@ -189,7 +189,6 @@ export default function CalcList3D({
               className={clsx(
                 "px-3 h-6 items-center text-[11px] tabular-nums transition-colors duration-150 ease-meno",
                 on ? "bg-gh-base" : (can(i) || r.atoms) && "hover:bg-gh-base",
-                can(i) && "cursor-pointer",
                 some && !can(i) && "opacity-40",
               )}
               style={columns}
@@ -235,7 +234,8 @@ export default function CalcList3D({
             step={1}
             value={sliderOf(Math.min(ISO_MOST, Math.max(ISO_LEAST, iso)))}
             onChange={(e) => onIso(isoOf(Number(e.target.value)))}
-            className="flex-1 min-w-24 h-2 rounded-full appearance-none cursor-pointer bg-white/60 border border-gh-line"
+            data-cursor="sideways"
+            className="flex-1 min-w-24 h-2 rounded-full appearance-none bg-white/60 border border-gh-line"
           />
           <span className="w-12 text-right tabular-nums text-gh-black">{isoText(iso)}</span>
         </label>
