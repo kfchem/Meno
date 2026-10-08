@@ -176,7 +176,11 @@ was; Escape, a press elsewhere or a turn of the wheel closes it. It opens
 QUICK_ADD_MS (0.28 s) after the double-click, a third click not having
 come: a quicker third click draws a chain instead, and a slower one still
 closes it and draws the chain. A double-click on an atom still draws one
-bond; on an arrow, a "+" or text, none of this (`Selection2D`, `QuickAdd`). On a trackpad a
+bond; on an arrow, a "+" or text, none of this (`Selection2D`, `QuickAdd`).
+After a thin rule, one more button - *Calculations* - opens below the
+row to the kinds of step a workflow can have (WORKFLOWS.md, *A step: from
+Quick Add*); a wire let go on empty space opens Quick Add at those alone.
+On a trackpad a
 double-tap and drag does the same as a double-click and drag.
 A box or a lasso drawn with Ctrl (⌘) held adds what it takes to the
 selection; drawn without, it replaces it.
