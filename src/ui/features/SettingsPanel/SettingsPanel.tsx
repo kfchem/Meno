@@ -9,6 +9,7 @@ import Style3DEditor from "../StyleEditor/Style3DEditor";
 import AbbreviationSettings from "./AbbreviationSettings";
 import ChemistrySettings from "./ChemistrySettings";
 import FileSettings from "./FileSettings";
+import CalculationSettings from "./CalculationSettings";
 import PluginSettings from "./PluginSettings";
 import RoleChoices from "./RoleChoices";
 import { useSettingsSection, type SettingsSection } from "./section";
@@ -18,6 +19,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
   { id: "style3d", name: "Molecules in 3D" },
   { id: "chemistry", name: "Chemistry" },
   { id: "files", name: "Files" },
+  { id: "calculations", name: "Calculations" },
   { id: "plugins", name: "Plugins" },
   { id: "abbreviations", name: "Dictionary" },
   { id: "network", name: "Network" },
@@ -27,7 +29,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
  * The application's settings: the drawing style every structure is drawn
  * in unless its document has its own, how molecules in 3D look and turn,
  * what is pointed out on a structure, who reads and writes each kind
- * of file, the plugins, what the labels Meno reads stand for, and what Meno
+ * of file, who does each kind of step in a workflow, the plugins, what the labels Meno reads stand for, and what Meno
  * may do on the network.
  */
 export default function SettingsPanel() {
@@ -128,6 +130,15 @@ export default function SettingsPanel() {
               what they find added beside it.
             </p>
             <FileSettings />
+          </section>
+        ) : section === "calculations" ? (
+          <section className="mt-6 max-w-4xl">
+            <h2 className="text-base font-semibold text-gh-black">Calculations</h2>
+            <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
+              The steps of a workflow on the page, and who does each. A new step starts with these options; the
+              options last chosen in a step become them.
+            </p>
+            <CalculationSettings />
           </section>
         ) : section === "plugins" ? (
           <section className="mt-6 max-w-4xl">
