@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { openedAs, OPENABLE } from "./openFile";
+import { openedAs, openedTexts, OPENABLE, textsOf } from "./openFile";
 import { registerKinds } from "../../lib/io/kinds";
 import { MANIFESTS } from "../../lib/plugins/known";
 
@@ -32,15 +32,31 @@ describe("openedAs", () => {
     expect(openedAs("work.meno", "{}").kind).toBe("structure");
   });
 
-  it("opens text in the text editor, and JSON laid out", () => {
-    expect(openedAs("run.py", "print(1)\n")).toMatchObject({ kind: "text", data: { text: "print(1)\n", language: "py" } });
-    expect(openedAs("a.json", '{"a":1}')).toMatchObject({ kind: "text", data: { text: '{\n  "a": 1\n}', language: "json" } });
-    expect(openedAs("notes.abc", "plain words")).toMatchObject({ kind: "text", data: { text: "plain words", language: "abc" } });
+  it("opens text into a workspace's column, as it is - on a canvas of its own where none takes it", () => {
+    expect(openedAs("run.py", "print(1)\n", "/w/run.py")).toEqual({
+      kind: "structure",
+      label: "run.py",
+      data: { texts: [{ name: "run.py", text: "print(1)\n", path: "/w/run.py" }], filename: "run.py", path: "/w/run.py" },
+    });
+    // (JSON too: its words kept as they are, to be written back as they were)
+    expect(textsOf(openedAs("a.json", '{"a":1}'))).toEqual([{ name: "a.json", text: '{"a":1}' }]);
+    expect(textsOf(openedAs("notes.abc", "plain words"))).toEqual([{ name: "notes.abc", text: "plain words" }]);
+    expect(textsOf(openedAs("ethanol.mol", MOL))).toBeUndefined();
+  });
+
+  it("opens texts together on one canvas, named for the first - a new one, with no name, as Untitled", () => {
+    const opened = openedTexts([{ name: "a.txt", text: "a" }, { name: "b.txt", text: "b" }]);
+    expect(opened).toMatchObject({ kind: "structure", label: "a.txt", data: { filename: "a.txt" } });
+    expect(textsOf(opened)).toHaveLength(2);
+    expect(openedTexts([{ name: "", text: "" }])).toEqual({ kind: "structure", label: "Untitled.txt", data: { texts: [{ name: "", text: "" }] } });
   });
 
   it("offers chemical files, calculations' output - of the plugins on offer, added or not - and text to Open, and no kind nothing reads", () => {
     for (const ext of [".meno", ".mol", ".sdf", ".rxn", ".xyz", ".out", ".log", ".fchk", ".cube", ".txt", ".py"]) expect(OPENABLE).toContain(ext);
     expect(OPENABLE).toContain(".pdb");
+    // (what a plugin on offer writes, a calculation's input, as text to change)
+    expect(OPENABLE).toEqual(expect.arrayContaining([".gjf", ".com"]));
+    expect(textsOf(openedAs("job.gjf", "# B3LYP/6-31G(d) Opt\n"))).toHaveLength(1);
     expect(OPENABLE).not.toContain(".ket");
     // (each once)
     expect(new Set(OPENABLE).size).toBe(OPENABLE.length);
@@ -53,11 +69,11 @@ describe("openedAs", () => {
     it("opens a calculation's output on a structure canvas, a log of something else as text", () => {
       expect(openedAs("job.out", "\n                                 * O   R   C   A *\n")).toMatchObject({ kind: "structure", label: "job.out" });
       expect(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n")).toMatchObject({ kind: "structure" });
-      expect(openedAs("build.log", "compiled in 3 s\n")).toMatchObject({ kind: "text" });
+      expect(textsOf(openedAs("build.log", "compiled in 3 s\n"))).toHaveLength(1);
     });
   });
 
   it("opens a calculation's output as text where no plugin added reads it: Meno knows no program", () => {
-    expect(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n")).toMatchObject({ kind: "text" });
+    expect(textsOf(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n"))).toHaveLength(1);
   });
 });

@@ -539,7 +539,8 @@ traced from reference drawings.
   Save As write the workspace (`.meno`) alone; MOL, SDF, RXN and SVG are
   written by Export; and closing offers Save beside Close without saving.
 - Open (Ctrl/Cmd+O, or Meno's menu) puts a file in a tab of its own - or
-  in place of a blank canvas - named for the file. The canvas is saved
+  in place of a blank canvas - named for the file; text goes into the
+  column of the workspace in front (docs/WORKSPACE.md, *Texts*). The canvas is saved
   nowhere then: Save asks where, suggesting that name. A save names the
   tab for its file too. A canvas opened from Word or PowerPoint keeps the
   document's name either way.

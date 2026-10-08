@@ -133,9 +133,10 @@ must not need one undo per frame), and the stack is capped.
 `subscribe` matches React's `useSyncExternalStore`; nothing in `lib/doc`
 imports React.
 
-Adoption is incremental. The text view and the structure canvas, with its
-molecules in 3D, are on documents; the workflow editor still keeps its
-content in component state, and it is still lost when its tab closes.
+Adoption is incremental. The structure canvas, with its molecules in 3D
+and the texts in its column, is on a document; the workflow editor still
+keeps its content in component state, and it is still lost when its tab
+closes.
 
 ## How things move
 
@@ -713,7 +714,7 @@ that every kind of these is in this table, by its id, and no other.
 | Molden file | `molden` | `.molden`, `.mld` | `[Molden Format]`, as PySCF's manifest brings it | PySCF (plugin, pixi) | never | a molecule in 3D, its orbitals and densities promises |
 | Gaussian input | `gaussian-input` | `.gjf`, `.com` | - | never | Export, by the Gaussian input plugin (uv, Python alone) | - |
 | KET | - | `.ket` | - | not read | never | Open does not offer it; one dropped says "not supported yet" |
-| Text | - | anything not told otherwise | its name, or nothing else telling it | the text editor | the text editor | a text tab |
+| Text | - | anything not told otherwise | its name, or nothing else telling it; dropped, no NUL in its start (`opensAsText`) | the workspace, as it is | Export, from the column of texts (`TextColumn.tsx`) | a text the workspace holds, in its column; saved in `.meno` |
 
 ## Verification commands
 

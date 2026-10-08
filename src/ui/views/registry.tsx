@@ -1,10 +1,4 @@
 import type { JSX } from "react";
-import TextEditor from "../features/TextEditor";
-import TextDocumentEditor from "../features/TextEditor/TextDocumentEditor";
-import {
-  createTextDocument,
-  textToTabData,
-} from "../features/TextEditor/document";
 import type { DocumentStore } from "../../lib/doc";
 import PyConsole from "../features/PythonConsole";
 import GraphEditor from "../features/WorkflowEditor";
@@ -71,22 +65,6 @@ export const viewRegistry: Record<string, ViewEntry> = {
     ),
     create: (label) => create(label, "2d", {}),
   },
-  text: {
-    kind: "text",
-    createDocument: createTextDocument,
-    toTabData: (text: string) => textToTabData(text),
-    Component: ({ content, dispatchPatchData, document }) =>
-      document ? (
-        <TextDocumentEditor document={document as DocumentStore<string>} />
-      ) : (
-        // Fallback for a tab opened before documents existed.
-        <TextEditor
-          value={(content.data as any)?.text ?? ""}
-          onChange={(v: string) => dispatchPatchData({ text: v })}
-        />
-      ),
-    create: (label) => create(label, "text", { text: "" }),
-  },
   settings: {
     kind: "settings",
     Component: () => <SettingsPanel />,
@@ -110,7 +88,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
   },
   structure: {
     kind: "structure",
-    createDocument: () => createStructureDocument(),
+    createDocument: (data) => createStructureDocument(data),
     Component: ({ tabId, content, active, document, renameTab }) => (
       <StructureCanvas
         tabId={tabId}
