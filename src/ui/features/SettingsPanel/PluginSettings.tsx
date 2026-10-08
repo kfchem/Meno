@@ -4,7 +4,7 @@ import { addedReaders, addPlugin, removePlugin, useReaders } from "../../../lib/
 import { ROLES } from "../../../lib/plugins/roles";
 import { forThisSystem, systemHere, SYSTEM_NAMES } from "../../../lib/plugins/here";
 import { locate, lookForAll, programKey, useInstalled } from "../../../lib/plugins/installed";
-import type { InstalledDecl } from "../../../lib/plugins/manifest";
+import { SYSTEMS, type InstalledDecl } from "../../../lib/plugins/manifest";
 import { KINDS } from "../StructureEditor/workflow/kinds";
 import { kindById } from "../../../lib/io/kinds";
 
@@ -92,6 +92,12 @@ function Plugin({ plugin: p, state, problem }: { plugin: PythonPlugin; state?: s
   );
 }
 
+/** The systems Meno runs a program installed separately on, by name: "macOS and Linux". */
+const runsOn = (decl: InstalledDecl) =>
+  SYSTEMS.filter((s) => decl.files[s])
+    .map((s) => SYSTEM_NAMES[s])
+    .join(" and ");
+
 /**
  * A program installed separately that a plugin's steps run - ORCA,
  * Gaussian - never downloaded by Meno: where it is, found where the system
@@ -111,7 +117,7 @@ function Installed({ plugin, decl }: { plugin: string; decl: InstalledDecl }) {
       <div className="flex items-center gap-2 min-w-0">
         <span className="shrink-0 text-gh-gray">{decl.label}, installed separately:</span>
         <span key={where ?? String(where)} className={`meno-fade-in min-w-0 truncate ${where ? "font-mono text-gh-black" : "text-gh-gray"}`} title={where ?? undefined}>
-          {!made ? `not made for ${SYSTEM_NAMES[here!]}` : where === undefined ? "Looking…" : (where ?? "Not found")}
+          {!made ? `run on ${runsOn(decl)} only` : where === undefined ? "Looking…" : (where ?? "Not found")}
         </span>
         {made && (
           <button onClick={pick} className="h-6 shrink-0 rounded-md border border-gh-line bg-white px-2 text-xs text-gh-black hover:bg-gh-base">
