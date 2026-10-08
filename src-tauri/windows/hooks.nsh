@@ -15,6 +15,13 @@
   Delete "$INSTDIR\resources\py\uv.exe"
   Delete "$INSTDIR\resources\py\requirements.chem.lock"
   Delete "$INSTDIR\resources\workers\chem_worker.py"
+  ; 0.1.7's Gaussian input plugin, the Gaussian interface since 0.1.8
+  ; (resources\plugins\gaussian): its folder goes once it is empty.
+  Delete "$INSTDIR\resources\plugins\gaussian-input\manifest.json"
+  Delete "$INSTDIR\resources\plugins\gaussian-input\requirements.in"
+  Delete "$INSTDIR\resources\plugins\gaussian-input\requirements.lock"
+  Delete "$INSTDIR\resources\plugins\gaussian-input\worker.py"
+  RMDir "$INSTDIR\resources\plugins\gaussian-input"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
