@@ -912,12 +912,12 @@ function StructureCanvasContent({
             within={quickAdd.within}
             steps={offeredSteps(store.getState(), quickAdd.wire)}
             wired={!!quickAdd.wire}
-            onStep={(kind) => {
+            onStep={(kind, by) => {
               const st = store.getState();
               const { at, wire } = quickAdd;
               st.setQuickAdd(null);
               // (its port that takes where Quick Add was opened - where the wire was let go)
-              const id = st.addStep(kind, at.x, at.y + PORT_DOWN);
+              const id = st.addStep(kind, by, at.x, at.y + PORT_DOWN);
               if (wire) st.connect(wire, id);
             }}
             onClose={closeQuickAdd}

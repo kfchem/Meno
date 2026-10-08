@@ -80,9 +80,8 @@ function editor() {
   connectStoreToDocument(store, doc);
   const st = () => store.getState();
   const set = st().addSet({ x0: -3, y0: -3, x1: 3, y1: 3 });
-  const step = st().addStep("optimise", 10, 0);
+  const step = st().addStep("optimise", "xtb", 10, 0);
   st().connect({ set }, step);
-  st().updateStep(step, { by: "xtb" });
   doc.markSaved();
   return { doc, st, step };
 }
@@ -112,7 +111,7 @@ describe("a step that runs a plugin's program", () => {
     const running = st().steps.find((s) => s.id === step)!.running!;
     expect(running.jobs).toEqual([{ id: idOf(1), entries: [0], reads: ["xtbopt.log"] }]);
     // (to be saved - and read back, so that a workspace opened again picks it up - but nothing to undo)
-    expect(doc.history()).toMatchObject({ dirty: true, undoLabel: "change who does it" });
+    expect(doc.history()).toMatchObject({ dirty: true, undoLabel: "wire" });
     expect(readWorkflow({ sets: st().sets, steps: st().steps, wires: st().wires })?.steps[0].running).toEqual(running);
 
     // its job running: the card says so, and what its log says last
@@ -164,6 +163,18 @@ describe("a step that runs a plugin's program", () => {
     await st().lookAtJobs();
     await ran;
     expect(st().steps.find((s) => s.id === step)!.ran).toMatchObject({ ok: false, said: "Some atoms are very close" });
+  });
+
+  it("is its plugin's: its calculation changed to another the plugin does, with the options it takes for that one, those they share kept - never to one it does not", () => {
+    const { st, step } = editor();
+    st().updateStep(step, { options: { method: "gfn1", solvent: "water", level: "tight" } });
+    st().updateStep(step, { kind: "frequencies" });
+    const s = st().steps.find((x) => x.id === step)!;
+    expect(s.kind).toBe("frequencies");
+    expect(s.by).toBe("xtb");
+    expect(s.options).toEqual({ method: "gfn1", solvent: "water" });
+    st().updateStep(step, { kind: "duplicates" });
+    expect(st().steps.find((x) => x.id === step)!.kind).toBe("frequencies");
   });
 
   it("asks before a running step is deleted - and, deleted, stops its jobs and takes their files away", async () => {

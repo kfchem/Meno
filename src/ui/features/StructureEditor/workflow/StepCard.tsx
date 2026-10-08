@@ -4,10 +4,9 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as Reac
 import OptionsForm from "../../../options/OptionsForm";
 import type { Option, OptionValues } from "../../../../lib/options";
 import type { WorkflowStep } from "../store/types";
-import type { Doer } from "./doers";
 import type { StepState } from "./flow";
 import { StepGlyph } from "./icons";
-import type { KindInfo } from "./kinds";
+import type { KindInfo, StepKind } from "./kinds";
 import { CARD_W, PORT_DOWN, PX } from "./look";
 import { clock } from "./programs";
 
@@ -101,8 +100,10 @@ function stateLine(state: StepState, said: string | undefined, run: RunView | un
 export type StepCardProps = {
   step: WorkflowStep;
   info: KindInfo;
-  /** Who does it and how, in a line: "Meno · 3 kcal/mol". */
+  /** Who does it - a plugin, or Meno - by name: its title. */
   who: string;
+  /** How it does it, in a line: its options' values. */
+  how: string;
   state: StepState;
   /** Its words too small to read at this zoom: its icon and its state's icon alone. */
   compact: boolean;
@@ -113,10 +114,10 @@ export type StepCardProps = {
   /** The options it takes, as who does it declares them; and their values. */
   optionList: readonly Option[];
   options: OptionValues;
-  doers: Doer[];
-  by: string;
+  /** The kinds of step who does it fills: another of them can be chosen in it. */
+  kinds: readonly { kind: StepKind; name: string }[];
   onOptions: (values: OptionValues) => void;
-  onBy: (id: string) => void;
+  onKind: (kind: StepKind) => void;
   onCardDown: (e: ReactPointerEvent) => void;
   onTakeDown: (e: ReactPointerEvent) => void;
   onGiveDown: (e: ReactPointerEvent) => void;
@@ -126,10 +127,11 @@ export type StepCardProps = {
 
 /**
  * A step's card (docs/WORKFLOWS.md, *What is on the page*), drawn as
- * Meno's cards are: its icon and what it does; who does it and how; a
- * rule; and what state it is in, in words and an icon. It takes on its
- * left edge and gives on its right. Clicked, it opens in place to its
- * options.
+ * Meno's cards are: who does it - a plugin, or Meno - with the icon of
+ * what it does; what it does and how; a rule; and what state it is in, in
+ * words and an icon. It takes on its left edge and gives on its right.
+ * Clicked, it opens in place to what it does - another of the kinds who
+ * does it fills - and its options.
  */
 export default function StepCard(p: StepCardProps) {
   const line = stateLine(p.state, p.step.ran?.said, p.run, Date.now());
@@ -145,7 +147,7 @@ export default function StepCard(p: StepCardProps) {
     >
       <div
         role="group"
-        aria-label={`Step: ${p.info.name}`}
+        aria-label={`Step: ${p.who}, ${p.info.name}`}
         onPointerDown={p.onCardDown}
         className="rounded-xl border-gh-line bg-white shadow-sm"
         style={{ borderWidth: HAIR, borderStyle: "solid", cursor: "default" }}
@@ -161,9 +163,9 @@ export default function StepCard(p: StepCardProps) {
               <span className="text-gh-gray">
                 <StepGlyph icon={p.info.icon} />
               </span>
-              <span className="text-[13px] font-medium leading-5 truncate">{p.info.name}</span>
+              <span className="text-[13px] font-medium leading-5 truncate">{p.who}</span>
             </div>
-            <div className="pl-6 text-[11px] leading-4 text-gh-gray truncate">{p.who}</div>
+            <div className="pl-6 text-[11px] leading-4 text-gh-gray truncate">{[p.info.name, p.how].filter(Boolean).join(" \u00b7 ")}</div>
             <div className="mt-2 mb-1.5 border-gh-line" style={{ borderTopWidth: HAIR, borderTopStyle: "solid" }} />
             <div className={clsx("flex items-center gap-1.5 text-[11px] leading-4 transition-colors duration-200 ease-meno", line.tone)}>
               {line.Icon && <line.Icon className={clsx("h-3.5 w-3.5 shrink-0", line.turning && "animate-spin motion-reduce:animate-none [animation-duration:2s]")} aria-hidden />}
@@ -180,30 +182,20 @@ export default function StepCard(p: StepCardProps) {
         )}
         {p.open && !p.compact && (
           <div className="border-gh-line px-3 py-2.5" style={{ borderTopWidth: HAIR, borderTopStyle: "solid" }} onPointerDown={(e) => e.stopPropagation()}>
+            {p.kinds.length > 1 && (
+              <div className="mb-3">
+                <OptionsForm
+                  options={[{ id: "kind", label: "Calculation", type: "choice", choices: p.kinds.map((k) => ({ value: k.kind, label: k.name })), default: p.step.kind }]}
+                  values={{ kind: p.step.kind }}
+                  onChange={(v) => p.onKind(v.kind as StepKind)}
+                />
+              </div>
+            )}
             {p.optionList.length ? (
               <OptionsForm options={p.optionList} values={p.options} onChange={p.onOptions} />
             ) : (
               <div className="text-xs text-gh-gray">No options</div>
             )}
-            <div className="mt-3 flex items-center gap-2 text-xs text-gh-gray">
-              <span>Done by</span>
-              {p.doers.length > 1 ? (
-                <select
-                  aria-label="Done by"
-                  value={p.by}
-                  onChange={(e) => p.onBy(e.target.value)}
-                  className="h-7 rounded-md border border-gh-line bg-white px-2 text-xs text-gh-black"
-                >
-                  {p.doers.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="text-gh-black">{p.doers[0]?.name ?? "Nothing added"}</span>
-              )}
-            </div>
           </div>
         )}
       </div>

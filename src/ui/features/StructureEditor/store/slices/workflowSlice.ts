@@ -6,7 +6,7 @@ import type { StructureDocument } from "../../document";
 import { currentStyle3D } from "../../style3d";
 import { lookOf, poseOf, seenBounds, solidOf } from "../../utils/molecule3d";
 import type { Style3D } from "../../../../../lib/chem/style3d";
-import { defaultDoer, optionsFor, stepOptions } from "../../workflow/doers";
+import { byOf, kindsOf, optionsFor, stepOptions } from "../../workflow/doers";
 import type { StepKind } from "../../workflow/kinds";
 import * as wf from "../../workflow/model";
 import type { EditorState, Molecule3D, WorkflowView } from "../types";
@@ -29,8 +29,8 @@ function extentOf(m: Molecule3D, style: Style3D): { w: number; h: number } {
   return { w, h };
 }
 
-/** The role a kind of step's options are remembered by (lib/settings/appSettings `options`). */
-export const stepRole = (kind: StepKind) => `step:${kind}`;
+/** The role a kind of step's options are remembered by, as who does it takes them (lib/settings/appSettings `options`). */
+export const stepRole = (kind: StepKind, by: string) => `step:${by}:${kind}`;
 
 /**
  * A workflow on the page (docs/WORKFLOWS.md): its sets, steps and wires,
@@ -59,19 +59,29 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
           chosenSet: prev.chosenSet === id ? null : prev.chosenSet,
         }));
     },
-    addStep: (kind: StepKind, x: number, y: number) => {
+    addStep: (kind: StepKind, by: string, x: number, y: number) => {
       const id = doc.getState().nextWorkflowId ?? 1;
-      // (with the options last chosen for its kind, as who does it by default takes them)
-      const options = valuesOf(optionsFor(kind, defaultDoer(kind)?.id ?? ""), useAppSettings.getState().options[stepRole(kind)]);
-      doc.edit("add step", (d) => wf.addStep(d, kind, x, y, options));
+      // (with the options last chosen for its kind, done by it)
+      const options = valuesOf(optionsFor(kind, by), useAppSettings.getState().options[stepRole(kind, by)]);
+      doc.edit("add step", (d) => wf.addStep(d, kind, x, y, options, by));
       return id;
     },
     moveStep: (id: number, x: number, y: number, gesture?: string) => doc.edit("move step", (d) => wf.moveStep(d, id, x, y), coalesce("step-move", id, gesture)),
-    updateStep: (id: number, patch: { options?: Record<string, string | number | boolean>; by?: string | null }) => {
+    updateStep: (id: number, patch: { options?: Record<string, string | number | boolean>; kind?: StepKind }) => {
       const step = doc.getState().steps?.find((s) => s.id === id);
       if (!step) return;
-      doc.edit(patch.options ? "change options" : "change who does it", (d) => wf.updateStep(d, id, patch));
-      if (patch.options) useAppSettings.getState().rememberOptions(stepRole(step.kind), rememberable(stepOptions(step), patch.options));
+      const by = byOf(step);
+      if (patch.kind && patch.kind !== step.kind) {
+        // (another kind its plugin fills: with the options last chosen for that one - those it shares with the step's, as the step has them)
+        const kind = patch.kind;
+        if (!kindsOf(by).includes(kind)) return;
+        const options = valuesOf(optionsFor(kind, by), { ...useAppSettings.getState().options[stepRole(kind, by)], ...step.options });
+        doc.edit("change calculation", (d) => wf.updateStep(d, id, { kind, options }));
+        return;
+      }
+      if (!patch.options) return;
+      doc.edit("change options", (d) => wf.updateStep(d, id, { options: patch.options }));
+      useAppSettings.getState().rememberOptions(stepRole(step.kind, by), rememberable(stepOptions(step), patch.options));
     },
     removeStep: (id: number, asked = false) => {
       const step = doc.getState().steps?.find((s) => s.id === id);

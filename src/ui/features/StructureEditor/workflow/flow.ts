@@ -95,7 +95,7 @@ function hash(text: string, h = 0x811c9dc5): number {
 export function inputKey(doc: Flow, step: WorkflowStep, by: string): string {
   const input = inputOf(doc, step.id);
   if (!input) return "";
-  let h = hash(`${input.holds}|${by}|${JSON.stringify(optionsOf(optionsFor(step.kind, by), step.options))}`);
+  let h = hash(`${input.holds}|${step.kind}|${by}|${JSON.stringify(optionsOf(optionsFor(step.kind, by), step.options))}`);
   for (const m of input.molecules) {
     h = hash(m.atoms.map((a) => `${a.el}${a.x.toFixed(5)},${a.y.toFixed(5)},${a.z.toFixed(5)}`).join(";"), h);
     h = hash(`${m.bonds.map((b) => `${b.a1}-${b.a2}:${b.order}`).join(";")}|${(m.frames ?? []).map((f) => f.map((v) => v.toFixed(5)).join(",")).join(";")}`, h);

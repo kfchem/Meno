@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { useReaders } from "../../../../lib/calc/workers";
 import { addMolecule3d, emptyStructureDocument, type StructureDocument } from "../document";
 import type { Molecule3D } from "../store/types";
 import { setMembers, countOf, setEntries, holdsOf } from "./entries";
@@ -249,16 +250,29 @@ describe("saving", () => {
 });
 
 describe("Quick Add's calculations", () => {
-  it("are the kinds something added does, As conformers only from a compound set's wire", () => {
+  const offered = (...a: Parameters<typeof offeredSteps>) => offeredSteps(...a).map((g) => [g.name, g.steps.map((k) => k.kind)]);
+  afterEach(() => useReaders.setState({ state: {}, problem: {} }));
+
+  it("are by who does them - each plugin added, then Meno - each with the kinds it fills; As conformers only from a compound set's wire", () => {
     let doc = addStep(page(), "as-conformers", 5, 0);
     doc = connect(doc, { set: 1 }, 2);
-    // (no plugin added runs a program: Meno's own steps on entries)
-    expect(offeredSteps(doc).map((k) => k.kind)).toEqual(["energy-window", "duplicates", "populations"]);
-    expect(offeredSteps(doc).every((k) => k.who === "Meno")).toBe(true);
+    // (no plugin added: Meno's own steps on entries)
+    expect(offered(doc)).toEqual([["Meno", ["energy-window", "duplicates", "populations"]]]);
     // a compound set's wire: what takes it, then the conversion
-    expect(offeredSteps(doc, { set: 1 }).map((k) => k.kind)).toEqual(["duplicates", "as-conformers"]);
+    expect(offered(doc, { set: 1 })).toEqual([["Meno", ["duplicates", "as-conformers"]]]);
     // a conformer set's
-    expect(offeredSteps(doc, { step: 2 }).map((k) => k.kind)).toEqual(["energy-window", "duplicates", "populations"]);
+    expect(offered(doc, { step: 2 })).toEqual([["Meno", ["energy-window", "duplicates", "populations"]]]);
+    // plugins added: theirs first, each under its name - and only those that take what a wire carries
+    useReaders.setState({ state: { rdkit: "added", xtb: "added" }, problem: {} });
+    expect(offered(doc)).toEqual([
+      ["RDKit", ["structure-3d"]],
+      ["xTB", ["optimise", "energy", "frequencies"]],
+      ["Meno", ["energy-window", "duplicates", "populations"]],
+    ]);
+    expect(offered(doc, { set: 1 })).toEqual([
+      ["xTB", ["optimise", "energy", "frequencies"]],
+      ["Meno", ["duplicates", "as-conformers"]],
+    ]);
   });
 });
 

@@ -18,7 +18,7 @@ import { useReaders } from "../../../../lib/calc/workers";
 import { finished } from "../../../../lib/jobs";
 import { setList } from "../workflow/list";
 import { CARD_W, HTML_DISTANCE, PORT_DOWN, PX } from "../workflow/look";
-import { byOf, doerOf, doersOf, stepOptions } from "../workflow/doers";
+import { byOf, doerOf, kindsOf, stepOptions } from "../workflow/doers";
 
 type Pt = { x: number; y: number };
 
@@ -595,7 +595,8 @@ export default function Workflow2D() {
                 <StepCard
                   step={s}
                   info={info}
-                  who={[doer?.name ?? "Nothing added does this", how].filter(Boolean).join(" · ")}
+                  who={doer?.name ?? "Nothing added"}
+                  how={how}
                   state={run?.waiting ? "waiting" : (states.get(s.id) ?? "ready")}
                   run={run?.view}
                   compact={compact}
@@ -603,10 +604,9 @@ export default function Workflow2D() {
                   ports={{ take: portLook("take", s.id), give: portLook("give", { step: s.id }) }}
                   optionList={takes}
                   options={optionsOf(takes, s.options)}
-                  doers={doersOf(s.kind)}
-                  by={byOf(s)}
+                  kinds={kindsOf(byOf(s)).map((k) => ({ kind: k, name: kindInfo(k).name }))}
                   onOptions={(values) => store.getState().updateStep(s.id, { options: values })}
-                  onBy={(id) => store.getState().updateStep(s.id, { by: id })}
+                  onKind={(kind) => store.getState().updateStep(s.id, { kind })}
                   onCardDown={(e) => dragStep(e, s)}
                   onTakeDown={(e) => drawInto(e, s.id)}
                   onGiveDown={(e) => drawFrom(e, { step: s.id })}

@@ -65,6 +65,14 @@ rearrange and run again, with its results beside the molecule it is about.
     show what is where, not how it looks. The look follows Meno's own
     design (*How it looks*); the figures' colours, transparency, line
     widths and icons are not to be taken from them.
+16. **A step is a plugin's, and the kind of calculation is in it** (the
+    maintainer, 2026-10-08): at the top is the plugin - xTB - and under it
+    the kinds of calculation that software does. Quick Add's
+    *Calculations* lists the plugins added, each with its kinds; a step's
+    card is titled with its plugin, its calculation chosen in it among
+    those the plugin does. Meno stands among them, for the steps it does
+    itself. This replaces choosing who does a kind in Settings (12): RDKit's
+    *Duplicates* and Meno's are two steps to choose between.
 
 No question is left open; the whole is for the maintainer to read and
 agree before step 1 is built.
@@ -108,8 +116,8 @@ in 3D, arrows, text - and is made of three things:
   many entries it holds (*1 structure*, *81 conformers*, *23 of 81*). It
   gives from a port on its right edge, half-way down; a result set takes
   on its left edge too.
-- **Steps.** A small card: an icon and what the step does (*Optimise*);
-  below it, who does it and how (*xTB · GFN2-xTB*); a rule; and what it is
+- **Steps.** A small card: who does it (*xTB*), with the icon of what it
+  does; below it, what it does and how (*Optimise · GFN2-xTB*); a rule; and what it is
   doing (*Ready*, *Running 0:42*). It takes on its left edge and gives on
   its right.
 - **Wires.** Curves from port to port, leaving and arriving level; while
@@ -210,8 +218,8 @@ before it is built.
 
 ### Who does a step
 
-As *Files* chooses who reads each kind of file (FILE-IO.md, decided
-again for steps on 2026-10-08):
+A step is the step of what does it - a plugin added, or Meno - and of
+one of the kinds of calculation it does (decided: 16):
 
 - **Meno does the simple steps itself** - *Energy window*,
   *Populations*, *As conformers*, and *Duplicates* in a plain way (the
@@ -219,13 +227,14 @@ again for steps on 2026-10-08):
   does not see symmetric atoms swapped, so two copies of a structure
   numbered differently can both be kept). Meno's part is there from the
   start, with nothing to add.
-- **A plugin added may do any of them instead**: RDKit does *Duplicates*
+- **A plugin added may do any of them as well**: RDKit does *Duplicates*
   with its best RMSD over the molecule's symmetries; ACCeL, its second
-  version, may come as a plugin that does them all as ACCeL does.
-- **The chemist chooses**, in Settings, *Calculations* - a table like
-  *Files*: each kind of step, who does it (*Meno*, or a plugin added),
-  and its options' defaults - and in the step itself, which says who
-  does it on its card (*Duplicates · Meno*, *Duplicates · RDKit*).
+  version, may come as a plugin that does them all as ACCeL does. Each
+  is a step of its own to choose: *RDKit*'s *Duplicates*, or *Meno*'s.
+- **The chemist chooses** in Quick Add - a plugin, then one of its
+  kinds - and may change a step's calculation in it, to another its
+  plugin does. Settings, *Calculations*, lists the plugins added and
+  Meno, each with its kinds and their options' defaults.
 - **Steps that run a program** are done by plugins only: Meno runs no
   program of its own.
 
@@ -236,21 +245,17 @@ again for steps on 2026-10-08):
 - **Quick Add keeps its four** - bond, text, reaction arrow, "+" - and
   gains **one button**: *Calculations*, a small graph of two joined
   sets, after a thin rule.
-- **Pressed, it opens** a panel below the row, of the kinds of step,
-  each an icon, named on hover with who does it (*Optimise · xTB*):
-  first those that run a program, then those that work on entries.
-  *As conformers* is not among them: it is reached from a compound set's
-  port, its wire let go on empty space, at the end of the panel - a
+- **Pressed, it opens** a panel below the row, a line for each plugin
+  added that does steps - those that run a program first - then Meno:
+  its name, and the kinds of calculation it does, each an icon, named on
+  hover (decided: 16). *As conformers* is not among Meno's: it is
+  reached from a compound set's port, its wire let go on empty space - a
   conversion taken on purpose.
-- **Only what something added does is there.** With no plugin that runs
-  a program added, the panel shows the steps Meno does itself; a kind
-  nothing does is not shown, and nothing is shown of plugins not added.
+- **Only what is added is there.** With no plugin added, the panel shows
+  Meno's line alone; nothing is shown of plugins not added.
 - **A wire let go on empty space** opens Quick Add already at
   *Calculations*, showing only the kinds that take what the wire
-  carries.
-- **Who does a kind** where more than one can is chosen in the step
-  (*Its options*); Settings, *Calculations*, says who by default (*Who
-  does a step*).
+  carries - and a plugin only where it does one of them.
 
 ### Wires
 
@@ -280,7 +285,9 @@ frames chip opens to its slider:
   (3 kcal/mol);
 - the charge and the unpaired electrons, read from each entry as Export
   reads them, and changeable;
-- who does it, where more than one can (*Who does a step*);
+- what it does: another of the kinds of calculation its plugin does,
+  where it does more than one (*Who does a step*) - the options the two
+  share kept as they were;
 - *Show log* and *Show files* once it has run.
 
 Another click on its title, Escape, or a press elsewhere closes it. The
@@ -704,6 +711,13 @@ Decided while building it, for the maintainer to confirm:
 - **xTB's options**: the method (GFN2-xTB, GFN1-xTB, GFN-FF), a solvent -
   ALPB, any of the 24 its documentation gives for all three methods - and,
   optimising, how far it converges (crude to extreme, normal by default).
+
+Changed after review (the maintainer, 2026-10-08; decided: 16): a step
+is its plugin's. Quick Add lists the plugins added, then Meno, each with
+its kinds; a step's card is titled with its plugin and says its
+calculation under it; opened, it offers the plugin's other kinds;
+Settings, *Calculations*, is by plugin, and no longer chooses who does a
+kind. A step's options are remembered by plugin and kind.
 
 Not yet, and where it comes:
 

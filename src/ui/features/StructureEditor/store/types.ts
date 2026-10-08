@@ -184,7 +184,7 @@ export type StepJob = { id: string; entries: number[]; reads: string[] };
  * them up.
  */
 export type StepRunning = { at: number; input: string; options: OptionValues; jobs: StepJob[] };
-/** A step on the page: its kind, where its card's top left stands, who does it (unset: as Settings says), its options, what it last did - and its run, while its jobs wait or run. */
+/** A step on the page: its kind, where its card's top left stands, who does it - Meno, or a plugin, by id - its options, what it last did - and its run, while its jobs wait or run. */
 export type WorkflowStep = { id: number; kind: StepKind; x: number; y: number; by?: string; options?: OptionValues; ran?: StepRan; running?: StepRunning };
 /** Where a wire starts: a set, or a step - what it gave. */
 export type WireEnd = { set: number } | { step: number };
@@ -414,11 +414,11 @@ export type EditorState = {
   resizeSet: (id: number, frame: { x0: number; y0: number; x1: number; y1: number }, gesture?: string) => void;
   moveSet: (id: number, dx: number, dy: number, gesture?: string) => void;
   removeSet: (id: number) => void;
-  /** A step of `kind` put down, its card's top left at (x, y), with the options last chosen for its kind; its id. */
-  addStep: (kind: StepKind, x: number, y: number) => number;
+  /** A step of `kind`, done by `by` - Meno, or a plugin - put down, its card's top left at (x, y), with the options last chosen for its kind done by it; its id. */
+  addStep: (kind: StepKind, by: string, x: number, y: number) => number;
   moveStep: (id: number, x: number, y: number, gesture?: string) => void;
-  /** A step's options, or who does it (null: as Settings says), changed: the options remembered for its kind. */
-  updateStep: (id: number, patch: { options?: OptionValues; by?: string | null }) => void;
+  /** A step's options changed - remembered for its kind, done by who does it - or its kind, to another who does it fills. */
+  updateStep: (id: number, patch: { options?: OptionValues; kind?: StepKind }) => void;
   /** A step deleted - its jobs stopped and their files taken away; one running, only once asked about (`askDeleteStep`), `asked`. */
   removeStep: (id: number, asked?: boolean) => void;
   /** A running step asked to be deleted: the question asked (StructureCanvas). */
