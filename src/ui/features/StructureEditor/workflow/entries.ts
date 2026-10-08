@@ -74,10 +74,26 @@ export function setMembers(page: Page, set: Frame): { structures: number[][]; mo
   return { structures, molecules };
 }
 
-/** What a set holds: what made it says; made by the chemist, molecules in 3D - or structures, where any is drawn. */
+/**
+ * Whether a molecule's frames are one compound's conformers wherever it
+ * is: those a conformer search made - Meno's own (*3D structures*), or a
+ * workflow's - which say so (`conformerSet`), where it has more than one
+ * (the maintainer, 2026-10-08). A file's many geometries are not.
+ */
+export const conformersOfOne = (m: Pick<Molecule3D, "conformerSet" | "frames">) => m.conformerSet === true && framesOf(m) > 1;
+
+/**
+ * What a set holds: what made it says; made by the chemist, structures,
+ * where any is drawn - else a conformer set, where a molecule in it is a
+ * conformer search's (`conformersOfOne`): each molecule in it a compound,
+ * its frames its conformers - else molecules in 3D.
+ */
 export function holdsOf(page: Page, set: WorkflowSet): SetKind {
   if (set.made) return set.made.holds;
-  return setMembers(page, set).structures.length ? "structures" : "molecules";
+  const { structures, molecules } = setMembers(page, set);
+  if (structures.length) return "structures";
+  const byId = new Map((page.molecules3d ?? []).map((m) => [m.id, m]));
+  return molecules.some((id) => conformersOfOne(byId.get(id)!)) ? "conformers" : "molecules";
 }
 
 /** How many entries a set holds, of what kind of set: a structure each, a frame each of a molecule in 3D - one for a path to its last. */
