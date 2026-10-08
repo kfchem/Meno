@@ -143,7 +143,7 @@ export default function PartMenu({
   onRunStep: () => void;
   onStepOptions: () => void;
   /** What a step right-clicked can do besides, as it is: stopped, while its jobs wait or run; its logs and files shown, where it has jobs. */
-  step?: { onStop?: () => void; onShowLog?: () => void; onShowFiles?: () => void };
+  step?: { onRunFrom?: () => void; onStop?: () => void; onShowLog?: () => void; onShowFiles?: () => void };
   /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
   onUseAsInput?: () => void;
   /** The selection saved as an abbreviation of the user's own. */
@@ -254,7 +254,9 @@ export default function PartMenu({
       ? [{ name: "Delete set", keys: deleteKey, run: onDelete }]
       : target.kind === "step"
       ? [
-          ...(step?.onStop ? [{ name: "Stop", keys: "", run: step.onStop }] : [{ name: "Run", keys: "", run: onRunStep }]),
+          ...(step?.onStop
+            ? [{ name: "Stop", keys: "", run: step.onStop }]
+            : [{ name: "Run", keys: "", run: onRunStep }, ...(step?.onRunFrom ? [{ name: "Run from here", keys: "", run: step.onRunFrom }] : [])]),
           ...(step?.onShowLog ? [{ name: "Show log", keys: "", run: step.onShowLog, divider: true }] : []),
           ...(step?.onShowFiles ? [{ name: "Show files", keys: "", run: step.onShowFiles }] : []),
           { name: "Options…", keys: "", run: onStepOptions, divider: !step?.onShowLog },

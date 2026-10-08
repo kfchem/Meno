@@ -14,11 +14,11 @@ import type { StructureDocument } from "../../document";
 import { blocksOf, moleculeOf } from "../../chem/make3d";
 import { byOf, optionsFor, programsFor } from "../../workflow/doers";
 import { setEntries, type SetEntry } from "../../workflow/entries";
-import { findSet, inputKey, inputOf, stateOf, stepOf, wireInto } from "../../workflow/flow";
+import { findSet, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "../../workflow/flow";
 import { kindInfo, optionsOf, type SetKind } from "../../workflow/kinds";
 import { setRan, setRunning } from "../../workflow/model";
 import { clock, doneSaid, pluginEntry, readCollected, readPrepared, workedOf } from "../../workflow/programs";
-import { runStep as runMenoStep, whyNot, withResults, type RunWith, type Worked } from "../../workflow/run";
+import { keepRun, runStep as runMenoStep, showRun, whyNot, withResults, type RunWith, type Worked } from "../../workflow/run";
 import type { EditorState, JobSeen, StepJob, StepRan } from "../types";
 
 type SetState = StoreApi<EditorState>["setState"];
@@ -81,7 +81,12 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     return out;
   };
 
-  const fail = (id: number, said: string, at: number, input: string) => doc.edit("run", (d) => setRan(d, id, { at, ok: false, said, input }));
+  /** A step that could not run, said so - with what it was to run as. */
+  const fail = (id: number, said: string, at: number, input: string) =>
+    doc.edit("run", (d) => {
+      const step = stepOf(d, id);
+      return step ? setRan(keepRun(d, step), id, { at, ok: false, said, input, kind: step.kind, ...(step.options ? { options: step.options } : {}) }) : d;
+    });
 
   /** One step run: Meno's at once; a plugin's in its worker, or as jobs. */
   async function runOne(id: number): Promise<void> {
@@ -112,9 +117,68 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     const step = stepOf(d, id);
     if (!step) return;
     const before = new Set((d.molecules3d ?? []).map((m) => m.id));
-    if (!worked.length) doc.edit("run", (x) => setRan(x, id, ran));
-    else doc.edit("results", (x) => setRan(withResults(x, step, { ok: true, holds, kept: worked, aside: [], said: ran.said }, w), id, ran));
+    // (what it did before kept among its runs)
+    if (!worked.length) doc.edit("run", (x) => setRan(keepRun(x, stepOf(x, id)!), id, ran));
+    else doc.edit("results", (x) => setRan(withResults(keepRun(x, stepOf(x, id)!), step, { ok: true, holds, kept: worked, aside: [], said: ran.said }, w), id, ran));
+    atTheirEnds(before);
+  }
+
+  /** Molecules new on the page that are an optimisation's path, shown at their ends. */
+  function atTheirEnds(before: ReadonlySet<number>) {
     for (const m of doc.getState().molecules3d ?? []) if (!before.has(m.id) && m.path && m.frames?.length) get().setFrame3d(m.id, m.frames.length);
+  }
+
+  /** The steps after a step: those that take what it gives, and those after them. */
+  const after = (d: StructureDocument, id: number): number[] => {
+    const out: number[] = [];
+    const seen = new Set([id]);
+    const queue = [id];
+    while (queue.length) {
+      const at = queue.shift()!;
+      const made = resultOf(d, at)?.id;
+      for (const wire of d.wires ?? []) {
+        const from = wire.from;
+        const fromIt = "step" in from ? from.step === at : made != null && from.set === made;
+        if (fromIt && !seen.has(wire.to)) {
+          seen.add(wire.to);
+          out.push(wire.to);
+          queue.push(wire.to);
+        }
+      }
+    }
+    return out;
+  };
+
+  /**
+   * Steps run (docs/WORKFLOWS.md, *Starting and stopping*): each, and first
+   * those before it that have not run or have changed, in the order their
+   * wires give - those that do not wait on one another at once (*Several at
+   * once*); a step after one that failed, not. Kept when all have ended.
+   */
+  async function runSteps(targets: readonly number[]): Promise<void> {
+    const d = doc.getState();
+    const wanted = new Set<number>();
+    for (const t of targets) for (const id of chainTo(d, t)) wanted.add(id);
+    const runs = new Map<number, Promise<boolean>>();
+    const run = (id: number): Promise<boolean> => {
+      let going = runs.get(id);
+      if (!going) {
+        going = (async () => {
+          const prior = before(doc.getState(), id);
+          if (prior && wanted.has(prior.id)) {
+            if (!(await run(prior.id))) return false;
+          } else if (prior?.running) await ended(prior.id);
+          const step = stepOf(doc.getState(), id);
+          if (!step) return false;
+          if (step.running) await ended(id);
+          else await runOne(id);
+          return !!stepOf(doc.getState(), id)?.ran?.ok;
+        })();
+        runs.set(id, going);
+      }
+      return going;
+    };
+    await Promise.all([...wanted].map(run));
   }
 
   /** A step a plugin does in its worker: a 3D structure made of each structure drawn, as a molecule in 3D is made from it on the canvas. */
@@ -149,7 +213,15 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     }
     if (!worked.length) return void fail(id, "No structure drawn could be made in 3D", at, key);
     const took = Date.now() - at;
-    bringIn(id, worked, givesFor(step.kind, input.holds), { at, ok: true, said: `${clock(took)} \u00b7 ${worked.length} of ${input.structures.length}`, input: key, took });
+    bringIn(id, worked, givesFor(step.kind, input.holds), {
+      at,
+      ok: true,
+      said: `${clock(took)} \u00b7 ${worked.length} of ${input.structures.length}`,
+      input: key,
+      took,
+      kind: step.kind,
+      ...(step.options ? { options: step.options } : {}),
+    });
   }
 
   /** A step a plugin's program does: prepared by the plugin, a job for each entry, started - and waited for. */
@@ -177,7 +249,7 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
       for (const j of jobs) void stopJob(j.id).catch(() => {});
       return void fail(id, `It could not be started: ${message(e)}`, at, key);
     }
-    doc.amend((x) => setRunning(x, id, { at, input: key, options, jobs }), { unsaved: true });
+    doc.amend((x) => setRunning(x, id, { at, input: key, options, jobs, kind: step.kind }), { unsaved: true });
     set((prev) => ({ ...prev, jobsSeen: { ...prev.jobsSeen, ...Object.fromEntries(jobs.map((j): [string, JobSeen] => [j.id, { state: "waiting", created: at }])) } }));
     void lookAtJobs();
     await ended(id);
@@ -241,16 +313,19 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
       const ends = records.flatMap((r) => (r?.ended != null ? [r.ended] : []));
       const took = ends.length && starts.length ? Math.max(...ends) - Math.min(...starts) : Date.now() - run.at;
       const ids = run.jobs.map((j) => j.id);
+      // (the kind and options it ran as: the step's may have changed since)
+      const kind = run.kind ?? step.kind;
+      const as = { kind, options: run.options };
       const close = () => doc.amend((x) => setRunning(x, id, undefined), { unsaved: true });
 
       // stopped - or gone without saying how it ended: nothing comes in
       if (records.some((r) => !r || r.state === "stopped" || r.state === "gone")) {
-        bringIn(id, [], "molecules", { at: run.at, ok: false, stopped: true, said: `Stopped after ${clock(took)}`, input: run.input, took, jobs: ids });
+        bringIn(id, [], "molecules", { at: run.at, ok: false, stopped: true, said: `Stopped after ${clock(took)}`, input: run.input, took, jobs: ids, ...as });
         return close();
       }
       // (what comes in now, where it is what came in when it started - its options aside, which may change as it runs)
       const input = inputOf(d, id);
-      const same = inputKey(d, { ...step, options: run.options }, by) === run.input;
+      const same = inputKey(d, { ...step, kind, options: run.options }, by) === run.input;
       const entries: SetEntry[] = same && input && input.holds !== "structures" ? setEntries(input.molecules, input.holds) : [];
       const total = run.jobs.reduce((n, j) => n + j.entries.length, 0);
       const worked: Worked[] = [];
@@ -275,7 +350,7 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
         }
         let said;
         try {
-          said = readCollected(await client.collect(step.kind, mine.map(pluginEntry), run.options, files, log, record.state), mine.length);
+          said = readCollected(await client.collect(kind, mine.map(pluginEntry), run.options, files, log, record.state), mine.length);
         } catch (e) {
           whys.push(message(e));
           continue;
@@ -285,16 +360,16 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
           continue;
         }
         // (its log kept with the workspace, as an output it was read from)
-        const { kind: _kind, ...source } = await rememberOutput(`${kindInfo(step.kind).name} ${k + 1}.log`, log, "");
+        const { kind: _kind, ...source } = await rememberOutput(`${kindInfo(kind).name} ${k + 1}.log`, log, "");
         for (const [i, out] of said.entries()) {
-          const made = workedOf(step.kind, mine[i], out, [`${plugin.id} ${plugin.version}`], log ? source : undefined);
+          const made = workedOf(kind, mine[i], out, [`${plugin.id} ${plugin.version}`], log ? source : undefined);
           if (typeof made === "string") whys.push(made);
           else worked.push(made);
         }
       }
       const ok = !whys.length && worked.length > 0;
       const said = ok ? doneSaid(worked, total, took) : whys.length >= total ? whys[0] : `${whys.length} of ${total} failed · ${whys[0]}`;
-      bringIn(id, worked, givesFor(step.kind, input?.holds ?? "molecules"), { at: run.at, ok, said, input: run.input, took, jobs: ids });
+      bringIn(id, worked, givesFor(kind, input?.holds ?? "molecules"), { at: run.at, ok, said, input: run.input, took, jobs: ids, ...as });
       close();
     } finally {
       finishing.delete(id);
@@ -347,18 +422,25 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
 
   return {
     jobsSeen: {} as Record<string, JobSeen>,
-    runStep: async (id: number) => {
-      for (const sid of chainTo(doc.getState(), id)) {
-        const step = stepOf(doc.getState(), sid);
-        if (!step) return;
-        if (step.running) await ended(sid);
-        else await runOne(sid);
-        if (!stepOf(doc.getState(), sid)?.ran?.ok) return;
-      }
+    runStep: (id: number) => runSteps([id]),
+    runFrom: (id: number) => runSteps([id, ...after(doc.getState(), id)]),
+    runAll: () => {
+      const d = doc.getState();
+      // (every step that has not run or has changed - one with nothing coming in left as it is)
+      return runSteps((d.steps ?? []).filter((s) => s.running || !["done", "no-input"].includes(stateOf(d, s, byOf(s)))).map((s) => s.id));
     },
     stopStep: (id: number) => {
       for (const j of stepOf(doc.getState(), id)?.running?.jobs ?? []) void stopJob(j.id).catch(() => {});
       void lookAtJobs();
+    },
+    stopAll: () => {
+      for (const s of doc.getState().steps ?? []) for (const j of s.running?.jobs ?? []) void stopJob(j.id).catch(() => {});
+      void lookAtJobs();
+    },
+    showRun: (id: number, index: number) => {
+      const was = new Set((doc.getState().molecules3d ?? []).map((m) => m.id));
+      doc.edit("show run", (x) => showRun(x, id, index, w));
+      atTheirEnds(was);
     },
     showStepLog: async (id: number) => {
       const step = stepOf(doc.getState(), id);

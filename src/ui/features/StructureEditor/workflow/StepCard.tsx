@@ -67,6 +67,18 @@ export function Port({
  */
 export type RunView = { place?: number; since?: number; ended: number; total: number; line?: string };
 
+/** A run as its step lists it: when, what it said, how it was set, whether it is the one shown. */
+export type RunRow = { at: number; said: string; how: string; shown: boolean };
+
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+/** When a run was, in few words: its time - and its day, where that was not today. */
+function when(at: number, now = Date.now()): string {
+  const same = new Date(at).toDateString() === new Date(now).toDateString();
+  return same ? TIME.format(at) : `${DAY.format(at)} ${TIME.format(at)}`;
+}
+
 /** A place in the queue, as it is said: 1st, 2nd, 3rd, 4th... */
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
 
@@ -116,8 +128,11 @@ export type StepCardProps = {
   options: OptionValues;
   /** The kinds of step who does it fills: another of them can be chosen in it. */
   kinds: readonly { kind: StepKind; name: string }[];
+  /** Its runs, newest first - the one shown first: when, what it said, how it was set; an earlier one can be shown again. */
+  runs: readonly RunRow[];
   onOptions: (values: OptionValues) => void;
   onKind: (kind: StepKind) => void;
+  onShowRun: (index: number) => void;
   onCardDown: (e: ReactPointerEvent) => void;
   onTakeDown: (e: ReactPointerEvent) => void;
   onGiveDown: (e: ReactPointerEvent) => void;
@@ -195,6 +210,33 @@ export default function StepCard(p: StepCardProps) {
               <OptionsForm options={p.optionList} values={p.options} onChange={p.onOptions} />
             ) : (
               <div className="text-xs text-gh-gray">No options</div>
+            )}
+            {p.runs.length > 1 && (
+              <div className="mt-3">
+                <div className="text-xs text-gh-gray mb-1">Runs</div>
+                <div className="space-y-1.5">
+                  {p.runs.map((r, i) => (
+                    <div key={`${r.at}-${i}`} className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] leading-4 text-gh-black truncate" title={r.said}>
+                          {`${when(r.at)} \u00b7 ${r.said}`}
+                        </div>
+                        {r.how && <div className="text-[10px] leading-4 text-gh-gray truncate">{r.how}</div>}
+                      </div>
+                      {r.shown ? (
+                        <span className="shrink-0 text-[11px] leading-6 text-gh-gray">Shown</span>
+                      ) : (
+                        <button
+                          onClick={() => p.onShowRun(i - 1)}
+                          className="h-6 shrink-0 rounded-md border border-gh-line bg-white px-2 text-[11px] text-gh-black hover:bg-gh-base"
+                        >
+                          Show
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}

@@ -6,7 +6,7 @@
  * takes the run's results away.
  */
 import { addMolecule3d, removeMolecules3d, type StructureDocument } from "../document";
-import type { AsideEntry, Molecule3D, WorkflowStep } from "../store/types";
+import type { AsideEntry, Molecule3D, StepRunKept, WorkflowStep } from "../store/types";
 import type { CalcInfo } from "../../../../lib/calc/output";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { setMembers, inside, setEntries, type Frame, type SetEntry } from "./entries";
@@ -15,7 +15,7 @@ import { kindInfo, MENO_DOES, takes, type SetKind } from "./kinds";
 import { setList } from "./list";
 import { BETWEEN, SET_PAD, SET_TOP, CARD_H, CARD_W, CHIP, GAP, LIST_W, PX, ROW } from "./look";
 import { runMeno, type Outcome } from "./meno";
-import { addSet, resizeSet, markMade, setRan } from "./model";
+import { addSet, resizeSet, markMade, RUNS_KEPT, setRan, withStepRuns } from "./model";
 
 /** What a run needs of the canvas: how far a molecule in 3D reaches from its middle on the page, across and up, in any of its frames; who does a step; and the time. */
 export type RunWith = { extentOf: (m: Omit<Molecule3D, "id">) => { w: number; h: number }; byOf: (step: WorkflowStep) => string; now: number };
@@ -36,14 +36,15 @@ export function runStep(doc: StructureDocument, id: number, w: RunWith, depth = 
   const by = w.byOf(step);
   const input = inputOf(doc, id);
   const key = inputKey(doc, step, by);
-  const fail = (said: string) => setRan(doc, id, { at: w.now, ok: false, said, input: key });
+  const as = { kind: step.kind, ...(step.options ? { options: step.options } : {}) };
+  const fail = (said: string) => setRan(keepRun(doc, step), id, { at: w.now, ok: false, said, input: key, ...as });
   const why = whyNot(doc, step, by);
   if (why) return fail(why);
   if (by !== "meno" || !MENO_DOES.includes(step.kind)) return fail("Nothing added does this step");
   if (!input) return fail("Nothing comes into it");
   const outcome = runMeno(step.kind, setEntries(input.molecules, input.holds as "molecules" | "conformers"), input.holds, step.options);
   if (!outcome.ok) return fail(outcome.said);
-  return setRan(withResults(doc, step, outcome, w), id, { at: w.now, ok: true, said: outcome.said, input: key });
+  return setRan(withResults(keepRun(doc, step), step, outcome, w), id, { at: w.now, ok: true, said: outcome.said, input: key, ...as });
 }
 
 /**
@@ -61,6 +62,55 @@ export function whyNot(doc: StructureDocument, step: WorkflowStep, by: string): 
   if (!takes(step.kind, input.holds)) return `Takes ${kindInfo(step.kind).takes.map((s) => SET_NAMES[s]).join(" or ")}`;
   if (!by) return "Nothing added does this step";
   return null;
+}
+
+/** What a run gave, as its result set holds it: its molecules in 3D, those it set aside, and what kind of set they make. */
+export type RunResults = { molecules: Omit<Molecule3D, "id" | "at">[]; aside: AsideEntry[]; holds: SetKind };
+
+/** What a step's result set holds now, as a run kept keeps it; none, where it has made none. */
+export function resultsNow(doc: StructureDocument, step: WorkflowStep): RunResults | undefined {
+  const set = resultOf(doc, step.id);
+  if (!set?.made) return undefined;
+  const byId = new Map((doc.molecules3d ?? []).map((m) => [m.id, m]));
+  const molecules = setMembers(doc, set).molecules.map((id) => {
+    const { id: _id, at: _at, ...m } = byId.get(id)!;
+    return m;
+  });
+  return { molecules, aside: set.aside ?? [], holds: set.made.holds };
+}
+
+/**
+ * `doc` with what a step last did kept among its earlier runs, its results
+ * with it - as a new run is about to take its place. One that did nothing -
+ * refused before it began - is not kept.
+ */
+export function keepRun(doc: StructureDocument, step: WorkflowStep): StructureDocument {
+  const ran = step.ran;
+  if (!ran || (!ran.ok && ran.took == null)) return doc;
+  const results = resultsNow(doc, step);
+  const kept: StepRunKept = { ...ran, kind: ran.kind ?? step.kind, ...((ran.options ?? step.options) ? { options: ran.options ?? step.options } : {}), ...(results ? { results } : {}) };
+  return withStepRuns(doc, step.id, [kept, ...(step.runs ?? [])].slice(0, RUNS_KEPT));
+}
+
+/**
+ * `doc` with an earlier run of a step shown again: its results in the
+ * step's result set and it as what the step last did - and what the step
+ * showed till then kept among its runs in its place.
+ */
+export function showRun(doc: StructureDocument, id: number, index: number, w: Pick<RunWith, "extentOf">): StructureDocument {
+  const step = stepOf(doc, id);
+  const shown = step?.runs?.[index];
+  if (!step || !shown) return doc;
+  const { results, ...ran } = shown;
+  const now = step.ran ? resultsNow(doc, step) : undefined;
+  const others = step.runs!.filter((_, i) => i !== index);
+  const was = step.ran;
+  const current: StepRunKept[] = was
+    ? [{ ...was, kind: was.kind ?? step.kind, ...((was.options ?? step.options) ? { options: was.options ?? step.options } : {}), ...(now ? { results: now } : {}) }]
+    : [];
+  doc = withStepRuns(doc, id, [...current, ...others].slice(0, RUNS_KEPT));
+  if (results) doc = placeResults(doc, stepOf(doc, id)!, results, w);
+  return setRan(doc, id, ran);
 }
 
 /** A frame `w` wide and `h` tall, its top left at (x, y). */
@@ -85,8 +135,17 @@ export type Worked = SetEntry & {
 
 /** `doc` with what a step gave as the entries of its result set: made to the right of it, or the one it made before, emptied of what it held. */
 export function withResults(doc: StructureDocument, step: WorkflowStep, outcome: Extract<Outcome, { ok: true }>, w: Pick<RunWith, "extentOf">): StructureDocument {
-  const made = moleculesOf(outcome);
   const aside: AsideEntry[] = outcome.aside.map((e) => ({ compound: e.compound, number: e.number, ...(e.energy != null ? { energy: e.energy } : {}) }));
+  return placeResults(doc, step, { molecules: moleculesOf(outcome), aside, holds: outcome.holds }, w);
+}
+
+/**
+ * `doc` with a step's results - its molecules in 3D, those it set aside,
+ * and what kind of set they make - as the entries of its result set: made
+ * to the right of it, or the one it made before, emptied of what it held.
+ */
+export function placeResults(doc: StructureDocument, step: WorkflowStep, results: RunResults, w: Pick<RunWith, "extentOf">): StructureDocument {
+  const { molecules: made, aside, holds } = results;
   // its list under the set's tab; below it, the molecules in rows, left to
   // right - each with room for its frames chip below it, where it has frames
   const sizes = made.map((m) => {
@@ -111,7 +170,7 @@ export function withResults(doc: StructureDocument, step: WorkflowStep, outcome:
     wide = Math.max(wide, x - BETWEEN);
   });
   const tall = -y + rowH;
-  const rows = setList(made, aside, outcome.holds).length;
+  const rows = setList(made, aside, holds).length;
   const listH = rows ? rows * ROW + BETWEEN : 0;
   const width = Math.max(wide, rows ? LIST_W : 0, 120 * PX) + 2 * SET_PAD;
   const height = SET_TOP + tall + listH + SET_PAD;
@@ -120,7 +179,7 @@ export function withResults(doc: StructureDocument, step: WorkflowStep, outcome:
   if (was) doc = removeMolecules3d(doc, setMembers(doc, was).molecules);
   const frame = was ? frameAt(was.x0, was.y1, width, height) : placeFor(doc, step, width, height);
   for (const [i, m] of made.entries()) doc = addMolecule3d(doc, { ...m, at: { x: frame.x0 + SET_PAD + places[i].x, y: frame.y1 - SET_TOP - listH + places[i].y } });
-  const madeBy = { step: step.id, holds: outcome.holds };
+  const madeBy = { step: step.id, holds };
   if (was) return markMade(resizeSet(doc, was.id, frame), was.id, madeBy, aside);
   const id = doc.nextWorkflowId ?? 1;
   return markMade(addSet(doc, frame, madeBy), id, madeBy, aside);
