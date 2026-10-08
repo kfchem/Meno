@@ -56,10 +56,10 @@ export function removeSet(doc: StructureDocument, id: number): StructureDocument
   return { ...doc, sets, wires: (doc.wires ?? []).filter((w) => !("set" in w.from && w.from.set === id)) };
 }
 
-/** `doc` with a step of `kind` whose card's top left is at (x, y); it is numbered `nextWorkflowId`. */
-export function addStep(doc: StructureDocument, kind: StepKind, x: number, y: number, options?: OptionValues): StructureDocument {
+/** `doc` with a step of `kind`, done by `by` - Meno, or a plugin - whose card's top left is at (x, y); it is numbered `nextWorkflowId`. */
+export function addStep(doc: StructureDocument, kind: StepKind, x: number, y: number, options?: OptionValues, by?: string): StructureDocument {
   const id = idOf(doc);
-  const step: WorkflowStep = { id, kind, x, y, ...(options && Object.keys(options).length ? { options } : {}) };
+  const step: WorkflowStep = { id, kind, x, y, ...(by ? { by } : {}), ...(options && Object.keys(options).length ? { options } : {}) };
   return { ...doc, nextWorkflowId: id + 1, steps: [...(doc.steps ?? []), step] };
 }
 
@@ -75,12 +75,10 @@ export function moveStep(doc: StructureDocument, id: number, x: number, y: numbe
   return withStep(doc, id, (s) => (s.x === x && s.y === y ? s : { ...s, x, y }));
 }
 
-/** A step's options, or who does it (null: as Settings says), changed. */
-export function updateStep(doc: StructureDocument, id: number, patch: { options?: OptionValues; by?: string | null }): StructureDocument {
+/** A step's options changed - or its kind, to another who does it fills, with the options it takes for that one. */
+export function updateStep(doc: StructureDocument, id: number, patch: { options?: OptionValues; kind?: StepKind }): StructureDocument {
   return withStep(doc, id, (s) => {
-    const { by: _by, ...rest } = s;
-    const by = patch.by === undefined ? s.by : (patch.by ?? undefined);
-    const next: WorkflowStep = { ...rest, ...(patch.options ? { options: patch.options } : {}), ...(by != null ? { by } : {}) };
+    const next: WorkflowStep = { ...s, ...(patch.kind ? { kind: patch.kind } : {}), ...(patch.options ? { options: patch.options } : {}) };
     return JSON.stringify(next) === JSON.stringify(s) ? s : next;
   });
 }
@@ -88,6 +86,16 @@ export function updateStep(doc: StructureDocument, id: number, patch: { options?
 /** What a step did when it ran, kept with it. */
 export function setRan(doc: StructureDocument, id: number, ran: NonNullable<WorkflowStep["ran"]>): StructureDocument {
   return withStep(doc, id, (s) => ({ ...s, ran }));
+}
+
+/** A step's run while its jobs wait or run - or, ended, none: the step as it was otherwise. */
+export function setRunning(doc: StructureDocument, id: number, running: WorkflowStep["running"]): StructureDocument {
+  return withStep(doc, id, (s) => {
+    if (running) return { ...s, running };
+    if (!s.running) return s;
+    const { running: _r, ...rest } = s;
+    return rest;
+  });
 }
 
 /** `doc` without a step and the wires into it and out of it. The set it made stays, with what it holds - a set like any the chemist drew (of conformers, where its molecules' frames are a conformer search's: entries `holdsOf`). */

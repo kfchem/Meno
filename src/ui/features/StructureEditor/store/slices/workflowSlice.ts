@@ -1,18 +1,19 @@
 import type { StoreApi } from "zustand";
 import type { DocumentStore } from "../../../../../lib/doc";
-import { rememberable, valuesOf } from "../../../../../lib/options";
+import { valuesOf } from "../../../../../lib/options";
 import { useAppSettings } from "../../../../../lib/settings/appSettings";
 import type { StructureDocument } from "../../document";
 import { currentStyle3D } from "../../style3d";
 import { lookOf, poseOf, seenBounds, solidOf } from "../../utils/molecule3d";
 import type { Style3D } from "../../../../../lib/chem/style3d";
-import { byOf } from "../../workflow/doers";
-import { kindInfo, type StepKind } from "../../workflow/kinds";
+import { byOf, kindsOf, optionsFor } from "../../workflow/doers";
+import type { StepKind } from "../../workflow/kinds";
 import * as wf from "../../workflow/model";
-import { runStep } from "../../workflow/run";
 import type { EditorState, Molecule3D, WorkflowView } from "../types";
+import { createStepRuns } from "./stepRuns";
 
 type SetState = StoreApi<EditorState>["setState"];
+type GetState = StoreApi<EditorState>["getState"];
 
 /** How far a molecule in 3D reaches from its middle on the page, across and up, as it stands unturned, in any of its frames. */
 function extentOf(m: Molecule3D, style: Style3D): { w: number; h: number } {
@@ -28,17 +29,19 @@ function extentOf(m: Molecule3D, style: Style3D): { w: number; h: number } {
   return { w, h };
 }
 
-/** The role a kind of step's options are remembered by (lib/settings/appSettings `options`). */
-export const stepRole = (kind: StepKind) => `step:${kind}`;
+/** The role a kind of step's defaults are kept under, as who does it takes them - set in Settings, Calculations (lib/settings/appSettings `options`). */
+export const stepRole = (kind: StepKind, by: string) => `step:${by}:${kind}`;
 
 /**
  * A workflow on the page (docs/WORKFLOWS.md): its sets, steps and wires,
  * edits to the document - so that undo takes each back and Save keeps it;
  * what is under the pointer, chosen, open or being drawn, the view's.
  */
-export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: SetState) {
+export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: SetState, get: GetState) {
   const coalesce = (what: string, id: number, gesture?: string) => (gesture ? { coalesceKey: `${what}:${id}:${gesture}` } : {});
+  const { forgetJobs, ...runs } = createStepRuns(doc, set, get, { extentOf: (m) => extentOf({ ...m, id: 0 }, currentStyle3D()) });
   return {
+    ...runs,
     setWorkflowView: (patch: Partial<Pick<EditorState, WorkflowView>>) => set(patch),
     addSet: (frame: { x0: number; y0: number; x1: number; y1: number }) => {
       const id = doc.getState().nextWorkflowId ?? 1;
@@ -56,27 +59,43 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
           chosenSet: prev.chosenSet === id ? null : prev.chosenSet,
         }));
     },
-    addStep: (kind: StepKind, x: number, y: number) => {
+    addStep: (kind: StepKind, by: string, x: number, y: number) => {
       const id = doc.getState().nextWorkflowId ?? 1;
-      // (with the options last chosen for its kind)
-      const options = valuesOf(kindInfo(kind).options ?? [], useAppSettings.getState().options[stepRole(kind)]);
-      doc.edit("add step", (d) => wf.addStep(d, kind, x, y, options));
+      // (with the defaults Settings has for its kind, done by it)
+      const options = valuesOf(optionsFor(kind, by), useAppSettings.getState().options[stepRole(kind, by)]);
+      doc.edit("add step", (d) => wf.addStep(d, kind, x, y, options, by));
       return id;
     },
     moveStep: (id: number, x: number, y: number, gesture?: string) => doc.edit("move step", (d) => wf.moveStep(d, id, x, y), coalesce("step-move", id, gesture)),
-    updateStep: (id: number, patch: { options?: Record<string, string | number | boolean>; by?: string | null }) => {
+    updateStep: (id: number, patch: { options?: Record<string, string | number | boolean>; kind?: StepKind }) => {
       const step = doc.getState().steps?.find((s) => s.id === id);
       if (!step) return;
-      doc.edit(patch.options ? "change options" : "change who does it", (d) => wf.updateStep(d, id, patch));
-      if (patch.options) useAppSettings.getState().rememberOptions(stepRole(step.kind), rememberable(kindInfo(step.kind).options ?? [], patch.options));
+      const by = byOf(step);
+      if (patch.kind && patch.kind !== step.kind) {
+        // (another kind its plugin fills: with the defaults Settings has for that one - those it shares with the step's, as the step has them)
+        const kind = patch.kind;
+        if (!kindsOf(by).includes(kind)) return;
+        const options = valuesOf(optionsFor(kind, by), { ...useAppSettings.getState().options[stepRole(kind, by)], ...step.options });
+        doc.edit("change calculation", (d) => wf.updateStep(d, id, { kind, options }));
+        return;
+      }
+      // (the step's alone: the defaults are Settings', and stay as they are)
+      if (patch.options) doc.edit("change options", (d) => wf.updateStep(d, id, { options: patch.options }));
     },
-    removeStep: (id: number) => {
-      if (doc.edit("delete step", (d) => wf.removeStep(d, id)))
+    removeStep: (id: number, asked = false) => {
+      const step = doc.getState().steps?.find((s) => s.id === id);
+      if (!step) return;
+      // (one running is asked about first: deleting it stops it)
+      if (step.running && !asked) return set({ askDeleteStep: id });
+      if (doc.edit("delete step", (d) => wf.removeStep(d, id))) {
+        forgetJobs(step);
         set((prev: EditorState) => ({
           ...prev,
+          askDeleteStep: null,
           openStep: prev.openStep === id ? null : prev.openStep,
           hoveredStep: prev.hoveredStep === id ? null : prev.hoveredStep,
         }));
+      }
     },
     connect: (from: Parameters<typeof wf.connect>[1], to: number) => {
       const was = doc.getState();
@@ -95,16 +114,6 @@ export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: 
         // (where it may not go there, it stays where it was)
         return moved.wires?.some((x) => x.to === to && JSON.stringify(x.from) === JSON.stringify(w.from)) ? moved : d;
       });
-    },
-    runStep: (id: number) => {
-      const style = currentStyle3D();
-      doc.edit("run", (d) =>
-        runStep(d, id, {
-          extentOf: (m) => extentOf({ ...m, id: 0 }, style),
-          byOf,
-          now: Date.now(),
-        }),
-      );
     },
   };
 }

@@ -16,13 +16,14 @@ const good = {
   kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO", at: "line-start" }] }],
   writes: [],
   roleOptions: {},
+  steps: [],
 };
 
 describe("a plugin's manifest", () => {
   it("is read as data: what it is, what makes its environment and runs its worker, what it reads, and the kinds it brings", () => {
     expect(acceptManifest(good)).toEqual(good);
     // (each plugin Meno carries, from its folder: Meno names none of them)
-    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "gaussian-input", "pyscf", "rdkit"]);
+    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "gaussian-input", "pyscf", "rdkit", "xtb"]);
   });
 
   it("may write kinds rather than read them: each named, its files' names, what it is given, and its options as data", () => {
@@ -62,6 +63,32 @@ describe("a plugin's manifest", () => {
     // (RDKit's, as it carries them)
     const rdkit = MANIFESTS.find((m) => m.id === "rdkit")!;
     expect(rdkit.roleOptions.conformers.map((o) => o.id)).toEqual(["count", "field", "iters", "same", "seed"]);
+  });
+
+  it("may fill kinds of step: each kind once, its programs by name - never a path - and its options as data", () => {
+    const steps = {
+      ...good,
+      reads: [],
+      kinds: [],
+      steps: [
+        { kind: "optimise", programs: ["xtb", "../bin/sh", "/usr/bin/xtb", "xtb"], options: [{ id: "level", label: "Level", type: "choice", choices: [{ value: "tight", label: "Tight" }], default: "tight" }] },
+        { kind: "optimise", programs: ["other"] },
+        { kind: "Not A Kind", programs: ["xtb"] },
+        { kind: "structure-3d" },
+      ],
+    };
+    expect(acceptManifest(steps)?.steps).toEqual([
+      { kind: "optimise", programs: ["xtb"], options: [{ id: "level", label: "Level", type: "choice", choices: [{ value: "tight", label: "Tight" }], default: "tight" }] },
+      { kind: "structure-3d", programs: [], options: [] },
+    ]);
+    // (xTB's, as Meno carries it)
+    const xtb = MANIFESTS.find((m) => m.id === "xtb")!;
+    expect(xtb.steps.map((d) => [d.kind, d.programs])).toEqual([
+      ["optimise", ["xtb"]],
+      ["energy", ["xtb"]],
+      ["frequencies", ["xtb"]],
+    ]);
+    expect(xtb.steps[0].options.map((o) => o.id)).toEqual(["method", "solvent", "level"]);
   });
 
   it("may fill roles rather than read files - but a plugin that does neither is none", () => {

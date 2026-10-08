@@ -1,8 +1,9 @@
-import type { Option, OptionValues } from "../../lib/options";
+import { MANY_CHOICES, type Option, type OptionValues } from "../../lib/options";
 
 /**
  * A role's options, drawn from their general form (lib/options): a choice
- * as its choices, each to pick; a number with its unit; a text; a switch.
+ * as its choices, each to pick - or, of many, a list to pick from; a number
+ * with its unit; a text; a switch.
  * Whoever fills the role declares them - Meno, or a plugin - and this draws
  * any of them alike.
  */
@@ -20,7 +21,22 @@ export default function OptionsForm({
     <div className="space-y-3">
       {options.map((o) => (
         <div key={o.id}>
-          {o.type === "choice" ? (
+          {o.type === "choice" && o.choices.length > MANY_CHOICES ? (
+            <label className="block">
+              <span className="block text-xs text-gh-gray mb-1">{o.label}</span>
+              <select
+                value={String(values[o.id] ?? "")}
+                onChange={(e) => set(o.id, e.target.value)}
+                className="h-7 w-full max-w-[12rem] rounded-md border border-gh-line bg-white px-2 text-sm text-gh-black"
+              >
+                {o.choices.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : o.type === "choice" ? (
             <fieldset>
               <legend className="text-xs text-gh-gray mb-1">{o.label}</legend>
               <div className="space-y-1">

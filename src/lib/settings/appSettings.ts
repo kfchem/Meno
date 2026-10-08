@@ -39,13 +39,12 @@ export type AppSettings = {
   pictures: PictureSettings;
   /** How the mouse and the trackpad work the canvas. */
   pointer: PointerSettings;
-  /** Who does each kind of step in a workflow (Settings, Calculations; docs/WORKFLOWS.md). */
+  /** How a workflow's jobs run (Settings, Calculations; docs/WORKFLOWS.md). */
   calculations: CalculationSettings;
 };
 
-/** Who does each kind of step, by the kind: Meno, or a plugin added - unset, Meno where Meno does it. Each kind's options' defaults are the options remembered for it (`options`, as "step:<kind>"). */
+/** How a workflow's steps run (Settings, Calculations). Each kind's default options, done by each, are kept with the options (`options`, as "step:<who>:<kind>"), set there alone. */
 export type CalculationSettings = {
-  by: Record<string, string>;
   /** How many jobs run at once on this computer (lib/jobs); unset, one. */
   atOnce?: number;
   /** How many cores each job may use; unset, the computer's shared among those at once (lib/jobs `runningOf`). */
@@ -124,7 +123,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   plugins: { removed: [], roles: {} },
   pictures: { dpi: 600 },
   pointer: { wheelUp: "in" },
-  calculations: { by: {} },
+  calculations: {},
 };
 
 /** The file's layout; bumped when it changes in a way old files need reading round. */
@@ -150,18 +149,13 @@ export function acceptAppSettings(raw: unknown): AppSettings {
   };
 }
 
-/** Who does each kind of step, as the file holds it: ids only - and how many jobs at once, and cores for each, whole numbers within reason. */
+/** How a workflow's jobs run, as the file holds it: how many at once, and cores for each, whole numbers within reason. */
 function acceptCalculations(raw: unknown): CalculationSettings {
-  const by: Record<string, string> = {};
-  const r = raw as { by?: unknown; atOnce?: unknown; cores?: unknown } | null;
-  const given = r?.by;
-  if (given && typeof given === "object" && !Array.isArray(given)) {
-    for (const [kind, who] of Object.entries(given)) if (ID.test(kind) && typeof who === "string" && ID.test(who)) by[kind] = who;
-  }
+  const r = raw as { atOnce?: unknown; cores?: unknown } | null;
   const whole = (v: unknown, most: number) => (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= most ? v : undefined);
   const atOnce = whole(r?.atOnce, JOBS_AT_ONCE_MOST);
   const cores = whole(r?.cores, CORES_MOST);
-  return { by, ...(atOnce ? { atOnce } : {}), ...(cores ? { cores } : {}) };
+  return { ...(atOnce ? { atOnce } : {}), ...(cores ? { cores } : {}) };
 }
 
 /** How the pointer works, as the file holds it; what does not read, as it is by default. */

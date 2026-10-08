@@ -65,6 +65,18 @@ rearrange and run again, with its results beside the molecule it is about.
     show what is where, not how it looks. The look follows Meno's own
     design (*How it looks*); the figures' colours, transparency, line
     widths and icons are not to be taken from them.
+16. **A step is a plugin's, and the kind of calculation is in it** (the
+    maintainer, 2026-10-08): at the top is the plugin - xTB - and under it
+    the kinds of calculation that software does. Quick Add's
+    *Calculations* lists the plugins added, each with its kinds; a step's
+    card is titled with its plugin, its calculation chosen in it among
+    those the plugin does. Meno stands among them, for the steps it does
+    itself. This replaces choosing who does a kind in Settings (12): RDKit's
+    *Duplicates* and Meno's are two steps to choose between.
+17. **Settings holds the defaults; a step customises them** (the
+    maintainer, 2026-10-08): Settings, *Calculations*, sets each kind's
+    default options, by plugin; a step starts with them, and its options
+    changed are its own - never written back as the defaults.
 
 No question is left open; the whole is for the maintainer to read and
 agree before step 1 is built.
@@ -108,8 +120,8 @@ in 3D, arrows, text - and is made of three things:
   many entries it holds (*1 structure*, *81 conformers*, *23 of 81*). It
   gives from a port on its right edge, half-way down; a result set takes
   on its left edge too.
-- **Steps.** A small card: an icon and what the step does (*Optimise*);
-  below it, who does it and how (*xTB · GFN2-xTB*); a rule; and what it is
+- **Steps.** A small card: who does it (*xTB*), with the icon of what it
+  does; below it, what it does and how (*Optimise · GFN2-xTB*); a rule; and what it is
   doing (*Ready*, *Running 0:42*). It takes on its left edge and gives on
   its right.
 - **Wires.** Curves from port to port, leaving and arriving level; while
@@ -210,8 +222,8 @@ before it is built.
 
 ### Who does a step
 
-As *Files* chooses who reads each kind of file (FILE-IO.md, decided
-again for steps on 2026-10-08):
+A step is the step of what does it - a plugin added, or Meno - and of
+one of the kinds of calculation it does (decided: 16):
 
 - **Meno does the simple steps itself** - *Energy window*,
   *Populations*, *As conformers*, and *Duplicates* in a plain way (the
@@ -219,13 +231,14 @@ again for steps on 2026-10-08):
   does not see symmetric atoms swapped, so two copies of a structure
   numbered differently can both be kept). Meno's part is there from the
   start, with nothing to add.
-- **A plugin added may do any of them instead**: RDKit does *Duplicates*
+- **A plugin added may do any of them as well**: RDKit does *Duplicates*
   with its best RMSD over the molecule's symmetries; ACCeL, its second
-  version, may come as a plugin that does them all as ACCeL does.
-- **The chemist chooses**, in Settings, *Calculations* - a table like
-  *Files*: each kind of step, who does it (*Meno*, or a plugin added),
-  and its options' defaults - and in the step itself, which says who
-  does it on its card (*Duplicates · Meno*, *Duplicates · RDKit*).
+  version, may come as a plugin that does them all as ACCeL does. Each
+  is a step of its own to choose: *RDKit*'s *Duplicates*, or *Meno*'s.
+- **The chemist chooses** in Quick Add - a plugin, then one of its
+  kinds - and may change a step's calculation in it, to another its
+  plugin does. Settings, *Calculations*, lists the plugins added and
+  Meno, each with its kinds and their default options.
 - **Steps that run a program** are done by plugins only: Meno runs no
   program of its own.
 
@@ -236,21 +249,17 @@ again for steps on 2026-10-08):
 - **Quick Add keeps its four** - bond, text, reaction arrow, "+" - and
   gains **one button**: *Calculations*, a small graph of two joined
   sets, after a thin rule.
-- **Pressed, it opens** a panel below the row, of the kinds of step,
-  each an icon, named on hover with who does it (*Optimise · xTB*):
-  first those that run a program, then those that work on entries.
-  *As conformers* is not among them: it is reached from a compound set's
-  port, its wire let go on empty space, at the end of the panel - a
+- **Pressed, it opens** a panel below the row, a line for each plugin
+  added that does steps - those that run a program first - then Meno:
+  its name, and the kinds of calculation it does, each an icon, named on
+  hover (decided: 16). *As conformers* is not among Meno's: it is
+  reached from a compound set's port, its wire let go on empty space - a
   conversion taken on purpose.
-- **Only what something added does is there.** With no plugin that runs
-  a program added, the panel shows the steps Meno does itself; a kind
-  nothing does is not shown, and nothing is shown of plugins not added.
+- **Only what is added is there.** With no plugin added, the panel shows
+  Meno's line alone; nothing is shown of plugins not added.
 - **A wire let go on empty space** opens Quick Add already at
   *Calculations*, showing only the kinds that take what the wire
-  carries.
-- **Who does a kind** where more than one can is chosen in the step
-  (*Its options*); Settings, *Calculations*, says who by default (*Who
-  does a step*).
+  carries - and a plugin only where it does one of them.
 
 ### Wires
 
@@ -280,11 +289,16 @@ frames chip opens to its slider:
   (3 kcal/mol);
 - the charge and the unpaired electrons, read from each entry as Export
   reads them, and changeable;
-- who does it, where more than one can (*Who does a step*);
+- what it does: another of the kinds of calculation its plugin does,
+  where it does more than one (*Who does a step*) - the options the two
+  share kept as they were;
 - *Show log* and *Show files* once it has run.
 
 Another click on its title, Escape, or a press elsewhere closes it. The
-last options chosen for each kind are what a new step starts with.
+step's options are its own: it starts with the defaults Settings,
+*Calculations*, has for its kind done by its plugin, and what is changed
+in it changes it alone - the defaults are set in Settings and nowhere
+else (decided: 17).
 
 ## Compound sets and conformer sets
 
@@ -638,6 +652,93 @@ Not yet, and where it comes:
   names programs, nothing asks for a job;
 - a program installed separately, found where the system finds programs
   (ORCA, Gaussian) - step 6.
+
+### Step 3: xTB (2026-10-08)
+
+Built: the xTB plugin (xtb 6.7.1 from conda-forge, made by pixi), filling
+*Optimise*, *Energy* and *Frequencies*; RDKit filling *3D structure*; the
+manifest's `steps` and the requests `prepare` and `collect`; steps that
+run jobs - *Waiting · 2nd*, *Running 1:12* with the log's last line under
+it, *Stopped after 0:31*, the wire into a running step a slow dash -
+*Stop*, *Show log* and *Show files* in a step's menu; results coming in; a
+workspace opened again picking its jobs up; and what closing says of jobs
+going on. The first workflow that runs: an input of drawn structures, *3D
+structure*, *Optimise*. How it works: ARCHITECTURE.md, *Workflows*.
+
+What xtb is asked, and what is read of what it writes, are as xtb's own
+documentation has them (xtb-docs.readthedocs.io) - the command line, the
+optimisation's trajectory and the files that say whether it converged,
+the machine-readable dump (`$write json=true`), the thermochemistry it
+prints - and the plugin's tests are written after its examples; no output
+of a real run is kept in the repository.
+
+Decided while building it, for the maintainer to confirm:
+
+- **The manifest's `steps`**: each kind it fills, with the `programs` it
+  runs - none, where it does the step in its worker - and its options in
+  the general form. A step's options are its doer's: who does it says
+  what it takes.
+- **`prepare {step, entries, options, cores}`** gives each job's input
+  files, its program and arguments, the entries it is for, and the files
+  `collect` will want; **`collect {step, entries, options, files, log,
+  ended}`** gives an output for each entry in the readers' output form
+  (lib/calc/output) - or, for a job that did not end done, why, in the
+  program's words. Meno asks `collect` of a failed job too, so that the
+  card says why.
+- **An entry goes to a plugin as Export gives a molecule to a writer**,
+  with its charge and spin multiplicity as Export reads them. Changing
+  them in the step comes later.
+- **One job for each entry**; a plugin taking all its entries in one job
+  comes with CREST (step 5).
+- **3D structure** is RDKit's: one conformer of the first stereoisomer,
+  as *3D structure* from the canvas's menu makes it, asked through the
+  roles' `conformers` with its options from Settings.
+- **Optimise, in a compound set**: each entry as optimised, its path as
+  its frames, ending at it and shown there; such a molecule is one entry
+  of a set - its last geometry - not one for each frame (`path`). In a
+  conformer set: each conformer's optimised geometry and energy, the path
+  not kept, the calculation's results not each conformer's.
+- **Frequencies**: the vibrations - their wavenumbers, reduced masses and
+  IR intensities - and the thermochemistry (Gibbs free energy, zero-point
+  energy, the corrections to G and H, T·S). How each mode moves is not
+  yet shown: xtb documents no displacements in a form of its own (its
+  `g98.out` is "GAUSSIAN-format"), so they wait for a documented source.
+- **A run under way is kept in the workspace with no step to undo**, the
+  workspace unsaved until it is saved; the results coming in are one step
+  to undo. Each job's log is kept in the workspace with the molecules it
+  gave.
+- **Closing**: a workspace with unsaved changes asks as before, and says
+  that closing it without saving stops its jobs, saved first they go on;
+  one saved says, once its tab is closed, how many go on. Meno quitting
+  with nothing unsaved says nothing: there is nowhere left to say it.
+- **Deleting a running step asks first**; deleted, a step's jobs are
+  stopped and their folders taken away. Undone, the step comes back
+  without them; its results keep its logs.
+- **Show log** opens each job's log as a text of the workspace, *Optimise
+  log* (*Optimise log 2*, ... where there are several), following the
+  job while it runs; a text that grows at its end keeps its last lines in
+  view unless it was scrolled up.
+- **A choice of more than five** is a list to pick from, in a step's
+  options and in Settings (xTB's solvents, its convergence levels).
+- **xTB's options**: the method (GFN2-xTB, GFN1-xTB, GFN-FF), a solvent -
+  ALPB, any of the 24 its documentation gives for all three methods - and,
+  optimising, how far it converges (crude to extreme, normal by default).
+
+Changed after review (the maintainer, 2026-10-08; decided: 16): a step
+is its plugin's. Quick Add lists the plugins added, then Meno, each with
+its kinds; a step's card is titled with its plugin and says its
+calculation under it; opened, it offers the plugin's other kinds;
+Settings, *Calculations*, is by plugin, and no longer chooses who does a
+kind. Settings sets each kind's defaults, by plugin and kind; a step
+starts with them, and what is changed in it is its own (decided: 17).
+
+Not yet, and where it comes:
+
+- *Run from here*, *Run all*, runs kept in a step, several steps at once
+  - step 4 (*Run* already runs the steps before it that need it);
+- a thin bar where a program says how far it is;
+- a workspace never saved keeping its jobs with the unsaved workspace
+  Meno reopens: Meno reopens no unsaved workspace yet.
 
 ## Questions
 

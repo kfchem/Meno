@@ -33,6 +33,7 @@ jobs:
       # A plugin's worker that needs Python alone is tested here; those that
       # need their packages are run by hand (scripts/calc, scripts/chem).
       - run: python3 -m unittest scripts/calc/test_writer_gaussian_input.py
+      - run: python3 -m unittest scripts/calc/test_plugin_xtb.py
 
   rust:
     name: Rust backend (check, clippy, test)

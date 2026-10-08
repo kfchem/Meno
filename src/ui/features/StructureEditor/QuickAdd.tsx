@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RISE } from "../../theme/motion";
 import { CalculationsGlyph, StepGlyph } from "./workflow/icons";
 import type { StepKind } from "./workflow/kinds";
-import type { QuickStep } from "./workflow/offered";
+import type { QuickGroup } from "./workflow/offered";
 
 /** What Quick Add puts down where it was opened. */
 export type QuickAddChoice = "bond" | "text" | "arrow" | "plus";
@@ -11,6 +11,8 @@ export type QuickAddChoice = "bond" | "text" | "arrow" | "plus";
 /** How far from the point it was opened at the icons stand, up and to the right, and each one's size, in px. */
 const OFF = 14;
 const SIZE = 36;
+/** How wide the name of who does a row of steps stands, beside its kinds. */
+const LABEL_W = 64;
 
 const CHOICES: { what: QuickAddChoice; name: string; icon: ReactNode }[] = [
   {
@@ -44,10 +46,11 @@ const CHOICES: { what: QuickAddChoice; name: string; icon: ReactNode }[] = [
  * What a double-click on empty space opens there: a bond, words, a
  * reaction arrow or a "+", each an icon - named as the pointer rests on it
  * - put down where the double-click was; and, after a thin rule, one
- * button for calculations, which opens below them to the kinds of step
- * (docs/WORKFLOWS.md, *A step: from Quick Add*) - those that run a program
- * first, then those on entries alone. A wire let go on empty space opens
- * it at its calculations alone, those that take what the wire carries.
+ * button for calculations, which opens below them to who does them - each
+ * plugin added that fills a kind of step, then Meno - each a row of the
+ * kinds it fills (docs/WORKFLOWS.md, *A step: from Quick Add*). A wire let
+ * go on empty space opens it at its calculations alone, those that take
+ * what the wire carries.
  * It stands up and to the right of that point, inside the canvas, and
  * closes on a choice, on Escape, on a press anywhere else and on a turn of
  * the wheel.
@@ -65,12 +68,12 @@ export default function QuickAdd({
   x: number;
   y: number;
   within: { width: number; height: number };
-  /** The kinds of step something added does - for a wire, those that take what it carries. */
-  steps: readonly QuickStep[];
+  /** Who does steps, each with the kinds it fills - for a wire, those that take what it carries. */
+  steps: readonly QuickGroup[];
   /** Opened by a wire let go: its calculations alone. */
   wired?: boolean;
   onChoose: (what: QuickAddChoice) => void;
-  onStep: (kind: StepKind) => void;
+  onStep: (kind: StepKind, by: string) => void;
   onClose: () => void;
 }) {
   const [calcOpen, setCalcOpen] = useState(wired);
@@ -94,11 +97,13 @@ export default function QuickAdd({
       window.removeEventListener("keydown", onKey, true);
     };
   }, [onClose]);
-  const PER_ROW = 6;
-  const rowsOf = Math.max(1, Math.ceil(steps.length / PER_ROW));
-  // (a wire's: as wide as its kinds, or the words saying there are none)
-  const width = wired ? (steps.length ? Math.min(steps.length, PER_ROW) * SIZE + 16 : 200) : (CHOICES.length + 1) * SIZE + 8 + 9;
-  const height = SIZE + 8 + (calcOpen && !wired ? rowsOf * SIZE + 9 : 0);
+  // (a row for each who does steps: its name, then its kinds)
+  const most = Math.max(1, ...steps.map((g) => g.steps.length));
+  const calcWidth = LABEL_W + most * SIZE + 8;
+  const rowWidth = (CHOICES.length + 1) * SIZE + 8 + 9;
+  // (a wire's: as wide as its rows, or the words saying there are none)
+  const width = wired ? (steps.length ? calcWidth : 200) : calcOpen ? Math.max(rowWidth, calcWidth) : rowWidth;
+  const height = SIZE + 8 + (calcOpen && !wired ? Math.max(1, steps.length) * SIZE + 9 : 0);
   // (up and to the right, clear of the point; inside the canvas, below it or to its left where it must)
   const left = x + OFF + width <= within.width - 4 ? x + OFF : Math.max(4, x - OFF - width);
   const top = y - OFF - height >= 4 ? y - OFF - height : Math.min(within.height - height - 4, y + OFF);
@@ -144,19 +149,26 @@ export default function QuickAdd({
       {/* (opening below the row in a short ease, not at once) */}
       <div className="grid transition-[grid-template-rows,opacity] duration-200 ease-meno" style={{ gridTemplateRows: calcOpen ? "1fr" : "0fr", opacity: calcOpen ? 1 : 0 }}>
         <div className="overflow-hidden">
-          <div role="group" aria-label="Calculations" className={`flex flex-wrap gap-0.5 ${wired ? "" : "mt-1 pt-1 border-t border-gh-line"}`} style={{ width: wired ? undefined : width - 8 }}>
+          <div role="group" aria-label="Calculations" className={wired ? "" : "mt-1 pt-1 border-t border-gh-line"} style={{ width: wired ? undefined : width - 8 }}>
             {steps.length ? (
-              steps.map((k, i) => (
-                <button
-                  key={k.kind}
-                  aria-label={k.name}
-                  title={`${k.name} · ${k.who}`}
-                  onClick={() => onStep(k.kind)}
-                  className={`rounded-md flex items-center justify-center text-gh-black hover:bg-gh-base ${i > 0 && k.runs !== steps[i - 1].runs ? "ml-2" : ""}`}
-                  style={{ width: SIZE, height: SIZE }}
-                >
-                  <StepGlyph icon={k.icon} size={20} stroke={2.1} />
-                </button>
+              steps.map((g) => (
+                <div key={g.by} role="group" aria-label={g.name} className="flex items-center">
+                  <span className="shrink-0 truncate px-1.5 text-xs text-gh-gray" style={{ width: LABEL_W }}>
+                    {g.name}
+                  </span>
+                  {g.steps.map((k) => (
+                    <button
+                      key={k.kind}
+                      aria-label={`${k.name} \u00b7 ${g.name}`}
+                      title={k.name}
+                      onClick={() => onStep(k.kind, g.by)}
+                      className="rounded-md flex items-center justify-center text-gh-black hover:bg-gh-base"
+                      style={{ width: SIZE, height: SIZE }}
+                    >
+                      <StepGlyph icon={k.icon} size={20} stroke={2.1} />
+                    </button>
+                  ))}
+                </div>
               ))
             ) : (
               <div className="px-2 text-xs leading-9 text-gh-gray whitespace-nowrap">No step added takes this</div>

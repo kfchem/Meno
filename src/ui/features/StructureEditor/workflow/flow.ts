@@ -7,6 +7,7 @@ import type { StructureDocument } from "../document";
 import type { Molecule3D, Wire, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
 import { holdsOf, setMembers } from "./entries";
 import { kindInfo, optionsOf, takes, type SetKind } from "./kinds";
+import { optionsFor } from "./doers";
 
 type Flow = Pick<StructureDocument, "model" | "molecules3d" | "sets" | "steps" | "wires">;
 
@@ -94,7 +95,7 @@ function hash(text: string, h = 0x811c9dc5): number {
 export function inputKey(doc: Flow, step: WorkflowStep, by: string): string {
   const input = inputOf(doc, step.id);
   if (!input) return "";
-  let h = hash(`${input.holds}|${by}|${JSON.stringify(optionsOf(step.kind, step.options))}`);
+  let h = hash(`${input.holds}|${step.kind}|${by}|${JSON.stringify(optionsOf(optionsFor(step.kind, by), step.options))}`);
   for (const m of input.molecules) {
     h = hash(m.atoms.map((a) => `${a.el}${a.x.toFixed(5)},${a.y.toFixed(5)},${a.z.toFixed(5)}`).join(";"), h);
     h = hash(`${m.bonds.map((b) => `${b.a1}-${b.a2}:${b.order}`).join(";")}|${(m.frames ?? []).map((f) => f.map((v) => v.toFixed(5)).join(",")).join(";")}`, h);
@@ -104,15 +105,24 @@ export function inputKey(doc: Flow, step: WorkflowStep, by: string): string {
   return h.toString(36);
 }
 
-/** What a step's card says it is: nothing coming in; ready to run; done, or failed - or changed since, in what comes in, its options or who does it. */
-export type StepState = "no-input" | "ready" | "done" | "failed" | "changed";
+/** The jobs a page's steps have waiting or running, by id (docs/WORKFLOWS.md, *When Meno closes*). */
+export const jobsUnderWay = (doc: Pick<Flow, "steps">): string[] => (doc.steps ?? []).flatMap((s) => s.running?.jobs.map((j) => j.id) ?? []);
+
+/**
+ * What a step's card says it is: nothing coming in; ready to run; its jobs
+ * waiting or running; done, failed or stopped - or changed since, in what
+ * comes in, its options or who does it.
+ */
+export type StepState = "no-input" | "ready" | "waiting" | "running" | "done" | "failed" | "stopped" | "changed";
 
 export function stateOf(doc: Flow, step: WorkflowStep, by: string): StepState {
+  // (its jobs under way: the card says which, as they were last looked at)
+  if (step.running) return "running";
   const into = wireInto(doc, step.id);
   if (!step.ran) return into ? "ready" : "no-input";
   // (what comes from a step not run yet, or run since, has changed)
   if (!into) return "changed";
   const key = inputKey(doc, step, by);
   if (key !== step.ran.input) return "changed";
-  return step.ran.ok ? "done" : "failed";
+  return step.ran.ok ? "done" : step.ran.stopped ? "stopped" : "failed";
 }

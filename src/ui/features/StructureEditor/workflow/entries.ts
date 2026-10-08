@@ -96,18 +96,21 @@ export function holdsOf(page: Page, set: WorkflowSet): SetKind {
   return molecules.some((id) => conformersOfOne(byId.get(id)!)) ? "conformers" : "molecules";
 }
 
-/** How many entries a set holds, of what kind of set: a structure each, a frame each of a molecule in 3D. */
+/** How many entries a set holds, of what kind of set: a structure each, a frame each of a molecule in 3D - one for a path to its last. */
 export function countOf(page: Page, set: WorkflowSet): { holds: SetKind; entries: number; compounds: number } {
   const holds = holdsOf(page, set);
   const { structures, molecules } = setMembers(page, set);
   const byId = new Map((page.molecules3d ?? []).map((m) => [m.id, m]));
-  const frames = molecules.reduce((n, id) => n + framesOf(byId.get(id)!), 0);
+  const frames = molecules.reduce((n, id) => n + entriesIn(byId.get(id)!), 0);
   const entries = structures.length + frames;
   return { holds, entries, compounds: holds === "conformers" ? molecules.length : entries };
 }
 
 /** How many frames a molecule in 3D has: its own geometry, and the rest. */
 export const framesOf = (m: Pick<Molecule3D, "frames">) => 1 + (m.frames?.length ?? 0);
+
+/** How many entries a molecule in 3D is: a frame each - but one, its last, where its frames are a path to it. */
+const entriesIn = (m: Pick<Molecule3D, "frames" | "path">) => (m.path ? 1 : framesOf(m));
 
 /** One entry of a set of molecules in 3D, as a step takes it: its compound by its place among the set's, its number among that compound's conformers, its atoms and bonds, its geometry, its energy. */
 export type SetEntry = {
@@ -139,7 +142,8 @@ export function setEntries(molecules: readonly Molecule3D[], holds: "molecules" 
   molecules.forEach((m, i) => {
     const n = framesOf(m);
     const energies = m.energies?.length === n ? m.energies : undefined;
-    for (let f = 0; f < n; f++) {
+    // (a path: its last frame alone)
+    for (let f = m.path ? n - 1 : 0; f < n; f++) {
       out.push({
         compound: holds === "conformers" ? i : out.length,
         number: holds === "conformers" ? (m.numbers?.[f] ?? f + 1) : 1,

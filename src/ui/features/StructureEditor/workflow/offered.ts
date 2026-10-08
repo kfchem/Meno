@@ -1,25 +1,34 @@
 /**
- * The kinds of step Quick Add offers (docs/WORKFLOWS.md, *A step: from
- * Quick Add*): only those something added does - those that run a program
- * first, then those on entries alone. For a wire let go on empty space,
- * those that take what it carries - and *As conformers*, the conversion
- * taken on purpose, at the end, from a compound set only.
+ * The steps Quick Add offers (docs/WORKFLOWS.md, *A step: from Quick
+ * Add*): by who does them - each plugin added that fills any, those that
+ * run a program first, then Meno - and under each the kinds it fills. For
+ * a wire let go on empty space, those that take what it carries; and *As
+ * conformers*, the conversion taken on purpose, only there, from a
+ * compound set.
  */
 import type { WireEnd } from "../store/types";
-import { defaultDoer, doable } from "./doers";
+import { doersAdded, kindsOf } from "./doers";
 import { givesOf } from "./flow";
-import { KINDS, takes, type StepIcon, type StepKind } from "./kinds";
+import { kindInfo, takes, type StepIcon, type StepKind } from "./kinds";
 
-/** A kind of step Quick Add offers: what it is called, its icon, who does it, and whether it runs a program. */
-export type QuickStep = { kind: StepKind; name: string; icon: StepIcon; who: string; runs: "program" | "entries" };
+/** A kind of step Quick Add offers: what it is called, and its icon. */
+export type QuickStep = { kind: StepKind; name: string; icon: StepIcon };
+/** Who does steps, as Quick Add offers them: by its id and name, and the kinds of step it fills that are offered. */
+export type QuickGroup = { by: string; name: string; steps: QuickStep[] };
 
 type Flow = Parameters<typeof givesOf>[0];
 
-export function offeredSteps(flow: Flow, wire?: WireEnd): QuickStep[] {
+export function offeredSteps(flow: Flow, wire?: WireEnd): QuickGroup[] {
   const set = wire ? givesOf(flow, wire) : null;
-  const kinds = KINDS.filter((k) => k.kind !== "as-conformers" && doable(k.kind) && (!wire || set == null || takes(k.kind, set)));
-  const program = kinds.filter((k) => k.runs === "program");
-  const entries = kinds.filter((k) => k.runs === "entries");
-  const convert = wire && set === "molecules" && doable("as-conformers") ? KINDS.filter((k) => k.kind === "as-conformers") : [];
-  return [...program, ...entries, ...convert].map((k) => ({ kind: k.kind, name: k.name, icon: k.icon, runs: k.runs, who: defaultDoer(k.kind)?.name ?? "" }));
+  const offered = (kind: StepKind) =>
+    kind === "as-conformers" ? !!wire && set === "molecules" : !wire || set == null || takes(kind, set);
+  return doersAdded()
+    .map((d) => ({
+      by: d.id,
+      name: d.name,
+      steps: kindsOf(d.id)
+        .filter(offered)
+        .map((kind) => ({ kind, name: kindInfo(kind).name, icon: kindInfo(kind).icon })),
+    }))
+    .filter((g) => g.steps.length);
 }

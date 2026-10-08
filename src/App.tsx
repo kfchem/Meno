@@ -26,7 +26,9 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { MENO_KINDS } from "./lib/io/kinds";
 import { kindOfFile } from "./lib/calc/probe";
 import { addedReaders } from "./lib/calc/workers";
-import { READERS, WRITER_PLUGINS } from "./lib/calc/catalog";
+import { PLUGINS, READERS } from "./lib/calc/catalog";
+import { stopJob } from "./lib/jobs";
+import { jobsUnderWay } from "./ui/features/StructureEditor/workflow/flow";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
 import {
@@ -84,9 +86,10 @@ export default function App() {
 
   // The plugins added on this computer, looked at once as Meno starts: the
   // kinds they bring registered (lib/io/kinds), for whatever is opened,
-  // dropped or pasted, and those they write offered by Export.
+  // dropped or pasted, those they write offered by Export, and the kinds of
+  // step they fill offered in Quick Add.
   useEffect(() => {
-    if (isTauri()) void addedReaders([...READERS, ...WRITER_PLUGINS.filter((p) => !READERS.includes(p))]).catch(() => {});
+    if (isTauri()) void addedReaders([...READERS, ...PLUGINS.filter((p) => !READERS.includes(p))]).catch(() => {});
   }, []);
 
   // The application's settings - the drawing style among them - read once,
@@ -253,6 +256,16 @@ export default function App() {
           .filter((t) => t.meta.dirty && officeIdOf(t) == null)
           .map((t) => t.meta.id);
   const savable = (p: { kind: "tab"; id: string } | { kind: "window" }) => unsavedOf(p).every((id) => saverOf(id));
+  // The jobs the workspaces of these tabs have waiting or running
+  // (docs/WORKFLOWS.md, *When Meno closes*): they go on without Meno - but
+  // a workspace closed without being saved will not pick them up, so they
+  // are stopped with it.
+  const jobsIn = (ids: readonly string[]): string[] =>
+    ids.flatMap((id) => {
+      const held = documentsRef.current.get(id);
+      return held?.kind === "structure" ? jobsUnderWay((held.doc as DocumentStore<StructureDocument>).getState()) : [];
+    });
+  const jobsSaid = (n: number, they: string) => (n ? `, and stops the ${n === 1 ? "job" : `${n} jobs`} ${they} running - saved first, ${n === 1 ? "it goes" : "they go"} on` : "");
   // Each saved in turn - its tab brought forward, so that it is seen which
   // is being saved - and then closed; kept open if one is not saved.
   const saveThenClose = async (p: { kind: "tab"; id: string } | { kind: "window" }) => {
@@ -400,7 +413,13 @@ export default function App() {
         closeTab(id);
         leaveIfOnlyForOffice(id);
       } else if (state.tabsById[id]?.meta.dirty) setPendingClose({ kind: "tab", id });
-      else closeTab(id);
+      else {
+        // (its jobs go on, as its saved workspace says: opened again, it picks them up)
+        const going = jobsIn([id]).length;
+        const label = state.tabsById[id]?.meta.label ?? "this workspace";
+        closeTab(id);
+        if (going) setNotice(`${going === 1 ? "A job" : `${going} jobs`} of "${label}" ${going === 1 ? "goes" : "go"} on. Open it again to see what ${going === 1 ? "it gives" : "they give"}.`);
+      }
     },
     // "+": a canvas, the page everything else is opened from
     add: () => {
@@ -482,14 +501,15 @@ export default function App() {
           }
           message={
             pendingClose.kind === "tab"
-              ? "Its changes have not been saved. Closing it throws them away."
-              : "Some tabs have changes that have not been saved. Closing the window throws them away."
+              ? `Its changes have not been saved. Closing it throws them away${jobsSaid(jobsIn([pendingClose.id]).length, "it is")}.`
+              : `Some tabs have changes that have not been saved. Closing the window throws them away${jobsSaid(jobsIn(unsavedOf(pendingClose)).length, "they are")}.`
           }
           discardLabel="Close without saving"
           onCancel={() => setPendingClose(null)}
-          onDiscard={() => {
+          onDiscard={async () => {
             const p = pendingClose;
             setPendingClose(null);
+            await Promise.all(jobsIn(unsavedOf(p)).map((j) => stopJob(j).catch(() => {})));
             if (p.kind === "tab") closeTab(p.id);
             // destroy, not close: close would only ask again.
             else void getCurrentWindow().destroy();

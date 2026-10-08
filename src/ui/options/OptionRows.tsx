@@ -1,11 +1,11 @@
 import clsx from "clsx";
-import type { Option, OptionValues } from "../../lib/options";
+import { MANY_CHOICES, type Option, type OptionValues } from "../../lib/options";
 
 /**
  * A role's options as rows of Settings (lib/options): each its label on
  * the left and its control on the right, as the drawing style's settings
- * are - a choice as buttons side by side, a number with its unit, a text,
- * a switch. For rows within a card: no frame of their own.
+ * are - a choice as buttons side by side, or of many a list to pick from;
+ * a number with its unit, a text, a switch. For rows within a card: no frame of their own.
  */
 export default function OptionRows({
   options,
@@ -25,7 +25,20 @@ export default function OptionRows({
       {options.map((o) => (
         <div key={o.id} className={clsx("py-2 pr-3 flex items-center gap-3", indent ? "pl-8" : "pl-3")}>
           <span className="min-w-0 flex-1 text-sm text-gh-black">{o.label}</span>
-          {o.type === "choice" ? (
+          {o.type === "choice" && o.choices.length > MANY_CHOICES ? (
+            <select
+              aria-label={o.label}
+              value={String(values[o.id] ?? "")}
+              onChange={(e) => set(o.id, e.target.value)}
+              className="h-7 shrink-0 rounded-md border border-gh-line bg-white px-2 text-xs text-gh-black"
+            >
+              {o.choices.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          ) : o.type === "choice" ? (
             <div className="flex rounded-md border border-gh-line overflow-hidden shrink-0" role="radiogroup" aria-label={o.label}>
               {o.choices.map((c) => (
                 <button

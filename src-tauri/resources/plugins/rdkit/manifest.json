@@ -22,5 +22,8 @@
     ]
   },
   "reads": [],
-  "kinds": []
+  "kinds": [],
+  "steps": [
+    {"kind": "structure-3d"}
+  ]
 }

@@ -961,7 +961,9 @@ mod tests {
         write_record(&other, &JobRecord::new(JobState::Running, 1)).unwrap();
         assert_eq!(current_record(&other).unwrap().state, JobState::Running);
         drop(lock);
-        assert_eq!(current_record(&other).unwrap().state, JobState::Gone);
+        // (let go: gone - once a program another test starts, forked while the
+        // lock was held and holding it with it until it runs, has let go too)
+        wait_for(|| current_record(&other).unwrap().state == JobState::Gone);
         let _ = fs::remove_dir_all(root);
     }
 

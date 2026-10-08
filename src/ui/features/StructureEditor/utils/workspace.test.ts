@@ -62,6 +62,15 @@ describe("a workspace file", () => {
     expect(second.frames).toEqual(water3d.frames);
   });
 
+  it("keeps an optimisation's path as one: its frames the path to its last", () => {
+    const doc = createStructureDocument();
+    const store = createEditorStore(doc);
+    connectStoreToDocument(store, doc);
+    store.getState().pasteModel({ atoms: [], bonds: [], molecules3d: [{ ...water3d, path: true, at: { x: 0, y: 0 } }] });
+    const ws = readWorkspace(workspaceText(store.getState()));
+    expect(ws!.drawn.molecules3d![0].path).toBe(true);
+  });
+
   it("opens on another canvas just as it was saved: turned, in its frame, its style its own", () => {
     const { st } = canvas();
     const text = workspaceText(st());

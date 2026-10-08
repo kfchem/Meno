@@ -34,7 +34,7 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
  * in unless its document has its own, how molecules in 3D look and turn,
  * how the mouse and the trackpad work the canvas,
  * what is pointed out on a structure, who reads and writes each kind
- * of file and how sharp a copied picture is, who does each kind of step in a workflow and how its jobs run, the plugins, what the labels Meno reads stand for, and what Meno
+ * of file and how sharp a copied picture is, the calculations of a workflow and how its jobs run, the plugins, what the labels Meno reads stand for, and what Meno
  * may do on the network.
  */
 export default function SettingsPanel() {
@@ -150,8 +150,8 @@ export default function SettingsPanel() {
           <section className="mt-6 max-w-4xl">
             <h2 className="text-base font-semibold text-gh-black">Calculations</h2>
             <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
-              The steps of a workflow on the page, and who does each. A new step starts with these options; the
-              options last chosen in a step become them.
+              Default options for each calculation in a workflow, by what does it: each plugin added, and Meno. A
+              step put on the page starts with these; options changed in a step are that step's alone.
             </p>
             <CalculationSettings />
             <h3 className="mt-6 text-sm font-semibold text-gh-black">Jobs</h3>

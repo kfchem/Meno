@@ -75,7 +75,9 @@ Everything a plugin is lives in one folder, named by its id:
                      its environment and runs its worker; the kinds of file
                      it brings (id, name, extensions, marks) and those it
                      reads, by id - its own, or Meno's; the kinds it writes,
-                     each with what it takes and its options (`writes`)
+                     each with what it takes and its options (`writes`);
+                     the kinds of a workflow's step it fills, each with the
+                     programs it runs and its options (`steps`)
   worker.py          its worker, spoken to in JSON lines under the contract
   requirements.lock  its environment, made by uv from PyPI - or, where it
   (or pixi.toml and  needs conda-forge, by pixi
@@ -192,7 +194,11 @@ The same for every plugin and for Meno's own parts:
   - `ping` - its name and version;
   - `read`, `ask`, `write` - the file roles, and `probe` - whether a file
     is of a kind it registered (FILE-IO.md);
-  - `run {role, input, options}` - every other role.
+  - `run {role, input, options}` - every other role;
+  - `prepare {step, entries, options, cores}` and `collect {step,
+    entries, options, files, log, ended}` - a kind of step its program
+    does (WORKFLOWS.md, *What changes in the contract*): the jobs Meno is
+    to run, and what one gave, read back.
 - **Molecules cross it in Meno's own forms.** Chemistry plugins are
   given and give back MOL blocks (decision 4, revised); a writer is given
   Meno's plain data - each atom's element, place in ångströms, charge,
