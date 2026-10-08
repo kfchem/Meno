@@ -1,0 +1,120 @@
+/**
+ * Jobs (src-tauri/src/jobs.rs; docs/WORKFLOWS.md): a program a plugin
+ * names, run for a workflow's step in a folder of its own in Meno's data
+ * folder, by Meno's executable started apart from Meno - so that it goes on
+ * when Meno closes. Jobs wait their turn, as many running at once as
+ * Settings allows; each has its log, and a record of how it ended.
+ */
+import { invoke } from "@tauri-apps/api/core";
+import type { CalculationSettings } from "./settings/appSettings";
+
+/** Where a job is. *Gone*: what ran it is no longer there, and never said how it ended (the computer was restarted, say). */
+export type JobState = "waiting" | "running" | "done" | "failed" | "stopped" | "gone";
+
+/** A job, as Meno's record of it has it. Times in ms since 1970. */
+export type Job = {
+  id: string;
+  /** The plugin that asked for it, and the program it runs, by its name. */
+  plugin: string;
+  program: string;
+  state: JobState;
+  created: number;
+  started?: number;
+  ended?: number;
+  /** The program's exit code, where it ended with one. */
+  code?: number;
+  /** Why it failed, where it failed before its program could say. */
+  why?: string;
+};
+
+/** A file written into a job's folder before it starts, by its path there. */
+export type JobFile = { name: string; text: string };
+
+/** What a plugin asks to run (`prepare`), and how many may run at once and how many cores each may use. */
+export type JobAsk = {
+  plugin: string;
+  /** A program the plugin's manifest names, in its environment. */
+  program: string;
+  args?: string[];
+  files?: JobFile[];
+  slots?: number;
+  cores?: number;
+};
+
+/** Whether a job is over - and will say nothing more. */
+export const finished = (state: JobState) => state !== "waiting" && state !== "running";
+
+/** A job made and started: its id. It waits its turn. */
+export const startJob = (ask: JobAsk) => invoke<string>("job_start", { payload: ask });
+export const jobOf = (id: string) => invoke<Job>("job_state", { id });
+/** Every job in Meno's data folder, those asked for first first. */
+export const listJobs = () => invoke<Job[]>("jobs_list");
+/** What a job's log says from byte `from` on, and where to read from next. */
+export const readJobLog = (id: string, from: number) => invoke<{ text: string; next: number }>("job_log", { id, from });
+/** The files in a job's folder, by their paths there. */
+export const jobFiles = (id: string) => invoke<string[]>("job_files", { id });
+export const readJobFile = (id: string, name: string) => invoke<string>("job_read", { id, name });
+/** Where a job's files are, for *Show files*. */
+export const jobFolder = (id: string) => invoke<string>("job_folder", { id });
+/** Asks a job to stop: its program, and everything it started - or, waiting, it never starts. */
+export const stopJob = (id: string) => invoke<void>("job_stop", { id });
+/** A finished job's folder taken away. */
+export const removeJob = (id: string) => invoke<void>("job_remove", { id });
+/** Every finished job's folder taken away: how many. */
+export const clearFinishedJobs = () => invoke<number>("jobs_clear_finished");
+
+/** This computer's cores, as far as the webview can tell. */
+export const computerCores = () => Math.max(1, (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 1);
+
+/**
+ * How many jobs run at once and how many cores each may use, as Settings,
+ * *Calculations*, has them: unset, one at once, and the computer's cores
+ * shared among those at once - never more than it has.
+ */
+export function runningOf(c: Pick<CalculationSettings, "atOnce" | "cores">, cores = computerCores()): { slots: number; cores: number } {
+  const slots = c.atOnce ?? 1;
+  return { slots, cores: Math.min(c.cores ?? Math.max(1, Math.floor(cores / slots)), cores) };
+}
+
+/** How often a job followed is looked at. */
+const FOLLOW_MS = 500;
+
+/**
+ * Follows a job: what its log says as it says it, and where it is when that
+ * changes, until it has finished and everything it said has been read.
+ * `done` is the job as it ended; `stop` stops following it.
+ */
+export function followJob(
+  id: string,
+  on: { log?: (text: string) => void; state?: (job: Job) => void },
+  every = FOLLOW_MS,
+): { done: Promise<Job>; stop: () => void } {
+  let stopped = false;
+  let from = 0;
+  let was: JobState | undefined;
+  const done = (async () => {
+    for (;;) {
+      const job = await jobOf(id);
+      // (all of it read: a long log comes in pieces)
+      for (;;) {
+        const read = await readJobLog(id, from);
+        if (stopped) return job;
+        if (read.next === from) break;
+        from = read.next;
+        if (read.text) on.log?.(read.text);
+      }
+      if (job.state !== was) {
+        was = job.state;
+        on.state?.(job);
+      }
+      if (stopped || finished(job.state)) return job;
+      await new Promise((go) => setTimeout(go, every));
+    }
+  })();
+  return {
+    done,
+    stop: () => {
+      stopped = true;
+    },
+  };
+}
