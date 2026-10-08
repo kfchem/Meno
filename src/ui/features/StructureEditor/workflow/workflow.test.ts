@@ -50,6 +50,22 @@ describe("what a set holds", () => {
     expect(countOf(doc, set)).toEqual({ holds: "molecules", entries: 2, compounds: 2 });
   });
 
+  it("is one compound's conformers where a molecule's frames are a conformer search's - a file's many geometries many compounds", () => {
+    // (a molecule made by 3D structures: its frames conformers, as it says)
+    let doc = addMolecule3d(emptyStructureDocument(), { ...bent({ x: 0, y: 0 }, 6), conformerSet: true });
+    doc = addSet(doc, { x0: -2, y0: -2, x1: 2, y1: 2 });
+    expect(holdsOf(doc, doc.sets![0])).toBe("conformers");
+    expect(countOf(doc, doc.sets![0])).toEqual({ holds: "conformers", entries: 6, compounds: 1 });
+    // (a file's: each frame a compound of its own)
+    let file = addMolecule3d(emptyStructureDocument(), bent({ x: 0, y: 0 }, 6));
+    file = addSet(file, { x0: -2, y0: -2, x1: 2, y1: 2 });
+    expect(countOf(file, file.sets![0])).toEqual({ holds: "molecules", entries: 6, compounds: 6 });
+    // (one conformer alone says nothing of a set)
+    let one = addMolecule3d(emptyStructureDocument(), { ...bent({ x: 0, y: 0 }, 1), conformerSet: true });
+    one = addSet(one, { x0: -2, y0: -2, x1: 2, y1: 2 });
+    expect(holdsOf(one, one.sets![0])).toBe("molecules");
+  });
+
   it("is a set of structures where any is drawn in it", () => {
     let doc = emptyStructureDocument();
     doc = { ...doc, model: { atoms: [{ id: 1, el: "C", x: 0, y: 0, r: 0.9 } as never], bonds: [] }, nextId: 2 };
@@ -111,10 +127,10 @@ describe("wires", () => {
     expect(resultOf(doc, 2)).toBeTruthy();
     doc = removeStep(doc, 2);
     expect(doc.wires).toEqual([]);
-    // (what it made stays, a set like any the chemist drew: a compound set)
+    // (what it made stays, a set like any the chemist drew - of conformers still, as its molecule's frames are a conformer search's)
     expect(doc.sets).toHaveLength(2);
     expect(doc.sets![1].made).toBeUndefined();
-    expect(holdsOf(doc, doc.sets![1])).toBe("molecules");
+    expect(holdsOf(doc, doc.sets![1])).toBe("conformers");
   });
 });
 
