@@ -4,7 +4,7 @@
  * document, so that undo takes it back and Save keeps it.
  */
 import type { StructureDocument } from "../document";
-import type { WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
+import type { StepRunKept, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
 import type { OptionValues } from "../../../../lib/options";
 import { setMembers, type Frame } from "./entries";
 import { canWire, wireInto } from "./flow";
@@ -86,6 +86,19 @@ export function updateStep(doc: StructureDocument, id: number, patch: { options?
 /** What a step did when it ran, kept with it. */
 export function setRan(doc: StructureDocument, id: number, ran: NonNullable<WorkflowStep["ran"]>): StructureDocument {
   return withStep(doc, id, (s) => ({ ...s, ran }));
+}
+
+/** How many of a step's earlier runs it keeps. */
+export const RUNS_KEPT = 10;
+
+/** A step's earlier runs, newest first - none, where it keeps none. */
+export function withStepRuns(doc: StructureDocument, id: number, runs: StepRunKept[]): StructureDocument {
+  return withStep(doc, id, (s) => {
+    if (runs.length) return { ...s, runs };
+    if (!s.runs) return s;
+    const { runs: _r, ...rest } = s;
+    return rest;
+  });
 }
 
 /** A step's run while its jobs wait or run - or, ended, none: the step as it was otherwise. */

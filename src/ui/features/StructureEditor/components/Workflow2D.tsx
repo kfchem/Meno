@@ -9,7 +9,7 @@ import { COLORS } from "../../../theme/colors";
 import { MOV_PX } from "../constants";
 import { useStyle3D } from "../style3d";
 import SetFrame, { type Edge } from "../workflow/SetFrame";
-import StepCard, { Port, type PortLook, type RunView } from "../workflow/StepCard";
+import StepCard, { Port, type PortLook, type RunRow, type RunView } from "../workflow/StepCard";
 import { setMembers, countOf, type Frame } from "../workflow/entries";
 import { selectionFrame } from "../workflow/selectionSet";
 import { canWire, stateOf } from "../workflow/flow";
@@ -18,7 +18,7 @@ import { useReaders } from "../../../../lib/calc/workers";
 import { finished } from "../../../../lib/jobs";
 import { setList } from "../workflow/list";
 import { CARD_W, HTML_DISTANCE, PORT_DOWN, PX } from "../workflow/look";
-import { byOf, doerOf, kindsOf, stepOptions } from "../workflow/doers";
+import { byOf, doerOf, kindsOf, optionsFor, stepOptions } from "../workflow/doers";
 
 type Pt = { x: number; y: number };
 
@@ -165,6 +165,17 @@ function WireLine({ p, q, color, zoom, onHover }: { p: Pt; q: Pt; color: string;
       )}
     </group>
   );
+}
+
+/** A step's runs as its card lists them: the one shown, then those it keeps, each with how it was set - its kind, where it was another. */
+function runRows(s: WorkflowStep): RunRow[] {
+  const by = byOf(s);
+  const how = (kind: WorkflowStep["kind"], options: WorkflowStep["options"]) =>
+    [kind !== s.kind ? kindInfo(kind).name : "", howOf(optionsFor(kind, by), options)].filter(Boolean).join(" \u00b7 ");
+  return [
+    ...(s.ran ? [{ at: s.ran.at, said: s.ran.said, how: how(s.ran.kind ?? s.kind, s.ran.options ?? s.options), shown: true }] : []),
+    ...(s.runs ?? []).map((r) => ({ at: r.at, said: r.said, how: how(r.kind, r.options), shown: false })),
+  ];
 }
 
 /**
@@ -605,8 +616,10 @@ export default function Workflow2D() {
                   optionList={takes}
                   options={optionsOf(takes, s.options)}
                   kinds={kindsOf(byOf(s)).map((k) => ({ kind: k, name: kindInfo(k).name }))}
+                  runs={runRows(s)}
                   onOptions={(values) => store.getState().updateStep(s.id, { options: values })}
                   onKind={(kind) => store.getState().updateStep(s.id, { kind })}
+                  onShowRun={(index) => store.getState().showRun(s.id, index)}
                   onCardDown={(e) => dragStep(e, s)}
                   onTakeDown={(e) => drawInto(e, s.id)}
                   onGiveDown={(e) => drawFrom(e, { step: s.id })}

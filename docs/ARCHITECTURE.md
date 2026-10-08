@@ -365,9 +365,13 @@ not taken from either.
   Settings alone, by plugin and kind (`step:<who>:<kind>`), and a step
   starts with them, its own changes never written back. Quick Add offers
   the plugins added, each with its kinds (`workflow/offered.ts`).
-- **Running** (`store/slices/stepRuns.ts`): the steps before it first,
-  then the step - Meno's at once, as one edit; a plugin's in its worker
-  (RDKit's 3D structure, through the roles' `conformers`); a plugin's
+- **Running** (`store/slices/stepRuns.ts`): the steps to run - those
+  asked for, and before each those that have not run or have changed -
+  each started once the step before it has ended well, those that do not
+  wait on one another at once (`runSteps`; *Run from here* adds the steps
+  after, *Run all* every step not done); each run - Meno's at once, as
+  one edit; a plugin's in its worker (RDKit's 3D structure, through the
+  roles' `conformers`); a plugin's
   program as jobs: `prepare` asked of its worker, a job started for each
   (lib/jobs), the run kept in the document as `running` - amended in, so
   that undo does not take a run back, but the workspace is unsaved until
@@ -375,7 +379,9 @@ not taken from either.
   are any (Workflow2D), and, all ended, `collect` asked for each and the
   results brought in as one edit. A workspace opened with steps running
   is looked at the same way, and picks them up. What a plugin sends and
-  reads back is checked as data (`workflow/programs.ts`).
+  reads back is checked as data (`workflow/programs.ts`). A step keeps
+  its earlier runs, with what each gave (`keepRun`, `showRun` in
+  `workflow/run.ts`), as a new run's results come in.
 - Settings, Calculations, is `SettingsPanel/CalculationSettings.tsx` - by
   plugin, each with its kinds' options - and its jobs
   `SettingsPanel/JobSettings.tsx`.

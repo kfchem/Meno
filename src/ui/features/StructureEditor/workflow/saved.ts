@@ -4,9 +4,11 @@
  * back as data, what does not read left out, and a wire whose ends are
  * not there with it.
  */
-import type { AsideEntry, StepJob, StepRan, StepRunning, Wire, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
+import type { AsideEntry, StepJob, StepRan, StepRunKept, StepRunning, Wire, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
+import { readCarried3D } from "../utils/copyPaste";
 import type { OptionValues } from "../../../../lib/options";
 import { KINDS, type SetKind, type StepKind } from "./kinds";
+import { RUNS_KEPT } from "./model";
 
 export type SavedWorkflow = { sets: WorkflowSet[]; steps: WorkflowStep[]; wires: Wire[] };
 
@@ -14,15 +16,18 @@ const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFin
 const isId = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0;
 const SETS: readonly SetKind[] = ["structures", "molecules", "conformers"];
 
-function readSet(v: unknown): WorkflowSet | null {
-  const b = v as Partial<Record<keyof WorkflowSet, unknown>> | null;
-  if (!b || !isId(b.id) || !isNum(b.x0) || !isNum(b.y0) || !isNum(b.x1) || !isNum(b.y1)) return null;
-  const made = b.made as { step?: unknown; holds?: unknown } | undefined;
-  const aside = (Array.isArray(b.aside) ? b.aside : []).flatMap((a: Partial<Record<keyof AsideEntry, unknown>>): AsideEntry[] =>
+const asideIn = (v: unknown): AsideEntry[] =>
+  (Array.isArray(v) ? v : []).flatMap((a: Partial<Record<keyof AsideEntry, unknown>>): AsideEntry[] =>
     Number.isInteger(a?.compound) && (a.compound as number) >= 0 && Number.isInteger(a.number)
       ? [{ compound: a.compound as number, number: a.number as number, ...(isNum(a.energy) ? { energy: a.energy } : {}) }]
       : [],
   );
+
+function readSet(v: unknown): WorkflowSet | null {
+  const b = v as Partial<Record<keyof WorkflowSet, unknown>> | null;
+  if (!b || !isId(b.id) || !isNum(b.x0) || !isNum(b.y0) || !isNum(b.x1) || !isNum(b.y1)) return null;
+  const made = b.made as { step?: unknown; holds?: unknown } | undefined;
+  const aside = asideIn(b.aside);
   return {
     id: b.id,
     x0: Math.min(b.x0, b.x1),
@@ -48,9 +53,10 @@ function optionsIn(v: unknown): OptionValues {
 }
 
 function readRan(v: unknown): StepRan | undefined {
-  const r = v as { at?: unknown; ok?: unknown; said?: unknown; input?: unknown; stopped?: unknown; took?: unknown; jobs?: unknown } | undefined;
+  const r = v as { at?: unknown; ok?: unknown; said?: unknown; input?: unknown; stopped?: unknown; took?: unknown; jobs?: unknown; kind?: unknown; options?: unknown } | undefined;
   if (!r || !isNum(r.at) || typeof r.ok !== "boolean" || typeof r.said !== "string" || typeof r.input !== "string") return undefined;
   const jobs = Array.isArray(r.jobs) ? r.jobs.filter((j): j is string => typeof j === "string" && JOB.test(j)) : [];
+  const options = optionsIn(r.options);
   return {
     at: r.at,
     ok: r.ok,
@@ -59,6 +65,32 @@ function readRan(v: unknown): StepRan | undefined {
     ...(r.stopped === true ? { stopped: true as const } : {}),
     ...(isNum(r.took) && r.took >= 0 ? { took: r.took } : {}),
     ...(jobs.length ? { jobs } : {}),
+    ...(KINDS.some((k) => k.kind === r.kind) ? { kind: r.kind as StepKind } : {}),
+    ...(Object.keys(options).length ? { options } : {}),
+  };
+}
+
+/** An earlier run a step keeps, as a file keeps it: what it did, its kind and options then, and what it gave - each molecule read as the page's are. */
+function readKept(v: unknown): StepRunKept | null {
+  const ran = readRan(v);
+  const r = v as { kind?: unknown; options?: unknown; results?: { molecules?: unknown; aside?: unknown; holds?: unknown } } | null;
+  if (!ran || !KINDS.some((k) => k.kind === r?.kind)) return null;
+  const options = optionsIn(r?.options);
+  const res = r?.results;
+  const molecules = Array.isArray(res?.molecules)
+    ? res.molecules.flatMap((m) => {
+        const read = readCarried3D({ ...(m as object), at: { x: 0, y: 0 } });
+        if (!read) return [];
+        const { at: _at, turn: _turn, frame: _frame, list: _list, ...molecule } = read;
+        return [molecule];
+      })
+    : [];
+  const holds = SETS.includes(res?.holds as SetKind) ? (res!.holds as SetKind) : undefined;
+  return {
+    ...ran,
+    kind: r!.kind as StepKind,
+    ...(Object.keys(options).length ? { options } : {}),
+    ...(holds && molecules.length ? { results: { molecules, aside: asideIn(res!.aside), holds } } : {}),
   };
 }
 
@@ -71,7 +103,8 @@ function readRunning(v: unknown): StepRunning | undefined {
       ? [{ id: j.id, entries: j.entries as number[], reads: Array.isArray(j.reads) ? j.reads.filter((n): n is string => typeof n === "string" && IN_FOLDER.test(n)) : [] }]
       : [],
   );
-  return jobs.length ? { at: r.at, input: r.input, options: optionsIn(r.options), jobs } : undefined;
+  const kind = (r as { kind?: unknown }).kind;
+  return jobs.length ? { at: r.at, input: r.input, options: optionsIn(r.options), jobs, ...(KINDS.some((k) => k.kind === kind) ? { kind: kind as StepKind } : {}) } : undefined;
 }
 
 function readStep(v: unknown): WorkflowStep | null {
@@ -80,6 +113,7 @@ function readStep(v: unknown): WorkflowStep | null {
   const options = optionsIn(s.options);
   const ran = readRan(s.ran);
   const running = readRunning(s.running);
+  const runs = (Array.isArray(s.runs) ? s.runs : []).map(readKept).filter((k): k is StepRunKept => k != null).slice(0, RUNS_KEPT);
   return {
     id: s.id,
     kind: s.kind as StepKind,
@@ -88,6 +122,7 @@ function readStep(v: unknown): WorkflowStep | null {
     ...(typeof s.by === "string" && /^[a-z0-9-]{1,40}$/.test(s.by) ? { by: s.by } : {}),
     ...(Object.keys(options).length ? { options } : {}),
     ...(ran ? { ran } : {}),
+    ...(runs.length ? { runs } : {}),
     ...(running ? { running } : {}),
   };
 }

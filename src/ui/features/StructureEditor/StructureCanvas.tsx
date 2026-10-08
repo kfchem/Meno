@@ -730,6 +730,7 @@ function StructureCanvasContent({
   // style, its texts - offered to the app's menu while its tab is in front,
   // and on empty space in the right-click menu; the keys say the same.
   const texts = useEditor((s) => s.texts);
+  const steps = useEditor((s) => s.steps);
   const textsOpen = useEditor((s) => s.textsOpen);
   const commandsNow = useRef<() => CommandGroup[]>(() => []);
   commandsNow.current = () => [
@@ -795,6 +796,18 @@ function StructureCanvasContent({
       title: "Format",
       items: [{ name: ownStyle ? "Drawing style (its own)…" : "Drawing style…", run: () => !styleOpen && toggleStyle() }],
     },
+    // a workflow's steps on the page: every one that has not run or has changed, run - or all stopped
+    ...(steps.length
+      ? [
+          {
+            title: "Calculations",
+            items: [
+              { name: "Run all", run: () => void store.getState().runAll() },
+              { name: "Stop all", run: () => store.getState().stopAll(), disabled: !steps.some((s) => s.running) },
+            ],
+          },
+        ]
+      : []),
   ];
   useEffect(() => {
     if (!active || !ownTab) return;
@@ -989,7 +1002,7 @@ function StructureCanvasContent({
             const st = store.getState();
             const jobs = !!(s.running?.jobs.length || s.ran?.jobs?.length);
             return {
-              ...(s.running ? { onStop: () => st.stopStep(s.id) } : {}),
+              ...(s.running ? { onStop: () => st.stopStep(s.id) } : { onRunFrom: () => void st.runFrom(s.id) }),
               ...(jobs ? { onShowLog: () => void st.showStepLog(s.id), onShowFiles: () => void st.showStepFiles(s.id).catch(() => {}) } : {}),
             };
           })()}

@@ -12,6 +12,7 @@ import { addSet, addStep, connect, moveSet, removeSet, removeStep, removeWire, u
 import { runStep, type RunWith } from "./run";
 import { offeredSteps } from "./offered";
 import { selectionFrame } from "./selectionSet";
+import { readWorkflow } from "./saved";
 
 /** Three atoms, bent, at `at` on the page: frame k opened out by k * `step` ångströms, with energies `e` (hartrees). */
 function bent(at: { x: number; y: number }, n = 1, e?: number[], step = 0.4, el = "O"): Omit<Molecule3D, "id"> {
@@ -264,6 +265,30 @@ describe("saving", () => {
     });
     expect(odd).toEqual({ sets: [{ id: 1, x0: 0, y0: 0, x1: 2, y1: 2 }], steps: [], wires: [] });
     expect(readWorkflow({})).toBeUndefined();
+  });
+
+  it("reads back a step's earlier runs, each with what it gave - a molecule that does not read left out", () => {
+    const m = bent({ x: 9, y: 9 });
+    const saved = readWorkflow({
+      steps: [
+        {
+          id: 1,
+          kind: "optimise",
+          x: 0,
+          y: 0,
+          by: "xtb",
+          runs: [
+            { at: 5, ok: true, said: "0:04", input: "k", kind: "optimise", options: { method: "gfn1" }, results: { molecules: [m, { atoms: "no" }], aside: [], holds: "molecules" } },
+            { at: 4, ok: false, said: "Stopped", input: "k", kind: "teleport" },
+          ],
+        },
+      ],
+    })!;
+    const runs = saved.steps[0].runs!;
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ kind: "optimise", options: { method: "gfn1" }, results: { holds: "molecules" } });
+    expect(runs[0].results!.molecules).toHaveLength(1);
+    expect(runs[0].results!.molecules[0]).not.toHaveProperty("at");
   });
 });
 

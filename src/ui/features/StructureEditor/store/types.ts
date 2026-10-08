@@ -168,9 +168,16 @@ export type AsideEntry = { compound: number; number: number; energy?: number };
  * What a step did when it last ran: when, whether it did, what it says, and
  * what came into it (`inputKey`: so that it shows when that has changed) -
  * and, where it ran jobs, whether it was stopped, how long it took (ms), and
- * its jobs, by id, whose logs and files are kept until the step is deleted.
+ * its jobs, by id, whose logs and files are kept until the step is deleted;
+ * and the kind and options it ran with.
  */
-export type StepRan = { at: number; ok: boolean; said: string; input: string; stopped?: true; took?: number; jobs?: string[] };
+export type StepRan = { at: number; ok: boolean; said: string; input: string; stopped?: true; took?: number; jobs?: string[]; kind?: StepKind; options?: OptionValues };
+/**
+ * An earlier run a step keeps (docs/WORKFLOWS.md, *Results*): what it did
+ * then - its kind and options as they were - and what it gave, as its
+ * result set held it, so that it can be shown again.
+ */
+export type StepRunKept = StepRan & { kind: StepKind; options?: OptionValues; results?: { molecules: Omit<Molecule3D, "id" | "at">[]; aside: AsideEntry[]; holds: SetKind } };
 /**
  * A job a step's run started (lib/jobs): its id; the entries it is for, by
  * their place among those that came in; and the files of its folder its
@@ -183,9 +190,20 @@ export type StepJob = { id: string; entries: number[]; reads: string[] };
  * were, and its jobs - kept in the workspace, so that one opened again picks
  * them up.
  */
-export type StepRunning = { at: number; input: string; options: OptionValues; jobs: StepJob[] };
+export type StepRunning = { at: number; input: string; options: OptionValues; jobs: StepJob[]; kind?: StepKind };
 /** A step on the page: its kind, where its card's top left stands, who does it - Meno, or a plugin, by id - its options, what it last did - and its run, while its jobs wait or run. */
-export type WorkflowStep = { id: number; kind: StepKind; x: number; y: number; by?: string; options?: OptionValues; ran?: StepRan; running?: StepRunning };
+export type WorkflowStep = {
+  id: number;
+  kind: StepKind;
+  x: number;
+  y: number;
+  by?: string;
+  options?: OptionValues;
+  ran?: StepRan;
+  /** Its earlier runs, newest first. */
+  runs?: StepRunKept[];
+  running?: StepRunning;
+};
 /** Where a wire starts: a set, or a step - what it gave. */
 export type WireEnd = { set: number } | { step: number };
 /** A wire, from what gives to the step that takes it. */
@@ -432,8 +450,16 @@ export type EditorState = {
    * for its jobs; the promise is kept when the last of them has run.
    */
   runStep: (id: number) => Promise<void>;
+  /** A step run, and every step after it - those that take what it gives, and those after them. */
+  runFrom: (id: number) => Promise<void>;
+  /** Every step on the page that has not run, or has changed, run in order - those that do not wait on one another at once. */
+  runAll: () => Promise<void>;
   /** A step's jobs asked to stop: those waiting never start, those running are stopped with what they started. */
   stopStep: (id: number) => void;
+  /** Every step's jobs asked to stop. */
+  stopAll: () => void;
+  /** An earlier run of a step shown again - its results in its result set - what it showed kept among its runs instead: one step to undo. */
+  showRun: (id: number, index: number) => void;
   /** A step's logs opened in the column of texts, following its jobs while they run. */
   showStepLog: (id: number) => Promise<void>;
   /** The folder of a step's last job shown where the system shows files. */

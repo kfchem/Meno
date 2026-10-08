@@ -740,6 +740,32 @@ Not yet, and where it comes:
 - a workspace never saved keeping its jobs with the unsaved workspace
   Meno reopens: Meno reopens no unsaved workspace yet.
 
+### Step 4: chains (2026-10-08)
+
+Built: *Run from here* in a step's menu - the step and every step after
+it, those that take what it gives and those after them; *Run all* and
+*Stop all* in Meno's menu, under *Calculations* - every step that has not
+run or has changed, in the order their wires give; steps that do not wait
+on one another run at once, their jobs queued as Settings allows; a step
+after one that failed is not run. A step keeps its earlier runs: opened,
+its card lists them under *Runs* - when, what it gave, how it was set -
+and one can be shown again, its results back in the step's result set.
+How it works: ARCHITECTURE.md, *Workflows*.
+
+Decided while building it, for the maintainer to confirm:
+
+- **A step keeps its last ten runs**, each with the molecules it gave, in
+  the workspace. A run refused before it began - nothing coming in, say -
+  is not kept.
+- **Showing a run again** puts its results in the result set and makes
+  it what the step last did - one step to undo - and keeps what was shown
+  among the runs in its place. The step's options stay as they are: where
+  they differ from the run shown, its card says *Changed*.
+- **Each run records the kind and options it ran with**, so that a run
+  kept says how it was set even after the step's are changed.
+- ***Run all* leaves out a step with nothing coming into it**, which
+  could only fail.
+
 ## Questions
 
 None left open (2026-10-08). The specification as a whole is for the

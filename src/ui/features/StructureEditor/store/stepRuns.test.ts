@@ -29,8 +29,14 @@ vi.mock("../../../../lib/jobs", async (actual) => ({
 
 /** The xTB plugin's worker, as the test has it: what it prepared and read back, and what it was asked. */
 const worker = {
-  prepare: vi.fn(async (_step: string, entries: unknown[]) => ({
-    jobs: entries.map((_, i) => ({ entries: [i], program: "xtb", args: ["input.xyz", "--opt", "normal"], files: [{ name: "input.xyz", text: "3\n\n" }], reads: ["xtbopt.log"] })),
+  prepare: vi.fn(async (step: string, entries: unknown[]) => ({
+    jobs: entries.map((_, i) => ({
+      entries: [i],
+      program: "xtb",
+      args: step === "optimise" ? ["input.xyz", "--opt", "normal"] : ["input.xyz", "--gfn", "2"],
+      files: [{ name: "input.xyz", text: "3\n\n" }],
+      reads: ["xtbopt.log"],
+    })),
   })),
   collect: vi.fn(async (_step: string, entries: { atoms: { el: string; x: number; y: number; z: number }[] }[], _o: unknown, files: Record<string, string>, _log: string, ended: string) =>
     ended !== "done"
@@ -193,5 +199,100 @@ describe("a step that runs a plugin's program", () => {
     expect(st().askDeleteStep).toBeNull();
     await settle();
     expect(asked.stopped).toEqual([idOf(1)]);
+  });
+});
+
+/** A page with three conformers of water, energies apart, in a set: wired into As conformers, then Energy window, then Populations - Meno's. */
+function chain() {
+  const doc = createStructureDocument();
+  const geo = (k: number) => [0, 0, 0, 0, 0.76 + 0.02 * k, 0.59, 0, -0.76, 0.59];
+  doc.edit("water", (d) =>
+    addMolecule3d(d, {
+      atoms: [
+        { el: "O", x: 0, y: 0, z: 0 },
+        { el: "H", x: 0, y: 0.76, z: 0.59 },
+        { el: "H", x: 0, y: -0.76, z: 0.59 },
+      ],
+      bonds: [
+        { a1: 0, a2: 1, order: 1 },
+        { a1: 0, a2: 2, order: 1 },
+      ],
+      frames: [geo(1), geo(2)],
+      energies: [-76, -76 + 1 / 627.5, -76 + 5 / 627.5],
+      at: { x: 0, y: 0 },
+    }),
+  );
+  const store = createEditorStore(doc);
+  connectStoreToDocument(store, doc);
+  const st = () => store.getState();
+  const set = st().addSet({ x0: -3, y0: -3, x1: 3, y1: 3 });
+  const a = st().addStep("as-conformers", "meno", 10, 0);
+  st().connect({ set }, a);
+  const b = st().addStep("energy-window", "meno", 30, 0);
+  st().connect({ step: a }, b);
+  const c = st().addStep("populations", "meno", 50, 0);
+  st().connect({ step: b }, c);
+  return { doc, st, a, b, c };
+}
+
+describe("running a workflow's steps", () => {
+  beforeEach(() => {
+    jobs.clear();
+    next = 1;
+    asked.started = [];
+    useReaders.setState({ state: { xtb: "added" }, problem: {} });
+  });
+
+  it("runs a step from here: it, and every step after it, in order", async () => {
+    const { st, a, b, c } = chain();
+    await st().runFrom(a);
+    expect([a, b, c].map((id) => st().steps.find((s) => s.id === id)!.ran?.ok)).toEqual([true, true, true]);
+    // (Populations on what the window kept: the conformer 5 kcal/mol up set aside)
+    expect(st().steps.find((s) => s.id === b)!.ran!.said).toBe("2 of 3 kept");
+  });
+
+  it("runs all that have not run or have changed - and leaves those done as they are", async () => {
+    const { st, a, b, c } = chain();
+    await st().runStep(b);
+    const before = st().steps.find((s) => s.id === a)!.ran!.at;
+    await st().runAll();
+    expect(st().steps.find((s) => s.id === c)!.ran?.ok).toBe(true);
+    expect(st().steps.find((s) => s.id === a)!.ran!.at).toBe(before);
+  });
+
+  it("runs steps that do not wait on one another at once", async () => {
+    const { st } = editor();
+    const set = st().sets[0].id;
+    const other = st().addStep("energy", "xtb", 10, 20);
+    st().connect({ set }, other);
+    void st().runAll();
+    await settle();
+    await settle();
+    await settle();
+    // (both prepared and started before either has ended)
+    expect(asked.started.map((x) => x.args?.slice(0, 2))).toEqual(expect.arrayContaining([["input.xyz", "--opt"]]));
+    expect(asked.started).toHaveLength(2);
+    st().stopAll();
+  });
+
+  it("keeps its earlier runs, each with what it gave, and shows one again - one step to undo", async () => {
+    const { doc, st, a, b } = chain();
+    await st().runFrom(a);
+    st().updateStep(b, { options: { window: 0.5 } });
+    await st().runStep(b);
+    const step = () => st().steps.find((s) => s.id === b)!;
+    expect(step().ran!.said).toBe("1 of 3 kept");
+    expect(step().runs).toHaveLength(1);
+    expect(step().runs![0]).toMatchObject({ options: { window: 3 }, kind: "energy-window" });
+    expect(step().runs![0].results!.holds).toBe("conformers");
+    // shown again: its results back in the set, the later run kept in its place
+    st().showRun(b, 0);
+    expect(step().ran!.said).toBe("2 of 3 kept");
+    expect(step().runs![0].options).toEqual({ window: 0.5 });
+    const made = st().sets.find((x) => x.made?.step === b)!;
+    expect(made.aside?.length).toBe(1);
+    expect(doc.history().undoLabel).toBe("show run");
+    doc.undo();
+    expect(step().ran!.said).toBe("1 of 3 kept");
   });
 });
