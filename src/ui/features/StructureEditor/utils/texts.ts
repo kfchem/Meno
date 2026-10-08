@@ -4,6 +4,7 @@
  * Export suggests writing one.
  */
 import type { WorkspaceText } from "../store/types";
+import { firstFreeBeside } from "../../../../lib/io/beside";
 
 /**
  * The text the column shows once the texts are `after`, having been
@@ -48,16 +49,5 @@ export function textExportPath(
   text: Pick<WorkspaceText, "name" | "path">,
   taken: (path: string) => boolean = () => false,
 ): string {
-  if (!text.path) return text.name;
-  for (let n = 2; n < 1000; n++) {
-    const beside = numbered(text.path, n);
-    if (!taken(beside)) return beside;
-  }
-  return numbered(text.path, 1000);
-}
-
-/** `path` numbered `n`, its extension kept: "a/b.inp" as "a/b-2.inp". */
-export function numbered(path: string, n: number): string {
-  const ext = /\.[^.\\/]*$/.exec(path)?.[0] ?? "";
-  return `${path.slice(0, path.length - ext.length)}-${n}${ext}`;
+  return text.path ? firstFreeBeside(text.path, taken) : text.name;
 }

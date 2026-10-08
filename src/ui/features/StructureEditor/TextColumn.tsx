@@ -8,7 +8,8 @@ import TextEditor from "../TextEditor";
 import { DURATION, EASE_SLIDE, FADE } from "../../theme/motion";
 import { useEditor } from "./store";
 import type { WorkspaceText } from "./store/types";
-import { numbered, textExportPath } from "./utils/texts";
+import { textExportPath } from "./utils/texts";
+import { takenBeside } from "../../../lib/io/beside";
 
 /** The column's width as it first opens, and the least and most it may be dragged to, in pixels. */
 const WIDTH = 440;
@@ -60,7 +61,7 @@ function Column({ texts, shown, width }: { texts: WorkspaceText[]; shown: Worksp
   const exportText = async (t: WorkspaceText) => {
     try {
       setError(null);
-      const picked = await saveDialog({ title: "Export", defaultPath: textExportPath(t, await takenBeside(t.path)) });
+      const picked = await saveDialog({ title: "Export", defaultPath: textExportPath(t, t.path ? await takenBeside(t.path, (p) => exists(p)) : undefined) });
       if (picked) await writeTextFile(picked, t.text);
     } catch (e) {
       setError(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -153,7 +154,9 @@ function Edge({
       aria-orientation="vertical"
       aria-label="Width of the texts"
       aria-valuenow={Math.round(width)}
-      className="absolute left-0 top-0 h-full w-1.5 -ml-0.5 cursor-col-resize z-10"
+      // (Meno's own pointer for dragging sideways, as a slider's: theme/cursors)
+      data-cursor="sideways"
+      className="absolute left-0 top-0 h-full w-1.5 -ml-0.5 z-10"
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         // (a drag, not a selection of the words it passes over)
@@ -177,16 +180,4 @@ function Edge({
       }}
     />
   );
-}
-
-/** Which of the names Export might suggest beside `path` are there: asked of the file system, none where it may not be asked. */
-async function takenBeside(path: string | undefined): Promise<(p: string) => boolean> {
-  const there = new Set<string>();
-  if (!path) return () => false;
-  for (let n = 2; n < 100; n++) {
-    const beside = numbered(path, n);
-    if (!(await exists(beside).catch(() => false))) break;
-    there.add(beside);
-  }
-  return (p) => there.has(p);
 }
