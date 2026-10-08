@@ -346,6 +346,11 @@ How these behave:
   The writer says what it takes: the page, the molecules, or one
   molecule. Meno asks which where it must, then shows the writer's
   options, then asks for the file's name.
+
+  The name it suggests is never the file the canvas was opened from, as
+  Save's never is (the maintainer, 2026-10-07, after the v0.1.7 Windows
+  check): where it would be, the first free name beside it, numbered from
+  2 - `cholesterol-2.pdb`.
 - **Copy stays as it is**: the record and the clipboard's flavours, not
   Export. The SMILES panel copies through the same clipboard as the menu.
 
