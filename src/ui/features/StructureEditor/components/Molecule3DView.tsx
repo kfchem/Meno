@@ -20,6 +20,7 @@ import { VIBRATION_PERIOD, vibrationOffsets } from "../utils/vibration3d";
 import PointedCard3D, { type CardGroups } from "./PointedCard3D";
 import Surface3D from "./Surface3D";
 import type { Grid } from "../../../../lib/calc/results";
+import { dollyAt, dollyMatrix, RISE_ACROSS_FROM, RISE_END, RISE_GROW, RISE_UP } from "../utils/rise";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -79,15 +80,6 @@ const STEREO_OFFSET = "translate(0.95em, -0.95em)";
 const STEREO_HALO = "0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff";
 /** How far apart two stereo labels keep at the least, in ems of their size. */
 const STEREO_APART = 0.6;
-/**
- * A molecule rising out of its drawing, in seconds: its atoms grow out of the
- * drawing's, where they lie on the page, and go over to their places in 3D as
- * it comes up off the page; then it goes over to rest beside the drawing.
- */
-const RISE_GROW = 0.3;
-const RISE_UP = 0.6;
-const RISE_ACROSS_FROM = 0.45;
-const RISE_END = 1.15;
 const easeOutCubic = (u: number) => 1 - (1 - Math.min(Math.max(u, 0), 1)) ** 3;
 const easeInOutCubic = (u: number) => {
   const t = Math.min(Math.max(u, 0), 1);
@@ -201,6 +193,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const drawn = useMemo(() => (fb ? { ...m, bonds: fb.bonds } : m), [m, fb]);
   const lineCount = useMemo(() => drawn.bonds.reduce((k, b) => k + linesOf(b.order), 0), [drawn.bonds]);
   const placed = useRef<THREE.Group>(null!);
+  /** What it is drawn through while it rises: seen in perspective (utils/rise `dollyMatrix`). */
+  const dolly = useRef<THREE.Group>(null!);
   const turned = useRef<THREE.Group>(null!);
   const atoms = useRef<THREE.InstancedMesh>(null!);
   const bonds = useRef<THREE.InstancedMesh>(null);
@@ -547,6 +541,12 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       moving = true;
     }
     placed.current.position.copy(shown.current);
+    // rising, it alone is seen in perspective for the moment of its rise (a
+    // dolly zoom: the page as it was), and back
+    const seen = rise && camera instanceof THREE.OrthographicCamera ? dollyMatrix(camera, dollyAt(performance.now(), [rise.start])) : null;
+    if (seen) dolly.current.matrix.copy(seen);
+    else dolly.current.matrix.identity();
+    dolly.current.matrixWorldNeedsUpdate = true;
     if (!shownTurn.current || shownTurn.current.angleTo(quaternion) < TURN_FOLLOWED) {
       shownTurn.current = quaternion.clone();
     } else {
@@ -913,6 +913,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   };
 
   return (
+    <group ref={dolly} matrixAutoUpdate={false}>
     <group ref={placed}>
       <group ref={turned}>
         <instancedMesh
@@ -1158,6 +1159,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
           )}
         </group>
       )}
+    </group>
     </group>
   );
 }
