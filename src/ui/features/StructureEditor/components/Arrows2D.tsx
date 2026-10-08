@@ -82,10 +82,14 @@ export default function Arrows2D() {
   });
 
   /** A press on the arrow: it follows the pointer, as one step. */
-  const startMove = (id: number, e: unknown) => {
+  const startMove = (id: number, e: { stopPropagation: () => void }) => {
     const ev = native(e);
     // a right press is the menu's, or the view's to move
     if ((ev.button ?? 0) !== 0) return;
+    // (one press, one move: the arrow and its wider hit area are both under
+    // the pointer, and each would hand the press to this group again - two
+    // moves at once, each its own undo step)
+    e.stopPropagation();
     const a = store.getState().arrows.find((x) => x.id === id);
     if (!a) return;
     const p = toWorld(ev.clientX, ev.clientY);
