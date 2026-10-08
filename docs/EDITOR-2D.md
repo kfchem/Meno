@@ -64,20 +64,25 @@ and in particular:
     - Led along it, it lays a bond down a step at a time; led back, it
       takes them back - led back a little beside the way it came too, as a
       hand leads it back, as far as the point it is led back to, with no
-      ring for that; led round a hexagon, it closes a six-membered ring;
-      onto an atom already there, it joins it.
-    - Led round in a loop back to the chain - enclosing room, not straight
-      back - it draws a ring there of as many members as the loop is long
-      (3 to 12), on the side the loop went round, with the bond the loop
-      began along: back to the chain's end, a ring through it (a
-      cyclopentyl, say); back to the atom before it, a ring fused on that
-      bond (`utils/chain`). Led on from there, the ring stays; led back
-      past it, it goes. Round a hexagon, a loop as long as six bonds is
-      that hexagon; another length wins over it. A loop is measured as the
-      hand meant it: the way is taken a quarter of a bond at a time, so a
+      ring for that.
+    - Led round, along the honeycomb, to a point it went through - the way
+      the pointer went enclosing room, not straight back - it closes the
+      ring that way makes: round one hexagon, a six-membered ring; round
+      two, a ten-membered one; round three, fourteen (`utils/chain`). Led
+      on from there, the ring stays; led back past it, it goes. Onto an
+      atom already there, it joins it where the ring that closes lies
+      along the honeycomb, or where it closes none; elsewhere the point is
+      an atom of the chain's own (`utils/stroke`).
+    - **A chain draws the honeycomb's rings and no other** (the
+      maintainer, 2026-10-07; what that means, 2026-10-08): a loop that
+      comes round to no point of the chain draws no ring, and a ring of
+      another size - a cyclopentane, say - is drawn by hand, bond by bond.
+      Before, a loop back to the chain drew a ring as long as the loop (3
+      to 12 members), off the honeycomb. A loop is measured as the hand
+      meant it: the way is taken a quarter of a bond at a time, so a
       tremble does not lengthen it, and a way out and back that encloses
-      only a sliver - less round than a triangle drawn by hand - draws no
-      ring.
+      only a sliver - less round than a triangle drawn by hand - goes round
+      nothing.
 
   The whole stroke is one undo step. (PR #57; chains, agent/gestures)
 - **The mouse alone should be enough**, and it should travel as little as
@@ -369,8 +374,8 @@ All hover-based, as above.
   electron.)
 - Ring templates (3- to 8-membered, benzene), fused onto a bond or an atom;
   chains. (Chains and rings came back on 2026-10-03 as the honeycomb: three
-  clicks on an atom or two on empty space, a ring as large as a loop drawn
-  back to the chain - see *Drawing is dragging bonds out of atoms*. Benzene
+  clicks on an atom or two on empty space, the honeycomb's ring where a
+  loop comes round to the chain - see *Drawing is dragging bonds out of atoms*. Benzene
   and other ring templates are still to come.)
 - Every bond type from the pointer: wavy, bold, dashed, and the rest of what
   the cycle cannot reach today.
