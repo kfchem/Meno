@@ -26,6 +26,7 @@ import { pluginById } from "../../../lib/calc/catalog";
 import { readerClient } from "../../../lib/calc/workers";
 import { writtenOf } from "./utils/written";
 import { writePdb } from "../../../lib/chem/pdb";
+import { firstFreeBeside, takenBeside } from "../../../lib/io/beside";
 
 /** A file's name without its folder. */
 export function fileNameOf(path: string): string {
@@ -103,26 +104,8 @@ export function suggestedExportPath(
   if (!from) return `${what.reaction ? "reaction" : what.solid && !what.drawn ? "molecules" : "structure"}.${ext}`;
   const path = from.toLowerCase().endsWith(`.${ext}`) ? from : withExtension(from, ext);
   if (!state.openedName || path.toLowerCase() !== state.openedName.toLowerCase()) return path;
-  for (let n = 2; n < 1000; n++) {
-    const beside = numbered(path, n, ext);
-    if (!taken(beside)) return beside;
-  }
-  return path;
-}
-
-/** `path` numbered `n`, as Export suggests a file beside the one it came from: "a.pdb" as "a-2.pdb". */
-const numbered = (path: string, n: number, ext: string) => `${path.replace(/\.[^.\\/]*$/, "")}-${n}.${ext}`;
-
-/** The names beside `path` Export might suggest, and whether each is there: asked of the file system, none taken where it may not be asked. */
-async function takenBeside(path: string, ext: string): Promise<(p: string) => boolean> {
-  const there = new Set<string>();
-  for (let n = 2; n < 100; n++) {
-    const beside = numbered(path, n, ext);
-    const is = await exists(beside).catch(() => false);
-    if (!is) break;
-    there.add(beside);
-  }
-  return (p) => there.has(p);
+  // (as the kind's extension: "1abc.PDB" as "1abc-2.pdb")
+  return firstFreeBeside(withExtension(path, ext), taken);
 }
 
 /**
@@ -398,7 +381,7 @@ export function useFileActions(nameTab?: (label: string) => void) {
         const ext = extensionOf(writer);
         const picked = await saveDialog({
           title: "Export",
-          defaultPath: suggestedExportPath(state, holdsOf(state), ext, await takenBeside(state.openedName ?? "", ext)),
+          defaultPath: suggestedExportPath(state, holdsOf(state), ext, state.openedName ? await takenBeside(withExtension(state.openedName, ext), (p) => exists(p)) : undefined),
           filters: [{ name: writer.name, extensions: writer.extensions.map((e) => e.slice(1)) }],
         });
         if (!picked) return;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newTextName, numbered, shownText, textExportPath } from "./texts";
+import { newTextName, shownText, textExportPath } from "./texts";
 
 const t = (id: number, text = `text ${id}`) => ({ id, name: `${id}.txt`, text });
 
@@ -47,7 +47,7 @@ describe("where Export suggests writing a text", () => {
   });
 
   it("numbers a name with no extension, or a folder with a dot, at its end", () => {
-    expect(numbered("/runs/README", 2)).toBe("/runs/README-2");
-    expect(numbered("/runs.d/input", 2)).toBe("/runs.d/input-2");
+    expect(textExportPath({ name: "README", path: "/runs/README" })).toBe("/runs/README-2");
+    expect(textExportPath({ name: "input", path: "/runs.d/input" })).toBe("/runs.d/input-2");
   });
 });
