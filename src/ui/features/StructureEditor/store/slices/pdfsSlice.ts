@@ -42,7 +42,8 @@ export function createPdfsSlice(doc: DocumentStore<StructureDocument>, set: SetS
       doc.amend((d) => (d.pdfs?.find((p) => p.id === id)?.page === from ? ops.updatePdf(d, id, { page: to }) : d)),
     endPdfFlight: () => set({ pdfFlight: null }),
     addPdfs: (pdfs: Parameters<EditorState["addPdfs"]>[0], at: { x: number; y: number }) => {
-      const row = ops.pdfsInRow(pdfs, at);
+      // (clear of the PDFs already there, not over them)
+      const row = ops.clearOfPdfs(ops.pdfsInRow(pdfs, at), doc.getState().pdfs ?? []);
       if (row.length) doc.edit(row.length > 1 ? "add PDFs" : "add PDF", (d) => row.reduce(ops.addPdf, d));
     },
     movePdf: (id: number, x: number, y: number, gesture?: string) =>

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { createStructureDocument, isBlankDocument } from "../document";
 import { readWorkspace, workspaceText } from "../utils/workspace";
-import { ICON_HEIGHT, iconScale, pdfBounds, POINT, shownSheet, spreadColumns, spreadSheets, stackSheets, topSheet, UNDER_MOST } from "../../../../lib/pdf/layout";
+import { ICON_HEIGHT, ICON_NAME_PT, ICON_NAME_WIDTH, ICON_TO_NAME, iconScale, pdfBounds, POINT, shownSheet, spreadColumns, spreadSheets, stackSheets, topSheet, UNDER_MOST } from "../../../../lib/pdf/layout";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
 const SHA = "a".repeat(64);
@@ -27,9 +27,11 @@ describe("PDFs on the page", () => {
       { x: 10, y: 20 },
     );
     const [a, b] = state().pdfs;
-    expect(a).toMatchObject({ name: "paper.pdf", x: 10, y: 20, page: 0 });
-    // (the second to the right of the first, clear of it)
-    expect(b.x - b.pages[0][0] * POINT / 2).toBeGreaterThan(a.x + a.pages[0][0] * POINT / 2);
+    // (each an icon at first, the second to the right of the first, clear of it and of its name)
+    expect(a).toMatchObject({ name: "paper.pdf", x: 10, y: 20, page: 0, icon: true });
+    expect(b.icon).toBe(true);
+    expect(pdfBounds(b).x0).toBeGreaterThan(pdfBounds(a).x1);
+    expect(b.x - a.x).toBeGreaterThanOrEqual(ICON_NAME_WIDTH);
     expect(isBlankDocument(doc.getState())).toBe(false);
     expect(doc.history().undoDepth).toBe(1);
 
@@ -54,6 +56,15 @@ describe("PDFs on the page", () => {
     expect(state().pdfs.map((p) => p.name)).toEqual(["paper.pdf", "si.pdf"]);
   });
 
+  it("put down where others lie already, lie clear of them, names and all", () => {
+    const { state } = editor();
+    state().addPdfs([{ name: "paper.pdf", sha256: SHA, pages: [A4] }], { x: 0, y: 0 });
+    state().addPdfs([{ name: "si.pdf", sha256: SHA2, pages: [A4] }], { x: 0, y: 0 });
+    const [a, b] = state().pdfs;
+    expect(b.x - a.x).toBeGreaterThanOrEqual(ICON_NAME_WIDTH);
+    expect(b.y).toBe(a.y);
+  });
+
   it("are made icons, their pages gathered, and full size again, each one step, and saved so", () => {
     const { doc, state } = editor();
     state().addPdfs([{ name: "paper.pdf", sha256: SHA, pages: [A4, A4] }], { x: 0, y: 0 });
@@ -71,7 +82,7 @@ describe("PDFs on the page", () => {
 
   it("are taken by a canvas opened for them", () => {
     const { state } = editor({ pdfs: [{ name: "paper.pdf", sha256: SHA, pages: [A4], size: 1000 }] });
-    expect(state().pdfs).toEqual([{ id: 1, name: "paper.pdf", sha256: SHA, pages: [A4], x: 0, y: 0, page: 0 }]);
+    expect(state().pdfs).toEqual([{ id: 1, name: "paper.pdf", sha256: SHA, pages: [A4], x: 0, y: 0, page: 0, icon: true }]);
   });
 
   it("leave out what is not a PDF held", () => {
@@ -240,8 +251,9 @@ describe("PDFs read in the column", () => {
 describe("where a PDF's pages lie", () => {
   const p = { pages: Array.from({ length: 7 }, () => A4), x: 0, y: 0, page: 0 };
 
-  it("as an icon: as tall as a benzene ring, two bonds, about its middle - its top page alone to be seen", () => {
-    expect(ICON_HEIGHT).toBe(2 * NOMINAL_BOND_LENGTH);
+  it("as an icon: five times as tall as its name's type, the drawing's labels' - three and a half bonds - about its middle, its top page alone to be seen", () => {
+    expect(ICON_HEIGHT).toBeCloseTo(ICON_TO_NAME * ICON_NAME_PT * POINT);
+    expect(ICON_HEIGHT / NOMINAL_BOND_LENGTH).toBeCloseTo(50 / 14.4);
     const icon = { ...p, x: 5, y: 7, icon: true };
     const s = shownSheet(icon, 0)!;
     expect(s.h).toBeCloseTo(ICON_HEIGHT);

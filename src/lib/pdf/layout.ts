@@ -15,8 +15,20 @@ export type Sheet = { x: number; y: number; w: number; h: number };
 /** What of a PDF its layout needs: its pages' sizes, in points, where its top page's middle lies, which page is on top, whether they are spread, and whether it is made an icon. */
 export type PdfPlace = { pages: readonly (readonly [number, number])[]; x: number; y: number; page: number; spread?: boolean; icon?: boolean };
 
-/** How tall a PDF made an icon is, in the page's units: a benzene ring's height, two bonds. */
-export const ICON_HEIGHT = 2 * NOMINAL_BOND_LENGTH;
+/**
+ * The type a PDF's name is set in under its icon, in points: the drawing's
+ * labels' in ACS 1996's style. And how many times as tall as it the icon
+ * is: as a file's icon is to its name on a desktop - 64 points to 12 in
+ * the Finder, 48 pixels to 12 in Explorer.
+ */
+export const ICON_NAME_PT = 10;
+export const ICON_TO_NAME = 5;
+
+/** How tall a PDF made an icon is, in the page's units: five times its name's type, three and a half bonds - a small molecule's height as it is drawn. */
+export const ICON_HEIGHT = ICON_TO_NAME * ICON_NAME_PT * POINT;
+
+/** How wide an icon's name may be before it goes onto another line, in the page's units, as a file's under its icon. */
+export const ICON_NAME_WIDTH = 2 * ICON_HEIGHT;
 
 /** How much smaller than its printed size a PDF made an icon is drawn: its top page as tall as `ICON_HEIGHT`. */
 export function iconScale(p: PdfPlace): number {

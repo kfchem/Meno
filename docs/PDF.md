@@ -111,10 +111,13 @@ stops being part of the work.
   - The right-click menu has *Spread pages*. The pages lift off the
     stack one after another and lie side by side on the page, in rows,
     to be read and compared at once. *Gather pages* puts them back.
-- **Made small**: *Minimize to an icon*, in its menu, makes it an icon
-  about a benzene ring's size - its top page on it, its name under it,
-  as a file's under its icon - and *Show full size* brings it back. An
-  icon is moved, read in the column and deleted as the stack is.
+- **It comes onto the page as an icon**, its top page on it and its name
+  under it. The name is set in the drawing's type, at the size of its
+  labels, and the icon is five times as tall as it, as a file's icon is
+  to its name on a desktop: three and a half bonds in ACS 1996's style.
+  *Show full size*, in its menu, makes it the stack at the size it is
+  printed; *Minimize to an icon* makes it small again. An icon is moved,
+  read in the column and deleted as the stack is.
 - **Its figures and words are taken out from here** as from the column
   (*Taking things out*, below).
 
@@ -550,7 +553,10 @@ Built:
   - A link to a web page opens in the system's browser.
   - PDFium reads each page's links when the pointer first comes over it (`pdf_links`).
 - **Saved** with the workspace: where each PDF read in the column is read (`reading`: pages down, and how large), and which one the column showed (`pdfShown`).
-- **A PDF made an icon** (*Minimize to an icon* in its menu; *Show full size* back), as tall as a benzene ring (`ICON_HEIGHT`, two bonds), shrinking to it about its middle and growing back, its name going under its middle. Double-clicked, it is read in the column, its page rising from the icon. Saved with the workspace (`icon`).
+- **A PDF comes as an icon** (*Show full size* in its menu, and *Minimize to an icon* back), shrinking to it about its middle and growing back, its name going under its middle.
+  - Its name is set in the drawing's type at its labels' size (10 points in ACS 1996's style), zoomed with the drawing; the icon is five times as tall (`ICON_TO_NAME`), as a file's icon is to its name on a desktop - 64 to 12 points in the Finder, 48 to 12 pixels in Explorer: three and a half bonds.
+  - PDFs put down where others lie are moved along to the right, clear of them and their names.
+  - Double-clicked, it is read in the column, its page rising from the icon. Saved with the workspace (`icon`).
 - **Its size checked**: a benzene ring printed as ACS 1996 prints it, 14.4-point bonds, in a PDF lies the size of one Meno draws beside it.
 
 Decided while building it, for the maintainer to confirm:
@@ -561,7 +567,7 @@ Decided while building it, for the maintainer to confirm:
 - **Closing a PDF in the column** forgets where it was read; read again, it opens at its page on top.
 - **Only the web's and mail's links open** (`http`, `https`, `mailto`). Any other a PDF holds (a file, a script, another program) is not followed.
 - **Links on the stack** are followed by a click that does not move it; the pointer is the system's hand over them.
-- **An icon** gathers a PDF's pages first; it shows its top page's small picture alone (no tiles), and its corners do not turn. A PDF still goes onto the page full size, as printed.
+- **An icon at first** (the maintainer chose it, the full-size page being too large to put down among the drawing), its size set by its name's type (the maintainer suggested the labels' size). An icon gathers a PDF's pages first; it shows its top page's small picture alone (no tiles), and its corners do not turn. A full-size stack's name stays as small on the screen as before.
 - **The look:** the column's pages on Meno's pale grey, 12-pixel margins and 10-pixel gaps; the page number a chip at the foot of the column.
 
 Not yet, and where it comes:

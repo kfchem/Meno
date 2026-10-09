@@ -1200,13 +1200,13 @@ function StructureCanvasContent({
       >
         <color attach="background" args={["#ffffff"]} />
         <FitToContent2D trigger={fitNonce} />
-        {/* PDFs, under the drawing, and one read in the column over the canvas's right side (docs/PDF.md) */}
-        <PdfPictures>
-          <Pdfs2D />
-          <PdfColumn />
-        </PdfPictures>
         {/* The drawing, laid out once for every layer below to draw from */}
         <DrawnLayoutProvider>
+          {/* PDFs, under the drawing - an icon's name in its type - and one read in the column over the canvas's right side (docs/PDF.md) */}
+          <PdfPictures>
+            <Pdfs2D />
+            <PdfColumn />
+          </PdfPictures>
           {/* Bonds */}
           <Bonds2D />
           <Atoms2D />

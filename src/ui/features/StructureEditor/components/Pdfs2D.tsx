@@ -22,7 +22,9 @@ import { pageAt } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
 import { useEditor, useEditorStore } from "../store";
 import type { PdfItem } from "../store/types";
-import { iconScale, pdfBounds, POINT, spreadSheets, stackSheets, topSheet, type Sheet } from "../../../../lib/pdf/layout";
+import { ICON_NAME_WIDTH, iconScale, pdfBounds, POINT, spreadSheets, stackSheets, topSheet, type Sheet } from "../../../../lib/pdf/layout";
+import { useDrawnLayout } from "./drawnLayoutContext";
+import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
 import { COLORS } from "../../../theme/colors";
 import { BASE, FADE_MS, GRAY, levelFor, LINE, Page, TILE, usePictures, type Pic, type Tile } from "./pdfPictures";
 import { followLink, readerOf } from "./pdfColumnReader";
@@ -46,8 +48,7 @@ const SPREAD_MS = 460;
 const SPREAD_STAGGER_MS = 45;
 /** How long a PDF takes to be made an icon, or full size again, in ms. */
 const ICON_MS = 380;
-/** How wide an icon's name may be, on the screen, in pixels: as a file's under its icon. */
-const ICON_NAME_PX = 140;
+
 /** The corner that folds, on the screen, in pixels. */
 const FOLD_PX = 30;
 
@@ -72,6 +73,10 @@ export default function Pdfs2D() {
     invalidate();
   }, [invalidate]);
   const pics = usePictures(redraw);
+  // (an icon's name in the drawing's type, as its labels are set)
+  const { opts } = useDrawnLayout();
+  const family = opts.fontFamily ?? "Arial";
+  const nameFont = useLabelFontUrl(family, needsFallback(pdfs.map((p) => p.name)));
 
   // the view: where it is, how near, and since when it has been still
   const view = useRef({ zoom: 0, x: 0, y: 0, still: 0, level: new Map<number, number>() });
@@ -277,6 +282,7 @@ export default function Pdfs2D() {
           onDown={(e) => startMove(p, e)}
           onTurn={(page) => store.getState().turnPdf(p.id, page)}
           size={size}
+          type={{ size: opts.fontPx, font: nameFont }}
         />
       ))}
     </group>
@@ -297,6 +303,8 @@ function PdfStack(props: {
   onDown: (e: { stopPropagation: () => void }) => void;
   onTurn: (page: number) => void;
   size: { width: number; height: number };
+  /** The drawing's type: its labels' size, in the page's units, and its font, once it is had. */
+  type: { size: number; font: string | null };
 }) {
   const { p, now, px, motion } = props;
   const top = topSheet(p);
@@ -340,14 +348,27 @@ function PdfStack(props: {
       <meshBasicMaterial color={COLORS.highlight} transparent opacity={lit} depthWrite={false} toneMapped={false} />
     </mesh>
   );
-  // its name under it: at its left as a page, under its middle as an icon, as a file's under its icon
+  // its name under it, in the drawing's type: at its left as a page, as
+  // small on the screen however near it is seen; under its middle as an
+  // icon, at the size of the drawing's labels, as a file's under its icon -
+  // and on its way between them
   const nameX = showSpread ? spread[0].x - spread[0].w / 2 : p.x - (top.w * k) / 2 + ((top.w * k) / 2) * iconness;
   const nameY = showSpread ? Math.min(...spread.map((s) => s.y - s.h / 2)) : b.y0;
-  const nameWidth = Math.max(120, top.w / px) * (1 - iconness) + ICON_NAME_PX * iconness;
+  const nameSize = 12 * px * (1 - iconness) + props.type.size * iconness;
+  const nameGap = 14 * px * (1 - iconness) + 0.4 * props.type.size * iconness;
+  const nameWidth = Math.max(120 * px, top.w) * (1 - iconness) + ICON_NAME_WIDTH * iconness;
   const name = (
-    <group position={[nameX, nameY - 14 * px, 0.01]} scale={[px, px, 1]}>
+    <group position={[nameX, nameY - nameGap, 0.01]}>
       {/* (troika takes a share of the text's width as its anchor; drei's types do not say so) */}
-      <Text fontSize={12} anchorX={`${50 * iconness}%` as unknown as number} anchorY="top" color={GRAY} maxWidth={nameWidth} textAlign={iconness > 0.5 ? "center" : "left"}>
+      <Text
+        font={props.type.font ?? undefined}
+        fontSize={nameSize}
+        anchorX={`${50 * iconness}%` as unknown as number}
+        anchorY="top"
+        color={GRAY}
+        maxWidth={nameWidth}
+        textAlign={iconness > 0.5 ? "center" : "left"}
+      >
         {p.name}
       </Text>
     </group>
