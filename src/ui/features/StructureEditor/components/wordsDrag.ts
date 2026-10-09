@@ -9,6 +9,7 @@ import type { EditorStore } from "../store";
 import type { PdfItem, PdfSelection, WordsFrom } from "../store/types";
 import { marksBetween, textOf, type PageText } from "../../../../lib/pdf/text";
 import { partPicture } from "../../../../lib/pdf/reader";
+import { POINT } from "../../../../lib/pdf/layout";
 import { onPage, ordered, selectedWords } from "../utils/pdfSelection";
 import { DURATION } from "../../../theme/motion";
 
@@ -27,6 +28,11 @@ export function onSelected(t: PageText, sel: PdfSelection, page: number, x: numb
   const range = onPage(sel, page, t.codes.length);
   if (!range) return false;
   return marksBetween(t, range[0], range[1]).some(([x0, y0, x1, y1]) => x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1);
+}
+
+/** How wide words taken from more than one line are made on the page: as wide as their widest line was, at the size the page is printed - none, from one. */
+export function linesWidth(rects: readonly (readonly [number, number, number, number])[]): number | undefined {
+  return rects.length > 1 ? Math.max(...rects.map((r) => r[2] - r[0])) * POINT : undefined;
 }
 
 /** How long words take to peel off, to settle once let go, and to go back, in ms. */
@@ -49,9 +55,9 @@ export type OnScreen = { at: (page: number, x: number, y: number) => { x: number
  * picture - drawn by PDFium where they lie, cut to their shape - lifts at
  * the edge the pointer pulls, leaning toward the viewer, its shadow
  * deepening, the page left bare where they were; then follows the pointer.
- * Let go on the canvas, they are words on the page there, one step, the
- * picture settling as they come; anywhere else, it goes back down into the
- * page.
+ * Let go on the canvas, they are words on the page there, one step - as
+ * wide as their lines were, broken into lines at it - the picture settling
+ * as they come; anywhere else, it goes back down into the page.
  */
 export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "id" | "sha256">, sel: PdfSelection, at: { x: number; y: number }, screen: OnScreen): Promise<void> {
   const words = await selectedWords(sel, pdf);
@@ -136,7 +142,7 @@ export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "id" | "s
     const world = canvas && over && over === canvas.canvas() ? canvas.worldAt(e.clientX, e.clientY) : null;
     if (world) {
       // let go on the canvas: words on the page there, the picture settling as they come
-      store.getState().addCaption(words, world.x, world.y, undefined, source);
+      store.getState().addCaption(words, world.x, world.y, undefined, source, linesWidth(rects));
       card.style.transition = `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1), filter ${SETTLE_MS}ms ease, opacity ${SETTLE_MS}ms ease`;
       card.style.transform = flat(e.clientX - at.x, e.clientY - at.y);
       card.style.filter = SHADOW_UP;

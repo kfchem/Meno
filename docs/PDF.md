@@ -598,7 +598,7 @@ Built:
   - With *All PDFs*, the places are listed under each PDF's name, with the words round each. A click goes there, showing that PDF.
 - **Words taken out.** A selection pressed and dragged peels off the page.
   - Its own picture, drawn by PDFium where it lies and cut to the words' shape, lifts at the edge the pointer pulls, leaning toward the viewer, its shadow deepening. The page is left bare where the words were, and the picture follows the pointer.
-  - Let go on the canvas, the words become words on the page there, in the drawing's type, as one step, the picture settling as they come.
+  - Let go on the canvas, the words become words on the page there, in the drawing's type, as one step, the picture settling as they come. Taken from more than one line, they are as wide as their lines were (at the size the page is printed: a point is a fourteenth and a half of a bond), broken into lines at it (EDITOR-2D.md, *Text*).
   - Let go anywhere else, the picture goes back down into the page.
   - The words keep where they came from. *Show in the PDF*, in their menu, reads that PDF in the column, goes there, and marks the words for a moment.
 
@@ -611,7 +611,6 @@ Decided while building it, for the maintainer to confirm:
 
 Not yet, and where it comes:
 - **A figure cut out by a box**: step 4.
-- **Words on the page that came from a PDF stay one line**, however long. Words on the page are to be broken into lines at a width that can be dragged (the maintainer); words taken out will then come as wide as their lines were.
 
 ## In order
 

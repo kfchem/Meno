@@ -16,9 +16,11 @@ export function createCaptionsSlice(doc: DocumentStore<StructureDocument>, set: 
     setHoveredCaption: (id: number | null) => set({ hoveredCaption: id }),
     setCaptionEdit: (edit: EditorState["captionEdit"]) => set({ captionEdit: edit }),
     setQuickAdd: (q: EditorState["quickAdd"]) => set({ quickAdd: q }),
-    addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom) => {
+    addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number) => {
       const id = doc.getState().nextCaptionId ?? 1;
-      doc.edit("add text", (d) => ops.addCaption(d, { text, x, y, ...(arrow != null ? { arrow } : {}), ...(from ? { from } : {}) }));
+      doc.edit("add text", (d) =>
+        ops.addCaption(d, { text, x, y, ...(arrow != null ? { arrow } : {}), ...(from ? { from } : {}), ...(width != null && width > 0 ? { width } : {}) }),
+      );
       return id;
     },
     updateCaption: (id: number, patch: Parameters<EditorState["updateCaption"]>[1], gesture?: string) =>

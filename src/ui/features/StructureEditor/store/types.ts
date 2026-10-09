@@ -507,8 +507,8 @@ export type EditorState = {
    */
   captionEdit: { id: number | null; at: { x: number; y: number } } | null;
   setCaptionEdit: (edit: EditorState["captionEdit"]) => void;
-  /** Words added, as one step - taken out of a PDF, where they came from; their id. */
-  addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom) => number;
+  /** Words added, as one step - taken out of a PDF, where they came from, and as wide as their lines were; their id. */
+  addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number) => number;
   /**
    * Words changed - written anew, moved, put over an arrow or taken from
    * one (`arrow` null), made as wide as something or as their words
