@@ -735,7 +735,11 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   `components/pdfFind.ts`) are the view's, marked on the pages by
   `components/pdfMarks.ts`. Words carried out of a PDF
   (`components/wordsDrag.ts`) become words on the page that keep where
-  they came from (`Caption.from`).
+  they came from (`Caption.from`), set as wide and lying as their lines
+  did (`blockOf`). As they are carried (`pdfWords`), the column's last
+  pass draws them (`components/WordsFlight.tsx`): each word a text of its
+  own, from the box it had on the page (`wordBoxesBetween`) to its place
+  in the words as they will be set (`captionWords`).
 - **Links** (`pdf_links`): each page's, read by PDFium when first wanted -
   where each lies, in points from the page's top left as it is drawn
   (`FPDF_PageToDevice`), and where it goes: a page and how far down it, or
