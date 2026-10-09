@@ -361,7 +361,10 @@ Taken on 2026-10-07:
     column hidden (*Hide texts*, its own button) keeps them all, and
     *Show texts* in Meno's menu brings it back;
   - the column slides open and shut as the panels beside the canvas do,
-    and is as wide as its left edge is dragged.
+    and is as wide as its left edge is dragged;
+  - since 2026-10-09 it lies over the canvas's right side, the view
+    following it, and the PDFs read there are named among its texts
+    (docs/PDF.md, step 2).
   The small previews on the page, decided on 2026-10-04, are not made yet.
 
 ## Stage 2, as built
