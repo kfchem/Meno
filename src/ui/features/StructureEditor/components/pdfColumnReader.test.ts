@@ -110,6 +110,18 @@ describe("the column's reader", () => {
     expect(store.getState().pdfs[0].page).toBe(0);
   });
 
+  it("goes to a place asked for as a PDF read no longer is read again, not to its top", () => {
+    const { store, r } = reading();
+    // (read no longer, the column still holding it as it shuts)
+    store.getState().stopReadingPdf(1);
+    r.take(store.getState().pdfs[0]);
+    store.getState().readPdf(1);
+    r.goToWhenRead(1, 7, 100, 0.3);
+    r.take(store.getState().pdfs[0]);
+    settle(r);
+    expect(r.pageNow().page).toBe(7);
+  });
+
   it("hears the system's Back keys", () => {
     const key = (k: Partial<KeyboardEvent>) => ({ metaKey: false, altKey: false, ctrlKey: false, key: "", code: "", ...k }) as KeyboardEvent;
     expect(isBackKey(key({ metaKey: true, key: "[" }))).toBe(true);

@@ -76,6 +76,7 @@ export class ColumnReader {
     this.unread = !pdf.reading;
     if (again) {
       this.sizes = pdf.pages;
+      this.goToPending(pdf.id);
       return;
     }
     this.keep();
@@ -87,12 +88,15 @@ export class ColumnReader {
     this.across = 0.5;
     this.goal = { zoom: this.zoom, anchor: null, at: this.at, across: 0.5 };
     this.page = pdf.page;
-    // (a place asked for in it before it was read: gone to now)
+    this.goToPending(pdf.id);
+  }
+
+  /** A place asked for in a PDF before it was read, gone to now it is. */
+  private goToPending(id: number): void {
     const pending = this.pending;
-    if (pending?.id === pdf.id) {
-      this.pending = null;
-      this.goTo(pending.page, pending.y, pending.above * this.tall);
-    }
+    if (pending?.id !== id) return;
+    this.pending = null;
+    this.goTo(pending.page, pending.y, pending.above * this.tall);
   }
 
   layout(zoom = this.zoom): ColumnLayout {
@@ -168,9 +172,13 @@ export class ColumnReader {
   /** A place to go to once the PDF it is in is read: gone to as it is taken. */
   private pending: { id: number; page: number; y: number | null; above: number } | null = null;
 
-  /** A place in a PDF gone to, `above` its share of what is seen below the top - now, where it is the one read; else as soon as it is. */
+  /**
+   * A place in a PDF gone to, `above` its share of what is seen below the
+   * top - now, where it is the one read; else as soon as it is (one read no
+   * longer, though still taken, is about to be read again from its top).
+   */
   goToWhenRead(id: number, page: number, y: number | null, above: number): void {
-    if (this.id === id) {
+    if (this.id === id && !this.unread) {
       this.pending = null;
       this.goTo(page, y, above * this.tall);
     } else this.pending = { id, page, y, above };
