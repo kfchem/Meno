@@ -290,7 +290,7 @@ export const createModelSlice = (
     const { drawn } = ws;
     // (its texts, those read - utils/workspace `readTexts` - numbered from the first)
     const read = ws.texts.filter((t) => t.text != null);
-    const texts = read.map((t, i) => ({ id: i + 1, name: t.name, text: t.text!, ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false as const } : {}) }));
+    const texts = read.map((t, i) => ({ id: i + 1, name: t.name, text: t.text!, ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false as const } : {}), ...(t.icon ? { icon: true as const } : {}) }));
     const shown = ws.textShown != null ? read.indexOf(ws.texts[ws.textShown]) : -1;
     const opened = (d: StructureDocument) => {
       const next = ops.withImportedScheme(ops.replaceModel(d, drawn), ops.schemeOf(drawn));

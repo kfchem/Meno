@@ -19,7 +19,7 @@ import { opensWith } from "./openingFit";
 import { captionSet } from "../../../../lib/chem/captions";
 import { pdfRoom } from "../../../../lib/pdf/layout";
 import { cornersOf } from "../utils/selection";
-import { sheetBox, sheetOf } from "../utils/textSheets";
+import { sheetRoom } from "../utils/textSheets";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
 export default function FitToContent2D({
@@ -102,11 +102,11 @@ export default function FitToContent2D({
       bounds.min = { x: Math.min(bounds.min.x, q.x), y: Math.min(bounds.min.y, q.y) };
       bounds.max = { x: Math.max(bounds.max.x, q.x), y: Math.max(bounds.max.y, q.y) };
     }
-    // and the texts' sheets, and their names under them
+    // and the texts' sheets, and their names under them (an icon's room holds its name)
     for (const t of texts) {
-      if (!t.at) continue;
-      const b = sheetBox(t.at, sheetOf(t.text));
-      bounds.min = { x: Math.min(bounds.min.x, b.x0), y: Math.min(bounds.min.y, b.y0 - NOMINAL_BOND_LENGTH) };
+      const b = sheetRoom(t);
+      if (!b) continue;
+      bounds.min = { x: Math.min(bounds.min.x, b.x0), y: Math.min(bounds.min.y, b.y0 - (t.icon ? 0 : NOMINAL_BOND_LENGTH)) };
       bounds.max = { x: Math.max(bounds.max.x, b.x1), y: Math.max(bounds.max.y, b.y1) };
     }
     // and the molecules in 3D, as each is turned and shown now, as the

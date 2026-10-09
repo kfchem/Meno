@@ -222,6 +222,10 @@ stops being part of the work.
   type, and its name under it. A text opened, dropped or made new
   (*New text*) lies on the page as well as being in the column. Seen
   nearer, more of it shows, and it is read where it lies.
+- **It comes onto the page as an icon**, as a PDF does: its sheet made
+  small, its longer side as long as a PDF's icon is tall, its name
+  under it at the size of the drawing's labels. *Show full size* and
+  *Minimize to an icon*, in its menu, change it as they change a PDF.
 - **A calculation's output keeps its molecule as its body**: the
   molecule's *Show <name>* opens the output in the column, rising from
   the molecule. No sheet is laid beside it.
@@ -697,14 +701,15 @@ Step 5 comes in parts: the trial of typing alone, shown first; the column's text
 **5a: the column's text on the canvas.** A text read in the column is drawn by the workspace's one canvas, in the column's pass, as a PDF read there is (*One canvas*): on a white sheet of its own, cut off where the column is, sliding with it. Its HTML half over it is see-through: it takes the pointer - a click puts the caret, two clicks a word, three a line, a drag selects on - the wheel, and holds the field it is typed through. Each text keeps where it was read, and what was selected, while the workspace is open.
 
 **5b: texts' sheets on the page.**
-- **A text opened, dropped or made new** lies on the page as a sheet as well as being read in the column: where it was dropped, or beside what is in view, clear of what lies there. A calculation's output shown from its molecule, and a step's log, have no sheet: their molecule, or their step, is their body.
+- **A text opened, dropped or made new** lies on the page as a sheet, made an icon, as well as being read in the column: where it was dropped, or beside what is in view, clear of what lies there, its name's room as a PDF's icon's. A calculation's output shown from its molecule, and a step's log, have no sheet: their molecule, or their step, is their body.
 - **The sheet** shows the text's first lines as they would be printed - Meno's monospaced type at 9 points, a line every 12 - as wide as its longest line among them (at most 80 letters, at least 32), as tall as its first 40 lines (at least 3); its name lies under it, as a PDF's does. Seen from far off, its lines are grey strokes; nearer, its words come up over them, sharp at every zoom (troika). A line with a letter Meno's monospaced type lacks takes it from IBM Plex Sans JP.
 - **Handled as a picture is**: a drag on it moves the view; held still, it is taken hold of, the selection's shade spreading from the pointer, and the drag moves it; a click selects it, Ctrl/Cmd and a click adds it or takes it out; a box or a lasso takes it by its middle; selected, it moves with the selection, and is deleted with it, each as one step. Delete over one deletes it. Fit takes sheets in.
-- **Read in the column** by two clicks, or *Read* in its right-click menu (*Read*, *Delete text*). A text's tab closed in the column leaves its sheet on the page, read there no longer; a text with no sheet goes, as before.
-- **Saved** in the workspace: each text's sheet's place (`at`, its top left) and whether it is read in the column (`reading`).
+- **An icon at first**, as a PDF is: the sheet made small about its middle, its longer side as long as a PDF's icon is tall (`ICON_HEIGHT`), its name under its middle at the drawing's labels' size. *Show full size* in its menu makes it the sheet; *Minimize to an icon* makes it small again - each one step, the sheet shrinking or growing about its middle as a PDF does (380 ms). An icon is moved, selected, read and deleted as the sheet is.
+- **Read in the column** by two clicks, or *Read* in its right-click menu (*Read*, *Show full size* or *Minimize to an icon*, *Delete text*). A text's tab closed in the column leaves its sheet on the page, read there no longer; a text with no sheet goes, as before.
+- **Saved** in the workspace: each text's sheet's place (`at`, its top left), whether it is an icon (`icon`) and whether it is read in the column (`reading`).
 
 **Between the page and the column.**
-- **Read**, by two clicks, *Read*, or as it is opened or made new, a text's lines rise from its sheet, a white sheet with a soft shadow under it, and go into the column as it opens, growing to its width; the view eases so that the sheet lies beside the column, as a PDF's does. **Closed**, they go back down to the sheet as the column shuts. A tab gone to in the column, the column open already, comes as it did.
+- **Read**, by two clicks, *Read*, or as it is opened or made new, a text's lines rise from its sheet - from its icon, as small as the icon shows them - a white sheet with a soft shadow under it, and go into the column as it opens, growing to its width; the view eases so that the sheet lies beside the column, as a PDF's does. **Closed**, they go back down to the sheet as the column shuts. A tab gone to in the column, the column open already, comes as it did.
 - **On the way they move in the page's type** - signed-distance glyphs, as large as the sheet shows them at one end and as the column's at the other - and once settled, the column's own lines, drawn in the system's type, take their place under them as they fade (140 ms). The flight sets off once its lines are laid out, a frame or two after, so as never to be blank.
 - **A calculation's output shown from its molecule** (*Show <name>*) rises out of the molecule likewise, coming up as the column's lines made as small as the molecule, and goes back down into it as the column shuts. Its molecule is the one read from the output's file, or else of its name.
 
@@ -712,6 +717,7 @@ Decided while building it, for the maintainer to confirm:
 - **On a Mac the textarea, on Windows the EditContext**: each the one its system's webview takes the IME through best. WebKit has no EditContext.
 - **A Mac's Home, End and Page keys move the view**, the caret staying, as in the Mac's own texts; with Option, a page moves the caret too. Tab moves the keys on, as the textarea did.
 - **A sheet's size** (above), and its top left where it lies, so that a text growing at its end grows down.
+- **A text's icon is its sheet made small**, not a page's shape: its longer side as long as a PDF's icon is tall, so that a few lines make a wide, low icon and a long log a tall one, as their sheets are.
 - **Closing a text's tab leaves its sheet on the page**; deleting the sheet takes the text out of the workspace.
 
 Not yet, and where it comes:

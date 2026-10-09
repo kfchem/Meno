@@ -1283,7 +1283,11 @@ function StructureCanvasContent({
             if (c) store.getState().setCaptionEdit({ id: c.id, at: { x: c.x, y: c.y } });
           }}
           onCopyPicture={menu.kind === "picture" && menu.id != null ? () => void clip.copyPicture(menu.id!) : undefined}
-          onReadText={menu.kind === "text" && menu.id != null ? () => store.getState().readText(menu.id!) : undefined}
+          text={(() => {
+            const t = menu.kind === "text" && menu.id != null ? store.getState().texts.find((x) => x.id === menu.id) : undefined;
+            if (!t) return undefined;
+            return { icon: !!t.icon, onRead: () => store.getState().readText(t.id), onIcon: () => store.getState().setTextIcon(t.id, !t.icon) };
+          })()}
           pdf={(() => {
             const p = menu.kind === "pdf" ? store.getState().pdfs.find((x) => x.id === menu.id) : undefined;
             if (!p) return undefined;

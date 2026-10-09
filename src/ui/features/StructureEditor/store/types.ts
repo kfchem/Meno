@@ -270,10 +270,11 @@ export type WordsFlight = {
  * A text the workspace holds: its name, its words and the file it came
  * from - and, where it lies on the page as a sheet of its own (docs/PDF.md,
  * *A text*), its sheet's top left; and whether it is read in the column,
- * as a tab there (unless `reading` is false). A calculation's output, or a
+ * as a tab there (unless `reading` is false), and whether its sheet is
+ * made an icon, as a PDF is. A calculation's output, or a
  * step's log, has no sheet: its molecule, or its step, is its body.
  */
-export type WorkspaceText = { id: number; name: string; text: string; path?: string; at?: { x: number; y: number }; reading?: false };
+export type WorkspaceText = { id: number; name: string; text: string; path?: string; at?: { x: number; y: number }; reading?: false; icon?: true };
 /**
  * A set on the page (docs/WORKFLOWS.md): its frame, in world units, x0 to
  * x1 and y0 (its foot) to y1 (its top) - what lies inside it its entries.
@@ -456,6 +457,8 @@ export type EditorState = {
   removeTexts: (ids: Iterable<number>) => void;
   /** A text read in the column - its tab there again, where it had none - and shown. */
   readText: (id: number) => void;
+  /** A text's sheet made an icon, or shown full size again, as one step. */
+  setTextIcon: (id: number, icon: boolean) => void;
   /** A text's tab in the column closed: one with a sheet on the page is read there no longer; one without goes. */
   stopReadingText: (id: number) => void;
   /**

@@ -59,6 +59,7 @@ export function createTextsSlice(doc: DocumentStore<StructureDocument>, set: Set
     },
     riseText: (id: number) => set({ textFlight: { id, to: "column", start: performance.now() } }),
     endTextFlight: () => set({ textFlight: null }),
+    setTextIcon: (id: number, icon: boolean) => doc.edit(icon ? "minimize text" : "expand text", (d) => ops.setTextIcon(d, id, icon)),
     setHoveredText: (id: number | null) => set((prev: EditorState) => (prev.hoveredText === id ? prev : { ...prev, hoveredText: id })),
     selectTexts: (ids: Iterable<number>, add = false) =>
       set((prev: EditorState) => ({ ...prev, selTexts: new Set([...(add ? prev.selTexts : []), ...ids]), pdfSel: null, pdfBox: null })),

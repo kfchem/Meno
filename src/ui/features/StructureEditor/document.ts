@@ -14,7 +14,7 @@ import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
 import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, PictureItem, PictureToAdd, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
 import { ICON_NAME_WIDTH, pdfRoom, POINT } from "../../../lib/pdf/layout";
-import { sheetBox, sheetOf } from "./utils/textSheets";
+import { sheetOf, sheetRoom } from "./utils/textSheets";
 import { printedSize } from "../../../lib/picture/image";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
@@ -1294,7 +1294,7 @@ export function addTexts(
       last = same.id;
       continue;
     }
-    held.push({ id: next, name: t.name || newTextName(held), text: t.text, ...(t.path ? { path: t.path } : {}), ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false as const } : {}) });
+    held.push({ id: next, name: t.name || newTextName(held), text: t.text, ...(t.path ? { path: t.path } : {}), ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false as const } : {}), ...(t.icon ? { icon: true as const } : {}) });
     last = next++;
   }
   if (held.length === (doc.texts ?? []).length) return { doc, last };
@@ -1316,6 +1316,16 @@ export function removeText(doc: StructureDocument, id: number): StructureDocumen
   return { ...doc, texts: doc.texts!.filter((t) => t.id !== id) };
 }
 
+/** A text's sheet made an icon, or shown full size again. */
+export function setTextIcon(doc: StructureDocument, id: number, icon: boolean): StructureDocument {
+  const at = (doc.texts ?? []).findIndex((t) => t.id === id);
+  if (at < 0 || !doc.texts![at].at || !!doc.texts![at].icon === icon) return doc;
+  const texts = doc.texts!.slice();
+  const { icon: _, ...rest } = texts[at];
+  texts[at] = icon ? { ...rest, icon: true } : rest;
+  return { ...doc, texts };
+}
+
 /** The texts `ids` taken out. */
 export function removeTexts(doc: StructureDocument, ids: ReadonlySet<number>): StructureDocument {
   if (!ids.size || !(doc.texts ?? []).some((t) => ids.has(t.id))) return doc;
@@ -1333,28 +1343,26 @@ export function setTextReading(doc: StructureDocument, id: number, reading: bool
 }
 
 /**
- * Texts as they go on the page, each a sheet (utils/textSheets): the
- * first's middle at `at`, the others to its right, a bond apart - all put
- * down clear of what lies there, pictures, PDFs and other sheets.
+ * Texts as they go on the page, each a sheet (utils/textSheets) made an
+ * icon as a PDF is at first: the first's middle at `at`, the others to its
+ * right, room for their names between them - all put down clear of what
+ * lies there, pictures, PDFs and other sheets.
  */
-export function textsInRow<T extends Omit<WorkspaceText, "id">>(texts: readonly T[], at: { x: number; y: number }, doc: Pick<StructureDocument, "pictures" | "pdfs" | "texts">): (T & { at: { x: number; y: number } })[] {
-  const sheets = texts.map((t) => sheetOf(t.text));
-  if (!sheets.length) return [];
-  const placed: { x: number; y: number }[] = [];
-  let x = at.x - sheets[0].w / 2;
-  for (const s of sheets) {
-    placed.push({ x, y: at.y + s.h / 2 });
-    x += s.w + NOMINAL_BOND_LENGTH;
-  }
+export function textsInRow<T extends Omit<WorkspaceText, "id">>(texts: readonly T[], at: { x: number; y: number }, doc: Pick<StructureDocument, "pictures" | "pdfs" | "texts">): (T & { at: { x: number; y: number }; icon: true })[] {
+  const step = ICON_NAME_WIDTH + NOMINAL_BOND_LENGTH;
+  // (each by its top left, its middle where it goes)
+  const row = texts.map((t, i) => {
+    const s = sheetOf(t.text);
+    return { ...t, at: { x: at.x + i * step - s.w / 2, y: at.y + s.h / 2 }, icon: true as const };
+  });
   const taken = [
     ...(doc.pictures ?? []).map((p) => ({ x0: p.x - p.w / 2, x1: p.x + p.w / 2, y0: p.y - p.h / 2, y1: p.y + p.h / 2 })),
     ...(doc.pdfs ?? []).map(pdfRoom),
-    ...(doc.texts ?? []).flatMap((t) => (t.at ? [sheetBox(t.at, sheetOf(t.text))] : [])),
+    ...(doc.texts ?? []).flatMap((t) => sheetRoom(t) ?? []),
   ];
-  const step = Math.max(...sheets.map((s) => s.w)) / 2 + NOMINAL_BOND_LENGTH;
   for (let n = 0; n < 200; n++) {
-    const moved = placed.map((p) => ({ x: p.x + n * step, y: p.y }));
-    if (!moved.some((p, i) => taken.some((b) => overlaps(sheetBox(p, sheets[i]), b)))) return texts.map((t, i) => ({ ...t, at: moved[i] }));
+    const moved = row.map((t) => ({ ...t, at: { x: t.at.x + n * step, y: t.at.y } }));
+    if (!moved.some((t) => taken.some((b) => overlaps(sheetRoom(t)!, b)))) return moved;
   }
-  return texts.map((t, i) => ({ ...t, at: placed[i] }));
+  return row;
 }

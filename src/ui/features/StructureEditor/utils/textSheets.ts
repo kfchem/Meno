@@ -6,7 +6,7 @@
  * lines of 32 letters. Where it lies is its top left (`WorkspaceText.at`),
  * so that a text growing at its end grows down.
  */
-import { POINT } from "../../../../lib/pdf/layout";
+import { ICON_HEIGHT, ICON_NAME_PT, ICON_NAME_WIDTH, POINT } from "../../../../lib/pdf/layout";
 
 /** The type on a sheet: its size, and a line's, in points; how wide a letter is, as a share of the size (IBM Plex Mono's 600 units in 1000). */
 export const SHEET_TYPE_PT = 9;
@@ -72,4 +72,35 @@ export function sheetBox(at: { x: number; y: number }, s: Pick<TextSheet, "w" | 
 export function sheetMiddle(at: { x: number; y: number }, text: string): { x: number; y: number } {
   const s = sheetOf(text);
   return { x: at.x + s.w / 2, y: at.y - s.h / 2 };
+}
+
+/**
+ * How much smaller than its sheet a text made an icon is drawn, about its
+ * middle: its longer side as long as a PDF's icon is tall (lib/pdf/layout
+ * `ICON_HEIGHT`) - a few lines wide, a long log tall.
+ */
+export function iconScaleOf(s: Pick<TextSheet, "w" | "h">): number {
+  return Math.min(ICON_HEIGHT / Math.max(s.w, s.h), 1);
+}
+
+/** A sheet as it is drawn made `k` times its size about its middle - an icon's, or one on its way to being one. */
+export function sheetBoxAt(at: { x: number; y: number }, s: Pick<TextSheet, "w" | "h">, k: number): { x0: number; x1: number; y0: number; y1: number } {
+  const cx = at.x + s.w / 2;
+  const cy = at.y - s.h / 2;
+  return { x0: cx - (k * s.w) / 2, x1: cx + (k * s.w) / 2, y0: cy - (k * s.h) / 2, y1: cy + (k * s.h) / 2 };
+}
+
+/** Where a text's sheet lies on the page as it is drawn: made an icon, or full size. */
+export function drawnSheetBox(t: { at?: { x: number; y: number }; text: string; icon?: true }): { x0: number; x1: number; y0: number; y1: number } | null {
+  if (!t.at) return null;
+  const s = sheetOf(t.text);
+  return sheetBoxAt(t.at, s, t.icon ? iconScaleOf(s) : 1);
+}
+
+/** The room a sheet takes on the page: as it is drawn, and made an icon, its name's under it too - as a PDF's (lib/pdf/layout `pdfRoom`). */
+export function sheetRoom(t: { at?: { x: number; y: number }; text: string; icon?: true }): { x0: number; x1: number; y0: number; y1: number } | null {
+  const b = drawnSheetBox(t);
+  if (!b || !t.icon) return b;
+  const mx = (b.x0 + b.x1) / 2;
+  return { x0: Math.min(b.x0, mx - ICON_NAME_WIDTH / 2), x1: Math.max(b.x1, mx + ICON_NAME_WIDTH / 2), y0: b.y0 - 3 * ICON_NAME_PT * POINT, y1: b.y1 };
 }

@@ -3,8 +3,8 @@ import { connectStoreToDocument, createEditorStore } from ".";
 import { createStructureDocument } from "../document";
 import * as ops from "../document";
 import { readWorkspace, workspaceText } from "../utils/workspace";
-import { POINT } from "../../../../lib/pdf/layout";
-import { SHEET_LEAST_COLS, SHEET_LINE_PT, SHEET_MOST_COLS, SHEET_MOST_LINES, SHEET_PAD_PT, sheetBox, sheetOf } from "../utils/textSheets";
+import { ICON_HEIGHT, ICON_NAME_WIDTH, POINT } from "../../../../lib/pdf/layout";
+import { drawnSheetBox, iconScaleOf, SHEET_LEAST_COLS, SHEET_LINE_PT, SHEET_MOST_COLS, SHEET_MOST_LINES, SHEET_PAD_PT, sheetOf, sheetRoom } from "../utils/textSheets";
 
 function editor(data?: unknown) {
   const doc = createStructureDocument(data);
@@ -27,15 +27,28 @@ describe("a text's sheet", () => {
     expect(sheetOf("a\tb").lines[0]).toBe("a   b");
   });
 
-  it("is put on the page where asked, a row of them, clear of a sheet already there", () => {
+  it("is put on the page an icon, where asked, a row of them, clear of a sheet already there and its name", () => {
     const first = ops.textsInRow([{ name: "a.txt", text: "a" }], { x: 0, y: 0 }, { texts: [] });
     const s = sheetOf("a");
-    expect(first[0].at!.x).toBeCloseTo(-s.w / 2);
-    expect(first[0].at!.y).toBeCloseTo(s.h / 2);
+    expect(first[0].icon).toBe(true);
+    expect(first[0].at.x).toBeCloseTo(-s.w / 2);
+    expect(first[0].at.y).toBeCloseTo(s.h / 2);
     const second = ops.textsInRow([{ name: "b.txt", text: "b" }], { x: 0, y: 0 }, { texts: [{ id: 1, ...first[0] }] });
-    const a = sheetBox(first[0].at!, s);
-    const b = sheetBox(second[0].at!, sheetOf("b"));
-    expect(b.x0).toBeGreaterThanOrEqual(a.x1);
+    expect(sheetRoom(second[0])!.x0).toBeGreaterThanOrEqual(sheetRoom(first[0])!.x1);
+    // (a row: room for each one's name between them)
+    const row = ops.textsInRow([{ name: "c.txt", text: "c" }, { name: "d.txt", text: "d" }], { x: 0, y: 0 }, { texts: [] });
+    expect(drawnSheetBox(row[1])!.x0 - drawnSheetBox(row[0])!.x0).toBeGreaterThanOrEqual(ICON_NAME_WIDTH);
+  });
+
+  it("made an icon, is as large as a PDF's icon by its longer side, about its middle", () => {
+    for (const text of ["short", Array.from({ length: 60 }, () => "x".repeat(20)).join("\n")]) {
+      const s = sheetOf(text);
+      const icon = drawnSheetBox({ at: { x: 0, y: 0 }, text, icon: true })!;
+      expect(Math.max(icon.x1 - icon.x0, icon.y1 - icon.y0)).toBeCloseTo(ICON_HEIGHT);
+      expect((icon.x0 + icon.x1) / 2).toBeCloseTo(s.w / 2);
+      expect((icon.y0 + icon.y1) / 2).toBeCloseTo(-s.h / 2);
+      expect(iconScaleOf(s)).toBeLessThan(1);
+    }
   });
 });
 
@@ -109,15 +122,38 @@ describe("texts on the page", () => {
     expect(state().textFlight).toBeNull();
   });
 
-  it("keep their sheets' places, and whether they are read, in the workspace", () => {
+  it("are made full size and an icon again, each a step", () => {
+    const { doc, state } = editor();
+    state().addTexts([{ name: "a.txt", text: "a" }], { x: 0, y: 0 });
+    const [t] = state().texts;
+    expect(t.icon).toBe(true);
+    const depth = doc.history().undoDepth;
+    state().setTextIcon(t.id, false);
+    expect(state().texts[0].icon).toBeUndefined();
+    expect(state().texts[0].at).toEqual(t.at);
+    expect(doc.history().undoDepth).toBe(depth + 1);
+    // (as it is already: no step)
+    state().setTextIcon(t.id, false);
+    expect(doc.history().undoDepth).toBe(depth + 1);
+    state().setTextIcon(t.id, true);
+    expect(state().texts[0].icon).toBe(true);
+    doc.undo();
+    expect(state().texts[0].icon).toBeUndefined();
+  });
+
+  it("keep their sheets' places, whether they are icons and whether they are read, in the workspace", () => {
     const { state } = editor();
-    state().addTexts([{ name: "a.txt", text: "a" }], { x: 1, y: 2 });
+    state().addTexts([{ name: "a.txt", text: "a" }, { name: "b.txt", text: "b" }], { x: 1, y: 2 });
     state().stopReadingText(state().texts[0].id);
-    const ws = readWorkspace(workspaceText(state(), new Set(), ["a".repeat(64)]));
-    expect(ws?.texts[0]).toMatchObject({ name: "a.txt", at: state().texts[0].at, reading: false });
+    state().setTextIcon(state().texts[1].id, false);
+    const ws = readWorkspace(workspaceText(state(), new Set(), ["a".repeat(64), "b".repeat(64)]));
+    expect(ws?.texts[0]).toMatchObject({ name: "a.txt", at: state().texts[0].at, reading: false, icon: true });
+    expect(ws?.texts[1].icon).toBeUndefined();
     // (opened again: as they were)
     const again = editor();
-    again.state().openWorkspace({ ...ws!, texts: ws!.texts.map((t) => ({ ...t, text: "a" })) }, true);
-    expect(again.state().texts[0]).toMatchObject({ name: "a.txt", at: state().texts[0].at, reading: false });
+    again.state().openWorkspace({ ...ws!, texts: ws!.texts.map((t) => ({ ...t, text: t.name[0] })) }, true);
+    expect(again.state().texts[0]).toMatchObject({ name: "a.txt", at: state().texts[0].at, reading: false, icon: true });
+    expect(again.state().texts[1]).toMatchObject({ name: "b.txt", at: state().texts[1].at });
+    expect(again.state().texts[1].icon).toBeUndefined();
   });
 });

@@ -112,7 +112,7 @@ export default function PartMenu({
   step,
   pdf,
   onCopyPicture,
-  onReadText,
+  text,
   onSaveProcedure,
   onUseAsInput,
   onSaveAbbreviation,
@@ -174,8 +174,8 @@ export default function PartMenu({
   };
   /** The picture right-clicked copied, for Meno and as a picture for other programs. */
   onCopyPicture?: () => void;
-  /** The text whose sheet was right-clicked read in the column. */
-  onReadText?: () => void;
+  /** What a text whose sheet was right-clicked can do: read in the column, made an icon or full size. */
+  text?: { icon: boolean; onRead: () => void; onIcon: () => void };
   /** The whole flow a step or a set right-clicked is part of, saved as a procedure, named. */
   onSaveProcedure?: () => void;
   /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
@@ -310,8 +310,9 @@ export default function PartMenu({
         ]
       : target.kind === "text"
       ? [
-          ...(onReadText ? [{ name: "Read", keys: "", run: onReadText }] : []),
-          { name: "Delete text", keys: deleteKey, run: onDelete, divider: !!onReadText },
+          ...(text ? [{ name: "Read", keys: "", run: text.onRead }] : []),
+          ...(text ? [{ name: text.icon ? "Show full size" : "Minimize to an icon", keys: "", run: text.onIcon, divider: true }] : []),
+          { name: "Delete text", keys: deleteKey, run: onDelete, divider: true },
         ]
       : target.kind === "picture"
       ? [

@@ -45,8 +45,8 @@ export type Workspace = {
   pdfShown?: number;
 };
 
-/** A text as a workspace's file keeps it: its name, and the file kept with its words, by SHA-256 - and where its sheet lies on the page, and whether it is read in the column. */
-export type SavedText = { name: string; sha256: string; text?: string; at?: { x: number; y: number }; reading?: false };
+/** A text as a workspace's file keeps it: its name, and the file kept with its words, by SHA-256 - and where its sheet lies on the page, whether it is made an icon, and whether it is read in the column. */
+export type SavedText = { name: string; sha256: string; text?: string; at?: { x: number; y: number }; reading?: false; icon?: true };
 
 type Saved = Pick<
   EditorState,
@@ -101,7 +101,7 @@ export function workspaceText(state: Saved, kept: ReadonlySet<string> = new Set(
       ...(state.aromaticEnabled ? { aromaticEnabled: true } : {}),
       ...(Object.keys(state.aromaticRings).length ? { aromaticRings: state.aromaticRings } : {}),
       ...(state.texts?.length
-        ? { texts: state.texts.map((t, i) => ({ name: t.name, sha256: texts[i], ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false } : {}) })) }
+        ? { texts: state.texts.map((t, i) => ({ name: t.name, sha256: texts[i], ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false } : {}), ...(t.icon ? { icon: true } : {}) })) }
         : {}),
       ...(shown >= 0 ? { textShown: shown } : {}),
       ...(state.pdfs?.length ? { pdfs: state.pdfs.map(({ id: _id, ...p }) => p) } : {}),
@@ -194,7 +194,7 @@ export function readWorkspace(text: string): Workspace | null {
   for (const t of Array.isArray(r.texts) ? (r.texts as Partial<SavedText>[]) : []) {
     if (typeof t?.name !== "string" || typeof t.sha256 !== "string" || !SHA.test(t.sha256)) continue;
     const at = t.at && Number.isFinite(t.at.x) && Number.isFinite(t.at.y) ? { at: { x: t.at.x, y: t.at.y } } : {};
-    texts.push({ name: t.name.slice(0, 260), sha256: t.sha256, ...at, ...(t.reading === false ? { reading: false as const } : {}) });
+    texts.push({ name: t.name.slice(0, 260), sha256: t.sha256, ...at, ...(t.reading === false ? { reading: false as const } : {}), ...(t.icon === true && at.at ? { icon: true as const } : {}) });
   }
   const shown = typeof r.textShown === "number" && Number.isInteger(r.textShown) && r.textShown >= 0 && r.textShown < texts.length;
   const pdfs = readPdfs(r.pdfs);

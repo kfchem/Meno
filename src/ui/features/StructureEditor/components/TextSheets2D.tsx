@@ -12,16 +12,16 @@
  * read it in the column (hooks/useStructureEvents).
  */
 import * as THREE from "three";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Text } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import type { WorkspaceText } from "../store/types";
 import { COLORS } from "../../../theme/colors";
-import { POINT } from "../../../../lib/pdf/layout";
+import { ICON_NAME_WIDTH, POINT } from "../../../../lib/pdf/layout";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { DOUBLE_CLICK_MS, LONG_PRESS_MS } from "../constants";
-import { SHEET_LETTER, SHEET_LINE_PT, SHEET_PAD_PT, SHEET_TYPE_PT, sheetOf } from "../utils/textSheets";
+import { iconScaleOf, SHEET_LETTER, SHEET_LINE_PT, SHEET_PAD_PT, SHEET_TYPE_PT, sheetBoxAt, sheetOf } from "../utils/textSheets";
 import { dragSelection } from "../utils/dragSelection";
 import { follow, TAU } from "../../../theme/motion";
 import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
@@ -30,6 +30,7 @@ import { pageAt } from "../utils/page";
 import { HeldLight } from "./HeldLight";
 import { heldShows, type Held } from "./held";
 import { GRAY } from "./pdfPictures";
+import { ease } from "./Pdfs2D";
 import plexMono from "../../../../assets/fonts/IBMPlexMono-Regular.ttf?url";
 
 /** Over the PDFs, under the pictures and the drawing; each put there later a step over the one before. */
@@ -49,9 +50,11 @@ const STROKE = "rgb(200, 206, 213)";
 /** How large its words are on the screen, in pixels, when they begin to come up over the strokes, and when they have quite. */
 const WORDS_FROM_PX = 3.5;
 const WORDS_AT_PX = 6;
-/** Its name: how large on the screen, and how far under it. */
+/** Its name: how large on the screen, and how far under it - a sheet's; an icon's, the drawing's labels'. */
 const NAME_PX = 12;
 const NAME_GAP_PX = 14;
+/** How long it takes to be made an icon, or full size again, in ms - as a PDF. */
+const ICON_MS = 380;
 
 type Pt = { x: number; y: number };
 const noRaycast = () => null;
@@ -72,24 +75,63 @@ export default function TextSheets2D() {
   return (
     <group>
       {sheets.map((t, i) => (
-        <Sheet key={t.id} t={t} z={Z + i * Z_STEP} selected={selTexts.has(t.id)} hovered={hovered === t.id} nameFont={nameFont ?? undefined} toWorld={toWorld} />
+        <Sheet key={t.id} t={t} z={Z + i * Z_STEP} selected={selTexts.has(t.id)} hovered={hovered === t.id} nameFont={nameFont ?? undefined} nameSize={opts.fontPx} toWorld={toWorld} />
       ))}
     </group>
   );
 }
 
-function Sheet({ t, z, selected, hovered, nameFont, toWorld }: { t: WorkspaceText; z: number; selected: boolean; hovered: boolean; nameFont?: string; toWorld: (cx: number, cy: number) => Pt }) {
+function Sheet({
+  t,
+  z,
+  selected,
+  hovered,
+  nameFont,
+  nameSize,
+  toWorld,
+}: {
+  t: WorkspaceText;
+  z: number;
+  selected: boolean;
+  hovered: boolean;
+  nameFont?: string;
+  nameSize: number;
+  toWorld: (cx: number, cy: number) => Pt;
+}) {
   const store = useEditorStore();
   const { camera, invalidate } = useThree();
   const zoom = (camera as THREE.OrthographicCamera).zoom || 1;
   const px = 1 / zoom;
   const s = useMemo(() => sheetOf(t.text), [t.text]);
+  const [, setTick] = useState(0);
   const at = t.at!;
   const pad = SHEET_PAD_PT * POINT;
   const line = SHEET_LINE_PT * POINT;
   const letter = SHEET_LETTER * SHEET_TYPE_PT * POINT;
+  // how large it is drawn: 1 full size, an icon's size made small, or on its way between them - as a PDF is
+  const small = iconScaleOf(s);
+  const turning = useRef<{ to: boolean; start: number } | null>(null);
+  const was = useRef(!!t.icon);
+  if (was.current !== !!t.icon) {
+    turning.current = { to: !!t.icon, start: performance.now() };
+    was.current = !!t.icon;
+  }
+  const tm = turning.current;
+  const it = tm ? ease(Math.min(1, (performance.now() - tm.start) / ICON_MS)) : 1;
+  const k = tm ? (tm.to ? 1 + (small - 1) * it : small + (1 - small) * it) : t.icon ? small : 1;
+  // (how much of an icon it is, 0 to 1: its name going under its middle)
+  const iconness = small < 1 ? (1 - k) / (1 - small) : t.icon ? 1 : 0;
+  useFrame(() => {
+    const m = turning.current;
+    if (!m) return;
+    if (performance.now() - m.start > ICON_MS + 80) turning.current = null;
+    setTick((n) => n + 1);
+    invalidate();
+  });
+  const b = sheetBoxAt(at, s, k);
+  const mid = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
   // (its words as large on the screen as they are: strokes where too small to read, the words over them, coming up)
-  const wordsPx = SHEET_TYPE_PT * POINT * zoom;
+  const wordsPx = SHEET_TYPE_PT * POINT * zoom * k;
   const words = Math.min(1, Math.max(0, (wordsPx - WORDS_FROM_PX) / (WORDS_AT_PX - WORDS_FROM_PX)));
 
   // the light round it while the pointer is on it, coming and going
@@ -105,9 +147,8 @@ function Sheet({ t, z, selected, hovered, nameFont, toWorld }: { t: WorkspaceTex
     m.opacity = follow(m.opacity, to, Math.min(dt, 1 / 20), TAU.quick);
     invalidate();
   });
-  // taken hold of by a press held on it: where, from its top left, lit from there
+  // taken hold of by a press held on it: where on the page, lit from there
   const [held, setHeld] = useState<(Held & Pt) | null>(null);
-  const [, setTick] = useState(0);
   useEffect(() => invalidate(), [held, invalidate]);
   useFrame(() => {
     if (!held || !heldShows(held, performance.now())) return;
@@ -143,7 +184,7 @@ function Sheet({ t, z, selected, hovered, nameFont, toWorld }: { t: WorkspaceTex
     }
     // else a drag moves the view; held still, it is taken hold of; a click selects it
     const q = toWorld(ev.clientX, ev.clientY);
-    setHeld({ x: q.x - at.x, y: q.y - at.y, start: performance.now() });
+    setHeld({ x: q.x, y: q.y, start: performance.now() });
     invalidate();
     let panned = false;
     const hold = window.setTimeout(() => {
@@ -181,83 +222,108 @@ function Sheet({ t, z, selected, hovered, nameFont, toWorld }: { t: WorkspaceTex
   const lit = LIT_PAD_PX * px;
   const now = performance.now();
   const edge = px;
+  const w = b.x1 - b.x0;
+  const h = b.y1 - b.y0;
+  // its name under it, in the drawing's type: at its left as a sheet, as small on the screen however near it is
+  // seen; under its middle as an icon, at the size of the drawing's labels, as a file's under its icon - and on
+  // its way between them (as a PDF's)
+  const nameX = b.x0 + (mid.x - b.x0) * iconness;
+  const nameSizeNow = NAME_PX * px * (1 - iconness) + nameSize * iconness;
+  const nameGap = NAME_GAP_PX * px * (1 - iconness) + 0.4 * nameSize * iconness;
+  const nameWidth = Math.max(120 * px, s.w) * (1 - iconness) + ICON_NAME_WIDTH * iconness;
   return (
-    <group position={[at.x, at.y, z]}>
+    <group position={[0, 0, z]}>
       {/* (round it, not under it, as a picture's) */}
       {[
-        [s.w / 2, lit / 2, s.w + 2 * lit, lit],
-        [s.w / 2, -s.h - lit / 2, s.w + 2 * lit, lit],
-        [s.w + lit / 2, -s.h / 2, lit, s.h],
-        [-lit / 2, -s.h / 2, lit, s.h],
-      ].map(([x, y, w, h], k) => (
-        <mesh key={`lit${k}`} position={[x, y, -Z_STEP / 2]} scale={[w, h, 1]} material={lightMaterial} raycast={noRaycast}>
+        [mid.x, b.y1 + lit / 2, w + 2 * lit, lit],
+        [mid.x, b.y0 - lit / 2, w + 2 * lit, lit],
+        [b.x1 + lit / 2, mid.y, lit, h],
+        [b.x0 - lit / 2, mid.y, lit, h],
+      ].map(([x, y, ww, hh], i) => (
+        <mesh key={`lit${i}`} position={[x, y, -Z_STEP / 2]} scale={[ww, hh, 1]} material={lightMaterial} raycast={noRaycast}>
           <planeGeometry args={[1, 1]} />
         </mesh>
       ))}
-      <mesh
-        position={[s.w / 2, -s.h / 2, 0]}
-        scale={[s.w, s.h, 1]}
-        onPointerOver={() => store.getState().setHoveredText(t.id)}
-        onPointerOut={() => {
-          if (store.getState().hoveredText === t.id) store.getState().setHoveredText(null);
-        }}
-        onPointerDown={onDown}
-      >
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial color={PAPER} toneMapped={false} />
-      </mesh>
+      {/* the sheet, made small about its middle as an icon: its paper, and its lines on it */}
+      <group position={[mid.x, mid.y, 0]} scale={[k, k, 1]}>
+        <group position={[-s.w / 2, s.h / 2, 0]}>
+          <mesh
+            position={[s.w / 2, -s.h / 2, 0]}
+            scale={[s.w, s.h, 1]}
+            onPointerOver={() => store.getState().setHoveredText(t.id)}
+            onPointerOut={() => {
+              if (store.getState().hoveredText === t.id) store.getState().setHoveredText(null);
+            }}
+            onPointerDown={onDown}
+          >
+            <planeGeometry args={[1, 1]} />
+            <meshBasicMaterial color={PAPER} toneMapped={false} />
+          </mesh>
+          {/* far off, or small, its lines as strokes */}
+          {words < 1 &&
+            s.lines.map((l, i) => {
+              const lead = l.length - l.trimStart().length;
+              const len = l.trimEnd().length;
+              if (len <= lead) return null;
+              const x0 = pad + lead * letter;
+              const lw = (len - lead) * letter;
+              return (
+                <mesh key={`stroke${i}`} position={[x0 + lw / 2, -(pad + (i + 0.5) * line), Z_STEP / 8]} scale={[lw, line * 0.42, 1]} raycast={noRaycast}>
+                  <planeGeometry args={[1, 1]} />
+                  <meshBasicMaterial color={STROKE} transparent opacity={1 - words} depthWrite={false} toneMapped={false} />
+                </mesh>
+              );
+            })}
+          {/* nearer, its words - a line at a time: a letter the type lacks, taken from another, takes no line but its own with it */}
+          {words > 0 &&
+            s.lines.map((l, i) =>
+              l.trim() ? (
+                <Text
+                  key={`line${i}`}
+                  font={plexMono}
+                  fontSize={SHEET_TYPE_PT * POINT}
+                  anchorX="left"
+                  anchorY="middle"
+                  position={[pad, -(pad + (i + 0.5) * line), Z_STEP / 4]}
+                  color={INK}
+                  fillOpacity={words}
+                  clipRect={[0, -line, s.w - 2 * pad, line]}
+                  raycast={noRaycast}
+                >
+                  {l}
+                </Text>
+              ) : null,
+            )}
+        </group>
+      </group>
       {/* its edge, a pixel wide - or the selection's light, where it is selected */}
       {[
-        [s.w / 2, 0, s.w, edge],
-        [s.w / 2, -s.h, s.w, edge],
-        [0, -s.h / 2, edge, s.h],
-        [s.w, -s.h / 2, edge, s.h],
-      ].map(([x, y, w, h], k) => (
-        <mesh key={`edge${k}`} position={[x, y, Z_STEP / 4]} scale={[selected ? w + edge : w, selected ? h + edge : h, 1]} raycast={noRaycast}>
+        [mid.x, b.y1, w, edge],
+        [mid.x, b.y0, w, edge],
+        [b.x0, mid.y, edge, h],
+        [b.x1, mid.y, edge, h],
+      ].map(([x, y, ww, hh], i) => (
+        <mesh key={`edge${i}`} position={[x, y, Z_STEP / 3]} scale={[selected ? ww + edge : ww, selected ? hh + edge : hh, 1]} raycast={noRaycast}>
           <planeGeometry args={[1, 1]} />
           <meshBasicMaterial color={selected ? COLORS.highlight : EDGE} toneMapped={false} />
         </mesh>
       ))}
-      {/* far off, its lines as strokes */}
-      {words < 1 &&
-        s.lines.map((l, i) => {
-          const lead = l.length - l.trimStart().length;
-          const len = l.trimEnd().length;
-          if (len <= lead) return null;
-          const x0 = pad + lead * letter;
-          const w = (len - lead) * letter;
-          return (
-            <mesh key={`stroke${i}`} position={[x0 + w / 2, -(pad + (i + 0.5) * line), Z_STEP / 8]} scale={[w, line * 0.42, 1]} raycast={noRaycast}>
-              <planeGeometry args={[1, 1]} />
-              <meshBasicMaterial color={STROKE} transparent opacity={1 - words} depthWrite={false} toneMapped={false} />
-            </mesh>
-          );
-        })}
-      {/* nearer, its words - a line at a time: a letter the type lacks, taken from another, takes no line but its own with it */}
-      {words > 0 &&
-        s.lines.map((l, i) =>
-          l.trim() ? (
-            <Text
-              key={`line${i}`}
-              font={plexMono}
-              fontSize={SHEET_TYPE_PT * POINT}
-              anchorX="left"
-              anchorY="middle"
-              position={[pad, -(pad + (i + 0.5) * line), Z_STEP / 4]}
-              color={INK}
-              fillOpacity={words}
-              clipRect={[0, -line, s.w - 2 * pad, line]}
-              raycast={noRaycast}
-            >
-              {l}
-            </Text>
-          ) : null,
-        )}
-      {/* its name under it, as small on the screen however near it is seen */}
-      <Text font={nameFont} fontSize={NAME_PX * px} anchorX="left" anchorY="top" position={[0, -s.h - NAME_GAP_PX * px, Z_STEP / 4]} color={GRAY} maxWidth={Math.max(120 * px, s.w)} raycast={noRaycast}>
-        {t.name}
-      </Text>
-      {held && <HeldLight b={{ x0: 0, x1: s.w, y0: -s.h, y1: 0 }} at={held} held={held} now={now} z={Z_STEP / 2} />}
+      <group position={[nameX, b.y0 - nameGap, Z_STEP / 4]}>
+        {/* (troika takes a share of the text's width as its anchor; drei's types do not say so) */}
+        <Text
+          font={nameFont}
+          fontSize={nameSizeNow}
+          anchorX={`${50 * iconness}%` as unknown as number}
+          anchorY="top"
+          color={GRAY}
+          maxWidth={nameWidth}
+          textAlign={iconness > 0.5 ? "center" : "left"}
+          raycast={noRaycast}
+        >
+          {t.name}
+        </Text>
+      </group>
+      {held && <HeldLight b={b} at={held} held={held} now={now} z={Z_STEP / 2} />}
     </group>
   );
 }

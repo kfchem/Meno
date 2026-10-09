@@ -39,7 +39,7 @@ import PictureFlight from "./PictureFlight";
 import ColumnText from "./ColumnText";
 import TextFlight from "./TextFlight";
 import { columnSettingAt, sheetSetting } from "./textFlightSetting";
-import { sheetBox, sheetOf } from "../utils/textSheets";
+import { drawnSheetBox, iconScaleOf, sheetOf } from "../utils/textSheets";
 import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
 import { currentStyle3D } from "../style3d";
 import { keepColumnTexts } from "../../TextEditor/columnText";
@@ -58,7 +58,7 @@ const READY_MOST_MS = 250;
  * it is seen; none, a text with neither.
  */
 function bodyBoxOf(st: EditorState, t: WorkspaceText): { x0: number; x1: number; y0: number; y1: number } | null {
-  if (t.at) return sheetBox(t.at, sheetOf(t.text));
+  if (t.at) return drawnSheetBox(t);
   const m = st.molecules3d.find((x) => x.calc?.source && (t.path ? x.calc.source.path === t.path : x.calc.source.name === t.name));
   if (!m) return null;
   const style = currentStyle3D();
@@ -466,7 +466,8 @@ function ColumnPass({
       textBegun.current = { start: flightStart, at: performance.now() };
       redraw();
     };
-    const set = fromMolecule ? columnSettingAt(onPage.w, inColumn) : sheetSetting(z);
+    // (from an icon, its lines as small as it shows them)
+    const set = fromMolecule ? columnSettingAt(onPage.w, inColumn) : sheetSetting(z * (flownText.icon ? iconScaleOf(s) : 1));
     return <TextFlight key={flightStart} sheet={onPage} column={inColumn} set={set} k={k} lift={Math.sin(Math.PI * t)} seen={seen} lines={s.lines} onReady={onReady} />;
   })();
 
