@@ -1,0 +1,129 @@
+import { describe, expect, it } from "vitest";
+import { applyEdit, caretAt, letterStep, lineAround, Lines, mapThrough, paragraphStep, plainLines, typed, wordAround, wordStep } from "./editing";
+import { commandOf } from "./keys";
+import { editOf, windowOf, AROUND, MOST } from "./field";
+
+describe("a text being edited", () => {
+  it("knows its lines: where each begins and ends, and which an offset is on", () => {
+    const l = new Lines("ab\ncde\n\nf");
+    expect(l.starts).toEqual([0, 3, 7, 8]);
+    expect([l.start(1), l.end(1), l.line(1)]).toEqual([3, 6, "cde"]);
+    expect(l.end(3)).toBe(9);
+    expect([l.at(0), l.at(2), l.at(3), l.at(7), l.at(9)]).toEqual([0, 0, 1, 2, 3]);
+  });
+
+  it("is typed into: what is selected replaced, the caret after it; places after moved with it", () => {
+    const t = typed("hello world", { anchor: 6, head: 11 }, "there");
+    expect(t.text).toBe("hello there");
+    expect(t.sel).toEqual(caretAt(11));
+    expect(applyEdit("abc", { from: 1, to: 2, insert: "XY" })).toBe("aXYc");
+    expect(mapThrough(5, { from: 1, to: 2, insert: "XY" })).toBe(6);
+    expect(mapThrough(0, { from: 1, to: 2, insert: "XY" })).toBe(0);
+    expect(plainLines("a\r\nb\rc")).toBe("a\nb\nc");
+  });
+
+  it("moves a letter at a time - an emoji or an accented letter as one, a line's end as one", () => {
+    const l = new Lines("éx\n👍🏽y");
+    expect(letterStep(l, 0, 1)).toBe(2);
+    expect(letterStep(l, 2, -1)).toBe(0);
+    expect(letterStep(l, 3, 1)).toBe(4);
+    expect(letterStep(l, 4, 1)).toBe(8);
+    expect(letterStep(l, 8, -1)).toBe(4);
+    expect(letterStep(l, 4, -1)).toBe(3);
+  });
+
+  it("moves a word at a time, on to a word's end on a Mac and to the next's start on Windows", () => {
+    const l = new Lines("foo bar, baz\nqux");
+    expect(wordStep(l, 0, 1, "end")).toBe(3);
+    expect(wordStep(l, 3, 1, "end")).toBe(7);
+    expect(wordStep(l, 0, 1, "start")).toBe(4);
+    expect(wordStep(l, 12, 1, "end")).toBe(13);
+    expect(wordStep(l, 9, -1, "end")).toBe(4);
+    expect(wordStep(l, 13, -1, "end")).toBe(12);
+    expect(wordStep(l, 0, -1, "end")).toBe(0);
+  });
+
+  it("selects a word by two clicks, and a line by three; moves a paragraph's edge at a time", () => {
+    const l = new Lines("foo bar\nbaz");
+    expect(wordAround(l, 5)).toEqual([4, 7]);
+    expect(wordAround(l, 7)).toEqual([4, 7]);
+    expect(wordAround(l, 3)).toEqual([0, 3]);
+    expect(lineAround(l, 2)).toEqual([0, 8]);
+    expect(lineAround(l, 9)).toEqual([8, 11]);
+    expect(paragraphStep(l, 5, -1)).toBe(0);
+    expect(paragraphStep(l, 8, -1)).toBe(0);
+    expect(paragraphStep(l, 5, 1)).toBe(7);
+    expect(paragraphStep(l, 7, 1)).toBe(11);
+  });
+
+  it("selects a Japanese word as a word", () => {
+    const l = new Lines("日本語の文章です");
+    const [a, b] = wordAround(l, 1);
+    expect(a).toBe(0);
+    expect(b).toBeGreaterThan(1);
+  });
+});
+
+describe("an editor's keys", () => {
+  it("are a Mac's on a Mac: Option by words, Command to the ends, Control's keys", () => {
+    expect(commandOf({ key: "ArrowRight", altKey: true }, true)).toEqual({ kind: "move", unit: "word", dir: 1, extend: false });
+    expect(commandOf({ key: "ArrowLeft", metaKey: true, shiftKey: true }, true)).toEqual({ kind: "move", unit: "lineEdge", dir: -1, extend: true });
+    expect(commandOf({ key: "ArrowDown", metaKey: true }, true)).toEqual({ kind: "move", unit: "all", dir: 1, extend: false });
+    expect(commandOf({ key: "e", ctrlKey: true }, true)).toEqual({ kind: "move", unit: "lineEdge", dir: 1, extend: false });
+    expect(commandOf({ key: "k", ctrlKey: true }, true)).toEqual({ kind: "delete", unit: "lineEdge", dir: 1 });
+    expect(commandOf({ key: "Backspace", altKey: true }, true)).toEqual({ kind: "delete", unit: "word", dir: -1 });
+    expect(commandOf({ key: "Backspace", metaKey: true }, true)).toEqual({ kind: "delete", unit: "lineEdge", dir: -1 });
+    // (Home, End and a page move the view, not the caret)
+    expect(commandOf({ key: "End" }, true)).toEqual({ kind: "scroll", unit: "all", dir: 1 });
+    expect(commandOf({ key: "PageDown" }, true)).toEqual({ kind: "scroll", unit: "page", dir: 1 });
+    expect(commandOf({ key: "PageDown", altKey: true }, true)).toEqual({ kind: "move", unit: "page", dir: 1, extend: false });
+    expect(commandOf({ key: "a", metaKey: true }, true)).toEqual({ kind: "selectAll" });
+    expect(commandOf({ key: "a" }, true)).toBeNull();
+  });
+
+  it("are Windows' elsewhere: Ctrl by words, Home and End a line's ends", () => {
+    expect(commandOf({ key: "ArrowRight", ctrlKey: true, shiftKey: true }, false)).toEqual({ kind: "move", unit: "word", dir: 1, extend: true });
+    expect(commandOf({ key: "Home" }, false)).toEqual({ kind: "move", unit: "lineEdge", dir: -1, extend: false });
+    expect(commandOf({ key: "End", ctrlKey: true }, false)).toEqual({ kind: "move", unit: "all", dir: 1, extend: false });
+    expect(commandOf({ key: "ArrowDown", ctrlKey: true }, false)).toEqual({ kind: "scroll", unit: "line", dir: 1 });
+    expect(commandOf({ key: "Backspace", ctrlKey: true }, false)).toEqual({ kind: "delete", unit: "word", dir: -1 });
+    expect(commandOf({ key: "a", ctrlKey: true }, false)).toEqual({ kind: "selectAll" });
+    expect(commandOf({ key: "e", ctrlKey: true }, false)).toBeNull();
+  });
+});
+
+describe("the field typed through", () => {
+  it("holds the caret's line and those around it, and what is selected", () => {
+    const text = Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n");
+    const l = new Lines(text);
+    const w = windowOf(l, caretAt(l.start(10) + 2));
+    expect(w.start).toBe(l.start(10 - AROUND));
+    expect(w.end).toBe(l.end(10 + AROUND));
+    expect(w.text.split("\n")).toHaveLength(2 * AROUND + 1);
+    expect(w.sel).toEqual([l.start(10) + 2 - w.start, l.start(10) + 2 - w.start]);
+    // (a selection reaching further: it too)
+    const wide = windowOf(l, { anchor: l.start(3), head: l.start(10) });
+    expect(wide.start).toBe(l.start(3));
+    expect(wide.sel).toEqual([0, l.start(10) - l.start(3)]);
+    expect(wide.whole).toBe(true);
+  });
+
+  it("holds the caret's lines alone where what is selected is too much", () => {
+    const text = Array.from({ length: 2000 }, () => "0123456789").join("\n");
+    const l = new Lines(text);
+    const w = windowOf(l, { anchor: 0, head: text.length });
+    expect(w.whole).toBe(false);
+    expect(w.end - w.start).toBeLessThanOrEqual(MOST);
+    expect(w.sel[0]).toBe(w.sel[1]);
+  });
+
+  it("reads what was typed as an edit: in place of what was selected, or else from both ends", () => {
+    expect(editOf("ab|cd".replace("|", ""), 2, 2, "abXcd")).toEqual({ from: 2, to: 2, insert: "X" });
+    // (a letter typed like the one after the caret, read where the caret was)
+    expect(editOf("abc", 2, 2, "abcc")).toEqual({ from: 2, to: 2, insert: "c" });
+    expect(editOf("hello world", 6, 11, "hello 世界")).toEqual({ from: 6, to: 11, insert: "世界" });
+    expect(editOf("hello", 5, 5, "hello")).toBeNull();
+    // (the field changed elsewhere than at the selection)
+    expect(editOf("abcdef", 6, 6, "abXdef")).toEqual({ from: 2, to: 3, insert: "X" });
+  });
+});

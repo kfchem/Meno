@@ -1,2 +1,1 @@
-export { default } from "./TextEditor";
-
+export { default } from "./DrawnText";
