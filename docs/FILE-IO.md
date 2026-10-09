@@ -459,7 +459,9 @@ work.meno (zip)
   keep where they came from (`captions[].from`: the PDF's SHA-256 and two
   places in it; docs/PDF.md, step 3). Pictures on the page are listed in
   `pictures`, each by its image's SHA-256 with its place, size and turn
-  (docs/PDF.md, step 4a).
+  (docs/PDF.md, step 4a); one cut out of a PDF keeps where it came from
+  (`pictures[].from`: the PDF's SHA-256, its page and the box on it;
+  step 4b).
 - **Written off the page.** The files kept are compressed in a worker of
   their own as the workspace is saved (`lib/doc/menoFileWorker.ts`), so a
   long output never holds the canvas up.

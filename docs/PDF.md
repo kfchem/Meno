@@ -644,9 +644,42 @@ Decided while building it, for the maintainer to confirm:
 - **Pictures copied inside Meno are carried by their SHA-256.** A paste in any tab of the same Meno finds them; one copied in another Meno running is left out.
 
 Not yet, and where it comes:
-- **A figure cut out of a PDF by a box**, with *Show in the PDF*: step 4b.
+- **A figure cut out of a PDF by a box**, with *Show in the PDF*: built in step 4b, below.
 - **A JPEG on the clipboard**, as some browsers copy a photograph: only a PNG or a bitmap is read for now.
 - **Reading a picture as a structure**: stage 5.
+
+### Step 4b: figures cut out of a PDF (2026-10-09)
+
+Built:
+- **Where a page's figures lie** (`pdf_objects`, `lib/pdf/figures`). PDFium lists what a page is made of - its words, paths, pictures, shadings and forms - each with its box, in points from the page's top left as it is drawn. From them:
+  - A figure is where pictures and paths lie within 8 points of one another. It is at least 24 points one way and 4 the other (a chain drawn flat is a figure, a word's underline none), or it holds a picture.
+  - A rule (at most 1.5 points thick and at least 150 long) is no part of one, nor is anything over most of the page, such as its frame.
+  - Words over a figure or within 6 points of it, each narrower than six tenths of it, are its labels, and its box takes them in. Its caption, and a column's lines beside it, are not.
+  - A page's figures are worked out once, when its words are first wanted: as it comes into the column, or onto the screen at a size its words can be read.
+- **A box, in the column.** A press in a figure, or where no word is near, begins a box.
+  - Let go where it was pressed, in a figure, it is that figure's box, labels and all. On a link, the link is followed instead.
+  - Dragged, the box is drawn by hand from the press to the pointer, on that page. The column moves on as the pointer nears its top or foot.
+  - Two clicks and three still select a word and a line.
+- **A box, on a stack at full size.** A drag there moves the view, so a box begins with a long press - in a figure, or where no word is near - with the same ring spreading as words are selected with. In a figure, the figure's box comes at once; dragged on, a box is drawn by hand.
+- **The box** is outlined, and shaded in Meno's light, on the stack and in the column alike. A box smaller than 6 points either way is let go. Esc, a click elsewhere, or anything else selected lets it go.
+- **Carried out.** The box pressed and dragged lifts off the page toward the viewer: a white sheet, a soft shadow falling under it, its picture coming into it as soon as it has been drawn. Held where it was pressed, it follows the pointer; over the canvas it is as large as the canvas shows the page. It is drawn in the column's last pass, as words carried out are, over the column too.
+  - Let go on the canvas, it settles there and is a picture on the page, just where it was let go, selected, as one step.
+  - Let go anywhere else, it goes back down onto the box.
+  - Pressed and let go where it was, the box stays.
+- **Its menu.** With a box on it, the PDF's right-click menu starts with *Put on the page* - beside what is in view, clear of what is there, as a picture opened is - and *Copy picture*.
+- **Drawn from the PDF itself**, by PDFium, at the resolution Settings, *Files*, sets for copied pictures (600 dpi by default), lowered where the picture would come to more than 48 million pixels. On the page, it is the size the figure is printed.
+- **Where it came from.** The picture is named after the PDF and its page (*figures, page 2.png*), and keeps the PDF's SHA-256, the page and the box (`from` in `workspace.json`'s `pictures`, and in what a copy carries). *Show in the PDF*, in its menu, reads that PDF in the column, goes to the box and marks it for a moment.
+
+Decided while building it, for the maintainer to confirm:
+- **In the column, a click in a figure takes it whole; a drag draws a box by hand.** The click is the quick way for the common case; the drag stays for part of a figure, or for one Meno does not see as one.
+- **On a stack, a box begins with a long press**, as words are selected there: a drag on a full-size stack moves the view (the maintainer).
+- **A figure's caption is not part of it.** It is words, to be taken out as words.
+- **The box lifts as a white sheet**, its picture fading in once drawn: a picture of the screen's resolution for the flight, drawn in a moment, and the one at the copy resolution drawn beside it for the page.
+- **A picture carried out lies just where it was let go**, over another picture if it was let go there; one opened or put on the page is put clear of the rest.
+
+Not yet, and where it comes:
+- **A scanned page**: it is one picture over most of the page, so no figure is found on it. A box drawn by hand takes part of it.
+- **Reading a figure as a structure**: stage 5.
 
 ## In order
 
@@ -668,8 +701,9 @@ Not yet, and where it comes:
    and copying, on the stack and in the column; *This PDF* and *All PDFs*;
    words dragged out onto the page.
 4. **Pictures**: from image files and the clipboard (built, 4a,
-   2026-10-09; *As built*, above), and figures dragged out of a PDF (4b);
-   moved, scaled, turned, tied to their source.
+   2026-10-09; *As built*, above), and figures dragged out of a PDF
+   (built, 4b, 2026-10-09; *As built*, above); moved, scaled, turned,
+   tied to their source.
 5. **Texts drawn with WebGL**: first a small trial of typing alone,
    Japanese through the IME on a Mac and on Windows, shown before the
    rest; then a text's sheet on the page, the column's text and its
