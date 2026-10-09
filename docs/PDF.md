@@ -724,6 +724,7 @@ Decided while building it, for the maintainer to confirm:
 
 Not yet, and where it comes:
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
+- **A step's card lies over the canvas**, in HTML, as all a workflow's cards do: a log's lines come out from under its step's card, and pass under the other cards on their way, as a PDF's page does.
 - **Colouring** (Lezer), **words on the page typed in place**: after.
 
 ## In order
