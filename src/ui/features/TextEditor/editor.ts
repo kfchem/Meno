@@ -54,8 +54,9 @@ export class Editor {
   focused = false;
   /** When the caret was last moved or typed at: it shows, steadily, a moment from then. */
   stirred = 0;
-  /** How wide the longest line is, as far as it is known. */
+  /** How wide the longest line is, as far as it is known - and the line the IME is composing in, while it does. */
   private widest = 0;
+  private composedWide = 0;
   /** Told when anything drawn has changed; and when the text has, by typing. */
   onChange: () => void = () => {};
   onEdited: (text: string) => void = () => {};
@@ -81,7 +82,7 @@ export class Editor {
     return Math.max(0, this.lines.count * LINE_PX - this.viewH + LINE_PX);
   }
   get mostLeft(): number {
-    return Math.max(0, this.widest + PAD_PX * 2 - (this.viewW - GUTTER_PX));
+    return Math.max(0, Math.max(this.widest, this.composedWide) + PAD_PX * 2 - (this.viewW - GUTTER_PX));
   }
   get atEnd(): boolean {
     return this.scrollTop >= this.mostTop - AT_END_PX;
@@ -114,10 +115,14 @@ export class Editor {
   /** The caret in view: its line, a line's worth from the edges where it can be, and across. */
   reveal(): void {
     const i = this.lines.at(this.sel.head);
+    this.revealAt(i, this.xOf(this.sel.head) + this.scrollLeft - GUTTER_PX);
+  }
+
+  /** A place in view: line `i`, `x` across from the gutter's edge as the text lies unscrolled. */
+  private revealAt(i: number, x: number): void {
     let top = this.scrollTop;
     if (i * LINE_PX < top) top = i * LINE_PX;
     else if ((i + 1) * LINE_PX > top + this.viewH) top = (i + 1) * LINE_PX - this.viewH;
-    const x = this.xOf(this.sel.head) + this.scrollLeft - GUTTER_PX;
     let left = this.scrollLeft;
     const room = this.viewW - GUTTER_PX;
     if (x - PAD_PX < left) left = Math.max(0, x - PAD_PX * 2);
@@ -174,6 +179,16 @@ export class Editor {
     typingProbe.got();
     this.composing = c;
     this.stirred = performance.now();
+    this.composedWide = 0;
+    // (what the IME has so far in view, its caret where it says - as typing keeps the caret in view)
+    if (c) {
+      const i = this.lines.at(c.from);
+      const start = this.lines.start(i);
+      const line = this.lines.line(i);
+      const shown = line.slice(0, c.from - start) + c.text + (c.to <= this.lines.end(i) ? line.slice(c.to - start) : "");
+      this.composedWide = lineWidth(shown);
+      this.revealAt(i, PAD_PX + xAt(shown, c.from - start + c.sel[1]));
+    }
     this.onChange();
   }
 
