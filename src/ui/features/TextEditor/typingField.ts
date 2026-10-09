@@ -17,10 +17,11 @@
  */
 import { IS_MAC } from "../../../lib/doc/shortcuts";
 import { caretAt, plainLines, selFrom, selTo } from "../../../lib/text/editing";
-import { composed, composingIn, editOf, inText, windowOf, type FieldWindow } from "../../../lib/text/field";
+import { composed, composingIn, editOf, inText, windowOf, withTakenAway, type FieldWindow } from "../../../lib/text/field";
 import { commandOf } from "../../../lib/text/keys";
 import type { Editor } from "./editor";
 import { LINE_PX, xAt } from "./linePictures";
+import { typingProbe } from "./typingProbe";
 
 export interface TypingField {
   focus(): void;
@@ -31,8 +32,19 @@ export interface TypingField {
   dispose(): void;
 }
 
-/** Whether the webview has an EditContext to type through. */
-export const hasEditContext = () => typeof window !== "undefined" && "EditContext" in window;
+/**
+ * Whether the webview has an EditContext to type through - unless, for the
+ * trial, the textarea is asked for (`localStorage["meno.typingField"] =
+ * "textarea"`), to set the two side by side.
+ */
+export function hasEditContext(): boolean {
+  if (typeof window === "undefined" || !("EditContext" in window)) return false;
+  try {
+    return window.localStorage.getItem("meno.typingField") !== "textarea";
+  } catch {
+    return true;
+  }
+}
 
 /** The field for a text: an EditContext on its element, where there is one; else the textarea. */
 export function typingField(el: HTMLElement, ed: Editor): TypingField {
@@ -48,7 +60,10 @@ abstract class Field implements TypingField {
     protected el: HTMLElement,
     protected ed: Editor,
   ) {
-    this.on<KeyboardEvent>(el, "keydown", (e) => this.onKey(e));
+    this.on<KeyboardEvent>(el, "keydown", (e) => {
+      typingProbe.key();
+      this.onKey(e);
+    });
     this.on<ClipboardEvent>(el, "copy", (e) => this.onCopy(e, false));
     this.on<ClipboardEvent>(el, "cut", (e) => this.onCopy(e, true));
     this.on<ClipboardEvent>(el, "paste", (e) => this.onPaste(e));
@@ -249,6 +264,9 @@ type TextUpdate = Event & { updateRangeStart: number; updateRangeEnd: number; te
 type TextFormats = Event & { getTextFormats(): { rangeStart: number; rangeEnd: number; underlineStyle: string; underlineThickness: string }[] };
 type BoundsAsked = Event & { rangeStart: number; rangeEnd: number };
 
+/** How long a part the IME took away is held for a composition to follow, in ms. */
+const HOLD_MS = 60;
+
 /**
  * The text's own element, with an EditContext: Chromium's IME, through the
  * system's text services, reads the lines it holds and says each change -
@@ -270,7 +288,16 @@ class EditContextField extends Field {
     start: number;
     in: { at: number; tail: number; from: number; to: number } | null;
     clauses?: { from: number; to: number; thick: boolean }[];
+    /** What the IME took away just before it began, held for it (`held`). */
+    taken: { from: number; to: number } | null;
   } | null = null;
+  /**
+   * A part taken away by the IME, not by a key - Meno's own keys delete -
+   * held a moment: converting again a word it has just taken, it puts the
+   * word back as it begins, and the two are one change, undone at once, or
+   * none if the word comes back as it was. Kept, if no composition follows.
+   */
+  private held: { from: number; to: number; start: number; timer: number } | null = null;
   /** Where the IME was last told the text lies, and its caret: told again only once they move, after the text is drawn. */
   private told = { control: "", caret: "" };
   private telling = false;
@@ -285,7 +312,10 @@ class EditContextField extends Field {
     this.on<TextFormats>(this.ec, "textformatupdate", (e) => this.onFormats(e));
     this.on<BoundsAsked>(this.ec, "characterboundsupdate", (e) => this.onBoundsAsked(e));
     this.on<CompositionEvent>(this.ec, "compositionstart", (e) => {
-      this.composing = { before: this.ec.text, data: e.data ?? "", start: this.win?.start ?? 0, in: null };
+      const held = this.held;
+      if (held) window.clearTimeout(held.timer);
+      this.held = null;
+      this.composing = { before: this.ec.text, data: e.data ?? "", start: held?.start ?? this.win?.start ?? 0, in: null, taken: held && { from: held.from, to: held.to } };
     });
     this.on(this.ec, "compositionend", () => this.onCompositionEnd());
     // (a line's end, Enter's - the context leaves it to the page)
@@ -302,6 +332,7 @@ class EditContextField extends Field {
   }
 
   dispose(): void {
+    this.keepHeld();
     super.dispose();
     this.gone = true;
     (this.el as HTMLElement & { editContext: EditContextLike | null }).editContext = null;
@@ -311,7 +342,18 @@ class EditContextField extends Field {
     return !!this.composing;
   }
 
+  /** What the IME took away, kept as an edit after all: no composition came. The context is given the lines about the caret again, unless a change it says next is still to be read against what it holds. */
+  private keepHeld(sync = true): void {
+    const h = this.held;
+    if (!h) return;
+    window.clearTimeout(h.timer);
+    this.held = null;
+    this.ed.edit(inText({ from: h.from, to: h.to, insert: "" }, h.start), caretAt(h.start + h.from));
+    if (sync) this.sync();
+  }
+
   protected onKey(e: KeyboardEvent): boolean {
+    if (!e.isComposing && e.keyCode !== 229) this.keepHeld();
     if (super.onKey(e)) return true;
     // (Enter, where the page is not told of it as an input)
     if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229 && !this.composing && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -325,7 +367,8 @@ class EditContextField extends Field {
   }
 
   sync(): void {
-    if (this.composing) return;
+    // (left as the IME has it while it composes - or has just taken a part away for a composition)
+    if (this.composing || this.held) return;
     const ed = this.ed;
     const w = windowOf(ed.lines, ed.sel);
     this.win = w;
@@ -368,10 +411,19 @@ class EditContextField extends Field {
   /** What the IME has so far drawn: in place of what it replaces, its caret and clauses as it says. */
   private show(): void {
     const c = this.composing!;
-    const k = c.in!;
+    const k = this.replaced()!;
     const text = composed(this.ec.text, k.at, k.tail);
     const s: [number, number] = [Math.min(Math.max(this.ec.selectionStart - k.at, 0), text.length), Math.min(Math.max(this.ec.selectionEnd - k.at, 0), text.length)];
     this.ed.setComposing({ from: c.start + k.from, to: c.start + k.to, text, sel: s, clauses: c.clauses });
+  }
+
+  /** Where what the IME composes lies in the context's text, and what it replaces in the text as Meno holds it - what it took away first too. */
+  private replaced(): { at: number; tail: number; from: number; to: number } | null {
+    const c = this.composing;
+    if (!c?.in) return null;
+    if (!c.taken) return c.in;
+    const [from, to] = withTakenAway(c.in.from, c.in.to, c.taken.from, c.taken.to);
+    return { ...c.in, from, to };
   }
 
   /** How far across the view a place in what the IME has so far lies. */
@@ -394,6 +446,13 @@ class EditContextField extends Field {
       this.show();
       return;
     }
+    // (a part taken away, not by a key: held, for a composition that may follow at once)
+    if (!e.text && e.updateRangeEnd > e.updateRangeStart && !this.held) {
+      this.held = { from: e.updateRangeStart, to: e.updateRangeEnd, start: w.start, timer: window.setTimeout(() => this.keepHeld(), HOLD_MS) };
+      return;
+    }
+    // (what was taken away kept first, the context still holding the text this change is read against)
+    this.keepHeld(false);
     const insert = plainLines(e.text);
     const typed = inText({ from: e.updateRangeStart, to: e.updateRangeEnd, insert }, w.start);
     this.ed.edit(typed, caretAt(w.start + e.selectionEnd + (insert.length - e.text.length)));
@@ -413,10 +472,10 @@ class EditContextField extends Field {
 
   /** Where each letter the IME composes lies on the screen, for its candidates: one box each, of the text's offsets. */
   private onBoundsAsked(e: BoundsAsked): void {
-    const c = this.composing;
     const ed = this.ed;
-    if (!c?.in || !ed.composing) return;
-    const at = c.in.at;
+    const k = this.replaced();
+    if (!k || !ed.composing) return;
+    const at = k.at;
     const box = this.el.getBoundingClientRect();
     const line = ed.lines.at(ed.composing.from);
     const top = box.top + ed.topOf(line);
@@ -431,15 +490,18 @@ class EditContextField extends Field {
 
   private onCompositionEnd(): void {
     const c = this.composing;
+    const k = this.replaced();
     this.composing = null;
     this.ed.setComposing(null);
-    if (!c?.in) {
+    if (!c || !k) {
+      // (nothing composed: what it took away, kept)
+      if (c?.taken) this.ed.edit(inText({ from: c.taken.from, to: c.taken.to, insert: "" }, c.start), caretAt(c.start + c.taken.from));
       this.sync();
       return;
     }
-    const k = c.in;
+    // (one change - or none, where what it replaced comes back as it was)
     const insert = plainLines(composed(this.ec.text, k.at, k.tail));
-    if (insert !== c.before.slice(k.from, k.to)) this.ed.edit(inText({ from: k.from, to: k.to, insert }, c.start), caretAt(c.start + k.from + insert.length));
+    if (insert !== this.ed.text.slice(c.start + k.from, c.start + k.to)) this.ed.edit(inText({ from: k.from, to: k.to, insert }, c.start), caretAt(c.start + k.from + insert.length));
     // (the context given the lines about the caret again - what the IME put in twice, once)
     this.sync();
   }

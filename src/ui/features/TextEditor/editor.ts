@@ -24,6 +24,7 @@ import {
 } from "../../../lib/text/editing";
 import type { Command, Unit } from "../../../lib/text/keys";
 import { colAt, LINE_PX, lineWidth, xAt } from "./linePictures";
+import { typingProbe } from "./typingProbe";
 
 /**
  * What the IME is composing: the part of the text it takes the place of,
@@ -152,6 +153,7 @@ export class Editor {
 
   /** An edit typed: made, the selection then `sel` - or the caret after what was put in. */
   edit(e: Edit, sel?: Sel): void {
+    typingProbe.got();
     const text = applyEdit(this.text, e);
     this.lines = new Lines(text);
     this.widest = Math.max(this.widest, lineWidth(this.lines.line(this.lines.at(e.from + e.insert.length))));
@@ -169,6 +171,7 @@ export class Editor {
   }
 
   setComposing(c: Composing | null): void {
+    typingProbe.got();
     this.composing = c;
     this.stirred = performance.now();
     this.onChange();

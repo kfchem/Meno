@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyEdit, caretAt, letterStep, lineAround, Lines, mapThrough, paragraphStep, plainLines, typed, wordAround, wordStep } from "./editing";
 import { commandOf } from "./keys";
-import { composed, composingIn, editOf, windowOf, AROUND, MOST } from "./field";
+import { composed, composingIn, editOf, windowOf, withTakenAway, AROUND, MOST } from "./field";
 
 describe("a text being edited", () => {
   it("knows its lines: where each begins and ends, and which an offset is on", () => {
@@ -139,6 +139,17 @@ describe("the field typed through", () => {
     expect(composed("化学飯能反応です", after.at, after.tail)).toBe("飯能");
     expect(composingIn(before, "化学", 2, 2, "化学")).toEqual({ at: 2, tail: 4, from: 0, to: 2 });
     expect(composed("化学反応です", 2, 2)).toBe("反応");
+    // (the words begun on lying across the caret - their first part taken away first, the rest after it)
+    const across = composingIn("これは化学です", "反応です", 5, 5, "反応です");
+    expect(across).toEqual({ at: 5, tail: 2, from: 5, to: 7 });
+    expect(composed("これは化学反応ですです", across.at, across.tail)).toBe("反応です");
+  });
+
+  it("joins what the IME took away first to what its composition then replaces", () => {
+    // (これは化学反応|です: 反応 [5, 7) taken away, then 反応です put in at 5 in place of です [5, 7) after)
+    expect(withTakenAway(5, 7, 5, 7)).toEqual([5, 9]);
+    // (化学| at a line's end: 化学 [3, 5) taken away, then put in again at 3, replacing nothing after)
+    expect(withTakenAway(3, 3, 3, 5)).toEqual([3, 5]);
   });
 });
 

@@ -73,10 +73,27 @@ export const inText = (e: Edit, start: number): Edit => ({ from: e.from + start,
  */
 export function composingIn(before: string, data: string, p: number, q: number, text: string): { at: number; tail: number; from: number; to: number } {
   if (p === q && data && text === data) {
-    if (before.slice(p, p + data.length) === data) return { at: p, tail: before.length - p, from: p, to: p + data.length };
-    if (before.slice(p - data.length, p) === data) return { at: p, tail: before.length - p, from: p - data.length, to: p };
+    // (as much of the words as lies just after the caret - all of them, or what the IME did not take away
+    // first - and, where they are not all there, as much as lies just before it)
+    const n = data.length;
+    let after = 0;
+    for (let k = n; k > 0 && !after; k--) if (before.slice(p, p + k) === data.slice(n - k)) after = k;
+    let ahead = 0;
+    if (after < n) for (let k = n - after; k > 0 && !ahead; k--) if (before.slice(p - k, p) === data.slice(0, k)) ahead = k;
+    if (after || ahead) return { at: p, tail: before.length - p, from: p - ahead, to: p + after };
   }
   return { at: p, tail: before.length - q, from: p, to: q };
+}
+
+/**
+ * Where a composition replaces, in the text as it was before the IME took
+ * a part of it away first - `[d0, d1)`, as it does converting again the
+ * word before the caret - from where it replaces in the text after:
+ * that part, and what the composition replaces, as one.
+ */
+export function withTakenAway(from: number, to: number, d0: number, d1: number): [number, number] {
+  const back = (x: number, end: boolean) => (x < d0 || (x === d0 && !end) ? x : x + (d1 - d0));
+  return [Math.min(d0, back(from, false)), Math.max(d1, back(to, true))];
 }
 
 /** What the IME has so far, in the context's text: from `at`, all but the `tail` that is not its. */

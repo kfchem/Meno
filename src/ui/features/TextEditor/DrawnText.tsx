@@ -15,6 +15,7 @@ import { selFrom, selTo } from "../../../lib/text/editing";
 import { Editor, GUTTER_PX, PAD_PX } from "./editor";
 import { BAND_PX, FONT, INK, LINE_PX, linePicture, TAB, typeReady, xAt } from "./linePictures";
 import { hasEditContext, typingField, type TypingField } from "./typingField";
+import { typingProbe } from "./typingProbe";
 
 type Props = { value: string; onChange: (v: string) => void };
 
@@ -198,12 +199,14 @@ function Scene({ ed, field }: { ed: Editor; field: MutableRefObject<TypingField 
   }, [ed, invalidate]);
   const caretRef = useRef<THREE.Mesh>(null);
   useFrame(() => {
+    typingProbe.drawn();
     const since = performance.now() - ed.stirred;
     if (caretRef.current) caretRef.current.visible = ed.focused && (since < BLINK_MS || Math.floor(since / BLINK_MS) % 2 === 0);
   });
 
   const plane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   if (!typeIn) return null;
+  typingProbe.rendered();
   const first = Math.max(0, Math.floor(ed.scrollTop / LINE_PX));
   const last = Math.min(ed.lines.count - 1, Math.floor((ed.scrollTop + ed.viewH) / LINE_PX));
   const left = GUTTER_PX + PAD_PX - ed.scrollLeft;
