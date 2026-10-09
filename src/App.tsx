@@ -13,6 +13,8 @@ import {
 import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
 import { openedAs, openedTexts, OPENABLE, textsOf, workspaceOfFile, type Opened } from "./ui/views/openFile";
+import { pdfTakerOf, type OpenedPdf } from "./ui/views/pdfs";
+import { holdPdfPath } from "./lib/pdf/reader";
 import { textTakerOf, type OpenedText } from "./ui/views/texts";
 import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
@@ -207,6 +209,13 @@ export default function App() {
     take(texts);
     return true;
   };
+  // PDFs opened, likewise: on the page of the workspace in front, or on a canvas of their own (ui/views/pdfs)
+  const openPdfs = (pdfs: OpenedPdf[], into: string | null): boolean => {
+    const take = into ? pdfTakerOf(into) : undefined;
+    if (!take) return openTab({ kind: "structure", label: pdfs[0].name, data: { pdfs, filename: pdfs[0].name } });
+    take(pdfs);
+    return true;
+  };
 
   // Open (Ctrl/Cmd+O, or the menu): files picked in the system's dialog,
   // each in a tab, by what it is (openFile) - text in the workspace in
@@ -225,8 +234,18 @@ export default function App() {
       filters: [{ name: "Files Meno opens", extensions: OPENABLE.map((ext) => ext.slice(1)) }],
     }).catch(() => null);
     const texts: OpenedText[] = [];
+    const pdfs: OpenedPdf[] = [];
     for (const path of picked ?? []) {
       const name = path.split(/[\\/]/).pop() || path;
+      // (a PDF: held, and put on the page: docs/PDF.md)
+      if (/\.pdf$/i.test(name)) {
+        try {
+          pdfs.push({ name, ...(await holdPdfPath(path)) });
+        } catch (e) {
+          setNotice(`${name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
       try {
         const bytes = await readFile(path);
         // (a workspace file: its workspace, and the outputs it keeps held)
@@ -246,6 +265,7 @@ export default function App() {
       }
     }
     if (texts.length) openTexts(texts, into);
+    if (pdfs.length) openPdfs(pdfs, into);
   };
   // Closing with unsaved changes: the tabs that hold them, and whether
   // each can be saved (lib/doc/savers).

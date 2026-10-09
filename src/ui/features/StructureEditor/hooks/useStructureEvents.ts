@@ -1,3 +1,4 @@
+import { holdPdfBytes } from "../../../../lib/pdf/reader";
 import * as THREE from "three";
 import { pageAt } from "../utils/page";
 import { useEffect, useRef, useState } from "react";
@@ -418,6 +419,18 @@ export function useStructureEvents(
     }
     if (!dropped) return;
     const f = dropped;
+    // PDFs: held, and put on the page where they were dropped (docs/PDF.md)
+    const pdfs = files.filter((g) => /\.pdf$/i.test(g.name) || g.type === "application/pdf");
+    if (pdfs.length) {
+      try {
+        const held = await Promise.all(pdfs.map(async (g) => ({ name: g.name, ...(await holdPdfBytes(new Uint8Array(await g.arrayBuffer()))) })));
+        store.getState().addPdfs(held, at);
+        setImportError(null);
+      } catch (e) {
+        reportImportError("append", e);
+      }
+      return;
+    }
     // a workspace file: its workspace - its outputs held - beside what is drawn, selected
     if (isMenoFile(new Uint8Array(await f.slice(0, 128).arrayBuffer()))) {
       try {

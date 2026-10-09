@@ -11,7 +11,7 @@ export type MenuTarget = {
    * The atom, bond, reaction arrow or "+" right-clicked, or a molecule in 3D
    * or a measurement on one; null, when it was nothing.
    */
-  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "molecule3d" | "measure3d" | "set" | "step" | "wire" | null;
+  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "pdf" | "molecule3d" | "measure3d" | "set" | "step" | "wire" | null;
   /** Its id: for a measurement, its molecule's. */
   id: number | null;
   /** A measurement's own id. */
@@ -106,6 +106,7 @@ export default function PartMenu({
   onRunStep,
   onStepOptions,
   step,
+  pdf,
   onSaveProcedure,
   onUseAsInput,
   onSaveAbbreviation,
@@ -145,6 +146,8 @@ export default function PartMenu({
   onStepOptions: () => void;
   /** What a step right-clicked can do besides, as it is: stopped, while its jobs wait or run; its logs and files shown, where it has jobs. */
   step?: { onRunFrom?: () => void; onStop?: () => void; onShowLog?: () => void; onShowFiles?: () => void };
+  /** What a PDF right-clicked can do: its pages turned, spread or gathered (docs/PDF.md). */
+  pdf?: { spread: boolean; onSpread: () => void; onNext?: () => void; onPrevious?: () => void };
   /** The whole flow a step or a set right-clicked is part of, saved as a procedure, named. */
   onSaveProcedure?: () => void;
   /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
@@ -253,6 +256,13 @@ export default function PartMenu({
           { name: "Edit text", keys: "", run: onEditText },
           { name: "Delete text", keys: deleteKey, run: onDelete },
         ]
+      : target.kind === "pdf"
+      ? [
+          ...(pdf?.onNext ? [{ name: "Next page", keys: "\u2192", run: pdf.onNext }] : []),
+          ...(pdf?.onPrevious ? [{ name: "Previous page", keys: "\u2190", run: pdf.onPrevious }] : []),
+          ...(pdf ? [{ name: pdf.spread ? "Gather pages" : "Spread pages", keys: "", run: pdf.onSpread, divider: !!(pdf.onNext || pdf.onPrevious) }] : []),
+          { name: "Delete PDF", keys: deleteKey, run: onDelete, divider: true },
+        ]
       : target.kind === "set"
       ? [
           ...(onSaveProcedure ? [{ name: "Save as procedure…", keys: "", run: onSaveProcedure }] : []),
@@ -342,6 +352,8 @@ export default function PartMenu({
                   ? "Plus"
                   : target.kind === "caption"
                     ? "Text"
+                  : target.kind === "pdf"
+                    ? "PDF"
                   : target.kind === "set"
                     ? "Set"
                   : target.kind === "step"

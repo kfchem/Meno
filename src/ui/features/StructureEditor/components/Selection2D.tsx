@@ -200,7 +200,7 @@ export default function Selection2D() {
       if (e.button !== 0 || e.target !== gl.domElement) return;
       const st = store.getState();
       // (on an arrow, a "+", words or a workflow's wire: theirs)
-      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null;
+      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null || st.hoveredPdf != null;
       if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || onMark || st.labelEdit.active || st.extend.active || st.captionEdit) return;
       const add = addsToSelection(e);
       const near =

@@ -17,6 +17,7 @@ import { eyeOf } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
 import { opensWith } from "./openingFit";
 import { captionSet } from "../../../../lib/chem/captions";
+import { pdfBounds } from "../../../../lib/pdf/layout";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -28,6 +29,7 @@ export default function FitToContent2D({
   const { model, autoFitSuspended } = useEditor();
   const molecules3d = useEditor((s) => s.molecules3d);
   const captions = useEditor((s) => s.captions);
+  const pdfs = useEditor((s) => s.pdfs);
   const store = useEditorStore();
   const style = useDrawingStyle();
   const { camera, size, invalidate } = useThree();
@@ -50,7 +52,7 @@ export default function FitToContent2D({
     const cam = camera as THREE.OrthographicCamera;
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
-    const empty = atoms.length === 0 && molecules3d.length === 0 && captions.length === 0;
+    const empty = atoms.length === 0 && molecules3d.length === 0 && captions.length === 0 && pdfs.length === 0;
     const firstView = !opened.current;
     opened.current = true;
     const firstContent = !held.current && !empty;
@@ -83,6 +85,12 @@ export default function FitToContent2D({
       const set = captionSet(c.text, c.x, c.y, opts.fontPx, labelSetOf(opts));
       bounds.min = { x: Math.min(bounds.min.x, c.x - set.halfW), y: Math.min(bounds.min.y, c.y - set.halfH) };
       bounds.max = { x: Math.max(bounds.max.x, c.x + set.halfW), y: Math.max(bounds.max.y, c.y + set.halfH) };
+    }
+    // and the PDFs, as they lie (lib/pdf/layout)
+    for (const p of pdfs) {
+      const b = pdfBounds(p);
+      bounds.min = { x: Math.min(bounds.min.x, b.x0), y: Math.min(bounds.min.y, b.y0) };
+      bounds.max = { x: Math.max(bounds.max.x, b.x1), y: Math.max(bounds.max.y, b.y1) };
     }
     // and the molecules in 3D, as each is turned and shown now, as the
     // camera sees them: straight from above, by an orthographic camera (the
@@ -138,6 +146,7 @@ export default function FitToContent2D({
     model.bonds,
     molecules3d,
     captions,
+    pdfs,
     style,
     camera,
     size.width,

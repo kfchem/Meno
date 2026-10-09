@@ -12,7 +12,8 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
+import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
+import { POINT, SPREAD_GAP } from "../../../lib/pdf/layout";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
 import { newTextName } from "./utils/texts";
@@ -54,6 +55,9 @@ export type StructureDocument = {
   /** The texts it holds, read and edited in the column beside the canvas. */
   texts?: WorkspaceText[];
   nextTextId?: number;
+  /** The PDFs on the page (docs/PDF.md). */
+  pdfs?: PdfItem[];
+  nextPdfId?: number;
 };
 
 /** Whether it holds nothing: no structure, arrow, "+" sign or words drawn, no molecule in 3D, no text, no workflow. */
@@ -65,6 +69,7 @@ export function isBlankDocument(doc: StructureDocument): boolean {
     !doc.captions?.length &&
     !doc.molecules3d?.length &&
     !doc.texts?.length &&
+    !doc.pdfs?.length &&
     !doc.sets?.length &&
     !doc.steps?.length
   );
@@ -98,7 +103,26 @@ export function createStructureDocument(data?: unknown): DocumentStore<Structure
       ? [{ name: t.name, text: t.text, ...(typeof t.path === "string" ? { path: t.path } : {}) }]
       : [],
   );
-  return createDocument<StructureDocument>(addTexts(emptyStructureDocument(), texts).doc);
+  // (PDFs opened on a canvas of their own: in a row from the middle of the page)
+  const held = (data as { pdfs?: unknown } | null | undefined)?.pdfs;
+  let doc = addTexts(emptyStructureDocument(), texts).doc;
+  for (const p of pdfsInRow(Array.isArray(held) ? held : [], { x: 0, y: 0 })) doc = addPdf(doc, p);
+  return createDocument<StructureDocument>(doc);
+}
+
+/** PDFs held, as they go on the page: the first's top page in the middle of `at`, the others to its right, a little apart. */
+export function pdfsInRow(held: readonly unknown[], at: { x: number; y: number }): Omit<PdfItem, "id">[] {
+  const out: Omit<PdfItem, "id">[] = [];
+  let x = at.x;
+  for (const h of held as Partial<PdfItem>[]) {
+    const pages = Array.isArray(h?.pages) ? h.pages.filter((p): p is [number, number] => Array.isArray(p) && p.length === 2 && p.every((v) => Number.isFinite(v) && v > 0)) : [];
+    if (typeof h?.name !== "string" || typeof h.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(h.sha256) || !pages.length) continue;
+    const w = pages[0][0] * POINT;
+    if (out.length) x += w / 2;
+    out.push({ name: h.name, sha256: h.sha256, pages, x, y: at.y, page: 0 });
+    x += w / 2 + SPREAD_GAP * 2;
+  }
+  return out;
 }
 
 // --- atoms and bonds -------------------------------------------------------
@@ -1026,6 +1050,30 @@ export function updateCaption(
   const out = captions.slice();
   out[index] = next;
   return { ...doc, captions: out };
+}
+
+// --- PDFs ------------------------------------------------------------------
+
+/** `doc` with a PDF on the page. */
+export function addPdf(doc: StructureDocument, pdf: Omit<PdfItem, "id">): StructureDocument {
+  const id = doc.nextPdfId ?? 1;
+  return { ...doc, pdfs: [...(doc.pdfs ?? []), { ...pdf, id }], nextPdfId: id + 1 };
+}
+
+/** `doc` with a PDF moved, turned to another page, or spread - unchanged where it has no such PDF, or the page is none of its. */
+export function updatePdf(doc: StructureDocument, id: number, patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread">>): StructureDocument {
+  const pdf = doc.pdfs?.find((p) => p.id === id);
+  if (!pdf) return doc;
+  if (patch.page != null && (!Number.isInteger(patch.page) || patch.page < 0 || patch.page >= pdf.pages.length)) return doc;
+  const next = { ...pdf, ...patch };
+  if (next.spread === false) delete next.spread;
+  return { ...doc, pdfs: doc.pdfs!.map((p) => (p.id === id ? next : p)) };
+}
+
+/** `doc` without a PDF. */
+export function removePdf(doc: StructureDocument, id: number): StructureDocument {
+  if (!doc.pdfs?.some((p) => p.id === id)) return doc;
+  return { ...doc, pdfs: doc.pdfs.filter((p) => p.id !== id) };
 }
 
 export function removeCaption(doc: StructureDocument, id: number): StructureDocument {

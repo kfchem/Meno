@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { DocumentStore } from "../../../../lib/doc";
 import { createStructureDocument, type StructureDocument } from "../document";
-import type { Caption, EditorState, SelFlow, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
+import type { Caption, EditorState, PdfItem, SelFlow, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
@@ -17,6 +17,7 @@ import { createUiSlice } from "./slices/uiSlice";
 import { createMolecules3dSlice, heldOf } from "./slices/molecules3dSlice";
 import { createTextsSlice } from "./slices/textsSlice";
 import { createCaptionsSlice } from "./slices/captionsSlice";
+import { createPdfsSlice } from "./slices/pdfsSlice";
 import { createWorkflowSlice } from "./slices/workflowSlice";
 import { turnsAcross } from "./turnJournal";
 import { shownText } from "../utils/texts";
@@ -49,6 +50,7 @@ function mirrorOf(doc: StructureDocument) {
     wires: doc.wires ?? NO_WIRES,
     docStyle: doc.style,
     texts: doc.texts ?? NO_TEXTS,
+    pdfs: doc.pdfs ?? NO_PDFS,
   };
 }
 
@@ -62,6 +64,7 @@ function flowHeld(sel: SelFlow, sets: readonly WorkflowSet[], steps: readonly Wo
 }
 
 const NO_TEXTS: WorkspaceText[] = [];
+const NO_PDFS: PdfItem[] = [];
 const NO_CAPTIONS: Caption[] = [];
 const NO_SETS: WorkflowSet[] = [];
 const NO_STEPS: WorkflowStep[] = [];
@@ -133,6 +136,7 @@ export function createEditorStore(
     hoveredArrow: null,
     hoveredPlus: null,
     hoveredCaption: null,
+    hoveredPdf: null,
     captionEdit: null,
     quickAdd: null,
     hoveredSet: null,
@@ -170,6 +174,7 @@ export function createEditorStore(
     ...createMolecules3dSlice(doc, set, get),
     ...createTextsSlice(doc, set),
     ...createCaptionsSlice(doc, set),
+    ...createPdfsSlice(doc, set),
     ...createWorkflowSlice(doc, set, get),
   }));
 

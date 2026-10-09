@@ -2,6 +2,7 @@ import type { TabKind } from "../../lib/core";
 import { kindOf, type Kind } from "../../lib/io/kinds";
 import { OFFERED, WRITER_PLUGINS } from "../../lib/calc/catalog";
 import { holdOutputsOf } from "../../lib/calc/asks";
+import { holdPdfsOf } from "../../lib/pdf/reader";
 import { isMenoFile, readMenoFile } from "../../lib/doc/menoFile";
 import type { OpenedText } from "./texts";
 
@@ -24,6 +25,8 @@ export const OPENABLE = [
     ...OFFERED.kinds.flatMap((k) => k.extensions),
     ...WRITER_PLUGINS.flatMap((p) => p.writes.flatMap((w) => w.extensions)),
     ...[...EXT_TEXT].map((ext) => `.${ext}`),
+    // (a PDF goes on the page: docs/PDF.md)
+    ".pdf",
   ]),
 ];
 
@@ -37,6 +40,7 @@ export function workspaceOfFile(bytes: Uint8Array): string | null {
   if (!isMenoFile(bytes)) return null;
   const file = readMenoFile(bytes);
   holdOutputsOf(file);
+  holdPdfsOf(file);
   return file.workspace;
 }
 

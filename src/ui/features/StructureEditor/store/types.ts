@@ -68,6 +68,13 @@ export type Plus = { id: number; x: number; y: number };
  * `arrow`, going where it goes.
  */
 export type Caption = { id: number; x: number; y: number; text: string; arrow?: number };
+/**
+ * A PDF on the page (docs/PDF.md): the file it is, by its SHA-256 - held in
+ * Meno's cache and kept in the workspace's file - its name, each page's
+ * width and height in points, where the middle of its top page lies, which
+ * page is on top, and whether its pages are spread out (lib/pdf/layout).
+ */
+export type PdfItem = { id: number; name: string; sha256: string; pages: [number, number][]; x: number; y: number; page: number; spread?: boolean };
 /** How a molecule in 3D is drawn: balls and sticks, or space-filling. */
 export type Look3D = "balls" | "space";
 /**
@@ -386,6 +393,20 @@ export type EditorState = {
   hoveredPlus: number | null;
   /** The words under the pointer, likewise. */
   hoveredCaption: number | null;
+  /** The PDF under the pointer, likewise. */
+  hoveredPdf: number | null;
+  setHoveredPdf: (id: number | null) => void;
+  /** The PDFs on the page. */
+  pdfs: PdfItem[];
+  /** PDFs held put on the page, as one step: the first where `at` is, the others beside it in a row. */
+  addPdfs: (pdfs: { name: string; sha256: string; pages: [number, number][] }[], at: { x: number; y: number }) => void;
+  /** A PDF moved, its top page's middle to (x, y): one step for a drag (`gesture`). */
+  movePdf: (id: number, x: number, y: number, gesture?: string) => void;
+  /** Another page on top of a PDF's stack. */
+  turnPdf: (id: number, page: number) => void;
+  /** A PDF's pages spread out, or gathered again. */
+  spreadPdf: (id: number, spread: boolean) => void;
+  removePdf: (id: number) => void;
   setHoveredCaption: (id: number | null) => void;
   /** Words on the page. */
   captions: Caption[];
