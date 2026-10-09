@@ -1,1 +1,1 @@
-export { default } from "./DrawnText";
+export { default } from "./TextBody";

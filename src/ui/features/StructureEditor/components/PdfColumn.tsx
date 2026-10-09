@@ -14,12 +14,15 @@
  *
  * The page most in view is the page on top of the stack on the page, and a
  * page turned there is gone to here: the two are one thing.
+ *
+ * A text read in the column is drawn in its pass likewise, on a sheet of
+ * its own (ColumnText).
  */
 import * as THREE from "three";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
-import type { PdfFlight, PdfItem, PictureFlight as PictureFlightState, WordsFlight as WordsFlightState } from "../store/types";
+import type { PdfFlight, PdfItem, PictureFlight as PictureFlightState, WordsFlight as WordsFlightState, WorkspaceText } from "../store/types";
 import { pdfRoom, shownSheet, topSheet } from "../../../../lib/pdf/layout";
 import { columnWidthFor } from "../utils/texts";
 import { viewBesideColumn } from "./coverLayer";
@@ -33,6 +36,8 @@ import { HEADER_PX, readerOf } from "./pdfColumnReader";
 import { ease, SETTLE_MS } from "./Pdfs2D";
 import WordsFlight from "./WordsFlight";
 import PictureFlight from "./PictureFlight";
+import ColumnText from "./ColumnText";
+import { keepColumnTexts } from "../../TextEditor/columnText";
 
 /** How long a page takes between the page and the column, in ms. */
 export const FLIGHT_MS = 420;
@@ -56,6 +61,22 @@ export default function PdfColumn() {
   if (open && shown != null) last.current = shown;
   const drawn = open && shown != null ? shown : cover > 0.5 ? last.current : null;
   const pdf = pdfs.find((p) => p.id === drawn) ?? null;
+  // (a text read, where no PDF is: likewise, as the column shuts on it)
+  const texts = useEditor((s) => s.texts);
+  const textShown = useEditor((s) => s.textShown);
+  const lastText = useRef<number | null>(null);
+  const reading = pdfs.some((p) => p.id === shown && p.reading);
+  if (open && textShown != null && !reading) lastText.current = textShown;
+  const textDrawn = open && textShown != null && !reading ? textShown : !pdf && cover > 0.5 ? lastText.current : null;
+  const text = pdf ? null : (texts.find((t) => t.id === textDrawn) ?? null);
+  useEffect(
+    () =>
+      keepColumnTexts(
+        store,
+        texts.map((t) => t.id),
+      ),
+    [store, texts],
+  );
   const flown = flight ? (pdfs.find((p) => p.id === flight.id) ?? null) : null;
   // a PDF read in the column, the column opening on it over most of the
   // canvas: the view eases, as the column opens, so that the PDF is all in
@@ -76,18 +97,20 @@ export default function PdfColumn() {
     // (as the flight sets off, once)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rising]);
-  if (!pdf && !flown && !words && !picture) return null;
-  return <ColumnPass pdf={pdf} flight={flight && flown ? flight : null} flown={flown} words={words} picture={picture} />;
+  if (!pdf && !text && !flown && !words && !picture) return null;
+  return <ColumnPass pdf={pdf} text={text} flight={flight && flown ? flight : null} flown={flown} words={words} picture={picture} />;
 }
 
 function ColumnPass({
   pdf,
+  text,
   flight,
   flown,
   words,
   picture,
 }: {
   pdf: PdfItem | null;
+  text: WorkspaceText | null;
   flight: PdfFlight | null;
   flown: PdfItem | null;
   words: WordsFlightState | null;
@@ -154,6 +177,11 @@ function ColumnPass({
     s.background = new THREE.Color(BASE);
     return s;
   }, []);
+  const textScene = useMemo(() => {
+    const s = new THREE.Scene();
+    s.background = new THREE.Color("#ffffff");
+    return s;
+  }, []);
   const cam = useMemo(() => new THREE.OrthographicCamera(0, 1, 0, -1, 0.1, 100), []);
   const flightScene = useMemo(() => new THREE.Scene(), []);
   const flightCam = useMemo(() => new THREE.OrthographicCamera(0, 1, 0, -1, 0.1, 100), []);
@@ -203,7 +231,7 @@ function ColumnPass({
     r.setViewport(0, 0, W, H);
     r.render(page, camera);
     const covered = st.cover;
-    if (pdf && covered > 0.5) {
+    if ((pdf || text) && covered > 0.5) {
       cam.left = 0;
       cam.right = reader.width;
       cam.top = 0;
@@ -213,7 +241,7 @@ function ColumnPass({
       r.setScissorTest(true);
       r.setScissor(W - covered, 0, covered, tall);
       r.setViewport(W - covered, 0, reader.width, tall);
-      r.render(scene, cam);
+      r.render(pdf ? scene : textScene, cam);
       r.setScissorTest(false);
       r.setViewport(0, 0, W, H);
     }
@@ -348,6 +376,7 @@ function ColumnPass({
   return (
     <>
       {createPortal(<>{column}</>, scene)}
+      {createPortal(<>{text && <ColumnText key={text.id} text={text} />}</>, textScene)}
       {createPortal(
         <>
           {flying}

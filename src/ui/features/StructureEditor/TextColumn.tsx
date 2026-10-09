@@ -4,7 +4,8 @@ import clsx from "clsx";
 import { ArrowUpTrayIcon, ChevronDoubleRightIcon, ChevronDownIcon, ChevronUpIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { exists, writeTextFile } from "@tauri-apps/plugin-fs";
-import TextEditor from "../TextEditor";
+import TextBody from "../TextEditor";
+import { columnText } from "../TextEditor/columnText";
 import { DURATION, EASE_SLIDE, FADE } from "../../theme/motion";
 import { useEditor, useEditorStore } from "./store";
 import type { PdfFind, PdfItem, WordPlace, WorkspaceText } from "./store/types";
@@ -130,6 +131,7 @@ export default function TextColumn({ slideIn = false }: { slideIn?: boolean }) {
 }
 
 function Column({ texts, read, shown, pdf, width }: { texts: WorkspaceText[]; read: PdfItem[]; shown?: WorkspaceText; pdf?: PdfItem; width: number }) {
+  const store = useEditorStore();
   const showText = useEditor((s) => s.showText);
   const removeText = useEditor((s) => s.removeText);
   const showPdf = useEditor((s) => s.showPdf);
@@ -191,9 +193,10 @@ function Column({ texts, read, shown, pdf, width }: { texts: WorkspaceText[]; re
       <div className="flex-1 min-h-0 relative">
         <AnimatePresence initial={false}>
           {shown && (
-            <motion.div key={`text-${shown.id}`} {...FADE} className="absolute inset-0 bg-white">
-              <TextEditor value={shown.text} onChange={(v) => editText(shown.id, v)} />
-            </motion.div>
+            // (see-through: the canvas draws the text under it, in the column's pass - components/ColumnText)
+            <div key={`text-${shown.id}`} className="absolute inset-0">
+              <TextBody entry={columnText(store, shown.id, shown.text)} value={shown.text} onChange={(v) => editText(shown.id, v)} />
+            </div>
           )}
         </AnimatePresence>
         {pdf && <PdfBody key={`pdf-${pdf.id}`} pdf={pdf} />}
