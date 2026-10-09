@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyEdit, caretAt, letterStep, lineAround, Lines, mapThrough, paragraphStep, plainLines, typed, wordAround, wordStep } from "./editing";
 import { commandOf } from "./keys";
-import { composed, composingIn, editOf, windowOf, withTakenAway, AROUND, MOST } from "./field";
+import { composed, composingIn, editOf, lineComposing, windowOf, withTakenAway, AROUND, MOST } from "./field";
 
 describe("a text being edited", () => {
   it("knows its lines: where each begins and ends, and which an offset is on", () => {
@@ -150,6 +150,14 @@ describe("the field typed through", () => {
     expect(withTakenAway(5, 7, 5, 7)).toEqual([5, 9]);
     // (化学| at a line's end: 化学 [3, 5) taken away, then put in again at 3, replacing nothing after)
     expect(withTakenAway(3, 3, 3, 5)).toEqual([3, 5]);
+  });
+
+  it("shows a line as the IME composes in it: what it has so far in place of what it replaces", () => {
+    // (the line "化学反応です" beginning at 10 in the text)
+    expect(lineComposing("化学反応です", 10, { from: 12, to: 12, text: "かが" })).toBe("化学かが反応です");
+    expect(lineComposing("化学反応です", 10, { from: 12, to: 14, text: "飯能" })).toBe("化学飯能です");
+    // (what it replaces reaching past the line's end, into the next: nothing of the line after it)
+    expect(lineComposing("化学反応です", 10, { from: 12, to: 20, text: "はんのう" })).toBe("化学はんのう");
   });
 });
 

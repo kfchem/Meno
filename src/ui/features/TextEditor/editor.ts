@@ -22,6 +22,7 @@ import {
   type Edit,
   type Sel,
 } from "../../../lib/text/editing";
+import { lineComposing } from "../../../lib/text/field";
 import type { Command, Unit } from "../../../lib/text/keys";
 import { colAt, LINE_PX, lineWidth, xAt } from "./linePictures";
 import { typingProbe } from "./typingProbe";
@@ -184,8 +185,7 @@ export class Editor {
     if (c) {
       const i = this.lines.at(c.from);
       const start = this.lines.start(i);
-      const line = this.lines.line(i);
-      const shown = line.slice(0, c.from - start) + c.text + (c.to <= this.lines.end(i) ? line.slice(c.to - start) : "");
+      const shown = lineComposing(this.lines.line(i), start, c);
       this.composedWide = lineWidth(shown);
       this.revealAt(i, PAD_PX + xAt(shown, c.from - start + c.sel[1]));
     }

@@ -98,3 +98,13 @@ export function withTakenAway(from: number, to: number, d0: number, d1: number):
 
 /** What the IME has so far, in the context's text: from `at`, all but the `tail` that is not its. */
 export const composed = (now: string, at: number, tail: number) => now.slice(at, Math.max(at, now.length - tail));
+
+/**
+ * A line as it shows while the IME composes in it: `line`, beginning at
+ * `start` in the text, with what the IME has so far (`text`) in place of
+ * what it takes the place of (`[from, to)`, in the text's offsets) - and
+ * nothing of the line after it where that reaches past the line's end.
+ */
+export function lineComposing(line: string, start: number, c: { from: number; to: number; text: string }): string {
+  return line.slice(0, c.from - start) + c.text + (c.to <= start + line.length ? line.slice(c.to - start) : "");
+}

@@ -12,6 +12,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { Canvas, flushSync, useFrame, useThree } from "@react-three/fiber";
 import { COLORS } from "../../theme/colors";
 import { selFrom, selTo } from "../../../lib/text/editing";
+import { lineComposing } from "../../../lib/text/field";
 import { Editor, GUTTER_PX, PAD_PX } from "./editor";
 import { BAND_PX, FONT, INK, LINE_PX, linePicture, TAB, typeReady, xAt } from "./linePictures";
 import { hasEditContext, typingField, type TypingField } from "./typingField";
@@ -236,7 +237,7 @@ function Scene({ ed, field }: { ed: Editor; field: MutableRefObject<TypingField 
     const end = ed.lines.end(i);
     let line = ed.lines.line(i);
     // (what the IME has so far, in place of what it takes the place of)
-    if (i === compLine && comp) line = line.slice(0, comp.from - start) + comp.text + (comp.to <= end ? line.slice(comp.to - start) : "");
+    if (i === compLine && comp) line = lineComposing(line, start, comp);
     for (let band = Math.max(0, Math.floor(ed.scrollLeft / BAND_PX)); band * BAND_PX < ed.scrollLeft + ed.viewW; band++) {
       const p = linePicture(line, band, dpr);
       if (!p) break;
