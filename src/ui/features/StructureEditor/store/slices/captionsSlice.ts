@@ -22,9 +22,13 @@ export function createCaptionsSlice(doc: DocumentStore<StructureDocument>, set: 
       return id;
     },
     updateCaption: (id: number, patch: Parameters<EditorState["updateCaption"]>[1], gesture?: string) =>
-      doc.edit(patch.text != null ? "edit text" : "move text", (d) => ops.updateCaption(d, id, patch), {
-        ...(gesture ? { coalesceKey: `caption:${id}:${gesture}` } : {}),
-      }),
+      doc.edit(
+        patch.text != null ? "edit text" : patch.width !== undefined ? "resize text" : patch.align !== undefined ? "align text" : "move text",
+        (d) => ops.updateCaption(d, id, patch),
+        {
+          ...(gesture ? { coalesceKey: `caption:${id}:${gesture}` } : {}),
+        },
+      ),
     removeCaption: (id: number) => {
       if (doc.edit("delete text", (d) => ops.removeCaption(d, id))) set((prev: EditorState) => ({ ...prev, hoveredCaption: prev.hoveredCaption === id ? null : prev.hoveredCaption }));
     },

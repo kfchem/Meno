@@ -196,7 +196,18 @@ export function readDrawn(data: unknown): Drawn | null {
   const captions = (Array.isArray(r.captions) ? (r.captions as Partial<Caption>[]) : []).flatMap((c): Caption[] => {
     if (!isNum(c.id) || !isNum(c.x) || !isNum(c.y) || typeof c.text !== "string" || !c.text.trim()) return [];
     const from = wordsFromOf(c.from);
-    return [{ id: c.id, x: c.x, y: c.y, text: c.text, ...(isNum(c.arrow) && arrowIds.has(c.arrow) ? { arrow: c.arrow } : {}), ...(from ? { from } : {}) }];
+    return [
+      {
+        id: c.id,
+        x: c.x,
+        y: c.y,
+        text: c.text,
+        ...(isNum(c.arrow) && arrowIds.has(c.arrow) ? { arrow: c.arrow } : {}),
+        ...(isNum(c.width) && c.width > 0 ? { width: c.width } : {}),
+        ...(c.align === "left" || c.align === "right" || c.align === "justify" ? { align: c.align } : {}),
+        ...(from ? { from } : {}),
+      },
+    ];
   });
   const molecules3d = (Array.isArray(r.molecules3d) ? r.molecules3d : []).flatMap((m) => {
     const read = readCarried3D(m);

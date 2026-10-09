@@ -67,7 +67,8 @@ export type Plus = { id: number; x: number; y: number };
  * else - where their middle is (lib/chem/captions); over or under an arrow,
  * `arrow`, going where it goes.
  */
-export type Caption = { id: number; x: number; y: number; text: string; arrow?: number; from?: WordsFrom };
+/** Words on the page: where their middle is, what they say, the arrow they are over, - made as wide as something - how wide they are, broken into lines at it, how their lines lie in it, centred unless said (lib/chem/captions), and - taken out of a PDF - where they came from. */
+export type Caption = { id: number; x: number; y: number; text: string; arrow?: number; width?: number; align?: "left" | "right" | "justify"; from?: WordsFrom };
 /** Where words taken out of a PDF came from (docs/PDF.md, *Taking things out*): the PDF, by its SHA-256, and the places they ran between. */
 export type WordsFrom = { sha256: string; from: WordPlace; to: WordPlace };
 /**
@@ -510,9 +511,14 @@ export type EditorState = {
   addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom) => number;
   /**
    * Words changed - written anew, moved, put over an arrow or taken from
-   * one (`arrow` null) - a run of changes in one gesture one step.
+   * one (`arrow` null), made as wide as something or as their words
+   * (`width` null) - a run of changes in one gesture one step.
    */
-  updateCaption: (id: number, patch: { text?: string; x?: number; y?: number; arrow?: number | null }, gesture?: string) => void;
+  updateCaption: (
+    id: number,
+    patch: { text?: string; x?: number; y?: number; arrow?: number | null; width?: number | null; align?: "left" | "center" | "right" | "justify" },
+    gesture?: string,
+  ) => void;
   removeCaption: (id: number) => void;
   /**
    * The icons a double-click on empty space opens there (QuickAdd): where,
