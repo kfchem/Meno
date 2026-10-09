@@ -805,6 +805,16 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   where each lies, in points from the page's top left as it is drawn
   (`FPDF_PageToDevice`), and where it goes: a page and how far down it, or
   a web page's address.
+- **Figures** (`pdf_objects`, `lib/pdf/figures`): what each page is made
+  of - its words, paths, pictures, shadings and forms - each with its box,
+  read by PDFium when the page's words are first wanted; the figures are
+  worked out from them in the window (`figuresOf`) and kept a page at a
+  time. A box on a page (`pdfBox`, the view's, as `pdfSel` is) is marked
+  by `components/pdfMarks.ts`. Carried out (`components/boxDrag.ts`), it
+  is drawn again by PDFium at the copy resolution (`boxPicture`) and
+  becomes a picture that keeps where it came from (`PictureItem.from`); as
+  it is carried (`pdfPicture`), the column's last pass draws it
+  (`components/PictureFlight.tsx`), its shadow worked out in a shader.
 
 ### Pictures
 
@@ -843,6 +853,7 @@ window decodes; nothing of it goes through Rust but the clipboard.
 | `pdf_render` | `lib/pdf/reader.ts` | A part of a page drawn by PDFium, as a PNG. |
 | `pdf_links` | `lib/pdf/reader.ts` | A page's links: where each lies, and where it goes. |
 | `pdf_text` | `lib/pdf/text.ts` | A page's letters, each with its box. |
+| `pdf_objects` | `lib/pdf/figures.ts` | What a page is made of - words, paths, pictures, shadings, forms - each with its box. |
 | `font_families` | `ui/fonts/typefaces.ts` | Every typeface installed (fontdb), for the label typeface picker. |
 | `font_file` | `ui/fonts/typefaces.ts` | One family's regular face as a font file of its own - out of its collection, its character map made plain (`fonts.rs`). |
 | `net_state` | `lib/net/network.ts` | Offline or not, what is allowed, tasks under way, recent connections. |

@@ -107,6 +107,7 @@ import { goBack, isBackKey, readerOf } from "./components/pdfColumnReader";
 import { selectedWords, selects } from "./utils/pdfSelection";
 import { runFind } from "./components/pdfFind";
 import { setCanvasPlace } from "./components/wordsDrag";
+import { copyBox, putBox } from "./components/boxDrag";
 import { marksBetween, textOf } from "../../../lib/pdf/text";
 import { writeClipboard } from "../../../lib/clipboard";
 import { PdfPictures } from "./components/pdfPictures";
@@ -123,7 +124,7 @@ import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf,
 import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
-import type { Molecule3D, WordsFrom } from "./store/types";
+import type { Molecule3D, PictureFrom, WordsFrom } from "./store/types";
 import { resultKey, resultsOn } from "../../../lib/calc/results";
 import { titled } from "../../../lib/calc/sources";
 import { missingFor } from "./workflow/doers";
@@ -480,6 +481,19 @@ function StructureCanvasContent({
     },
     [store],
   );
+  // where a picture cut out of a PDF came from, shown: the PDF read in the
+  // column, gone to there, the box marked for a moment
+  const showBoxFrom = useCallback(
+    (id: number, from: PictureFrom) => {
+      const st = store.getState();
+      if (!st.pdfs.some((p) => p.id === id)) return;
+      if (!(st.textsOpen && st.pdfShown === id)) st.readPdf(id);
+      readerOf(store).goToWhenRead(id, from.page, from.box[1], 0.3);
+      const at = { page: from.page, at: 0 };
+      st.setPdfFlash({ id, from: at, to: at, start: performance.now(), box: from.box });
+    },
+    [store],
+  );
   // words selected in a PDF copied, as they read (utils/pdfSelection)
   const copyWords = useCallback(async () => {
     const st = store.getState();
@@ -541,7 +555,7 @@ function StructureCanvasContent({
       const kind = hoveredPart();
       const id = kind === "atom" ? hovered.atomId : hovered.bondId;
       const drawingSelected = sel.atoms.size > 0 || sel.bonds.size > 0;
-      const selected = drawingSelected || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0;
+      const selected = drawingSelected || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0 || st.selPictures.size > 0;
       const busy = st.labelEdit.active || st.moveDrag.active || st.extend.active;
       if (isCleanUpKey(e)) {
         e.preventDefault();
@@ -627,7 +641,7 @@ function StructureCanvasContent({
       } else if (isDeselectKey(e) && st.pdfFind && !menu) {
         // (Esc closes the search of PDFs, wherever the keys are)
         st.setPdfFind(null);
-      } else if (isDeselectKey(e) && (selected || st.chosen3d || st.pdfSel) && !busy && !menu) {
+      } else if (isDeselectKey(e) && (selected || st.chosen3d || st.pdfSel || st.pdfBox) && !busy && !menu) {
         // (Esc with the menu open closes the menu only)
         st.clearSel();
       }
@@ -1223,8 +1237,14 @@ function StructureCanvasContent({
             store.getState().clearSel();
           } : undefined}
           onShowSource={(() => {
-            const c = menu.kind === "caption" ? store.getState().captions.find((x) => x.id === menu.id) : undefined;
-            const pdf = c?.from ? store.getState().pdfs.find((p) => p.sha256 === c.from!.sha256) : undefined;
+            const st = store.getState();
+            // (a picture cut out of a PDF: its box there)
+            const pic = menu.kind === "picture" ? st.pictures.find((x) => x.id === menu.id) : undefined;
+            const from = pic?.from;
+            const fromPdf = from ? st.pdfs.find((p) => p.sha256 === from.sha256) : undefined;
+            if (from && fromPdf) return () => showBoxFrom(fromPdf.id, from);
+            const c = menu.kind === "caption" ? st.captions.find((x) => x.id === menu.id) : undefined;
+            const pdf = c?.from ? st.pdfs.find((p) => p.sha256 === c.from!.sha256) : undefined;
             return c?.from && pdf ? () => showWordsFrom(pdf.id, c.from!) : undefined;
           })()}
           captionAlign={(() => {
@@ -1253,6 +1273,13 @@ function StructureCanvasContent({
               ...(!p.spread && !p.icon && p.page > 0 ? { onPrevious: () => st.turnPdf(p.id, p.page - 1) } : {}),
               onRead: () => st.readPdf(p.id),
               ...(selects(st.pdfSel) && st.pdfSel.id === p.id ? { onCopy: () => void copyWords() } : {}),
+              // (a box drawn on it: put on the page, or copied, as a picture)
+              ...(st.pdfBox?.id === p.id
+                ? (() => {
+                    const box = st.pdfBox;
+                    return { onPutBox: () => void putBox(store, p, box, pasteTarget()), onCopyBox: () => void copyBox(p, box) };
+                  })()
+                : {}),
             };
           })()}
           onCleanUp={() =>

@@ -110,6 +110,42 @@ describe("the column's reader", () => {
     expect(store.getState().pdfs[0].page).toBe(0);
   });
 
+  it("goes to a place asked for as a PDF read no longer is read again, not to its top", () => {
+    const { store, r } = reading();
+    // (read no longer, the column still holding it as it shuts)
+    store.getState().stopReadingPdf(1);
+    r.take(store.getState().pdfs[0]);
+    store.getState().readPdf(1);
+    r.goToWhenRead(1, 7, 100, 0.3);
+    r.take(store.getState().pdfs[0]);
+    settle(r);
+    expect(r.pageNow().page).toBe(7);
+  });
+
+  it("keeps to a place gone to as the column comes to its size - until it is moved otherwise", () => {
+    const sent = (width: number, tall: number) => {
+      const { r } = reading();
+      r.width = width;
+      r.tall = tall;
+      r.goToWhenRead(1, 7, 400, 0.3);
+      return r;
+    };
+    const there = sent(1200, 900);
+    settle(there);
+    // (sent before the column knew its size)
+    const r = sent(440, 800);
+    r.width = 1200;
+    r.tall = 900;
+    settle(r);
+    expect(r.at).toBeCloseTo(there.at, 4);
+    // (moved by a hand, it keeps no more to it)
+    r.scrollBy(0, 300, true);
+    const moved = r.at;
+    r.width = 900;
+    settle(r);
+    expect(r.at).toBeCloseTo(moved, 4);
+  });
+
   it("hears the system's Back keys", () => {
     const key = (k: Partial<KeyboardEvent>) => ({ metaKey: false, altKey: false, ctrlKey: false, key: "", code: "", ...k }) as KeyboardEvent;
     expect(isBackKey(key({ metaKey: true, key: "[" }))).toBe(true);

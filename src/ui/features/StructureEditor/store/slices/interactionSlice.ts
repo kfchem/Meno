@@ -258,6 +258,7 @@ export function createInteractionSlice(set: SetState, get: GetState) {
         quickAdd: null,
         workflowMenu: null,
         pdfWords: null,
+        pdfPicture: null,
         menuAsk: null,
       })),
   };

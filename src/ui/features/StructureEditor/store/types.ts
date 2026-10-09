@@ -116,10 +116,36 @@ export type PictureItem = {
   w: number;
   h: number;
   turn?: number;
+  /** Where it was cut out of a PDF, if it was (docs/PDF.md, *Taking things out*). */
+  from?: PictureFrom;
 };
 
-/** A picture held, as it is put on the page: its name, what it is known by, what it is, its size in pixels and its resolution, where it gives one. */
-export type PictureToAdd = { name: string; sha256: string; media: PictureMedia; width: number; height: number; dpi?: number };
+/** Where a picture was cut out of a PDF: the PDF, by its SHA-256, the page, and the box, in points from the page's top left. */
+export type PictureFrom = { sha256: string; page: number; box: [number, number, number, number] };
+
+/** A box drawn on a PDF's page, to be taken out as a picture: the PDF, the page, and the box, in points from its top left. */
+export type PdfBox = { id: number; page: number; box: [number, number, number, number] };
+
+/**
+ * A box carried out of a PDF as a picture (components/PictureFlight): the
+ * box, on its PDF's page; where it lay at first - its top left, in the
+ * window's pixels, and how many pixels a unit of the page was there -
+ * where it was pressed, and when. `now` is changed in place as the pointer
+ * goes, and read each frame: where it is, whether over the canvas, the
+ * picture as it is shown, once drawn, and how it ends. `landing`: the
+ * picture on the page it has become, not drawn until this has settled.
+ */
+export type PictureFlight = {
+  box: PdfBox;
+  from: { left: number; top: number; k: number };
+  grab: { x: number; y: number };
+  start: number;
+  now: { x: number; y: number; over: boolean; shown: ImageBitmap | null; end: { to: "page" | "back"; start: number } | null };
+  landing?: number | null;
+};
+
+/** A picture held, as it is put on the page: its name, what it is known by, what it is, its size in pixels and its resolution, where it gives one - and where it was cut out of a PDF, if it was. */
+export type PictureToAdd = { name: string; sha256: string; media: PictureMedia; width: number; height: number; dpi?: number; from?: PictureFrom };
 
 /** Where a PDF is read in the column, and how large: `PdfItem.reading`. */
 export type PdfReading = { at: number; zoom: number };
@@ -395,8 +421,14 @@ export type EditorState = {
   pdfWords: WordsFlight | null;
   setPdfWords: (words: WordsFlight | null) => void;
   /** A place in a PDF shown, marked for a moment: words gone back to where they came from. */
-  pdfFlash: { id: number; from: WordPlace; to: WordPlace; start: number } | null;
-  setPdfFlash: (flash: { id: number; from: WordPlace; to: WordPlace; start: number } | null) => void;
+  pdfFlash: { id: number; from: WordPlace; to: WordPlace; start: number; box?: [number, number, number, number] } | null;
+  setPdfFlash: (flash: { id: number; from: WordPlace; to: WordPlace; start: number; box?: [number, number, number, number] } | null) => void;
+  /** A box drawn on a PDF's page, to be taken out as a picture - one selection in a PDF at a time, with its words'. */
+  pdfBox: PdfBox | null;
+  setPdfBox: (box: PdfBox | null) => void;
+  /** A box being carried out of a PDF as a picture. */
+  pdfPicture: PictureFlight | null;
+  setPdfPicture: (flight: PictureFlight | null) => void;
   /** A search of PDFs, its field open at the column's top; none, closed. */
   pdfFind: PdfFind | null;
   setPdfFind: (find: PdfFind | null) => void;
@@ -556,8 +588,8 @@ export type EditorState = {
   selectPictures: (ids: Iterable<number>, add?: boolean) => void;
   /** A picture added to the selection, or taken out of it (Ctrl or ⌘ and a click). */
   togglePictureSel: (id: number) => void;
-  /** Pictures held put on the page, as one step: the first's middle where `at` is, the others beside it in a row - selected; their ids. */
-  addPictures: (pictures: PictureToAdd[], at: { x: number; y: number }) => number[];
+  /** Pictures held put on the page, as one step: the first's middle where `at` is, the others beside it in a row - clear of what lies there, unless `just` there - selected; their ids. */
+  addPictures: (pictures: PictureToAdd[], at: { x: number; y: number }, just?: boolean) => number[];
   /** A picture moved, made larger or smaller, or turned: one step for a drag (`gesture`). */
   updatePicture: (id: number, patch: Partial<Pick<PictureItem, "x" | "y" | "w" | "h" | "turn">>, gesture?: string) => void;
   removePicture: (id: number) => void;

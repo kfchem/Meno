@@ -241,6 +241,7 @@ function readPicture(v: unknown): PictureItem | null {
   if (p.media !== "image/png" && p.media !== "image/jpeg") return null;
   if (!Array.isArray(p.px) || p.px.length !== 2 || !p.px.every((n) => isNum(n) && n > 0)) return null;
   if (!isNum(p.x) || !isNum(p.y) || !isNum(p.w) || !isNum(p.h) || p.w <= 0 || p.h <= 0) return null;
+  const from = pictureFromOf(p.from);
   return {
     id: p.id,
     name: p.name.slice(0, 260),
@@ -252,7 +253,17 @@ function readPicture(v: unknown): PictureItem | null {
     w: p.w,
     h: p.h,
     ...(isNum(p.turn) && p.turn ? { turn: p.turn } : {}),
+    ...(from ? { from } : {}),
   };
+}
+
+/** Where a picture was cut out of a PDF, as far as it reads: its SHA-256, a page, and a box on it. */
+function pictureFromOf(v: unknown): PictureItem["from"] | null {
+  const f = v as { sha256?: unknown; page?: unknown; box?: unknown } | null | undefined;
+  if (!f || typeof f.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(f.sha256) || !Number.isInteger(f.page) || (f.page as number) < 0) return null;
+  if (!Array.isArray(f.box) || f.box.length !== 4 || !f.box.every(isNum)) return null;
+  const [x0, y0, x1, y1] = f.box as number[];
+  return x1 > x0 && y1 > y0 ? { sha256: f.sha256, page: f.page as number, box: [x0, y0, x1, y1] } : null;
 }
 
 /** How a molecule was made, as a file carries it: rows of text, each read as data; otherwise none. */

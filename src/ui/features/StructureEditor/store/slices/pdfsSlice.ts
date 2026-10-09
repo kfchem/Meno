@@ -49,9 +49,19 @@ export function createPdfsSlice(doc: DocumentStore<StructureDocument>, set: SetS
     setPdfSel: (sel: EditorState["pdfSel"]) =>
       set((prev: EditorState) =>
         sel
-          ? { ...prev, pdfSel: sel, sel: { atoms: new Set<number>(), bonds: new Set<number>() }, selAnchor: null, sel3d: new Set<number>(), chosen3d: null }
+          ? { ...prev, pdfSel: sel, pdfBox: null, sel: { atoms: new Set<number>(), bonds: new Set<number>() }, selAnchor: null, sel3d: new Set<number>(), chosen3d: null }
           : prev.pdfSel
             ? { ...prev, pdfSel: null }
+            : prev,
+      ),
+    setPdfPicture: (flight: EditorState["pdfPicture"]) => set({ pdfPicture: flight }),
+    // (a box drawn lets the words selected go, and the drawing's selection: one selection, what is copied)
+    setPdfBox: (box: EditorState["pdfBox"]) =>
+      set((prev: EditorState) =>
+        box
+          ? { ...prev, pdfBox: box, pdfSel: null, sel: { atoms: new Set<number>(), bonds: new Set<number>() }, selAnchor: null, sel3d: new Set<number>(), chosen3d: null, selPictures: new Set<number>() }
+          : prev.pdfBox
+            ? { ...prev, pdfBox: null }
             : prev,
       ),
     addPdfs: (pdfs: Parameters<EditorState["addPdfs"]>[0], at: { x: number; y: number }) => {

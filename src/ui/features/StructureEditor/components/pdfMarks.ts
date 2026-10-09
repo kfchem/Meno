@@ -21,8 +21,9 @@ export function flashOf(start: number, now: number): number {
   return Math.max(0, FLASH * (1 - (t - FLASH_HOLD_MS) / (FLASH_MS - FLASH_HOLD_MS)));
 }
 
-/** How words selected are marked, and places found. */
+/** How words selected are marked, places found, and a box drawn. */
 const SELECTED = 0.3;
+const BOX = 0.08;
 export const FOUND_COLOR = "#d4a72c";
 const FOUND = 0.3;
 const FOUND_NOW = 0.6;
@@ -36,14 +37,21 @@ export function marksOn(
   now: PdfFound | null,
   came: () => void,
   flash: EditorState["pdfFlash"] = null,
+  box: EditorState["pdfBox"] = null,
 ): Mark[] {
+  const out: Mark[] = [];
+  // (a box drawn there, outlined, and a box shown, marked for a moment: no letters wanted)
+  if (box?.id === pdf.id && box.page === page) out.push({ rects: [box.box], color: COLORS.highlight, opacity: BOX, edge: true });
+  if (flash?.box && flash.id === pdf.id && flash.from.page === page) {
+    const o = flashOf(flash.start, performance.now());
+    if (o > 0) out.push({ rects: [flash.box], color: COLORS.highlight, opacity: o });
+  }
   const mine = found.filter((f) => f.id === pdf.id && f.page === page);
   const selected = sel?.id === pdf.id ? sel : null;
-  const shown = flash?.id === pdf.id && page >= flash.from.page && page <= flash.to.page ? flash : null;
-  if (!selected && !mine.length && !shown) return [];
+  const shown = !flash?.box && flash?.id === pdf.id && page >= flash.from.page && page <= flash.to.page ? flash : null;
+  if (!selected && !mine.length && !shown) return out;
   const t = textHad(pdf.sha256, page, came);
-  if (!t) return [];
-  const out: Mark[] = [];
+  if (!t) return out;
   const isNow = (f: PdfFound) => !!now && now.id === f.id && now.page === f.page && now.from === f.from;
   const others = mine.filter((f) => !isNow(f));
   if (others.length) out.push({ rects: others.flatMap((f) => marksBetween(t, f.from, f.to)), color: FOUND_COLOR, opacity: FOUND });

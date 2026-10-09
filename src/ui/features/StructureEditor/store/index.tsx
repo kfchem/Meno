@@ -142,6 +142,8 @@ export function createEditorStore(
     menuAsk: null,
     pdfFlash: null,
     pdfWords: null,
+    pdfBox: null,
+    pdfPicture: null,
 
     // Ephemeral view state: hover, gestures, camera requests, edit buffers.
     sel: { atoms: new Set<number>(), bonds: new Set<number>() },

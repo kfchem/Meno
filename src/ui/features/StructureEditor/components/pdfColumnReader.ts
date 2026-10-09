@@ -53,6 +53,12 @@ export class ColumnReader {
   /** The page most in view - or the page gone to, until it is moved by a hand. */
   page = 0;
   private goneTo: number | null = null;
+  /**
+   * A place sent to as a share of what is seen (`goToWhenRead`), and the
+   * size it was worked out at: worked out again as the column comes to its
+   * size - it is taken before it knows it - until it is moved otherwise.
+   */
+  private sought: { page: number; y: number | null; above: number; width: number; tall: number } | null = null;
   /** A frame asked for, where the column is drawn. */
   redraw: () => void = () => {};
   private keepTimer: ReturnType<typeof setTimeout> | null = null;
@@ -76,23 +82,28 @@ export class ColumnReader {
     this.unread = !pdf.reading;
     if (again) {
       this.sizes = pdf.pages;
+      this.goToPending(pdf.id);
       return;
     }
     this.keep();
     this.id = pdf.id;
     this.goneTo = null;
+    this.sought = null;
     this.sizes = pdf.pages;
     this.at = pdf.reading?.at ?? pdf.page;
     this.zoom = pdf.reading?.zoom ?? 1;
     this.across = 0.5;
     this.goal = { zoom: this.zoom, anchor: null, at: this.at, across: 0.5 };
     this.page = pdf.page;
-    // (a place asked for in it before it was read: gone to now)
+    this.goToPending(pdf.id);
+  }
+
+  /** A place asked for in a PDF before it was read, gone to now it is. */
+  private goToPending(id: number): void {
     const pending = this.pending;
-    if (pending?.id === pdf.id) {
-      this.pending = null;
-      this.goTo(pending.page, pending.y, pending.above * this.tall);
-    }
+    if (pending?.id !== id) return;
+    this.pending = null;
+    this.seek(pending.page, pending.y, pending.above);
   }
 
   layout(zoom = this.zoom): ColumnLayout {
@@ -115,6 +126,7 @@ export class ColumnReader {
   /** Moved by the wheel or fingers, by CSS pixels: eased (a notch), or at once (fingers). */
   scrollBy(dx: number, dy: number, atOnce: boolean): void {
     this.goneTo = null;
+    this.sought = null;
     const g = this.goal;
     if (g.anchor) {
       g.anchor.sx -= dx;
@@ -134,6 +146,7 @@ export class ColumnReader {
   /** Made larger or smaller by `ratio`, about a point on the column's body: at once (a pinch), or eased (a notch). */
   zoomAt(ratio: number, sx: number, sy: number, atOnce: boolean): void {
     this.goneTo = null;
+    this.sought = null;
     const zoom = Math.min(ZOOM_MOST, Math.max(ZOOM_LEAST, this.goal.zoom * ratio));
     const { l, top, left } = this.seen();
     const at = pointOn(l, left + sx, top + sy);
@@ -152,6 +165,7 @@ export class ColumnReader {
 
   /** A page gone to: its top at the top of what is seen - or, `y` points down it, `above` pixels below the top (a line's worth). */
   goTo(page: number, y: number | null = null, above = ABOVE_PX): void {
+    this.sought = null;
     const i = Math.min(Math.max(0, Math.round(page)), this.sizes.length - 1);
     let at: number = i;
     if (y != null && Number.isFinite(y)) {
@@ -168,16 +182,27 @@ export class ColumnReader {
   /** A place to go to once the PDF it is in is read: gone to as it is taken. */
   private pending: { id: number; page: number; y: number | null; above: number } | null = null;
 
-  /** A place in a PDF gone to, `above` its share of what is seen below the top - now, where it is the one read; else as soon as it is. */
+  /**
+   * A place in a PDF gone to, `above` its share of what is seen below the
+   * top - now, where it is the one read; else as soon as it is (one read no
+   * longer, though still taken, is about to be read again from its top).
+   */
   goToWhenRead(id: number, page: number, y: number | null, above: number): void {
-    if (this.id === id) {
+    if (this.id === id && !this.unread) {
       this.pending = null;
-      this.goTo(page, y, above * this.tall);
+      this.seek(page, y, above);
     } else this.pending = { id, page, y, above };
+  }
+
+  /** A place gone to, `above` its share of what is seen below the top, kept to as the column comes to its size. */
+  private seek(page: number, y: number | null, above: number): void {
+    this.goTo(page, y, above * this.tall);
+    this.sought = { page, y, above, width: this.width, tall: this.tall };
   }
 
   /** A place gone back to: where it was read, and how large, its page the page shown. */
   goBackTo(place: Place): void {
+    this.sought = null;
     this.goal = { ...this.goal, anchor: null, at: place.at ?? place.page, zoom: place.zoom ?? this.goal.zoom };
     this.goneTo = Math.min(Math.max(0, place.page), this.sizes.length - 1);
     this.moved();
@@ -245,6 +270,9 @@ export class ColumnReader {
    * across, in pixels.
    */
   step(dt: number): boolean {
+    // (a place sent to, worked out again at the size the column has come to)
+    const s = this.sought;
+    if (s && (s.width !== this.width || s.tall !== this.tall)) this.seek(s.page, s.y, s.above);
     const g = this.goal;
     const zooming = Math.abs(Math.log(this.zoom / g.zoom)) > 1e-4;
     this.zoom = zooming ? Math.exp(follow(Math.log(this.zoom), Math.log(g.zoom), dt, TAU.move)) : g.zoom;
@@ -299,6 +327,7 @@ export class ColumnReader {
   letGo(): void {
     this.keep();
     this.id = null;
+    this.sought = null;
   }
 
   /** Where it is, kept with the PDF. */
