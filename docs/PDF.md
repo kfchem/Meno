@@ -208,7 +208,7 @@ stops being part of the work.
 - **A calculation's output keeps its molecule as its body**: the
   molecule's *Show <name>* opens the output in the column, rising from
   the molecule. No sheet is laid beside it.
-- **Drawn with WebGL** (question 4): the column's text and the sheet's
+- **Drawn with WebGL** (question 1): the column's text and the sheet's
   alike, so that a text can rise from the page into the column as a PDF
   does.
   - Only the lines in view are set, so a calculation's log of a hundred
