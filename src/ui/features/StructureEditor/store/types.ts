@@ -300,6 +300,9 @@ export type EditorState = {
   /** How wide the column is when it is open, in CSS pixels, as its edge was dragged: what it shows is laid out at that width as it slides. */
   columnWidth: number;
   setColumnWidth: (px: number) => void;
+  /** How wide the column was dragged showing a PDF, in CSS pixels; none, three quarters of the canvas (utils/texts `columnWidthFor`). */
+  pdfColumnWidth: number | null;
+  setPdfColumnWidth: (px: number) => void;
   /** The PDF the column shows, among those read there; none, it shows the text it shows (docs/PDF.md, *In the column*). */
   pdfShown: number | null;
   /** The PDF a page of in the column is under the pointer: it is lit on the page, as one hovered there is. */

@@ -8,7 +8,7 @@ import TextEditor from "../TextEditor";
 import { DURATION, EASE_SLIDE, FADE } from "../../theme/motion";
 import { useEditor, useEditorStore } from "./store";
 import type { PdfItem, WorkspaceText } from "./store/types";
-import { COLUMN_WIDTH, textExportPath } from "./utils/texts";
+import { COLUMN_NARROWEST, COLUMN_WIDEST, columnWidthFor, textExportPath } from "./utils/texts";
 import { takenBeside } from "../../../lib/io/beside";
 import { isPinch, wheelReader } from "../../../lib/input/wheel";
 import { useAppSettings } from "../../../lib/settings/appSettings";
@@ -17,11 +17,6 @@ import { linkAt, linksOf, type PdfLink } from "../../../lib/pdf/reader";
 import { followLink, goBack, isBackKey, readerOf } from "./components/pdfColumnReader";
 import { DOUBLE_CLICK_MS } from "./constants";
 
-/** The least and most the column may be dragged to, in pixels, the most as a share of the canvas. */
-const NARROWEST = 260;
-const WIDEST = 0.85;
-/** How much of the canvas the column takes as a PDF is read in it, until it is dragged: most of it, a PDF's page being for reading. */
-const PDF_SHARE = 0.75;
 /** How far a pinch's step zooms the column, by ratio, per px of it, and how far a notch of the wheel with Ctrl or ⌘ does: as on the canvas (PanZoom2D). */
 const PINCH_PER_PX = 0.01;
 const NOTCH_RATIO = 1.2;
@@ -67,11 +62,12 @@ export default function TextColumn() {
     setRoom(roomEl.clientWidth);
     return () => seen.disconnect();
   }, [roomEl]);
-  const [textWidth, setTextWidth] = useState(COLUMN_WIDTH);
-  const [pdfWidth, setPdfWidth] = useState<number | null>(null);
+  const [textWidth, setTextWidth] = useState<number | null>(null);
+  const pdfWidth = useEditor((s) => s.pdfColumnWidth);
+  const setPdfWidth = useEditor((s) => s.setPdfColumnWidth);
   const canvas = room || window.innerWidth;
-  const widest = Math.max(NARROWEST, canvas * WIDEST);
-  const width = Math.min(widest, Math.max(NARROWEST, pdf ? (pdfWidth ?? Math.round(canvas * PDF_SHARE)) : textWidth));
+  const widest = Math.max(COLUMN_NARROWEST, canvas * COLUMN_WIDEST);
+  const width = columnWidthFor(canvas, !!pdf, pdf ? pdfWidth : textWidth);
   const setWidth = pdf ? setPdfWidth : setTextWidth;
   const [dragging, setDragging] = useState(false);
   // (how much of the canvas it covers, as it slides and as it is dragged: what is in view is the rest)
@@ -518,7 +514,7 @@ function Edge({
       }}
       onPointerMove={(e) => {
         if (!from.current) return;
-        setWidth(Math.min(widest, Math.max(NARROWEST, from.current.width + from.current.x - e.clientX)));
+        setWidth(Math.min(widest, Math.max(COLUMN_NARROWEST, from.current.width + from.current.x - e.clientX)));
       }}
       onPointerUp={() => {
         from.current = null;

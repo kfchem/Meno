@@ -18,7 +18,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import type { PdfFlight, PdfItem } from "../store/types";
-import { spreadSheets, topSheet } from "../../../../lib/pdf/layout";
+import { pdfBounds, spreadSheets, topSheet } from "../../../../lib/pdf/layout";
+import { columnWidthFor } from "../utils/texts";
+import { viewBesideColumn } from "./coverLayer";
+import { setViewGoal, viewGoalOf } from "./viewGoal";
 import { pagesInView } from "../../../../lib/pdf/column";
 import { BASE, levelFor, Page, TILE, usePictures } from "./pdfPictures";
 import { HEADER_PX, readerOf } from "./pdfColumnReader";
@@ -31,6 +34,8 @@ export const FLIGHT_MS = 420;
 type Rect = { x: number; y: number; w: number; h: number };
 
 export default function PdfColumn() {
+  const store = useEditorStore();
+  const { camera, size, invalidate } = useThree();
   const open = useEditor((s) => s.textsOpen);
   const shown = useEditor((s) => s.pdfShown);
   const cover = useEditor((s) => s.cover);
@@ -43,6 +48,25 @@ export default function PdfColumn() {
   const drawn = open && shown != null ? shown : cover > 0.5 ? last.current : null;
   const pdf = pdfs.find((p) => p.id === drawn) ?? null;
   const flown = flight ? (pdfs.find((p) => p.id === flight.id) ?? null) : null;
+  // a PDF read in the column, the column opening on it over most of the
+  // canvas: the view eases, as the column opens, so that the PDF is all in
+  // what is left in view - smaller, where it would not be
+  const rising = flight?.to === "column" ? flight.start : null;
+  useLayoutEffect(() => {
+    if (rising == null) return;
+    const st = store.getState();
+    const p = st.pdfs.find((x) => x.id === st.pdfFlight?.id);
+    if (!p) return;
+    const cam = camera as THREE.OrthographicCamera;
+    const goal = viewGoalOf(cam);
+    const view = { zoom: goal?.zoom ?? cam.zoom, x: goal?.x ?? cam.position.x, y: goal?.y ?? cam.position.y };
+    const to = viewBesideColumn(view, size, { now: st.cover, final: columnWidthFor(size.width, true, st.pdfColumnWidth) }, pdfBounds(p));
+    if (!to) return;
+    setViewGoal(cam, to);
+    invalidate();
+    // (as the flight sets off, once)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rising]);
   if (!pdf && !flown) return null;
   return <ColumnPass pdf={pdf} flight={flight && flown ? flight : null} flown={flown} />;
 }

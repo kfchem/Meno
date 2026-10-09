@@ -18,6 +18,7 @@ export function createPdfsSlice(doc: DocumentStore<StructureDocument>, set: SetS
     setHoveredPdf: (id: number | null) => set({ hoveredPdf: id }),
     setLitPdf: (id: number | null) => set({ litPdf: id }),
     setColumnWidth: (px: number) => set({ columnWidth: px }),
+    setPdfColumnWidth: (px: number) => set({ pdfColumnWidth: px }),
     readPdf: (id: number) => {
       const pdf = get().pdfs.find((p) => p.id === id);
       if (!pdf) return;

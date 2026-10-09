@@ -119,6 +119,7 @@ export function createEditorStore(
     textsOpen: !!doc.getState().texts?.length,
     cover: 0,
     columnWidth: COLUMN_WIDTH,
+    pdfColumnWidth: null,
     pdfShown: null,
     litPdf: null,
     pdfFlight: null,
