@@ -2,7 +2,7 @@ import type { StoreApi } from "zustand";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
 import type { StructureDocument } from "../../document";
-import type { EditorState } from "../types";
+import type { Caption, EditorState, WordsFrom } from "../types";
 
 type SetState = StoreApi<EditorState>["setState"];
 
@@ -16,9 +16,19 @@ export function createCaptionsSlice(doc: DocumentStore<StructureDocument>, set: 
     setHoveredCaption: (id: number | null) => set({ hoveredCaption: id }),
     setCaptionEdit: (edit: EditorState["captionEdit"]) => set({ captionEdit: edit }),
     setQuickAdd: (q: EditorState["quickAdd"]) => set({ quickAdd: q }),
-    addCaption: (text: string, x: number, y: number, arrow?: number) => {
+    addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number, align?: Caption["align"]) => {
       const id = doc.getState().nextCaptionId ?? 1;
-      doc.edit("add text", (d) => ops.addCaption(d, { text, x, y, ...(arrow != null ? { arrow } : {}) }));
+      doc.edit("add text", (d) =>
+        ops.addCaption(d, {
+          text,
+          x,
+          y,
+          ...(arrow != null ? { arrow } : {}),
+          ...(from ? { from } : {}),
+          ...(width != null && width > 0 ? { width } : {}),
+          ...(align ? { align } : {}),
+        }),
+      );
       return id;
     },
     updateCaption: (id: number, patch: Parameters<EditorState["updateCaption"]>[1], gesture?: string) =>

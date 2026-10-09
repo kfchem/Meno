@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ARROW_CLEAR, captionLines, captionPlace, captionRuns, captionSet, CAPTION_LINE } from "./captions";
+import { ARROW_CLEAR, captionLines, captionPlace, captionRuns, captionSet, captionWords, CAPTION_LINE } from "./captions";
 import { labelBox, placeLabel, runsWidth } from "./layout2d";
 
 const shown = (line: string) =>
@@ -127,6 +127,23 @@ describe("a caption's lines laid", () => {
     expect(last.stop).toBeLessThan(6);
     // (its words all there, in order)
     expect(set.items.map((i) => i.text).join(" ")).toBe(text);
+  });
+
+  it("word by word, each where its line set whole has it", () => {
+    for (const align of ["left", "center", "right", "justify"] as const) {
+      const whole = captionSet(text, 0, 0, 1, undefined, 12, align);
+      const words = captionWords(text, 0, 0, 1, undefined, 12, align);
+      expect(words.items.map((i) => i.text)).toEqual(text.split(" "));
+      expect(words.words).toHaveLength(words.items.length);
+      expect(words.halfW).toBeCloseTo(whole.halfW);
+      expect(words.halfH).toBeCloseTo(whole.halfH);
+      for (const y of new Set(whole.items.map((i) => i.y))) {
+        const a = ends(whole.items, y);
+        const b = ends(words.items, y);
+        expect(b.start).toBeCloseTo(a.start);
+        expect(b.stop).toBeCloseTo(a.stop, 1);
+      }
+    }
   });
 });
 

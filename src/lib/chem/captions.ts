@@ -96,8 +96,11 @@ export function captionLines(text: string, fontSize: number, set: LabelSet = ACS
   return linesOf(text, fontSize, set, width).map((l) => l.text);
 }
 
-/** A caption set: its lines, each a text the drawing draws as it draws a label, and how far its ink reaches either way of its middle. */
+/** A caption set: its lines - or words - each a text the drawing draws as it draws a label, and how far its ink reaches either way of its middle. */
 export type CaptionSet = { items: TextItem[]; halfW: number; halfH: number };
+
+/** A caption set word by word: each word where it lies in its line, as `captionSet` sets the line, and where it starts and how far it runs. */
+export type CaptionWords = CaptionSet & { words: { x: number; y: number; w: number }[] };
 
 /**
  * A caption's text set about (x, y), its middle: line under line
@@ -115,6 +118,29 @@ export function captionSet(
   width?: number,
   align: CaptionAlign = "center",
 ): CaptionSet {
+  const { items, halfW, halfH } = setWords(text, x, y, fontSize, set, width, align, false);
+  return { items, halfW, halfH };
+}
+
+/**
+ * A caption set as `captionSet` sets it, but each word a text of its own,
+ * where it falls in its line: for words that move on their own as they come
+ * (components/WordsFlight). Each word's start, its line's middle and how far
+ * it runs are said with it.
+ */
+export function captionWords(
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  set: LabelSet = ACS_LABEL_SET,
+  width?: number,
+  align: CaptionAlign = "center",
+): CaptionWords {
+  return setWords(text, x, y, fontSize, set, width, align, true);
+}
+
+function setWords(text: string, x: number, y: number, fontSize: number, set: LabelSet, width: number | undefined, align: CaptionAlign, byWord: boolean): CaptionWords {
   const lines = linesOf(text, fontSize, set, width);
   const step = fontSize * CAPTION_LINE;
   const top = ((lines.length - 1) / 2) * step;
@@ -125,9 +151,11 @@ export function captionSet(
   let halfW = box / 2;
   let halfH = fontSize / 2 + top;
   const items: TextItem[] = [];
+  const words: { x: number; y: number; w: number }[] = [];
   const put = (t: string, start: number, lineY: number) => {
     const runs = captionRuns(t);
     if (!runs.length) return;
+    words.push({ x: start, y: lineY, w: runsWidth(runs, fontSize, set) });
     // (placeLabel centres the first letter on x: the start, and half of it)
     const first = runsWidth([{ text: [...runs[0].text][0] ?? " " }], fontSize, set);
     const item: TextItem = { x: start + first / 2, y: lineY, text: t, fontPx: fontSize, runs, anchorRun: 0 };
@@ -152,9 +180,11 @@ export function captionSet(
       return;
     }
     const start = align === "left" || align === "justify" ? x - box / 2 : align === "right" ? x + box / 2 - w : x - w / 2;
-    put(line.text, start, lineY);
+    if (!byWord) put(line.text, start, lineY);
+    // (word by word: each where the line set whole has it)
+    else for (const m of line.text.matchAll(/\S+/g)) put(m[0], start + (m.index ? wide(line.text.slice(0, m.index)) : 0), lineY);
   });
-  return { items, halfW, halfH };
+  return { items, halfW, halfH, words };
 }
 
 /** How near an arrow a caption put down is taken to be its: within this many ems of it, across. */

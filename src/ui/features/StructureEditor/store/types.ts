@@ -67,8 +67,10 @@ export type Plus = { id: number; x: number; y: number };
  * else - where their middle is (lib/chem/captions); over or under an arrow,
  * `arrow`, going where it goes.
  */
-/** Words on the page: where their middle is, what they say, the arrow they are over, - made as wide as something - how wide they are, broken into lines at it, and how their lines lie in it, centred unless said (lib/chem/captions). */
-export type Caption = { id: number; x: number; y: number; text: string; arrow?: number; width?: number; align?: "left" | "right" | "justify" };
+/** Words on the page: where their middle is, what they say, the arrow they are over, - made as wide as something - how wide they are, broken into lines at it, how their lines lie in it, centred unless said (lib/chem/captions), and - taken out of a PDF - where they came from. */
+export type Caption = { id: number; x: number; y: number; text: string; arrow?: number; width?: number; align?: "left" | "right" | "justify"; from?: WordsFrom };
+/** Where words taken out of a PDF came from (docs/PDF.md, *Taking things out*): the PDF, by its SHA-256, and the places they ran between. */
+export type WordsFrom = { sha256: string; from: WordPlace; to: WordPlace };
 /**
  * A PDF on the page (docs/PDF.md): the file it is, by its SHA-256 - held in
  * Meno's cache and kept in the workspace's file - its name, each page's
@@ -178,8 +180,41 @@ export type Molecule3D = {
  * read and edited in the column beside the canvas (docs/WORKSPACE.md,
  * *Texts*): its name, and where it was opened from, where Open said.
  */
+/** A place between a PDF's letters: on which page, before which letter (lib/pdf/text). */
+export type WordPlace = { page: number; at: number };
+/** Words selected in a PDF (docs/PDF.md, *Text*): from where the selection was begun to where it has been drawn to - either way round. */
+export type PdfSelection = { id: number; anchor: WordPlace; focus: WordPlace };
+
+/** A place a search found: in which PDF, on which page, from which letter to before which. */
+export type PdfFound = { id: number; page: number; from: number; to: number };
+/** A search of PDFs (docs/PDF.md, *Search*): what is asked, in the PDF shown or in all, what it found, and which of them is gone to. */
+export type PdfFind = { q: string; all: boolean; found: PdfFound[]; now: number; busy: boolean };
+
 /** A PDF's page on its way into the column, or back to the page: which page, and when it set off. */
 export type PdfFlight = { id: number; page: number; to: "column" | "page"; start: number };
+/**
+ * Words being carried out of a PDF (components/WordsFlight): set as they
+ * will be on the page - as wide as their lines were, and lying as they did -
+ * and where each word was on the PDF's page, in the window's pixels (left,
+ * top, right, bottom; none, on a page not in view); where the box they are
+ * set in lay at first - its top left, and how many pixels a unit of the page
+ * was there - where they were pressed, and when. `now` is changed in place
+ * as the pointer goes, and read each frame: where it is, whether over the
+ * canvas, where under it they are held - set once they are, in units of the
+ * page from their middle - and how they end. `landing`: the words on the
+ * page they have become, not drawn until these have settled where they are.
+ */
+export type WordsFlight = {
+  text: string;
+  width?: number;
+  align?: "left" | "right" | "justify";
+  boxes: ([number, number, number, number] | null)[];
+  from: { left: number; top: number; k: number };
+  grab: { x: number; y: number };
+  start: number;
+  now: { x: number; y: number; over: boolean; held: { x: number; y: number } | null; end: { to: "page" | "back"; start: number } | null };
+  landing?: number | null;
+};
 
 export type WorkspaceText = { id: number; name: string; text: string; path?: string };
 /**
@@ -326,6 +361,21 @@ export type EditorState = {
    * goes back past the pages turned on the page, not the column's.
    */
   readToPage: (id: number, from: number, to: number) => void;
+  /** Words selected in a PDF, on its stack or in the column - one selection at a time, the drawing's let go as it is made. */
+  pdfSel: PdfSelection | null;
+  setPdfSel: (sel: PdfSelection | null) => void;
+  /** The canvas asked to open a PDF's menu where the column was right-clicked, in the window's pixels. */
+  menuAsk: { id: number; clientX: number; clientY: number } | null;
+  askPdfMenu: (ask: { id: number; clientX: number; clientY: number } | null) => void;
+  /** Words being carried out of a PDF, as Meno's own, peeling off it. */
+  pdfWords: WordsFlight | null;
+  setPdfWords: (words: WordsFlight | null) => void;
+  /** A place in a PDF shown, marked for a moment: words gone back to where they came from. */
+  pdfFlash: { id: number; from: WordPlace; to: WordPlace; start: number } | null;
+  setPdfFlash: (flash: { id: number; from: WordPlace; to: WordPlace; start: number } | null) => void;
+  /** A search of PDFs, its field open at the column's top; none, closed. */
+  pdfFind: PdfFind | null;
+  setPdfFind: (find: PdfFind | null) => void;
   /** A page going between the page and the column, as a PDF is read there or no longer. */
   pdfFlight: PdfFlight | null;
   endPdfFlight: () => void;
@@ -480,8 +530,8 @@ export type EditorState = {
    */
   captionEdit: { id: number | null; at: { x: number; y: number } } | null;
   setCaptionEdit: (edit: EditorState["captionEdit"]) => void;
-  /** Words added, as one step; their id. */
-  addCaption: (text: string, x: number, y: number, arrow?: number) => number;
+  /** Words added, as one step - taken out of a PDF, where they came from, as wide as their lines were and lying as they did; their id. */
+  addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number, align?: Caption["align"]) => number;
   /**
    * Words changed - written anew, moved, put over an arrow or taken from
    * one (`arrow` null), made as wide as something or as their words

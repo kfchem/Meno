@@ -829,6 +829,7 @@ pub fn run() {
             pdf::pdf_bytes,
             pdf::pdf_render,
             pdf::pdf_links,
+            pdf::pdf_text,
             // the system clipboard, for structures
             clipboard::clipboard_write,
             clipboard::clipboard_read,

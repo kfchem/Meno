@@ -181,6 +181,36 @@ fn answer(docs: &mut HashMap<String, PdfDocument<'static>>, pdfium: &'static Pdf
             }
             Ok((json!({"links": links, "ms": ms(t)}), vec![]))
         }
+        "text" => {
+            let page = doc.pages().get(ask["page"].as_i64().unwrap_or(0) as i32).map_err(|_| "no such page".to_string())?;
+            let text = page.text().map_err(|e| e.to_string())?;
+            // (the page's own space as it is drawn, from its top left: found
+            // once, from where three points of it lie, and taken for all)
+            let (Some(o), Some(ax), Some(ay)) = (on_page(&page, 0.0, 0.0), on_page(&page, 1000.0, 0.0), on_page(&page, 0.0, 1000.0)) else {
+                return Err("the page could not be measured".into());
+            };
+            let m = [(ax.0 - o.0) / 1000.0, (ax.1 - o.1) / 1000.0, (ay.0 - o.0) / 1000.0, (ay.1 - o.1) / 1000.0];
+            let at = |x: f32, y: f32| (o.0 + m[0] * x + m[2] * y, o.1 + m[1] * x + m[3] * y);
+            let chars = text.chars();
+            let mut bytes = Vec::with_capacity(chars.len() * 20);
+            for c in chars.iter() {
+                // (a letter PDFium put there itself - a space, a line's end - has no box of its own)
+                let b = c
+                    .loose_bounds()
+                    .ok()
+                    .filter(|r| !c.is_generated().unwrap_or(false) && (r.width().value > 0.0 || r.height().value > 0.0))
+                    .map(|r| {
+                        let (a, b) = (at(r.left().value, r.bottom().value), at(r.right().value, r.top().value));
+                        [a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1)]
+                    })
+                    .unwrap_or([0.0; 4]);
+                bytes.extend_from_slice(&c.unicode_value().to_le_bytes());
+                for v in b {
+                    bytes.extend_from_slice(&v.to_le_bytes());
+                }
+            }
+            Ok((json!({"n": bytes.len() / 20, "ms": ms(t)}), bytes))
+        }
         "close" => {
             docs.remove(&sha);
             Ok((json!({}), vec![]))
@@ -406,6 +436,16 @@ pub async fn pdf_links(app: tauri::AppHandle, sha: String, page: u32) -> Result<
     Ok(head["links"].clone())
 }
 
+/// A page's letters, as PDFium reads them: for each, 20 bytes - its
+/// character (u32), and its box (four f32s: left, top, right, bottom, in
+/// points from the page's top left as it is drawn; all naught for one
+/// PDFium put there itself, a space or a line's end).
+#[tauri::command]
+pub async fn pdf_text(app: tauri::AppHandle, sha: String, page: u32) -> Result<tauri::ipc::Response, String> {
+    let (_, bytes) = ask(&app, json!({"op": "text", "sha": sha, "page": page})).await?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -492,6 +532,21 @@ mod tests {
         assert_eq!(links[1]["uri"], json!("https://example.com/"));
         let (none, _) = answer(&mut docs, pdfium, &cache, &json!({"op": "links", "sha": sha, "page": 1})).unwrap();
         assert_eq!(none["links"], json!([]));
+        // its letters, each where it lies: "To page three", in Helvetica at 14 points from (72, 700)
+        let (head, bytes) = answer(&mut docs, pdfium, &cache, &json!({"op": "text", "sha": sha, "page": 0})).unwrap();
+        let n = head["n"].as_u64().unwrap() as usize;
+        assert_eq!(bytes.len(), n * 20);
+        let letter = |i: usize| {
+            let f = |k: usize| f32::from_le_bytes(bytes[i * 20 + 4 + k * 4..i * 20 + 8 + k * 4].try_into().unwrap());
+            (char::from_u32(u32::from_le_bytes(bytes[i * 20..i * 20 + 4].try_into().unwrap())).unwrap(), [f(0), f(1), f(2), f(3)])
+        };
+        let text: String = (0..n).map(|i| letter(i).0).collect();
+        assert_eq!(text, "To page three");
+        let (t, b) = letter(0);
+        assert_eq!(t, 'T');
+        assert!((b[0] - 72.0).abs() < 1.0, "{b:?}");
+        // (its baseline 142 points from the top: the box above it, and a little below)
+        assert!(b[1] < 842.0 - 700.0 && b[3] > 842.0 - 700.0, "{b:?}");
         drop(docs);
         let _ = std::fs::remove_dir_all(&cache);
     }

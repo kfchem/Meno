@@ -13,7 +13,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
 import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
-import { ICON_NAME_PT, ICON_NAME_WIDTH, pdfBounds, POINT } from "../../../lib/pdf/layout";
+import { ICON_NAME_WIDTH, pdfRoom } from "../../../lib/pdf/layout";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
 import { newTextName } from "./utils/texts";
@@ -113,11 +113,7 @@ export function createStructureDocument(data?: unknown): DocumentStore<Structure
 /** PDFs held, as they go on the page: the first's top page in the middle of `at`, the others to its right, a little apart. */
 /** A row of PDFs put down clear of those already on the page: moved along to the right, a place at a time, until none of them, nor their names, lies over another. */
 export function clearOfPdfs<T extends Omit<PdfItem, "id">>(row: T[], others: readonly Omit<PdfItem, "id">[]): T[] {
-  // (an icon's name is as wide as its room in a row)
-  const room = (p: Omit<PdfItem, "id">) => {
-    const b = pdfBounds(p);
-    return p.icon ? { ...b, x0: Math.min(b.x0, p.x - ICON_NAME_WIDTH / 2), x1: Math.max(b.x1, p.x + ICON_NAME_WIDTH / 2), y0: b.y0 - ICON_NAME_PT * POINT * 3 } : b;
-  };
+  const room = (p: Omit<PdfItem, "id">) => pdfRoom(p);
   const taken = others.map(room);
   const step = ICON_NAME_WIDTH + NOMINAL_BOND_LENGTH;
   for (let n = 0; n < 200; n++) {

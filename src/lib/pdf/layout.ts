@@ -107,5 +107,12 @@ export function pdfBounds(p: PdfPlace): { x0: number; y0: number; x1: number; y1
   };
 }
 
+/** What a PDF takes up on the page, its name under it with it: an icon's two lines of it, as wide as it may be. */
+export function pdfRoom(p: PdfPlace): { x0: number; y0: number; x1: number; y1: number } {
+  const b = pdfBounds(p);
+  if (!p.icon) return b;
+  return { x0: Math.min(b.x0, p.x - ICON_NAME_WIDTH / 2), x1: Math.max(b.x1, p.x + ICON_NAME_WIDTH / 2), y0: b.y0 - 3 * ICON_NAME_PT * POINT, y1: b.y1 };
+}
+
 /** Whether a point of the page lies on a sheet. */
 export const onSheet = (s: Sheet, q: { x: number; y: number }) => Math.abs(q.x - s.x) <= s.w / 2 && Math.abs(q.y - s.y) <= s.h / 2;

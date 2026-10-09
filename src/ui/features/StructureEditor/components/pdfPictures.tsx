@@ -29,6 +29,9 @@ export const FADE_MS = 160;
 /** How long a tile no longer wanted is kept before it is let go, in ms. */
 const KEEP_MS = 4000;
 
+/** Marks on a page: boxes, in points from its top left, in a colour - words selected, or found. */
+export type Mark = { rects: readonly (readonly [number, number, number, number])[]; color: string; opacity: number };
+
 /** A picture of a page or a part of one, as WebGL has it, and when it came. */
 export type Pic = { tex: THREE.Texture; born: number };
 /** A tile had: its key, its picture, where it lies among the page's tiles, and the level - pixels a point - it was drawn at. */
@@ -210,6 +213,7 @@ export function Page(props: {
   px: number;
   preview: Pic | null;
   tiles: Tile[];
+  marks?: readonly Mark[];
 }) {
   const { s, lift, now, preview, tiles } = props;
   const opacity = props.opacity ?? 1;
@@ -252,6 +256,14 @@ export function Page(props: {
           </mesh>
         );
       })}
+      {props.marks?.flatMap((m, k) =>
+        m.rects.map(([x0, y0, x1, y1], i) => (
+          <mesh key={`${k}:${i}`} position={[left + ((x0 + x1) / 2) * unit, topY - ((y0 + y1) / 2) * unit, 0.0025]} scale={[(x1 - x0) * unit, (y1 - y0) * unit, 1]}>
+            <planeGeometry args={[1, 1]} />
+            <meshBasicMaterial color={m.color} transparent opacity={m.opacity * opacity} depthWrite={false} toneMapped={false} />
+          </mesh>
+        )),
+      )}
       <lineSegments geometry={edges} scale={[s.w, s.h, 1]} position={[0, 0, 0.003]}>
         <lineBasicMaterial color={LINE} transparent opacity={opacity} toneMapped={false} />
       </lineSegments>
