@@ -182,7 +182,8 @@ Nothing a part shows lives in the part, so a part made again shows the same:
   bond being drawn was lost with the canvas. Hover, the label and words
   being typed, words being carried out of a PDF, Quick Add, a workflow
   menu and a PDF's menu asked for go with it; what is selected (words in
-  a PDF too), how the molecules in 3D are turned and the column stay.
+  a PDF and pictures too), how the molecules in 3D are turned and the
+  column stay.
 
 A part that fails again as it is made shows its card again. The column's
 Hide is the way on when the column itself is what fails. For the canvas

@@ -91,6 +91,8 @@ describe("a canvas made again", () => {
       textsOpen: true,
       hovered: { atomId: atom, bondId: null },
       hoveredCaption: 2,
+      hoveredPicture: 3,
+      selPictures: new Set([3]),
       boxSelect: { active: true, kind: "lasso", points: [{ x: 0, y: 0 }] },
       pressHold: { atomId: atom, start: 0 },
       moveDrag: { active: true, atomId: atom, pointer: { x: 1, y: 1 }, mode: "free", preview: null },
@@ -109,6 +111,7 @@ describe("a canvas made again", () => {
     const s = store.getState();
     expect(s.hovered).toEqual({ atomId: null, bondId: null });
     expect(s.hoveredCaption).toBeNull();
+    expect(s.hoveredPicture).toBeNull();
     expect(s.boxSelect.active).toBe(false);
     expect(s.pressHold).toBeNull();
     expect(s.extend.active).toBe(false);
@@ -124,6 +127,7 @@ describe("a canvas made again", () => {
     expect(s.turns3d[1]).toBeDefined();
     expect(s.textsOpen).toBe(true);
     expect(s.pdfSel).not.toBeNull();
+    expect([...s.selPictures]).toEqual([3]);
     expect(s.model.atoms).toHaveLength(1);
     expect(doc.history().undoDepth).toBe(1);
   });
