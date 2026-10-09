@@ -7,6 +7,13 @@ builds on it. Written on 2026-10-09, before anything is built, for the
 maintainer to agree to or change; the questions at the end are theirs to
 answer.
 
+**Decided by the maintainer (2026-10-09): PDFium, not pdf.js.** PDFium
+is the engine Chrome reads PDFs with. The maintainer chose it for how
+fast and how faithfully it draws; viewers built on pdf.js, as some
+publishers' have been, left a poor impression. The reader is to feel as
+quick as the best tablet PDF apps: what is under the hand answers at
+once.
+
 Judge it against [PURPOSE.md](PURPOSE.md). A chemist reads a paper to
 find a molecule, how it was made and what was found about it. Here the
 paper is open beside that molecule, in the same workspace. A figure from
@@ -59,12 +66,15 @@ stops being part of the work.
   back with a double-click on the number. The column can be dragged
   wider, as it is for texts. A page larger than the column is scrolled
   across as well.
-- **Sharp at any size.** Pages are drawn at the screen's resolution, and
-  drawn again once the size stops changing; the sharper picture fades in
-  over the softer one.
-- **Only what is in view is drawn**, so a long thesis scrolls as a short
-  paper does. Pages far out of view are let go, and drawn again when they
-  come back.
+- **Quick, then sharp.** A page shows at once, softly, from a small
+  picture of it; the parts in view are then drawn at the screen's
+  resolution, in tiles, and fade in over it. While a pinch goes on, the
+  tiles there are scaled on the graphics card, and drawn again sharper
+  once it stops - nothing waits for a page to be drawn.
+- **Only what is in view is drawn**, nearest first, and the next pages
+  ahead of the scroll. A tile no longer wanted is not finished, so a long
+  thesis scrolls as a short paper does. Pages far out of view are let go,
+  and drawn again when they come back.
 - **Links in the PDF** work: one to a figure, a reference or a section
   goes there in the column, and back with the system's Back keys (⌘[ on
   a Mac, Alt+← on Windows) or the mouse's back button. One to a web page opens in the
@@ -76,7 +86,8 @@ stops being part of the work.
 
 - **Selected as in any reader**: a drag over the text selects it, a
   double-click a word, a triple-click a line. ⌘C copies it. The
-  right-click menu has *Copy*.
+  right-click menu has *Copy*. PDFium says where each letter is on its
+  page, and Meno selects and marks by that.
 - Whatever the text says, Meno does nothing with it of itself. Reading a
   compound's name as a structure is a step for later (not stage 5).
 
@@ -86,9 +97,10 @@ stops being part of the work.
   opens a field at the column's top. Every place the words are found is
   marked on the pages and counted (*3 of 12*). Enter goes to the next,
   Shift+Enter to the one before, and Esc closes the field.
-- **It searches the PDF shown** (question 5). Letters are matched
-  without regard to case or accents, and across a line's end, as PDF
-  readers match them.
+- **It searches the PDF shown** (question 5), by PDFium's own search,
+  letters matched without regard to case. Whether words broken across a
+  line's end are found is measured in step 0, and made so in step 2 if
+  PDFium does not.
 
 ### Figures cut out onto the page
 
@@ -137,19 +149,65 @@ A new kind of thing on the page, which stage 5 will read as structures.
 
 ## How it is built
 
-- **pdf.js** (Mozilla, `pdfjs-dist`, Apache-2.0) reads and draws the PDF
-  in Meno's own window, its parsing in a web worker so that the canvas
-  never waits. It is part of Meno, not a plugin: it needs no Python and
-  nothing fetched, and a PDF is a file any workspace may hold. It adds
-  some megabytes to the app (to be measured; at most about 4 MB is
-  expected).
-- **What pdf.js needs besides, bundled** (question 6), each licence
-  shipped in `resources/licenses` and credited in the README:
-  - the CMaps (Adobe, BSD-3-Clause), for text in Chinese, Japanese and
-    Korean that a PDF does not carry in full;
-  - the standard fonts, for the fourteen fonts a PDF may name without
-    carrying: Foxit's (PDFium, BSD-3-Clause) and Liberation Sans (SIL OFL
-    1.1).
+### PDFium
+
+- **PDFium** (the PDFium Authors, BSD-3-Clause, with some parts under
+  Apache-2.0) reads and draws the PDF. It is part of Meno, not a plugin:
+  it needs no Python and nothing fetched while Meno runs, and a PDF is a
+  file any workspace may hold.
+- **The build**: PDFium's own, as Chrome builds it, from the prebuilt
+  libraries of `bblanchon/pdfium-binaries` (their build scripts MIT).
+  It is built without JavaScript and without XFA forms
+  (`pdf_enable_v8 = false`, `pdf_enable_xfa = false`). The release and
+  each file's SHA-256 are pinned in Meno, and fetched and checked when
+  Meno is built, never kept in the repository - as uv and pixi are
+  pinned.
+- **What PDFium carries within itself**:
+  - the fourteen standard fonts a PDF may name without carrying them;
+  - the CMaps for Chinese, Japanese and Korean text.
+
+  Nothing besides is bundled for it. A font a PDF names but does not
+  carry is found among the system's, as Chrome finds it, and after them
+  among Meno's own (IBM Plex Sans, Mono and Sans JP).
+- **Reached from Rust** through `pdfium-render` (MIT or Apache-2.0),
+  which binds the library when Meno first needs it.
+- **A narrow seam**: the rest of Meno asks the PDF for no more than
+  these things:
+  - a part of a page drawn at a scale;
+  - its text, with where each letter is;
+  - a search, and its links;
+  - what a page is made of: paths, text and pictures, for stage 5.
+
+  An engine could be changed behind that seam without the column, the
+  page or stage 5 knowing (*Questions*, 6).
+
+### Where it runs
+
+- **In a process of its own** (question 6), as calculations' jobs are
+  (`Meno --job`): Meno starts itself as a PDF reader, `Meno --pdf`,
+  when a workspace first shows a PDF, and talks to it by its standard
+  input and output.
+- **A PDF that breaks PDFium breaks that process only.** The PDF says
+  so, with *Open again*; Meno, and the work not yet saved, go on. Chrome
+  keeps PDFium apart for the same reason.
+- **The reader draws on its own thread**, a page at a time, each part
+  in a way that can be stopped. A request no longer wanted - a tile
+  scrolled out of view - is dropped, not finished.
+- **Pictures come back as they are drawn**: the colours of each pixel,
+  in the order a WebGL texture takes them (PDFium's
+  `FPDF_REVERSE_BYTE_ORDER`), with no image format in between. They go
+  to the window as bytes, not as text (Tauri's binary response).
+
+### On the screen
+
+- **The column's pages are drawn with WebGL**, as the canvas is: each
+  page a sheet, its tiles textures on it. The graphics card scales and
+  moves them, so scrolling and pinching never wait on PDFium.
+- **Selection and search are drawn over the pages** in the same way,
+  from where PDFium says the letters are.
+- **A picture on the page is a texture on the canvas**, as a molecule's
+  picture is. A figure at 600 dpi - a whole A4 page is about
+  5000 × 7000 pixels - fits within what the graphics card takes.
 - **In the document**, as texts are:
   - `pdfs`: each PDF's name, the SHA-256 of its file, and where it was
     left;
@@ -160,27 +218,86 @@ A new kind of thing on the page, which stage 5 will read as structures.
 - **The column** shows texts and PDFs alike, by name. A PDF's view is a
   component of its own beside the text editor.
 
+### Size
+
+- **The library is the size of PDFium**: 7.3 MB on a Mac (Apple
+  silicon), about 3.4 MB compressed (2.5 MB as the Windows installer
+  compresses). For Windows and Linux, the prebuilt archives are 3.9 and
+  3.8 MB.
+- **What it adds to a download** is about 3 MB on each system: the
+  Mac's disk image (8.1 MB for 0.1.8) and the Windows installer (6.6 MB).
+  Installed, Meno grows by about 7 MB.
+
+### Licences
+
+Checked on 2026-10-09 against the licences shipped with the prebuilt
+PDFium (chromium/8086). All allow Meno to carry PDFium within an
+Apache-2.0 app:
+
+| Part | Licence |
+| --- | --- |
+| PDFium | BSD-3-Clause, some files Apache-2.0 |
+| FreeType (fonts) | The FreeType Project License |
+| HarfBuzz (text shaping) | "Old MIT" |
+| ICU (Unicode) | Unicode License v3 |
+| libjpeg-turbo | IJG License, BSD-3-Clause, zlib |
+| OpenJPEG (JPEG 2000) | BSD-2-Clause |
+| libpng | PNG Reference Library License v2 |
+| zlib | zlib License |
+| Little CMS (colour) | MIT |
+| Abseil | Apache-2.0 |
+| Anti-Grain Geometry 2.3 | its own permissive notice |
+| dragonbox, LLVM's libc | Apache-2.0 with LLVM Exceptions (dragonbox also Boost) |
+| fast_float, simdutf | MIT |
+| pdfium-binaries' build scripts | MIT |
+| pdfium-render (Rust) | MIT or Apache-2.0 |
+
+- **No copyleft code is in the library.** GPL text appears only in
+  ICU's notice, for build scripts (Autoconf's) that are not part of it,
+  under Autoconf's exception.
+- **What Meno must do**:
+  - ship every one of these licences, in `resources/licenses/pdfium/`;
+  - credit them in the README;
+  - and, as two of them ask of a program shipped without its source,
+    say in its documentation that it is "based in part on the work of
+    the Independent JPEG Group" and that "portions of this software are
+    copyright © The FreeType Project (www.freetype.org). All rights
+    reserved."
+
 ### Safety
 
 A PDF is a file from anywhere, and is treated as such.
 
-- **pdf.js is set to run nothing**: no scripting, no evaluated code
-  (`isEvalSupported: false`), and no forms or actions run.
+- **Nothing in a PDF runs.** PDFium is built without JavaScript and XFA,
+  and Meno runs no form, action or launch a PDF holds.
 - **Nothing a PDF names is fetched.** Its fonts and images are its own,
-  read from the file; there is no remote content. A web link opens in
-  the system's browser only when it is clicked.
+  read from the file, or the system's; there is no remote content. A
+  web link opens in the system's browser only when it is clicked.
+- **PDFium runs apart** (*Where it runs*, above), so a PDF made to break
+  it takes nothing else with it.
 - **Its text and pictures go no further than the column**, the page and
   the clipboard, as the chemist moves them.
 
 ### Platforms
 
-- **The engines Meno runs in** are WebKit on macOS (the system's), WebView2
-  (Chromium) on Windows and WebKitGTK on Linux. pdf.js's current build
-  needs recent engines. Each system is checked before step 1 is merged,
-  and pdf.js's build for older engines is used where one falls short.
+- **The same PDFium on every system**: the library for macOS (Apple
+  silicon), Windows (x64) and Linux (x64), from the same release.
+- **Carried in the app**:
+  - on a Mac, inside the app, signed with it;
+  - on Windows, beside Meno's program, with a line in the installer's
+    hook for when it is renamed or goes (RELEASING.md);
+  - on Linux, beside it as well.
+
+  Step 0 checks that a Mac app signed as Meno's is (ad hoc, with the
+  hardened runtime) loads it.
 
 ## In order
 
+0. **A trial, kept off main**, its numbers shown before step 1:
+   - PDFium bound, in its own process, on the Mac and on Windows;
+   - the Mac's signed app loading it;
+   - how long a paper's first page, and a tile, take to show;
+   - how fast pictures go from the process to the window.
 1. **A PDF in the column**:
    - opened, dropped or pasted, held in the workspace and saved with it;
    - its pages drawn and scrolled, larger and smaller;
@@ -209,11 +326,16 @@ weights), drawn by Meno's engine beside it, tied to it.
 
 ## Questions
 
+(Question 6 of the first draft - which of pdf.js's fonts to bundle - went
+with pdf.js. PDFium carries its own.)
+
+
 1. **Where a PDF is read: in the column beside the canvas, by its name
    with the texts** (recommended), or its pages laid on the page itself,
    zoomed with the drawing? The column keeps a paper at a size it can be
    read at, whatever the canvas is zoomed to. The page is where its figures
-   go, cut out.
+   go, cut out. (Drawn with WebGL either way, the pages could later be
+   laid on the page as well.)
 2. **How a figure is cut out: a long press then a drag**, as a box begins
    on the canvas (recommended)? Or the box drawn with a key held (Alt, as
    the lasso is)? Or a mode chosen first? A plain drag stays for text,
@@ -225,11 +347,17 @@ weights), drawn by Meno's engine beside it, tied to it.
    (recommended)? Or over the drawing, at a fixed size?
 5. **Search looks in the PDF shown** (recommended), or in every PDF
    the workspace holds, its hits listed by PDF?
-6. **pdf.js's CMaps and standard fonts bundled** (recommended), under
-   BSD-3-Clause and the OFL, their licences shipped? Without them, some PDFs
-   show text in a system font, and some Chinese, Japanese or Korean text
-   not at all. Or only the OFL fonts (Liberation)?
-7. **No preview of a PDF on the page for now** (recommended)? Its name
+6. **PDFium as a library in a process of its own** (recommended)? Or
+   PDFium built for the web (WebAssembly, `pdfium.wasm`, 5.4 MB) in the
+   window? In the window it needs no process, no signing and no bytes
+   sent across, and it runs walled off as the page's code does. But it
+   is slower - about one and a half to two times as slow - has no thread of its own,
+   and finds no system font - Meno would have to give it every font.
+7. **PDFium carried in the app** (recommended), about 3 MB more to
+   download? Or fetched the first time a PDF is opened, as uv and pixi
+   are, with the network's consent - a smaller download, but no PDF
+   opens before it has been fetched?
+8. **No preview of a PDF on the page for now** (recommended)? Its name
    in the column, and its figures on the page, tie it to the work.
-8. **Nothing more for notes in stage 4** (recommended)? Words on the
+9. **Nothing more for notes in stage 4** (recommended)? Words on the
    page and the workspace's texts cover them.
