@@ -83,6 +83,8 @@ export type PdfItem = {
   y: number;
   page: number;
   spread?: boolean;
+  /** Made small, an icon about a benzene ring's size, its top page on it (lib/pdf/layout `ICON_HEIGHT`). */
+  icon?: boolean;
   /**
    * Read in the column, its name among the texts' (docs/PDF.md, *In the
    * column*): where the column's top was, in pages from the first's top -
@@ -464,6 +466,8 @@ export type EditorState = {
   turnPdf: (id: number, page: number) => void;
   /** A PDF's pages spread out, or gathered again. */
   spreadPdf: (id: number, spread: boolean) => void;
+  /** A PDF made small, an icon - its pages gathered - or full size again. */
+  iconPdf: (id: number, icon: boolean) => void;
   removePdf: (id: number) => void;
   setHoveredCaption: (id: number | null) => void;
   /** Words on the page. */

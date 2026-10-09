@@ -15,14 +15,14 @@
  * the pages lift off one after another and settle in their places.
  */
 import * as THREE from "three";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import { pageAt } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
 import { useEditor, useEditorStore } from "../store";
 import type { PdfItem } from "../store/types";
-import { pdfBounds, POINT, spreadSheets, stackSheets, topSheet, type Sheet } from "../../../../lib/pdf/layout";
+import { iconScale, pdfBounds, POINT, spreadSheets, stackSheets, topSheet, type Sheet } from "../../../../lib/pdf/layout";
 import { COLORS } from "../../../theme/colors";
 import { BASE, FADE_MS, GRAY, levelFor, LINE, Page, TILE, usePictures, type Pic, type Tile } from "./pdfPictures";
 import { followLink, readerOf } from "./pdfColumnReader";
@@ -44,6 +44,10 @@ const STILL_PX = 0.5;
 const TURN_MS = 380;
 const SPREAD_MS = 460;
 const SPREAD_STAGGER_MS = 45;
+/** How long a PDF takes to be made an icon, or full size again, in ms. */
+const ICON_MS = 380;
+/** How wide an icon's name may be, on the screen, in pixels: as a file's under its icon. */
+const ICON_NAME_PX = 140;
 /** The corner that folds, on the screen, in pixels. */
 const FOLD_PX = 30;
 
@@ -86,6 +90,7 @@ export default function Pdfs2D() {
     const m = motion.current.get(p.id);
     if (!!m?.lit?.on !== lit && (m?.lit || lit)) motion.current.set(p.id, { ...m, lit: { on: lit, start: performance.now(), from: litOf(m, performance.now()) } });
     if (before && !!before.spread !== !!p.spread) motion.current.set(p.id, { ...motion.current.get(p.id), spread: { to: !!p.spread, start: performance.now() } });
+    if (before && !!before.icon !== !!p.icon) motion.current.set(p.id, { ...motion.current.get(p.id), icon: { to: !!p.icon, start: performance.now() } });
   }
   was.current = new Map(pdfs.map((p) => [p.id, p]));
 
@@ -151,7 +156,10 @@ export default function Pdfs2D() {
       // (drawn until a little past the end, so that the last frame drawn is the end's)
       if ((m.turned && now - m.turned.start < TURN_MS + 80) || (m.spread && now - m.spread.start < SPREAD_MS + 20 * SPREAD_STAGGER_MS + 80)) animating = true;
     }
-    for (const m of motion.current.values()) if (m.lit && now - m.lit.start < FADE_MS + 80) animating = true;
+    for (const m of motion.current.values()) {
+      if (m.lit && now - m.lit.start < FADE_MS + 80) animating = true;
+      if (m.icon && now - m.icon.start < ICON_MS + 80) animating = true;
+    }
     // (the tiles' fading in, and the motions, ask for frames while they last)
     const fading = pics.fading(now);
     // (what moves is worked out as it is drawn: drawn again each frame while it moves)
@@ -166,6 +174,11 @@ export default function Pdfs2D() {
     const want = cam.zoom * dpr * POINT;
     let asked = false;
     for (const p of pdfs) {
+      // (an icon is its small picture: no tiles)
+      if (p.icon) {
+        v.level.set(p.id * 100000 + p.page, 0);
+        continue;
+      }
       const sheets = p.spread ? spreadSheets(p).map((s, i) => ({ s, page: i })) : [{ s: topSheet(p), page: p.page }];
       for (const { s, page } of sheets) {
         if (s.x + s.w / 2 < seen.x0 || s.x - s.w / 2 > seen.x1 || s.y + s.h / 2 < seen.y0 || s.y - s.h / 2 > seen.y1) continue;
@@ -197,6 +210,7 @@ export default function Pdfs2D() {
 
   /** The link, if any, at a point of the page on a PDF's page in view: its top page, or one of its pages spread. */
   const linkOn = (p: PdfItem, q: { x: number; y: number }): PdfLink | null => {
+    if (p.icon) return null;
     const sheets = p.spread ? spreadSheets(p).map((s, page) => ({ s, page })) : [{ s: topSheet(p), page: p.page }];
     const hit = sheets.find(({ s }) => Math.abs(q.x - s.x) <= s.w / 2 && Math.abs(q.y - s.y) <= s.h / 2);
     if (!hit) return null;
@@ -298,9 +312,27 @@ function PdfStack(props: {
   };
   const spreading = !!sm && now - sm.start < SPREAD_MS + p.pages.length * SPREAD_STAGGER_MS;
   const showSpread = p.spread || spreading;
+  // how large it is: 1 full size, an icon's size made small, or on its way between them
+  const small = iconScale(p);
+  const im = motion?.icon;
+  const it = im ? ease((now - im.start) / ICON_MS) : 1;
+  const k = im ? (im.to ? 1 + (small - 1) * it : small + (1 - small) * it) : p.icon ? small : 1;
+  // (how much of an icon it is, 0 to 1: its name going under its middle)
+  const iconness = small < 1 ? (1 - k) / (1 - small) : 0;
+  const atSize = (node: ReactNode) =>
+    k === 1 ? (
+      node
+    ) : (
+      <group position={[p.x, p.y, 0]} scale={[k, k, 1]}>
+        <group position={[-p.x, -p.y, 0]}>{node}</group>
+      </group>
+    );
   // (lit, round all of it: hovered, or its page in the column)
   const lit = litOf(motion, now);
-  const b = pdfBounds(p);
+  const full = pdfBounds({ ...p, icon: false });
+  const b = showSpread
+    ? full
+    : { x0: p.x + (full.x0 - p.x) * k, x1: p.x + (full.x1 - p.x) * k, y0: p.y + (full.y0 - p.y) * k, y1: p.y + (full.y1 - p.y) * k };
   const pad = LIT_PAD_PX * px;
   const light = lit > 0.001 && (
     <mesh position={[(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, -0.02]} scale={[b.x1 - b.x0 + 2 * pad, b.y1 - b.y0 + 2 * pad, 1]}>
@@ -308,9 +340,14 @@ function PdfStack(props: {
       <meshBasicMaterial color={COLORS.highlight} transparent opacity={lit} depthWrite={false} toneMapped={false} />
     </mesh>
   );
+  // its name under it: at its left as a page, under its middle as an icon, as a file's under its icon
+  const nameX = showSpread ? spread[0].x - spread[0].w / 2 : p.x - (top.w * k) / 2 + ((top.w * k) / 2) * iconness;
+  const nameY = showSpread ? Math.min(...spread.map((s) => s.y - s.h / 2)) : b.y0;
+  const nameWidth = Math.max(120, top.w / px) * (1 - iconness) + ICON_NAME_PX * iconness;
   const name = (
-    <group position={[showSpread ? spread[0].x - spread[0].w / 2 : top.x - top.w / 2, (showSpread ? Math.min(...spread.map((s) => s.y - s.h / 2)) : top.y - top.h / 2 - 0.7 * Math.min(4, p.pages.length - 1)) - 14 * px, 0.01]} scale={[px, px, 1]}>
-      <Text fontSize={12} anchorX="left" anchorY="top" color={GRAY} maxWidth={Math.max(120, (top.w / px) * 1.0)}>
+    <group position={[nameX, nameY - 14 * px, 0.01]} scale={[px, px, 1]}>
+      {/* (troika takes a share of the text's width as its anchor; drei's types do not say so) */}
+      <Text fontSize={12} anchorX={`${50 * iconness}%` as unknown as number} anchorY="top" color={GRAY} maxWidth={nameWidth} textAlign={iconness > 0.5 ? "center" : "left"}>
         {p.name}
       </Text>
     </group>
@@ -338,15 +375,20 @@ function PdfStack(props: {
   const tt = tm ? Math.min(1, (now - tm.start) / TURN_MS) : 1;
   const going = tm && tt < 1 ? tm.page : null;
   const forward = tm ? p.page > tm.page : true;
-  const hasNext = p.page < p.pages.length - 1;
-  const hasPrev = p.page > 0;
+  // (its corners turn its pages full size only)
+  const hasNext = p.page < p.pages.length - 1 && k === 1;
+  const hasPrev = p.page > 0 && k === 1;
   const fold = FOLD_PX * px;
+  // (what is drawn made smaller is drawn with a screen's pixel the larger)
+  const inPx = px / k;
   return (
     <group onPointerOver={props.onOver} onPointerOut={props.onOut} onPointerDown={props.onDown} onPointerMove={(e) => props.onHover(e.point)}>
-      {under.map((s, k) => (
-        <BlankSheet key={k} s={s} z={0.01 * k} />
-      ))}
-      <Page s={top} pt={p.pages[p.page]} lift={0} z={0.06} now={now} px={px} preview={props.previewOf(p.page)} tiles={props.tilesOf(p.page)} />
+      {atSize(
+        <>
+          {under.map((s, i) => (
+            <BlankSheet key={i} s={s} z={0.01 * i} />
+          ))}
+          <Page s={top} pt={p.pages[p.page]} lift={0} z={0.06} now={now} px={inPx} preview={props.previewOf(p.page)} tiles={props.tilesOf(p.page)} />
       {going != null && (
         <Page
           pt={p.pages[going]}
@@ -359,10 +401,12 @@ function PdfStack(props: {
           z={0.3}
           opacity={1 - ease(tt)}
           now={now}
-          px={px}
+          px={inPx}
           preview={props.previewOf(going)}
           tiles={[]}
         />
+      )}
+        </>,
       )}
       {props.hovered && hasNext && <Fold s={top} size={fold} corner="right" onTurn={() => props.onTurn(p.page + 1)} />}
       {props.hovered && hasPrev && <Fold s={top} size={fold} corner="left" onTurn={() => props.onTurn(p.page - 1)} />}
@@ -372,10 +416,11 @@ function PdfStack(props: {
   );
 }
 
-/** What moves of a PDF: a page turned (the one that went), its pages spread or gathered, its light coming or going. */
+/** What moves of a PDF: a page turned (the one that went), its pages spread or gathered, it made an icon or full size, its light coming or going. */
 type Motion = {
   turned?: { page: number; start: number };
   spread?: { to: boolean; start: number };
+  icon?: { to: boolean; start: number };
   lit?: { on: boolean; start: number; from: number };
 };
 

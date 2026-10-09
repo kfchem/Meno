@@ -1060,11 +1060,11 @@ export function addPdf(doc: StructureDocument, pdf: Omit<PdfItem, "id">): Struct
   return { ...doc, pdfs: [...(doc.pdfs ?? []), { ...pdf, id }], nextPdfId: id + 1 };
 }
 
-/** `doc` with a PDF moved, turned to another page, or spread - unchanged where it has no such PDF, or the page is none of its. */
+/** `doc` with a PDF moved, turned to another page, spread, or made an icon - unchanged where it has no such PDF, or the page is none of its. */
 export function updatePdf(
   doc: StructureDocument,
   id: number,
-  patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread">> & { reading?: PdfItem["reading"] | null },
+  patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread" | "icon">> & { reading?: PdfItem["reading"] | null },
 ): StructureDocument {
   const pdf = doc.pdfs?.find((p) => p.id === id);
   if (!pdf) return doc;
@@ -1072,6 +1072,7 @@ export function updatePdf(
   const { reading, ...rest } = patch;
   const next: PdfItem = { ...pdf, ...rest };
   if (next.spread === false) delete next.spread;
+  if (next.icon === false) delete next.icon;
   // (read no longer; or read from where it was, no further than its last page, neither far smaller nor far larger)
   if (reading === null) delete next.reading;
   else if (reading) next.reading = readingOf(reading, pdf.pages.length);

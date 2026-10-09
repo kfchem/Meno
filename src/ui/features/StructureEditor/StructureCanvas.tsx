@@ -511,7 +511,7 @@ function StructureCanvasContent({
       } else if (!busy && st.hoveredPdf != null && !e.metaKey && !e.ctrlKey && !e.altKey && ["ArrowRight", "ArrowLeft", "PageDown", "PageUp"].includes(e.key)) {
         // a PDF's pages turned, over it (docs/PDF.md)
         const pdf = st.pdfs.find((p) => p.id === st.hoveredPdf);
-        if (pdf && !pdf.spread) {
+        if (pdf && !pdf.spread && !pdf.icon) {
           e.preventDefault();
           const next = pdf.page + (e.key === "ArrowRight" || e.key === "PageDown" ? 1 : -1);
           if (next >= 0 && next < pdf.pages.length) st.turnPdf(pdf.id, next);
@@ -1118,9 +1118,11 @@ function StructureCanvasContent({
             const st = store.getState();
             return {
               spread: !!p.spread,
+              icon: !!p.icon,
               onSpread: () => st.spreadPdf(p.id, !p.spread),
-              ...(!p.spread && p.page < p.pages.length - 1 ? { onNext: () => st.turnPdf(p.id, p.page + 1) } : {}),
-              ...(!p.spread && p.page > 0 ? { onPrevious: () => st.turnPdf(p.id, p.page - 1) } : {}),
+              onIcon: () => st.iconPdf(p.id, !p.icon),
+              ...(!p.spread && !p.icon && p.page < p.pages.length - 1 ? { onNext: () => st.turnPdf(p.id, p.page + 1) } : {}),
+              ...(!p.spread && !p.icon && p.page > 0 ? { onPrevious: () => st.turnPdf(p.id, p.page - 1) } : {}),
               onRead: () => st.readPdf(p.id),
             };
           })()}

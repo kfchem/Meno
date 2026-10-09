@@ -207,7 +207,7 @@ function readPdfs(v: unknown): Omit<PdfItem, "id">[] {
     const page = Number.isInteger(p.page) && (p.page as number) >= 0 && (p.page as number) < pages.length ? (p.page as number) : 0;
     const r = p.reading as { at?: unknown; zoom?: unknown } | undefined;
     const reading = r && typeof r.at === "number" && typeof r.zoom === "number" ? readingOf({ at: r.at, zoom: r.zoom }, pages.length) : null;
-    out.push({ name: p.name.slice(0, 260), sha256: p.sha256, pages, x: p.x, y: p.y, page, ...(p.spread === true ? { spread: true } : {}), ...(reading ? { reading } : {}) });
+    out.push({ name: p.name.slice(0, 260), sha256: p.sha256, pages, x: p.x, y: p.y, page, ...(p.spread === true ? { spread: true } : {}), ...(p.icon === true ? { icon: true } : {}), ...(reading ? { reading } : {}) });
   }
   return out;
 }

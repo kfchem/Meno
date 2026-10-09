@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { createStructureDocument, isBlankDocument } from "../document";
 import { readWorkspace, workspaceText } from "../utils/workspace";
-import { pdfBounds, POINT, spreadColumns, spreadSheets, stackSheets, topSheet, UNDER_MOST } from "../../../../lib/pdf/layout";
+import { ICON_HEIGHT, iconScale, pdfBounds, POINT, shownSheet, spreadColumns, spreadSheets, stackSheets, topSheet, UNDER_MOST } from "../../../../lib/pdf/layout";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
 const SHA = "a".repeat(64);
 const SHA2 = "b".repeat(64);
@@ -51,6 +52,21 @@ describe("PDFs on the page", () => {
     expect(state().pdfs.map((p) => p.name)).toEqual(["paper.pdf"]);
     doc.undo();
     expect(state().pdfs.map((p) => p.name)).toEqual(["paper.pdf", "si.pdf"]);
+  });
+
+  it("are made icons, their pages gathered, and full size again, each one step, and saved so", () => {
+    const { doc, state } = editor();
+    state().addPdfs([{ name: "paper.pdf", sha256: SHA, pages: [A4, A4] }], { x: 0, y: 0 });
+    state().spreadPdf(1, true);
+    state().iconPdf(1, true);
+    expect(state().pdfs[0]).toMatchObject({ icon: true });
+    expect(state().pdfs[0].spread).toBeUndefined();
+    expect(readWorkspace(workspaceText(state()))?.pdfs[0].icon).toBe(true);
+    state().iconPdf(1, false);
+    expect(state().pdfs[0].icon).toBeUndefined();
+    expect(doc.history().undoDepth).toBe(4);
+    doc.undo();
+    expect(state().pdfs[0].icon).toBe(true);
   });
 
   it("are taken by a canvas opened for them", () => {
@@ -223,6 +239,19 @@ describe("PDFs read in the column", () => {
 
 describe("where a PDF's pages lie", () => {
   const p = { pages: Array.from({ length: 7 }, () => A4), x: 0, y: 0, page: 0 };
+
+  it("as an icon: as tall as a benzene ring, two bonds, about its middle - its top page alone to be seen", () => {
+    expect(ICON_HEIGHT).toBe(2 * NOMINAL_BOND_LENGTH);
+    const icon = { ...p, x: 5, y: 7, icon: true };
+    const s = shownSheet(icon, 0)!;
+    expect(s.h).toBeCloseTo(ICON_HEIGHT);
+    expect(s.w / s.h).toBeCloseTo(595 / 842);
+    expect(s).toMatchObject({ x: 5, y: 7 });
+    expect(shownSheet(icon, 1)).toBeNull();
+    const b = pdfBounds(icon);
+    expect(b.y1 - b.y0).toBeLessThan(ICON_HEIGHT * 1.1);
+    expect(iconScale(icon)).toBeCloseTo(ICON_HEIGHT / (842 * POINT));
+  });
 
   it("stacked: the top page where the PDF is, at its printed size, a few sheets under it", () => {
     expect(topSheet(p)).toEqual({ x: 0, y: 0, w: 595 * POINT, h: 842 * POINT });

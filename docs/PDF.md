@@ -111,6 +111,10 @@ stops being part of the work.
   - The right-click menu has *Spread pages*. The pages lift off the
     stack one after another and lie side by side on the page, in rows,
     to be read and compared at once. *Gather pages* puts them back.
+- **Made small**: *Minimize to an icon*, in its menu, makes it an icon
+  about a benzene ring's size - its top page on it, its name under it,
+  as a file's under its icon - and *Show full size* brings it back. An
+  icon is moved, read in the column and deleted as the stack is.
 - **Its figures and words are taken out from here** as from the column
   (*Taking things out*, below).
 
@@ -546,6 +550,8 @@ Built:
   - A link to a web page opens in the system's browser.
   - PDFium reads each page's links when the pointer first comes over it (`pdf_links`).
 - **Saved** with the workspace: where each PDF read in the column is read (`reading`: pages down, and how large), and which one the column showed (`pdfShown`).
+- **A PDF made an icon** (*Minimize to an icon* in its menu; *Show full size* back), as tall as a benzene ring (`ICON_HEIGHT`, two bonds), shrinking to it about its middle and growing back, its name going under its middle. Double-clicked, it is read in the column, its page rising from the icon. Saved with the workspace (`icon`).
+- **Its size checked**: a benzene ring printed as ACS 1996 prints it, 14.4-point bonds, in a PDF lies the size of one Meno draws beside it.
 
 Decided while building it, for the maintainer to confirm:
 - **Three quarters of the canvas for a PDF** (the maintainer asked for a wider column for reading PDFs, about three quarters), the stack brought beside it into the quarter left (the maintainer asked for that too).
@@ -555,6 +561,7 @@ Decided while building it, for the maintainer to confirm:
 - **Closing a PDF in the column** forgets where it was read; read again, it opens at its page on top.
 - **Only the web's and mail's links open** (`http`, `https`, `mailto`). Any other a PDF holds (a file, a script, another program) is not followed.
 - **Links on the stack** are followed by a click that does not move it; the pointer is the system's hand over them.
+- **An icon** gathers a PDF's pages first; it shows its top page's small picture alone (no tiles), and its corners do not turn. A PDF still goes onto the page full size, as printed.
 - **The look:** the column's pages on Meno's pale grey, 12-pixel margins and 10-pixel gaps; the page number a chip at the foot of the column.
 
 Not yet, and where it comes:

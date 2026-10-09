@@ -18,7 +18,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import type { PdfFlight, PdfItem } from "../store/types";
-import { pdfBounds, spreadSheets, topSheet } from "../../../../lib/pdf/layout";
+import { pdfBounds, shownSheet, topSheet } from "../../../../lib/pdf/layout";
 import { columnWidthFor } from "../utils/texts";
 import { viewBesideColumn } from "./coverLayer";
 import { setViewGoal, viewGoalOf } from "./viewGoal";
@@ -298,9 +298,9 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
     );
   })();
 
-  /** Where a PDF's page lies on the canvas now: on top of its stack, or among its pages spread. */
+  /** Where a PDF's page lies on the canvas now: on top of its stack, among its pages spread, or on its icon. */
   function stackRect(p: PdfItem, page: number): Rect | null {
-    const s = p.spread ? spreadSheets(p)[page] : topSheet(p);
+    const s = shownSheet(p, page) ?? topSheet(p);
     if (!s) return null;
     const c = camera as THREE.OrthographicCamera;
     const z = c.zoom || 1;
