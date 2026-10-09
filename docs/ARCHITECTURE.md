@@ -179,9 +179,10 @@ Nothing a part shows lives in the part, so a part made again shows the same:
 - **A gesture under way** is let go as the canvas is made again (`letGo`:
   before it is made, when the canvas itself failed; as it is, with its tab
   or the window): the press that would have ended a drag, a lasso or a
-  bond being drawn was lost with the canvas. Hover, the label and words being typed, Quick Add
-  and a workflow menu go with it; what is selected, how the molecules in 3D
-  are turned and the column stay.
+  bond being drawn was lost with the canvas. Hover, the label and words
+  being typed, words being carried out of a PDF, Quick Add, a workflow
+  menu and a PDF's menu asked for go with it; what is selected (words in
+  a PDF too), how the molecules in 3D are turned and the column stay.
 
 A part that fails again as it is made shows its card again. The column's
 Hide is the way on when the column itself is what fails. For the canvas

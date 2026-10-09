@@ -251,11 +251,13 @@ export function createInteractionSlice(set: SetState, get: GetState) {
         moveDrag: { active: false, atomId: null, pointer: null, mode: "snap", preview: null },
         panHold: { active: false, pointerId: null },
         wireDrag: null,
-        // nothing being written or asked over the canvas
+        // nothing being written, carried or asked over the canvas
         labelEdit: { active: false, atomId: null, value: "", autoCap: true },
         captionEdit: null,
         quickAdd: null,
         workflowMenu: null,
+        pdfWords: null,
+        menuAsk: null,
       })),
   };
 }

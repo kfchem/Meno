@@ -98,6 +98,9 @@ describe("a canvas made again", () => {
       labelEdit: { active: true, atomId: atom, value: "N", autoCap: true },
       captionEdit: { id: null, at: { x: 0, y: 0 } },
       quickAdd: { at: { x: 0, y: 0 }, x: 0, y: 0, within: { width: 100, height: 100 } },
+      pdfWords: {} as never,
+      menuAsk: { id: 1, clientX: 0, clientY: 0 },
+      pdfSel: {} as never,
     });
     store.getState().startExtend(atom);
 
@@ -114,10 +117,13 @@ describe("a canvas made again", () => {
     expect(s.labelEdit.active).toBe(false);
     expect(s.captionEdit).toBeNull();
     expect(s.quickAdd).toBeNull();
+    expect(s.pdfWords).toBeNull();
+    expect(s.menuAsk).toBeNull();
     // (what is selected, how the molecules in 3D are turned, the column, and the drawing itself)
     expect([...s.sel.atoms]).toEqual([atom]);
     expect(s.turns3d[1]).toBeDefined();
     expect(s.textsOpen).toBe(true);
+    expect(s.pdfSel).not.toBeNull();
     expect(s.model.atoms).toHaveLength(1);
     expect(doc.history().undoDepth).toBe(1);
   });
