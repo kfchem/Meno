@@ -8,7 +8,8 @@
       "resources/plugins/*/*.py",
       "resources/plugins/*/*.lock",
       "resources/plugins/*/pixi.toml",
-      "resources/licenses/*"
+      "resources/licenses/*",
+      "pdfium/windows/pdfium.dll"
     ],
     "windows": {
       "nsis": {

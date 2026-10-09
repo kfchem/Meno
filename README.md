@@ -35,6 +35,7 @@ Setup and common commands:
 
 ```bash
 npm install          # install frontend dependencies
+node scripts/fetch-pdfium.mjs  # PDFium's library, pinned and checked, for the desktop app (docs/PDF.md)
 npm run dev          # run the Vite dev server only (frontend, in a browser)
 npm run tauri dev    # run the full desktop app (Rust + WebView)
 npm run typecheck    # TypeScript typecheck only
@@ -82,6 +83,8 @@ This repository is licensed under the **Apache License 2.0**. See [`LICENSE`](./
 Meno's typefaces, IBM Plex Sans (upright and italic), IBM Plex Sans JP and IBM Plex Mono (`src/assets/fonts/`), are © IBM Corp. and licensed under the SIL Open Font License 1.1; see [`src-tauri/resources/licenses/IBM-Plex-OFL.txt`](./src-tauri/resources/licenses/IBM-Plex-OFL.txt), which the app carries with it. The font files are bundled unchanged, and carry the same notice in their own metadata.
 
 The outlines Meno places Arial labels by before the system's own Arial has been read (`src/lib/chem/arial.ts`) are worked out from Arimo, © The Arimo Project Authors, licensed under the SIL Open Font License 1.1; see [`src-tauri/resources/licenses/Arimo-OFL.txt`](./src-tauri/resources/licenses/Arimo-OFL.txt). No font file is taken from Arial.
+
+Meno reads and draws PDFs with PDFium, © The PDFium Authors, licensed under the BSD 3-Clause License (some files under the Apache License 2.0), as built by [`bblanchon/pdfium-binaries`](https://github.com/bblanchon/pdfium-binaries) (MIT). The app carries PDFium's library unchanged, and its licences and those of what it is built with - FreeType, HarfBuzz, ICU, libjpeg-turbo, OpenJPEG, libpng, zlib, Little CMS, Abseil, Anti-Grain Geometry, dragonbox, fast_float, simdutf and LLVM's libc - as `src-tauri/resources/licenses/PDFium-*`. This software is based in part on the work of the Independent JPEG Group. Portions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.
 
 ## Acknowledgments
 

@@ -9,6 +9,12 @@
       "resources/plugins/*/*.lock",
       "resources/plugins/*/pixi.toml",
       "resources/licenses/*"
-    ]
+    ],
+    "macOS": {
+      "frameworks": [
+        "pdfium/macos/libpdfium.dylib"
+      ],
+      "entitlements": "Entitlements.plist"
+    }
   }
 }
