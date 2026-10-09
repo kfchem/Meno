@@ -411,13 +411,67 @@ A PDF is a file from anywhere, and is treated as such.
     hook for when it is renamed or goes (RELEASING.md);
   - on Linux, beside it as well.
 
-  The trial checks that a Mac app signed as Meno's is (ad hoc, with the
-  hardened runtime) loads it.
+- **On a Mac, signed as Meno is - ad hoc, with the hardened runtime -
+  the app cannot load PDFium's library**: macOS's library validation
+  takes a library only from the app's own team, and an ad hoc signature
+  has none (the trial, below). Decided by the maintainer (2026-10-09):
+  until Meno is signed with a Developer ID, which is to come soon, the
+  app carries the entitlement `com.apple.security.cs.disable-library-validation`.
+  Signed with a Developer ID, the app and the library are the same
+  team's, and the entitlement goes.
+
+## The trial (step 0), 2026-10-09
+
+Built on `agent/pdf-trial`, kept off main:
+- `Meno --pdf`, the reader;
+- the PDF fetched and checked by `scripts/fetch-pdfium.mjs`;
+- one canvas with a workspace view and a column view;
+- a page's stack sharpening in tiles as it is zoomed into;
+- a page rising into the column;
+- a search.
+
+It was tried on PDFs made for it - two columns of text, a figure drawn
+as paths, a picture, a word broken by a hyphen at a line's end, and a
+page of 30000 paths - on the Mac and on Windows (release builds).
+
+| | Mac (Apple M4, 2x) | Windows (WebView2, 100 %) |
+| --- | --- | --- |
+| Opened | 19 ms in PDFium, 32 ms all told | 44 ms, 95 ms |
+| First preview | 2.7 ms, 4 ms | 2.4 ms, 10 ms |
+| A 512-pixel tile | 1.7 ms, 9 ms | 1.0 ms, 15 ms |
+| A page in the column | 5.5 ms, 26 ms (832 × 1178) | 2.1 ms, 33 ms (416 × 589) |
+| Bytes to the window | 127-261 MB/s | 42-66 MB/s |
+| Frames while zooming | 17 ms (95th: 18) | 10 ms (95th: 10) |
+| Search, all pages | 22 ms | 18 ms |
+
+What it showed:
+- **PDFium draws far faster than anything waits for it**: a tile in a
+  millisecond or two, a dense page of paths in 3.
+- **The time is in carrying the pictures to the window**, most of all
+  on Windows: a megabyte takes some 20-30 ms there, as WebView2 passes
+  bytes. Step 1 carries them smaller - compressed without loss in the
+  reader, a page being mostly white, and unpacked off the main thread -
+  or through WebView2's shared buffers, whichever measures better on
+  Windows; a tile is to reach the window within 5 ms of PDFium.
+- **Zoomed into, the page is sharp a quarter of a second after the
+  zoom stops** (on Windows: soft at 0.38 s, the first sharp tiles at
+  0.52 s, all of them at 0.63 s). Step 1 asks for the tiles sooner:
+  when the zoom slows, at the level it is going to.
+- **PDFium's own search does not find a word broken by a hyphen at a
+  line's end**: it gives the hyphen as U+0002 and the line's end as
+  `\r\n`. Meno searches the page's text itself, a line's end read as a
+  space and a broken word read whole, each letter pointing back to its
+  box - found and marked on both lines.
+- **One canvas draws both views** at the display's own rate, a page
+  rising from one into the other.
+- **The Mac app needs the entitlement** above.
+- **The reader stays** once started, until Meno closes, ready for the
+  next PDF.
+- **The app is 8.8 MB larger installed**: 28.4 MB against 19.6 MB.
 
 ## In order
 
-0. **A trial, kept off main**, its numbers and a recording shown before
-   step 1:
+0. **A trial, kept off main** (done, 2026-10-09; *The trial*, above):
    - PDFium bound, in its own process, on the Mac and on Windows, and the
      Mac's signed app loading it;
    - how long a paper's first page, and a tile, take to show, and how
