@@ -33,7 +33,8 @@ if (sha !== pin.sha256) throw new Error(`${pin.asset}: SHA-256 ${sha}, not the p
 const work = mkdtempSync(join(tmpdir(), "pdfium-"));
 const archive = join(work, pin.asset);
 writeFileSync(archive, bytes);
-execFileSync("tar", ["-xzf", archive, "-C", work]);
+// (tar run in the folder, on a name with no drive in it: Git Bash's GNU tar takes "C:" for a host)
+execFileSync("tar", ["-xzf", pin.asset], { cwd: work });
 mkdirSync(out, { recursive: true });
 copyFileSync(join(work, pin.lib), join(out, pin.lib.split("/").pop()));
 cpSync(join(work, "licenses"), join(out, "licenses"), { recursive: true });
