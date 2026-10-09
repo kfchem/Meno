@@ -231,6 +231,11 @@ export function useStructureEvents(
     ndc.copy(pageAt(ndc.x, ndc.y, camRef.current));
 
     const st = store.getState();
+    // (twice on a text's sheet, nothing drawn over it: read in the column - docs/PDF.md, *A text*)
+    if (st.hoveredText != null && st.hovered.atomId == null && st.hovered.bondId == null && st.hoveredPicture == null && st.texts.some((t) => t.id === st.hoveredText && t.at)) {
+      st.readText(st.hoveredText);
+      return;
+    }
     // (twice on a PDF, nothing drawn over it: read in the column - docs/PDF.md)
     const overPdf = st.hoveredPdf != null && st.hovered.atomId == null && st.hovered.bondId == null;
     if (overPdf && st.hoveredArrow == null && st.hoveredPlus == null && st.hoveredCaption == null) {
@@ -361,6 +366,8 @@ export function useStructureEvents(
       e.target === domRef.current &&
       stClick.hovered.atomId == null &&
       stClick.hovered.bondId == null &&
+      // (a click on a text's sheet selects it: not a click on nothing)
+      stClick.hoveredText == null &&
       !heldOff
     )
       stClick.clearSel();
@@ -465,9 +472,9 @@ export function useStructureEvents(
       }
       return;
     }
-    // a text: held in the workspace, shown in its column
+    // a text: held in the workspace, its sheet on the page where it was dropped, shown in its column
     if (!kind && opensAsText(f.name, head)) {
-      store.getState().addTexts([{ name: f.name, text: await f.text() }]);
+      store.getState().addTexts([{ name: f.name, text: await f.text() }], at);
       setImportError(null);
       return;
     }

@@ -102,6 +102,7 @@ import QuickAdd from "./QuickAdd";
 import Captions2D from "./components/Captions2D";
 import Pdfs2D from "./components/Pdfs2D";
 import Pictures2D from "./components/Pictures2D";
+import TextSheets2D from "./components/TextSheets2D";
 import PdfColumn from "./components/PdfColumn";
 import { goBack, isBackKey, readerOf } from "./components/pdfColumnReader";
 import { selectedWords, selects } from "./utils/pdfSelection";
@@ -223,7 +224,7 @@ function StructureCanvasContent({
   const store = useEditorStore();
   // (a tab's own, unless it is a document's, holds texts opened while it is in front: ui/views/texts)
   useEffect(
-    () => (ownTab && officeId == null ? setTextTaker(tabId, (texts) => store.getState().addTexts(texts)) : undefined),
+    () => (ownTab && officeId == null ? setTextTaker(tabId, (texts) => store.getState().addTexts(texts, pdfTarget.current())) : undefined),
     [ownTab, officeId, tabId, store],
   );
   // (and PDFs and pictures opened, on its page where it is looked at: docs/PDF.md)
@@ -555,7 +556,7 @@ function StructureCanvasContent({
       const kind = hoveredPart();
       const id = kind === "atom" ? hovered.atomId : hovered.bondId;
       const drawingSelected = sel.atoms.size > 0 || sel.bonds.size > 0;
-      const selected = drawingSelected || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0 || st.selPictures.size > 0;
+      const selected = drawingSelected || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0 || st.selPictures.size > 0 || st.selTexts.size > 0;
       const busy = st.labelEdit.active || st.moveDrag.active || st.extend.active;
       if (isCleanUpKey(e)) {
         e.preventDefault();
@@ -605,6 +606,10 @@ function StructureCanvasContent({
         // a PDF under the pointer, and nothing else
         e.preventDefault();
         st.removePdf(st.hoveredPdf);
+      } else if (isDeleteKey(e) && !busy && st.hoveredText != null && st.texts.some((t) => t.id === st.hoveredText && t.at)) {
+        // a text's sheet under the pointer, likewise
+        e.preventDefault();
+        st.removeTexts([st.hoveredText]);
       } else if (isDeleteKey(e) && !busy && st.hoveredPicture != null && st.pictures.some((p) => p.id === st.hoveredPicture)) {
         // a picture under the pointer, likewise
         e.preventDefault();
@@ -822,6 +827,18 @@ function StructureCanvasContent({
       else if (!r?.moved) setMenu(target);
       return;
     }
+    // likewise a text's sheet, unless it is selected with more (docs/PDF.md, *A text*)
+    const { hoveredText, texts, selTexts } = store.getState();
+    const withOthers = (() => {
+      const s = store.getState();
+      return s.sel.atoms.size > 0 || s.sel3d.size > 0 || s.selFlow.sets.size > 0 || s.selFlow.steps.size > 0 || s.selPictures.size > 0 || selTexts.size > 1;
+    })();
+    if (!kind && hoveredText != null && texts.some((t) => t.id === hoveredText && t.at) && !(selTexts.has(hoveredText) && withOthers)) {
+      const target: MenuTarget = { kind: "text", id: hoveredText, selection: "none", ...place };
+      if (r?.down) r.pending = target;
+      else if (!r?.moved) setMenu(target);
+      return;
+    }
     // likewise a picture, unless it is selected with more (docs/PDF.md, *A picture*)
     const { hoveredPicture, pictures, selPictures } = store.getState();
     const withMore = (() => {
@@ -855,7 +872,7 @@ function StructureCanvasContent({
     const { sel, selFlow } = store.getState();
     const part = kind && id != null;
     const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
-    const selected = drawing || sel3d.size > 0 || selFlow.sets.size > 0 || selFlow.steps.size > 0 || selPictures.size > 0;
+    const selected = drawing || sel3d.size > 0 || selFlow.sets.size > 0 || selFlow.steps.size > 0 || selPictures.size > 0 || selTexts.size > 0;
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
@@ -931,7 +948,7 @@ function StructureCanvasContent({
           },
         },
         // (a text of its own, in the column of texts)
-        ...(officeId == null ? [{ name: "New text", run: () => store.getState().addTexts([{ name: "", text: "" }]) }] : []),
+        ...(officeId == null ? [{ name: "New text", run: () => store.getState().addTexts([{ name: "", text: "" }], pasteTarget()) }] : []),
       ],
     },
     {
@@ -1182,6 +1199,7 @@ function StructureCanvasContent({
             else if (menu.kind === "caption" && menu.id != null) st.removeCaption(menu.id);
             else if (menu.kind === "pdf" && menu.id != null) st.removePdf(menu.id);
             else if (menu.kind === "picture" && menu.id != null) st.removePicture(menu.id);
+            else if (menu.kind === "text" && menu.id != null) st.removeTexts([menu.id]);
             else if (menu.kind === "set" && menu.id != null) st.removeSet(menu.id);
             else if (menu.kind === "step" && menu.id != null) st.removeStep(menu.id);
             else if (menu.kind === "wire" && menu.id != null) st.removeWire(menu.id);
@@ -1260,6 +1278,7 @@ function StructureCanvasContent({
             if (c) store.getState().setCaptionEdit({ id: c.id, at: { x: c.x, y: c.y } });
           }}
           onCopyPicture={menu.kind === "picture" && menu.id != null ? () => void clip.copyPicture(menu.id!) : undefined}
+          onReadText={menu.kind === "text" && menu.id != null ? () => store.getState().readText(menu.id!) : undefined}
           pdf={(() => {
             const p = menu.kind === "pdf" ? store.getState().pdfs.find((x) => x.id === menu.id) : undefined;
             if (!p) return undefined;
@@ -1363,6 +1382,8 @@ function StructureCanvasContent({
             <Pdfs2D />
             <PdfColumn />
           </PdfPictures>
+          {/* Texts' sheets, over the PDFs (docs/PDF.md, *A text*) */}
+          <TextSheets2D />
           {/* Pictures, over the PDFs and under the drawing (docs/PDF.md, *A picture*) */}
           <Pictures2D />
           {/* Bonds */}

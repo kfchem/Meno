@@ -12,7 +12,7 @@ export type MenuTarget = {
    * The atom, bond, reaction arrow or "+" right-clicked, or a molecule in 3D
    * or a measurement on one; null, when it was nothing.
    */
-  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "pdf" | "picture" | "molecule3d" | "measure3d" | "set" | "step" | "wire" | null;
+  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "pdf" | "picture" | "text" | "molecule3d" | "measure3d" | "set" | "step" | "wire" | null;
   /** Its id: for a measurement, its molecule's. */
   id: number | null;
   /** A measurement's own id. */
@@ -112,6 +112,7 @@ export default function PartMenu({
   step,
   pdf,
   onCopyPicture,
+  onReadText,
   onSaveProcedure,
   onUseAsInput,
   onSaveAbbreviation,
@@ -173,6 +174,8 @@ export default function PartMenu({
   };
   /** The picture right-clicked copied, for Meno and as a picture for other programs. */
   onCopyPicture?: () => void;
+  /** The text whose sheet was right-clicked read in the column. */
+  onReadText?: () => void;
   /** The whole flow a step or a set right-clicked is part of, saved as a procedure, named. */
   onSaveProcedure?: () => void;
   /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
@@ -305,6 +308,11 @@ export default function PartMenu({
           ...(pdf ? [{ name: pdf.icon ? "Show full size" : "Minimize to an icon", keys: "", run: pdf.onIcon, divider: pdf.icon }] : []),
           { name: "Delete PDF", keys: deleteKey, run: onDelete, divider: true },
         ]
+      : target.kind === "text"
+      ? [
+          ...(onReadText ? [{ name: "Read", keys: "", run: onReadText }] : []),
+          { name: "Delete text", keys: deleteKey, run: onDelete, divider: !!onReadText },
+        ]
       : target.kind === "picture"
       ? [
           ...(onCopyPicture ? [{ name: "Copy picture", keys: "", run: onCopyPicture }] : []),
@@ -404,6 +412,8 @@ export default function PartMenu({
                     ? "PDF"
                   : target.kind === "picture"
                     ? "Picture"
+                  : target.kind === "text"
+                    ? "Text"
                   : target.kind === "set"
                     ? "Set"
                   : target.kind === "step"
