@@ -450,7 +450,9 @@ work.meno (zip)
   file does not hold is left out as the workspace opens, and named. A PDF
   read in the column keeps where it was read (`reading`, in its entry in
   `pdfs`), and `pdfShown` names the one the column showed, in place of
-  `textShown` (docs/PDF.md, step 2).
+  `textShown` (docs/PDF.md, step 2). Words on the page taken out of a PDF
+  keep where they came from (`captions[].from`: the PDF's SHA-256 and two
+  places in it; docs/PDF.md, step 3).
 - **Written off the page.** The files kept are compressed in a worker of
   their own as the workspace is saved (`lib/doc/menoFileWorker.ts`), so a
   long output never holds the canvas up.

@@ -574,6 +574,44 @@ Not yet, and where it comes:
 - **Selecting and copying text, and search**: step 3.
 - **The mouse's back button on a Mac** is not checked yet. It is heard where WebKit passes it on; ⌘[ is the Mac's own.
 
+### Step 3: text and search (2026-10-09)
+
+Built:
+- **Each page's letters, as PDFium reads them** (`pdf_text`). Each comes with its box, in points from the page's top left as it is drawn; the letters PDFium adds itself (a space, a line's end) have none. `lib/pdf/text` keeps them a page at a time and works out:
+  - the place between letters nearest the pointer;
+  - a word, and a line;
+  - the boxes that mark a selection;
+  - the words to copy;
+  - where a search finds something.
+- **Selecting words**, in the column and on a stack or its pages spread.
+  - A drag on words selects them; two clicks select a word, three a line.
+  - In the column a selection can run across pages, and the column moves on as the pointer nears its top or foot.
+  - A press between two lines, or just past a line's end, counts as on the line beside it.
+  - The words selected are marked in Meno's light, the same on the stack and in the column.
+  - Cmd/Ctrl+C copies them, or *Copy* in the PDF's menu; a right-click in the column opens that menu too.
+  - Selecting words lets the drawing's selection go. Esc, or a click elsewhere, lets the words go.
+- **Searching**, with Cmd/Ctrl+F or *Find in PDF…* in the Edit menu.
+  - A field opens over the top of the column, holding the words selected, if any.
+  - *This PDF* or *All PDFs* choose where to look, and the count shows as *3 of 12*.
+  - Enter goes to the next place and Shift+Enter to the one before. Esc closes the field.
+  - Every place found is marked on the pages, in the column and on the stacks; the one gone to is marked more strongly.
+  - With *All PDFs*, the places are listed under each PDF's name, with the words round each. A click goes there, showing that PDF.
+- **Words taken out.** A selection pressed and dragged lifts off as a card of its words, rising and following the pointer.
+  - Let go on the canvas, the words become words on the page there, in the drawing's type, as one step.
+  - Let go anywhere else, the card goes back.
+  - The words keep where they came from. *Show in the PDF*, in their menu, reads that PDF in the column, goes there, and marks the words for a moment.
+
+Decided while building it, for the maintainer to confirm:
+- **On a stack, a drag on words selects them only where they can be read**: a point at least 0.6 pixels on the screen. Further off, the drag moves the PDF, as before. A drag on a page's margin always moves it; in step 4 such a drag will draw a box instead, and the PDF will then be moved by its edge or its name.
+- **Copying and searching treat line ends and hyphens alike.** A line's end reads as a space. A word PDFium marks as broken at a line's end (U+0002) reads whole, and a search with its hyphen finds it too. A hyphen PDFium left at a line's end is a word's own, as in Diels-Alder, and is kept.
+- **The search field lies over the top of what is read**, as a browser's does, so that the pages stay where the canvas draws them.
+- **A selection of several pages copies as one run of words**, a page's end read as a space.
+- **Words carried out are a card in HTML until step 5**, when texts move into WebGL.
+
+Not yet, and where it comes:
+- **A figure cut out by a box**: step 4.
+- **Words on the page that came from a PDF stay one line**, however long. Breaking them into lines comes with texts drawn in WebGL (step 5).
+
 ## In order
 
 0. **A trial, kept off main** (done, 2026-10-09; *The trial*, above):
@@ -590,8 +628,9 @@ Not yet, and where it comes:
 2. **The column on the canvas** (built, 2026-10-09; *As built*, above): a
    PDF read there, joined to its stack; its page number and links; texts
    still in HTML beside it until step 5.
-3. **Text and search**: selecting and copying, on the stack and in the
-   column; *This PDF* and *All PDFs*; words dragged out onto the page.
+3. **Text and search** (built, 2026-10-09; *As built*, above): selecting
+   and copying, on the stack and in the column; *This PDF* and *All PDFs*;
+   words dragged out onto the page.
 4. **Pictures**: from image files and the clipboard, and figures dragged
    out of a PDF; moved, scaled, turned, tied to their source.
 5. **Texts drawn with WebGL**: first a small trial of typing alone,
