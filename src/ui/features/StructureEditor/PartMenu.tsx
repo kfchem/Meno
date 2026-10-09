@@ -272,7 +272,7 @@ export default function PartMenu({
                 ] as const
               ).map(([align, name], k) => ({ name, keys: "", run: () => captionAlign.set(align), checked: captionAlign.now === align, divider: k === 0 }))
             : []),
-          { name: "Delete text", keys: deleteKey, run: onDelete },
+          { name: "Delete text", keys: deleteKey, run: onDelete, divider: !!captionAlign },
         ]
       : target.kind === "pdf"
       ? [
