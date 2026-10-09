@@ -6,9 +6,10 @@
  * where the column's reader says it is read (pdfColumnReader).
  *
  * The canvas is then drawn in three goes: the page, as ever; the column's
- * part of it, cut off where the column is; and a page on its way between
- * them - rising from the stack and going into the column as it opens,
- * growing to its width, or going back down to the stack as it is closed.
+ * part of it, cut off where the column is; and what is on its way between
+ * them - a page rising from the stack and going into the column as it
+ * opens, growing to its width, or going back down to the stack as it is
+ * closed; words carried out of a PDF (WordsFlight), over both.
  *
  * The page most in view is the page on top of the stack on the page, and a
  * page turned there is gone to here: the two are one thing.
@@ -17,15 +18,18 @@ import * as THREE from "three";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
-import type { PdfFlight, PdfItem } from "../store/types";
-import { pdfBounds, shownSheet, topSheet } from "../../../../lib/pdf/layout";
+import type { PdfFlight, PdfItem, WordsFlight as WordsFlightState } from "../store/types";
+import { pdfRoom, shownSheet, topSheet } from "../../../../lib/pdf/layout";
 import { columnWidthFor } from "../utils/texts";
 import { viewBesideColumn } from "./coverLayer";
 import { setViewGoal, viewGoalOf } from "./viewGoal";
 import { pagesInView } from "../../../../lib/pdf/column";
+import { textHad } from "../../../../lib/pdf/text";
 import { BASE, levelFor, Page, TILE, usePictures } from "./pdfPictures";
+import { FLASH_MS, marksOn } from "./pdfMarks";
 import { HEADER_PX, readerOf } from "./pdfColumnReader";
 import { ease, SETTLE_MS } from "./Pdfs2D";
+import WordsFlight from "./WordsFlight";
 
 /** How long a page takes between the page and the column, in ms. */
 export const FLIGHT_MS = 420;
@@ -41,6 +45,7 @@ export default function PdfColumn() {
   const cover = useEditor((s) => s.cover);
   const pdfs = useEditor((s) => s.pdfs);
   const flight = useEditor((s) => s.pdfFlight);
+  const words = useEditor((s) => s.pdfWords);
   // (shutting, it goes on showing what it showed as it slides away - and
   // under a text it has gone on to, as that fades in over it)
   const last = useRef<number | null>(null);
@@ -60,22 +65,26 @@ export default function PdfColumn() {
     const cam = camera as THREE.OrthographicCamera;
     const goal = viewGoalOf(cam);
     const view = { zoom: goal?.zoom ?? cam.zoom, x: goal?.x ?? cam.position.x, y: goal?.y ?? cam.position.y };
-    const to = viewBesideColumn(view, size, { now: st.cover, final: columnWidthFor(size.width, true, st.pdfColumnWidth) }, pdfBounds(p));
+    const to = viewBesideColumn(view, size, { now: st.cover, final: columnWidthFor(size.width, true, st.pdfColumnWidth) }, pdfRoom(p));
     if (!to) return;
     setViewGoal(cam, to);
     invalidate();
     // (as the flight sets off, once)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rising]);
-  if (!pdf && !flown) return null;
-  return <ColumnPass pdf={pdf} flight={flight && flown ? flight : null} flown={flown} />;
+  if (!pdf && !flown && !words) return null;
+  return <ColumnPass pdf={pdf} flight={flight && flown ? flight : null} flown={flown} words={words} />;
 }
 
-function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFlight | null; flown: PdfItem | null }) {
+function ColumnPass({ pdf, flight, flown, words }: { pdf: PdfItem | null; flight: PdfFlight | null; flown: PdfItem | null; words: WordsFlightState | null }) {
   const store = useEditorStore();
   const { gl, size, invalidate, camera } = useThree();
   const cover = useEditor((s) => s.cover);
   const width = useEditor((s) => s.columnWidth);
+  // (words selected, and places found, marked on the pages)
+  const pdfSel = useEditor((s) => s.pdfSel);
+  const pdfFind = useEditor((s) => s.pdfFind);
+  const pdfFlash = useEditor((s) => s.pdfFlash);
   const [, setTick] = useState(0);
   const redraw = useCallback(() => {
     setTick((t) => t + 1);
@@ -159,6 +168,8 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
         else window.setTimeout(() => invalidate(), SETTLE_MS + 20);
       }
       if (pics.fading(now)) redraw();
+      // (a place shown marked, fading)
+      if (st.pdfFlash && now - st.pdfFlash.start < FLASH_MS + 80) redraw();
     }
     // a page between the page and the column
     if (flight) {
@@ -188,7 +199,7 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
       r.setScissorTest(false);
       r.setViewport(0, 0, W, H);
     }
-    if (flight) {
+    if (flight || words) {
       flightCam.left = 0;
       flightCam.right = W;
       flightCam.top = 0;
@@ -211,6 +222,8 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
     let asked = false;
     for (const i of pagesInView(l, top, tall)) {
       const p = l.pages[i];
+      // (its letters, ready for a press on its words)
+      textHad(pdf.sha256, i);
       clock.current.levels.set(i, level);
       if (!level) continue;
       const part = {
@@ -262,6 +275,7 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
             px={1}
             preview={pics.preview(pdf, i)}
             tiles={pics.tilesOf(pdf.sha256, i, clock.current.levels.get(i) ?? 0)}
+            marks={marksOn(pdf, i, pdfSel, pdfFind?.found ?? [], pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null, redraw, pdfFlash)}
           />
         );
       });
@@ -315,7 +329,13 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
   return (
     <>
       {createPortal(<>{column}</>, scene)}
-      {createPortal(<>{flying}</>, flightScene)}
+      {createPortal(
+        <>
+          {flying}
+          {words && <WordsFlight w={words} />}
+        </>,
+        flightScene,
+      )}
     </>
   );
 }

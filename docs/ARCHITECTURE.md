@@ -779,6 +779,19 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   link - and the canvas eases and draws; it is kept with the PDF
   (`reading`) once it rests, by amending the document rather than editing
   it, so that it is no step to undo.
+- **Words** (`pdf_text`, `lib/pdf/text`): each page's letters, read by
+  PDFium when first wanted, each with its box in points from the page's
+  top left. The place nearest the pointer, words, lines, the marks of a
+  selection, the words to copy and a search are all worked out from them
+  in the window. A selection (`pdfSel`) and a search (`pdfFind`,
+  `components/pdfFind.ts`) are the view's, marked on the pages by
+  `components/pdfMarks.ts`. Words carried out of a PDF
+  (`components/wordsDrag.ts`) become words on the page that keep where
+  they came from (`Caption.from`), set as wide and lying as their lines
+  did (`blockOf`). As they are carried (`pdfWords`), the column's last
+  pass draws them (`components/WordsFlight.tsx`): each word a text of its
+  own, from the box it had on the page (`wordBoxesBetween`) to its place
+  in the words as they will be set (`captionWords`).
 - **Links** (`pdf_links`): each page's, read by PDFium when first wanted -
   where each lies, in points from the page's top left as it is drawn
   (`FPDF_PageToDevice`), and where it goes: a page and how far down it, or
@@ -797,6 +810,7 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
 | `pdf_bytes` | `utils/workspace.ts` | A PDF held, as its bytes, for a workspace's file. |
 | `pdf_render` | `lib/pdf/reader.ts` | A part of a page drawn by PDFium, as a PNG. |
 | `pdf_links` | `lib/pdf/reader.ts` | A page's links: where each lies, and where it goes. |
+| `pdf_text` | `lib/pdf/text.ts` | A page's letters, each with its box. |
 | `font_families` | `ui/fonts/typefaces.ts` | Every typeface installed (fontdb), for the label typeface picker. |
 | `font_file` | `ui/fonts/typefaces.ts` | One family's regular face as a font file of its own - out of its collection, its character map made plain (`fonts.rs`). |
 | `net_state` | `lib/net/network.ts` | Offline or not, what is allowed, tasks under way, recent connections. |

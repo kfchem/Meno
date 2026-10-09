@@ -72,6 +72,7 @@ import {
   isDeleteKey,
   isFitKey,
   isDeselectKey,
+  isFindKey,
   isSelectAllKey,
   saveIntent,
   shortcutLabel,
@@ -100,7 +101,12 @@ import QuickAdd from "./QuickAdd";
 import Captions2D from "./components/Captions2D";
 import Pdfs2D from "./components/Pdfs2D";
 import PdfColumn from "./components/PdfColumn";
-import { goBack, isBackKey } from "./components/pdfColumnReader";
+import { goBack, isBackKey, readerOf } from "./components/pdfColumnReader";
+import { selectedWords, selects } from "./utils/pdfSelection";
+import { runFind } from "./components/pdfFind";
+import { setCanvasPlace } from "./components/wordsDrag";
+import { marksBetween, textOf } from "../../../lib/pdf/text";
+import { writeClipboard } from "../../../lib/clipboard";
 import { PdfPictures } from "./components/pdfPictures";
 import { FollowCover, PageHtmlLayer } from "./components/coverLayer";
 import CaptionEditor2D from "./components/CaptionEditor2D";
@@ -115,7 +121,7 @@ import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf,
 import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
-import type { Molecule3D } from "./store/types";
+import type { Molecule3D, WordsFrom } from "./store/types";
 import { resultKey, resultsOn } from "../../../lib/calc/results";
 import { titled } from "../../../lib/calc/sources";
 import { missingFor } from "./workflow/doers";
@@ -431,6 +437,76 @@ function StructureCanvasContent({
     [store],
   );
   const [menu, setMenu] = useState<MenuTarget | null>(null);
+  // the field to look for words in the PDFs, opened at the column's top on
+  // the PDF it shows - or the one under the pointer, or read there, or the
+  // first - with the words selected in it, if any
+  const openFind = useCallback(() => {
+    const st = store.getState();
+    if (!st.pdfs.length) return;
+    const shown = st.textsOpen && st.pdfShown != null ? st.pdfShown : null;
+    const target = shown ?? st.hoveredPdf ?? st.pdfs.find((p) => p.reading)?.id ?? st.pdfs[0].id;
+    if (shown !== target) st.readPdf(target);
+    const sel = st.pdfSel;
+    const pdf = selects(sel) ? st.pdfs.find((p) => p.id === sel.id) : undefined;
+    const open = (q: string) => {
+      const now = store.getState().pdfFind;
+      if (!now) store.getState().setPdfFind({ q, all: false, found: [], now: 0, busy: false });
+      else if (q && q !== now.q) void runFind(store, q, now.all);
+      // (the field, there already, given the keys)
+      window.setTimeout(() => document.querySelector<HTMLInputElement>("[data-pdf-find]")?.focus(), 0);
+    };
+    if (sel && pdf) void selectedWords(sel, pdf).then((w) => open(w.slice(0, 200)));
+    else open(st.pdfFind?.q ?? "");
+  }, [store]);
+  // where words taken out of a PDF came from, shown: the PDF read in the
+  // column, gone to there, the words marked for a moment
+  const showWordsFrom = useCallback(
+    (id: number, from: WordsFrom) => {
+      const st = store.getState();
+      const pdf = st.pdfs.find((p) => p.id === id);
+      if (!pdf) return;
+      if (!(st.textsOpen && st.pdfShown === id)) st.readPdf(id);
+      void textOf(pdf.sha256, from.from.page).then((t) => {
+        const y = marksBetween(t, from.from.at, from.from.page === from.to.page ? from.to.at : t.codes.length)[0]?.[1] ?? null;
+        readerOf(store).goToWhenRead(id, from.from.page, y, 0.3);
+        store.getState().setPdfFlash({ id, from: from.from, to: from.to, start: performance.now() });
+      });
+    },
+    [store],
+  );
+  // words selected in a PDF copied, as they read (utils/pdfSelection)
+  const copyWords = useCallback(async () => {
+    const st = store.getState();
+    const sel = st.pdfSel;
+    const pdf = selects(sel) ? st.pdfs.find((p) => p.id === sel.id) : undefined;
+    if (!sel || !pdf) return;
+    const words = await selectedWords(sel, pdf);
+    if (words) await writeClipboard([{ flavor: "text", text: words }]);
+  }, [store]);
+  // where words taken out of a PDF are let go (components/wordsDrag)
+  useEffect(() => {
+    setCanvasPlace(store, { canvas: () => domRef.current, worldAt: (x, y) => clientToWorld(x, y) });
+    return () => setCanvasPlace(store, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store]);
+  // a PDF's menu, asked for by the column it is read in, where it was right-clicked
+  const menuAsk = useEditor((s) => s.menuAsk);
+  useEffect(() => {
+    if (!menuAsk) return;
+    store.getState().askPdfMenu(null);
+    const box = dropRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setMenu({
+      kind: "pdf",
+      id: menuAsk.id,
+      selection: "none",
+      at: pasteTarget(),
+      x: menuAsk.clientX - box.left,
+      y: menuAsk.clientY - box.top,
+      within: { width: box.width, height: box.height },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuAsk]);
   /** A flow being saved as a procedure: its parts, asking for its name. */
   const [naming, setNaming] = useState<FlowParts | null>(null);
   // Copy, cut and paste, by the keys and from the menu
@@ -526,20 +602,29 @@ function StructureCanvasContent({
       } else if (clipboardIntent(e)) {
         e.preventDefault();
         const what = clipboardIntent(e);
-        if (what === "copy") void clip.copy();
+        // (words selected in a PDF, where nothing else is: their words)
+        if (what === "copy" && !selected && selects(st.pdfSel)) void copyWords();
+        else if (what === "copy") void clip.copy();
         else if (what === "cut") void clip.cut();
         else void clip.paste(pasteTarget());
+      } else if (isFindKey(e) && st.pdfs.length) {
+        // looking for words in the PDFs (docs/PDF.md, *Search*)
+        e.preventDefault();
+        openFind();
       } else if (isSelectAllKey(e) && !busy) {
         e.preventDefault();
         st.selectAll();
-      } else if (isDeselectKey(e) && (selected || st.chosen3d) && !busy && !menu) {
+      } else if (isDeselectKey(e) && st.pdfFind && !menu) {
+        // (Esc closes the search of PDFs, wherever the keys are)
+        st.setPdfFind(null);
+      } else if (isDeselectKey(e) && (selected || st.chosen3d || st.pdfSel) && !busy && !menu) {
         // (Esc with the menu open closes the menu only)
         st.clearSel();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget, requestFit]);
+  }, [active, store, runCleanUp, hoveredPart, structureAt, deletePart, chargeAtom, menu, clip, pasteTarget, requestFit, openFind, copyWords]);
   // The same, from the mouse alone: a menu at the pointer on a right-click.
   const closeMenu = useCallback(() => setMenu(null), []);
   // and what a double-click on empty space can put down there (QuickAdd)
@@ -787,6 +872,7 @@ function StructureCanvasContent({
   const steps = useEditor((s) => s.steps);
   const textsOpen = useEditor((s) => s.textsOpen);
   const reading = useEditor((s) => s.pdfs.some((p) => p.reading));
+  const pdfsHeld = useEditor((s) => s.pdfs.length > 0);
   const commandsNow = useRef<() => CommandGroup[]>(() => []);
   commandsNow.current = () => [
     {
@@ -816,6 +902,7 @@ function StructureCanvasContent({
       title: "Edit",
       items: [
         { name: "SMILES…", run: () => setSmilesOpen(true) },
+        ...(pdfsHeld ? [{ name: "Find in PDF…", keys: shortcutLabel("F"), run: openFind }] : []),
         {
           name: "Clean up all",
           keys: shortcutLabel("K", true),
@@ -1112,6 +1199,19 @@ function StructureCanvasContent({
             store.getState().addSet(frame);
             store.getState().clearSel();
           } : undefined}
+          onShowSource={(() => {
+            const c = menu.kind === "caption" ? store.getState().captions.find((x) => x.id === menu.id) : undefined;
+            const pdf = c?.from ? store.getState().pdfs.find((p) => p.sha256 === c.from!.sha256) : undefined;
+            return c?.from && pdf ? () => showWordsFrom(pdf.id, c.from!) : undefined;
+          })()}
+          captionAlign={(() => {
+            const c = menu.kind === "caption" ? store.getState().captions.find((x) => x.id === menu.id) : undefined;
+            return c ? { now: c.align ?? "center", set: (align) => store.getState().updateCaption(c.id, { align }) } : undefined;
+          })()}
+          onFitWords={(() => {
+            const c = menu.kind === "caption" ? store.getState().captions.find((x) => x.id === menu.id) : undefined;
+            return c?.width ? () => store.getState().updateCaption(c.id, { width: null }) : undefined;
+          })()}
           onEditText={() => {
             const c = store.getState().captions.find((x) => x.id === menu.id);
             if (c) store.getState().setCaptionEdit({ id: c.id, at: { x: c.x, y: c.y } });
@@ -1128,6 +1228,7 @@ function StructureCanvasContent({
               ...(!p.spread && !p.icon && p.page < p.pages.length - 1 ? { onNext: () => st.turnPdf(p.id, p.page + 1) } : {}),
               ...(!p.spread && !p.icon && p.page > 0 ? { onPrevious: () => st.turnPdf(p.id, p.page - 1) } : {}),
               onRead: () => st.readPdf(p.id),
+              ...(selects(st.pdfSel) && st.pdfSel.id === p.id ? { onCopy: () => void copyWords() } : {}),
             };
           })()}
           onCleanUp={() =>

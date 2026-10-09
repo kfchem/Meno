@@ -87,6 +87,12 @@ export class ColumnReader {
     this.across = 0.5;
     this.goal = { zoom: this.zoom, anchor: null, at: this.at, across: 0.5 };
     this.page = pdf.page;
+    // (a place asked for in it before it was read: gone to now)
+    const pending = this.pending;
+    if (pending?.id === pdf.id) {
+      this.pending = null;
+      this.goTo(pending.page, pending.y, pending.above * this.tall);
+    }
   }
 
   layout(zoom = this.zoom): ColumnLayout {
@@ -144,19 +150,30 @@ export class ColumnReader {
     this.zoomAt(1 / this.goal.zoom, this.width / 2, this.tall / 2, false);
   }
 
-  /** A page gone to: its top at the top of what is seen - or, `y` points down it, a line's worth above there. */
-  goTo(page: number, y: number | null = null): void {
+  /** A page gone to: its top at the top of what is seen - or, `y` points down it, `above` pixels below the top (a line's worth). */
+  goTo(page: number, y: number | null = null, above = ABOVE_PX): void {
     const i = Math.min(Math.max(0, Math.round(page)), this.sizes.length - 1);
     let at: number = i;
     if (y != null && Number.isFinite(y)) {
       const l = this.layout(this.goal.zoom);
       const p = l.pages[i];
-      if (p) at = atOf(l, Math.min(Math.max(0, p.y + y * l.scale - ABOVE_PX), deepest(l, this.tall)));
+      if (p) at = atOf(l, Math.min(Math.max(0, p.y + y * l.scale - above), deepest(l, this.tall)));
     }
     this.goal = { ...this.goal, anchor: null, at };
     // (the page gone to is the page shown, though its place be low on it, or the last pages be all in view)
     this.goneTo = i;
     this.moved();
+  }
+
+  /** A place to go to once the PDF it is in is read: gone to as it is taken. */
+  private pending: { id: number; page: number; y: number | null; above: number } | null = null;
+
+  /** A place in a PDF gone to, `above` its share of what is seen below the top - now, where it is the one read; else as soon as it is. */
+  goToWhenRead(id: number, page: number, y: number | null, above: number): void {
+    if (this.id === id) {
+      this.pending = null;
+      this.goTo(page, y, above * this.tall);
+    } else this.pending = { id, page, y, above };
   }
 
   /** A place gone back to: where it was read, and how large, its page the page shown. */

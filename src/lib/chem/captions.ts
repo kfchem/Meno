@@ -2,8 +2,10 @@
  * Words on the page - a reaction's reagents and conditions over its arrow,
  * or anything else (docs/EDITOR-2D.md, *Text*): set as the drawing sets a
  * label, a formula's counts low and a prefix's t- in italics, the rest as
- * typed; line under line, each centred; and, put near an arrow, set over
- * it or under it, clear of it, to go where it goes.
+ * typed; line under line, each centred - or to the left, to the right, or
+ * spread to both edges, as it is set - broken into lines as wide as it is
+ * made, where it is given a width; and, put near an arrow, set over it or
+ * under it, clear of it, to go where it goes.
  */
 import { italicUnits, labelUnits, unitRuns } from "./abbreviations";
 import { ACS_LABEL_SET, labelBox, runsWidth, type LabelSet, type TextItem, type TextRun } from "./layout2d";
@@ -46,36 +48,143 @@ export function captionRuns(line: string): TextRun[] {
   return runs;
 }
 
-/** A caption set: its lines, each a text the drawing draws as it draws a label, and how far its ink reaches either way of its middle. */
-export type CaptionSet = { items: TextItem[]; halfW: number; halfH: number };
+/** A number, and a unit after one: kept together on a line, as 60 °C, 12 h, 2 equiv, 10 mol% are. */
+const NUMBER = /^[−-]?\d+([.,]\d+)?$/;
+const UNIT = /^(°\S*|[\p{L}%µ][\p{L}%µ]{0,4}[.,;)]?)$/u;
+
+/** A typed line's words as they are kept on a line: its words, a number with the unit after it as one. */
+function unbreakable(para: string): string[] {
+  const out: string[] = [];
+  for (const word of para.split(/\s+/).filter(Boolean)) {
+    const last = out[out.length - 1];
+    if (last && NUMBER.test(last.split(" ").slice(-1)[0]) && UNIT.test(word)) out[out.length - 1] = `${last} ${word}`;
+    else out.push(word);
+  }
+  return out;
+}
+
+/** How a caption's lines lie in its width: to its left edge, about its middle, to its right edge, or spread to both - each line a typed line ends, to the left. */
+export type CaptionAlign = "left" | "center" | "right" | "justify";
+
+/** A caption's lines, as `captionLines` breaks them, each saying whether a typed line ends with it. */
+function linesOf(text: string, fontSize: number, set: LabelSet, width?: number): { text: string; ends: boolean }[] {
+  const typed = text.split("\n").map((l) => l.trim());
+  if (!(width != null && width > 0)) return typed.map((t) => ({ text: t, ends: true }));
+  const out: { text: string; ends: boolean }[] = [];
+  for (const para of typed) {
+    let line = "";
+    for (const word of unbreakable(para)) {
+      const next = line ? `${line} ${word}` : word;
+      if (!line || runsWidth(captionRuns(next), fontSize, set) <= width) line = next;
+      else {
+        out.push({ text: line, ends: false });
+        line = word;
+      }
+    }
+    out.push({ text: line, ends: true });
+  }
+  return out;
+}
 
 /**
- * A caption's text set about (x, y), its middle: each line centred, line
- * under line `CAPTION_LINE` ems apart, at `fontSize` - a label's size -
- * in the typeface `set` measures in. Blank lines keep their room.
+ * A caption's lines: as typed - or, given a `width`, each typed line broken
+ * at its spaces into lines no wider than it, as many words on each as fit
+ * (a word wider than it alone on its line), a number never parted from the
+ * unit after it.
  */
-export function captionSet(text: string, x: number, y: number, fontSize: number, set: LabelSet = ACS_LABEL_SET): CaptionSet {
-  const lines = text.split("\n").map((l) => l.trim());
+export function captionLines(text: string, fontSize: number, set: LabelSet = ACS_LABEL_SET, width?: number): string[] {
+  return linesOf(text, fontSize, set, width).map((l) => l.text);
+}
+
+/** A caption set: its lines - or words - each a text the drawing draws as it draws a label, and how far its ink reaches either way of its middle. */
+export type CaptionSet = { items: TextItem[]; halfW: number; halfH: number };
+
+/** A caption set word by word: each word where it lies in its line, as `captionSet` sets the line, and where it starts and how far it runs. */
+export type CaptionWords = CaptionSet & { words: { x: number; y: number; w: number }[] };
+
+/**
+ * A caption's text set about (x, y), its middle: line under line
+ * `CAPTION_LINE` ems apart, at `fontSize` - a label's size - in the
+ * typeface `set` measures in, broken into lines as wide as `width` where it
+ * is given one; each line lying in that width - or the widest line's - as
+ * `align` says. Blank lines keep their room.
+ */
+export function captionSet(
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  set: LabelSet = ACS_LABEL_SET,
+  width?: number,
+  align: CaptionAlign = "center",
+): CaptionSet {
+  const { items, halfW, halfH } = setWords(text, x, y, fontSize, set, width, align, false);
+  return { items, halfW, halfH };
+}
+
+/**
+ * A caption set as `captionSet` sets it, but each word a text of its own,
+ * where it falls in its line: for words that move on their own as they come
+ * (components/WordsFlight). Each word's start, its line's middle and how far
+ * it runs are said with it.
+ */
+export function captionWords(
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  set: LabelSet = ACS_LABEL_SET,
+  width?: number,
+  align: CaptionAlign = "center",
+): CaptionWords {
+  return setWords(text, x, y, fontSize, set, width, align, true);
+}
+
+function setWords(text: string, x: number, y: number, fontSize: number, set: LabelSet, width: number | undefined, align: CaptionAlign, byWord: boolean): CaptionWords {
+  const lines = linesOf(text, fontSize, set, width);
   const step = fontSize * CAPTION_LINE;
   const top = ((lines.length - 1) / 2) * step;
-  // (how far it reaches: half a line's height at the least, and its ink - a subscript's drop, a capital's height)
-  let halfW = 0;
+  const wide = (t: string) => runsWidth(captionRuns(t), fontSize, set);
+  // (the width its lines lie in: as wide as it was made, or as its widest line)
+  const box = width != null && width > 0 ? width : Math.max(0, ...lines.map((l) => wide(l.text)));
+  // (how far it reaches: half a line's height at the least, half its width, and its ink - a subscript's drop, a capital's height)
+  let halfW = box / 2;
   let halfH = fontSize / 2 + top;
   const items: TextItem[] = [];
-  lines.forEach((line, i) => {
-    const runs = captionRuns(line);
-    const width = runsWidth(runs, fontSize, set);
-    halfW = Math.max(halfW, width / 2);
+  const words: { x: number; y: number; w: number }[] = [];
+  const put = (t: string, start: number, lineY: number) => {
+    const runs = captionRuns(t);
     if (!runs.length) return;
-    // (placeLabel centres the first letter on x: the line's start, and half of it)
+    words.push({ x: start, y: lineY, w: runsWidth(runs, fontSize, set) });
+    // (placeLabel centres the first letter on x: the start, and half of it)
     const first = runsWidth([{ text: [...runs[0].text][0] ?? " " }], fontSize, set);
-    const item: TextItem = { x: x - width / 2 + first / 2, y: y + top - i * step, text: line, fontPx: fontSize, runs, anchorRun: 0 };
+    const item: TextItem = { x: start + first / 2, y: lineY, text: t, fontPx: fontSize, runs, anchorRun: 0 };
     const ink = labelBox(item, fontSize, set);
     halfW = Math.max(halfW, x - (item.x - ink.left), item.x + ink.right - x);
     halfH = Math.max(halfH, item.y + ink.top - y, y - (item.y - ink.bottom));
     items.push(item);
+  };
+  lines.forEach((line, i) => {
+    const lineY = y + top - i * step;
+    const w = wide(line.text);
+    const words = line.text.split(" ").filter(Boolean);
+    // spread to both edges: its words apart by what is left, each set where it falls - but not a typed line's last
+    if (align === "justify" && !line.ends && words.length > 1) {
+      const widths = words.map(wide);
+      const gap = (box - widths.reduce((a, b) => a + b, 0)) / (words.length - 1);
+      let at = x - box / 2;
+      words.forEach((word, k) => {
+        put(word, at, lineY);
+        at += widths[k] + gap;
+      });
+      return;
+    }
+    const start = align === "left" || align === "justify" ? x - box / 2 : align === "right" ? x + box / 2 - w : x - w / 2;
+    if (!byWord) put(line.text, start, lineY);
+    // (word by word: each where the line set whole has it)
+    else for (const m of line.text.matchAll(/\S+/g)) put(m[0], start + (m.index ? wide(line.text.slice(0, m.index)) : 0), lineY);
   });
-  return { items, halfW, halfH };
+  return { items, halfW, halfH, words };
 }
 
 /** How near an arrow a caption put down is taken to be its: within this many ems of it, across. */

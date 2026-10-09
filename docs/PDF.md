@@ -177,8 +177,9 @@ stops being part of the work.
 
 ## Taking things out
 
-- **Words**: a selection dragged lifts off the page, the words rising
-  toward the viewer and following the pointer.
+- **Words**: a selection dragged comes off the page as Meno's own words,
+  each rising from the word it was toward the viewer and going to its
+  place in Meno's lines, following the pointer.
   - Let go on the canvas, they settle there as words on the page (as
     #177 made them), in the drawing's type.
   - Let go anywhere else, they go back.
@@ -574,6 +575,47 @@ Not yet, and where it comes:
 - **Selecting and copying text, and search**: step 3.
 - **The mouse's back button on a Mac** is not checked yet. It is heard where WebKit passes it on; ⌘[ is the Mac's own.
 
+### Step 3: text and search (2026-10-09)
+
+Built:
+- **Each page's letters, as PDFium reads them** (`pdf_text`). Each comes with its box, in points from the page's top left as it is drawn; the letters PDFium adds itself (a space, a line's end) have none. `lib/pdf/text` keeps them a page at a time and works out:
+  - the place between letters nearest the pointer;
+  - a word, and a line;
+  - the boxes that mark a selection;
+  - the words to copy;
+  - where a search finds something.
+- **Selecting words**, in the column and on a stack or its pages spread.
+  - In the column, a drag on words selects them at once; two clicks select a word, three a line. A selection can run across pages, and the column moves on as the pointer nears its top or foot.
+  - On a stack at full size, a drag moves the view, as a drag on empty space does. Held still a moment on its words - as a box begins on empty space, the same ring spreading - the word under the press is selected, and the selection is drawn on from it as the pointer goes. A click selects nothing; two read the PDF in the column.
+  - A press between two lines, or just past a line's end, counts as on the line beside it.
+  - The words selected are marked in Meno's light, the same on the stack and in the column.
+  - Cmd/Ctrl+C copies them, or *Copy* in the PDF's menu; a right-click in the column opens that menu too.
+  - Selecting words lets the drawing's selection go. Esc, or a click elsewhere, lets the words go.
+- **Searching**, with Cmd/Ctrl+F or *Find in PDF…* in the Edit menu.
+  - A field opens over the top of the column, holding the words selected, if any.
+  - *This PDF* or *All PDFs* choose where to look, and the count shows as *3 of 12*.
+  - Enter goes to the next place and Shift+Enter to the one before. Esc closes the field.
+  - Every place found is marked on the pages, in the column and on the stacks; the one gone to is marked more strongly.
+  - With *All PDFs*, the places are listed under each PDF's name, with the words round each. A click goes there, showing that PDF.
+- **Words taken out.** A selection pressed and dragged comes off the page as Meno's own words, the PDF left as it is - a morph, word by word.
+  - Each of Meno's words first lies over the word it was in the PDF, as wide and as tall, unseen. One after another, outward from where they were pressed, each is seen as it rises toward the viewer - a little larger, its shadow falling under it - and goes to its place in Meno's lines, set as the words will be on the page. They follow the pointer, held where it pressed them; over the canvas they are as large as the canvas shows the page.
+  - Let go on the canvas, they settle onto it and are words on the page there, in the drawing's type, as one step. Taken from more than one line, they are as wide as their lines were (at the size the page is printed: a point is a fourteenth and a half of a bond), broken into lines at it (EDITOR-2D.md, *Text*), and lie as those lines did: spread to both edges, to the left, to the right or about the middle.
+  - Let go anywhere else, or on the PDF they came from, each word goes back down onto the word it was.
+  - The words keep where they came from. *Show in the PDF*, in their menu, reads that PDF in the column, goes there, and marks the words for a moment.
+- **Moving a stack.** At full size, a drag on it moves the view, as on empty space. Held still a moment on its rim - by its pages' edges, on the pages under the top one, or on its name - the PDF is taken hold of: the selection's shade spreads over it from the pointer, as over a structure held, and the drag then moves it, as one step. An icon is moved by a drag.
+
+Decided while building it, for the maintainer to confirm:
+- **On a stack, words are selected by a long press** (the maintainer), as a box is begun on empty space, and only where they can be read: a point at least 0.6 pixels on the screen. In the column, a drag selects at once (the maintainer).
+- **A full-size stack is moved by a long press on its rim** (the maintainer), and a drag on it moves the view. The rim reaches 16 pixels in from a page's edge on the screen. Where its words are too small to be selected, a long press anywhere on it takes hold of it, there being nothing else for a hold to do there.
+- **How words taken out lie is read from the lines about them too**: the paragraph they come from and those before and after it in the same column, of the same size and as far apart. Most reaching both edges is spread, most starting at the left is to the left, and so on; a line ending in a word broken by PDFium's hyphen is not counted at its right. From two lines alone, a paragraph's last line short, they lie to the left.
+- **Copying and searching treat line ends and hyphens alike.** A line's end reads as a space. A word PDFium marks as broken at a line's end (U+0002) reads whole, and a search with its hyphen finds it too. A hyphen PDFium left at a line's end is a word's own, as in Diels-Alder, and is kept.
+- **The search field lies over the top of what is read**, as a browser's does, so that the pages stay where the canvas draws them.
+- **A selection of several pages copies as one run of words**, a page's end read as a space.
+- **Words carried out come off as Meno's own, in WebGL** (the maintainer: the PDF's words stay as they are, and Meno's peel up from the pointer, fading in, close to a morph). They are drawn on the canvas in its last pass, over the column too, each word a text of its own; let go on the canvas, the words on the page take their place once they have settled, the two drawn together a moment.
+
+Not yet, and where it comes:
+- **A figure cut out by a box**: step 4.
+
 ## In order
 
 0. **A trial, kept off main** (done, 2026-10-09; *The trial*, above):
@@ -590,14 +632,17 @@ Not yet, and where it comes:
 2. **The column on the canvas** (built, 2026-10-09; *As built*, above): a
    PDF read there, joined to its stack; its page number and links; texts
    still in HTML beside it until step 5.
-3. **Text and search**: selecting and copying, on the stack and in the
-   column; *This PDF* and *All PDFs*; words dragged out onto the page.
+3. **Text and search** (built, 2026-10-09; *As built*, above): selecting
+   and copying, on the stack and in the column; *This PDF* and *All PDFs*;
+   words dragged out onto the page.
 4. **Pictures**: from image files and the clipboard, and figures dragged
    out of a PDF; moved, scaled, turned, tied to their source.
 5. **Texts drawn with WebGL**: first a small trial of typing alone,
    Japanese through the IME on a Mac and on Windows, shown before the
    rest; then a text's sheet on the page, the column's text and its
-   typing drawn by Meno, and its colouring.
+   typing drawn by Meno, and its colouring; and words on the page written
+   in place drawn by Meno too, so that they break into lines as they will
+   be kept (the maintainer, 2026-10-09).
 
 Each step is a pull request of its own, checked in the built app on the
 Mac (and on Windows for steps 0, 1 and 5). Then stage 5: a picture read

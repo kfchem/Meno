@@ -34,9 +34,12 @@ export default function Labels2D() {
 
 /**
  * Texts set as the drawing sets its labels (lib/chem/layout2d `placeLabel`):
- * the labels, and the words on the page (Captions2D).
+ * the labels, and the words on the page (Captions2D) - and words carried
+ * out of a PDF (WordsFlight), `moved`: each text's group placed, and its
+ * letters seen, by what draws them, frame by frame; given `shadow` (how far
+ * it is blurred), as their shadow alone.
  */
-export function Texts2D({ texts: items }: { texts: readonly TextItem[] }) {
+export function Texts2D({ texts: items, moved, shadow, renderOrder = 30 }: { texts: readonly TextItem[]; moved?: boolean; shadow?: string; renderOrder?: number }) {
   const { opts, zoom } = useDrawnLayout();
 
   // Set in the style's typeface, where the layout has placed each run: the
@@ -63,6 +66,7 @@ export function Texts2D({ texts: items }: { texts: readonly TextItem[] }) {
     if (s.font === null || s.level === 1) return;
     const n = follow(s.level, 1, Math.min(dt, 1 / 20), TAU.quick);
     s.level = n > 0.99 ? 1 : n;
+    if (moved) return;
     group.current?.traverse((o) => {
       if ("fillOpacity" in o) (o as unknown as { fillOpacity: number }).fillOpacity = s.level;
     });
@@ -75,7 +79,7 @@ export function Texts2D({ texts: items }: { texts: readonly TextItem[] }) {
   const labels = useMemo(() => {
     if (font === null) return null;
     const set = labelSetOf(opts);
-    const fill = seen.current.level;
+    const fill = shadow || moved ? 0 : seen.current.level;
     return items.map((t, i) => {
       const fontWorld = labelZoom != null ? t.fontPx / Math.max(labelZoom, 1e-6) : t.fontPx;
       return (
@@ -91,7 +95,8 @@ export function Texts2D({ texts: items }: { texts: readonly TextItem[] }) {
                 fillOpacity={fill}
                 anchorX="left"
                 anchorY="top-baseline"
-                renderOrder={30}
+                renderOrder={renderOrder}
+                {...(shadow ? { outlineBlur: shadow, outlineColor: "black", outlineOpacity: 0 } : {})}
                 material-toneMapped={false}
                 material-depthTest={false}
                 material-depthWrite={false}
@@ -103,7 +108,7 @@ export function Texts2D({ texts: items }: { texts: readonly TextItem[] }) {
         </group>
       );
     });
-  }, [items, opts, labelZoom, labelColor, font]);
+  }, [items, opts, labelZoom, labelColor, font, moved, shadow, renderOrder]);
   if (font === null) return null;
   return <group ref={group}>{labels}</group>;
 }

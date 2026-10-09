@@ -41,6 +41,19 @@ export function createPdfsSlice(doc: DocumentStore<StructureDocument>, set: SetS
     readToPage: (id: number, from: number, to: number) =>
       doc.amend((d) => (d.pdfs?.find((p) => p.id === id)?.page === from ? ops.updatePdf(d, id, { page: to }) : d)),
     endPdfFlight: () => set({ pdfFlight: null }),
+    setPdfFind: (find: EditorState["pdfFind"]) => set({ pdfFind: find }),
+    askPdfMenu: (ask: EditorState["menuAsk"]) => set({ menuAsk: ask }),
+    setPdfFlash: (flash: EditorState["pdfFlash"]) => set({ pdfFlash: flash }),
+    setPdfWords: (words: EditorState["pdfWords"]) => set({ pdfWords: words }),
+    // (words selected let the drawing's selection go: one selection, what is copied)
+    setPdfSel: (sel: EditorState["pdfSel"]) =>
+      set((prev: EditorState) =>
+        sel
+          ? { ...prev, pdfSel: sel, sel: { atoms: new Set<number>(), bonds: new Set<number>() }, selAnchor: null, sel3d: new Set<number>(), chosen3d: null }
+          : prev.pdfSel
+            ? { ...prev, pdfSel: null }
+            : prev,
+      ),
     addPdfs: (pdfs: Parameters<EditorState["addPdfs"]>[0], at: { x: number; y: number }) => {
       // (clear of the PDFs already there, not over them)
       const row = ops.clearOfPdfs(ops.pdfsInRow(pdfs, at), doc.getState().pdfs ?? []);

@@ -17,7 +17,7 @@ import { eyeOf } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
 import { opensWith } from "./openingFit";
 import { captionSet } from "../../../../lib/chem/captions";
-import { pdfBounds } from "../../../../lib/pdf/layout";
+import { pdfRoom } from "../../../../lib/pdf/layout";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -82,13 +82,13 @@ export default function FitToContent2D({
       : { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
     // and the words on the page, as they are set
     for (const c of captions) {
-      const set = captionSet(c.text, c.x, c.y, opts.fontPx, labelSetOf(opts));
+      const set = captionSet(c.text, c.x, c.y, opts.fontPx, labelSetOf(opts), c.width, c.align);
       bounds.min = { x: Math.min(bounds.min.x, c.x - set.halfW), y: Math.min(bounds.min.y, c.y - set.halfH) };
       bounds.max = { x: Math.max(bounds.max.x, c.x + set.halfW), y: Math.max(bounds.max.y, c.y + set.halfH) };
     }
     // and the PDFs, as they lie (lib/pdf/layout)
     for (const p of pdfs) {
-      const b = pdfBounds(p);
+      const b = pdfRoom(p);
       bounds.min = { x: Math.min(bounds.min.x, b.x0), y: Math.min(bounds.min.y, b.y0) };
       bounds.max = { x: Math.max(bounds.max.x, b.x1), y: Math.max(bounds.max.y, b.y1) };
     }

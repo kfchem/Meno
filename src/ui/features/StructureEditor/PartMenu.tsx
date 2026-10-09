@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { RISE } from "../../theme/motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CheckIcon } from "@heroicons/react/24/outline";
 
 /**
  * What was right-clicked, where in the canvas the menu opens, and how big
@@ -52,7 +53,7 @@ export type MenuClipboard = {
   onSelectAll: () => void;
 };
 
-type Item = { name: string; keys: string; run: () => void; divider?: boolean };
+type Item = { name: string; keys: string; run: () => void; divider?: boolean; checked?: boolean };
 
 /** What can be done to a molecule in 3D from the menu. */
 export type MenuMolecule3D = {
@@ -103,6 +104,9 @@ export default function PartMenu({
   onAddPlus,
   onAddText,
   onEditText,
+  onShowSource,
+  onFitWords,
+  captionAlign,
   onRunStep,
   onStepOptions,
   step,
@@ -141,13 +145,19 @@ export default function PartMenu({
   onAddText: () => void;
   /** The words right-clicked, written anew. */
   onEditText: () => void;
+  /** Words taken out of a PDF: where they came from shown, marked, in the column. */
+  onShowSource?: () => void;
+  /** Words made as wide as something: as wide as their words again, a line for each line typed. */
+  onFitWords?: () => void;
+  /** How the words' lines lie, and setting it. */
+  captionAlign?: { now: "left" | "center" | "right" | "justify"; set: (align: "left" | "center" | "right" | "justify") => void };
   /** A workflow's step right-clicked: run, or opened to its options. */
   onRunStep: () => void;
   onStepOptions: () => void;
   /** What a step right-clicked can do besides, as it is: stopped, while its jobs wait or run; its logs and files shown, where it has jobs. */
   step?: { onRunFrom?: () => void; onStop?: () => void; onShowLog?: () => void; onShowFiles?: () => void };
   /** What a PDF right-clicked can do: read in the column, its pages turned, spread or gathered, made an icon or full size (docs/PDF.md). */
-  pdf?: { spread: boolean; icon: boolean; onSpread: () => void; onIcon: () => void; onNext?: () => void; onPrevious?: () => void; onRead: () => void };
+  pdf?: { spread: boolean; icon: boolean; onSpread: () => void; onIcon: () => void; onNext?: () => void; onPrevious?: () => void; onRead: () => void; onCopy?: () => void };
   /** The whole flow a step or a set right-clicked is part of, saved as a procedure, named. */
   onSaveProcedure?: () => void;
   /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
@@ -254,11 +264,24 @@ export default function PartMenu({
       : target.kind === "caption"
       ? [
           { name: "Edit text", keys: "", run: onEditText },
-          { name: "Delete text", keys: deleteKey, run: onDelete },
+          ...(onShowSource ? [{ name: "Show in the PDF", keys: "", run: onShowSource }] : []),
+          ...(onFitWords ? [{ name: "As wide as its words", keys: "", run: onFitWords }] : []),
+          ...(captionAlign
+            ? (
+                [
+                  ["left", "Align left"],
+                  ["center", "Align centre"],
+                  ["right", "Align right"],
+                  ["justify", "Justify"],
+                ] as const
+              ).map(([align, name], k) => ({ name, keys: "", run: () => captionAlign.set(align), checked: captionAlign.now === align, divider: k === 0 }))
+            : []),
+          { name: "Delete text", keys: deleteKey, run: onDelete, divider: !!captionAlign },
         ]
       : target.kind === "pdf"
       ? [
-          ...(pdf ? [{ name: "Read", keys: "", run: pdf.onRead }] : []),
+          ...(pdf?.onCopy ? [{ name: "Copy", keys: shortcut("C"), run: pdf.onCopy }] : []),
+          ...(pdf ? [{ name: "Read", keys: "", run: pdf.onRead, divider: !!pdf.onCopy }] : []),
           ...(pdf?.onNext ? [{ name: "Next page", keys: "\u2192", run: pdf.onNext, divider: true }] : []),
           ...(pdf?.onPrevious ? [{ name: "Previous page", keys: "\u2190", run: pdf.onPrevious, divider: !pdf.onNext }] : []),
           ...(pdf && !pdf.icon ? [{ name: pdf.spread ? "Gather pages" : "Spread pages", keys: "", run: pdf.onSpread, divider: true }] : []),
@@ -394,7 +417,7 @@ export default function PartMenu({
           className="w-full h-8 px-3 flex items-center justify-between gap-4 text-left whitespace-nowrap transition-colors duration-150 ease-meno hover:bg-gh-base focus:bg-gh-base outline-none"
         >
           <span>{item.name}</span>
-          <kbd className="font-sans text-xs text-gh-gray">{item.keys}</kbd>
+          {item.checked ? <CheckIcon aria-label="Chosen" className="h-4 w-4 text-gh-gray" /> : <kbd className="font-sans text-xs text-gh-gray">{item.keys}</kbd>}
         </button>,
       ])}
     </motion.div>
