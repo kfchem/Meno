@@ -476,6 +476,25 @@ All hover-based, as above.
     off it. Put down elsewhere, they stay where they are put.
   - Lit from behind under the pointer, dragged to move, deleted by Delete
     or Backspace under the pointer or from their menu.
+  - Made wider or narrower by their edges, shown as they are lit (the
+    maintainer, 2026-10-09): dragged sideways, with Meno's own pointer for
+    it, the other edge staying where it is, their words are broken at
+    their spaces into lines no wider than they are made - as many words on
+    each as fit, each line still centred, a word wider alone on its line, a
+    number never parted from the unit after it (60 °C, 12 h, 2 equiv); a
+    drag is one undo step. Written anew, they are written at that width.
+    *As wide as its words*, in their menu, is a line for each line typed
+    again. The width is saved, copied and drawn with them.
+  - Their lines lie as their menu says (the maintainer, 2026-10-09): *Align
+    left*, *Align centre* (as they come), *Align right*, or *Justify* -
+    spread to both edges, but for the last line of each line typed, which
+    lies to the left - the one chosen marked. In the width they were made,
+    or the widest line's. Saved, copied and drawn so.
+  - While they are written, their box is the system's own text box, which
+    breaks lines as the system does, and may part a number from its unit;
+    kept, they break as above. Words written in place drawn by Meno itself,
+    as it will draw a text's typing (docs/PDF.md, step 5), will break as
+    they will be kept.
   - With a selection when among it, or over an arrow among it: copied,
     cut, deleted and moved with it (not turned). Saved in the workspace,
     kept by a copy's record, drawn in an exported SVG and in the pictures a

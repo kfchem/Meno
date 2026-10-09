@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { RISE } from "../../theme/motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CheckIcon } from "@heroicons/react/24/outline";
 
 /**
  * What was right-clicked, where in the canvas the menu opens, and how big
@@ -52,7 +53,7 @@ export type MenuClipboard = {
   onSelectAll: () => void;
 };
 
-type Item = { name: string; keys: string; run: () => void; divider?: boolean };
+type Item = { name: string; keys: string; run: () => void; divider?: boolean; checked?: boolean };
 
 /** What can be done to a molecule in 3D from the menu. */
 export type MenuMolecule3D = {
@@ -103,6 +104,8 @@ export default function PartMenu({
   onAddPlus,
   onAddText,
   onEditText,
+  onFitWords,
+  captionAlign,
   onRunStep,
   onStepOptions,
   step,
@@ -141,6 +144,10 @@ export default function PartMenu({
   onAddText: () => void;
   /** The words right-clicked, written anew. */
   onEditText: () => void;
+  /** Words made as wide as something: as wide as their words again, a line for each line typed. */
+  onFitWords?: () => void;
+  /** How the words' lines lie, and setting it. */
+  captionAlign?: { now: "left" | "center" | "right" | "justify"; set: (align: "left" | "center" | "right" | "justify") => void };
   /** A workflow's step right-clicked: run, or opened to its options. */
   onRunStep: () => void;
   onStepOptions: () => void;
@@ -254,7 +261,18 @@ export default function PartMenu({
       : target.kind === "caption"
       ? [
           { name: "Edit text", keys: "", run: onEditText },
-          { name: "Delete text", keys: deleteKey, run: onDelete },
+          ...(onFitWords ? [{ name: "As wide as its words", keys: "", run: onFitWords }] : []),
+          ...(captionAlign
+            ? (
+                [
+                  ["left", "Align left"],
+                  ["center", "Align centre"],
+                  ["right", "Align right"],
+                  ["justify", "Justify"],
+                ] as const
+              ).map(([align, name], k) => ({ name, keys: "", run: () => captionAlign.set(align), checked: captionAlign.now === align, divider: k === 0 }))
+            : []),
+          { name: "Delete text", keys: deleteKey, run: onDelete, divider: !!captionAlign },
         ]
       : target.kind === "pdf"
       ? [
@@ -394,7 +412,7 @@ export default function PartMenu({
           className="w-full h-8 px-3 flex items-center justify-between gap-4 text-left whitespace-nowrap transition-colors duration-150 ease-meno hover:bg-gh-base focus:bg-gh-base outline-none"
         >
           <span>{item.name}</span>
-          <kbd className="font-sans text-xs text-gh-gray">{item.keys}</kbd>
+          {item.checked ? <CheckIcon aria-label="Chosen" className="h-4 w-4 text-gh-gray" /> : <kbd className="font-sans text-xs text-gh-gray">{item.keys}</kbd>}
         </button>,
       ])}
     </motion.div>

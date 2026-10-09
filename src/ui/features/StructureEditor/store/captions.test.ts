@@ -31,6 +31,31 @@ describe("words on the page", () => {
     expect(state().captions).toHaveLength(1);
   });
 
+  it("are made wider or narrower, a drag one step - saved, read back and drawn so - and as wide as their words again", () => {
+    const { doc, state } = editor();
+    const id = state().addCaption("The rotational barrier of the hydroxyl group was found to be small.", 0, 0);
+    for (const width of [20, 15, 10]) state().updateCaption(id, { width, x: width / 2 }, "resize");
+    expect(state().captions[0]).toMatchObject({ width: 10, x: 5 });
+    expect(doc.history().undoDepth).toBe(2);
+    expect(doc.history().undoLabel).toBe("resize text");
+    const ws = readWorkspace(workspaceText(state()));
+    expect(ws?.drawn.captions?.[0]).toMatchObject({ width: 10 });
+    // (drawn broken into lines: more than one)
+    const svg = drawingSvg(drawnOf(state()), { aromaticEnabled: false, aromaticRings: {} }, ACS_1996);
+    expect((svg.match(/<text/g) ?? []).length).toBeGreaterThan(1);
+    // (laid to the left, or spread: one step each; centred again, as none)
+    state().updateCaption(id, { align: "justify" });
+    expect(doc.history().undoLabel).toBe("align text");
+    expect(readWorkspace(workspaceText(state()))?.drawn.captions?.[0]).toMatchObject({ align: "justify" });
+    state().updateCaption(id, { align: "center" });
+    expect(state().captions[0].align).toBeUndefined();
+    state().updateCaption(id, { width: null });
+    expect(state().captions[0].width).toBeUndefined();
+    // (none, or one not a width: as wide as its words)
+    state().updateCaption(id, { width: -3 });
+    expect(state().captions[0].width).toBeUndefined();
+  });
+
   it("over an arrow go where it goes - moved, reshaped, with a selection - and stay where they are when it goes", () => {
     const { state } = editor();
     const arrow = state().addArrow(0, 0);
