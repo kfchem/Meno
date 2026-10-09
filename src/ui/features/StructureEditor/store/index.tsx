@@ -70,7 +70,7 @@ const NO_PDFS: PdfItem[] = [];
 const NO_PICTURES: PictureItem[] = [];
 
 /** The pictures selected, kept to those the document still has. */
-function picturesHeld(sel: Set<number>, pictures: readonly PictureItem[]): Set<number> {
+function picturesHeld(sel: Set<number>, pictures: readonly { id: number }[]): Set<number> {
   if (!sel.size) return sel;
   const ids = new Set(pictures.map((p) => p.id));
   return [...sel].every((id) => ids.has(id)) ? sel : new Set([...sel].filter((id) => ids.has(id)));
@@ -102,6 +102,9 @@ export function connectStoreToDocument(
         ...heldOf(prev, mirrored.molecules3d),
         selFlow: flowHeld(prev.selFlow, mirrored.sets, mirrored.steps),
         selPictures: picturesHeld(prev.selPictures, mirrored.pictures),
+        // (sheets selected kept to those still on the page - and the one under the pointer, if it still is)
+        selTexts: picturesHeld(prev.selTexts, (mirrored.texts ?? []).filter((t) => t.at)),
+        hoveredText: prev.hoveredText != null && !(mirrored.texts ?? []).some((t) => t.id === prev.hoveredText && t.at) ? null : prev.hoveredText,
       };
       if (turns) {
         const turns3d = { ...(held.turns3d ?? prev.turns3d) };
@@ -143,6 +146,8 @@ export function createEditorStore(
     pdfFlash: null,
     pdfWords: null,
     pdfBox: null,
+    hoveredText: null,
+    selTexts: new Set<number>(),
     pdfPicture: null,
 
     // Ephemeral view state: hover, gestures, camera requests, edit buffers.

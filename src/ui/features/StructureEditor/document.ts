@@ -14,6 +14,7 @@ import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
 import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, PictureItem, PictureToAdd, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
 import { ICON_NAME_WIDTH, pdfRoom, POINT } from "../../../lib/pdf/layout";
+import { sheetBox, sheetOf } from "./utils/textSheets";
 import { printedSize } from "../../../lib/picture/image";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
@@ -975,9 +976,10 @@ export function removePlus(doc: StructureDocument, id: number): StructureDocumen
   return pluses.length === (doc.pluses ?? []).length ? doc : { ...doc, pluses };
 }
 
-/** Where arrows, pluses and words go, by id - and pictures, and how they are turned. */
+/** Where arrows, pluses and words go, by id - and pictures, and how they are turned; and texts' sheets, by their top left. */
 export type MarkPlaces = {
   pictures?: { id: number; x: number; y: number; turn?: number }[];
+  texts?: { id: number; x: number; y: number }[];
   arrows?: { id: number; x: number; y: number }[];
   pluses?: { id: number; x: number; y: number }[];
   captions?: { id: number; x: number; y: number }[];
@@ -991,6 +993,11 @@ export type MarkPlaces = {
 /** `doc` with the arrows, pluses, molecules in 3D, sets and steps `places` names where it says. */
 export function placeMarks(doc: StructureDocument, places?: MarkPlaces): StructureDocument {
   if (places?.molecules3d?.length) return placeMarks(moveMolecules3d(doc, places.molecules3d), { ...places, molecules3d: [] });
+  if (places?.texts?.length) {
+    const at = new Map(places.texts.map((t) => [t.id, t]));
+    const placed = { ...doc, texts: (doc.texts ?? []).map((t) => (at.has(t.id) && t.at ? { ...t, at: { x: at.get(t.id)!.x, y: at.get(t.id)!.y } } : t)) };
+    return placeMarks(placed, { ...places, texts: [] });
+  }
   if (places?.pictures?.length) {
     const at = new Map(places.pictures.map((p) => [p.id, p]));
     const placed = {
@@ -1287,7 +1294,7 @@ export function addTexts(
       last = same.id;
       continue;
     }
-    held.push({ id: next, name: t.name || newTextName(held), text: t.text, ...(t.path ? { path: t.path } : {}) });
+    held.push({ id: next, name: t.name || newTextName(held), text: t.text, ...(t.path ? { path: t.path } : {}), ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false as const } : {}) });
     last = next++;
   }
   if (held.length === (doc.texts ?? []).length) return { doc, last };
@@ -1307,4 +1314,47 @@ export function editText(doc: StructureDocument, id: number, text: string): Stru
 export function removeText(doc: StructureDocument, id: number): StructureDocument {
   if (!(doc.texts ?? []).some((t) => t.id === id)) return doc;
   return { ...doc, texts: doc.texts!.filter((t) => t.id !== id) };
+}
+
+/** The texts `ids` taken out. */
+export function removeTexts(doc: StructureDocument, ids: ReadonlySet<number>): StructureDocument {
+  if (!ids.size || !(doc.texts ?? []).some((t) => ids.has(t.id))) return doc;
+  return { ...doc, texts: doc.texts!.filter((t) => !ids.has(t.id)) };
+}
+
+/** A text read in the column, as a tab there - or not, its sheet on the page all of it. */
+export function setTextReading(doc: StructureDocument, id: number, reading: boolean): StructureDocument {
+  const at = (doc.texts ?? []).findIndex((t) => t.id === id);
+  if (at < 0 || (doc.texts![at].reading !== false) === reading) return doc;
+  const texts = doc.texts!.slice();
+  const { reading: _, ...rest } = texts[at];
+  texts[at] = reading ? rest : { ...rest, reading: false };
+  return { ...doc, texts };
+}
+
+/**
+ * Texts as they go on the page, each a sheet (utils/textSheets): the
+ * first's middle at `at`, the others to its right, a bond apart - all put
+ * down clear of what lies there, pictures, PDFs and other sheets.
+ */
+export function textsInRow<T extends Omit<WorkspaceText, "id">>(texts: readonly T[], at: { x: number; y: number }, doc: Pick<StructureDocument, "pictures" | "pdfs" | "texts">): (T & { at: { x: number; y: number } })[] {
+  const sheets = texts.map((t) => sheetOf(t.text));
+  if (!sheets.length) return [];
+  const placed: { x: number; y: number }[] = [];
+  let x = at.x - sheets[0].w / 2;
+  for (const s of sheets) {
+    placed.push({ x, y: at.y + s.h / 2 });
+    x += s.w + NOMINAL_BOND_LENGTH;
+  }
+  const taken = [
+    ...(doc.pictures ?? []).map((p) => ({ x0: p.x - p.w / 2, x1: p.x + p.w / 2, y0: p.y - p.h / 2, y1: p.y + p.h / 2 })),
+    ...(doc.pdfs ?? []).map(pdfRoom),
+    ...(doc.texts ?? []).flatMap((t) => (t.at ? [sheetBox(t.at, sheetOf(t.text))] : [])),
+  ];
+  const step = Math.max(...sheets.map((s) => s.w)) / 2 + NOMINAL_BOND_LENGTH;
+  for (let n = 0; n < 200; n++) {
+    const moved = placed.map((p) => ({ x: p.x + n * step, y: p.y }));
+    if (!moved.some((p, i) => taken.some((b) => overlaps(sheetBox(p, sheets[i]), b)))) return texts.map((t, i) => ({ ...t, at: moved[i] }));
+  }
+  return texts.map((t, i) => ({ ...t, at: placed[i] }));
 }

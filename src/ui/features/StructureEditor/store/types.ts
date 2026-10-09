@@ -266,7 +266,14 @@ export type WordsFlight = {
   landing?: number | null;
 };
 
-export type WorkspaceText = { id: number; name: string; text: string; path?: string };
+/**
+ * A text the workspace holds: its name, its words and the file it came
+ * from - and, where it lies on the page as a sheet of its own (docs/PDF.md,
+ * *A text*), its sheet's top left; and whether it is read in the column,
+ * as a tab there (unless `reading` is false). A calculation's output, or a
+ * step's log, has no sheet: its molecule, or its step, is its body.
+ */
+export type WorkspaceText = { id: number; name: string; text: string; path?: string; at?: { x: number; y: number }; reading?: false };
 /**
  * A set on the page (docs/WORKFLOWS.md): its frame, in world units, x0 to
  * x1 and y0 (its foot) to y1 (its top) - what lies inside it its entries.
@@ -439,11 +446,25 @@ export type EditorState = {
    * Texts added to the workspace, as one undo step, the last shown: each
    * one the workspace holds already - the same name and text - shown instead.
    */
-  addTexts: (texts: Omit<WorkspaceText, "id">[]) => void;
+  /** Texts added - each a sheet on the page too, in a row from `onPage`, where it is given - and the last shown in the column. */
+  addTexts: (texts: Omit<WorkspaceText, "id">[], onPage?: { x: number; y: number }) => void;
   /** A text as typed: a run of typing in it is one undo step. */
   editText: (id: number, text: string) => void;
   /** A text taken out of the workspace, as one undo step. */
   removeText: (id: number) => void;
+  /** Texts deleted, their sheets with them, as one step. */
+  removeTexts: (ids: Iterable<number>) => void;
+  /** A text read in the column - its tab there again, where it had none - and shown. */
+  readText: (id: number) => void;
+  /** A text's tab in the column closed: one with a sheet on the page is read there no longer; one without goes. */
+  stopReadingText: (id: number) => void;
+  /** The text whose sheet the pointer is on. */
+  hoveredText: number | null;
+  setHoveredText: (id: number | null) => void;
+  /** The texts whose sheets are selected, with the rest of the selection. */
+  selTexts: Set<number>;
+  selectTexts: (ids: Iterable<number>, add?: boolean) => void;
+  toggleTextSel: (id: number) => void;
   /** A text shown in its column, which opens. */
   showText: (id: number) => void;
   /** The column of texts closed: the texts kept. */

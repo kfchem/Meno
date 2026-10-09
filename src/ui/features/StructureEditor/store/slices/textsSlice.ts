@@ -13,16 +13,46 @@ type SetState = StoreApi<EditorState>["setState"];
  */
 export function createTextsSlice(doc: DocumentStore<StructureDocument>, set: SetState) {
   return {
-    addTexts: (texts: Parameters<EditorState["addTexts"]>[0]) => {
+    addTexts: (texts: Parameters<EditorState["addTexts"]>[0], onPage?: { x: number; y: number }) => {
       if (!texts.length) return;
-      const { doc: next, last } = ops.addTexts(doc.getState(), texts);
+      // (each a sheet on the page too, where it is to lie: a row of them there, clear of what lies there)
+      const placed = onPage ? ops.textsInRow(texts, onPage, doc.getState()) : texts;
+      const { doc: next, last } = ops.addTexts(doc.getState(), placed);
       if (next !== doc.getState()) doc.edit(texts.length > 1 ? "open texts" : "open text", () => next);
       set({ textShown: last, textsOpen: last != null });
     },
     editText: (id: number, text: string) =>
       doc.edit("type text", (d) => ops.editText(d, id, text), { coalesceKey: `text:${id}` }),
     removeText: (id: number) => doc.edit("close text", (d) => ops.removeText(d, id)),
+    removeTexts: (ids: Iterable<number>) => {
+      const gone = new Set(ids);
+      doc.edit(gone.size > 1 ? "delete texts" : "delete text", (d) => ops.removeTexts(d, gone));
+      set((prev: EditorState) => ({ ...prev, selTexts: new Set([...prev.selTexts].filter((id) => !gone.has(id))), hoveredText: prev.hoveredText != null && gone.has(prev.hoveredText) ? null : prev.hoveredText }));
+    },
     showText: (id: number) => set({ textShown: id, textsOpen: true, pdfShown: null }),
+    // (read in the column: its tab there, as a PDF's is - not a step to undo; store/index shows it, as one come)
+    readText: (id: number) => {
+      const t = doc.getState().texts?.find((x) => x.id === id);
+      if (!t) return;
+      if (t.reading === false) doc.amend((d) => ops.setTextReading(d, id, true));
+      set({ textShown: id, textsOpen: true, pdfShown: null });
+    },
+    // (its tab closed: one with a sheet on the page lies there still; one without - an output, a log - goes)
+    stopReadingText: (id: number) => {
+      const t = doc.getState().texts?.find((x) => x.id === id);
+      if (!t) return;
+      if (t.at) doc.amend((d) => ops.setTextReading(d, id, false));
+      else doc.edit("close text", (d) => ops.removeText(d, id));
+    },
+    setHoveredText: (id: number | null) => set((prev: EditorState) => (prev.hoveredText === id ? prev : { ...prev, hoveredText: id })),
+    selectTexts: (ids: Iterable<number>, add = false) =>
+      set((prev: EditorState) => ({ ...prev, selTexts: new Set([...(add ? prev.selTexts : []), ...ids]), pdfSel: null, pdfBox: null })),
+    toggleTextSel: (id: number) =>
+      set((prev: EditorState) => {
+        const next = new Set(prev.selTexts);
+        if (!next.delete(id)) next.add(id);
+        return { ...prev, selTexts: next, pdfSel: null, pdfBox: null };
+      }),
     closeTexts: () =>
       set((prev: EditorState) => {
         // (a PDF shown: its page goes back down to it on the page as the column shuts - docs/PDF.md)
