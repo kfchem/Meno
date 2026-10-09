@@ -46,7 +46,16 @@ before building, and a build on a computer of one's own needs it once.
 
 1. On a branch: raise the version, the same in both `package.json` and
    `src-tauri/Cargo.toml` (the app takes its version from `package.json`),
-   and merge it into `main` as usual.
+   and merge it into `main` as usual. Before that, see which files Meno
+   carries no longer since the last release, and add each to the Windows
+   installer's hook (see *What an installed Meno does*, below) - each the
+   installer carried, that is, as `bundle.resources` in
+   `src-tauri/tauri.windows.conf.json` picks them (a plugin's
+   `requirements.in` is not among them):
+
+   ```bash
+   git diff --name-status --diff-filter=DR "$(git describe --tags --abbrev=0)" -- src-tauri/resources
+   ```
 2. Tag `main` with the version, prefixed `v`, and push the tag:
 
    ```bash
@@ -147,8 +156,10 @@ updates. The `uv` inside is already signed and notarized by its makers.
 - On Windows, an installer over an earlier version leaves the files that
   version had and this one has not; its hook (`src-tauri/windows/hooks.nsh`)
   deletes those, each by name - since 0.1.8, the uv, RDKit lock and
-  chemistry worker 0.1.6 and before carried. **A release that stops
-  carrying a file adds it there.** (A Mac's app is replaced whole.)
+  chemistry worker 0.1.6 and before carried; since 0.1.9, the Gaussian
+  input plugin's files 0.1.7 carried (`resources\plugins\gaussian-input`,
+  its folder too, once empty). **A release that stops carrying a file
+  adds it there.** (A Mac's app is replaced whole.)
 - On Windows, the installer it ran stays in the temporary folder
   (`%TEMP%\Meno-<version>-updater-…`, some 17 MB), since Meno has ended
   by then; the next Meno to start takes it away, once it is ten minutes
