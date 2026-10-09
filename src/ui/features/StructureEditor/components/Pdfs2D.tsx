@@ -41,8 +41,10 @@ const Z = -0.4;
 const TILE = 512;
 /** A page's first picture: this many pixels across, whatever its size. */
 const PREVIEW_PX = 360;
-/** How long the view stays still before sharper tiles are asked for, in ms. */
+/** How long the view stays still before sharper tiles are asked for, in ms - still being under these a frame: a share of the zoom, and pixels moved. */
 const SETTLE_MS = 90;
+const STILL_ZOOM = 0.003;
+const STILL_PX = 0.5;
 /** How long things take: a tile fading in, a page turned, a page spread or gathered, in ms. */
 const FADE_MS = 160;
 const TURN_MS = 380;
@@ -164,13 +166,19 @@ export default function Pdfs2D() {
     const cam = camera as THREE.OrthographicCamera;
     const v = view.current;
     const now = performance.now();
-    const moved = Math.abs(cam.zoom - v.zoom) > 1e-6 * cam.zoom || Math.abs(cam.position.x - v.x) > 1e-6 || Math.abs(cam.position.y - v.y) > 1e-6;
-    if (moved) {
+    // (a glide's tail - well under a pixel a frame, a fraction of a percent of
+    // the zoom - is still enough for the tiles: they are asked for then, not
+    // once it has quite stopped)
+    const zoomed = Math.abs(cam.zoom - v.zoom) > 1e-6 * cam.zoom;
+    const moving = Math.abs(cam.zoom - v.zoom) > STILL_ZOOM * cam.zoom || Math.hypot(cam.position.x - v.x, cam.position.y - v.y) * cam.zoom > STILL_PX;
+    if (zoomed || moving) {
       // (zoomed: what is drawn the same size on the screen is drawn again at it)
-      if (Math.abs(cam.zoom - v.zoom) > 1e-6 * cam.zoom) setTick((t) => t + 1);
+      if (zoomed) setTick((t) => t + 1);
       v.zoom = cam.zoom;
       v.x = cam.position.x;
       v.y = cam.position.y;
+    }
+    if (moving) {
       v.still = now;
       // (and once the view has been still a moment, a frame, to ask for sharper tiles)
       if (settleTimer.current != null) window.clearTimeout(settleTimer.current);
