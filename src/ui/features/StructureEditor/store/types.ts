@@ -177,6 +177,16 @@ export type Molecule3D = {
  * read and edited in the column beside the canvas (docs/WORKSPACE.md,
  * *Texts*): its name, and where it was opened from, where Open said.
  */
+/** A place between a PDF's letters: on which page, before which letter (lib/pdf/text). */
+export type WordPlace = { page: number; at: number };
+/** Words selected in a PDF (docs/PDF.md, *Text*): from where the selection was begun to where it has been drawn to - either way round. */
+export type PdfSelection = { id: number; anchor: WordPlace; focus: WordPlace };
+
+/** A place a search found: in which PDF, on which page, from which letter to before which. */
+export type PdfFound = { id: number; page: number; from: number; to: number };
+/** A search of PDFs (docs/PDF.md, *Search*): what is asked, in the PDF shown or in all, what it found, and which of them is gone to. */
+export type PdfFind = { q: string; all: boolean; found: PdfFound[]; now: number; busy: boolean };
+
 /** A PDF's page on its way into the column, or back to the page: which page, and when it set off. */
 export type PdfFlight = { id: number; page: number; to: "column" | "page"; start: number };
 
@@ -325,6 +335,15 @@ export type EditorState = {
    * goes back past the pages turned on the page, not the column's.
    */
   readToPage: (id: number, from: number, to: number) => void;
+  /** Words selected in a PDF, on its stack or in the column - one selection at a time, the drawing's let go as it is made. */
+  pdfSel: PdfSelection | null;
+  setPdfSel: (sel: PdfSelection | null) => void;
+  /** The canvas asked to open a PDF's menu where the column was right-clicked, in the window's pixels. */
+  menuAsk: { id: number; clientX: number; clientY: number } | null;
+  askPdfMenu: (ask: { id: number; clientX: number; clientY: number } | null) => void;
+  /** A search of PDFs, its field open at the column's top; none, closed. */
+  pdfFind: PdfFind | null;
+  setPdfFind: (find: PdfFind | null) => void;
   /** A page going between the page and the column, as a PDF is read there or no longer. */
   pdfFlight: PdfFlight | null;
   endPdfFlight: () => void;

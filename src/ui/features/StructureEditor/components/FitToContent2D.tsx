@@ -17,7 +17,7 @@ import { eyeOf } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
 import { opensWith } from "./openingFit";
 import { captionSet } from "../../../../lib/chem/captions";
-import { pdfBounds } from "../../../../lib/pdf/layout";
+import { pdfRoom } from "../../../../lib/pdf/layout";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -88,7 +88,7 @@ export default function FitToContent2D({
     }
     // and the PDFs, as they lie (lib/pdf/layout)
     for (const p of pdfs) {
-      const b = pdfBounds(p);
+      const b = pdfRoom(p);
       bounds.min = { x: Math.min(bounds.min.x, b.x0), y: Math.min(bounds.min.y, b.y0) };
       bounds.max = { x: Math.max(bounds.max.x, b.x1), y: Math.max(bounds.max.y, b.y1) };
     }

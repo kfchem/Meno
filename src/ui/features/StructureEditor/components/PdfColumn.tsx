@@ -18,12 +18,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import type { PdfFlight, PdfItem } from "../store/types";
-import { pdfBounds, shownSheet, topSheet } from "../../../../lib/pdf/layout";
+import { pdfRoom, shownSheet, topSheet } from "../../../../lib/pdf/layout";
 import { columnWidthFor } from "../utils/texts";
 import { viewBesideColumn } from "./coverLayer";
 import { setViewGoal, viewGoalOf } from "./viewGoal";
 import { pagesInView } from "../../../../lib/pdf/column";
+import { textHad } from "../../../../lib/pdf/text";
 import { BASE, levelFor, Page, TILE, usePictures } from "./pdfPictures";
+import { marksOn } from "./pdfMarks";
 import { HEADER_PX, readerOf } from "./pdfColumnReader";
 import { ease, SETTLE_MS } from "./Pdfs2D";
 
@@ -60,7 +62,7 @@ export default function PdfColumn() {
     const cam = camera as THREE.OrthographicCamera;
     const goal = viewGoalOf(cam);
     const view = { zoom: goal?.zoom ?? cam.zoom, x: goal?.x ?? cam.position.x, y: goal?.y ?? cam.position.y };
-    const to = viewBesideColumn(view, size, { now: st.cover, final: columnWidthFor(size.width, true, st.pdfColumnWidth) }, pdfBounds(p));
+    const to = viewBesideColumn(view, size, { now: st.cover, final: columnWidthFor(size.width, true, st.pdfColumnWidth) }, pdfRoom(p));
     if (!to) return;
     setViewGoal(cam, to);
     invalidate();
@@ -76,6 +78,9 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
   const { gl, size, invalidate, camera } = useThree();
   const cover = useEditor((s) => s.cover);
   const width = useEditor((s) => s.columnWidth);
+  // (words selected, and places found, marked on the pages)
+  const pdfSel = useEditor((s) => s.pdfSel);
+  const pdfFind = useEditor((s) => s.pdfFind);
   const [, setTick] = useState(0);
   const redraw = useCallback(() => {
     setTick((t) => t + 1);
@@ -211,6 +216,8 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
     let asked = false;
     for (const i of pagesInView(l, top, tall)) {
       const p = l.pages[i];
+      // (its letters, ready for a press on its words)
+      textHad(pdf.sha256, i);
       clock.current.levels.set(i, level);
       if (!level) continue;
       const part = {
@@ -262,6 +269,7 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
             px={1}
             preview={pics.preview(pdf, i)}
             tiles={pics.tilesOf(pdf.sha256, i, clock.current.levels.get(i) ?? 0)}
+            marks={marksOn(pdf, i, pdfSel, pdfFind?.found ?? [], pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null, redraw)}
           />
         );
       });

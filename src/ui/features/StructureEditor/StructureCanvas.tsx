@@ -100,6 +100,8 @@ import Captions2D from "./components/Captions2D";
 import Pdfs2D from "./components/Pdfs2D";
 import PdfColumn from "./components/PdfColumn";
 import { goBack, isBackKey } from "./components/pdfColumnReader";
+import { selectedWords, selects } from "./utils/pdfSelection";
+import { writeClipboard } from "../../../lib/clipboard";
 import { PdfPictures } from "./components/pdfPictures";
 import { FollowCover, PageHtmlLayer } from "./components/coverLayer";
 import CaptionEditor2D from "./components/CaptionEditor2D";
@@ -427,6 +429,33 @@ function StructureCanvasContent({
     [store],
   );
   const [menu, setMenu] = useState<MenuTarget | null>(null);
+  // words selected in a PDF copied, as they read (utils/pdfSelection)
+  const copyWords = useCallback(async () => {
+    const st = store.getState();
+    const sel = st.pdfSel;
+    const pdf = selects(sel) ? st.pdfs.find((p) => p.id === sel.id) : undefined;
+    if (!sel || !pdf) return;
+    const words = await selectedWords(sel, pdf);
+    if (words) await writeClipboard([{ flavor: "text", text: words }]);
+  }, [store]);
+  // a PDF's menu, asked for by the column it is read in, where it was right-clicked
+  const menuAsk = useEditor((s) => s.menuAsk);
+  useEffect(() => {
+    if (!menuAsk) return;
+    store.getState().askPdfMenu(null);
+    const box = dropRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setMenu({
+      kind: "pdf",
+      id: menuAsk.id,
+      selection: "none",
+      at: pasteTarget(),
+      x: menuAsk.clientX - box.left,
+      y: menuAsk.clientY - box.top,
+      within: { width: box.width, height: box.height },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuAsk]);
   /** A flow being saved as a procedure: its parts, asking for its name. */
   const [naming, setNaming] = useState<FlowParts | null>(null);
   // Copy, cut and paste, by the keys and from the menu
@@ -522,13 +551,15 @@ function StructureCanvasContent({
       } else if (clipboardIntent(e)) {
         e.preventDefault();
         const what = clipboardIntent(e);
-        if (what === "copy") void clip.copy();
+        // (words selected in a PDF, where nothing else is: their words)
+        if (what === "copy" && !selected && selects(st.pdfSel)) void copyWords();
+        else if (what === "copy") void clip.copy();
         else if (what === "cut") void clip.cut();
         else void clip.paste(pasteTarget());
       } else if (isSelectAllKey(e) && !busy) {
         e.preventDefault();
         st.selectAll();
-      } else if (isDeselectKey(e) && (selected || st.chosen3d) && !busy && !menu) {
+      } else if (isDeselectKey(e) && (selected || st.chosen3d || st.pdfSel) && !busy && !menu) {
         // (Esc with the menu open closes the menu only)
         st.clearSel();
       }
@@ -1124,6 +1155,7 @@ function StructureCanvasContent({
               ...(!p.spread && !p.icon && p.page < p.pages.length - 1 ? { onNext: () => st.turnPdf(p.id, p.page + 1) } : {}),
               ...(!p.spread && !p.icon && p.page > 0 ? { onPrevious: () => st.turnPdf(p.id, p.page - 1) } : {}),
               onRead: () => st.readPdf(p.id),
+              ...(selects(st.pdfSel) && st.pdfSel.id === p.id ? { onCopy: () => void copyWords() } : {}),
             };
           })()}
           onCleanUp={() =>

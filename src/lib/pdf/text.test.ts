@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findIn, letterAt, lineAt, linesOf, marksBetween, pageTextFrom, pageTextOf, placeAt, searchable, wordAt, wordsBetween, type PageText } from "./text";
+import { findIn, letterAt, letterNear, lineAt, linesOf, marksBetween, pageTextFrom, pageTextOf, placeAt, searchable, wordAt, wordsBetween, type PageText } from "./text";
 
 /** A page of lines as PDFium reads them: each letter 6 points wide, each line 12 tall, 14 apart; its ends "\r\n" with no box. */
 function page(lines: string[]): PageText {
@@ -41,6 +41,11 @@ describe("a PDF page's words", () => {
   it("are found under the pointer, and the place between letters nearest it", () => {
     expect(String.fromCodePoint(p.codes[letterAt(p, 73, 105)!])).toBe("R");
     expect(letterAt(p, 10, 10)).toBeNull();
+    // (between two lines, or just past a line's end: the nearest letter of the line beside it)
+    expect(letterAt(p, 73, 113)).toBeNull();
+    expect(String.fromCodePoint(p.codes[letterNear(p, 73, 113)!])).toBe("R");
+    expect(letterNear(p, 72 + 30 * 6 + 2, 105)).toBe(29);
+    expect(letterNear(p, 10, 10)).toBeNull();
     // (left of a letter's middle, before it; right, after it)
     expect(placeAt(p, 73, 105)).toBe(0);
     expect(placeAt(p, 77, 105)).toBe(1);
@@ -60,7 +65,10 @@ describe("a PDF page's words", () => {
     expect(wordsBetween(p, s, e)).toBe("Rotational barriers of the hy-");
     // (a space alone, or a stop)
     const space = 10;
-    expect(wordAt(p, space)).toEqual([space, space + 1]);
+    // (on a space between words, the word on the nearer side)
+    expect(wordsBetween(p, ...wordAt(p, space, 72 + space * 6 + 1))).toBe("Rotational");
+    expect(wordsBetween(p, ...wordAt(p, space, 72 + space * 6 + 5))).toBe("barriers");
+    expect(wordsBetween(p, ...wordAt(p, lineAt(p, 0)[1] - 1))).toBe("hy-");
   });
 
   it("are marked a line at a time, and copied with a line's end a space and a word broken at one whole", () => {

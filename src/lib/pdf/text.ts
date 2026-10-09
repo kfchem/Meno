@@ -132,6 +132,34 @@ export function letterAt(t: PageText, x: number, y: number, slack = 0.5): number
 }
 
 /**
+ * The letter a press at a point of the page is on: one whose box holds it,
+ * or - between two lines of words, or just past a line's end - the nearest
+ * letter of the line it is beside, within `reach` points of it. None, where
+ * there are no words near.
+ */
+export function letterNear(t: PageText, x: number, y: number, reach = 3): number | null {
+  const at = letterAt(t, x, y, 0.5);
+  if (at != null) return at;
+  let best: number | null = null;
+  let near = Infinity;
+  for (const l of linesOf(t)) {
+    const dy = y < l.y0 ? l.y0 - y : y > l.y1 ? y - l.y1 : 0;
+    const dx = x < l.x0 ? l.x0 - x : x > l.x1 ? x - l.x1 : 0;
+    if (dy > reach || dx > reach) continue;
+    for (let i = l.start; i < l.end; i++) {
+      if (!hasBox(t, i)) continue;
+      const [a, , c] = boxOf(t, i);
+      const d = dy * 4 + (x < a ? a - x : x > c ? x - c : 0);
+      if (d < near) {
+        near = d;
+        best = i;
+      }
+    }
+  }
+  return best;
+}
+
+/**
  * The place between letters nearest a point of the page: on the line the
  * point is on, or the nearest line - before a letter whose middle is to the
  * right of the point, after the last whose middle is to its left. Above
@@ -166,10 +194,20 @@ export function placeAt(t: PageText, x: number, y: number): number {
 const WORDISH = /[\p{L}\p{N}_'’‐-]/u;
 const isWordish = (t: PageText, i: number) => WORDISH.test(String.fromCodePoint(t.codes[i]));
 
-/** The word a letter is in: its first letter and the one after its last - or the letter alone, if it is no word's. */
-export function wordAt(t: PageText, i: number): [number, number] {
+/**
+ * The word a letter is in: its first letter and the one after its last. On
+ * a space between words, the word on the side of it `x` is nearer, where
+ * there is one; else the letter alone.
+ */
+export function wordAt(t: PageText, i: number, x?: number): [number, number] {
   if (i < 0 || i >= t.codes.length) return [i, i];
-  if (!isWordish(t, i)) return [i, i + 1];
+  if (!isWordish(t, i)) {
+    const [a, , c] = boxOf(t, i);
+    const leftNearer = x == null || x - a <= c - x;
+    const side = leftNearer ? (i > 0 && isWordish(t, i - 1) ? i - 1 : i + 1) : i + 1 < t.codes.length && isWordish(t, i + 1) ? i + 1 : i - 1;
+    if (side < 0 || side >= t.codes.length || !isWordish(t, side)) return [i, i + 1];
+    i = side;
+  }
   let a = i;
   let b = i + 1;
   while (a > 0 && isWordish(t, a - 1)) a--;
