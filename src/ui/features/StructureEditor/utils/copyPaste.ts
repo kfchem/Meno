@@ -10,7 +10,7 @@ import { arrowEnds } from "../../../../lib/chem/reactionScheme";
 import { fragmentOf, partOf } from "../chem/cleanUp";
 import { forFlatReaders } from "../chem/drawing";
 import { notOneReaction, reactionFileText } from "../chem/reactionFile";
-import type { Arrow, Atom, Bond, Caption, Carried3D, CarriedList, Drawn, Measure3D, Plus, Sel, Turn3D, WordsFrom } from "../store/types";
+import type { Arrow, Atom, Bond, Caption, Carried3D, CarriedList, Drawn, Measure3D, PictureItem, Plus, Sel, Turn3D, WordsFrom } from "../store/types";
 import { asSeen } from "./molecule3d";
 import { readCalc } from "../../../../lib/calc/output";
 import { readWorkflow } from "../workflow/saved";
@@ -98,8 +98,8 @@ export function clipItems(part: Drawn): ClipItem[] {
   // molecules in 3D alone: a molfile in 3D, as they are seen
   if (!part.atoms.length) {
     const ms = part.molecules3d ?? [];
-    // (a workflow's parts alone: Meno's record, which no other program reads)
-    if (!ms.length) return hasFlow(part) ? [{ flavor: "meno", text: recordText(part) }] : [];
+    // (a workflow's parts, or pictures, alone: Meno's record, which no other program reads)
+    if (!ms.length) return hasFlow(part) || part.pictures?.length ? [{ flavor: "meno", text: recordText(part) }] : [];
     const placed = ms.length > 1;
     const seen = ms.map((m) => asSeen(m, m.turn, m.frame, placed));
     const offsets = seen.map((_, i) => seen.slice(0, i).reduce((n, a) => n + a.length, 0));
@@ -138,6 +138,7 @@ export function recordText(part: Drawn): string {
     ...(part.captions?.length ? { captions: part.captions } : {}),
     ...(part.molecules3d?.length ? { molecules3d: part.molecules3d } : {}),
     ...(hasFlow(part) ? { flow: part.flow } : {}),
+    ...(part.pictures?.length ? { pictures: part.pictures } : {}),
   });
 }
 
@@ -175,6 +176,7 @@ export function readDrawn(data: unknown): Drawn | null {
     captions?: unknown;
     molecules3d?: unknown;
     flow?: unknown;
+    pictures?: unknown;
   };
   if (!r || !Array.isArray(r.atoms) || !Array.isArray(r.bonds)) return null;
   const atoms = r.atoms as Partial<Atom>[];
@@ -216,6 +218,10 @@ export function readDrawn(data: unknown): Drawn | null {
   // (a workflow's parts, read as a workspace's are - what they did is a step's own, not a copy's)
   const read = r.flow ? readWorkflow(r.flow) : undefined;
   const flow = read ? { ...read, steps: read.steps.map(({ ran: _r, runs: _k, running: _g, ...s }) => s) } : undefined;
+  const pictures = (Array.isArray(r.pictures) ? r.pictures : []).flatMap((p) => {
+    const read = readPicture(p);
+    return read ? [read] : [];
+  });
   return {
     atoms: atoms.map((a) => ({ r: 0.9, ...a }) as Atom),
     bonds: bonds as Bond[],
@@ -224,6 +230,28 @@ export function readDrawn(data: unknown): Drawn | null {
     ...(captions.length ? { captions } : {}),
     ...(molecules3d.length ? { molecules3d } : {}),
     ...(flow ? { flow } : {}),
+    ...(pictures.length ? { pictures } : {}),
+  };
+}
+
+/** A picture as a record or a workspace carries it, as far as it reads: what it is known by, what it is, its size in pixels, where it lies, how large and how turned. */
+function readPicture(v: unknown): PictureItem | null {
+  const p = v as Partial<PictureItem> | null;
+  if (!p || !isNum(p.id) || typeof p.name !== "string" || typeof p.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(p.sha256)) return null;
+  if (p.media !== "image/png" && p.media !== "image/jpeg") return null;
+  if (!Array.isArray(p.px) || p.px.length !== 2 || !p.px.every((n) => isNum(n) && n > 0)) return null;
+  if (!isNum(p.x) || !isNum(p.y) || !isNum(p.w) || !isNum(p.h) || p.w <= 0 || p.h <= 0) return null;
+  return {
+    id: p.id,
+    name: p.name.slice(0, 260),
+    sha256: p.sha256,
+    media: p.media,
+    px: [p.px[0], p.px[1]],
+    x: p.x,
+    y: p.y,
+    w: p.w,
+    h: p.h,
+    ...(isNum(p.turn) && p.turn ? { turn: p.turn } : {}),
   };
 }
 
@@ -345,6 +373,10 @@ export function centredAt<D extends Drawn>(drawn: D, p: Pt): D {
     ...(drawn.captions ?? []),
     ...(drawn.molecules3d ?? []).map((m) => m.at),
     ...(flow ? [{ x: flow.x0, y: flow.y0 }, { x: flow.x1, y: flow.y1 }] : []),
+    ...(drawn.pictures ?? []).flatMap((p) => [
+      { x: p.x - p.w / 2, y: p.y - p.h / 2 },
+      { x: p.x + p.w / 2, y: p.y + p.h / 2 },
+    ]),
   ];
   if (!points.length) return drawn;
   const xs = points.map((a) => a.x);
@@ -359,6 +391,7 @@ export function centredAt<D extends Drawn>(drawn: D, p: Pt): D {
     ...(drawn.pluses ? { pluses: drawn.pluses.map(moved) } : {}),
     ...(drawn.captions ? { captions: drawn.captions.map(moved) } : {}),
     ...(drawn.molecules3d ? { molecules3d: drawn.molecules3d.map((m) => ({ ...m, at: moved(m.at) })) } : {}),
+    ...(drawn.pictures ? { pictures: drawn.pictures.map(moved) } : {}),
     ...(drawn.flow
       ? {
           flow: {

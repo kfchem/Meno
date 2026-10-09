@@ -59,6 +59,22 @@ export function molecules3dIn(molecules: readonly { id: number; at: Pt }[], kind
   return molecules.filter((m) => insidePolygon(m.at, points)).map((m) => m.id);
 }
 
+/** A picture's corners on the page, as it is turned: lower left, lower right, upper right, upper left, before it is. */
+export function cornersOf(p: { x: number; y: number; w: number; h: number; turn?: number }): Pt[] {
+  const c = Math.cos(p.turn ?? 0);
+  const s = Math.sin(p.turn ?? 0);
+  return [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ].map(([i, j]) => {
+    const dx = (i * p.w) / 2;
+    const dy = (j * p.h) / 2;
+    return { x: p.x + dx * c - dy * s, y: p.y + dx * s + dy * c };
+  });
+}
+
 /**
  * The atoms and bonds along the bonds from `from` to `to`, the shortest way
  * (the fewest bonds), both ends included; null where no bonds join them.

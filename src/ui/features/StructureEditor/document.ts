@@ -12,8 +12,9 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
-import { ICON_NAME_WIDTH, pdfRoom } from "../../../lib/pdf/layout";
+import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, PictureItem, PictureToAdd, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
+import { ICON_NAME_WIDTH, pdfRoom, POINT } from "../../../lib/pdf/layout";
+import { printedSize } from "../../../lib/picture/image";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
 import { newTextName } from "./utils/texts";
@@ -58,6 +59,9 @@ export type StructureDocument = {
   /** The PDFs on the page (docs/PDF.md). */
   pdfs?: PdfItem[];
   nextPdfId?: number;
+  /** The pictures on the page (docs/PDF.md, *A picture*). */
+  pictures?: PictureItem[];
+  nextPictureId?: number;
 };
 
 /** Whether it holds nothing: no structure, arrow, "+" sign or words drawn, no molecule in 3D, no text, no workflow. */
@@ -70,6 +74,7 @@ export function isBlankDocument(doc: StructureDocument): boolean {
     !doc.molecules3d?.length &&
     !doc.texts?.length &&
     !doc.pdfs?.length &&
+    !doc.pictures?.length &&
     !doc.sets?.length &&
     !doc.steps?.length
   );
@@ -103,10 +108,12 @@ export function createStructureDocument(data?: unknown): DocumentStore<Structure
       ? [{ name: t.name, text: t.text, ...(typeof t.path === "string" ? { path: t.path } : {}) }]
       : [],
   );
-  // (PDFs opened on a canvas of their own: in a row from the middle of the page)
+  // (PDFs opened on a canvas of their own: in a row from the middle of the page - and pictures likewise)
   const held = (data as { pdfs?: unknown } | null | undefined)?.pdfs;
   let doc = addTexts(emptyStructureDocument(), texts).doc;
   for (const p of pdfsInRow(Array.isArray(held) ? held : [], { x: 0, y: 0 })) doc = addPdf(doc, p);
+  const pictures = (data as { pictures?: unknown } | null | undefined)?.pictures;
+  for (const p of picturesInRow(Array.isArray(pictures) ? (pictures as PictureToAdd[]) : [], { x: 0, y: 0 })) doc = addPicture(doc, p);
   return createDocument<StructureDocument>(doc);
 }
 
@@ -968,8 +975,9 @@ export function removePlus(doc: StructureDocument, id: number): StructureDocumen
   return pluses.length === (doc.pluses ?? []).length ? doc : { ...doc, pluses };
 }
 
-/** Where arrows, pluses and words go, by id. */
+/** Where arrows, pluses and words go, by id - and pictures, and how they are turned. */
 export type MarkPlaces = {
+  pictures?: { id: number; x: number; y: number; turn?: number }[];
   arrows?: { id: number; x: number; y: number }[];
   pluses?: { id: number; x: number; y: number }[];
   captions?: { id: number; x: number; y: number }[];
@@ -983,6 +991,19 @@ export type MarkPlaces = {
 /** `doc` with the arrows, pluses, molecules in 3D, sets and steps `places` names where it says. */
 export function placeMarks(doc: StructureDocument, places?: MarkPlaces): StructureDocument {
   if (places?.molecules3d?.length) return placeMarks(moveMolecules3d(doc, places.molecules3d), { ...places, molecules3d: [] });
+  if (places?.pictures?.length) {
+    const at = new Map(places.pictures.map((p) => [p.id, p]));
+    const placed = {
+      ...doc,
+      pictures: (doc.pictures ?? []).map((p) => {
+        const q = at.get(p.id);
+        if (!q) return p;
+        const { turn: _, ...kept } = p;
+        return { ...kept, x: q.x, y: q.y, ...turnOf(q.turn !== undefined ? q.turn : p.turn) };
+      }),
+    };
+    return placeMarks(placed, { ...places, pictures: [] });
+  }
   if (places?.sets?.length || places?.steps?.length) {
     const setAt = new Map((places.sets ?? []).map((b) => [b.id, b]));
     const stepAt = new Map((places.steps ?? []).map((s) => [s.id, s]));
@@ -1109,6 +1130,78 @@ export function readingOf(r: { at: number; zoom: number }, pages: number): NonNu
 export function removePdf(doc: StructureDocument, id: number): StructureDocument {
   if (!doc.pdfs?.some((p) => p.id === id)) return doc;
   return { ...doc, pdfs: doc.pdfs.filter((p) => p.id !== id) };
+}
+
+// --- pictures ------------------------------------------------------------------
+
+/** A turn kept as it is - an angle, from -π to π - and none where it is none. */
+function turnOf(turn: number | undefined): { turn?: number } {
+  if (!turn) return {};
+  const t = Math.atan2(Math.sin(turn), Math.cos(turn));
+  return Math.abs(t) < 1e-9 ? {} : { turn: t };
+}
+
+/**
+ * Pictures held, as they go on the page: each as it would be printed
+ * (lib/picture/image `printedSize`), the first's middle at `at`, the others
+ * to its right, a bond apart.
+ */
+export function picturesInRow(held: readonly PictureToAdd[], at: { x: number; y: number }): Omit<PictureItem, "id">[] {
+  const out: Omit<PictureItem, "id">[] = [];
+  let x = at.x;
+  for (const h of held) {
+    if (typeof h?.name !== "string" || typeof h.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(h.sha256)) continue;
+    if ((h.media !== "image/png" && h.media !== "image/jpeg") || !(h.width > 0) || !(h.height > 0)) continue;
+    const size = printedSize(h);
+    const w = size.w * POINT;
+    if (out.length) x += w / 2;
+    out.push({ name: h.name, sha256: h.sha256, media: h.media, px: [h.width, h.height], x, y: at.y, w, h: size.h * POINT });
+    x += w / 2 + NOMINAL_BOND_LENGTH;
+  }
+  return out;
+}
+
+/** A row of pictures put down clear of what lies there - other pictures, PDFs and their names - moved along to the right until none lies over it. */
+export function clearOfPictures<T extends Omit<PictureItem, "id">>(row: T[], doc: Pick<StructureDocument, "pictures" | "pdfs">): T[] {
+  if (!row.length) return row;
+  const box = (p: Pick<PictureItem, "x" | "y" | "w" | "h" | "turn">) => {
+    const c = Math.abs(Math.cos(p.turn ?? 0));
+    const s = Math.abs(Math.sin(p.turn ?? 0));
+    const hw = (p.w * c + p.h * s) / 2;
+    const hh = (p.w * s + p.h * c) / 2;
+    return { x0: p.x - hw, x1: p.x + hw, y0: p.y - hh, y1: p.y + hh };
+  };
+  const taken = [...(doc.pictures ?? []).map(box), ...(doc.pdfs ?? []).map(pdfRoom)];
+  const step = Math.max(...row.map((p) => p.w)) / 2 + NOMINAL_BOND_LENGTH;
+  for (let n = 0; n < 200; n++) {
+    const moved = row.map((p) => ({ ...p, x: p.x + n * step }));
+    if (!moved.some((p) => taken.some((t) => overlaps(box(p), t)))) return moved;
+  }
+  return row;
+}
+
+/** `doc` with a picture put on the page; it is numbered `nextPictureId`. */
+export function addPicture(doc: StructureDocument, picture: Omit<PictureItem, "id">): StructureDocument {
+  const id = doc.nextPictureId ?? 1;
+  return { ...doc, pictures: [...(doc.pictures ?? []), { ...picture, id }], nextPictureId: id + 1 };
+}
+
+/** `doc` with the picture `id` moved, made larger or smaller - never to nothing - or turned. */
+export function updatePicture(doc: StructureDocument, id: number, patch: Partial<Pick<PictureItem, "x" | "y" | "w" | "h" | "turn">>): StructureDocument {
+  const was = doc.pictures?.find((p) => p.id === id);
+  if (!was) return doc;
+  const { turn, ...rest } = patch;
+  const { turn: _, ...kept } = was;
+  const next: PictureItem = { ...kept, ...rest, ...turnOf(turn !== undefined ? turn : was.turn) };
+  if (!(next.w > 0) || !(next.h > 0) || ![next.x, next.y, next.w, next.h].every(Number.isFinite)) return doc;
+  return { ...doc, pictures: doc.pictures!.map((p) => (p.id === id ? next : p)) };
+}
+
+/** `doc` without the pictures `ids`. */
+export function removePictures(doc: StructureDocument, ids: Iterable<number>): StructureDocument {
+  const gone = new Set(ids);
+  if (!doc.pictures?.some((p) => gone.has(p.id))) return doc;
+  return { ...doc, pictures: doc.pictures.filter((p) => !gone.has(p.id)) };
 }
 
 export function removeCaption(doc: StructureDocument, id: number): StructureDocument {

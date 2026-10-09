@@ -14,7 +14,11 @@ import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
 import { openedAs, openedTexts, OPENABLE, textsOf, workspaceOfFile, type Opened } from "./ui/views/openFile";
 import { pdfTakerOf, type OpenedPdf } from "./ui/views/pdfs";
+import { pictureTakerOf } from "./ui/views/pictures";
 import { holdPdfPath } from "./lib/pdf/reader";
+import { isPictureName } from "./lib/picture/image";
+import { pictureToAdd } from "./ui/features/StructureEditor/utils/pictures";
+import type { PictureToAdd } from "./ui/features/StructureEditor/store/types";
 import { textTakerOf, type OpenedText } from "./ui/views/texts";
 import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
@@ -216,6 +220,13 @@ export default function App() {
     take(pdfs);
     return true;
   };
+  // and pictures (ui/views/pictures)
+  const openPictures = (pictures: PictureToAdd[], into: string | null): boolean => {
+    const take = into ? pictureTakerOf(into) : undefined;
+    if (!take) return openTab({ kind: "structure", label: pictures[0].name, data: { pictures, filename: pictures[0].name } });
+    take(pictures);
+    return true;
+  };
 
   // Open (Ctrl/Cmd+O, or the menu): files picked in the system's dialog,
   // each in a tab, by what it is (openFile) - text in the workspace in
@@ -235,8 +246,20 @@ export default function App() {
     }).catch(() => null);
     const texts: OpenedText[] = [];
     const pdfs: OpenedPdf[] = [];
+    const pictures: PictureToAdd[] = [];
     for (const path of picked ?? []) {
       const name = path.split(/[\\/]/).pop() || path;
+      // (a picture: held, and put on the page - docs/PDF.md, *A picture*)
+      if (isPictureName(name)) {
+        try {
+          const picture = await pictureToAdd(name, await readFile(path));
+          if (!picture) throw new Error("It is not a PNG or JPEG picture Meno can show.");
+          pictures.push(picture);
+        } catch (e) {
+          setNotice(`${name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
       // (a PDF: held, and put on the page: docs/PDF.md)
       if (/\.pdf$/i.test(name)) {
         try {
@@ -266,6 +289,7 @@ export default function App() {
     }
     if (texts.length) openTexts(texts, into);
     if (pdfs.length) openPdfs(pdfs, into);
+    if (pictures.length) openPictures(pictures, into);
   };
   // Closing with unsaved changes: the tabs that hold them, and whether
   // each can be saved (lib/doc/savers).

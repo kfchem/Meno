@@ -8,6 +8,7 @@ import type { StyleChoice } from "../../../../lib/chem/style";
 import type { BondChem, ParsedAtom, ParsedBond } from "../../../../lib/chem/molecule";
 import type { Workspace } from "../utils/workspace";
 import type { CalcInfo } from "../../../../lib/calc/output";
+import type { PictureMedia } from "../../../../lib/picture/image";
 import type { JobState } from "../../../../lib/jobs";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
@@ -96,6 +97,29 @@ export type PdfItem = {
    */
   reading?: PdfReading;
 };
+
+/**
+ * A picture on the page (docs/PDF.md, *A picture*): an image - a PNG or a
+ * JPEG - by its SHA-256, held for the session (lib/picture/held) and kept in
+ * the workspace's file; its name; its size in pixels; where its middle lies;
+ * how wide and tall it is drawn, in the page's units; and how far it is
+ * turned, anticlockwise, in radians.
+ */
+export type PictureItem = {
+  id: number;
+  name: string;
+  sha256: string;
+  media: PictureMedia;
+  px: [number, number];
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  turn?: number;
+};
+
+/** A picture held, as it is put on the page: its name, what it is known by, what it is, its size in pixels and its resolution, where it gives one. */
+export type PictureToAdd = { name: string; sha256: string; media: PictureMedia; width: number; height: number; dpi?: number };
 
 /** Where a PDF is read in the column, and how large: `PdfItem.reading`. */
 export type PdfReading = { at: number; zoom: number };
@@ -303,7 +327,7 @@ export type Rising3D = { from: { x: number; y: number }; start: number; flat?: n
 export type CarriedList = { id: string; row: number | null; iso?: number };
 export type Carried3D = Omit<Molecule3D, "id"> & { turn?: Turn3D; frame?: number; list?: CarriedList };
 /** What is drawn, as a copy carries it: the drawing, its arrows, pluses and words, molecules in 3D - and a workflow's parts (sets, steps and the wires among them). */
-export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[]; captions?: Caption[]; molecules3d?: Carried3D[]; flow?: FlowParts };
+export type Drawn = Model & { arrows?: Arrow[]; pluses?: Plus[]; captions?: Caption[]; molecules3d?: Carried3D[]; flow?: FlowParts; pictures?: PictureItem[] };
 
 export type EditorState = {
   model: Model;
@@ -481,6 +505,7 @@ export type EditorState = {
     moves: { id: number; at: { x: number; y: number; z?: number }; turn: Turn3D }[],
     gesture: string,
     drawing?: { id: number; x: number; y: number }[],
+    marks?: MarkPlaces,
   ) => void;
   /**
    * Molecules in 3D turned where they stand, by the selection's handle, from
@@ -520,6 +545,22 @@ export type EditorState = {
   /** A PDF made small, an icon - its pages gathered - or full size again. */
   iconPdf: (id: number, icon: boolean) => void;
   removePdf: (id: number) => void;
+  /** The pictures on the page. */
+  pictures: PictureItem[];
+  /** The picture under the pointer: its menu is the one a right-click opens. */
+  hoveredPicture: number | null;
+  setHoveredPicture: (id: number | null) => void;
+  /** The pictures selected, by id: besides `sel`, which is the drawing's. */
+  selPictures: Set<number>;
+  /** The pictures selected: these, or (`add`) these besides those already. */
+  selectPictures: (ids: Iterable<number>, add?: boolean) => void;
+  /** A picture added to the selection, or taken out of it (Ctrl or ⌘ and a click). */
+  togglePictureSel: (id: number) => void;
+  /** Pictures held put on the page, as one step: the first's middle where `at` is, the others beside it in a row - selected; their ids. */
+  addPictures: (pictures: PictureToAdd[], at: { x: number; y: number }) => number[];
+  /** A picture moved, made larger or smaller, or turned: one step for a drag (`gesture`). */
+  updatePicture: (id: number, patch: Partial<Pick<PictureItem, "x" | "y" | "w" | "h" | "turn">>, gesture?: string) => void;
+  removePicture: (id: number) => void;
   setHoveredCaption: (id: number | null) => void;
   /** Words on the page. */
   captions: Caption[];

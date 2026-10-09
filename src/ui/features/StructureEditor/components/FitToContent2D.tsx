@@ -18,6 +18,7 @@ import { setViewGoal } from "./viewGoal";
 import { opensWith } from "./openingFit";
 import { captionSet } from "../../../../lib/chem/captions";
 import { pdfRoom } from "../../../../lib/pdf/layout";
+import { cornersOf } from "../utils/selection";
 
 export default function FitToContent2D({
   paddingPx = 48,
@@ -30,6 +31,7 @@ export default function FitToContent2D({
   const molecules3d = useEditor((s) => s.molecules3d);
   const captions = useEditor((s) => s.captions);
   const pdfs = useEditor((s) => s.pdfs);
+  const pictures = useEditor((s) => s.pictures);
   const store = useEditorStore();
   const style = useDrawingStyle();
   const { camera, size, invalidate } = useThree();
@@ -52,7 +54,7 @@ export default function FitToContent2D({
     const cam = camera as THREE.OrthographicCamera;
     if (autoFitSuspended) return; // skip while suspended
     const atoms = model.atoms;
-    const empty = atoms.length === 0 && molecules3d.length === 0 && captions.length === 0 && pdfs.length === 0;
+    const empty = atoms.length === 0 && molecules3d.length === 0 && captions.length === 0 && pdfs.length === 0 && pictures.length === 0;
     const firstView = !opened.current;
     opened.current = true;
     const firstContent = !held.current && !empty;
@@ -91,6 +93,11 @@ export default function FitToContent2D({
       const b = pdfRoom(p);
       bounds.min = { x: Math.min(bounds.min.x, b.x0), y: Math.min(bounds.min.y, b.y0) };
       bounds.max = { x: Math.max(bounds.max.x, b.x1), y: Math.max(bounds.max.y, b.y1) };
+    }
+    // and the pictures, as they are turned
+    for (const q of pictures.flatMap(cornersOf)) {
+      bounds.min = { x: Math.min(bounds.min.x, q.x), y: Math.min(bounds.min.y, q.y) };
+      bounds.max = { x: Math.max(bounds.max.x, q.x), y: Math.max(bounds.max.y, q.y) };
     }
     // and the molecules in 3D, as each is turned and shown now, as the
     // camera sees them: straight from above, by an orthographic camera (the
@@ -150,6 +157,7 @@ export default function FitToContent2D({
     molecules3d,
     captions,
     pdfs,
+    pictures,
     style,
     camera,
     size.width,

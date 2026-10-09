@@ -12,7 +12,7 @@ export type MenuTarget = {
    * The atom, bond, reaction arrow or "+" right-clicked, or a molecule in 3D
    * or a measurement on one; null, when it was nothing.
    */
-  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "pdf" | "molecule3d" | "measure3d" | "set" | "step" | "wire" | null;
+  kind: "atom" | "bond" | "arrow" | "plus" | "caption" | "pdf" | "picture" | "molecule3d" | "measure3d" | "set" | "step" | "wire" | null;
   /** Its id: for a measurement, its molecule's. */
   id: number | null;
   /** A measurement's own id. */
@@ -111,6 +111,7 @@ export default function PartMenu({
   onStepOptions,
   step,
   pdf,
+  onCopyPicture,
   onSaveProcedure,
   onUseAsInput,
   onSaveAbbreviation,
@@ -158,6 +159,8 @@ export default function PartMenu({
   step?: { onRunFrom?: () => void; onStop?: () => void; onShowLog?: () => void; onShowFiles?: () => void };
   /** What a PDF right-clicked can do: read in the column, its pages turned, spread or gathered, made an icon or full size (docs/PDF.md). */
   pdf?: { spread: boolean; icon: boolean; onSpread: () => void; onIcon: () => void; onNext?: () => void; onPrevious?: () => void; onRead: () => void; onCopy?: () => void };
+  /** The picture right-clicked copied, for Meno and as a picture for other programs. */
+  onCopyPicture?: () => void;
   /** The whole flow a step or a set right-clicked is part of, saved as a procedure, named. */
   onSaveProcedure?: () => void;
   /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
@@ -288,6 +291,11 @@ export default function PartMenu({
           ...(pdf ? [{ name: pdf.icon ? "Show full size" : "Minimize to an icon", keys: "", run: pdf.onIcon, divider: pdf.icon }] : []),
           { name: "Delete PDF", keys: deleteKey, run: onDelete, divider: true },
         ]
+      : target.kind === "picture"
+      ? [
+          ...(onCopyPicture ? [{ name: "Copy picture", keys: "", run: onCopyPicture }] : []),
+          { name: "Delete picture", keys: deleteKey, run: onDelete, divider: !!onCopyPicture },
+        ]
       : target.kind === "set"
       ? [
           ...(onSaveProcedure ? [{ name: "Save as procedure…", keys: "", run: onSaveProcedure }] : []),
@@ -379,6 +387,8 @@ export default function PartMenu({
                     ? "Text"
                   : target.kind === "pdf"
                     ? "PDF"
+                  : target.kind === "picture"
+                    ? "Picture"
                   : target.kind === "set"
                     ? "Set"
                   : target.kind === "step"
