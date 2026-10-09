@@ -685,6 +685,36 @@ the lock or Python version changes. uv runs with its Python downloads
 uv-managed Pythons, and no user uv configuration (`uv_command` in `lib.rs`):
 nothing of Meno's environments lands in the user's own directories.
 
+### PDFs
+
+A PDF on the page (docs/PDF.md) is read and drawn by PDFium, in a process of
+its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
+
+- **Held by its SHA-256.** A PDF opened or dropped is written once to Meno's
+  cache, `<app cache>/pdf/<sha256>.pdf` (`pdf_hold_path`, `pdf_hold_bytes`),
+  and is known by that hash from then on: the document's `PdfItem` names
+  it, a workspace's file keeps its bytes (`pdf_bytes`, `utils/workspace`),
+  and a workspace's file opened writes them to the cache again
+  (`holdPdfsOf`).
+- **The reader** is Meno's own executable started as `Meno --pdf <cache>`,
+  as a job's runner is (`run()` hands it to `pdf::pdf_mode` first). It binds
+  PDFium's library - inside the app on a Mac, beside the program among the
+  resources elsewhere (`scripts/fetch-pdfium.mjs` fetches it for the build)
+  - opens a PDF from the cache when first asked about it, and answers a
+  line of JSON at a time on its standard output: a frame of JSON, then
+  bytes. Meno starts it when a PDF is first wanted and again if it has
+  gone, so that a PDF that breaks PDFium breaks it alone.
+- **Parts of pages drawn** (`pdf_render`) come back as PNGs - a page is
+  mostly white, so a 512-pixel tile is a quarter of its pixels or less, and
+  carrying bytes is what takes the time - and are taken apart off the main
+  thread (`createImageBitmap`) as WebGL textures. `lib/pdf/reader` queues
+  them, three at a time, nearest the middle of the view first, and drops
+  those the view has moved on from.
+- **On the page** (`components/Pdfs2D.tsx`, `lib/pdf/layout`): each PDF a
+  stack at the size it is printed - a 14.4-point bond is a bond - or its
+  pages spread; a small picture of each page shown at once, tiles at the
+  screen's resolution asked for once the view is still, each fading in.
+
 ### Tauri commands
 
 | Command | Called from | Purpose |
@@ -694,6 +724,9 @@ nothing of Meno's environments lands in the user's own directories.
 | `ext_spawn_sidecar` | `PyConsole` | Spawn a process with piped stdio; returns an id. |
 | `ext_stdin` | `PyConsole` | Write to a sidecar's stdin. |
 | `ext_kill` | `PyConsole` | Kill a sidecar and emit `ext:exit`. |
+| `pdf_hold_path`, `pdf_hold_bytes` | `lib/pdf/reader.ts` | A PDF held in Meno's cache by its SHA-256; its pages' sizes (`pdf.rs`). |
+| `pdf_bytes` | `utils/workspace.ts` | A PDF held, as its bytes, for a workspace's file. |
+| `pdf_render` | `lib/pdf/reader.ts` | A part of a page drawn by PDFium, as a PNG. |
 | `font_families` | `ui/fonts/typefaces.ts` | Every typeface installed (fontdb), for the label typeface picker. |
 | `font_file` | `ui/fonts/typefaces.ts` | One family's regular face as a font file of its own - out of its collection, its character map made plain (`fonts.rs`). |
 | `net_state` | `lib/net/network.ts` | Offline or not, what is allowed, tasks under way, recent connections. |

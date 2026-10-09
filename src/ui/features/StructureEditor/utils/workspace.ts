@@ -4,14 +4,15 @@
  * and measurements, how each is turned and which frame it shows, a
  * workflow's sets, steps and wires, and the document's own drawing style -
  * so that it opens again just as it was saved - and the texts it holds,
- * and which its column showed. JSON, versioned; a reader keeps what it
- * reads and leaves out what it does not. Its file, `.meno`, is a zip
- * (lib/doc/menoFile) holding it, the calculations' outputs its molecules
- * were read from, and its texts.
+ * and which its column showed, and the PDFs on its page. JSON, versioned; a
+ * reader keeps what it reads and leaves out what it does not. Its file,
+ * `.meno`, is a zip (lib/doc/menoFile) holding it, the calculations'
+ * outputs its molecules were read from, its texts and its PDFs.
  */
 import { acceptStyleChoice } from "../../../../lib/chem/styleFields";
 import type { StyleChoice } from "../../../../lib/chem/style";
-import type { Carried3D, Drawn, EditorState, WorkspaceText } from "../store/types";
+import type { Carried3D, Drawn, EditorState, PdfItem, WorkspaceText } from "../store/types";
+import { pdfBytes } from "../../../../lib/pdf/reader";
 import { readDrawn } from "./copyPaste";
 import { calcShowing, heldOutput, outputsToKeep, sha256Of } from "../../../../lib/calc/asks";
 import { writeMenoFile } from "../../../../lib/doc/menoFileWriter";
@@ -35,6 +36,8 @@ export type Workspace = {
   texts: SavedText[];
   /** Which of them its column showed, by its place among them; none, it was closed. */
   textShown?: number;
+  /** The PDFs on its page, each by its file's SHA-256 (docs/PDF.md). */
+  pdfs: Omit<PdfItem, "id">[];
 };
 
 /** A text as a workspace's file keeps it: its name, and the file kept with its words, by SHA-256. */
@@ -44,7 +47,7 @@ type Saved = Pick<
   EditorState,
   "model" | "arrows" | "pluses" | "captions" | "molecules3d" | "turns3d" | "frames3d" | "lists3d" | "docStyle" | "aromaticEnabled" | "aromaticRings"
 > &
-  Partial<Pick<EditorState, "sets" | "steps" | "wires" | "texts" | "textShown" | "textsOpen">>;
+  Partial<Pick<EditorState, "sets" | "steps" | "wires" | "texts" | "textShown" | "textsOpen" | "pdfs">>;
 
 /**
  * The canvas's molecules in 3D as a file carries them: each turned, and
@@ -93,6 +96,7 @@ export function workspaceText(state: Saved, kept: ReadonlySet<string> = new Set(
       ...(Object.keys(state.aromaticRings).length ? { aromaticRings: state.aromaticRings } : {}),
       ...(state.texts?.length ? { texts: state.texts.map((t, i) => ({ name: t.name, sha256: texts[i] })) } : {}),
       ...(shown >= 0 ? { textShown: shown } : {}),
+      ...(state.pdfs?.length ? { pdfs: state.pdfs.map(({ id: _id, ...p }) => p) } : {}),
     }) + "\n"
   );
 }
@@ -102,10 +106,18 @@ export async function workspaceFile(state: Saved): Promise<Uint8Array> {
   const sources = state.molecules3d.flatMap((m): CalcSource[] => (m.calc?.source ? [m.calc.source] : []));
   const kept = await outputsToKeep(sources);
   const texts = await textsToKeep(state.texts ?? []);
+  const pdfs = await pdfsToKeep(state.pdfs ?? []);
   return writeMenoFile(
     workspaceText(state, new Set(kept.map((k) => k.sha256)), texts.map((t) => t.sha256)),
-    [...kept, ...texts],
+    [...kept, ...texts, ...pdfs],
   );
+}
+
+/** The PDFs as a workspace's file keeps them: each as it was, once, read from where Meno holds it (lib/pdf/reader). */
+async function pdfsToKeep(pdfs: readonly PdfItem[]): Promise<KeptData[]> {
+  const seen = new Map<string, string>();
+  for (const p of pdfs) if (!seen.has(p.sha256)) seen.set(p.sha256, p.name);
+  return Promise.all([...seen].map(async ([sha256, name]) => ({ sha256, name, media: "application/pdf", data: await pdfBytes(sha256) })));
 }
 
 /** The texts as a workspace's file keeps them, in order: each as UTF-8, by its SHA-256 - one an output's too kept once. */
@@ -147,6 +159,7 @@ export function readWorkspace(text: string): Workspace | null {
     aromaticRings?: unknown;
     texts?: unknown;
     textShown?: unknown;
+    pdfs?: unknown;
   };
   if (r?.format !== WORKSPACE || r.version !== WORKSPACE_VERSION) return null;
   const drawn = readDrawn(data);
@@ -161,6 +174,7 @@ export function readWorkspace(text: string): Workspace | null {
     if (typeof t?.name === "string" && typeof t.sha256 === "string" && SHA.test(t.sha256)) texts.push({ name: t.name.slice(0, 260), sha256: t.sha256 });
   }
   const shown = typeof r.textShown === "number" && Number.isInteger(r.textShown) && r.textShown >= 0 && r.textShown < texts.length;
+  const pdfs = readPdfs(r.pdfs);
   return {
     drawn,
     ...(workflow ? { workflow } : {}),
@@ -169,7 +183,23 @@ export function readWorkspace(text: string): Workspace | null {
     aromaticRings: rings,
     texts,
     ...(shown ? { textShown: r.textShown as number } : {}),
+    pdfs,
   };
+}
+
+/** The PDFs a workspace's JSON lists, each as far as it reads: its file by SHA-256, its pages' sizes, its place, the page on top. */
+function readPdfs(v: unknown): Omit<PdfItem, "id">[] {
+  const out: Omit<PdfItem, "id">[] = [];
+  for (const p of Array.isArray(v) ? (v as Partial<PdfItem>[]) : []) {
+    const pages = Array.isArray(p?.pages)
+      ? p.pages.filter((s): s is [number, number] => Array.isArray(s) && s.length === 2 && s.every((n) => typeof n === "number" && Number.isFinite(n) && n > 0)).slice(0, 100_000)
+      : [];
+    if (typeof p?.name !== "string" || typeof p.sha256 !== "string" || !SHA.test(p.sha256) || !pages.length) continue;
+    if (typeof p.x !== "number" || typeof p.y !== "number" || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    const page = Number.isInteger(p.page) && (p.page as number) >= 0 && (p.page as number) < pages.length ? (p.page as number) : 0;
+    out.push({ name: p.name.slice(0, 260), sha256: p.sha256, pages, x: p.x, y: p.y, page, ...(p.spread === true ? { spread: true } : {}) });
+  }
+  return out;
 }
 
 const SHA = /^[0-9a-f]{64}$/;

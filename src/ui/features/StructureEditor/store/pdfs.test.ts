@@ -1,0 +1,133 @@
+import { describe, expect, it } from "vitest";
+import { connectStoreToDocument, createEditorStore } from ".";
+import { createStructureDocument, isBlankDocument } from "../document";
+import { readWorkspace, workspaceText } from "../utils/workspace";
+import { pdfBounds, POINT, spreadColumns, spreadSheets, stackSheets, topSheet, UNDER_MOST } from "../../../../lib/pdf/layout";
+
+const SHA = "a".repeat(64);
+const SHA2 = "b".repeat(64);
+const A4: [number, number] = [595, 842];
+
+function editor(data?: unknown) {
+  const doc = createStructureDocument(data);
+  const store = createEditorStore(doc);
+  connectStoreToDocument(store, doc);
+  return { doc, state: () => store.getState() };
+}
+
+describe("PDFs on the page", () => {
+  it("are put down in a row, moved, turned, spread and deleted, each one step", () => {
+    const { doc, state } = editor();
+    state().addPdfs(
+      [
+        { name: "paper.pdf", sha256: SHA, pages: [A4, A4, A4] },
+        { name: "si.pdf", sha256: SHA2, pages: [A4] },
+      ],
+      { x: 10, y: 20 },
+    );
+    const [a, b] = state().pdfs;
+    expect(a).toMatchObject({ name: "paper.pdf", x: 10, y: 20, page: 0 });
+    // (the second to the right of the first, clear of it)
+    expect(b.x - b.pages[0][0] * POINT / 2).toBeGreaterThan(a.x + a.pages[0][0] * POINT / 2);
+    expect(isBlankDocument(doc.getState())).toBe(false);
+    expect(doc.history().undoDepth).toBe(1);
+
+    for (const x of [11, 12, 13]) state().movePdf(a.id, x, 20, "drag");
+    expect(state().pdfs[0].x).toBe(13);
+    expect(doc.history().undoDepth).toBe(2);
+
+    state().turnPdf(a.id, 2);
+    expect(state().pdfs[0].page).toBe(2);
+    // (no page past the last)
+    state().turnPdf(a.id, 3);
+    expect(state().pdfs[0].page).toBe(2);
+
+    state().spreadPdf(a.id, true);
+    expect(state().pdfs[0].spread).toBe(true);
+    state().spreadPdf(a.id, false);
+    expect(state().pdfs[0].spread).toBeUndefined();
+
+    state().removePdf(b.id);
+    expect(state().pdfs.map((p) => p.name)).toEqual(["paper.pdf"]);
+    doc.undo();
+    expect(state().pdfs.map((p) => p.name)).toEqual(["paper.pdf", "si.pdf"]);
+  });
+
+  it("are taken by a canvas opened for them", () => {
+    const { state } = editor({ pdfs: [{ name: "paper.pdf", sha256: SHA, pages: [A4], size: 1000 }] });
+    expect(state().pdfs).toEqual([{ id: 1, name: "paper.pdf", sha256: SHA, pages: [A4], x: 0, y: 0, page: 0 }]);
+  });
+
+  it("leave out what is not a PDF held", () => {
+    const { state } = editor();
+    state().addPdfs(
+      [
+        { name: "no sha", sha256: "x", pages: [A4] },
+        { name: "no pages", sha256: SHA, pages: [] },
+      ],
+      { x: 0, y: 0 },
+    );
+    expect(state().pdfs).toEqual([]);
+  });
+
+  it("are saved with the workspace and read back as they lay", () => {
+    const { state } = editor();
+    state().addPdfs([{ name: "paper.pdf", sha256: SHA, pages: [A4, [612, 792]] }], { x: 3, y: 4 });
+    state().turnPdf(1, 1);
+    state().spreadPdf(1, true);
+    const ws = readWorkspace(workspaceText(state()));
+    expect(ws?.pdfs).toEqual([{ name: "paper.pdf", sha256: SHA, pages: [A4, [612, 792]], x: 3, y: 4, page: 1, spread: true }]);
+    // (opened, as they were)
+    const { state: again } = editor();
+    again().openWorkspace(ws!, true);
+    expect(again().pdfs).toEqual([{ id: 1, name: "paper.pdf", sha256: SHA, pages: [A4, [612, 792]], x: 3, y: 4, page: 1, spread: true }]);
+  });
+
+  it("are read from a workspace as far as they read", () => {
+    const text = JSON.stringify({
+      format: "meno-workspace",
+      version: 1,
+      atoms: [],
+      bonds: [],
+      arrows: [],
+      pluses: [],
+      molecules3d: [],
+      pdfs: [
+        { name: "ok.pdf", sha256: SHA, pages: [A4], x: 0, y: 0, page: 7 },
+        { name: "bad sha", sha256: "../x", pages: [A4], x: 0, y: 0, page: 0 },
+        { name: "bad pages", sha256: SHA, pages: [[0, 1]], x: 0, y: 0, page: 0 },
+        { name: "bad place", sha256: SHA, pages: [A4], x: "0", y: 0, page: 0 },
+      ],
+    });
+    // (a page past the last is the first)
+    expect(readWorkspace(text)?.pdfs).toEqual([{ name: "ok.pdf", sha256: SHA, pages: [A4], x: 0, y: 0, page: 0 }]);
+  });
+});
+
+describe("where a PDF's pages lie", () => {
+  const p = { pages: Array.from({ length: 7 }, () => A4), x: 0, y: 0, page: 0 };
+
+  it("stacked: the top page where the PDF is, at its printed size, a few sheets under it", () => {
+    expect(topSheet(p)).toEqual({ x: 0, y: 0, w: 595 * POINT, h: 842 * POINT });
+    const under = stackSheets(p);
+    expect(under).toHaveLength(UNDER_MOST);
+    // (each further down and to the right, the bottom first)
+    expect(under[0].x).toBeGreaterThan(under[1].x);
+    expect(under[0].y).toBeLessThan(under[1].y);
+    expect(stackSheets({ ...p, pages: [A4] })).toEqual([]);
+  });
+
+  it("spread: in rows of four, the first page's top left where the stack's was", () => {
+    expect(spreadColumns(7)).toBe(4);
+    expect(spreadColumns(2)).toBe(2);
+    const s = spreadSheets(p);
+    expect(s).toHaveLength(7);
+    const top = topSheet(p);
+    expect(s[0].x - s[0].w / 2).toBeCloseTo(top.x - top.w / 2);
+    expect(s[0].y + s[0].h / 2).toBeCloseTo(top.y + top.h / 2);
+    expect(s[4].x).toBeCloseTo(s[0].x);
+    expect(s[4].y).toBeLessThan(s[0].y - s[0].h);
+    const b = pdfBounds({ ...p, spread: true });
+    expect(b.x1 - b.x0).toBeGreaterThan(4 * s[0].w);
+  });
+});

@@ -24,6 +24,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # PDFium's library, pinned and checked (scripts/fetch-pdfium.mjs), carried in the app
+      - run: node scripts/fetch-pdfium.mjs
       - run: npm run check:tauri
       - name: The tag is the version
         shell: bash
@@ -77,6 +79,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # PDFium's library, pinned and checked (scripts/fetch-pdfium.mjs), carried in the app
+      - run: node scripts/fetch-pdfium.mjs
       - run: npm run check:tauri
       - name: The tag is the version
         run: |

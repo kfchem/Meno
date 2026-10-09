@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Meno on a Mac, signed ad hoc with the hardened runtime, carries PDFium's
+  library inside the app (docs/PDF.md, Platforms): macOS's library
+  validation takes a library only from the app's own team, and an ad hoc
+  signature has none. Decided by the maintainer (2026-10-09): this goes
+  once Meno is signed with a Developer ID, its library with it.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>

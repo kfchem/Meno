@@ -51,6 +51,9 @@ jobs:
       # tauri::generate_context! embeds ../dist, so build the frontend first.
       - run: npm ci
       - run: npm run build
+      # PDFium's library, pinned (scripts/fetch-pdfium.mjs): the bundle names
+      # it among Windows' resources, which the build looks for.
+      - run: node scripts/fetch-pdfium.mjs
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri

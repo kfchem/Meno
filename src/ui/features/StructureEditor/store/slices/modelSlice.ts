@@ -293,7 +293,16 @@ export const createModelSlice = (
       // (a workflow's parts by their own ids: what a set holds is what lies inside it, whatever the molecules' ids)
       const workflow = ws.workflow ? { ...ws.workflow, nextWorkflowId: nextIdAfter(ws.workflow) } : {};
       return ops.setDocumentStyle(
-        { ...next, ...workflow, aromaticEnabled: ws.aromaticEnabled, aromaticRings: ws.aromaticRings, texts, nextTextId: texts.length + 1 },
+        {
+          ...next,
+          ...workflow,
+          aromaticEnabled: ws.aromaticEnabled,
+          aromaticRings: ws.aromaticRings,
+          texts,
+          nextTextId: texts.length + 1,
+          pdfs: ws.pdfs.map((p, i) => ({ ...p, id: i + 1 })),
+          nextPdfId: ws.pdfs.length + 1,
+        },
         ws.style,
       );
     };

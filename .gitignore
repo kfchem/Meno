@@ -34,3 +34,6 @@ __pycache__/
 # Calculation outputs for trying the readers: kept on the machine, never
 # committed (docs/WORKSPACE.md, stage 3)
 /calc-samples/
+
+# PDFium, fetched for the build (scripts/fetch-pdfium.mjs)
+src-tauri/pdfium/

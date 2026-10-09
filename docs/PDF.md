@@ -477,6 +477,47 @@ What it showed:
   next PDF.
 - **The app is 8.8 MB larger installed**: 28.4 MB against 19.6 MB.
 
+## As built
+
+### Step 1: a PDF on the page (2026-10-09)
+
+Built:
+- **Putting a PDF on the page.**
+  - A PDF opened (*Open…*) goes onto the page of the workspace in front, at the middle of the view, or onto a canvas of its own where none is in front.
+  - A PDF dropped goes where it is dropped.
+  - The view eases to take it in where it was not all in view.
+- **Holding and saving it.**
+  - It is held in Meno's cache by its SHA-256.
+  - It is kept in the workspace's file, and is held again when the file is opened.
+  - Its place, the page on top and whether it is spread are saved with it.
+- **The stack.**
+  - Its name lies under it.
+  - It comes up sharp as it is zoomed into.
+  - It is moved by a drag, and deleted by Delete or its menu, each as one step to undo.
+- **Its pages turned, spread and gathered**, with depth. How it works: ARCHITECTURE.md, *PDFs*.
+
+Measured on the Mac (Apple M4) on the reader, for the PDFs made for the trial:
+- **Pictures sent as PNGs are 3.6-5 times smaller.** A 512-pixel tile is 0.2-0.29 MB in place of 1.05 MB, and a page at the column's width is 1.0 MB in place of 4.4 MB.
+- **Packing costs little**: 0.3-1.4 ms more in the reader.
+
+The picture is unpacked off the main thread. Windows, where carrying bytes took the time, is to be measured again.
+
+Decided while building it, for the maintainer to confirm:
+- **Turning a page: its folded corner, the arrow keys, or its menu.**
+  - As the stack is hovered, its top page's lower corners fold: the right one turns to the next page, the left one to the page before.
+  - Over it, the arrow keys and Page Up and Page Down turn too, and its menu has *Next page* and *Previous page*.
+  - The wheel and two fingers stay the canvas's zoom and pan. Over a stack they would take the zoom away from whoever is reading the page at hand; the first draft had them turn pages.
+- **Its menu:** *Next page*, *Previous page*, *Spread pages* (or *Gather pages*), and *Delete PDF*.
+- **Printed size.** A PDF lies on the page at the size it is printed: a point is a fourteenth and a half of a bond, as the ACS's style prints a bond 14.4 points long.
+- **Spread pages** lie in rows of four, the first where the stack's top page lay.
+- **PDFs lie under the drawing** for now. Their place among the other things, by when they were put there, comes with pictures (step 4).
+- **The cache is never cleared yet.** A PDF stays in Meno's cache once held, so that a workspace opened later finds it, and the cache grows with the PDFs opened.
+
+Not yet, and where it comes:
+- **Selecting PDFs with others**: by a click, a box or a lasso, and copying, cutting and pasting them. This comes with pictures (step 4); for now a PDF is moved alone.
+- **Pasting a PDF copied in the Finder or Explorer.** For now it is opened or dropped.
+- **A double-click opening it in the column**: step 2.
+
 ## In order
 
 0. **A trial, kept off main** (done, 2026-10-09; *The trial*, above):
@@ -487,8 +528,9 @@ What it showed:
    - one canvas drawing the workspace and the column, a page going from
      one to the other;
    - whether PDFium's search finds a word broken across a line's end.
-1. **A PDF on the page**: opened, dropped or pasted, held and saved; its
-   stack, coming up as it is zoomed into, its pages turned and spread.
+1. **A PDF on the page** (built, 2026-10-09; *As built*, above): opened,
+   dropped or pasted, held and saved; its stack, coming up as it is zoomed
+   into, its pages turned and spread.
 2. **The column on the canvas**: a PDF read there, joined to its stack;
    its page number and links; texts still in HTML beside it until step 5.
 3. **Text and search**: selecting and copying, on the stack and in the

@@ -39,6 +39,11 @@ taken up, or dropped, at any release.
 
 ## Each release
 
+Builds carry PDFium's library (docs/PDF.md): `node scripts/fetch-pdfium.mjs`
+fetches it at the release pinned there, checks its SHA-256 and puts it in
+`src-tauri/pdfium/<system>/` - the CI and the release workflow run it
+before building, and a build on a computer of one's own needs it once.
+
 1. On a branch: raise the version, the same in both `package.json` and
    `src-tauri/Cargo.toml` (the app takes its version from `package.json`),
    and merge it into `main` as usual.

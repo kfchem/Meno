@@ -328,6 +328,11 @@ How these behave:
 - **Office's record is handed to the canvas as the record**, not under a
   made-up name.
 
+- **A PDF** opened or dropped goes onto the page of the workspace in front
+  (docs/PDF.md), held in Meno's cache by its SHA-256; a workspace's file
+  keeps it, stored as it was (`application/pdf`). Pasting a PDF copied in
+  the Finder or Explorer is not taken yet.
+
 ### Save and Export
 
 - **Save and Save As write `.meno`.**
