@@ -703,6 +703,11 @@ Step 5 comes in parts: the trial of typing alone, shown first; the column's text
 - **Read in the column** by two clicks, or *Read* in its right-click menu (*Read*, *Delete text*). A text's tab closed in the column leaves its sheet on the page, read there no longer; a text with no sheet goes, as before.
 - **Saved** in the workspace: each text's sheet's place (`at`, its top left) and whether it is read in the column (`reading`).
 
+**Between the page and the column.**
+- **Read**, by two clicks, *Read*, or as it is opened or made new, a text's lines rise from its sheet, a white sheet with a soft shadow under it, and go into the column as it opens, growing to its width; the view eases so that the sheet lies beside the column, as a PDF's does. **Closed**, they go back down to the sheet as the column shuts. A tab gone to in the column, the column open already, comes as it did.
+- **On the way they move in the page's type** - signed-distance glyphs, as large as the sheet shows them at one end and as the column's at the other - and once settled, the column's own lines, drawn in the system's type, take their place under them as they fade (140 ms). The flight sets off once its lines are laid out, a frame or two after, so as never to be blank.
+- **A calculation's output shown from its molecule** (*Show <name>*) rises out of the molecule likewise, coming up as the column's lines made as small as the molecule, and goes back down into it as the column shuts. Its molecule is the one read from the output's file, or else of its name.
+
 Decided while building it, for the maintainer to confirm:
 - **On a Mac the textarea, on Windows the EditContext**: each the one its system's webview takes the IME through best. WebKit has no EditContext.
 - **A Mac's Home, End and Page keys move the view**, the caret staying, as in the Mac's own texts; with Option, a page moves the caret too. Tab moves the keys on, as the textarea did.
@@ -710,7 +715,7 @@ Decided while building it, for the maintainer to confirm:
 - **Closing a text's tab leaves its sheet on the page**; deleting the sheet takes the text out of the workspace.
 
 Not yet, and where it comes:
-- **The movement between the page and the column** - a sheet rising into the column as it is read, going back as it is closed, the column's lines coming up sharp once it settles - and an output rising from its molecule: next.
+- **A step's log rising from its step**, as an output does from its molecule.
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
 - **Colouring** (Lezer), **words on the page typed in place**: after.
 

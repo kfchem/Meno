@@ -458,6 +458,16 @@ export type EditorState = {
   readText: (id: number) => void;
   /** A text's tab in the column closed: one with a sheet on the page is read there no longer; one without goes. */
   stopReadingText: (id: number) => void;
+  /**
+   * A text's sheet going into the column as it is read - rising from where
+   * it lies on the page, growing to the column's width - or the column's
+   * text going back down to its sheet as the column shuts (components/
+   * TextFlight).
+   */
+  textFlight: { id: number; to: "column" | "page"; start: number } | null;
+  /** A text shown in the column rising into it from its body - an output, from its molecule. */
+  riseText: (id: number) => void;
+  endTextFlight: () => void;
   /** The text whose sheet the pointer is on. */
   hoveredText: number | null;
   setHoveredText: (id: number | null) => void;

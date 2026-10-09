@@ -671,7 +671,12 @@ function StructureCanvasContent({
   const showOutput = async (source: CalcSource) => {
     try {
       const out = (await outputOf(source)) ?? ((await findOutput(source)) ? await outputOf(source) : undefined);
-      if (out) store.getState().addTexts([{ name: out.name, text: out.text, ...(source.path ? { path: source.path } : {}) }]);
+      if (out) {
+        store.getState().addTexts([{ name: out.name, text: out.text, ...(source.path ? { path: source.path } : {}) }]);
+        // (rising from its molecule into the column - docs/PDF.md, *A text*)
+        const shown = store.getState().textShown;
+        if (shown != null) store.getState().riseText(shown);
+      }
     } catch (e) {
       setChemError(e instanceof Error ? e.message : String(e));
     }

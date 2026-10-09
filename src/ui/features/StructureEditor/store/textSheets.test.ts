@@ -85,6 +85,30 @@ describe("texts on the page", () => {
     expect(state().selTexts.size).toBe(0);
   });
 
+  it("rise from their sheets into the column as they are read, and go back as it shuts - those without a sheet do not", () => {
+    const { state } = editor();
+    state().addTexts([{ name: "a.txt", text: "a" }], { x: 0, y: 0 });
+    const [t] = state().texts;
+    // (made new: from its sheet, as the column opens on it)
+    expect(state().textFlight).toMatchObject({ id: t.id, to: "column" });
+    state().endTextFlight();
+    state().closeTexts();
+    expect(state().textFlight).toMatchObject({ id: t.id, to: "page" });
+    state().endTextFlight();
+    state().readText(t.id);
+    expect(state().textFlight).toMatchObject({ id: t.id, to: "column" });
+    state().endTextFlight();
+    // (read where the column shows it already: nothing rises)
+    state().readText(t.id);
+    expect(state().textFlight).toBeNull();
+    // (its tab closed, the last: back to its sheet)
+    state().stopReadingText(t.id);
+    expect(state().textFlight).toMatchObject({ id: t.id, to: "page" });
+    state().endTextFlight();
+    state().addTexts([{ name: "run.log", text: "log" }]);
+    expect(state().textFlight).toBeNull();
+  });
+
   it("keep their sheets' places, and whether they are read, in the workspace", () => {
     const { state } = editor();
     state().addTexts([{ name: "a.txt", text: "a" }], { x: 1, y: 2 });

@@ -148,6 +148,7 @@ export function createEditorStore(
     pdfBox: null,
     hoveredText: null,
     selTexts: new Set<number>(),
+    textFlight: null,
     pdfPicture: null,
 
     // Ephemeral view state: hover, gestures, camera requests, edit buffers.
@@ -207,7 +208,7 @@ export function createEditorStore(
     ...createUiSlice(doc, set, get),
     ...createInteractionSlice(set, get),
     ...createMolecules3dSlice(doc, set, get),
-    ...createTextsSlice(doc, set),
+    ...createTextsSlice(doc, set, get),
     ...createCaptionsSlice(doc, set),
     ...createPdfsSlice(doc, set, get),
     ...createPicturesSlice(doc, set),

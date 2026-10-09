@@ -22,7 +22,7 @@ import * as THREE from "three";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
-import type { PdfFlight, PdfItem, PictureFlight as PictureFlightState, WordsFlight as WordsFlightState, WorkspaceText } from "../store/types";
+import type { EditorState, PdfFlight, PdfItem, PictureFlight as PictureFlightState, WordsFlight as WordsFlightState, WorkspaceText } from "../store/types";
 import { pdfRoom, shownSheet, topSheet } from "../../../../lib/pdf/layout";
 import { columnWidthFor } from "../utils/texts";
 import { viewBesideColumn } from "./coverLayer";
@@ -37,10 +37,34 @@ import { ease, SETTLE_MS } from "./Pdfs2D";
 import WordsFlight from "./WordsFlight";
 import PictureFlight from "./PictureFlight";
 import ColumnText from "./ColumnText";
+import TextFlight from "./TextFlight";
+import { columnSettingAt, sheetSetting } from "./textFlightSetting";
+import { sheetBox, sheetOf } from "../utils/textSheets";
+import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
+import { currentStyle3D } from "../style3d";
 import { keepColumnTexts } from "../../TextEditor/columnText";
 
-/** How long a page takes between the page and the column, in ms. */
+/** How long a page takes between the page and the column, in ms; and a text's lines, once settled, to hand over to the column's own. */
 export const FLIGHT_MS = 420;
+const HANDOVER_MS = 140;
+/** How far toward the column an output's lines have come out of its molecule once they are quite seen. */
+const MOLECULE_FADE = 0.35;
+/** How long a text's flight waits at most for its lines to be laid out, in ms. */
+const READY_MOST_MS = 250;
+
+/**
+ * Where a text's body lies on the page: its sheet - or, an output shown
+ * from a molecule (its source's file, or else its name), that molecule as
+ * it is seen; none, a text with neither.
+ */
+function bodyBoxOf(st: EditorState, t: WorkspaceText): { x0: number; x1: number; y0: number; y1: number } | null {
+  if (t.at) return sheetBox(t.at, sheetOf(t.text));
+  const m = st.molecules3d.find((x) => x.calc?.source && (t.path ? x.calc.source.path === t.path : x.calc.source.name === t.name));
+  if (!m) return null;
+  const style = currentStyle3D();
+  const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m, style), st.turns3d[m.id], st.frames3d[m.id]));
+  return { x0: b.minX, x1: b.maxX, y0: b.minY, y1: b.maxY };
+}
 
 /** A rectangle on the canvas, in CSS pixels from its top left. */
 type Rect = { x: number; y: number; w: number; h: number };
@@ -69,6 +93,32 @@ export default function PdfColumn() {
   if (open && textShown != null && !reading) lastText.current = textShown;
   const textDrawn = open && textShown != null && !reading ? textShown : !pdf && cover > 0.5 ? lastText.current : null;
   const text = pdf ? null : (texts.find((t) => t.id === textDrawn) ?? null);
+  // (a text on its way between its sheet and the column)
+  const textFlight = useEditor((s) => s.textFlight);
+  const flownText = textFlight ? (texts.find((t) => t.id === textFlight.id) ?? null) : null;
+  // (one with no body on the page to go from or to: none goes - the column opens or shuts on it as it is)
+  const flownBody = flownText ? bodyBoxOf(store.getState(), flownText) : null;
+  useEffect(() => {
+    if (textFlight && !flownBody) store.getState().endTextFlight();
+  }, [textFlight, flownBody, store]);
+  // a text read from its sheet, the column opening on it: the view eases, as for a PDF, so that the sheet is beside the column
+  const textRising = textFlight?.to === "column" ? textFlight.start : null;
+  useLayoutEffect(() => {
+    if (textRising == null) return;
+    const st = store.getState();
+    const t = st.texts.find((x) => x.id === st.textFlight?.id);
+    const body = t ? bodyBoxOf(st, t) : null;
+    if (!body) return;
+    const cam = camera as THREE.OrthographicCamera;
+    const goal = viewGoalOf(cam);
+    const view = { zoom: goal?.zoom ?? cam.zoom, x: goal?.x ?? cam.position.x, y: goal?.y ?? cam.position.y };
+    const to = viewBesideColumn(view, size, { now: st.cover, final: columnWidthFor(size.width, false, null) }, body);
+    if (!to) return;
+    setViewGoal(cam, to);
+    invalidate();
+    // (as the text sets off, once)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textRising]);
   useEffect(
     () =>
       keepColumnTexts(
@@ -97,8 +147,19 @@ export default function PdfColumn() {
     // (as the flight sets off, once)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rising]);
-  if (!pdf && !text && !flown && !words && !picture) return null;
-  return <ColumnPass pdf={pdf} text={text} flight={flight && flown ? flight : null} flown={flown} words={words} picture={picture} />;
+  if (!pdf && !text && !flown && !flownBody && !words && !picture) return null;
+  return (
+    <ColumnPass
+      pdf={pdf}
+      text={text}
+      flight={flight && flown ? flight : null}
+      flown={flown}
+      textFlight={textFlight && flownText && flownBody ? textFlight : null}
+      flownText={flownBody ? flownText : null}
+      words={words}
+      picture={picture}
+    />
+  );
 }
 
 function ColumnPass({
@@ -106,6 +167,8 @@ function ColumnPass({
   text,
   flight,
   flown,
+  textFlight,
+  flownText,
   words,
   picture,
 }: {
@@ -113,6 +176,8 @@ function ColumnPass({
   text: WorkspaceText | null;
   flight: PdfFlight | null;
   flown: PdfItem | null;
+  textFlight: EditorState["textFlight"];
+  flownText: WorkspaceText | null;
   words: WordsFlightState | null;
   picture: PictureFlightState | null;
 }) {
@@ -217,9 +282,16 @@ function ColumnPass({
       // (a place shown marked, fading)
       if (st.pdfFlash && now - st.pdfFlash.start < FLASH_MS + 80) redraw();
     }
-    // a page between the page and the column
+    // a page between the page and the column - or a text, handing over once there
     if (flight) {
       if (now - flight.start >= FLIGHT_MS) st.endPdfFlight();
+      redraw();
+    }
+    if (textFlight) {
+      const begun = textBegun.current?.start === textFlight.start ? textBegun.current.at : null;
+      if (begun != null && now - begun >= FLIGHT_MS + HANDOVER_MS) st.endTextFlight();
+      // (one never ready - its lines not laid out - set off all the same, a moment on)
+      else if (begun == null && now - textFlight.start > READY_MOST_MS) textBegun.current = { start: textFlight.start, at: now };
       redraw();
     }
 
@@ -245,7 +317,7 @@ function ColumnPass({
       r.setScissorTest(false);
       r.setViewport(0, 0, W, H);
     }
-    if (flight || words || picture) {
+    if (flight || textFlight || words || picture) {
       flightCam.left = 0;
       flightCam.right = W;
       flightCam.top = 0;
@@ -359,6 +431,45 @@ function ColumnPass({
     );
   })();
 
+  // a text on its way: from its sheet to the column, or back - the column's own lines unseen till it hands over, its sheet
+  // in the column at its start when it goes back, as the column shuts
+  const textFrom = useRef<{ start: number; rect: Rect } | null>(null);
+  // (set off once its lines are laid out: when, for the flight it is)
+  const textBegun = useRef<{ start: number; at: number } | null>(null);
+  if (textFlight?.to === "page" && textFrom.current?.start !== textFlight.start) {
+    textFrom.current = { start: textFlight.start, rect: { x: size.width - store.getState().cover, y: HEADER_PX, w: width, h: tall } };
+  }
+  const begunAt = textFlight && textBegun.current?.start === textFlight.start ? textBegun.current.at : null;
+  const textT = textFlight ? (begunAt == null ? 0 : (now - begunAt) / FLIGHT_MS) : 1;
+  // (the column's own lines unseen from when it sets off till it hands over)
+  const textHidden = !!textFlight && begunAt != null && (textFlight.to === "page" || textT < 1);
+  const textFlying = (() => {
+    if (!textFlight || !flownText) return null;
+    const b = bodyBoxOf(store.getState(), flownText);
+    if (!b) return null;
+    const c = camera as THREE.OrthographicCamera;
+    const z = c.zoom || 1;
+    const s = sheetOf(flownText.text);
+    const onPage = { x: size.width / 2 + (b.x0 - c.position.x) * z, y: size.height / 2 - (b.y1 - c.position.y) * z, w: (b.x1 - b.x0) * z, h: (b.y1 - b.y0) * z };
+    // (from a molecule, not a sheet: coming up out of it, and going down into it, fading)
+    const fromMolecule = !flownText.at;
+    const inColumn = textFlight.to === "column" ? { x: size.width - store.getState().cover, y: HEADER_PX, w: width, h: tall } : textFrom.current?.rect;
+    if (!inColumn) return null;
+    const t = Math.min(1, textT);
+    const k = textFlight.to === "column" ? ease(t) : 1 - ease(t);
+    const handing = textT <= 1 ? 1 : Math.max(0, 1 - ((textT - 1) * FLIGHT_MS) / HANDOVER_MS);
+    const out = fromMolecule ? Math.min(1, k / MOLECULE_FADE) : 1;
+    const seen = begunAt == null ? 0 : handing * out;
+    const flightStart = textFlight.start;
+    const onReady = () => {
+      if (textBegun.current?.start === flightStart) return;
+      textBegun.current = { start: flightStart, at: performance.now() };
+      redraw();
+    };
+    const set = fromMolecule ? columnSettingAt(onPage.w, inColumn) : sheetSetting(z);
+    return <TextFlight key={flightStart} sheet={onPage} column={inColumn} set={set} k={k} lift={Math.sin(Math.PI * t)} seen={seen} lines={s.lines} onReady={onReady} />;
+  })();
+
   /** Where a PDF's page lies on the canvas now: on top of its stack, among its pages spread, or on its icon. */
   function stackRect(p: PdfItem, page: number): Rect | null {
     const s = shownSheet(p, page) ?? topSheet(p);
@@ -376,10 +487,11 @@ function ColumnPass({
   return (
     <>
       {createPortal(<>{column}</>, scene)}
-      {createPortal(<>{text && <ColumnText key={text.id} text={text} />}</>, textScene)}
+      {createPortal(<>{text && <ColumnText key={text.id} text={text} hidden={textHidden} />}</>, textScene)}
       {createPortal(
         <>
           {flying}
+          {textFlying}
           {words && <WordsFlight w={words} />}
           {picture && <PictureFlight f={picture} />}
         </>,

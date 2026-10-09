@@ -32,7 +32,8 @@ const SELECTED_AWAY = 0.15;
 const CARET_PX = 2;
 const BLINK_MS = 530;
 
-export default function ColumnText({ text }: { text: WorkspaceText }) {
+/** `hidden`, its sheet only: its lines are on their way into the column, or back to the page (TextFlight). */
+export default function ColumnText({ text, hidden = false }: { text: WorkspaceText; hidden?: boolean }) {
   const store = useEditorStore();
   const entry = columnText(store, text.id, text.text);
   const ed = entry.ed;
@@ -76,7 +77,7 @@ export default function ColumnText({ text }: { text: WorkspaceText }) {
 
   const plane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   useEffect(() => () => plane.dispose(), [plane]);
-  if (!typeIn) return null;
+  if (!typeIn || hidden) return null;
   const first = Math.max(0, Math.floor(ed.scrollTop / LINE_PX));
   const last = Math.min(ed.lines.count - 1, Math.floor((ed.scrollTop + ed.viewH) / LINE_PX));
   const left = GUTTER_PX + PAD_PX - ed.scrollLeft;

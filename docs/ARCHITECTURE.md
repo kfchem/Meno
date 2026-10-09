@@ -804,7 +804,11 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   the page, its first lines in troika's signed-distance type (IBM Plex Mono,
   bundled). Selected with the rest (`selTexts`), moved with a dragged
   selection (`MarkPlaces.texts`); whether it is read in the column is the
-  text's (`reading`), amended as a PDF's is.
+  text's (`reading`), amended as a PDF's is. Read or closed, its lines go
+  between its sheet - or an output's molecule - and the column
+  (`textFlight`, drawn in the column's last pass by
+  `components/TextFlight.tsx`, set at either end as `textFlightSetting.ts`
+  says), handing over to the column's own lines once settled.
 - **Words** (`pdf_text`, `lib/pdf/text`): each page's letters, read by
   PDFium when first wanted, each with its box in points from the page's
   top left. The place nearest the pointer, words, lines, the marks of a
