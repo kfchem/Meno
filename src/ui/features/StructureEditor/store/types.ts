@@ -791,6 +791,15 @@ export type EditorState = {
   triggerHoverPulse: (bondId: number) => void;
   beginPanHold: (pointerId: number | null) => void;
   endPanHold: (pointerId?: number | null) => void;
+  /**
+   * The canvas at rest: nothing under the pointer, no gesture under way,
+   * nothing being written, carried out of a PDF or asked over it - as it
+   * is made again after it failed, the press that would have ended a
+   * gesture lost with it (docs/ARCHITECTURE.md, *When a part fails*). What
+   * is selected - words in a PDF too - how the molecules in 3D are turned
+   * and the column stay as they are.
+   */
+  letGo: () => void;
   setMoveMode: (mode: "snap" | "free") => void;
   beginMoveDrag: (
     atomId: number,

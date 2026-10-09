@@ -49,8 +49,11 @@ const EDGE_PX = 28;
  * column*); one shown is drawn on the canvas under the column's header
  * (PdfColumn), and what is done over it - the wheel, a pinch, the keys,
  * the pointer - goes to the column's reader.
+ *
+ * Open as it comes, it shows at once, as wide as it is - but slides in,
+ * made again after it failed (`slideIn`: StructureCanvas, ColumnBoundary).
  */
-export default function TextColumn() {
+export default function TextColumn({ slideIn = false }: { slideIn?: boolean }) {
   const texts = useEditor((s) => s.texts);
   const pdfs = useEditor((s) => s.pdfs);
   const shownId = useEditor((s) => s.textShown);
@@ -101,7 +104,7 @@ export default function TextColumn() {
     <>
       {/* (the canvas's width, measured: what the column's share is of) */}
       <div ref={setRoomEl} aria-hidden className="absolute inset-0 pointer-events-none" />
-      <AnimatePresence initial={false}>
+      <AnimatePresence initial={slideIn}>
         {open && (shown || pdf) && (
           <motion.div
             key="texts"
