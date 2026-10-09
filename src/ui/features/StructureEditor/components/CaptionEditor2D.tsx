@@ -2,7 +2,7 @@ import PageHtml from "./PageHtml";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
-import { CAPTION_LINE, captionPlace, captionSet } from "../../../../lib/chem/captions";
+import { CAPTION_LINE, captionLines, captionPlace, captionSet } from "../../../../lib/chem/captions";
 import { fontStack, labelSetOf } from "../../../../lib/chem/layout2d";
 import { useEditor, useEditorStore } from "../store";
 import { useDrawnLayout } from "./drawnLayoutContext";
@@ -13,7 +13,9 @@ import { useDrawnLayout } from "./drawnLayoutContext";
  * at its size. Enter keeps them, Shift+Enter starts another line, Escape
  * lets them go, and a press elsewhere keeps them too. New words put down
  * near an arrow go over it or under it; words written anew over an arrow
- * stay clear of it as they grow. Words written away are gone.
+ * stay clear of it as they grow. Words made as wide as something are
+ * written as wide, broken into lines as they will be. Words written away
+ * are gone.
  */
 export default function CaptionEditor2D() {
   const edit = useEditor((s) => s.captionEdit);
@@ -58,13 +60,13 @@ export default function CaptionEditor2D() {
     if (keep) {
       const set = labelSetOf(opts);
       const half = (t: string) => {
-        const r = captionSet(t, 0, 0, opts.fontPx, set);
+        const r = captionSet(t, 0, 0, opts.fontPx, set, caption?.width);
         return { w: r.halfW, h: r.halfH };
       };
       const others = s.captions
         .filter((o) => o.id !== edit.id)
         .map((o) => {
-          const r = captionSet(o.text, o.x, o.y, opts.fontPx, set);
+          const r = captionSet(o.text, o.x, o.y, opts.fontPx, set, o.width);
           return { ...o, halfW: r.halfW, halfH: r.halfH };
         });
       if (edit.id == null) {
@@ -83,8 +85,10 @@ export default function CaptionEditor2D() {
     s.setCaptionEdit(null);
   };
 
-  // as wide as its longest line, and as tall as its lines: measured in its own typeface
-  const widest = Math.max(1, ...lines.map((l) => measure(l || " ", fontPx, family)));
+  // as wide as its longest line - or as it was made - and as tall as its lines: measured in its own typeface
+  const wide = caption?.width;
+  const widest = wide ? wide * zoom : Math.max(1, ...lines.map((l) => measure(l || " ", fontPx, family)));
+  const rows = wide ? captionLines(lines.join("\n"), opts.fontPx, labelSetOf(opts), wide).length : lines.length;
   return (
     <PageHtml position={[at.x, at.y, 0]} center transform={false} style={{ pointerEvents: "auto", zIndex: 30 }}>
       <div
@@ -108,7 +112,7 @@ export default function CaptionEditor2D() {
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"
-          rows={Math.max(1, lines.length)}
+          rows={Math.max(1, rows)}
           onInput={(e) => setLines(e.currentTarget.value.split("\n"))}
           onCompositionStart={() => (composing.current = true)}
           onCompositionEnd={() => (composing.current = false)}

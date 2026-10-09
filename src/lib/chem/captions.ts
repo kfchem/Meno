@@ -2,8 +2,9 @@
  * Words on the page - a reaction's reagents and conditions over its arrow,
  * or anything else (docs/EDITOR-2D.md, *Text*): set as the drawing sets a
  * label, a formula's counts low and a prefix's t- in italics, the rest as
- * typed; line under line, each centred; and, put near an arrow, set over
- * it or under it, clear of it, to go where it goes.
+ * typed; line under line, each centred - broken into lines as wide as it
+ * is made, where it is given a width; and, put near an arrow, set over it
+ * or under it, clear of it, to go where it goes.
  */
 import { italicUnits, labelUnits, unitRuns } from "./abbreviations";
 import { ACS_LABEL_SET, labelBox, runsWidth, type LabelSet, type TextItem, type TextRun } from "./layout2d";
@@ -46,20 +47,62 @@ export function captionRuns(line: string): TextRun[] {
   return runs;
 }
 
+/** A number, and a unit after one: kept together on a line, as 60 °C, 12 h, 2 equiv, 10 mol% are. */
+const NUMBER = /^[−-]?\d+([.,]\d+)?$/;
+const UNIT = /^(°\S*|[\p{L}%µ][\p{L}%µ]{0,4}[.,;)]?)$/u;
+
+/** A typed line's words as they are kept on a line: its words, a number with the unit after it as one. */
+function unbreakable(para: string): string[] {
+  const out: string[] = [];
+  for (const word of para.split(/\s+/).filter(Boolean)) {
+    const last = out[out.length - 1];
+    if (last && NUMBER.test(last.split(" ").slice(-1)[0]) && UNIT.test(word)) out[out.length - 1] = `${last} ${word}`;
+    else out.push(word);
+  }
+  return out;
+}
+
+/**
+ * A caption's lines: as typed - or, given a `width`, each typed line broken
+ * at its spaces into lines no wider than it, as many words on each as fit
+ * (a word wider than it alone on its line), a number never parted from the
+ * unit after it.
+ */
+export function captionLines(text: string, fontSize: number, set: LabelSet = ACS_LABEL_SET, width?: number): string[] {
+  const typed = text.split("\n").map((l) => l.trim());
+  if (!(width != null && width > 0)) return typed;
+  const out: string[] = [];
+  for (const para of typed) {
+    let line = "";
+    for (const word of unbreakable(para)) {
+      const next = line ? `${line} ${word}` : word;
+      if (!line || runsWidth(captionRuns(next), fontSize, set) <= width) line = next;
+      else {
+        out.push(line);
+        line = word;
+      }
+    }
+    out.push(line);
+  }
+  return out;
+}
+
 /** A caption set: its lines, each a text the drawing draws as it draws a label, and how far its ink reaches either way of its middle. */
 export type CaptionSet = { items: TextItem[]; halfW: number; halfH: number };
 
 /**
  * A caption's text set about (x, y), its middle: each line centred, line
  * under line `CAPTION_LINE` ems apart, at `fontSize` - a label's size -
- * in the typeface `set` measures in. Blank lines keep their room.
+ * in the typeface `set` measures in, broken into lines as wide as `width`
+ * where it is given one. Blank lines keep their room.
  */
-export function captionSet(text: string, x: number, y: number, fontSize: number, set: LabelSet = ACS_LABEL_SET): CaptionSet {
-  const lines = text.split("\n").map((l) => l.trim());
+export function captionSet(text: string, x: number, y: number, fontSize: number, set: LabelSet = ACS_LABEL_SET, width?: number): CaptionSet {
+  const lines = captionLines(text, fontSize, set, width);
   const step = fontSize * CAPTION_LINE;
   const top = ((lines.length - 1) / 2) * step;
-  // (how far it reaches: half a line's height at the least, and its ink - a subscript's drop, a capital's height)
-  let halfW = 0;
+  // (how far it reaches: half a line's height at the least, and its ink - a
+  // subscript's drop, a capital's height - and, made as wide as something, that)
+  let halfW = width != null && width > 0 ? width / 2 : 0;
   let halfH = fontSize / 2 + top;
   const items: TextItem[] = [];
   lines.forEach((line, i) => {

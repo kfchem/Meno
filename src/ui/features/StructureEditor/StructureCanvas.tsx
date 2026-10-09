@@ -1108,6 +1108,10 @@ function StructureCanvasContent({
             store.getState().addSet(frame);
             store.getState().clearSel();
           } : undefined}
+          onFitWords={(() => {
+            const c = menu.kind === "caption" ? store.getState().captions.find((x) => x.id === menu.id) : undefined;
+            return c?.width ? () => store.getState().updateCaption(c.id, { width: null }) : undefined;
+          })()}
           onEditText={() => {
             const c = store.getState().captions.find((x) => x.id === menu.id);
             if (c) store.getState().setCaptionEdit({ id: c.id, at: { x: c.x, y: c.y } });

@@ -234,7 +234,7 @@ export function drawingLayout(
   }
   // and the words on the page, set as the canvas sets them
   const set = labelSetOf(opts);
-  const words = (model.captions ?? []).flatMap((c) => captionSet(c.text, c.x, c.y, opts.fontPx, set).items);
+  const words = (model.captions ?? []).flatMap((c) => captionSet(c.text, c.x, c.y, opts.fontPx, set, c.width).items);
   if (words.length) {
     layout.texts.push(...words);
     // (each line's ink, about where it is set)

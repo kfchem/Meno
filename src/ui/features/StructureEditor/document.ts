@@ -1055,18 +1055,19 @@ export function addCaption(doc: StructureDocument, c: Omit<Caption, "id">): Stru
 export function updateCaption(
   doc: StructureDocument,
   id: number,
-  patch: { text?: string; x?: number; y?: number; arrow?: number | null },
+  patch: { text?: string; x?: number; y?: number; arrow?: number | null; width?: number | null },
 ): StructureDocument {
   const captions = doc.captions ?? [];
   const index = captions.findIndex((c) => c.id === id);
   if (index < 0) return doc;
-  const { arrow, ...rest } = patch;
+  const { arrow, width, ...rest } = patch;
   const was = captions[index];
-  // (over the arrow it was over, unless said)
+  // (over the arrow it was over, unless said; as wide as it was, unless said - none, as its words)
   const link = arrow === undefined ? was.arrow : (arrow ?? undefined);
-  const { arrow: _was, ...kept } = was;
-  const next: Caption = { ...kept, ...rest, ...(link != null ? { arrow: link } : {}) };
-  if (next.text === was.text && next.x === was.x && next.y === was.y && next.arrow === was.arrow) return doc;
+  const wide = width === undefined ? was.width : width != null && width > 0 ? width : undefined;
+  const { arrow: _was, width: _wide, ...kept } = was;
+  const next: Caption = { ...kept, ...rest, ...(link != null ? { arrow: link } : {}), ...(wide != null ? { width: wide } : {}) };
+  if (next.text === was.text && next.x === was.x && next.y === was.y && next.arrow === was.arrow && next.width === was.width) return doc;
   const out = captions.slice();
   out[index] = next;
   return { ...doc, captions: out };

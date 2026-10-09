@@ -103,6 +103,7 @@ export default function PartMenu({
   onAddPlus,
   onAddText,
   onEditText,
+  onFitWords,
   onRunStep,
   onStepOptions,
   step,
@@ -141,6 +142,8 @@ export default function PartMenu({
   onAddText: () => void;
   /** The words right-clicked, written anew. */
   onEditText: () => void;
+  /** Words made as wide as something: as wide as their words again, a line for each line typed. */
+  onFitWords?: () => void;
   /** A workflow's step right-clicked: run, or opened to its options. */
   onRunStep: () => void;
   onStepOptions: () => void;
@@ -254,6 +257,7 @@ export default function PartMenu({
       : target.kind === "caption"
       ? [
           { name: "Edit text", keys: "", run: onEditText },
+          ...(onFitWords ? [{ name: "As wide as its words", keys: "", run: onFitWords }] : []),
           { name: "Delete text", keys: deleteKey, run: onDelete },
         ]
       : target.kind === "pdf"

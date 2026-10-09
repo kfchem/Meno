@@ -22,7 +22,7 @@ export function createCaptionsSlice(doc: DocumentStore<StructureDocument>, set: 
       return id;
     },
     updateCaption: (id: number, patch: Parameters<EditorState["updateCaption"]>[1], gesture?: string) =>
-      doc.edit(patch.text != null ? "edit text" : "move text", (d) => ops.updateCaption(d, id, patch), {
+      doc.edit(patch.text != null ? "edit text" : patch.width !== undefined ? "resize text" : "move text", (d) => ops.updateCaption(d, id, patch), {
         ...(gesture ? { coalesceKey: `caption:${id}:${gesture}` } : {}),
       }),
     removeCaption: (id: number) => {

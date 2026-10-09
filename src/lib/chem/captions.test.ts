@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ARROW_CLEAR, captionPlace, captionRuns, captionSet, CAPTION_LINE } from "./captions";
+import { ARROW_CLEAR, captionLines, captionPlace, captionRuns, captionSet, CAPTION_LINE } from "./captions";
 import { labelBox, placeLabel, runsWidth } from "./layout2d";
 
 const shown = (line: string) =>
@@ -52,6 +52,39 @@ describe("a caption set", () => {
     }
     // (a blank line keeps its room, and draws nothing)
     expect(captionSet("a\n\nb", 0, 0, 1).items.map((i) => i.text)).toEqual(["a", "b"]);
+  });
+});
+
+describe("a caption made as wide as something", () => {
+  const text = "The rotational barrier of the hydroxyl group was found by conformational analysis to be small.";
+
+  it("is broken at its spaces into lines no wider than it, as many words on each as fit", () => {
+    const lines = captionLines(text, 1, undefined, 12);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.join(" ")).toBe(text);
+    for (const l of lines) expect(runsWidth(captionRuns(l), 1)).toBeLessThanOrEqual(12 + 1e-9);
+    // (each line as full as it can be: the next word would not have fitted)
+    for (let i = 0; i < lines.length - 1; i++) expect(runsWidth(captionRuns(`${lines[i]} ${lines[i + 1].split(" ")[0]}`), 1)).toBeGreaterThan(12);
+    // (a word wider than it alone on its line; a line typed kept a line of its own; none, as typed)
+    expect(captionLines("a conformationally b", 1, undefined, 2)).toEqual(["a", "conformationally", "b"]);
+    expect(captionLines("one two\nthree", 1, undefined, 100)).toEqual(["one two", "three"]);
+    expect(captionLines("one two\nthree", 1)).toEqual(["one two", "three"]);
+    // (a number and the unit after it kept together)
+    for (const width of [3, 4, 5, 6, 7, 8]) {
+      const lines = captionLines("K2CO3, DMF, 60 °C, 12 h, then 2 equiv of base", 1, undefined, width);
+      expect(lines.some((l) => /(^|\s)60$/.test(l) || /(^|\s)12$/.test(l) || /(^|\s)2$/.test(l))).toBe(false);
+    }
+    expect(captionLines("60 °C", 1, undefined, 0.5)).toEqual(["60 °C"]);
+    expect(captionLines("aged 3 days", 1, undefined, 0.5)).toEqual(["aged", "3 days"]);
+  });
+
+  it("reaches as wide as it was made, and as tall as its lines, each centred", () => {
+    const set = captionSet(text, 0, 0, 1, undefined, 12);
+    expect(set.halfW).toBeGreaterThanOrEqual(6);
+    expect(set.items.length).toBe(captionLines(text, 1, undefined, 12).length);
+    expect(set.items[0].y - set.items[1].y).toBeCloseTo(CAPTION_LINE);
+    // (narrower words, narrower lines: more of them)
+    expect(captionSet(text, 0, 0, 1, undefined, 6).items.length).toBeGreaterThan(set.items.length);
   });
 });
 
