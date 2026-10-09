@@ -26,7 +26,7 @@ import {
   Selection2D,
 } from "./components";
 import { ExclamationTriangleIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CANVAS_RESIZE, DURATION, EASE_SLIDE, FADE, RISE } from "../../theme/motion";
 import DocumentStylePanel from "./DocumentStylePanel";
@@ -42,6 +42,7 @@ import { setPdfTaker } from "../../views/pdfs";
 import TextColumn from "./TextColumn";
 import ConfirmDiscard from "../../layouts/ConfirmDiscard";
 import NameDialog from "../../layouts/NameDialog";
+import { ErrorBoundary, StoppedCard } from "../../layouts/ErrorBoundary";
 import { flowOf, procedureParts, type FlowParts } from "./workflow/parts";
 import { procedureNeeds, proceduresSaved, saveProcedure, suggestedName } from "./workflow/procedures";
 import { knownOf, pluginWriters, WRITERS, type Writer } from "../../../lib/io/writers";
@@ -134,6 +135,7 @@ function StructureCanvasContent({
   toggleStyle,
   openArrowStyle,
   openSaveAbbreviation,
+  fadeIn,
 }: {
   active: boolean;
   tabId: string;
@@ -159,6 +161,8 @@ function StructureCanvasContent({
   openArrowStyle: (id: number) => void;
   /** The selected group saved as an abbreviation, in the panel beside the canvas. */
   openSaveAbbreviation: (ids: number[], smiles: string) => void;
+  /** Whether it fades into view: made again after it failed (CanvasBoundary). */
+  fadeIn?: boolean;
 }) {
   const fitNonce = useEditor((s) => s.fitNonce);
   const requestFit = useEditor((s) => s.requestFit);
@@ -877,7 +881,7 @@ function StructureCanvasContent({
   return (
     <div
       ref={dropRef}
-      className="flex-1 min-w-0 h-full relative"
+      className={`flex-1 min-w-0 h-full relative${fadeIn ? " meno-fade-in" : ""}`}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseMove={handleWrapperMouseMove}
       onMouseLeave={handleWrapperMouseLeave}
@@ -1271,6 +1275,73 @@ function StructureCanvasContent({
   );
 }
 
+/**
+ * The canvas, should it fail as it is drawn: a card in its place, and
+ * Reload making it again - whatever it was in the middle of let go, the
+ * press that would have ended it lost with it. Its document, and its store
+ * with it, are as they were (ui/layouts/ErrorBoundary).
+ */
+function CanvasBoundary({ children }: { children: (reloaded: boolean) => ReactNode }) {
+  const store = useEditorStore();
+  // (made again with its tab, or with the window, likewise: the store is as
+  // whatever failed left it)
+  useEffect(() => store.getState().letGo(), [store]);
+  // (the card in the middle of what is seen of the page: the column lies over its right side)
+  const cover = useEditor((s) => s.cover);
+  return (
+    <ErrorBoundary
+      part="canvas"
+      onReload={() => store.getState().letGo()}
+      fallback={({ error, reload }) => (
+        // (in the canvas's place, as wide, and as white)
+        <div className="flex-1 min-w-0 h-full relative bg-white">
+          <div className="absolute top-3 left-0 flex justify-center" style={{ right: cover }}>
+            <StoppedCard
+              said="The canvas stopped working. What is on it is kept."
+              error={error}
+              actions={[{ label: "Reload", run: reload }]}
+            />
+          </div>
+        </div>
+      )}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
+
+/**
+ * The column, likewise: a card where it was, Reload making it again - or
+ * Hide closing it, its texts and PDFs kept, for a column that fails again.
+ */
+function ColumnBoundary({ children }: { children: (reloaded: boolean) => ReactNode }) {
+  const store = useEditorStore();
+  return (
+    <ErrorBoundary
+      part="column"
+      fallback={({ error, reload }) => (
+        <StoppedCard
+          said="The column stopped working. Its texts and PDFs are kept."
+          error={error}
+          actions={[
+            { label: "Reload", run: reload },
+            {
+              label: "Hide",
+              run: () => {
+                store.getState().closeTexts();
+                reload();
+              },
+            },
+          ]}
+          className="absolute top-3 right-3"
+        />
+      )}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
+
 export default function StructureCanvas({
   tabId,
   initialPayload,
@@ -1310,23 +1381,29 @@ export default function StructureCanvas({
       <div className="w-full h-full flex">
         {/* the canvas, and over its right side the column of texts and PDFs (docs/PDF.md, *One canvas*) */}
         <div className="relative flex-1 min-w-0 h-full flex">
-        <StructureCanvasContent
-          active={active}
-          tabId={tabId}
-          initialPayload={initialPayload}
-          initialFilename={initialFilename}
-          initialKind={initialKind}
-          initialPath={initialPath}
-          officeId={officeId}
-          ownTab={document != null}
-          nameTab={nameTab}
-          styleOpen={styleOpen}
-          toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
-          openArrowStyle={(id) => setPanel({ arrow: id })}
-          openSaveAbbreviation={(ids, smiles) => setPanel({ abbreviation: { ids, smiles } })}
-        />
+        {/* (each its own part: should one fail, the other goes on - docs/ARCHITECTURE.md, *When a part fails*) */}
+        <CanvasBoundary>
+          {(reloaded) => (
+            <StructureCanvasContent
+              active={active}
+              tabId={tabId}
+              initialPayload={initialPayload}
+              initialFilename={initialFilename}
+              initialKind={initialKind}
+              initialPath={initialPath}
+              officeId={officeId}
+              ownTab={document != null}
+              nameTab={nameTab}
+              styleOpen={styleOpen}
+              toggleStyle={() => setPanel((p) => (p === "style" ? null : "style"))}
+              openArrowStyle={(id) => setPanel({ arrow: id })}
+              openSaveAbbreviation={(ids, smiles) => setPanel({ abbreviation: { ids, smiles } })}
+              fadeIn={reloaded}
+            />
+          )}
+        </CanvasBoundary>
         {/* The texts the workspace holds, in their column */}
-        <TextColumn />
+        <ColumnBoundary>{(reloaded) => <TextColumn slideIn={reloaded} />}</ColumnBoundary>
         </div>
         {/* The panel beside the canvas slides open and shut, the canvas giving
             way as it does; one going as another comes takes as long, so the

@@ -3,6 +3,7 @@ import type { DocumentStore } from "../../lib/doc";
 import type { ViewEntry } from "../views/registry";
 import { useEffect, useRef, useState } from "react";
 import { DURATION } from "../theme/motion";
+import { ErrorBoundary, StoppedCard } from "../layouts/ErrorBoundary";
 
 type Props = {
   order: TabId[];
@@ -54,17 +55,34 @@ export default function Deck({
             }
           >
             {entry ? (
-              // (keyed by what the tab shows: a view taking its place fades in)
-              <div key={t.content.kind} className="w-full h-full flex meno-fade-in">
-                <entry.Component
-                  tabId={id}
-                  content={t.content}
-                  active={active}
-                  document={getDocument(t)}
-                  dispatchPatchData={(patch) => patchData(id, patch)}
-                  renameTab={(label) => renameTab(id, label)}
-                />
-              </div>
+              // (each tab its own part: should what it shows fail, a card
+              // takes its place, the other tabs going on, and Reload makes
+              // it again from its document - ui/layouts/ErrorBoundary)
+              <ErrorBoundary
+                part={`tab "${t.meta.label}"`}
+                fallback={({ error, reload }) => (
+                  <div className="w-full h-full relative bg-white">
+                    <StoppedCard
+                      said="This tab stopped working. What it holds is kept."
+                      error={error}
+                      actions={[{ label: "Reload", run: reload }]}
+                      className="absolute top-3 left-1/2 -translate-x-1/2"
+                    />
+                  </div>
+                )}
+              >
+                {/* (keyed by what the tab shows: a view taking its place - or made again - fades in) */}
+                <div key={t.content.kind} className="w-full h-full flex meno-fade-in">
+                  <entry.Component
+                    tabId={id}
+                    content={t.content}
+                    active={active}
+                    document={getDocument(t)}
+                    dispatchPatchData={(patch) => patchData(id, patch)}
+                    renameTab={(label) => renameTab(id, label)}
+                  />
+                </div>
+              </ErrorBoundary>
             ) : null}
           </div>
         );
