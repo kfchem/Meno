@@ -109,6 +109,20 @@ fn on_page(page: &PdfPage, x: f32, y: f32) -> Option<(f32, f32)> {
     Some((dx as f32 / ON_PAGE_SCALE, dy as f32 / ON_PAGE_SCALE))
 }
 
+/// A page's own space as it is drawn, from its top left: found once, from
+/// where three points of it lie, and taken for every point after.
+fn page_space(page: &PdfPage) -> Option<impl Fn(f32, f32) -> (f32, f32)> {
+    let (o, ax, ay) = (on_page(page, 0.0, 0.0)?, on_page(page, 1000.0, 0.0)?, on_page(page, 0.0, 1000.0)?);
+    let m = [(ax.0 - o.0) / 1000.0, (ax.1 - o.1) / 1000.0, (ay.0 - o.0) / 1000.0, (ay.1 - o.1) / 1000.0];
+    Some(move |x: f32, y: f32| (o.0 + m[0] * x + m[2] * y, o.1 + m[1] * x + m[3] * y))
+}
+
+/// A box of a page's own space - left, bottom, right, top - as it lies on the page as drawn: left, top, right, bottom from its top left.
+fn drawn_box(at: &impl Fn(f32, f32) -> (f32, f32), r: &PdfRect) -> [f32; 4] {
+    let (a, b) = (at(r.left().value, r.bottom().value), at(r.right().value, r.top().value));
+    [a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1)]
+}
+
 /// A request answered: its JSON, and its bytes.
 fn answer(docs: &mut HashMap<String, PdfDocument<'static>>, pdfium: &'static Pdfium, cache: &Path, ask: &Value) -> Result<(Value, Vec<u8>), String> {
     let t = Instant::now();
@@ -184,13 +198,7 @@ fn answer(docs: &mut HashMap<String, PdfDocument<'static>>, pdfium: &'static Pdf
         "text" => {
             let page = doc.pages().get(ask["page"].as_i64().unwrap_or(0) as i32).map_err(|_| "no such page".to_string())?;
             let text = page.text().map_err(|e| e.to_string())?;
-            // (the page's own space as it is drawn, from its top left: found
-            // once, from where three points of it lie, and taken for all)
-            let (Some(o), Some(ax), Some(ay)) = (on_page(&page, 0.0, 0.0), on_page(&page, 1000.0, 0.0), on_page(&page, 0.0, 1000.0)) else {
-                return Err("the page could not be measured".into());
-            };
-            let m = [(ax.0 - o.0) / 1000.0, (ax.1 - o.1) / 1000.0, (ay.0 - o.0) / 1000.0, (ay.1 - o.1) / 1000.0];
-            let at = |x: f32, y: f32| (o.0 + m[0] * x + m[2] * y, o.1 + m[1] * x + m[3] * y);
+            let at = page_space(&page).ok_or("the page could not be measured")?;
             let chars = text.chars();
             let mut bytes = Vec::with_capacity(chars.len() * 20);
             for c in chars.iter() {
@@ -199,13 +207,34 @@ fn answer(docs: &mut HashMap<String, PdfDocument<'static>>, pdfium: &'static Pdf
                     .loose_bounds()
                     .ok()
                     .filter(|r| !c.is_generated().unwrap_or(false) && (r.width().value > 0.0 || r.height().value > 0.0))
-                    .map(|r| {
-                        let (a, b) = (at(r.left().value, r.bottom().value), at(r.right().value, r.top().value));
-                        [a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1)]
-                    })
+                    .map(|r| drawn_box(&at, &r))
                     .unwrap_or([0.0; 4]);
                 bytes.extend_from_slice(&c.unicode_value().to_le_bytes());
                 for v in b {
+                    bytes.extend_from_slice(&v.to_le_bytes());
+                }
+            }
+            Ok((json!({"n": bytes.len() / 20, "ms": ms(t)}), bytes))
+        }
+        // what the page is made of, each thing where it lies - 20 bytes each:
+        // what it is (1 text, 2 a path, 3 a picture, 4 a shading, 5 a form
+        // holding more), and its box, as a letter's is (`text`)
+        "objects" => {
+            let page = doc.pages().get(ask["page"].as_i64().unwrap_or(0) as i32).map_err(|_| "no such page".to_string())?;
+            let at = page_space(&page).ok_or("the page could not be measured")?;
+            let mut bytes = Vec::new();
+            for obj in page.objects().iter() {
+                let kind: u32 = match obj.object_type() {
+                    PdfPageObjectType::Text => 1,
+                    PdfPageObjectType::Path => 2,
+                    PdfPageObjectType::Image => 3,
+                    PdfPageObjectType::Shading => 4,
+                    PdfPageObjectType::XObjectForm => 5,
+                    _ => continue,
+                };
+                let Ok(q) = obj.bounds() else { continue };
+                bytes.extend_from_slice(&kind.to_le_bytes());
+                for v in drawn_box(&at, &q.to_rect()) {
                     bytes.extend_from_slice(&v.to_le_bytes());
                 }
             }
@@ -446,6 +475,13 @@ pub async fn pdf_text(app: tauri::AppHandle, sha: String, page: u32) -> Result<t
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// What a page is made of - its words, paths, pictures, shadings and forms - each where it lies: 20 bytes each (`objects`).
+#[tauri::command]
+pub async fn pdf_objects(app: tauri::AppHandle, sha: String, page: u32) -> Result<tauri::ipc::Response, String> {
+    let (_, bytes) = ask(&app, json!({"op": "objects", "sha": sha, "page": page})).await?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,7 +507,7 @@ mod tests {
     fn linked_pdf() -> Vec<u8> {
         let contents = [
             "BT /F1 14 Tf 72 700 Td (To page three) Tj ET",
-            "BT /F1 14 Tf 72 700 Td (Two) Tj ET",
+            "BT /F1 14 Tf 72 700 Td (Two) Tj ET 0 0 1 RG 2 w 100 300 200 150 re S",
             "BT /F1 14 Tf 72 700 Td (Three) Tj ET",
         ];
         let mut objs: Vec<(u32, String)> = vec![
@@ -547,6 +583,19 @@ mod tests {
         assert!((b[0] - 72.0).abs() < 1.0, "{b:?}");
         // (its baseline 142 points from the top: the box above it, and a little below)
         assert!(b[1] < 842.0 - 700.0 && b[3] > 842.0 - 700.0, "{b:?}");
+        // what the second page is made of: its word, and a box drawn round 100..300 across, 300..450 up
+        let (head, bytes) = answer(&mut docs, pdfium, &cache, &json!({"op": "objects", "sha": sha, "page": 1})).unwrap();
+        let n = head["n"].as_u64().unwrap() as usize;
+        assert_eq!(bytes.len(), n * 20);
+        let object = |i: usize| {
+            let f = |k: usize| f32::from_le_bytes(bytes[i * 20 + 4 + k * 4..i * 20 + 8 + k * 4].try_into().unwrap());
+            (u32::from_le_bytes(bytes[i * 20..i * 20 + 4].try_into().unwrap()), [f(0), f(1), f(2), f(3)])
+        };
+        let kinds: Vec<u32> = (0..n).map(|i| object(i).0).collect();
+        assert_eq!(kinds, vec![1, 2]);
+        let (_, b) = object(1);
+        // (a stroke two points wide reaches a point beyond the path)
+        assert!((b[0] - 99.0).abs() < 1.5 && (b[1] - (842.0 - 451.0)).abs() < 1.5 && (b[2] - 301.0).abs() < 1.5 && (b[3] - (842.0 - 299.0)).abs() < 1.5, "{b:?}");
         drop(docs);
         let _ = std::fs::remove_dir_all(&cache);
     }
