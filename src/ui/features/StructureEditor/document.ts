@@ -1061,16 +1061,31 @@ export function addPdf(doc: StructureDocument, pdf: Omit<PdfItem, "id">): Struct
 }
 
 /** `doc` with a PDF moved, turned to another page, or spread - unchanged where it has no such PDF, or the page is none of its. */
-export function updatePdf(doc: StructureDocument, id: number, patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread">>): StructureDocument {
+export function updatePdf(
+  doc: StructureDocument,
+  id: number,
+  patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread">> & { reading?: PdfItem["reading"] | null },
+): StructureDocument {
   const pdf = doc.pdfs?.find((p) => p.id === id);
   if (!pdf) return doc;
   if (patch.page != null && (!Number.isInteger(patch.page) || patch.page < 0 || patch.page >= pdf.pages.length)) return doc;
-  const next = { ...pdf, ...patch };
+  const { reading, ...rest } = patch;
+  const next: PdfItem = { ...pdf, ...rest };
   if (next.spread === false) delete next.spread;
+  // (read no longer; or read from where it was, no further than its last page, neither far smaller nor far larger)
+  if (reading === null) delete next.reading;
+  else if (reading) next.reading = readingOf(reading, pdf.pages.length);
   return { ...doc, pdfs: doc.pdfs!.map((p) => (p.id === id ? next : p)) };
 }
 
 /** `doc` without a PDF. */
+/** Where a PDF is read in the column, as far as it can be: its pages there, at a size between a quarter and eight times the column's width. */
+export function readingOf(r: { at: number; zoom: number }, pages: number): NonNullable<PdfItem["reading"]> {
+  const at = Number.isFinite(r.at) ? Math.min(Math.max(0, r.at), Math.max(0, pages - 1) + 0.999) : 0;
+  const zoom = Number.isFinite(r.zoom) ? Math.min(8, Math.max(0.25, r.zoom)) : 1;
+  return { at, zoom };
+}
+
 export function removePdf(doc: StructureDocument, id: number): StructureDocument {
   if (!doc.pdfs?.some((p) => p.id === id)) return doc;
   return { ...doc, pdfs: doc.pdfs.filter((p) => p.id !== id) };

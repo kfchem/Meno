@@ -22,7 +22,7 @@ export function createTextsSlice(doc: DocumentStore<StructureDocument>, set: Set
     editText: (id: number, text: string) =>
       doc.edit("type text", (d) => ops.editText(d, id, text), { coalesceKey: `text:${id}` }),
     removeText: (id: number) => doc.edit("close text", (d) => ops.removeText(d, id)),
-    showText: (id: number) => set({ textShown: id, textsOpen: true }),
+    showText: (id: number) => set({ textShown: id, textsOpen: true, pdfShown: null }),
     closeTexts: () => set({ textsOpen: false }),
   };
 }

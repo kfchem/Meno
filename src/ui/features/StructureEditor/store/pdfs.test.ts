@@ -104,6 +104,106 @@ describe("PDFs on the page", () => {
   });
 });
 
+describe("PDFs read in the column", () => {
+  const three = { name: "paper.pdf", sha256: SHA, pages: [A4, A4, A4] };
+
+  it("are named and shown there from their page on top, where they are read kept with them, no step to undo", () => {
+    const { doc, state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().turnPdf(1, 1);
+    expect(doc.history().undoDepth).toBe(2);
+    state().readPdf(1);
+    expect(state().pdfs[0].reading).toEqual({ at: 1, zoom: 1 });
+    expect(state()).toMatchObject({ pdfShown: 1, textsOpen: true, pdfFlight: { id: 1, page: 1, to: "column" } });
+    state().setPdfReading(1, { at: 1.5, zoom: 2 });
+    expect(state().pdfs[0].reading).toEqual({ at: 1.5, zoom: 2 });
+    expect(doc.history().undoDepth).toBe(2);
+    // (undone past and redone, it is still read where it was)
+    doc.undo();
+    expect(state().pdfs[0]).toMatchObject({ page: 0, reading: { at: 1.5, zoom: 2 } });
+    doc.redo();
+    expect(state().pdfs[0]).toMatchObject({ page: 1, reading: { at: 1.5, zoom: 2 } });
+    expect(state().pdfShown).toBe(1);
+  });
+
+  it("bring the page they come to on top on the page, the pages turned there still undone", () => {
+    const { doc, state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().turnPdf(1, 2);
+    state().readPdf(1);
+    state().readToPage(1, 2, 1);
+    expect(state().pdfs[0].page).toBe(1);
+    expect(doc.history().undoDepth).toBe(2);
+    // (the turn undone goes back to the page before it, and redone, to where the column is)
+    doc.undo();
+    expect(state().pdfs[0].page).toBe(0);
+    doc.redo();
+    expect(state().pdfs[0].page).toBe(1);
+    // (from a page it is not on: nothing)
+    state().readToPage(1, 0, 2);
+    expect(state().pdfs[0].page).toBe(1);
+  });
+
+  it("read no longer, go back to the page, the column showing the text it holds or shutting", () => {
+    const { state } = editor();
+    state().addTexts([{ name: "notes.txt", text: "hello" }]);
+    state().addPdfs([three, { ...three, name: "si.pdf", sha256: SHA2 }], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().readPdf(2);
+    expect(state().pdfShown).toBe(2);
+    state().showPdf(1);
+    expect(state().pdfShown).toBe(1);
+    // (a text shown: the PDFs still read there, named)
+    state().showText(state().texts[0].id);
+    expect(state().pdfShown).toBeNull();
+    state().showPdf(1);
+    state().stopReadingPdf(1);
+    expect(state().pdfs[0].reading).toBeUndefined();
+    expect(state()).toMatchObject({ pdfShown: 2, textsOpen: true, pdfFlight: { id: 1, to: "page" } });
+    state().stopReadingPdf(2);
+    expect(state()).toMatchObject({ pdfShown: null, textShown: state().texts[0].id, textsOpen: true });
+    state().removeText(state().texts[0].id);
+    expect(state().textsOpen).toBe(false);
+  });
+
+  it("deleted, are shown no longer; brought back, are shown again", () => {
+    const { doc, state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().removePdf(1);
+    expect(state()).toMatchObject({ pdfShown: null, textsOpen: false });
+    doc.undo();
+    expect(state()).toMatchObject({ pdfShown: 1, textsOpen: true });
+  });
+
+  it("are saved where they were read, the column showing the one it showed, and read back so", () => {
+    const { state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().setPdfReading(1, { at: 2.25, zoom: 1.5 });
+    const ws = readWorkspace(workspaceText(state()));
+    expect(ws?.pdfs[0].reading).toEqual({ at: 2.25, zoom: 1.5 });
+    expect(ws?.pdfShown).toBe(0);
+    const { state: again } = editor();
+    again().openWorkspace(ws!, true);
+    expect(again()).toMatchObject({ pdfShown: 1, textsOpen: true });
+    expect(again().pdfs[0].reading).toEqual({ at: 2.25, zoom: 1.5 });
+    // (the column closed: none shown)
+    again().closeTexts();
+    expect(readWorkspace(workspaceText(again()))?.pdfShown).toBeUndefined();
+  });
+
+  it("are read as far as they can be: no further than the last page, neither far smaller nor far larger", () => {
+    const { state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().setPdfReading(1, { at: 9, zoom: 100 });
+    expect(state().pdfs[0].reading).toEqual({ at: 2.999, zoom: 8 });
+    state().setPdfReading(1, { at: -1, zoom: 0 });
+    expect(state().pdfs[0].reading).toEqual({ at: 0, zoom: 0.25 });
+  });
+});
+
 describe("where a PDF's pages lie", () => {
   const p = { pages: Array.from({ length: 7 }, () => A4), x: 0, y: 0, page: 0 };
 

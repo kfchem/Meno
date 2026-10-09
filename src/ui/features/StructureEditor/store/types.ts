@@ -74,7 +74,26 @@ export type Caption = { id: number; x: number; y: number; text: string; arrow?: 
  * width and height in points, where the middle of its top page lies, which
  * page is on top, and whether its pages are spread out (lib/pdf/layout).
  */
-export type PdfItem = { id: number; name: string; sha256: string; pages: [number, number][]; x: number; y: number; page: number; spread?: boolean };
+export type PdfItem = {
+  id: number;
+  name: string;
+  sha256: string;
+  pages: [number, number][];
+  x: number;
+  y: number;
+  page: number;
+  spread?: boolean;
+  /**
+   * Read in the column, its name among the texts' (docs/PDF.md, *In the
+   * column*): where the column's top was, in pages from the first's top -
+   * 2.5, half way down the third, the gap under it counted - and how large
+   * its pages were, 1 as wide as the column. Kept, not a step to undo.
+   */
+  reading?: PdfReading;
+};
+
+/** Where a PDF is read in the column, and how large: `PdfItem.reading`. */
+export type PdfReading = { at: number; zoom: number };
 /** How a molecule in 3D is drawn: balls and sticks, or space-filling. */
 export type Look3D = "balls" | "space";
 /**
@@ -156,6 +175,9 @@ export type Molecule3D = {
  * read and edited in the column beside the canvas (docs/WORKSPACE.md,
  * *Texts*): its name, and where it was opened from, where Open said.
  */
+/** A PDF's page on its way into the column, or back to the page: which page, and when it set off. */
+export type PdfFlight = { id: number; page: number; to: "column" | "page"; start: number };
+
 export type WorkspaceText = { id: number; name: string; text: string; path?: string };
 /**
  * A set on the page (docs/WORKFLOWS.md): its frame, in world units, x0 to
@@ -275,6 +297,32 @@ export type EditorState = {
    */
   cover: number;
   setCover: (px: number) => void;
+  /** How wide the column is when it is open, in CSS pixels, as its edge was dragged: what it shows is laid out at that width as it slides. */
+  columnWidth: number;
+  setColumnWidth: (px: number) => void;
+  /** The PDF the column shows, among those read there; none, it shows the text it shows (docs/PDF.md, *In the column*). */
+  pdfShown: number | null;
+  /** The PDF a page of in the column is under the pointer: it is lit on the page, as one hovered there is. */
+  litPdf: number | null;
+  setLitPdf: (id: number | null) => void;
+  /** A PDF read in the column: its page on top rising into it from the page, the column opened on it. */
+  readPdf: (id: number) => void;
+  /** A PDF read in the column shown there. */
+  showPdf: (id: number) => void;
+  /** A PDF no longer read in the column: its page going back down to it on the page. */
+  stopReadingPdf: (id: number) => void;
+  /** Where a PDF is read in the column now - kept with it, not a step to undo. */
+  setPdfReading: (id: number, reading: PdfReading) => void;
+  /**
+   * The page the column has come to, on top on the page too (docs/PDF.md,
+   * *The two are one thing*) - not a step to undo: every state it was the
+   * page `from` in, undone to or redone, has it instead, so that undoing
+   * goes back past the pages turned on the page, not the column's.
+   */
+  readToPage: (id: number, from: number, to: number) => void;
+  /** A page going between the page and the column, as a PDF is read there or no longer. */
+  pdfFlight: PdfFlight | null;
+  endPdfFlight: () => void;
   /**
    * Texts added to the workspace, as one undo step, the last shown: each
    * one the workspace holds already - the same name and text - shown instead.

@@ -229,6 +229,12 @@ export function useStructureEvents(
     ndc.copy(pageAt(ndc.x, ndc.y, camRef.current));
 
     const st = store.getState();
+    // (twice on a PDF, nothing drawn over it: read in the column - docs/PDF.md)
+    const overPdf = st.hoveredPdf != null && st.hovered.atomId == null && st.hovered.bondId == null;
+    if (overPdf && st.hoveredArrow == null && st.hoveredPlus == null && st.hoveredCaption == null) {
+      st.readPdf(st.hoveredPdf!);
+      return;
+    }
     const atoms = st.model.atoms;
     const bonds = st.model.bonds;
 

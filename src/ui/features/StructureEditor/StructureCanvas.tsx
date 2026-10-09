@@ -98,6 +98,9 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import QuickAdd from "./QuickAdd";
 import Captions2D from "./components/Captions2D";
 import Pdfs2D from "./components/Pdfs2D";
+import PdfColumn from "./components/PdfColumn";
+import { goBack, isBackKey } from "./components/pdfColumnReader";
+import { PdfPictures } from "./components/pdfPictures";
 import { FollowCover, PageHtmlLayer } from "./components/coverLayer";
 import CaptionEditor2D from "./components/CaptionEditor2D";
 import Workflow2D from "./components/Workflow2D";
@@ -502,6 +505,9 @@ function StructureCanvasContent({
         // a PDF under the pointer, and nothing else
         e.preventDefault();
         st.removePdf(st.hoveredPdf);
+      } else if (!busy && st.hoveredPdf != null && isBackKey(e) && goBack(store, st.hoveredPdf)) {
+        // Back, over a PDF: to where it was before a link was followed in it
+        e.preventDefault();
       } else if (!busy && st.hoveredPdf != null && !e.metaKey && !e.ctrlKey && !e.altKey && ["ArrowRight", "ArrowLeft", "PageDown", "PageUp"].includes(e.key)) {
         // a PDF's pages turned, over it (docs/PDF.md)
         const pdf = st.pdfs.find((p) => p.id === st.hoveredPdf);
@@ -1105,6 +1111,7 @@ function StructureCanvasContent({
               onSpread: () => st.spreadPdf(p.id, !p.spread),
               ...(!p.spread && p.page < p.pages.length - 1 ? { onNext: () => st.turnPdf(p.id, p.page + 1) } : {}),
               ...(!p.spread && p.page > 0 ? { onPrevious: () => st.turnPdf(p.id, p.page - 1) } : {}),
+              onRead: () => st.readPdf(p.id),
             };
           })()}
           onCleanUp={() =>
@@ -1181,8 +1188,11 @@ function StructureCanvasContent({
       >
         <color attach="background" args={["#ffffff"]} />
         <FitToContent2D trigger={fitNonce} />
-        {/* PDFs, under the drawing (docs/PDF.md) */}
-        <Pdfs2D />
+        {/* PDFs, under the drawing, and one read in the column over the canvas's right side (docs/PDF.md) */}
+        <PdfPictures>
+          <Pdfs2D />
+          <PdfColumn />
+        </PdfPictures>
         {/* The drawing, laid out once for every layer below to draw from */}
         <DrawnLayoutProvider>
           {/* Bonds */}

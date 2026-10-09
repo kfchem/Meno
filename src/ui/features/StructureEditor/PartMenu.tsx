@@ -146,8 +146,8 @@ export default function PartMenu({
   onStepOptions: () => void;
   /** What a step right-clicked can do besides, as it is: stopped, while its jobs wait or run; its logs and files shown, where it has jobs. */
   step?: { onRunFrom?: () => void; onStop?: () => void; onShowLog?: () => void; onShowFiles?: () => void };
-  /** What a PDF right-clicked can do: its pages turned, spread or gathered (docs/PDF.md). */
-  pdf?: { spread: boolean; onSpread: () => void; onNext?: () => void; onPrevious?: () => void };
+  /** What a PDF right-clicked can do: read in the column, its pages turned, spread or gathered (docs/PDF.md). */
+  pdf?: { spread: boolean; onSpread: () => void; onNext?: () => void; onPrevious?: () => void; onRead: () => void };
   /** The whole flow a step or a set right-clicked is part of, saved as a procedure, named. */
   onSaveProcedure?: () => void;
   /** The selection made a set, a workflow's input; unset, where it holds no whole structure or molecule in 3D. */
@@ -258,9 +258,10 @@ export default function PartMenu({
         ]
       : target.kind === "pdf"
       ? [
-          ...(pdf?.onNext ? [{ name: "Next page", keys: "\u2192", run: pdf.onNext }] : []),
-          ...(pdf?.onPrevious ? [{ name: "Previous page", keys: "\u2190", run: pdf.onPrevious }] : []),
-          ...(pdf ? [{ name: pdf.spread ? "Gather pages" : "Spread pages", keys: "", run: pdf.onSpread, divider: !!(pdf.onNext || pdf.onPrevious) }] : []),
+          ...(pdf ? [{ name: "Read", keys: "", run: pdf.onRead }] : []),
+          ...(pdf?.onNext ? [{ name: "Next page", keys: "\u2192", run: pdf.onNext, divider: true }] : []),
+          ...(pdf?.onPrevious ? [{ name: "Previous page", keys: "\u2190", run: pdf.onPrevious, divider: !pdf.onNext }] : []),
+          ...(pdf ? [{ name: pdf.spread ? "Gather pages" : "Spread pages", keys: "", run: pdf.onSpread, divider: true }] : []),
           { name: "Delete PDF", keys: deleteKey, run: onDelete, divider: true },
         ]
       : target.kind === "set"

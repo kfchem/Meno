@@ -1,9 +1,12 @@
 /**
  * The texts a workspace holds (docs/WORKSPACE.md, *Texts*): which its
- * column shows as they come and go, what a new one is called, and where
- * Export suggests writing one.
+ * column shows as they come and go - or which PDF read there (docs/PDF.md)
+ * - what a new one is called, and where Export suggests writing one.
  */
-import type { WorkspaceText } from "../store/types";
+import type { PdfItem, WorkspaceText } from "../store/types";
+
+/** The column's width as it first opens, in CSS pixels. */
+export const COLUMN_WIDTH = 440;
 import { firstFreeBeside } from "../../../../lib/io/beside";
 
 /**
@@ -29,6 +32,35 @@ export function shownText(
   if (!after.length) return { shown: null };
   const at = before.findIndex((t) => t.id === shown);
   return { shown: after[Math.min(Math.max(at, 0), after.length - 1)].id };
+}
+
+/**
+ * The PDF the column shows once the PDFs are `after`, having been `before`
+ * and showing `shown`, the texts going as `text` says - and whether it is to
+ * open, to show it: none, where a text has come; one read there that has
+ * come - brought back by an undo, or with a workspace - the last of them,
+ * opening; else the one shown, while it is read there - read no longer, the
+ * one read there now where it was among them; else none, where there is a
+ * text to show; else the first read there, if any.
+ */
+export function shownPdf(
+  before: readonly PdfItem[],
+  after: readonly PdfItem[],
+  shown: number | null,
+  text: { shown: number | null; open?: true },
+): { shown: number | null; open?: true } {
+  if (text.open) return { shown: null };
+  if (before !== after) {
+    const was = new Set(before.map((p) => p.id));
+    const come = after.filter((p) => !was.has(p.id) && p.reading);
+    if (come.length) return { shown: come[come.length - 1].id, open: true };
+  }
+  if (shown != null && after.some((p) => p.id === shown && p.reading)) return { shown };
+  const read = after.filter((p) => p.reading);
+  const at = shown != null ? before.filter((p) => p.reading).findIndex((p) => p.id === shown) : -1;
+  if (at >= 0 && read.length) return { shown: read[Math.min(at, read.length - 1)].id };
+  if (text.shown != null) return { shown: null };
+  return { shown: read[0]?.id ?? null };
 }
 
 /** What a new text is called: "Untitled.txt", or numbered from 2 where the workspace holds one so called. */

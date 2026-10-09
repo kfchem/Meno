@@ -14,6 +14,7 @@ import type { StyleChoice } from "../../../../lib/chem/style";
 import type { Carried3D, Drawn, EditorState, PdfItem, WorkspaceText } from "../store/types";
 import { pdfBytes } from "../../../../lib/pdf/reader";
 import { readDrawn } from "./copyPaste";
+import { readingOf } from "../document";
 import { calcShowing, heldOutput, outputsToKeep, sha256Of } from "../../../../lib/calc/asks";
 import { writeMenoFile } from "../../../../lib/doc/menoFileWriter";
 import type { KeptData } from "../../../../lib/doc/menoFile";
@@ -36,8 +37,10 @@ export type Workspace = {
   texts: SavedText[];
   /** Which of them its column showed, by its place among them; none, it was closed. */
   textShown?: number;
-  /** The PDFs on its page, each by its file's SHA-256 (docs/PDF.md). */
+  /** The PDFs on its page, each by its file's SHA-256 (docs/PDF.md), and where each read in its column was. */
   pdfs: Omit<PdfItem, "id">[];
+  /** Which of them its column showed, by its place among them - a text, or none, if it showed none of them. */
+  pdfShown?: number;
 };
 
 /** A text as a workspace's file keeps it: its name, and the file kept with its words, by SHA-256. */
@@ -47,7 +50,7 @@ type Saved = Pick<
   EditorState,
   "model" | "arrows" | "pluses" | "captions" | "molecules3d" | "turns3d" | "frames3d" | "lists3d" | "docStyle" | "aromaticEnabled" | "aromaticRings"
 > &
-  Partial<Pick<EditorState, "sets" | "steps" | "wires" | "texts" | "textShown" | "textsOpen" | "pdfs">>;
+  Partial<Pick<EditorState, "sets" | "steps" | "wires" | "texts" | "textShown" | "textsOpen" | "pdfs" | "pdfShown">>;
 
 /**
  * The canvas's molecules in 3D as a file carries them: each turned, and
@@ -79,7 +82,8 @@ export function workspaceText(state: Saved, kept: ReadonlySet<string> = new Set(
     const { path: _, ...source } = m.calc.source;
     return { ...m, calc: { ...m.calc, source } };
   });
-  const shown = state.textsOpen ? (state.texts?.findIndex((t) => t.id === state.textShown) ?? -1) : -1;
+  const pdfShown = state.textsOpen && state.pdfShown != null ? (state.pdfs?.findIndex((p) => p.id === state.pdfShown) ?? -1) : -1;
+  const shown = state.textsOpen && pdfShown < 0 ? (state.texts?.findIndex((t) => t.id === state.textShown) ?? -1) : -1;
   return (
     JSON.stringify({
       format: WORKSPACE,
@@ -97,6 +101,7 @@ export function workspaceText(state: Saved, kept: ReadonlySet<string> = new Set(
       ...(state.texts?.length ? { texts: state.texts.map((t, i) => ({ name: t.name, sha256: texts[i] })) } : {}),
       ...(shown >= 0 ? { textShown: shown } : {}),
       ...(state.pdfs?.length ? { pdfs: state.pdfs.map(({ id: _id, ...p }) => p) } : {}),
+      ...(pdfShown >= 0 ? { pdfShown } : {}),
     }) + "\n"
   );
 }
@@ -160,6 +165,7 @@ export function readWorkspace(text: string): Workspace | null {
     texts?: unknown;
     textShown?: unknown;
     pdfs?: unknown;
+    pdfShown?: unknown;
   };
   if (r?.format !== WORKSPACE || r.version !== WORKSPACE_VERSION) return null;
   const drawn = readDrawn(data);
@@ -175,6 +181,7 @@ export function readWorkspace(text: string): Workspace | null {
   }
   const shown = typeof r.textShown === "number" && Number.isInteger(r.textShown) && r.textShown >= 0 && r.textShown < texts.length;
   const pdfs = readPdfs(r.pdfs);
+  const pdfShown = typeof r.pdfShown === "number" && Number.isInteger(r.pdfShown) && !!pdfs[r.pdfShown]?.reading;
   return {
     drawn,
     ...(workflow ? { workflow } : {}),
@@ -184,10 +191,11 @@ export function readWorkspace(text: string): Workspace | null {
     texts,
     ...(shown ? { textShown: r.textShown as number } : {}),
     pdfs,
+    ...(pdfShown ? { pdfShown: r.pdfShown as number } : {}),
   };
 }
 
-/** The PDFs a workspace's JSON lists, each as far as it reads: its file by SHA-256, its pages' sizes, its place, the page on top. */
+/** The PDFs a workspace's JSON lists, each as far as it reads: its file by SHA-256, its pages' sizes, its place, the page on top, where it was read. */
 function readPdfs(v: unknown): Omit<PdfItem, "id">[] {
   const out: Omit<PdfItem, "id">[] = [];
   for (const p of Array.isArray(v) ? (v as Partial<PdfItem>[]) : []) {
@@ -197,7 +205,9 @@ function readPdfs(v: unknown): Omit<PdfItem, "id">[] {
     if (typeof p?.name !== "string" || typeof p.sha256 !== "string" || !SHA.test(p.sha256) || !pages.length) continue;
     if (typeof p.x !== "number" || typeof p.y !== "number" || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
     const page = Number.isInteger(p.page) && (p.page as number) >= 0 && (p.page as number) < pages.length ? (p.page as number) : 0;
-    out.push({ name: p.name.slice(0, 260), sha256: p.sha256, pages, x: p.x, y: p.y, page, ...(p.spread === true ? { spread: true } : {}) });
+    const r = p.reading as { at?: unknown; zoom?: unknown } | undefined;
+    const reading = r && typeof r.at === "number" && typeof r.zoom === "number" ? readingOf({ at: r.at, zoom: r.zoom }, pages.length) : null;
+    out.push({ name: p.name.slice(0, 260), sha256: p.sha256, pages, x: p.x, y: p.y, page, ...(p.spread === true ? { spread: true } : {}), ...(reading ? { reading } : {}) });
   }
   return out;
 }
