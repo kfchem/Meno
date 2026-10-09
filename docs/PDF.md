@@ -432,7 +432,9 @@ Built on `agent/pdf-trial`, kept off main:
 
 It was tried on PDFs made for it - two columns of text, a figure drawn
 as paths, a picture, a word broken by a hyphen at a line's end, and a
-page of 30000 paths - on the Mac and on Windows (release builds).
+page of 30000 paths - on the Mac and on Windows (release builds), and on
+Windows on a journal's article as published (8 pages, 3.2 MB: text,
+figures, structures and pictures).
 
 | | Mac (Apple M4, 2x) | Windows (WebView2, 100 %) |
 | --- | --- | --- |
@@ -443,6 +445,12 @@ page of 30000 paths - on the Mac and on Windows (release builds).
 | Bytes to the window | 127-261 MB/s | 42-66 MB/s |
 | Frames while zooming | 17 ms (95th: 18) | 10 ms (95th: 10) |
 | Search, all pages | 22 ms | 18 ms |
+
+The journal's article, on Windows: opened in 14 ms in PDFium (36 ms all
+told); its first preview in 8.0 ms (14 ms); a tile in 3.2 ms (17 ms); a
+page in the column in 10.6 ms (27 ms); searches in 0.5-19 ms; frames at
+10 ms. PDFium takes three to five times as long on it as on the PDFs
+made for the trial, and still far less than carrying the pictures.
 
 What it showed:
 - **PDFium draws far faster than anything waits for it**: a tile in a
@@ -458,7 +466,7 @@ What it showed:
   0.52 s, all of them at 0.63 s). Step 1 asks for the tiles sooner:
   when the zoom slows, at the level it is going to.
 - **PDFium's own search does not find a word broken by a hyphen at a
-  line's end**: it gives the hyphen as U+0002 and the line's end as
+  line's end** (the article's *computa-tional* among them): it gives the hyphen as U+0002 and the line's end as
   `\r\n`. Meno searches the page's text itself, a line's end read as a
   space and a broken word read whole, each letter pointing back to its
   box - found and marked on both lines.
