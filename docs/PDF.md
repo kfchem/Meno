@@ -525,7 +525,9 @@ Built:
   - the view moves by half as much, eased, so that what was in the middle of what could be seen stays there;
   - fitting, pasting and bringing a PDF into view use the part it does not cover;
   - what is on the page in HTML (a step's card, words being written) is cut off where the column begins.
-- **Reading a PDF there.** A double-click on its stack, or *Read* in its menu, opens it in the column. Its page rises from the stack, growing to the column's width as the column opens; closed, the page goes back down to the stack.
+- **Reading a PDF there.** A double-click on its stack, or *Read* in its menu, opens it in the column. Its page rises from the stack, growing to the column's width as the column opens. Closed by its ×, or the column hidden, the page lifts from where it is and goes back down to the stack.
+  - A PDF is read in three quarters of the canvas, a page being for reading; a text keeps the column's narrower width. Each keeps its own width once dragged, up to 85 % of the canvas.
+  - The column hidden on a PDF and shown again (*Show texts*) opens on it, its page rising again.
   - Its name is among the texts' along the column's top. Its × closes the column's view of it; the PDF stays on the page.
   - Several can be read there, each kept where it was read; closing the one shown shows the next.
 - **Its pages** lie one under another, as wide as the column.
@@ -545,6 +547,7 @@ Built:
 - **Saved** with the workspace: where each PDF read in the column is read (`reading`: pages down, and how large), and which one the column showed (`pdfShown`).
 
 Decided while building it, for the maintainer to confirm:
+- **Three quarters of the canvas for a PDF** (the maintainer asked for a wider column for reading PDFs, about three quarters). The stack is then partly under the column unless the view is moved.
 - **The column over the canvas, not beside it.** The canvas no longer narrows as the column opens. One canvas then draws the page and the column, and a page goes from one to the other as one thing (*One canvas*). The view follows the column instead.
 - **The page shown** is the one most in view. After a link, *Go to page* or Back, it is the page gone to, until the column is moved by hand: a place low on a page, or the last pages all in view at the end, would otherwise show the page after it.
 - **Reading is not a step to undo**, as where a text is scrolled to is not. The page the column brings on top of the stack is not one either. Turns made on the stack still are, and undoing them goes back past the column's pages, not through them.

@@ -166,6 +166,23 @@ describe("PDFs read in the column", () => {
     expect(state().textsOpen).toBe(false);
   });
 
+  it("go back to the page as the column is hidden on them, and rise into it again as it is shown", () => {
+    const { state } = editor();
+    state().addTexts([{ name: "notes.txt", text: "hello" }]);
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().endPdfFlight();
+    state().closeTexts();
+    expect(state()).toMatchObject({ textsOpen: false, pdfShown: 1, pdfFlight: { id: 1, to: "page" } });
+    state().readPdf(1);
+    expect(state()).toMatchObject({ textsOpen: true, pdfFlight: { id: 1, to: "column" } });
+    // (a text shown: nothing goes back)
+    state().endPdfFlight();
+    state().showText(state().texts[0].id);
+    state().closeTexts();
+    expect(state().pdfFlight).toBeNull();
+  });
+
   it("deleted, are shown no longer; brought back, are shown again", () => {
     const { doc, state } = editor();
     state().addPdfs([three], { x: 0, y: 0 });

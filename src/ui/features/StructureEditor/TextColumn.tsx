@@ -8,7 +8,7 @@ import TextEditor from "../TextEditor";
 import { DURATION, EASE_SLIDE, FADE } from "../../theme/motion";
 import { useEditor, useEditorStore } from "./store";
 import type { PdfItem, WorkspaceText } from "./store/types";
-import { textExportPath } from "./utils/texts";
+import { COLUMN_WIDTH, textExportPath } from "./utils/texts";
 import { takenBeside } from "../../../lib/io/beside";
 import { isPinch, wheelReader } from "../../../lib/input/wheel";
 import { useAppSettings } from "../../../lib/settings/appSettings";
@@ -17,9 +17,11 @@ import { linkAt, linksOf, type PdfLink } from "../../../lib/pdf/reader";
 import { followLink, goBack, isBackKey, readerOf } from "./components/pdfColumnReader";
 import { DOUBLE_CLICK_MS } from "./constants";
 
-/** The least and most the column may be dragged to, in pixels, the most as a share of the window. */
+/** The least and most the column may be dragged to, in pixels, the most as a share of the canvas. */
 const NARROWEST = 260;
-const WIDEST = 0.7;
+const WIDEST = 0.85;
+/** How much of the canvas the column takes as a PDF is read in it, until it is dragged: most of it, a PDF's page being for reading. */
+const PDF_SHARE = 0.75;
 /** How far a pinch's step zooms the column, by ratio, per px of it, and how far a notch of the wheel with Ctrl or ⌘ does: as on the canvas (PanZoom2D). */
 const PINCH_PER_PX = 0.01;
 const NOTCH_RATIO = 1.2;
@@ -55,11 +57,30 @@ export default function TextColumn() {
   const read = useMemo(() => pdfs.filter((p) => p.reading), [pdfs]);
   const pdf = read.find((p) => p.id === pdfShownId);
   const shown = pdf ? undefined : texts.find((t) => t.id === shownId);
-  const width = useEditor((s) => s.columnWidth);
-  const setWidth = useEditor((s) => s.setColumnWidth);
+  // as wide as it was dragged - a text's, as it first opened; a PDF's, most of the canvas
+  const [room, setRoom] = useState(0);
+  const [roomEl, setRoomEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!roomEl) return;
+    const seen = new ResizeObserver(() => setRoom(roomEl.clientWidth));
+    seen.observe(roomEl);
+    setRoom(roomEl.clientWidth);
+    return () => seen.disconnect();
+  }, [roomEl]);
+  const [textWidth, setTextWidth] = useState(COLUMN_WIDTH);
+  const [pdfWidth, setPdfWidth] = useState<number | null>(null);
+  const canvas = room || window.innerWidth;
+  const widest = Math.max(NARROWEST, canvas * WIDEST);
+  const width = Math.min(widest, Math.max(NARROWEST, pdf ? (pdfWidth ?? Math.round(canvas * PDF_SHARE)) : textWidth));
+  const setWidth = pdf ? setPdfWidth : setTextWidth;
   const [dragging, setDragging] = useState(false);
   // (how much of the canvas it covers, as it slides and as it is dragged: what is in view is the rest)
   const store = useEditorStore();
+  // (the width the canvas lays a PDF out at in it - not changed as it shuts on what it showed)
+  const showing = open && !!(shown || pdf);
+  useEffect(() => {
+    if (showing) store.getState().setColumnWidth(width);
+  }, [showing, width, store]);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!el) {
@@ -74,23 +95,27 @@ export default function TextColumn() {
     };
   }, [el, store]);
   return (
-    <AnimatePresence initial={false}>
-      {open && (shown || pdf) && (
-        <motion.div
-          key="texts"
-          ref={setEl}
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          // (dragged, it follows the pointer)
-          transition={dragging ? { duration: 0 } : { duration: DURATION.move, ease: EASE_SLIDE }}
-          className={clsx("absolute top-0 right-0 z-20 h-full overflow-hidden", dragging && "select-none")}
-        >
-          <Column texts={texts} read={read} shown={shown} pdf={pdf} width={width} />
-          <Edge width={width} setWidth={setWidth} setDragging={setDragging} />
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <>
+      {/* (the canvas's width, measured: what the column's share is of) */}
+      <div ref={setRoomEl} aria-hidden className="absolute inset-0 pointer-events-none" />
+      <AnimatePresence initial={false}>
+        {open && (shown || pdf) && (
+          <motion.div
+            key="texts"
+            ref={setEl}
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            // (dragged, it follows the pointer)
+            transition={dragging ? { duration: 0 } : { duration: DURATION.move, ease: EASE_SLIDE }}
+            className={clsx("absolute top-0 right-0 z-20 h-full overflow-hidden", dragging && "select-none")}
+          >
+            <Column texts={texts} read={read} shown={shown} pdf={pdf} width={width} />
+            <Edge width={width} widest={widest} setWidth={setWidth} setDragging={setDragging} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -464,10 +489,12 @@ function PageNumber({ pages, over }: { pages: number; over: boolean }) {
 /** The column's left edge, dragged to make it wider or narrower. */
 function Edge({
   width,
+  widest,
   setWidth,
   setDragging,
 }: {
   width: number;
+  widest: number;
   setWidth: (w: number) => void;
   setDragging: (on: boolean) => void;
 }) {
@@ -491,7 +518,6 @@ function Edge({
       }}
       onPointerMove={(e) => {
         if (!from.current) return;
-        const widest = Math.max(NARROWEST, window.innerWidth * WIDEST);
         setWidth(Math.min(widest, Math.max(NARROWEST, from.current.width + from.current.x - e.clientX)));
       }}
       onPointerUp={() => {

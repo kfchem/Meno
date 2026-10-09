@@ -61,12 +61,15 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
   const reader = readerOf(store);
   const tall = Math.max(1, size.height - HEADER_PX);
 
-  // where a page going back to the stack set off from, in the column: kept as the column goes on to show something else
+  // where a page going back to the stack set off from: where it was on the
+  // screen as the column began to shut, or went on to something else - it
+  // lifts from there, and does not go away with the column
   const from = useRef<{ start: number; rect: Rect } | null>(null);
   if (flight?.to === "page" && from.current?.start !== flight.start && reader.id === flight.id) {
     const { l, top, left } = reader.seen();
     const p = l.pages[flight.page];
-    if (p) from.current = { start: flight.start, rect: { x: p.x - left, y: p.y - top, w: p.w, h: p.h } };
+    const x0 = size.width - store.getState().cover;
+    if (p) from.current = { start: flight.start, rect: { x: x0 + p.x - left, y: HEADER_PX + p.y - top, w: p.w, h: p.h } };
   }
   if (pdf) reader.take(pdf);
   reader.width = width;
@@ -218,7 +221,8 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
   const column = (() => {
     if (!pdf || reader.id !== pdf.id) return null;
     const { l, top, left } = reader.seen();
-    const hidden = flight?.to === "column" && flight.id === pdf.id ? flight.page : null;
+    // (the page on its way, in or out, is the one flying, not one left in the column)
+    const hidden = flight?.id === pdf.id ? flight.page : null;
     return pagesInView(l, top, tall, tall / 2)
       .filter((i) => i !== hidden)
       .map((i) => {
@@ -251,10 +255,7 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
       const { l, top, left } = reader.seen();
       const p = l.pages[flight.page];
       if (p) inColumn = { x: x0 + p.x - left, y: HEADER_PX + p.y - top, w: p.w, h: p.h };
-    } else if (flight.to === "page" && from.current?.start === flight.start) {
-      const r = from.current.rect;
-      inColumn = { x: x0 + r.x, y: HEADER_PX + r.y, w: r.w, h: r.h };
-    }
+    } else if (flight.to === "page" && from.current?.start === flight.start) inColumn = from.current.rect;
     if (!onPage || !inColumn) return null;
     const [a, b] = flight.to === "column" ? [onPage, inColumn] : [inColumn, onPage];
     const r = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, w: a.w + (b.w - a.w) * k, h: a.h + (b.h - a.h) * k };

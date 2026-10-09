@@ -782,6 +782,7 @@ function StructureCanvasContent({
   const texts = useEditor((s) => s.texts);
   const steps = useEditor((s) => s.steps);
   const textsOpen = useEditor((s) => s.textsOpen);
+  const reading = useEditor((s) => s.pdfs.some((p) => p.reading));
   const commandsNow = useRef<() => CommandGroup[]>(() => []);
   commandsNow.current = () => [
     {
@@ -833,11 +834,20 @@ function StructureCanvasContent({
       items: [
         { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit },
         { name: chemistry.stereoLabels ? "Hide R and S" : "Show R and S", run: toggleStereoLabels },
-        ...(texts.length
+        ...(texts.length || reading
           ? [
               textsOpen
                 ? { name: "Hide texts", run: () => store.getState().closeTexts() }
-                : { name: "Show texts", run: () => store.getState().showText(store.getState().textShown ?? texts[0].id) },
+                : {
+                    name: "Show texts",
+                    run: () => {
+                      // (the PDF it showed, rising into it again; or the text)
+                      const st = store.getState();
+                      if (st.pdfShown != null && st.pdfs.some((p) => p.id === st.pdfShown && p.reading)) st.readPdf(st.pdfShown);
+                      else if (st.texts.length) st.showText(st.textShown ?? st.texts[0].id);
+                      else if (st.pdfs.some((p) => p.reading)) st.readPdf(st.pdfs.find((p) => p.reading)!.id);
+                    },
+                  },
             ]
           : []),
       ],
