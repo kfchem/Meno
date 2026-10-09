@@ -61,6 +61,15 @@ stops being part of the work.
      things out*).
    - **Words dragged out become words on the page**, the kind #177 made.
    - **Texts are coloured by Lezer** (*A text*).
+   - **Texts are drawn with WebGL**, as VS Code draws its own text: Meno
+     draws the text, the caret and the selection, and takes typing from a
+     field kept out of sight.
+   - **What is on the page is drawn as its labels are, in signed-distance
+     type (troika)**, sharp at every zoom: atoms' labels and words on the
+     page, as now, and a text's sheet. **What is in the column is drawn
+     by the system's own type**, made into pictures line by line, as sharp
+     as any editor's: the column is zoomed into only as a thing opens or
+     closes.
 
 ## What a thing on the page is
 
@@ -208,15 +217,32 @@ stops being part of the work.
 - **A calculation's output keeps its molecule as its body**: the
   molecule's *Show <name>* opens the output in the column, rising from
   the molecule. No sheet is laid beside it.
-- **Drawn with WebGL** (question 1): the column's text and the sheet's
-  alike, so that a text can rise from the page into the column as a PDF
-  does.
-  - Only the lines in view are set, so a calculation's log of a hundred
-    thousand lines scrolls as a short file does.
-  - Typing, IME included, goes into a field kept out of sight, and
-    Meno draws the text, the caret, the selection and what the IME is
-    composing. (Words on the page are typed today in a field shown over
-    the page, in HTML; they would be typed this way too.)
+- **Drawn with WebGL**, as VS Code draws its own text:
+  - **On the page**, a text's sheet is set in the type atoms' labels are
+    set in, signed-distance glyphs made as they are needed (troika),
+    sharp at every zoom.
+  - **In the column**, each line is drawn by the system's own type into a
+    picture, and the pictures are textures: as sharp as an editor's, and
+    any letter Meno's own fonts lack is taken from the system's, as a
+    browser takes it.
+  - **Between the two**, a text rising from the page into the column
+    moves in the page's type, and once it has settled its lines come up
+    sharp in the system's - as a PDF's tiles do.
+  - **Only the lines in view are set or drawn**, so a calculation's log
+    of a hundred thousand lines scrolls as a short file does.
+  - **Typing**, IME included, goes into a field kept out of sight and
+    kept at the caret, so that the IME's candidates show where they
+    should; Meno draws the text, the caret, the selection and what the
+    IME is composing. The lines around the caret are kept in that field
+    too, so that a word already written can be converted again.
+    (Words on the page are typed today in a field shown over the page,
+    in HTML.)
+  - **The keys are an editor's**: arrows, by word and by line, to a
+    line's ends and the text's, page by page, with Shift to select, each
+    as the system has them on a Mac and on Windows.
+  - **What the system's text services give** - a word looked up,
+    reading aloud - is not offered in the column at first; a copy of
+    the text in view, kept out of sight, can bring them back later.
 - **Coloured by what it is**, where that is known, by Lezer (MIT, the
   parsers CodeMirror is built on, which take up an edit without starting
   over). Lezer says which part of the text is what; Meno draws the
@@ -295,9 +321,10 @@ together, in short eased transitions.
   the part of the canvas it draws in). A page or a text can then go from
   one to the other as one moving thing. The column's header - its names,
   its buttons - stays as it is, in HTML, in Meno's look.
-- **A page is a sheet with textures**, its tiles. A text is set with the
-  type the drawing's labels are set with (troika), line by line as it
-  comes into view.
+- **A page is a sheet with textures**, its tiles. A text's sheet on the
+  page is set with the type the drawing's labels are set with (troika);
+  in the column, its lines are pictures the system's type draws, line by
+  line as they come into view.
 - **Selection, search and the caret** are drawn over them, from where
   PDFium says the letters are, or where the text's type sets them.
 - **A picture is a texture on a sheet**. A figure at 600 dpi - a whole
@@ -406,8 +433,10 @@ A PDF is a file from anywhere, and is treated as such.
    column; *This PDF* and *All PDFs*; words dragged out onto the page.
 4. **Pictures**: from image files and the clipboard, and figures dragged
    out of a PDF; moved, scaled, turned, tied to their source.
-5. **Texts drawn with WebGL**: a text's sheet on the page, the column's
-   text and its typing drawn by Meno, and its colouring.
+5. **Texts drawn with WebGL**: first a small trial of typing alone,
+   Japanese through the IME on a Mac and on Windows, shown before the
+   rest; then a text's sheet on the page, the column's text and its
+   typing drawn by Meno, and its colouring.
 
 Each step is a pull request of its own, checked in the built app on the
 Mac (and on Windows for steps 0, 1 and 5). Then stage 5: a picture read
@@ -427,9 +456,5 @@ to it.
 
 ## Questions
 
-1. **Texts drawn with WebGL** (recommended, step 5)? Or kept in HTML in
-   the column, with only the sheet on the page in WebGL? Drawn by Meno, a
-   text can rise from the page into the column as a PDF does, and a long
-   log scrolls as fast as a short one; but Meno then draws the caret, the
-   selection and what an IME is composing itself, which no part of Meno
-   does yet.
+None left open (2026-10-09). The specification as a whole is for the
+maintainer to agree to before step 0's trial is shown.
