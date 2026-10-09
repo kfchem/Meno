@@ -226,5 +226,36 @@ export function createInteractionSlice(set: SetState, get: GetState) {
         }
         return prev;
       }),
+
+    letGo: () =>
+      set((prev: EditorState) => ({
+        ...prev,
+        // nothing under the pointer
+        hovered: { atomId: null, bondId: null },
+        hovered3d: null,
+        hoveredAtom3d: null,
+        hoveredMeasure3d: null,
+        hoveredArrow: null,
+        hoveredPlus: null,
+        hoveredCaption: null,
+        hoveredPdf: null,
+        hoveredSet: null,
+        hoveredStep: null,
+        hoveredWire: null,
+        litPdf: null,
+        // no gesture under way
+        boxSelect: { active: false, kind: "box", points: [] },
+        pressHold: null,
+        doubleClickBond: null,
+        extend: ended,
+        moveDrag: { active: false, atomId: null, pointer: null, mode: "snap", preview: null },
+        panHold: { active: false, pointerId: null },
+        wireDrag: null,
+        // nothing being written or asked over the canvas
+        labelEdit: { active: false, atomId: null, value: "", autoCap: true },
+        captionEdit: null,
+        quickAdd: null,
+        workflowMenu: null,
+      })),
   };
 }
