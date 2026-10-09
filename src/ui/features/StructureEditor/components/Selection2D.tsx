@@ -8,13 +8,13 @@ import { SELECTION_SHADE } from "./selectionShade";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX, QUICK_ADD_MS } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
-import { inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
+import { cornersOf, inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
 import { flowIn } from "../workflow/parts";
 import type { Style3D } from "../../../../lib/chem/style3d";
 import { currentStyle3D, useStyle3D } from "../style3d";
 import { lookOf, poseOf, seenBounds, solidOf, standingHeight, turnedInPlane, turnedTogether, type Turning3D } from "../utils/molecule3d";
 import { eyeOf } from "../utils/page";
-import type { Model, Molecule3D, Turn3D } from "../store/types";
+import type { Model, Molecule3D, PictureItem, Turn3D } from "../store/types";
 import { useDrawnLayout } from "./drawnLayoutContext";
 import { TAU, follow } from "../../../theme/motion";
 
@@ -35,10 +35,11 @@ const turningOf =
   };
 
 /**
- * How far the selection reaches on the page, the drawing's atoms and the
+ * How far the selection reaches on the page, the drawing's atoms, the
  * molecules in 3D - each as it is turned and shown now, seen straight from
  * above (orthographic), or from `eyeHeight` above it by a camera in
- * perspective - and its middle; null with nothing selected.
+ * perspective - and the pictures, and its middle; null with nothing
+ * selected.
  */
 function selectionExtent(
   model: Model,
@@ -49,6 +50,7 @@ function selectionExtent(
   frames: Record<number, number>,
   style: Style3D,
   eyeHeight?: number,
+  pictures: readonly PictureItem[] = [],
 ): { mid: { x: number; y: number }; top: number } | null {
   const xs: number[] = [];
   const ys: number[] = [];
@@ -64,9 +66,15 @@ function selectionExtent(
     xs.push(b.minX, b.maxX);
     ys.push(b.minY, b.maxY);
   }
+  for (const p of pictures) {
+    for (const q of cornersOf(p)) {
+      xs.push(q.x);
+      ys.push(q.y);
+    }
+  }
   if (!xs.length) return null;
   // (the drawing alone: its atoms' middle, as ever)
-  const mid = sel3d.size ? { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 } : middleOf(model, atoms);
+  const mid = sel3d.size || pictures.length ? { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 } : middleOf(model, atoms);
   return mid ? { mid, top: Math.max(...ys) } : null;
 }
 
@@ -87,6 +95,9 @@ function selectionExtent(
 export default function Selection2D() {
   const { model, sel, boxSelect } = useEditor();
   const sel3d = useEditor((s) => s.sel3d);
+  const selPictures = useEditor((s) => s.selPictures);
+  const pictures = useEditor((s) => s.pictures);
+  const picked = useMemo(() => pictures.filter((p) => selPictures.has(p.id)), [pictures, selPictures]);
   const molecules3d = useEditor((s) => s.molecules3d);
   const turns3d = useEditor((s) => s.turns3d);
   const frames3d = useEditor((s) => s.frames3d);
@@ -153,8 +164,9 @@ export default function Selection2D() {
         const atoms = add ? new Set([...s.sel.atoms, ...got.atoms]) : got.atoms;
         const bonds = add ? new Set([...s.sel.bonds, ...got.bonds]) : got.bonds;
         const taken = [...got.atoms];
-        // (the molecules in 3D whose centres it takes, with the drawing - and a workflow's sets and steps, likewise)
+        // (the molecules in 3D whose centres it takes, with the drawing - and pictures, and a workflow's sets and steps, likewise)
         s.selectMolecules3d(molecules3dIn(s.molecules3d, kind, points), add);
+        s.selectPictures(molecules3dIn(s.pictures.map((p) => ({ id: p.id, at: p })), kind, points), add);
         s.selectFlow(flowIn(s, kind, points), add);
         s.setSel({ atoms, bonds }, taken.length ? taken[taken.length - 1] : s.selAnchor);
         // the box's end is no double-click's, and no click on nothing
@@ -200,7 +212,7 @@ export default function Selection2D() {
       if (e.button !== 0 || e.target !== gl.domElement) return;
       const st = store.getState();
       // (on an arrow, a "+", words or a workflow's wire: theirs)
-      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null || st.hoveredPdf != null;
+      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null || st.hoveredPdf != null || st.hoveredPicture != null;
       if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || onMark || st.labelEdit.active || st.extend.active || st.captionEdit) return;
       const add = addsToSelection(e);
       const near =
@@ -295,23 +307,26 @@ export default function Selection2D() {
     return { ...model, atoms: model.atoms.map((a) => ({ ...a, x: at.get(a.id)?.x ?? a.x, y: at.get(a.id)?.y ?? a.y })) };
   }, [model, drawn.atoms]);
   const extent = useMemo(
-    () => held ?? selectionExtent(shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d, eyeOf(camera)?.z),
-    [held, shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d, camera],
+    () => held ?? selectionExtent(shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d, eyeOf(camera)?.z, picked),
+    [held, shownModel, sel.atoms, molecules3d, sel3d, turns3d, frames3d, style3d, camera, picked],
   );
-  const turnable = extent != null && (sel.atoms.size > 1 || sel3d.size > 0);
+  const turnable = extent != null && (sel.atoms.size > 1 || sel3d.size > 0 || picked.length > 0);
   const handleAt = turnable ? { x: extent!.mid.x, y: extent!.top + NOMINAL_BOND_LENGTH * HANDLE_ABOVE } : null;
 
   const startTurn = (e: PointerEvent) => {
     const st = store.getState();
     const molecules = st.molecules3d.filter((m) => st.sel3d.has(m.id));
+    const pics = st.pictures.filter((p) => st.selPictures.has(p.id));
     // molecules alone, or with Shift: turned in 3D, as a drag on one turns it
-    if (molecules.length && (e.shiftKey || !st.sel.atoms.size)) {
+    if (molecules.length && (e.shiftKey || (!st.sel.atoms.size && !pics.length))) {
       turnInSpace(e, molecules, e.shiftKey);
       return;
     }
-    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D(), eyeOf(camera)?.z)?.mid;
+    const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D(), eyeOf(camera)?.z, pics)?.mid;
     if (!about) return;
     const from = st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y }));
+    // (pictures carried round, and turned as far)
+    const picturesAt = (angle: number) => turned(pics, about, angle).map((q, i) => ({ ...q, turn: (pics[i].turn ?? 0) + angle }));
     const carried = molecules.map(turningOf(st.turns3d, currentStyle3D()));
     const p0 = toWorld(e.clientX, e.clientY);
     const a0 = Math.atan2(p0.y - about.y, p0.x - about.x);
@@ -328,8 +343,9 @@ export default function Selection2D() {
       const step = (TURN_STEP * Math.PI) / 180;
       const angle = free ? a : Math.round(a / step) * step;
       // (molecules with the drawing: carried round in its plane, and turned with it)
-      if (carried.length) store.getState().turnMolecules3d(turnedInPlane(carried, about, angle), gesture, turned(from, about, angle));
-      else store.getState().moveAtoms(turned(from, about, angle), gesture);
+      const marks = pics.length ? { pictures: picturesAt(angle) } : undefined;
+      if (carried.length) store.getState().turnMolecules3d(turnedInPlane(carried, about, angle), gesture, turned(from, about, angle), marks);
+      else store.getState().moveAtoms(turned(from, about, angle), gesture, marks);
     };
     const onMove = (ev: PointerEvent) => {
       last = toWorld(ev.clientX, ev.clientY);

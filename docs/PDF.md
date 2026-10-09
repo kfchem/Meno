@@ -616,6 +616,38 @@ Decided while building it, for the maintainer to confirm:
 Not yet, and where it comes:
 - **A figure cut out by a box**: step 4.
 
+### Step 4a: pictures on the page (2026-10-09)
+
+Step 4 comes in two parts: pictures on the page first (4a), then figures cut out of a PDF (4b).
+
+- **Where pictures come from.**
+  - A PNG or a JPEG opened (Open offers them) or dropped on the canvas: on the page of the workspace in front, where it is looked at, or where it was dropped; on a canvas of its own where none is in front.
+  - A picture pasted, such as a screenshot, where nothing on the clipboard reads as a structure. On Windows, a bitmap (CF_DIB), which is what a screenshot puts there, is taken too.
+  - Several at once lie in a row, and all are put down clear of the pictures and PDFs already there. The view eases to them where they are not all in view, and they come selected, to be moved straight on.
+- **How large.** A picture comes at the size it would be printed: at the resolution its file gives (a PNG's pHYs, a JPEG's JFIF density), or a screen's 96 to the inch where it gives none or 72. It is never wider or taller than a page's text (6.5 inches). A photograph turned by its camera comes turned.
+- **Drawn** under the drawing and over the PDFs, each one put there later over the one before. Until it is decoded it shows as a light grey sheet. Lit round while the pointer is on it.
+- **Handled as a structure is.**
+  - A drag on it moves the view, as on empty space.
+  - Held still a moment, it is taken hold of: the selection's shade spreads over it from the pointer, and the drag then moves it.
+  - A click selects it alone. Ctrl/Cmd and a click adds it to the selection or takes it out. A box or a lasso takes those whose middle it holds, and *Select all* takes them all.
+  - Selected, its frame shows, with a handle at each corner. A corner dragged makes it larger or smaller, keeping its proportions, the opposite corner where it was (Meno's own diagonal pointer). A drag on it moves the whole selection, and the selection's handle turns it with the rest, in steps of 15 degrees or freely after a pause.
+  - Deleted, copied, cut and pasted with the rest of the selection, each as one step to undo. Delete over one deletes it.
+  - Its right-click menu has *Copy picture* (a PNG for other programs, and Meno's record for Meno) and *Delete picture*.
+- **Saved** in the workspace: its image kept as it is (`image/png` or `image/jpeg`, stored, by its SHA-256), and `pictures` in `workspace.json` listing each one's place, size, turn, size in pixels and name. A workspace's file opened holds its pictures, each read from it when first drawn.
+- **Fitting the view (Cmd/Ctrl+1) takes in the pictures** with everything else.
+
+Decided while building it, for the maintainer to confirm:
+- **A picture is moved as a full-size PDF is** (the maintainer's rule for PDFs): a drag on it moves the view, and a long press takes hold of it. A click selects it.
+- **Pictures lie under the drawing, over the PDFs.** Among themselves they lie in the order they were put there. A structure drawn over a picture is never hidden by it; their order among structures is left for later.
+- **No name is shown under a picture.** The picture shows itself; its name is kept, for *Copy picture* and the workspace.
+- **One picture copied alone goes to other programs as itself.** A selection with structures copies the drawing's picture as before, without the pictures (*Not yet*, below: pictures in Export and *Copy picture* of the drawing).
+- **Pictures copied inside Meno are carried by their SHA-256.** A paste in any tab of the same Meno finds them; one copied in another Meno running is left out.
+
+Not yet, and where it comes:
+- **A figure cut out of a PDF by a box**, with *Show in the PDF*: step 4b.
+- **A JPEG on the clipboard**, as some browsers copy a photograph: only a PNG or a bitmap is read for now.
+- **Reading a picture as a structure**: stage 5.
+
 ## In order
 
 0. **A trial, kept off main** (done, 2026-10-09; *The trial*, above):
@@ -635,8 +667,9 @@ Not yet, and where it comes:
 3. **Text and search** (built, 2026-10-09; *As built*, above): selecting
    and copying, on the stack and in the column; *This PDF* and *All PDFs*;
    words dragged out onto the page.
-4. **Pictures**: from image files and the clipboard, and figures dragged
-   out of a PDF; moved, scaled, turned, tied to their source.
+4. **Pictures**: from image files and the clipboard (built, 4a,
+   2026-10-09; *As built*, above), and figures dragged out of a PDF (4b);
+   moved, scaled, turned, tied to their source.
 5. **Texts drawn with WebGL**: first a small trial of typing alone,
    Japanese through the IME on a Mac and on Windows, shown before the
    rest; then a text's sheet on the page, the column's text and its

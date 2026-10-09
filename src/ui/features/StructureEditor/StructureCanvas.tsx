@@ -39,6 +39,7 @@ import { findOutput, outputOf } from "../../../lib/calc/asks";
 import type { CalcSource } from "../../../lib/calc/output";
 import { setTextTaker } from "../../views/texts";
 import { setPdfTaker } from "../../views/pdfs";
+import { setPictureTaker } from "../../views/pictures";
 import TextColumn from "./TextColumn";
 import ConfirmDiscard from "../../layouts/ConfirmDiscard";
 import NameDialog from "../../layouts/NameDialog";
@@ -100,6 +101,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import QuickAdd from "./QuickAdd";
 import Captions2D from "./components/Captions2D";
 import Pdfs2D from "./components/Pdfs2D";
+import Pictures2D from "./components/Pictures2D";
 import PdfColumn from "./components/PdfColumn";
 import { goBack, isBackKey, readerOf } from "./components/pdfColumnReader";
 import { selectedWords, selects } from "./utils/pdfSelection";
@@ -223,9 +225,13 @@ function StructureCanvasContent({
     () => (ownTab && officeId == null ? setTextTaker(tabId, (texts) => store.getState().addTexts(texts)) : undefined),
     [ownTab, officeId, tabId, store],
   );
-  // (and PDFs opened, on its page where it is looked at: docs/PDF.md)
+  // (and PDFs and pictures opened, on its page where it is looked at: docs/PDF.md)
   useEffect(
     () => (ownTab && officeId == null ? setPdfTaker(tabId, (pdfs) => store.getState().addPdfs(pdfs, pdfTarget.current())) : undefined),
+    [ownTab, officeId, tabId, store],
+  );
+  useEffect(
+    () => (ownTab && officeId == null ? setPictureTaker(tabId, (pictures) => void store.getState().addPictures(pictures, pdfTarget.current())) : undefined),
     [ownTab, officeId, tabId, store],
   );
   // What readers reading an output as well find, joined to each molecule
@@ -585,6 +591,10 @@ function StructureCanvasContent({
         // a PDF under the pointer, and nothing else
         e.preventDefault();
         st.removePdf(st.hoveredPdf);
+      } else if (isDeleteKey(e) && !busy && st.hoveredPicture != null && st.pictures.some((p) => p.id === st.hoveredPicture)) {
+        // a picture under the pointer, likewise
+        e.preventDefault();
+        st.removePicture(st.hoveredPicture);
       } else if (!busy && st.hoveredPdf != null && isBackKey(e) && goBack(store, st.hoveredPdf)) {
         // Back, over a PDF: to where it was before a link was followed in it
         e.preventDefault();
@@ -798,6 +808,18 @@ function StructureCanvasContent({
       else if (!r?.moved) setMenu(target);
       return;
     }
+    // likewise a picture, unless it is selected with more (docs/PDF.md, *A picture*)
+    const { hoveredPicture, pictures, selPictures } = store.getState();
+    const withMore = (() => {
+      const s = store.getState();
+      return s.sel.atoms.size > 0 || s.sel3d.size > 0 || s.selFlow.sets.size > 0 || s.selFlow.steps.size > 0 || selPictures.size > 1;
+    })();
+    if (!kind && hoveredPicture != null && pictures.some((p) => p.id === hoveredPicture) && !(selPictures.has(hoveredPicture) && withMore)) {
+      const target: MenuTarget = { kind: "picture", id: hoveredPicture, selection: "none", ...place };
+      if (r?.down) r.pending = target;
+      else if (!r?.moved) setMenu(target);
+      return;
+    }
     // likewise a PDF (docs/PDF.md)
     const { hoveredPdf, pdfs } = store.getState();
     if (!kind && hoveredPdf != null && pdfs.some((p) => p.id === hoveredPdf)) {
@@ -819,7 +841,7 @@ function StructureCanvasContent({
     const { sel, selFlow } = store.getState();
     const part = kind && id != null;
     const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
-    const selected = drawing || sel3d.size > 0 || selFlow.sets.size > 0 || selFlow.steps.size > 0;
+    const selected = drawing || sel3d.size > 0 || selFlow.sets.size > 0 || selFlow.steps.size > 0 || selPictures.size > 0;
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
@@ -1145,6 +1167,7 @@ function StructureCanvasContent({
             if (menu.kind === "arrow" && menu.id != null) st.removeArrow(menu.id);
             else if (menu.kind === "caption" && menu.id != null) st.removeCaption(menu.id);
             else if (menu.kind === "pdf" && menu.id != null) st.removePdf(menu.id);
+            else if (menu.kind === "picture" && menu.id != null) st.removePicture(menu.id);
             else if (menu.kind === "set" && menu.id != null) st.removeSet(menu.id);
             else if (menu.kind === "step" && menu.id != null) st.removeStep(menu.id);
             else if (menu.kind === "wire" && menu.id != null) st.removeWire(menu.id);
@@ -1216,6 +1239,7 @@ function StructureCanvasContent({
             const c = store.getState().captions.find((x) => x.id === menu.id);
             if (c) store.getState().setCaptionEdit({ id: c.id, at: { x: c.x, y: c.y } });
           }}
+          onCopyPicture={menu.kind === "picture" && menu.id != null ? () => void clip.copyPicture(menu.id!) : undefined}
           pdf={(() => {
             const p = menu.kind === "pdf" ? store.getState().pdfs.find((x) => x.id === menu.id) : undefined;
             if (!p) return undefined;
@@ -1312,6 +1336,8 @@ function StructureCanvasContent({
             <Pdfs2D />
             <PdfColumn />
           </PdfPictures>
+          {/* Pictures, over the PDFs and under the drawing (docs/PDF.md, *A picture*) */}
+          <Pictures2D />
           {/* Bonds */}
           <Bonds2D />
           <Atoms2D />

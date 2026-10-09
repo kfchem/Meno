@@ -10,7 +10,8 @@ import { drawnOf } from "./fileActions";
 import { pictureItems } from "./picture";
 import type { EditorStore } from "./store";
 import type { Carried3D, Drawn } from "./store/types";
-import { centredAt, clipItems, hasFlow, partToCopy } from "./utils/copyPaste";
+import { centredAt, clipItems, hasFlow, partToCopy, recordText } from "./utils/copyPaste";
+import { pictureOnClipboard, picturePng, pictureToAdd } from "./utils/pictures";
 import { bondsAmong } from "./utils/selection";
 import { setMembers } from "./workflow/entries";
 import { partsOf } from "./workflow/parts";
@@ -23,10 +24,12 @@ type Pt = { x: number; y: number };
  * - What is copied is the selection, with the reaction arrows and "+"
  *   signs among it - or, with nothing selected, the structure under the
  *   pointer - with pictures of it, drawn in the style the canvas is drawn
- *   in, for Office and other programs (picture.ts).
+ *   in, for Office and other programs (picture.ts). Pictures on the page
+ *   selected go with it; one alone goes as itself, for other programs too.
  * - A paste goes where it is asked to go (the pointer, or where the menu
  *   was opened), selected, so that it can be dragged straight on; one undo
- *   step.
+ *   step. A picture on the clipboard and nothing else - a screenshot - goes
+ *   on the page as a picture.
  * - `copySmiles` puts the SMILES alone on the clipboard, as plain text.
  */
 export function useClipboardActions(
@@ -45,6 +48,8 @@ export function useClipboardActions(
   const part = useCallback((only?: number): { part: Drawn; ids3d: number[] } | null => {
     const state = store.getState();
     const { model, hovered, hovered3d, molecules3d, turns3d, frames3d, selFlow } = state;
+    // (the pictures selected go with it)
+    const pictures = only != null ? [] : state.pictures.filter((p) => state.selPictures.has(p.id));
     // (a set selected takes what it holds along, selected or not - as it does when dragged)
     const held = only != null ? [] : state.sets.filter((b) => selFlow.sets.has(b.id)).map((b) => setMembers(state, b));
     const heldAtoms = new Set(held.flatMap((h) => h.structures.flat()));
@@ -55,16 +60,21 @@ export function useClipboardActions(
     const flow = only != null || (!selFlow.sets.size && !selFlow.steps.size) ? undefined : partsOf(state, selFlow.sets, selFlow.steps);
     const around =
       hovered.atomId ?? model.bonds.find((b) => b.id === hovered.bondId)?.a ?? null;
-    const drawn = only != null ? null : partToCopy(drawnOf(state), sel, flow ? null : around);
-    const nothingSelected = !sel.atoms.size && !sel.bonds.size && !sel3d.size && !flow;
+    const drawn = only != null ? null : partToCopy(drawnOf(state), sel, flow || pictures.length ? null : around);
+    const nothingSelected = !sel.atoms.size && !sel.bonds.size && !sel3d.size && !flow && !pictures.length;
     const ids3d =
       only != null ? [only] : sel3d.size ? [...sel3d] : nothingSelected && hovered3d && !drawn ? [hovered3d.id] : [];
     const carried: Carried3D[] = molecules3d
       .filter((m) => ids3d.includes(m.id))
       .map(({ id, ...m }) => ({ ...m, ...(turns3d[id] ? { turn: turns3d[id] } : {}), ...(frames3d[id] ? { frame: frames3d[id] } : {}) }));
-    if (!drawn && !carried.length && !flow) return null;
+    if (!drawn && !carried.length && !flow && !pictures.length) return null;
     return {
-      part: { ...(drawn ?? { atoms: [], bonds: [] }), ...(carried.length ? { molecules3d: carried } : {}), ...(flow ? { flow } : {}) },
+      part: {
+        ...(drawn ?? { atoms: [], bonds: [] }),
+        ...(carried.length ? { molecules3d: carried } : {}),
+        ...(flow ? { flow } : {}),
+        ...(pictures.length ? { pictures } : {}),
+      },
       ids3d: molecules3d.filter((m) => ids3d.includes(m.id)).map((m) => m.id),
     };
   }, [store]);
@@ -77,7 +87,11 @@ export function useClipboardActions(
       const state = store.getState();
       // (the structure is copied, pictures or no: the drawing's and the
       // molecules' in 3D, as they are seen)
-      const pictures = !p.atoms.length && !p.molecules3d?.length
+      // (a picture on the page alone: itself, for other programs)
+      const alone = !p.atoms.length && !p.molecules3d?.length && !hasFlow(p) && p.pictures?.length === 1 ? p.pictures[0] : null;
+      const pictures = alone
+        ? await picturePng(alone).then((png) => (png ? [{ flavor: "png" as const, bytes: png }] : [])).catch(() => [])
+        : !p.atoms.length && !p.molecules3d?.length
         ? []
         : await pictureItems(
             p,
@@ -113,8 +127,15 @@ export function useClipboardActions(
       if (busy()) return;
       try {
         const found = await structureOnClipboard();
-        if (!found || (!found.atoms.length && !found.molecules3d?.length && !hasFlow(found))) {
-          onError("There is nothing on the clipboard that reads as a structure.");
+        if (!found || (!found.atoms.length && !found.molecules3d?.length && !hasFlow(found) && !found.pictures?.length)) {
+          // (a picture, and nothing that reads as a structure: a picture on the page)
+          const png = await pictureOnClipboard();
+          const picture = png ? await pictureToAdd("Pasted picture.png", png) : null;
+          if (picture) {
+            store.getState().addPictures([picture], at);
+            return;
+          }
+          onError("There is nothing on the clipboard that reads as a structure or a picture.");
           return;
         }
         store.getState().pasteModel(centredAt(found, at));
@@ -137,5 +158,20 @@ export function useClipboardActions(
     }
   }, [part, onError]);
 
-  return useMemo(() => ({ copy, cut, paste, copySmiles }), [copy, cut, paste, copySmiles]);
+  // a picture on the page, alone: for Meno, and as itself for other programs
+  const copyPicture = useCallback(
+    async (id: number) => {
+      const p = store.getState().pictures.find((x) => x.id === id);
+      if (!p) return;
+      try {
+        const png = await picturePng(p);
+        await writeClipboard([{ flavor: "meno", text: recordText({ atoms: [], bonds: [], pictures: [p] }) }, ...(png ? [{ flavor: "png" as const, bytes: png }] : [])]);
+      } catch (e) {
+        onError(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+    [store, onError],
+  );
+
+  return useMemo(() => ({ copy, cut, paste, copySmiles, copyPicture }), [copy, cut, paste, copySmiles, copyPicture]);
 }

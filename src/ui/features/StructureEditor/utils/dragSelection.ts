@@ -7,8 +7,8 @@ type Pt = { x: number; y: number };
 /**
  * The selection dragged, from the press at `from` (on the screen): moved by
  * as much as the pointer goes, off the grid, with the arrows, "+" signs and
- * words among it, the molecules in 3D selected with it, and a workflow's
- * sets - with what they hold - and steps selected, as one undo step - one
+ * words among it, the molecules in 3D and pictures selected with it, and a
+ * workflow's sets - with what they hold - and steps selected, as one undo step - one
  * move a frame, as every move lays the drawing out again. `toWorld` takes a
  * point of the screen to the page; `done` is told when the button comes up,
  * and whether it moved.
@@ -29,6 +29,7 @@ export function dragSelection(
   const among = schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses, captions: st.captions }, takenAtoms);
   const solids = st.molecules3d.filter((m) => takenSolids.has(m.id)).map((m) => ({ id: m.id, at: m.at }));
   const steps = st.steps.filter((s) => st.selFlow.steps.has(s.id)).map((s) => ({ id: s.id, x: s.x, y: s.y }));
+  const pictures = st.pictures.filter((p) => st.selPictures.has(p.id)).map((p) => ({ id: p.id, x: p.x, y: p.y }));
   const p0 = toWorld(from.x, from.y);
   const gesture = `drag-${performance.now()}`;
   let frame: number | null = null;
@@ -45,6 +46,7 @@ export function dragSelection(
       molecules3d: solids.map((m) => ({ id: m.id, at: { x: m.at.x + dx, y: m.at.y + dy } })),
       sets: sets.map((b) => ({ id: b.id, x0: b.x0 + dx, x1: b.x1 + dx, y0: b.y0 + dy, y1: b.y1 + dy })),
       steps: steps.map(by),
+      pictures: pictures.map(by),
     });
   };
   const onMove = (ev: PointerEvent) => {

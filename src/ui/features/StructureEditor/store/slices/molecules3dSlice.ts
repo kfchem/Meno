@@ -156,6 +156,7 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
       moves: { id: number; at: { x: number; y: number; z?: number }; turn: Turn3D }[],
       gesture: string,
       drawing?: { id: number; x: number; y: number }[],
+      marks?: ops.MarkPlaces,
     ) => {
       const before = doc.getState();
       const was = get().turns3d;
@@ -165,8 +166,8 @@ export function createMolecules3dSlice(doc: DocumentStore<StructureDocument>, se
       // (one step however long the hand pauses in it: the turns go with the
       // whole step, and with nothing less)
       const meta = { coalesceKey: gesture, coalesceWithinMs: Infinity };
-      if (drawing?.length)
-        doc.edit("turn selection", (d) => ops.placeMarks(ops.placeAtoms(d, drawing), { molecules3d: places }), meta);
+      if (drawing?.length || marks)
+        doc.edit("turn selection", (d) => ops.placeMarks(ops.placeAtoms(d, drawing ?? []), { ...marks, molecules3d: places }), meta);
       else doc.edit("turn molecules", (d) => ops.moveMolecules3d(d, places), meta);
       const turnsAfter: Record<number, Turn3D> = {};
       for (const m of moves) turnsAfter[m.id] = m.turn;

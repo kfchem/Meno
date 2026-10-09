@@ -4,15 +4,17 @@
  * and measurements, how each is turned and which frame it shows, a
  * workflow's sets, steps and wires, and the document's own drawing style -
  * so that it opens again just as it was saved - and the texts it holds,
- * and which its column showed, and the PDFs on its page. JSON, versioned; a
- * reader keeps what it reads and leaves out what it does not. Its file,
- * `.meno`, is a zip (lib/doc/menoFile) holding it, the calculations'
- * outputs its molecules were read from, its texts and its PDFs.
+ * and which its column showed, and the PDFs and pictures on its page. JSON,
+ * versioned; a reader keeps what it reads and leaves out what it does not.
+ * Its file, `.meno`, is a zip (lib/doc/menoFile) holding it, the
+ * calculations' outputs its molecules were read from, its texts, its PDFs
+ * and its pictures.
  */
 import { acceptStyleChoice } from "../../../../lib/chem/styleFields";
 import type { StyleChoice } from "../../../../lib/chem/style";
-import type { Carried3D, Drawn, EditorState, PdfItem, WorkspaceText } from "../store/types";
+import type { Carried3D, Drawn, EditorState, PdfItem, PictureItem, WorkspaceText } from "../store/types";
 import { pdfBytes } from "../../../../lib/pdf/reader";
+import { pictureBytes } from "../../../../lib/picture/held";
 import { readDrawn } from "./copyPaste";
 import { readingOf } from "../document";
 import { calcShowing, heldOutput, outputsToKeep, sha256Of } from "../../../../lib/calc/asks";
@@ -50,7 +52,7 @@ type Saved = Pick<
   EditorState,
   "model" | "arrows" | "pluses" | "captions" | "molecules3d" | "turns3d" | "frames3d" | "lists3d" | "docStyle" | "aromaticEnabled" | "aromaticRings"
 > &
-  Partial<Pick<EditorState, "sets" | "steps" | "wires" | "texts" | "textShown" | "textsOpen" | "pdfs" | "pdfShown">>;
+  Partial<Pick<EditorState, "sets" | "steps" | "wires" | "texts" | "textShown" | "textsOpen" | "pdfs" | "pdfShown" | "pictures">>;
 
 /**
  * The canvas's molecules in 3D as a file carries them: each turned, and
@@ -102,6 +104,7 @@ export function workspaceText(state: Saved, kept: ReadonlySet<string> = new Set(
       ...(shown >= 0 ? { textShown: shown } : {}),
       ...(state.pdfs?.length ? { pdfs: state.pdfs.map(({ id: _id, ...p }) => p) } : {}),
       ...(pdfShown >= 0 ? { pdfShown } : {}),
+      ...(state.pictures?.length ? { pictures: state.pictures } : {}),
     }) + "\n"
   );
 }
@@ -114,8 +117,18 @@ export async function workspaceFile(state: Saved): Promise<Uint8Array> {
   const pdfs = await pdfsToKeep(state.pdfs ?? []);
   return writeMenoFile(
     workspaceText(state, new Set(kept.map((k) => k.sha256)), texts.map((t) => t.sha256)),
-    [...kept, ...texts, ...pdfs],
+    [...kept, ...texts, ...pdfs, ...picturesToKeep(state.pictures ?? [])],
   );
+}
+
+/** The pictures as a workspace's file keeps them: each image as it is, once - those held this session (lib/picture/held). */
+function picturesToKeep(pictures: readonly PictureItem[]): KeptData[] {
+  const seen = new Map<string, PictureItem>();
+  for (const p of pictures) if (!seen.has(p.sha256)) seen.set(p.sha256, p);
+  return [...seen.values()].flatMap((p) => {
+    const data = pictureBytes(p.sha256);
+    return data ? [{ sha256: p.sha256, name: p.name, media: p.media, data }] : [];
+  });
 }
 
 /** The PDFs as a workspace's file keeps them: each as it was, once, read from where Meno holds it (lib/pdf/reader). */

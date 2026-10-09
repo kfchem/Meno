@@ -37,9 +37,9 @@ import { linkAt, linksOf, type PdfLink } from "../../../../lib/pdf/reader";
 import { letterNear, placeAt, textHad, wordAt, type PageText } from "../../../../lib/pdf/text";
 import { placeBefore, selects } from "../utils/pdfSelection";
 import { dragWords, onSelected } from "./wordsDrag";
-import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS, MOV_PX } from "../constants";
-import { ALPHA } from "../../../theme/colors";
-import { SHADE } from "./selectionShade";
+import { LONG_PRESS_MS, MOV_PX } from "../constants";
+import { HeldLight } from "./HeldLight";
+import { heldShows } from "./held";
 import type { PdfSelection, WordPlace } from "../store/types";
 
 /** Eased in and out, cubic: what is lifted rises and settles. */
@@ -77,8 +77,6 @@ const READABLE_PX_PER_PT = 0.6;
 const RIM_PX = 16;
 /** How far a press moves before it moves the view (PanZoom2D's), in pixels: a hold begun is let go. */
 const PAN_PX = 3;
-/** How quickly the light of a PDF let go goes, in ms. */
-const HELD_FADE_MS = 140;
 
 type Pointerish = { button?: number; clientX: number; clientY: number; pointerId?: number };
 const native = (e: unknown): Pointerish => ((e as { nativeEvent?: Pointerish }).nativeEvent ?? (e as Pointerish));
@@ -195,7 +193,7 @@ export default function Pdfs2D() {
     for (const m of motion.current.values()) {
       if (m.lit && now - m.lit.start < FADE_MS + 80) animating = true;
       if (m.icon && now - m.icon.start < ICON_MS + 80) animating = true;
-      if (m.held && (m.held.let == null || now - m.held.let < HELD_FADE_MS + 80)) animating = true;
+      if (m.held && heldShows(m.held, now)) animating = true;
     }
     // (the tiles' fading in, and the motions, ask for frames while they last)
     const fading = pics.fading(now);
@@ -615,73 +613,6 @@ function PdfStack(props: {
       {held}
       {name}
     </group>
-  );
-}
-
-// language=GLSL
-const HELD_VERTEX = /* glsl */ `
-varying vec2 vAt;
-void main() {
-  vec4 w = modelMatrix * vec4(position, 1.0);
-  vAt = w.xy;
-  gl_Position = projectionMatrix * viewMatrix * w;
-}
-`;
-// language=GLSL
-const HELD_FRAGMENT = /* glsl */ `
-uniform vec2 uAt;
-uniform float uReach;
-uniform float uSoft;
-uniform float uOpacity;
-uniform vec3 uColor;
-varying vec2 vAt;
-void main() {
-  float a = uOpacity * (1.0 - smoothstep(uReach - uSoft, uReach, distance(vAt, uAt)));
-  if (a <= 0.0) discard;
-  gl_FragColor = vec4(uColor, a);
-  #include <colorspace_fragment>
-}
-`;
-
-/**
- * A PDF taken hold of, lit as a structure is: the selection's shade, over
- * it, spreading out from where it is held as the press is held - reaching
- * all of it just as it is taken hold of - and going once it is let go.
- */
-function HeldLight({ b, at, held, now }: { b: { x0: number; x1: number; y0: number; y1: number }; at: { x: number; y: number }; held: NonNullable<Motion["held"]>; now: number }) {
-  const material = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        uniforms: {
-          uAt: { value: new THREE.Vector2() },
-          uReach: { value: 0 },
-          uSoft: { value: 1 },
-          uOpacity: { value: 0 },
-          uColor: { value: new THREE.Color(COLORS.highlight) },
-        },
-        vertexShader: HELD_VERTEX,
-        fragmentShader: HELD_FRAGMENT,
-        transparent: true,
-        depthWrite: false,
-        toneMapped: false,
-      }),
-    [],
-  );
-  useEffect(() => () => material.dispose(), [material]);
-  // (the farthest of it reached just as it is taken hold of)
-  const far = Math.max(...[b.x0, b.x1].flatMap((x) => [b.y0, b.y1].map((y) => Math.hypot(x - at.x, y - at.y))));
-  const u = held.done ? 1 : Math.min(1, Math.max(0, (now - held.start - LONG_PRESS_SHOW_MS) / (LONG_PRESS_MS - LONG_PRESS_SHOW_MS)));
-  const soft = 0.12 * far;
-  const fade = held.let == null ? 1 : Math.max(0, 1 - (now - held.let) / HELD_FADE_MS);
-  material.uniforms.uAt.value.set(at.x, at.y);
-  material.uniforms.uReach.value = (far + soft) * (1 - (1 - u) ** 3);
-  material.uniforms.uSoft.value = soft;
-  material.uniforms.uOpacity.value = ALPHA.highlight * SHADE * fade;
-  if (fade <= 0) return null;
-  return (
-    <mesh position={[(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, 0.45]} scale={[b.x1 - b.x0, b.y1 - b.y0, 1]} material={material}>
-      <planeGeometry args={[1, 1]} />
-    </mesh>
   );
 }
 

@@ -3,6 +3,7 @@ import { kindOf, type Kind } from "../../lib/io/kinds";
 import { OFFERED, WRITER_PLUGINS } from "../../lib/calc/catalog";
 import { holdOutputsOf } from "../../lib/calc/asks";
 import { holdPdfsOf } from "../../lib/pdf/reader";
+import { holdPicturesOf } from "../../lib/picture/held";
 import { isMenoFile, readMenoFile } from "../../lib/doc/menoFile";
 import type { OpenedText } from "./texts";
 
@@ -25,8 +26,11 @@ export const OPENABLE = [
     ...OFFERED.kinds.flatMap((k) => k.extensions),
     ...WRITER_PLUGINS.flatMap((p) => p.writes.flatMap((w) => w.extensions)),
     ...[...EXT_TEXT].map((ext) => `.${ext}`),
-    // (a PDF goes on the page: docs/PDF.md)
+    // (a PDF goes on the page: docs/PDF.md - and a picture)
     ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
   ]),
 ];
 
@@ -41,6 +45,7 @@ export function workspaceOfFile(bytes: Uint8Array): string | null {
   const file = readMenoFile(bytes);
   holdOutputsOf(file);
   holdPdfsOf(file);
+  holdPicturesOf(file);
   return file.workspace;
 }
 

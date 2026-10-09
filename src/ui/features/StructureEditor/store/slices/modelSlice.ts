@@ -9,6 +9,7 @@ import { EditorState, Bond, Arrow, Model, Drawn } from "../types";
 import { turnedOver } from "../../utils/selection";
 import { schemeAmong } from "../../utils/copyPaste";
 import { relinked } from "../../utils/drawnLink";
+import { pictureBytes } from "../../../../../lib/picture/held";
 import { resultKey } from "../../../../../lib/calc/results";
 import type { Workspace } from "../../utils/workspace";
 import { StoreApi } from "zustand";
@@ -146,8 +147,8 @@ export const createModelSlice = (
   },
 
   deleteSelection: () => {
-    const { sel, sel3d, selFlow, steps, model, arrows, pluses, captions } = get();
-    if (!sel.atoms.size && !sel.bonds.size && !sel3d.size && !selFlow.sets.size && !selFlow.steps.size) return;
+    const { sel, sel3d, selFlow, selPictures, steps, model, arrows, pluses, captions } = get();
+    if (!sel.atoms.size && !sel.bonds.size && !sel3d.size && !selFlow.sets.size && !selFlow.steps.size && !selPictures.size) return;
     // the arrows and pluses among it go with it, as with a cut; the
     // molecules in 3D selected, and a workflow's sets and steps, in the same
     // step - but not a step running, which is asked about on its own
@@ -157,7 +158,7 @@ export const createModelSlice = (
     const gone = steps.filter((s) => idle.includes(s.id));
     const deleted = doc.edit("delete selection", (d) =>
       removeParts(
-        ops.removeMolecules3d(ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses), ids(among.captions)), sel3d),
+        ops.removePictures(ops.removeMolecules3d(ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses), ids(among.captions)), sel3d), selPictures),
         selFlow.sets,
         idle,
       ),
@@ -302,6 +303,8 @@ export const createModelSlice = (
           nextTextId: texts.length + 1,
           pdfs: ws.pdfs.map((p, i) => ({ ...p, id: i + 1 })),
           nextPdfId: ws.pdfs.length + 1,
+          pictures: (drawn.pictures ?? []).map((p, i) => ({ ...p, id: i + 1 })),
+          nextPictureId: (drawn.pictures ?? []).length + 1,
         },
         ws.style,
       );
@@ -370,9 +373,12 @@ export const createModelSlice = (
   pasteModel: (next: Drawn) => {
     const carried = next.molecules3d ?? [];
     const flow = next.flow ?? NO_PARTS;
-    if (!next.atoms.length && !carried.length && !flow.sets.length && !flow.steps.length) return;
+    // (pictures pasted only where they are held: a copy carries them by what they are known by)
+    const pictures = (next.pictures ?? []).filter((p) => pictureBytes(p.sha256));
+    if (!next.atoms.length && !carried.length && !flow.sets.length && !flow.steps.length && !pictures.length) return;
     const start = doc.getState().nextId;
     const start3d = doc.getState().nextMolecule3dId ?? 1;
+    const startPicture = doc.getState().nextPictureId ?? 1;
     // (the pasted atoms numbered on from here, in their order: a molecule in
     // 3D pasted with its drawing is tied to the pasted drawing - and a
     // workflow's parts numbered on from its counter, wired as they were)
@@ -380,7 +386,8 @@ export const createModelSlice = (
     const tied = { ...next, molecules3d: carried.map((m) => relinked(m, next, (id) => idOf.get(id))) };
     let pastedFlow: { sets: number[]; steps: number[] } = { sets: [], steps: [] };
     const pasted = doc.edit("paste", (d) => {
-      const drawn = next.atoms.length || carried.length ? ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(tied)) : d;
+      const model = next.atoms.length || carried.length ? ops.withImportedScheme(ops.appendModel(d, next), ops.schemeOf(tied)) : d;
+      const drawn = pictures.reduce((doc2, { id: _, ...p }) => ops.addPicture(doc2, p), model);
       if (!flow.sets.length && !flow.steps.length) return drawn;
       const added = appendParts(drawn, flow);
       pastedFlow = added;
@@ -400,6 +407,7 @@ export const createModelSlice = (
       ...prev,
       sel: added(start, doc.getState().model),
       sel3d: new Set(ids),
+      selPictures: new Set(pictures.map((_, i) => startPicture + i)),
       selFlow: { sets: new Set(pastedFlow.sets), steps: new Set(pastedFlow.steps) },
       chosen3d: null,
       turns3d,
@@ -466,16 +474,19 @@ export const createModelSlice = (
     const steps = get().steps.filter((s) => part.flow?.steps.some((x) => x.id === s.id) && !s.running);
     const edited = doc.edit("cut", (d) =>
       removeParts(
-        ops.removeMolecules3d(
-          ops.deleteDrawn(
-            d,
-            new Set(part.atoms.map((a) => a.id)),
-            new Set(part.bonds.map((b) => b.id)),
-            new Set((part.arrows ?? []).map((a) => a.id)),
-            new Set((part.pluses ?? []).map((p) => p.id)),
-            new Set((part.captions ?? []).map((c) => c.id)),
+        ops.removePictures(
+          ops.removeMolecules3d(
+            ops.deleteDrawn(
+              d,
+              new Set(part.atoms.map((a) => a.id)),
+              new Set(part.bonds.map((b) => b.id)),
+              new Set((part.arrows ?? []).map((a) => a.id)),
+              new Set((part.pluses ?? []).map((p) => p.id)),
+              new Set((part.captions ?? []).map((c) => c.id)),
+            ),
+            molecules3d,
           ),
-          molecules3d,
+          (part.pictures ?? []).map((p) => p.id),
         ),
         (part.flow?.sets ?? []).map((b) => b.id),
         steps.map((s) => s.id),

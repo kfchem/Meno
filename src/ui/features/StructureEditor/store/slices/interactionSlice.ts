@@ -239,6 +239,7 @@ export function createInteractionSlice(set: SetState, get: GetState) {
         hoveredPlus: null,
         hoveredCaption: null,
         hoveredPdf: null,
+        hoveredPicture: null,
         hoveredSet: null,
         hoveredStep: null,
         hoveredWire: null,

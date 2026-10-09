@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { DocumentStore } from "../../../../lib/doc";
 import { createStructureDocument, type StructureDocument } from "../document";
-import type { Caption, EditorState, PdfItem, SelFlow, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
+import type { Caption, EditorState, PdfItem, PictureItem, SelFlow, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
@@ -18,6 +18,7 @@ import { createMolecules3dSlice, heldOf } from "./slices/molecules3dSlice";
 import { createTextsSlice } from "./slices/textsSlice";
 import { createCaptionsSlice } from "./slices/captionsSlice";
 import { createPdfsSlice } from "./slices/pdfsSlice";
+import { createPicturesSlice } from "./slices/picturesSlice";
 import { createWorkflowSlice } from "./slices/workflowSlice";
 import { turnsAcross } from "./turnJournal";
 import { COLUMN_WIDTH, shownPdf, shownText } from "../utils/texts";
@@ -51,6 +52,7 @@ function mirrorOf(doc: StructureDocument) {
     docStyle: doc.style,
     texts: doc.texts ?? NO_TEXTS,
     pdfs: doc.pdfs ?? NO_PDFS,
+    pictures: doc.pictures ?? NO_PICTURES,
   };
 }
 
@@ -65,6 +67,14 @@ function flowHeld(sel: SelFlow, sets: readonly WorkflowSet[], steps: readonly Wo
 
 const NO_TEXTS: WorkspaceText[] = [];
 const NO_PDFS: PdfItem[] = [];
+const NO_PICTURES: PictureItem[] = [];
+
+/** The pictures selected, kept to those the document still has. */
+function picturesHeld(sel: Set<number>, pictures: readonly PictureItem[]): Set<number> {
+  if (!sel.size) return sel;
+  const ids = new Set(pictures.map((p) => p.id));
+  return [...sel].every((id) => ids.has(id)) ? sel : new Set([...sel].filter((id) => ids.has(id)));
+}
 const NO_CAPTIONS: Caption[] = [];
 const NO_SETS: WorkflowSet[] = [];
 const NO_STEPS: WorkflowStep[] = [];
@@ -88,7 +98,11 @@ export function connectStoreToDocument(
       // (a turn of several as one body undone or redone: their turns too)
       const turns = turnsAcross(doc, was, now);
       was = now;
-      const held = { ...heldOf(prev, mirrored.molecules3d), selFlow: flowHeld(prev.selFlow, mirrored.sets, mirrored.steps) };
+      const held = {
+        ...heldOf(prev, mirrored.molecules3d),
+        selFlow: flowHeld(prev.selFlow, mirrored.sets, mirrored.steps),
+        selPictures: picturesHeld(prev.selPictures, mirrored.pictures),
+      };
       if (turns) {
         const turns3d = { ...(held.turns3d ?? prev.turns3d) };
         for (const [id, t] of Object.entries(turns)) {
@@ -149,6 +163,8 @@ export function createEditorStore(
     hoveredPlus: null,
     hoveredCaption: null,
     hoveredPdf: null,
+    hoveredPicture: null,
+    selPictures: new Set<number>(),
     captionEdit: null,
     quickAdd: null,
     hoveredSet: null,
@@ -187,6 +203,7 @@ export function createEditorStore(
     ...createTextsSlice(doc, set),
     ...createCaptionsSlice(doc, set),
     ...createPdfsSlice(doc, set, get),
+    ...createPicturesSlice(doc, set),
     ...createWorkflowSlice(doc, set, get),
   }));
 

@@ -332,6 +332,11 @@ How these behave:
   (docs/PDF.md), held in Meno's cache by its SHA-256; a workspace's file
   keeps it, stored as it was (`application/pdf`). Pasting a PDF copied in
   the Finder or Explorer is not taken yet.
+- **A picture** - a PNG or a JPEG opened or dropped, or a picture pasted
+  where nothing on the clipboard reads as a structure - goes onto the page
+  likewise (docs/PDF.md, step 4a), held this session by its SHA-256
+  (`lib/picture/held`); a workspace's file keeps it, stored as it was
+  (`image/png`, `image/jpeg`).
 
 ### Save and Export
 
@@ -452,7 +457,9 @@ work.meno (zip)
   `pdfs`), and `pdfShown` names the one the column showed, in place of
   `textShown` (docs/PDF.md, step 2). Words on the page taken out of a PDF
   keep where they came from (`captions[].from`: the PDF's SHA-256 and two
-  places in it; docs/PDF.md, step 3).
+  places in it; docs/PDF.md, step 3). Pictures on the page are listed in
+  `pictures`, each by its image's SHA-256 with its place, size and turn
+  (docs/PDF.md, step 4a).
 - **Written off the page.** The files kept are compressed in a worker of
   their own as the workspace is saved (`lib/doc/menoFileWorker.ts`), so a
   long output never holds the canvas up.

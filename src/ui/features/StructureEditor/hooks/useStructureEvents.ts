@@ -1,4 +1,6 @@
 import { holdPdfBytes } from "../../../../lib/pdf/reader";
+import { isPictureName } from "../../../../lib/picture/image";
+import { pictureToAdd } from "../utils/pictures";
 import * as THREE from "three";
 import { pageAt } from "../utils/page";
 import { useEffect, useRef, useState } from "react";
@@ -431,6 +433,20 @@ export function useStructureEvents(
       try {
         const held = await Promise.all(pdfs.map(async (g) => ({ name: g.name, ...(await holdPdfBytes(new Uint8Array(await g.arrayBuffer()))) })));
         store.getState().addPdfs(held, at);
+        setImportError(null);
+      } catch (e) {
+        reportImportError("append", e);
+      }
+      return;
+    }
+    // pictures: held, and put on the page where they were dropped (docs/PDF.md, *A picture*)
+    const images = files.filter((g) => isPictureName(g.name) || g.type === "image/png" || g.type === "image/jpeg");
+    if (images.length) {
+      try {
+        const held = await Promise.all(images.map(async (g) => pictureToAdd(g.name, new Uint8Array(await g.arrayBuffer()))));
+        const pictures = held.filter((p) => p != null);
+        if (!pictures.length) throw new Error(`${images[0].name} is not a PNG or JPEG picture Meno can show.`);
+        store.getState().addPictures(pictures, at);
         setImportError(null);
       } catch (e) {
         reportImportError("append", e);
