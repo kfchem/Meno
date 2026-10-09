@@ -8,15 +8,21 @@
       "resources/plugins/*/*.py",
       "resources/plugins/*/*.lock",
       "resources/plugins/*/pixi.toml",
-      "resources/licenses/*"
+      "resources/licenses/*",
+      "pdfium/windows/pdfium.dll"
     ],
     "windows": {
       "nsis": {
         "installerHooks": "windows/hooks.nsh"
       },
       "wix": {
-        "fragmentPaths": ["windows/ole.wxs"],
-        "componentRefs": ["MenoOleClass", "MenoOleClass32"]
+        "fragmentPaths": [
+          "windows/ole.wxs"
+        ],
+        "componentRefs": [
+          "MenoOleClass",
+          "MenoOleClass32"
+        ]
       }
     }
   }

@@ -13,6 +13,7 @@ import {
 import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
 import { openedAs, openedTexts, OPENABLE, textsOf, workspaceOfFile, type Opened } from "./ui/views/openFile";
+import PdfTrial from "./ui/features/PdfTrial/PdfTrial";
 import { textTakerOf, type OpenedText } from "./ui/views/texts";
 import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
@@ -214,6 +215,8 @@ export default function App() {
   // outside Tauri - the browser dev server - the page's own picker stands
   // in, and gives none.
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // (the PDF trial, kept off main: a PDF opened goes to it)
+  const [trialPdf, setTrialPdf] = useState<string | null>(null);
   const pickFiles = async () => {
     if (!isTauri()) {
       fileInputRef.current?.click();
@@ -222,11 +225,15 @@ export default function App() {
     const into = stateRef.current.activeId;
     const picked = await openDialog({
       multiple: true,
-      filters: [{ name: "Files Meno opens", extensions: OPENABLE.map((ext) => ext.slice(1)) }],
+      filters: [{ name: "Files Meno opens", extensions: [...OPENABLE.map((ext) => ext.slice(1)), "pdf"] }],
     }).catch(() => null);
     const texts: OpenedText[] = [];
     for (const path of picked ?? []) {
       const name = path.split(/[\\/]/).pop() || path;
+      if (path.toLowerCase().endsWith(".pdf")) {
+        setTrialPdf(path);
+        continue;
+      }
       try {
         const bytes = await readFile(path);
         // (a workspace file: its workspace, and the outputs it keeps held)
@@ -481,6 +488,7 @@ export default function App() {
     // window and clipped, nothing in it can scroll it, a section scrolled
     // into view in Settings included; only what is inside it scrolls)
     <div className="fixed inset-0 flex flex-col overflow-clip">
+      {trialPdf && <PdfTrial path={trialPdf} onClose={() => setTrialPdf(null)} />}
       <TopBar ctl={ctl} />
       <input
         ref={fileInputRef}

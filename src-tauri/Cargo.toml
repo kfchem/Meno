@@ -39,6 +39,7 @@ sha2 = "0.10"
 flate2 = "1"
 tar = "0.4"
 zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
+pdfium-render = { version = "0.9.4", default-features = false, features = ["pdfium_latest", "thread_safe"] }
 
 # A job's program, and what it starts, stopped as a process group (src/jobs.rs)
 [target.'cfg(unix)'.dependencies]

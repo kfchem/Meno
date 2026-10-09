@@ -16,6 +16,7 @@ mod fonts;
 #[cfg(windows)]
 mod drop;
 mod jobs;
+mod pdf;
 mod net;
 mod pixienv;
 mod tools;
@@ -778,6 +779,10 @@ pub fn run() {
     if let Some(code) = jobs::job_mode() {
         std::process::exit(code);
     }
+    // started as the PDF reader (pdf.rs): that, apart from Meno
+    if let Some(code) = pdf::pdf_mode() {
+        std::process::exit(code);
+    }
     #[cfg(windows)]
     if let Some(code) = registration_asked() {
         std::process::exit(code);
@@ -803,6 +808,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ProcState(Mutex::new(HashMap::new())))
         .manage(net::Net::default())
+        .manage(pdf::PdfState::default())
         .manage(update::Updates::new(version))
         .setup(|app| {
             net::start(app.handle());
@@ -818,6 +824,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            pdf::pdf_open,
+            pdf::pdf_render,
+            pdf::pdf_text,
+            pdf::pdf_search,
             // the system clipboard, for structures
             clipboard::clipboard_write,
             clipboard::clipboard_read,
