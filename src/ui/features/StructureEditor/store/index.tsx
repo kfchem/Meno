@@ -210,6 +210,39 @@ export function createEditorStore(
   return store;
 }
 
+/**
+ * Each document's store, kept with the document: a canvas made again after
+ * something failed - itself, its tab or the window (docs/ARCHITECTURE.md,
+ * *When a part fails*) - takes up where it was, with the molecules in 3D
+ * turned as they were, the column as it was and Save writing where it wrote.
+ */
+const storesOf = new WeakMap<DocumentStore<StructureDocument>, EditorStore>();
+
+/** The store a document is drawn from: made the first time it is asked for, the same one from then on. */
+export function storeOf(doc: DocumentStore<StructureDocument>): EditorStore {
+  let store = storesOf.get(doc);
+  if (!store) {
+    store = createEditorStore(doc);
+    storesOf.set(doc, store);
+  }
+  return store;
+}
+
+/** The stores that have taken what their canvas was opened with (hooks/useStructureEvents). */
+const openedStores = new WeakSet<EditorStore>();
+
+/**
+ * Whether what a canvas was opened with - a file, a workspace - is still to
+ * be taken into its store: true the first time it is asked, and never
+ * again, however often the canvas is made; taken twice, the file would
+ * stand in for everything done since.
+ */
+export function takeOpening(store: EditorStore): boolean {
+  if (openedStores.has(store)) return false;
+  openedStores.add(store);
+  return true;
+}
+
 const EditorStoreContext = createContext<EditorStore | null>(null);
 
 export function EditorProvider({
@@ -232,10 +265,11 @@ export function EditorProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [document, tabId],
   );
-  // One store per provider instance. Deliberately not a module-level registry
-  // keyed by tabId: an id is not bound to be unique (a canvas embedded in
-  // another view may share one with another).
-  const store = useMemo(() => createEditorStore(doc), [doc]);
+  // One store per document (`storeOf`), not per tabId: an id is not bound to
+  // be unique (a canvas embedded in another view may share one with
+  // another), and a provider made again for the same document - its canvas
+  // reloaded after it failed - finds the store as it was.
+  const store = useMemo(() => storeOf(doc), [doc]);
   useEffect(() => connectStoreToDocument(store, doc), [store, doc]);
   return (
     <EditorStoreContext.Provider value={store}>

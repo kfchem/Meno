@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { pageAt } from "../utils/page";
 import { useEffect, useRef, useState } from "react";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { useEditorStore } from "../store";
+import { takeOpening, useEditorStore } from "../store";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS } from "../constants";
 import { calculateNewBondPosition } from "../utils/geometry";
 import { clickClock, doubleClickedSince, noteClick } from "../utils/clickCount";
@@ -112,18 +112,18 @@ export function useStructureEvents(
   };
 
   // Effect: Initial Payload
-  const importedInitial = useRef(false);
   useEffect(() => {
     (async () => {
-      if (importedInitial.current) return;
+      // One import per store: this effect runs twice under StrictMode, and
+      // again when the canvas is made again after it failed (ui/layouts/
+      // ErrorBoundary) - importing twice would leave two undo steps for a
+      // single file, or put the file back over everything done since.
+      if (!takeOpening(store)) return;
       if (!initialPayload) {
         // (a canvas opened for a text: Save suggests its name, beside it)
         if (openedFile && initialFilename) store.getState().markOpenedOver(initialPath ?? initialFilename);
         return;
       }
-      // One import per canvas: this effect runs twice under StrictMode, and
-      // importing twice would leave two undo steps for a single file.
-      importedInitial.current = true;
       // what it is, as whoever opened it said (lib/io/kinds) - or told now
       const kind = (initialKind ? anyKindById(initialKind) : undefined) ?? kindOf(initialFilename ?? "", initialPayload);
       // A workspace file, as it was saved

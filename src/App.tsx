@@ -36,6 +36,7 @@ import { PLUGINS, READERS } from "./lib/calc/catalog";
 import { stopJob } from "./lib/jobs";
 import { jobsUnderWay } from "./ui/features/StructureEditor/workflow/flow";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
+import { ErrorBoundary, StoppedCard } from "./ui/layouts/ErrorBoundary";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
 import {
   applyNetworkSettings,
@@ -525,6 +526,28 @@ export default function App() {
     // window and clipped, nothing in it can scroll it, a section scrolled
     // into view in Settings included; only what is inside it scrolls)
     <div className="fixed inset-0 flex flex-col overflow-clip">
+      {/* The last resort, should anything in the window fail that nothing
+          nearer caught (ui/layouts/ErrorBoundary): a card in its place, and
+          Reload making it all again - the tabs and their documents, held
+          here, as they were. */}
+      <ErrorBoundary
+        part="window"
+        fallback={({ error, reload }) => (
+          // (the window has no frame of its own: moved by any of it meanwhile)
+          <div data-tauri-drag-region className="flex-1 relative">
+            <StoppedCard
+              said="Meno stopped working. The open tabs are kept."
+              error={error}
+              actions={[
+                { label: "Reload", run: reload },
+                // (closed as from its own button: asked first, should a tab hold unsaved changes)
+                ...(isTauri() ? [{ label: "Close Meno", run: () => void getCurrentWindow().close().catch(() => {}) }] : []),
+              ]}
+              className="absolute top-3 left-1/2 -translate-x-1/2"
+            />
+          </div>
+        )}
+      >
       <TopBar ctl={ctl} />
       <input
         ref={fileInputRef}
@@ -539,6 +562,44 @@ export default function App() {
           void openFiles(files);
         }}
       />
+      <AnimatePresence>
+      {notice && (
+        <motion.div
+          key="notice"
+          {...RISE}
+          role="alert"
+          className="absolute top-12 left-1/2 -translate-x-1/2 z-50 max-w-[90%] flex items-start gap-3 rounded-md border border-gh-line bg-white/95 shadow-sm px-3 py-2 text-xs text-gh-black"
+        >
+          <span className="break-words">{notice}</span>
+          <button
+            onClick={() => setNotice(null)}
+            className="shrink-0 underline text-gh-gray hover:text-gh-black"
+          >
+            OK
+          </button>
+        </motion.div>
+      )}
+      </AnimatePresence>
+      <NetworkToasts
+        onOpen={() => {
+          showSettingsSection("network");
+          void ctl.openByKind?.("settings", { label: "Settings" });
+        }}
+      />
+      <ConsentDialog />
+      <UpdateNotice />
+      <Deck
+        order={state.mountOrder}
+        tabs={state.tabsById}
+        activeId={state.activeId}
+        resolveView={resolveView}
+        patchData={patchData}
+        getDocument={getDocument}
+        renameTab={(id, label) => dispatch({ type: "RENAME_TAB", id, label })}
+      />
+      </ErrorBoundary>
+      {/* (beside it, not in it: closing is asked about, and the tabs kept in
+          step with their documents, whatever has failed) */}
       <AnimatePresence>
       {pendingClose && (
         <ConfirmDiscard
@@ -567,24 +628,6 @@ export default function App() {
         />
       )}
       </AnimatePresence>
-      <AnimatePresence>
-      {notice && (
-        <motion.div
-          key="notice"
-          {...RISE}
-          role="alert"
-          className="absolute top-12 left-1/2 -translate-x-1/2 z-50 max-w-[90%] flex items-start gap-3 rounded-md border border-gh-line bg-white/95 shadow-sm px-3 py-2 text-xs text-gh-black"
-        >
-          <span className="break-words">{notice}</span>
-          <button
-            onClick={() => setNotice(null)}
-            className="shrink-0 underline text-gh-gray hover:text-gh-black"
-          >
-            OK
-          </button>
-        </motion.div>
-      )}
-      </AnimatePresence>
       {state.mountOrder.map((id) => {
         const tab = state.tabsById[id];
         const entry = tab ? viewRegistry[tab.content.kind] : undefined;
@@ -600,23 +643,6 @@ export default function App() {
           />
         );
       })}
-      <NetworkToasts
-        onOpen={() => {
-          showSettingsSection("network");
-          void ctl.openByKind?.("settings", { label: "Settings" });
-        }}
-      />
-      <ConsentDialog />
-      <UpdateNotice />
-      <Deck
-        order={state.mountOrder}
-        tabs={state.tabsById}
-        activeId={state.activeId}
-        resolveView={resolveView}
-        patchData={patchData}
-        getDocument={getDocument}
-        renameTab={(id, label) => dispatch({ type: "RENAME_TAB", id, label })}
-      />
     </div>
   );
 }
