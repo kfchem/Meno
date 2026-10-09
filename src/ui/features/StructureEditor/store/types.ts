@@ -67,8 +67,8 @@ export type Plus = { id: number; x: number; y: number };
  * else - where their middle is (lib/chem/captions); over or under an arrow,
  * `arrow`, going where it goes.
  */
-/** Words on the page: where their middle is, what they say, the arrow they are over, and - made as wide as something - how wide they are, broken into lines at it (lib/chem/captions). */
-export type Caption = { id: number; x: number; y: number; text: string; arrow?: number; width?: number };
+/** Words on the page: where their middle is, what they say, the arrow they are over, - made as wide as something - how wide they are, broken into lines at it, and how their lines lie in it, centred unless said (lib/chem/captions). */
+export type Caption = { id: number; x: number; y: number; text: string; arrow?: number; width?: number; align?: "left" | "right" | "justify" };
 /**
  * A PDF on the page (docs/PDF.md): the file it is, by its SHA-256 - held in
  * Meno's cache and kept in the workspace's file - its name, each page's
@@ -487,7 +487,11 @@ export type EditorState = {
    * one (`arrow` null), made as wide as something or as their words
    * (`width` null) - a run of changes in one gesture one step.
    */
-  updateCaption: (id: number, patch: { text?: string; x?: number; y?: number; arrow?: number | null; width?: number | null }, gesture?: string) => void;
+  updateCaption: (
+    id: number,
+    patch: { text?: string; x?: number; y?: number; arrow?: number | null; width?: number | null; align?: "left" | "center" | "right" | "justify" },
+    gesture?: string,
+  ) => void;
   removeCaption: (id: number) => void;
   /**
    * The icons a double-click on empty space opens there (QuickAdd): where,

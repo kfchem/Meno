@@ -597,7 +597,9 @@ Not yet, and where it comes:
 5. **Texts drawn with WebGL**: first a small trial of typing alone,
    Japanese through the IME on a Mac and on Windows, shown before the
    rest; then a text's sheet on the page, the column's text and its
-   typing drawn by Meno, and its colouring.
+   typing drawn by Meno, and its colouring; and words on the page written
+   in place drawn by Meno too, so that they break into lines as they will
+   be kept (the maintainer, 2026-10-09).
 
 Each step is a pull request of its own, checked in the built app on the
 Mac (and on Windows for steps 0, 1 and 5). Then stage 5: a picture read

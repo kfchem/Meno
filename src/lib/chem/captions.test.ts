@@ -88,6 +88,48 @@ describe("a caption made as wide as something", () => {
   });
 });
 
+describe("a caption's lines laid", () => {
+  const text = "The rotational barrier of the hydroxyl group was found by conformational analysis to be small.";
+  /** Where a line's ink starts and ends, as placed. */
+  const ends = (items: ReturnType<typeof captionSet>["items"], y: number) => {
+    const on = items.filter((i) => Math.abs(i.y - y) < 1e-9);
+    const starts = on.map((i) => placeLabel(i, 1)[0].x);
+    const stops = on.map((i, k) => starts[k] + runsWidth(i.runs!, 1));
+    return { start: Math.min(...starts), stop: Math.max(...stops) };
+  };
+
+  it("to the left or the right of the width, or about its middle", () => {
+    const left = captionSet(text, 0, 0, 1, undefined, 12, "left");
+    for (const item of left.items) expect(ends(left.items, item.y).start).toBeCloseTo(-6);
+    const right = captionSet(text, 0, 0, 1, undefined, 12, "right");
+    for (const item of right.items) expect(ends(right.items, item.y).stop).toBeCloseTo(6);
+    const centre = captionSet(text, 0, 0, 1, undefined, 12);
+    for (const item of centre.items) {
+      const e = ends(centre.items, item.y);
+      expect((e.start + e.stop) / 2).toBeCloseTo(0);
+    }
+    // (with no width, in the widest line's)
+    const two = captionSet("a\nlonger line", 0, 0, 1, undefined, undefined, "left");
+    expect(ends(two.items, two.items[0].y).start).toBeCloseTo(ends(two.items, two.items[1].y).start);
+  });
+
+  it("spread to both edges, each but a typed line's last, which lies to the left", () => {
+    const set = captionSet(text, 0, 0, 1, undefined, 12, "justify");
+    const ys = [...new Set(set.items.map((i) => i.y))].sort((a, b) => b - a);
+    expect(ys.length).toBeGreaterThan(2);
+    for (const y of ys.slice(0, -1)) {
+      const e = ends(set.items, y);
+      expect(e.start).toBeCloseTo(-6);
+      expect(e.stop).toBeCloseTo(6);
+    }
+    const last = ends(set.items, ys[ys.length - 1]);
+    expect(last.start).toBeCloseTo(-6);
+    expect(last.stop).toBeLessThan(6);
+    // (its words all there, in order)
+    expect(set.items.map((i) => i.text).join(" ")).toBe(text);
+  });
+});
+
 describe("where a caption put down goes", () => {
   const arrow = { id: 7, x: 0, y: 0, angle: 0, length: 4.8 };
   const half = { w: 1.5, h: 0.6 };

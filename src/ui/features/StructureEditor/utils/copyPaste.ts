@@ -191,6 +191,7 @@ export function readDrawn(data: unknown): Drawn | null {
         text: c.text,
         ...(isNum(c.arrow) && arrowIds.has(c.arrow) ? { arrow: c.arrow } : {}),
         ...(isNum(c.width) && c.width > 0 ? { width: c.width } : {}),
+        ...(c.align === "left" || c.align === "right" || c.align === "justify" ? { align: c.align } : {}),
       },
     ];
   });

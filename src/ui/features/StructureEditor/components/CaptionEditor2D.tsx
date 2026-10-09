@@ -60,13 +60,13 @@ export default function CaptionEditor2D() {
     if (keep) {
       const set = labelSetOf(opts);
       const half = (t: string) => {
-        const r = captionSet(t, 0, 0, opts.fontPx, set, caption?.width);
+        const r = captionSet(t, 0, 0, opts.fontPx, set, caption?.width, caption?.align);
         return { w: r.halfW, h: r.halfH };
       };
       const others = s.captions
         .filter((o) => o.id !== edit.id)
         .map((o) => {
-          const r = captionSet(o.text, o.x, o.y, opts.fontPx, set, o.width);
+          const r = captionSet(o.text, o.x, o.y, opts.fontPx, set, o.width, o.align);
           return { ...o, halfW: r.halfW, halfH: r.halfH };
         });
       if (edit.id == null) {
@@ -135,7 +135,7 @@ export default function CaptionEditor2D() {
             fontSize: fontPx,
             lineHeight: CAPTION_LINE,
             fontFamily: family,
-            textAlign: "center",
+            textAlign: caption?.align ?? "center",
             padding: 0,
             border: "none",
             outline: "none",

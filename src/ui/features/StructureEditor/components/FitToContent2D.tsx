@@ -82,7 +82,7 @@ export default function FitToContent2D({
       : { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
     // and the words on the page, as they are set
     for (const c of captions) {
-      const set = captionSet(c.text, c.x, c.y, opts.fontPx, labelSetOf(opts), c.width);
+      const set = captionSet(c.text, c.x, c.y, opts.fontPx, labelSetOf(opts), c.width, c.align);
       bounds.min = { x: Math.min(bounds.min.x, c.x - set.halfW), y: Math.min(bounds.min.y, c.y - set.halfH) };
       bounds.max = { x: Math.max(bounds.max.x, c.x + set.halfW), y: Math.max(bounds.max.y, c.y + set.halfH) };
     }

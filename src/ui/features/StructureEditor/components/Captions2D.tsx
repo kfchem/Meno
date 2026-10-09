@@ -41,7 +41,7 @@ export default function Captions2D() {
   const { opts } = useDrawnLayout();
   const laid = useMemo<Laid[]>(() => {
     const set = labelSetOf(opts);
-    return captions.filter((c) => c.id !== editing).map((c) => ({ c, ...captionSet(c.text, c.x, c.y, opts.fontPx, set, c.width) }));
+    return captions.filter((c) => c.id !== editing).map((c) => ({ c, ...captionSet(c.text, c.x, c.y, opts.fontPx, set, c.width, c.align) }));
   }, [captions, editing, opts]);
   const texts = useMemo(() => laid.flatMap((l) => l.items), [laid]);
   return (
@@ -131,7 +131,7 @@ function CaptionHold({ laid }: { laid: Laid }) {
           const others = s.captions
             .filter((o) => o.id !== c.id)
             .map((o) => {
-              const r = captionSet(o.text, o.x, o.y, opts.fontPx, set, o.width);
+              const r = captionSet(o.text, o.x, o.y, opts.fontPx, set, o.width, o.align);
               return { ...o, halfW: r.halfW, halfH: r.halfH };
             });
           const placed = captionPlace({ x: q.x + off.x, y: q.y + off.y }, { w: halfW, h: halfH }, s.arrows, opts.fontPx, others);

@@ -43,6 +43,12 @@ describe("words on the page", () => {
     // (drawn broken into lines: more than one)
     const svg = drawingSvg(drawnOf(state()), { aromaticEnabled: false, aromaticRings: {} }, ACS_1996);
     expect((svg.match(/<text/g) ?? []).length).toBeGreaterThan(1);
+    // (laid to the left, or spread: one step each; centred again, as none)
+    state().updateCaption(id, { align: "justify" });
+    expect(doc.history().undoLabel).toBe("align text");
+    expect(readWorkspace(workspaceText(state()))?.drawn.captions?.[0]).toMatchObject({ align: "justify" });
+    state().updateCaption(id, { align: "center" });
+    expect(state().captions[0].align).toBeUndefined();
     state().updateCaption(id, { width: null });
     expect(state().captions[0].width).toBeUndefined();
     // (none, or one not a width: as wide as its words)
