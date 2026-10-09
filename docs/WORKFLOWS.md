@@ -685,7 +685,9 @@ Decided while building it, for the maintainer to confirm:
   what it takes.
 - **`prepare {step, entries, options, cores}`** gives each job's input
   files, its program and arguments, the entries it is for, and the files
-  `collect` will want; **`collect {step, entries, options, files, log,
+  `collect` will want - and, where its program reads one of its files as
+  its standard input, which (`stdin`; added with the real runs of
+  2026-10-09, for Gaussian); **`collect {step, entries, options, files, log,
   ended}`** gives an output for each entry in the readers' output form
   (lib/calc/output) - or, for a job that did not end done, why, in the
   program's words. Meno asks `collect` of a failed job too, so that the
@@ -860,9 +862,9 @@ Decided by the maintainer (2026-10-08), as it was built:
   for the program, nor its version for the program's. Where its steps are
   - a card, Quick Add, Settings' defaults - they go by the program's name:
   *ORCA*, *Gaussian 16*. *Plugins* stays the name of the whole.
-- **Checked with stand-ins on the Mac**: no ORCA or Gaussian is installed
-  there; a run with each program itself is for the maintainer, where they
-  are.
+- **Checked with stand-ins on the Mac**: no ORCA or Gaussian was installed
+  there then; the programs themselves were run on 2026-10-09 (*Real runs
+  of ORCA and Gaussian*, below).
 
 Decided while building it, for the maintainer to confirm:
 
@@ -892,9 +894,10 @@ Decided while building it, for the maintainer to confirm:
 - **Gaussian** is given the input *Export* writes - the job of the step's
   kind (Opt, SP, Freq), PCM or SMD with one of 22 solvents as SCRF says,
   %NProcShared from the cores a job may use, no checkpoint file - and run
-  as `g16 input`, given `g16root` (the folder above its own) and
-  GAUSS_EXEDIR (its own folder), its scratch files where it runs. Why a
-  run failed is read from its output.
+  as `g16 <input.gjf` (`g16 input` until 2026-10-09: *Real runs*, below),
+  given `g16root` (the folder above its own) and GAUSS_EXEDIR (its own
+  folder), its scratch files where it runs. Why a run failed is read from
+  its output.
 - **The options** are the method and basis set as text - as *Export*'s
   are - the dispersion, the solvation and its solvent, more keywords, and
   the memory; the cores come from Settings, *Calculations*, as xTB's do.
@@ -910,6 +913,86 @@ Not yet, and where it comes:
   *Calculations*), ORCA needs none.
 - **The version** of a program installed separately is what its output
   says, as the readers read it; Settings does not ask the program itself.
+
+### Real runs of ORCA and Gaussian (2026-10-09)
+
+Step 6 had run only against stand-ins. On 2026-10-09 the real programs
+were run from the built app on the Mac: ORCA 6.1.1 (macOS, arm64) and
+Gaussian 16 Rev. B.01 (x86_64, under Rosetta), each located in Settings,
+*Plugins*, with one core for each job (Settings, *Calculations*: OpenMPI
+is not installed there, so ORCA runs one process). Methanol, opened from
+a MOL file, was made the input of two chains from Quick Add: ORCA's
+*Optimise* then *Frequencies* (B3LYP-D3BJ/def2-SVP), Gaussian 16's the
+same (B3LYP-D3BJ/6-31G(d)), the four queued one at a time.
+
+What was seen, and what was put right:
+
+- **ORCA**: both ran and were read back as designed - *Optimise* in about
+  12 s, -115.56885 Eh, its path of 7 frames on the frames chip;
+  *Frequencies* in 10 s, its 12 vibrations in the molecule's list (330.5
+  to 3819.7 cm-1, none imaginary), its partial charges by pointing at an
+  atom, and what the calculation was on the chip.
+- **Gaussian's output went to a file nobody followed.** Run as `g16
+  input`, Gaussian writes `input.log`, and what it printed - nothing - was
+  the job's log: *Show log* said *(Nothing yet)*, the running card had no
+  last line, and a run that died said *Gaussian said nothing*. Gaussian's
+  "Running Gaussian" page gives a second form, `g16 <input-file
+  >output-file`: given no job name, it reads its input from standard input
+  and writes its output to standard output. A job's program may now be
+  given one of its input files as what it reads (`stdin`, in `prepare`'s
+  answer; `jobs.rs` opens it in the job's folder, and takes only a file
+  written for that job), so Gaussian runs as `g16 <input.gjf`, its output
+  the job's log - followed while it runs, as ORCA's and xTB's are - and
+  `collect` says the log is the output to read.
+- **Gaussian gives molecules back turned.** It works in its standard
+  orientation, and that is the geometry it prints: methanol came back a
+  half turn round, a molecule's results not lying as it went in.
+  Results that are what came in worked out - *Optimise*, *Energy*,
+  *Frequencies* - are now put down turned the way that lays each over the
+  entry it was worked out from (Horn's quaternion, as a structure in 3D is
+  laid over its drawing), and then as that molecule is turned on the page.
+  The turn is the view's, as any molecule's is: its geometry, its
+  vibrations and anything read from its output stay as the program gave
+  them, and *Reset orientation* shows it as the output has it. Its room in
+  the result set is made for it turned. ORCA and xTB keep the input's
+  orientation, so for them it is the turn of the input, if any.
+- **A Gaussian run that dies without an error** now says what it printed
+  last: *Gaussian stopped without saying why, after: ...*.
+- **The vibrations could not be chosen**, in a result set or in an output
+  opened: their rows were neither pointed at nor chosen, and no molecule
+  moved (the release 0.1.7 does both). Since the page's HTML went into the
+  layer cut off where the column begins (PDF.md), which lets the pointer
+  through to the canvas, what drei's Html lays flat on the screen let it
+  through as well - the list, the frames chip's slider and details. It
+  takes the pointer again (`PageHtml`), unless it says it does not.
+
+Decided while building it, for the maintainer to confirm:
+
+- **Results laid over what went in, by the view's turn**, as above -
+  not by turning the coordinates, which would part them from the output
+  they were read from (its vibrations, the surfaces asked of it later).
+  A run shown again from *Runs* is laid over what comes in now; results
+  undone and done again are shown as the output has them, the view's
+  turns being no part of an undo.
+
+Not put right here:
+
+- **Gaussian's Frequencies fail on this Mac.** Every Freq job - Meno's,
+  and one run by hand from a shell, HF/STO-3G as well as B3LYP - ends with
+  exit code 1 in Link 103, straight after the frequencies are printed,
+  with no error message; Opt and SP run to normal termination. It is
+  Gaussian 16 B.01 under Rosetta on this Mac, not Meno. Meno marks the
+  step failed and says where Gaussian stopped. Gaussian's frequencies
+  need a run elsewhere (a native build, Linux).
+- **ORCA's method on the chip** reads *DFT/def2-SVP*, not B3LYP: cclib
+  1.9rc1 reads no functional from ORCA 6's output. The reader's to put
+  right, not the step's.
+- **ORCA in parallel** still needs OpenMPI (step 6, *Not yet*): with the
+  cores left unset, all of a computer's go to a job, so ORCA is given
+  `%pal`, and without OpenMPI it cannot run. Settings, *Calculations*,
+  *Cores for each* set to 1 runs it.
+- **A conformer set worked out by Gaussian** keeps each conformer in its
+  standard orientation: the turn is one for the molecule, not each frame.
 
 ### Step 7: procedures and copying (2026-10-08)
 
