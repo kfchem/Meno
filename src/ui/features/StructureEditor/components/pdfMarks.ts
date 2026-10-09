@@ -36,20 +36,29 @@ export function marksOn(
   now: PdfFound | null,
   came: () => void,
   flash: EditorState["pdfFlash"] = null,
+  lifted: EditorState["pdfLifted"] = null,
 ): Mark[] {
   const mine = found.filter((f) => f.id === pdf.id && f.page === page);
   const selected = sel?.id === pdf.id ? sel : null;
   const shown = flash?.id === pdf.id && page >= flash.from.page && page <= flash.to.page ? flash : null;
-  if (!selected && !mine.length && !shown) return [];
+  const bare = lifted?.id === pdf.id && page >= lifted.from.page && page <= lifted.to.page ? lifted : null;
+  if (!selected && !mine.length && !shown && !bare) return [];
   const t = textHad(pdf.sha256, page, came);
   if (!t) return [];
   const out: Mark[] = [];
+  // (words being carried out: the page bare where they were, as paper is)
+  if (bare) {
+    const a = page === bare.from.page ? bare.from.at : 0;
+    const b = page === bare.to.page ? bare.to.at : t.codes.length;
+    out.push({ rects: marksBetween(t, a, b), color: "#ffffff", opacity: 1 });
+  }
   const isNow = (f: PdfFound) => !!now && now.id === f.id && now.page === f.page && now.from === f.from;
   const others = mine.filter((f) => !isNow(f));
   if (others.length) out.push({ rects: others.flatMap((f) => marksBetween(t, f.from, f.to)), color: FOUND_COLOR, opacity: FOUND });
   const there = mine.find(isNow);
   if (there) out.push({ rects: marksBetween(t, there.from, there.to), color: FOUND_COLOR, opacity: FOUND_NOW });
-  const range = selected ? onPage(selected, page, t.codes.length) : null;
+  // (the words being carried out leave paper, not their mark)
+  const range = selected && !bare ? onPage(selected, page, t.codes.length) : null;
   if (range) out.push({ rects: marksBetween(t, range[0], range[1]), color: COLORS.highlight, opacity: SELECTED });
   if (shown) {
     const a = page === shown.from.page ? shown.from.at : 0;

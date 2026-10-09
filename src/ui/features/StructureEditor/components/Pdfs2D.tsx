@@ -30,10 +30,10 @@ import { BASE, FADE_MS, GRAY, levelFor, LINE, Page, TILE, usePictures, type Mark
 import { FLASH_MS, marksOn } from "./pdfMarks";
 import { followLink, readerOf } from "./pdfColumnReader";
 import { linkAt, linksOf, type PdfLink } from "../../../../lib/pdf/reader";
-import { letterAt, letterNear, lineAt, placeAt, textHad, wordAt, type PageText } from "../../../../lib/pdf/text";
+import { letterNear, placeAt, textHad, wordAt, type PageText } from "../../../../lib/pdf/text";
 import { placeBefore, selects } from "../utils/pdfSelection";
 import { dragWords, onSelected } from "./wordsDrag";
-import { DOUBLE_CLICK_MS } from "../constants";
+import { LONG_PRESS_MS, MOV_PX } from "../constants";
 import type { PdfSelection, WordPlace } from "../store/types";
 
 /** Eased in and out, cubic: what is lifted rises and settles. */
@@ -81,6 +81,7 @@ export default function Pdfs2D() {
   const found = pdfFind?.found ?? NOTHING_FOUND;
   const foundNow = pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null;
   const pdfFlash = useEditor((s) => s.pdfFlash);
+  const pdfLifted = useEditor((s) => s.pdfLifted);
   const store = useEditorStore();
   const { camera, gl, invalidate, size } = useThree();
   const [, setTick] = useState(0);
@@ -243,60 +244,24 @@ export default function Pdfs2D() {
     const onMove = (m: PointerEvent) => {
       if (carried || Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) < CLICK_PX) return;
       carried = true;
-      void dragWords(store, p, sel, { x: m.clientX, y: m.clientY });
+      // (from where it was pressed, where the words lie on the screen now)
+      const cam = camera as THREE.OrthographicCamera;
+      const rect = (gl.domElement as HTMLCanvasElement).getBoundingClientRect();
+      void dragWords(store, p, sel, { x: ev.clientX, y: ev.clientY }, {
+        pxPerPoint: cam.zoom * POINT,
+        at: (page, x, y) => {
+          const s = shownSheet(p, page) ?? topSheet(p);
+          const wx = s.x - s.w / 2 + x * POINT;
+          const wy = s.y + s.h / 2 - y * POINT;
+          return { x: rect.left + rect.width / 2 + (wx - cam.position.x) * cam.zoom, y: rect.top + rect.height / 2 - (wy - cam.position.y) * cam.zoom };
+        },
+      });
     };
     const onUp = (u: PointerEvent) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp, true);
       store.getState().endPanHold(u.pointerId);
       if (!carried) store.getState().setPdfSel(null);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp, true);
-  };
-
-  // two or three presses in a row on a PDF's words: a word, a line
-  const pressed = useRef({ n: 0, t: 0, x: 0, y: 0 });
-  /** A press on a PDF's words: a selection begun - a letter's place, a word, a line - and drawn on that page as the pointer goes; let go where it was pressed, a link followed. */
-  const selectWords = (p: PdfItem, ev: Pointerish, w: { page: number; t: PageText; x: number; y: number; sheet: Sheet }, letter: number) => {
-    const now = performance.now();
-    const c = pressed.current;
-    const near = now - c.t < DOUBLE_CLICK_MS && Math.hypot(ev.clientX - c.x, ev.clientY - c.y) < CLICK_PX * 2;
-    pressed.current = { n: near ? c.n + 1 : 1, t: now, x: ev.clientX, y: ev.clientY };
-    const unit = pressed.current.n >= 3 ? "line" : pressed.current.n === 2 ? "word" : "letter";
-    const [a, b] = unit === "letter" ? [placeAt(w.t, w.x, w.y), placeAt(w.t, w.x, w.y)] : unit === "word" ? wordAt(w.t, letter, w.x) : lineAt(w.t, letter);
-    const first: [WordPlace, WordPlace] = [
-      { page: w.page, at: a },
-      { page: w.page, at: b },
-    ];
-    const st = store.getState();
-    st.setPdfSel({ id: p.id, anchor: first[0], focus: first[1] });
-    st.beginPanHold(ev.pointerId ?? null);
-    let moved = false;
-    const onMove = (m: PointerEvent) => {
-      if (!moved && Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) < CLICK_PX) return;
-      moved = true;
-      const q = toWorld(m.clientX, m.clientY);
-      const x = (q.x - (w.sheet.x - w.sheet.w / 2)) / POINT;
-      const y = (w.sheet.y + w.sheet.h / 2 - q.y) / POINT;
-      let place: WordPlace = { page: w.page, at: placeAt(w.t, x, y) };
-      if (unit !== "letter") {
-        const i = letterAt(w.t, x, y, 2) ?? Math.min(Math.max(0, place.at), w.t.codes.length - 1);
-        const [s, e] = unit === "word" ? wordAt(w.t, i) : lineAt(w.t, i);
-        place = { page: w.page, at: placeBefore(place, first[0]) ? s : e };
-      }
-      store.getState().setPdfSel({ id: p.id, anchor: placeBefore(place, first[0]) ? first[1] : first[0], focus: place });
-    };
-    const onUp = (u: PointerEvent) => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp, true);
-      store.getState().endPanHold(u.pointerId);
-      if (moved || unit !== "letter") return;
-      // a click: nothing selected - a link followed
-      store.getState().setPdfSel(null);
-      const pdf = store.getState().pdfs.find((x) => x.id === p.id);
-      const link = pdf ? linkOn(pdf, toWorld(u.clientX, u.clientY)) : null;
-      if (pdf && link) followLink(store, pdf, link);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, true);
@@ -324,10 +289,9 @@ export default function Pdfs2D() {
     if (!hit || !t) return null;
     return { page: hit.page, t, x: (q.x - (hit.s.x - hit.s.w / 2)) / POINT, y: (hit.s.y + hit.s.h / 2 - q.y) / POINT, sheet: hit.s };
   };
-  /** Over a link on a PDF, the system's hand; over its words, the text cursor. */
+  /** Over a link on a PDF, the system's hand (its words are selected by a long press, not the text cursor's drag). */
   const hoverAt = (p: PdfItem | null, q?: { x: number; y: number }) => {
-    const w = p && q ? wordsOn(p, q) : null;
-    const want = p && q && linkOn(p, q) ? "pointer" : w && letterNear(w.t, w.x, w.y) != null ? "text" : "";
+    const want = p && q && linkOn(p, q) ? "pointer" : "";
     const dom = gl.domElement as HTMLCanvasElement;
     if (dom.style.cursor !== want) dom.style.cursor = want;
   };
@@ -349,24 +313,59 @@ export default function Pdfs2D() {
       liftWords(p, ev, sel);
       return;
     }
+    // a drag moves it; held still a moment on its words, where they can be
+    // read - as a box begins on empty space - a selection begins there, the
+    // word under the press, drawn on as the pointer goes
     const letter = w ? letterNear(w.t, w.x, w.y) : null;
-    if (w && letter != null) {
-      selectWords(p, ev, w, letter);
-      return;
-    }
-    store.getState().setPdfSel(null);
     const off = { x: p.x - q.x, y: p.y - q.y };
     const gesture = `move-${performance.now()}`;
     st.beginPanHold(ev.pointerId ?? null);
+    let moving = false;
+    let selecting: { first: [WordPlace, WordPlace] } | null = null;
+    let hold: number | null = null;
+    const letHoldGo = () => {
+      if (hold != null) window.clearTimeout(hold);
+      hold = null;
+      if (store.getState().pressHold) store.getState().setPressHold(null);
+    };
+    if (w && letter != null) {
+      st.setPressHold({ at: q, start: performance.now() });
+      hold = window.setTimeout(() => {
+        hold = null;
+        store.getState().setPressHold(null);
+        const [a, b] = wordAt(w.t, letter, w.x);
+        selecting = { first: [{ page: w.page, at: a }, { page: w.page, at: b }] };
+        store.getState().setPdfSel({ id: p.id, anchor: selecting.first[0], focus: selecting.first[1] });
+      }, LONG_PRESS_MS);
+    }
     const onMove = (m: PointerEvent) => {
+      if (selecting && w) {
+        // (by letters, beyond the word first selected)
+        const r = toWorld(m.clientX, m.clientY);
+        const x = (r.x - (w.sheet.x - w.sheet.w / 2)) / POINT;
+        const y = (w.sheet.y + w.sheet.h / 2 - r.y) / POINT;
+        const place: WordPlace = { page: w.page, at: placeAt(w.t, x, y) };
+        const [a, b] = selecting.first;
+        const within = !placeBefore(place, a) && placeBefore(place, b);
+        store.getState().setPdfSel(within ? { id: p.id, anchor: a, focus: b } : { id: p.id, anchor: placeBefore(place, a) ? b : a, focus: place });
+        return;
+      }
+      if (!moving && Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) < MOV_PX) return;
+      if (!moving) {
+        moving = true;
+        letHoldGo();
+      }
       const r = toWorld(m.clientX, m.clientY);
       store.getState().movePdf(p.id, r.x + off.x, r.y + off.y, gesture);
     };
     const onUp = (u: PointerEvent) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp, true);
+      letHoldGo();
       store.getState().endPanHold(u.pointerId);
-      if (Math.hypot(u.clientX - ev.clientX, u.clientY - ev.clientY) > CLICK_PX) return;
+      if (selecting || moving) return;
+      // a click: the words selected let go, a link followed
+      store.getState().setPdfSel(null);
       const now = store.getState().pdfs.find((x) => x.id === p.id);
       const link = now ? linkOn(now, toWorld(u.clientX, u.clientY)) : null;
       if (now && link) followLink(store, now, link);
@@ -390,7 +389,7 @@ export default function Pdfs2D() {
           motion={motion.current.get(p.id)}
           previewOf={(page) => pics.preview(p, page)}
           tilesOf={(page) => pics.tilesOf(p.sha256, page, view.current.level.get(p.id * 100000 + page) ?? 0)}
-          marksOf={(page) => marksOn(p, page, pdfSel, found, foundNow, redraw, pdfFlash)}
+          marksOf={(page) => marksOn(p, page, pdfSel, found, foundNow, redraw, pdfFlash, pdfLifted)}
           onOver={() => store.getState().setHoveredPdf(p.id)}
           onOut={() => {
             hoverAt(null);

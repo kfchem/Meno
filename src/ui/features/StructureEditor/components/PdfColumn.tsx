@@ -82,6 +82,7 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
   const pdfSel = useEditor((s) => s.pdfSel);
   const pdfFind = useEditor((s) => s.pdfFind);
   const pdfFlash = useEditor((s) => s.pdfFlash);
+  const pdfLifted = useEditor((s) => s.pdfLifted);
   const [, setTick] = useState(0);
   const redraw = useCallback(() => {
     setTick((t) => t + 1);
@@ -272,7 +273,7 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
             px={1}
             preview={pics.preview(pdf, i)}
             tiles={pics.tilesOf(pdf.sha256, i, clock.current.levels.get(i) ?? 0)}
-            marks={marksOn(pdf, i, pdfSel, pdfFind?.found ?? [], pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null, redraw, pdfFlash)}
+            marks={marksOn(pdf, i, pdfSel, pdfFind?.found ?? [], pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null, redraw, pdfFlash, pdfLifted)}
           />
         );
       });

@@ -584,8 +584,8 @@ Built:
   - the words to copy;
   - where a search finds something.
 - **Selecting words**, in the column and on a stack or its pages spread.
-  - A drag on words selects them; two clicks select a word, three a line.
-  - In the column a selection can run across pages, and the column moves on as the pointer nears its top or foot.
+  - In the column, a drag on words selects them at once; two clicks select a word, three a line. A selection can run across pages, and the column moves on as the pointer nears its top or foot.
+  - On a stack, a drag moves the PDF, as a drag on empty space moves the view. Held still a moment on its words - as a box begins on empty space, the same ring spreading - the word under the press is selected, and the selection is drawn on from it as the pointer goes. A click selects nothing; two read the PDF in the column.
   - A press between two lines, or just past a line's end, counts as on the line beside it.
   - The words selected are marked in Meno's light, the same on the stack and in the column.
   - Cmd/Ctrl+C copies them, or *Copy* in the PDF's menu; a right-click in the column opens that menu too.
@@ -596,21 +596,22 @@ Built:
   - Enter goes to the next place and Shift+Enter to the one before. Esc closes the field.
   - Every place found is marked on the pages, in the column and on the stacks; the one gone to is marked more strongly.
   - With *All PDFs*, the places are listed under each PDF's name, with the words round each. A click goes there, showing that PDF.
-- **Words taken out.** A selection pressed and dragged lifts off as a card of its words, rising and following the pointer.
-  - Let go on the canvas, the words become words on the page there, in the drawing's type, as one step.
-  - Let go anywhere else, the card goes back.
+- **Words taken out.** A selection pressed and dragged peels off the page.
+  - Its own picture, drawn by PDFium where it lies and cut to the words' shape, lifts at the edge the pointer pulls, leaning toward the viewer, its shadow deepening. The page is left bare where the words were, and the picture follows the pointer.
+  - Let go on the canvas, the words become words on the page there, in the drawing's type, as one step, the picture settling as they come.
+  - Let go anywhere else, the picture goes back down into the page.
   - The words keep where they came from. *Show in the PDF*, in their menu, reads that PDF in the column, goes there, and marks the words for a moment.
 
 Decided while building it, for the maintainer to confirm:
-- **On a stack, a drag on words selects them only where they can be read**: a point at least 0.6 pixels on the screen. Further off, the drag moves the PDF, as before. A drag on a page's margin always moves it; in step 4 such a drag will draw a box instead, and the PDF will then be moved by its edge or its name.
+- **On a stack, words are selected by a long press** (the maintainer), as a box is begun on empty space, and only where they can be read: a point at least 0.6 pixels on the screen. A drag moves the PDF. In the column, a drag selects at once (the maintainer).
 - **Copying and searching treat line ends and hyphens alike.** A line's end reads as a space. A word PDFium marks as broken at a line's end (U+0002) reads whole, and a search with its hyphen finds it too. A hyphen PDFium left at a line's end is a word's own, as in Diels-Alder, and is kept.
 - **The search field lies over the top of what is read**, as a browser's does, so that the pages stay where the canvas draws them.
 - **A selection of several pages copies as one run of words**, a page's end read as a space.
-- **Words carried out are a card in HTML until step 5**, when texts move into WebGL.
+- **Words carried out peel off as their own picture** (the maintainer asked for words peeling off the PDF), in HTML over the canvas, until texts move into WebGL (step 5).
 
 Not yet, and where it comes:
 - **A figure cut out by a box**: step 4.
-- **Words on the page that came from a PDF stay one line**, however long. Breaking them into lines comes with texts drawn in WebGL (step 5).
+- **Words on the page that came from a PDF stay one line**, however long. Words on the page are to be broken into lines at a width that can be dragged (the maintainer); words taken out will then come as wide as their lines were.
 
 ## In order
 

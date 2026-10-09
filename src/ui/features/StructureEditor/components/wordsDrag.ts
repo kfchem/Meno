@@ -7,7 +7,8 @@
  */
 import type { EditorStore } from "../store";
 import type { PdfItem, PdfSelection, WordsFrom } from "../store/types";
-import { marksBetween, type PageText } from "../../../../lib/pdf/text";
+import { marksBetween, textOf, type PageText } from "../../../../lib/pdf/text";
+import { partPicture } from "../../../../lib/pdf/reader";
 import { onPage, ordered, selectedWords } from "../utils/pdfSelection";
 import { DURATION } from "../../../theme/motion";
 
@@ -28,43 +29,104 @@ export function onSelected(t: PageText, sel: PdfSelection, page: number, x: numb
   return marksBetween(t, range[0], range[1]).some(([x0, y0, x1, y1]) => x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1);
 }
 
-/** How long words let go take to settle, or to go back, in ms. */
+/** How long words take to peel off, to settle once let go, and to go back, in ms. */
+const PEEL_MS = 240;
 const SETTLE_MS = DURATION.base * 1000;
-const BACK_MS = DURATION.move * 1000;
-/** The most of the words shown as they are carried. */
-const SHOWN_MOST = 160;
+const BACK_MS = 300;
+/** How far words peeling off lift and lean, toward the viewer, and how they are seen in depth. */
+const LIFT_SCALE = 1.06;
+const LEAN_DEG = 9;
+const DEPTH_PX = 700;
+const SHADOW_UP = "drop-shadow(0 0 0 rgba(0,0,0,0))";
+const SHADOW_LIFTED = "drop-shadow(0 12px 16px rgba(0,0,0,0.22))";
+
+/** Where a point of a PDF's page lies in the window, in its pixels: where the words are drawn, on the stack or in the column. */
+export type OnScreen = { at: (page: number, x: number, y: number) => { x: number; y: number }; pxPerPoint: number };
 
 /**
- * Words selected in a PDF carried from where the pointer pressed them: a
- * card of them following the pointer until it is let go - on the canvas,
- * words on the page there, as one step; elsewhere, the card going back.
+ * Words selected in a PDF carried out, from where the pointer pressed them
+ * (docs/PDF.md, *Taking things out*). They peel off the page: their own
+ * picture - drawn by PDFium where they lie, cut to their shape - lifts at
+ * the edge the pointer pulls, leaning toward the viewer, its shadow
+ * deepening, the page left bare where they were; then follows the pointer.
+ * Let go on the canvas, they are words on the page there, one step, the
+ * picture settling as they come; anywhere else, it goes back down into the
+ * page.
  */
-export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "sha256">, sel: PdfSelection, at: { x: number; y: number }): Promise<void> {
+export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "id" | "sha256">, sel: PdfSelection, at: { x: number; y: number }, screen: OnScreen): Promise<void> {
   const words = await selectedWords(sel, pdf);
   if (!words) return;
   const { from, to } = ordered(sel);
   const source: WordsFrom = { sha256: pdf.sha256, from, to };
+  // where they are on their first page, and the box round them there
+  const t = await textOf(pdf.sha256, from.page);
+  const range = onPage(sel, from.page, t.codes.length);
+  const rects = range ? marksBetween(t, range[0], range[1]) : [];
+  if (!rects.length) return;
+  const pad = 1;
+  const x0 = Math.min(...rects.map((r) => r[0])) - pad;
+  const y0 = Math.min(...rects.map((r) => r[1])) - pad;
+  const x1 = Math.max(...rects.map((r) => r[2])) + pad;
+  const y1 = Math.max(...rects.map((r) => r[3])) + pad;
+  const k = screen.pxPerPoint;
+  const topLeft = screen.at(from.page, x0, y0);
+  const box = { left: topLeft.x, top: topLeft.y, width: (x1 - x0) * k, height: (y1 - y0) * k };
+  // their picture, as sharp as the screen shows it
+  const scale = k * (window.devicePixelRatio || 1);
+  const url = await partPicture(pdf.sha256, from.page, scale, x0 * scale, y0 * scale, (x1 - x0) * scale, (y1 - y0) * scale).catch(() => null);
+  if (!url) return;
   const card = document.createElement("div");
   card.setAttribute("aria-hidden", "true");
-  card.className =
-    "fixed left-0 top-0 z-[100] pointer-events-none max-w-[22rem] rounded-md border border-gh-line bg-white px-2 py-1 text-[13px] leading-snug text-gh-black";
-  card.style.fontFamily = "Arimo, Arial, sans-serif";
-  card.style.boxShadow = "0 1px 2px rgba(0,0,0,0.08)";
-  card.style.transformOrigin = "0 0";
-  card.style.transition = `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow ${SETTLE_MS}ms ease, opacity ${SETTLE_MS}ms ease`;
-  card.textContent = words.length > SHOWN_MOST ? `${words.slice(0, SHOWN_MOST)}…` : words;
-  const place = (x: number, y: number, k: number) => (card.style.transform = `translate(${x + 10}px, ${y + 10}px) scale(${k})`);
-  place(at.x, at.y, 0.96);
+  Object.assign(card.style, {
+    position: "fixed",
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+    zIndex: "100",
+    pointerEvents: "none",
+    willChange: "transform, filter",
+    filter: SHADOW_UP,
+  } satisfies Partial<CSSStyleDeclaration>);
+  // (lifting at the edge it is pulled by, the far edge the last to leave the page)
+  const grab = { x: at.x - box.left, y: at.y - box.top };
+  const towardRight = grab.x > box.width / 2;
+  const towardBottom = grab.y > box.height / 2;
+  card.style.transformOrigin = `${towardRight ? 0 : 100}% ${towardBottom ? 0 : 100}%`;
+  const lean = `rotateY(${towardRight ? -LEAN_DEG : LEAN_DEG}deg) rotateX(${towardBottom ? LEAN_DEG / 2 : -LEAN_DEG / 2}deg)`;
+  const lifted = (dx: number, dy: number) => `perspective(${DEPTH_PX}px) translate(${dx}px, ${dy}px) ${lean} scale(${LIFT_SCALE})`;
+  const flat = (dx: number, dy: number, s = 1) => `perspective(${DEPTH_PX}px) translate(${dx}px, ${dy}px) rotateY(0deg) rotateX(0deg) scale(${s})`;
+  card.style.transform = flat(0, 0);
+  const img = document.createElement("img");
+  img.src = url;
+  img.alt = "";
+  Object.assign(img.style, { width: "100%", height: "100%", display: "block" } satisfies Partial<CSSStyleDeclaration>);
+  // (cut to the words' own shape: the lines selected, not the whole box)
+  const path = rects.map(([a, b, c, d]) => `M${(a - x0) * k} ${(b - y0) * k}H${(c - x0) * k}V${(d - y0) * k}H${(a - x0) * k}Z`).join("");
+  img.style.clipPath = `path("${path}")`;
+  card.appendChild(img);
+  await img.decode().catch(() => undefined);
   document.body.appendChild(card);
-  // (rising: a little larger, its shadow deeper)
+  store.getState().setPdfLifted({ id: pdf.id, from, to });
+  let pointer = { x: at.x, y: at.y };
+  const peeled = performance.now();
+  // peeling off: lifting and leaning toward the viewer, its shadow deepening
   requestAnimationFrame(() => {
-    place(at.x, at.y, 1.04);
-    card.style.boxShadow = "0 12px 28px rgba(0,0,0,0.18)";
+    card.style.transition = `transform ${PEEL_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1), filter ${PEEL_MS}ms ease`;
+    card.style.transform = lifted(pointer.x - at.x, pointer.y - at.y);
+    card.style.filter = SHADOW_LIFTED;
   });
-  const gone = (ms: number) => window.setTimeout(() => card.remove(), ms + 40);
+  const done = (ms: number) =>
+    window.setTimeout(() => {
+      card.remove();
+      URL.revokeObjectURL(url);
+      store.getState().setPdfLifted(null);
+    }, ms + 40);
   const onMove = (e: PointerEvent) => {
-    card.style.transition = "box-shadow 160ms ease";
-    place(e.clientX, e.clientY, 1.04);
+    pointer = { x: e.clientX, y: e.clientY };
+    // (once peeled, it keeps up with the pointer)
+    if (performance.now() - peeled > PEEL_MS) card.style.transition = "filter 160ms ease";
+    card.style.transform = lifted(pointer.x - at.x, pointer.y - at.y);
   };
   const onUp = (e: PointerEvent) => {
     window.removeEventListener("pointermove", onMove);
@@ -72,19 +134,20 @@ export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "sha256">
     const canvas = places.get(store);
     const over = document.elementFromPoint(e.clientX, e.clientY);
     const world = canvas && over && over === canvas.canvas() ? canvas.worldAt(e.clientX, e.clientY) : null;
-    card.style.transition = `transform ${world ? SETTLE_MS : BACK_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow ${SETTLE_MS}ms ease, opacity ${world ? SETTLE_MS : BACK_MS}ms ease`;
     if (world) {
-      // let go on the canvas: settled there as words on the page
+      // let go on the canvas: words on the page there, the picture settling as they come
       store.getState().addCaption(words, world.x, world.y, undefined, source);
-      place(e.clientX, e.clientY, 1);
-      card.style.boxShadow = "0 1px 2px rgba(0,0,0,0.08)";
+      card.style.transition = `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1), filter ${SETTLE_MS}ms ease, opacity ${SETTLE_MS}ms ease`;
+      card.style.transform = flat(e.clientX - at.x, e.clientY - at.y);
+      card.style.filter = SHADOW_UP;
       card.style.opacity = "0";
-      gone(SETTLE_MS);
+      done(SETTLE_MS);
     } else {
-      // elsewhere: back to where it was taken from
-      place(at.x, at.y, 0.96);
-      card.style.opacity = "0";
-      gone(BACK_MS);
+      // elsewhere: back down into the page, where they were
+      card.style.transition = `transform ${BACK_MS}ms cubic-bezier(0.45, 0, 0.55, 1), filter ${BACK_MS}ms ease`;
+      card.style.transform = flat(0, 0);
+      card.style.filter = SHADOW_UP;
+      done(BACK_MS);
     }
   };
   window.addEventListener("pointermove", onMove);

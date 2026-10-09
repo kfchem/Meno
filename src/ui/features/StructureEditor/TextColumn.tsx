@@ -481,7 +481,17 @@ function PdfBody({ pdf }: { pdf: PdfItem }) {
           lifting.carried = true;
           const st = store.getState();
           const pdfNow = st.pdfs.find((x) => x.id === id);
-          if (pdfNow && selects(st.pdfSel)) void dragWords(store, pdfNow, st.pdfSel, { x: e.clientX, y: e.clientY });
+          // (from where it was pressed, where the words lie on the screen now)
+          const { l, top, left } = reader.seen();
+          const r = el.getBoundingClientRect();
+          if (pdfNow && selects(st.pdfSel))
+            void dragWords(store, pdfNow, st.pdfSel, { x: lifting.x, y: lifting.y }, {
+              pxPerPoint: l.scale,
+              at: (page, x, y) => {
+                const p = l.pages[page] ?? l.pages[0];
+                return { x: r.left + p.x - left + x * l.scale, y: r.top + p.y - top + y * l.scale };
+              },
+            });
         }
         return;
       }

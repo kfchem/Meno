@@ -343,6 +343,9 @@ export type EditorState = {
   /** The canvas asked to open a PDF's menu where the column was right-clicked, in the window's pixels. */
   menuAsk: { id: number; clientX: number; clientY: number } | null;
   askPdfMenu: (ask: { id: number; clientX: number; clientY: number } | null) => void;
+  /** Words being carried out of a PDF: where they were on its page shows bare until they are let go. */
+  pdfLifted: { id: number; from: WordPlace; to: WordPlace } | null;
+  setPdfLifted: (lifted: { id: number; from: WordPlace; to: WordPlace } | null) => void;
   /** A place in a PDF shown, marked for a moment: words gone back to where they came from. */
   pdfFlash: { id: number; from: WordPlace; to: WordPlace; start: number } | null;
   setPdfFlash: (flash: { id: number; from: WordPlace; to: WordPlace; start: number } | null) => void;
