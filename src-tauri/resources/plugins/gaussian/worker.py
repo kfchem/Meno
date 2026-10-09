@@ -13,9 +13,9 @@ line on stdin, one per line back on stdout, as every plugin's:
      "options": {"job": "opt freq", "method": "B3LYP", ...}}
     {"id": 3, "ok": true, "result": {"text": "..."}}
     {"id": 4, "op": "prepare", "step": "optimise", "entries": [...], "options": {...}, "cores": 4}
-    {"id": 4, "ok": true, "result": {"jobs": [{"entries": [0], "program": "g16", "args": ["input"], ...}]}}
-    {"id": 5, "op": "collect", "step": "optimise", "entries": [...], "files": {...}, "log": "...", "ended": "done"}
-    {"id": 5, "ok": true, "result": {"read": [{"kind": "gaussian", "file": "input.log", "name": "water.log"}]}}
+    {"id": 4, "ok": true, "result": {"jobs": [{"entries": [0], "program": "g16", "args": [], "stdin": "input.gjf", ...}]}}
+    {"id": 5, "op": "collect", "step": "optimise", "entries": [...], "files": {}, "log": "...", "ended": "done"}
+    {"id": 5, "ok": true, "result": {"read": [{"kind": "gaussian", "log": true, "name": "water.log"}]}}
     {"id": 3, "ok": false, "error": "..."}
 
 It writes what it is given and nothing else - no file of its own choosing,
@@ -25,11 +25,13 @@ no network - runs nothing itself, and says when it is ready:
 
 Its steps - Optimise, Energy, Frequencies - each make a job for an entry:
 its input written as below, run as Gaussian's "Running Gaussian" page has
-it (`g16 job-name` reads job-name.gjf and writes job-name.log, the scratch
-files where it runs, its folder `g16root` the one above Gaussian's own and
-GAUSS_EXEDIR Gaussian's own). `collect` reads nothing: it says that the
-.log is Gaussian's output, for Meno's readers to read as one opened is -
-or, where the job failed, why, as the output says.
+it - `g16 <input-file >output-file`: given no job name, Gaussian reads its
+input from standard input and writes its output to standard output, which
+is the job's log, followed by Meno as it runs; the scratch files where it
+runs; its folder `g16root` the one above Gaussian's own and GAUSS_EXEDIR
+Gaussian's own. `collect` reads nothing: it says that the log is
+Gaussian's output, for Meno's readers to read as one opened is - or,
+where the job failed, why, as the output says.
 
 The input is laid out as Gaussian's own reference has it (gaussian.com,
 "About Gaussian 16 Input", "Link 0 Commands", "Molecule Specifications"),
@@ -185,7 +187,8 @@ def gaussian_input(name, molecule, options):
 # --- a workflow's steps ---------------------------------------------------------
 
 PROGRAM = "g16"
-STEM = "input"
+# the input file, which Gaussian reads as its standard input
+INPUT = "input.gjf"
 # what Gaussian's output is, as Meno's readers know it (their manifests' kinds)
 KIND = "gaussian"
 # each kind of step, as its job's keyword says it
@@ -222,7 +225,7 @@ def step_input(step, entry, options, cores):
         "checkpoint": False,
         "processors": whole(cores, "The cores", 1) if cores else 0,
     }
-    return gaussian_input(f"{STEM}.gjf", entry, given)
+    return gaussian_input(INPUT, entry, given)
 
 
 def op_prepare(m):
@@ -232,9 +235,10 @@ def op_prepare(m):
         jobs.append({
             "entries": [i],
             "program": PROGRAM,
-            "args": [STEM],
-            "files": [{"name": f"{STEM}.gjf", "text": step_input(m.get("step"), entry, options, m.get("cores"))}],
-            "reads": [f"{STEM}.log"],
+            "args": [],
+            "files": [{"name": INPUT, "text": step_input(m.get("step"), entry, options, m.get("cores"))}],
+            "stdin": INPUT,
+            "reads": [],
         })
     if not jobs:
         raise Refused("nothing came in")
@@ -247,24 +251,26 @@ def output_name(entry):
     return f"{stem or 'gaussian'}.log"
 
 
-def why_of(output, log):
-    """Why Gaussian stopped, as its output says: the line before it says it ended in error, else that line; else what it printed last."""
+def why_of(output):
+    """
+    Why Gaussian stopped, as its output says: the line before it says it
+    ended in error, else that line; else - where it stopped with no word of
+    an error, as a link that dies does - the last thing it printed.
+    """
     lines = [line.strip() for line in (output or "").splitlines() if line.strip()]
     for k in range(len(lines) - 1, -1, -1):
         if lines[k].startswith("Error termination"):
             return lines[k - 1] if k and not lines[k - 1].startswith("Error termination") else lines[k]
-    said = [line.strip() for line in (log or "").splitlines() if line.strip()]
-    return said[-1] if said else "Gaussian said nothing"
+    return f"Gaussian stopped without saying why, after: {lines[-1]}" if lines else "Gaussian said nothing"
 
 
 def op_collect(m):
     if m.get("step") not in STEP_JOBS:
         raise Refused(f"this plugin does no {m.get('step')!r}")
-    files = m.get("files") or {}
-    output = files.get(f"{STEM}.log")
-    if m.get("ended") != "done" or not output:
-        return {"why": why_of(output, m.get("log") or "")}
-    return {"read": [{"kind": KIND, "file": f"{STEM}.log", "name": output_name(e)} for e in m.get("entries") or []]}
+    output = m.get("log") or ""
+    if m.get("ended") != "done" or not output.strip():
+        return {"why": why_of(output)}
+    return {"read": [{"kind": KIND, "log": True, "name": output_name(e)} for e in m.get("entries") or []]}
 
 
 def op_write(m):

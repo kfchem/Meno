@@ -37,6 +37,8 @@ export type JobAsk = {
   program: string;
   args?: string[];
   files?: JobFile[];
+  /** One of its files, given to its program as what it reads (its standard input). */
+  stdin?: string;
   slots?: number;
   cores?: number;
   /** Where its program is, where it is one installed separately (lib/plugins/installed). */

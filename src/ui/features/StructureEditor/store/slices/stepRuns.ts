@@ -286,7 +286,8 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     try {
       for (const p of prepared) {
         const path = paths.get(p.program);
-        jobs.push({ id: await startJob({ plugin: plugin.id, program: p.program, args: p.args, files: p.files, slots, cores, ...(path ? { path } : {}) }), entries: p.entries, reads: p.reads });
+        const ask = { plugin: plugin.id, program: p.program, args: p.args, files: p.files, ...(p.stdin ? { stdin: p.stdin } : {}), slots, cores, ...(path ? { path } : {}) };
+        jobs.push({ id: await startJob(ask), entries: p.entries, reads: p.reads });
       }
     } catch (e) {
       for (const j of jobs) void stopJob(j.id).catch(() => {});
