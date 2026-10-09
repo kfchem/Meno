@@ -9,10 +9,14 @@
  * view is zoomed, the tiles there are scaled; once it settles, sharper ones
  * are asked for. PDFium draws them, in a process of its own (lib/pdf).
  *
- * Moved by a drag; the page on top turned by the corner that folds as the
- * stack is hovered, or by the arrow keys over it (StructureCanvas). Turned,
- * the page lifts off toward the viewer and goes under; spread or gathered,
- * the pages lift off one after another and settle in their places.
+ * Full size, a drag on it moves the view, as on empty space; held still a
+ * moment on its rim - or anywhere on it, where its words are too small to
+ * read - it is taken hold of, lit from the pointer out as a structure is,
+ * and then moved by the drag. As an icon, a drag moves it. The page on top
+ * is turned by the corner that folds as the stack is hovered, or by the
+ * arrow keys over it (StructureCanvas). Turned, the page lifts off toward
+ * the viewer and goes under; spread or gathered, the pages lift off one
+ * after another and settle in their places.
  */
 import * as THREE from "three";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -33,7 +37,9 @@ import { linkAt, linksOf, type PdfLink } from "../../../../lib/pdf/reader";
 import { letterNear, placeAt, textHad, wordAt, type PageText } from "../../../../lib/pdf/text";
 import { placeBefore, selects } from "../utils/pdfSelection";
 import { dragWords, onSelected } from "./wordsDrag";
-import { LONG_PRESS_MS, MOV_PX } from "../constants";
+import { LONG_PRESS_MS, LONG_PRESS_SHOW_MS, MOV_PX } from "../constants";
+import { ALPHA } from "../../../theme/colors";
+import { SHADE } from "./selectionShade";
 import type { PdfSelection, WordPlace } from "../store/types";
 
 /** Eased in and out, cubic: what is lifted rises and settles. */
@@ -65,8 +71,14 @@ const LIT = 0.16;
 const LIT_PAD_PX = 5;
 /** How far a press may move and still be a click, in pixels. */
 const CLICK_PX = 4;
-/** How large a page's words must be on the screen to be selected by a drag on them - pixels a point: else the drag moves the PDF. */
+/** How large a page's words must be on the screen to be selected by a long press on them - pixels a point. */
 const READABLE_PX_PER_PT = 0.6;
+/** How far in from a page's edge its rim reaches, on the screen, in pixels: held there, the PDF is taken hold of. */
+const RIM_PX = 16;
+/** How far a press moves before it moves the view (PanZoom2D's), in pixels: a hold begun is let go. */
+const PAN_PX = 3;
+/** How quickly the light of a PDF let go goes, in ms. */
+const HELD_FADE_MS = 140;
 
 type Pointerish = { button?: number; clientX: number; clientY: number; pointerId?: number };
 const native = (e: unknown): Pointerish => ((e as { nativeEvent?: Pointerish }).nativeEvent ?? (e as Pointerish));
@@ -183,6 +195,7 @@ export default function Pdfs2D() {
     for (const m of motion.current.values()) {
       if (m.lit && now - m.lit.start < FADE_MS + 80) animating = true;
       if (m.icon && now - m.icon.start < ICON_MS + 80) animating = true;
+      if (m.held && (m.held.let == null || now - m.held.let < HELD_FADE_MS + 80)) animating = true;
     }
     // (the tiles' fading in, and the motions, ask for frames while they last)
     const fading = pics.fading(now);
@@ -295,7 +308,27 @@ export default function Pdfs2D() {
     if (dom.style.cursor !== want) dom.style.cursor = want;
   };
 
-  /** A press on a PDF: it follows the pointer, as one step - or, let go where it was pressed, on a link, the link is followed. */
+  /** Whether a point of a PDF is on its rim: not well inside a page of it - by its edges, on the pages under it, or its name. */
+  const onRim = (p: PdfItem, q: { x: number; y: number }) => {
+    const inset = RIM_PX / Math.max((camera as THREE.OrthographicCamera).zoom, 1e-6);
+    const sheets = p.spread ? spreadSheets(p) : [topSheet(p)];
+    return !sheets.some((s) => Math.abs(q.x - s.x) <= s.w / 2 - inset && Math.abs(q.y - s.y) <= s.h / 2 - inset);
+  };
+  /** A PDF taken hold of by a press held on it, lit from where it is held out: or its light let go. */
+  const holdPdf = (id: number, held: Motion["held"]) => {
+    motion.current.set(id, { ...motion.current.get(id), held });
+    redraw();
+  };
+
+  /**
+   * A press on a PDF. Full size: a drag moves the view, as on empty space;
+   * held still a moment, on its words - where they can be read - a selection
+   * begins there, the word under the press, drawn on as the pointer goes; on
+   * its rim, or anywhere on it where its words are too small to read, it is
+   * taken hold of - lit from the pointer out, as a structure is - and the
+   * drag then moves it, as one step. An icon follows a drag at once. Let go
+   * where it was pressed, on a link, the link is followed.
+   */
   const startMove = (p: PdfItem, e: { stopPropagation: () => void }) => {
     const ev = native(e);
     if ((ev.button ?? 0) !== 0) return;
@@ -304,41 +337,62 @@ export default function Pdfs2D() {
     if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null) return;
     e.stopPropagation();
     const q = toWorld(ev.clientX, ev.clientY);
-    // (on its words, at a size they can be read: a selection drawn, not the PDF moved -
-    // or, on those selected, the words carried out)
+    // (on its words selected, at a size they can be read: the words carried out)
     const w = wordsOn(p, q);
     const sel = st.pdfSel;
     if (w && selects(sel) && sel.id === p.id && onSelected(w.t, sel, w.page, w.x, w.y)) {
       liftWords(p, ev, sel);
       return;
     }
-    // a drag moves it; held still a moment on its words, where they can be
-    // read - as a box begins on empty space - a selection begins there, the
-    // word under the press, drawn on as the pointer goes
-    const letter = w ? letterNear(w.t, w.x, w.y) : null;
     const off = { x: p.x - q.x, y: p.y - q.y };
     const gesture = `move-${performance.now()}`;
-    st.beginPanHold(ev.pointerId ?? null);
-    let moving = false;
+    const readable = (camera as THREE.OrthographicCamera).zoom * POINT >= READABLE_PX_PER_PT;
+    // what a hold there does: take hold of it, or begin a selection; an icon is moved at once
+    const takes = !p.icon && (onRim(p, q) || !readable);
+    const letter = !p.icon && !takes && w ? letterNear(w.t, w.x, w.y) : null;
+    let mode: "pressed" | "moving" | "selecting" | "panned" = p.icon ? "moving" : "pressed";
     let selecting: { first: [WordPlace, WordPlace] } | null = null;
     let hold: number | null = null;
+    let panHeld = false;
+    const holdPan = () => {
+      if (panHeld) return;
+      panHeld = true;
+      store.getState().beginPanHold(ev.pointerId ?? null);
+    };
+    if (p.icon) holdPan();
     const letHoldGo = () => {
       if (hold != null) window.clearTimeout(hold);
       hold = null;
       if (store.getState().pressHold) store.getState().setPressHold(null);
     };
-    if (w && letter != null) {
+    if (takes) {
+      // (lit from where it is held, as it is held; taken hold of, it moves)
+      holdPdf(p.id, { x: q.x - p.x, y: q.y - p.y, start: performance.now() });
+      hold = window.setTimeout(() => {
+        hold = null;
+        mode = "moving";
+        holdPan();
+        const m = motion.current.get(p.id);
+        if (m?.held) holdPdf(p.id, { ...m.held, done: true });
+      }, LONG_PRESS_MS);
+    } else if (w && letter != null) {
       st.setPressHold({ at: q, start: performance.now() });
       hold = window.setTimeout(() => {
         hold = null;
         store.getState().setPressHold(null);
+        mode = "selecting";
+        holdPan();
         const [a, b] = wordAt(w.t, letter, w.x);
         selecting = { first: [{ page: w.page, at: a }, { page: w.page, at: b }] };
         store.getState().setPdfSel({ id: p.id, anchor: selecting.first[0], focus: selecting.first[1] });
       }, LONG_PRESS_MS);
     }
+    const letLightGo = () => {
+      const m = motion.current.get(p.id);
+      if (m?.held && m.held.let == null) holdPdf(p.id, { ...m.held, let: performance.now() });
+    };
     const onMove = (m: PointerEvent) => {
-      if (selecting && w) {
+      if (mode === "selecting" && selecting && w) {
         // (by letters, beyond the word first selected)
         const r = toWorld(m.clientX, m.clientY);
         const x = (r.x - (w.sheet.x - w.sheet.w / 2)) / POINT;
@@ -349,11 +403,16 @@ export default function Pdfs2D() {
         store.getState().setPdfSel(within ? { id: p.id, anchor: a, focus: b } : { id: p.id, anchor: placeBefore(place, a) ? b : a, focus: place });
         return;
       }
-      if (!moving && Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) < MOV_PX) return;
-      if (!moving) {
-        moving = true;
+      const away = Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY);
+      if (mode === "pressed") {
+        // (moved before it was held long enough: the view moves, as on empty space)
+        if (away < PAN_PX) return;
+        mode = "panned";
         letHoldGo();
+        letLightGo();
+        return;
       }
+      if (mode !== "moving" || (p.icon && away < MOV_PX)) return;
       const r = toWorld(m.clientX, m.clientY);
       store.getState().movePdf(p.id, r.x + off.x, r.y + off.y, gesture);
     };
@@ -361,8 +420,10 @@ export default function Pdfs2D() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp, true);
       letHoldGo();
-      store.getState().endPanHold(u.pointerId);
-      if (selecting || moving) return;
+      letLightGo();
+      if (panHeld) store.getState().endPanHold(u.pointerId);
+      const away = Math.hypot(u.clientX - ev.clientX, u.clientY - ev.clientY);
+      if (mode === "selecting" || mode === "panned" || away >= CLICK_PX || (mode === "moving" && !p.icon)) return;
       // a click: the words selected let go, a link followed
       store.getState().setPdfSel(null);
       const now = store.getState().pdfs.find((x) => x.id === p.id);
@@ -465,6 +526,7 @@ function PdfStack(props: {
       <meshBasicMaterial color={COLORS.highlight} transparent opacity={lit} depthWrite={false} toneMapped={false} />
     </mesh>
   );
+  const held = motion?.held && <HeldLight b={{ x0: b.x0 - pad, x1: b.x1 + pad, y0: b.y0 - pad, y1: b.y1 + pad }} at={{ x: p.x + motion.held.x, y: p.y + motion.held.y }} held={motion.held} now={now} />;
   // its name under it, in the drawing's type: at its left as a page, as
   // small on the screen however near it is seen; under its middle as an
   // icon, at the size of the drawing's labels, as a file's under its icon -
@@ -503,6 +565,7 @@ function PdfStack(props: {
           return <Page key={i} s={s} pt={p.pages[i]} lift={lift} z={0.02 * i + 0.2 * lift} now={now} px={px} preview={props.previewOf(i)} tiles={props.tilesOf(i)} marks={props.marksOf(i)} />;
         })}
         {light}
+        {held}
         {name}
       </group>
     );
@@ -549,17 +612,91 @@ function PdfStack(props: {
       {props.hovered && hasNext && <Fold s={top} size={fold} corner="right" onTurn={() => props.onTurn(p.page + 1)} />}
       {props.hovered && hasPrev && <Fold s={top} size={fold} corner="left" onTurn={() => props.onTurn(p.page - 1)} />}
       {light}
+      {held}
       {name}
     </group>
   );
 }
 
-/** What moves of a PDF: a page turned (the one that went), its pages spread or gathered, it made an icon or full size, its light coming or going. */
+// language=GLSL
+const HELD_VERTEX = /* glsl */ `
+varying vec2 vAt;
+void main() {
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vAt = w.xy;
+  gl_Position = projectionMatrix * viewMatrix * w;
+}
+`;
+// language=GLSL
+const HELD_FRAGMENT = /* glsl */ `
+uniform vec2 uAt;
+uniform float uReach;
+uniform float uSoft;
+uniform float uOpacity;
+uniform vec3 uColor;
+varying vec2 vAt;
+void main() {
+  float a = uOpacity * (1.0 - smoothstep(uReach - uSoft, uReach, distance(vAt, uAt)));
+  if (a <= 0.0) discard;
+  gl_FragColor = vec4(uColor, a);
+  #include <colorspace_fragment>
+}
+`;
+
+/**
+ * A PDF taken hold of, lit as a structure is: the selection's shade, over
+ * it, spreading out from where it is held as the press is held - reaching
+ * all of it just as it is taken hold of - and going once it is let go.
+ */
+function HeldLight({ b, at, held, now }: { b: { x0: number; x1: number; y0: number; y1: number }; at: { x: number; y: number }; held: NonNullable<Motion["held"]>; now: number }) {
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uAt: { value: new THREE.Vector2() },
+          uReach: { value: 0 },
+          uSoft: { value: 1 },
+          uOpacity: { value: 0 },
+          uColor: { value: new THREE.Color(COLORS.highlight) },
+        },
+        vertexShader: HELD_VERTEX,
+        fragmentShader: HELD_FRAGMENT,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    [],
+  );
+  useEffect(() => () => material.dispose(), [material]);
+  // (the farthest of it reached just as it is taken hold of)
+  const far = Math.max(...[b.x0, b.x1].flatMap((x) => [b.y0, b.y1].map((y) => Math.hypot(x - at.x, y - at.y))));
+  const u = held.done ? 1 : Math.min(1, Math.max(0, (now - held.start - LONG_PRESS_SHOW_MS) / (LONG_PRESS_MS - LONG_PRESS_SHOW_MS)));
+  const soft = 0.12 * far;
+  const fade = held.let == null ? 1 : Math.max(0, 1 - (now - held.let) / HELD_FADE_MS);
+  material.uniforms.uAt.value.set(at.x, at.y);
+  material.uniforms.uReach.value = (far + soft) * (1 - (1 - u) ** 3);
+  material.uniforms.uSoft.value = soft;
+  material.uniforms.uOpacity.value = ALPHA.highlight * SHADE * fade;
+  if (fade <= 0) return null;
+  return (
+    <mesh position={[(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, 0.45]} scale={[b.x1 - b.x0, b.y1 - b.y0, 1]} material={material}>
+      <planeGeometry args={[1, 1]} />
+    </mesh>
+  );
+}
+
+/**
+ * What moves of a PDF: a page turned (the one that went), its pages spread
+ * or gathered, it made an icon or full size, its light coming or going; and
+ * it taken hold of by a press held on it - where, from its middle, since
+ * when, whether it has been, and when it was let go.
+ */
 type Motion = {
   turned?: { page: number; start: number };
   spread?: { to: boolean; start: number };
   icon?: { to: boolean; start: number };
   lit?: { on: boolean; start: number; from: number };
+  held?: { x: number; y: number; start: number; done?: boolean; let?: number };
 };
 
 /** How lit a PDF is now, easing to lit or not. */
