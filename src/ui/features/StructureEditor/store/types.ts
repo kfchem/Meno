@@ -67,7 +67,9 @@ export type Plus = { id: number; x: number; y: number };
  * else - where their middle is (lib/chem/captions); over or under an arrow,
  * `arrow`, going where it goes.
  */
-export type Caption = { id: number; x: number; y: number; text: string; arrow?: number };
+export type Caption = { id: number; x: number; y: number; text: string; arrow?: number; from?: WordsFrom };
+/** Where words taken out of a PDF came from (docs/PDF.md, *Taking things out*): the PDF, by its SHA-256, and the places they ran between. */
+export type WordsFrom = { sha256: string; from: WordPlace; to: WordPlace };
 /**
  * A PDF on the page (docs/PDF.md): the file it is, by its SHA-256 - held in
  * Meno's cache and kept in the workspace's file - its name, each page's
@@ -341,6 +343,9 @@ export type EditorState = {
   /** The canvas asked to open a PDF's menu where the column was right-clicked, in the window's pixels. */
   menuAsk: { id: number; clientX: number; clientY: number } | null;
   askPdfMenu: (ask: { id: number; clientX: number; clientY: number } | null) => void;
+  /** A place in a PDF shown, marked for a moment: words gone back to where they came from. */
+  pdfFlash: { id: number; from: WordPlace; to: WordPlace; start: number } | null;
+  setPdfFlash: (flash: { id: number; from: WordPlace; to: WordPlace; start: number } | null) => void;
   /** A search of PDFs, its field open at the column's top; none, closed. */
   pdfFind: PdfFind | null;
   setPdfFind: (find: PdfFind | null) => void;
@@ -498,8 +503,8 @@ export type EditorState = {
    */
   captionEdit: { id: number | null; at: { x: number; y: number } } | null;
   setCaptionEdit: (edit: EditorState["captionEdit"]) => void;
-  /** Words added, as one step; their id. */
-  addCaption: (text: string, x: number, y: number, arrow?: number) => number;
+  /** Words added, as one step - taken out of a PDF, where they came from; their id. */
+  addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom) => number;
   /**
    * Words changed - written anew, moved, put over an arrow or taken from
    * one (`arrow` null) - a run of changes in one gesture one step.

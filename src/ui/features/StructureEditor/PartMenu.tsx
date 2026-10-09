@@ -103,6 +103,7 @@ export default function PartMenu({
   onAddPlus,
   onAddText,
   onEditText,
+  onShowSource,
   onRunStep,
   onStepOptions,
   step,
@@ -141,6 +142,8 @@ export default function PartMenu({
   onAddText: () => void;
   /** The words right-clicked, written anew. */
   onEditText: () => void;
+  /** Words taken out of a PDF: where they came from shown, marked, in the column. */
+  onShowSource?: () => void;
   /** A workflow's step right-clicked: run, or opened to its options. */
   onRunStep: () => void;
   onStepOptions: () => void;
@@ -254,6 +257,7 @@ export default function PartMenu({
       : target.kind === "caption"
       ? [
           { name: "Edit text", keys: "", run: onEditText },
+          ...(onShowSource ? [{ name: "Show in the PDF", keys: "", run: onShowSource }] : []),
           { name: "Delete text", keys: deleteKey, run: onDelete },
         ]
       : target.kind === "pdf"

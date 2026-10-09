@@ -5,9 +5,21 @@
  */
 import { COLORS } from "../../../theme/colors";
 import { marksBetween, textHad } from "../../../../lib/pdf/text";
-import type { PdfFound, PdfItem, PdfSelection } from "../store/types";
+import type { EditorState, PdfFound, PdfItem, PdfSelection } from "../store/types";
 import { onPage } from "../utils/pdfSelection";
 import type { Mark } from "./pdfPictures";
+
+/** How long a place shown is marked, in ms: held, then fading. */
+export const FLASH_MS = 1800;
+const FLASH_HOLD_MS = 700;
+const FLASH = 0.5;
+
+/** How marked a place shown is now: held a moment, then fading out. */
+export function flashOf(start: number, now: number): number {
+  const t = now - start;
+  if (t < FLASH_HOLD_MS) return FLASH;
+  return Math.max(0, FLASH * (1 - (t - FLASH_HOLD_MS) / (FLASH_MS - FLASH_HOLD_MS)));
+}
 
 /** How words selected are marked, and places found. */
 const SELECTED = 0.3;
@@ -23,10 +35,12 @@ export function marksOn(
   found: readonly PdfFound[],
   now: PdfFound | null,
   came: () => void,
+  flash: EditorState["pdfFlash"] = null,
 ): Mark[] {
   const mine = found.filter((f) => f.id === pdf.id && f.page === page);
   const selected = sel?.id === pdf.id ? sel : null;
-  if (!selected && !mine.length) return [];
+  const shown = flash?.id === pdf.id && page >= flash.from.page && page <= flash.to.page ? flash : null;
+  if (!selected && !mine.length && !shown) return [];
   const t = textHad(pdf.sha256, page, came);
   if (!t) return [];
   const out: Mark[] = [];
@@ -37,5 +51,11 @@ export function marksOn(
   if (there) out.push({ rects: marksBetween(t, there.from, there.to), color: FOUND_COLOR, opacity: FOUND_NOW });
   const range = selected ? onPage(selected, page, t.codes.length) : null;
   if (range) out.push({ rects: marksBetween(t, range[0], range[1]), color: COLORS.highlight, opacity: SELECTED });
+  if (shown) {
+    const a = page === shown.from.page ? shown.from.at : 0;
+    const b = page === shown.to.page ? shown.to.at : t.codes.length;
+    const o = flashOf(shown.start, performance.now());
+    if (o > 0) out.push({ rects: marksBetween(t, a, b), color: COLORS.highlight, opacity: o });
+  }
   return out;
 }

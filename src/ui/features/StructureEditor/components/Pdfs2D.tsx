@@ -27,13 +27,14 @@ import { useDrawnLayout } from "./drawnLayoutContext";
 import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
 import { COLORS } from "../../../theme/colors";
 import { BASE, FADE_MS, GRAY, levelFor, LINE, Page, TILE, usePictures, type Mark, type Pic, type Tile } from "./pdfPictures";
-import { marksOn } from "./pdfMarks";
+import { FLASH_MS, marksOn } from "./pdfMarks";
 import { followLink, readerOf } from "./pdfColumnReader";
 import { linkAt, linksOf, type PdfLink } from "../../../../lib/pdf/reader";
 import { letterAt, letterNear, lineAt, placeAt, textHad, wordAt, type PageText } from "../../../../lib/pdf/text";
-import { placeBefore } from "../utils/pdfSelection";
+import { placeBefore, selects } from "../utils/pdfSelection";
+import { dragWords, onSelected } from "./wordsDrag";
 import { DOUBLE_CLICK_MS } from "../constants";
-import type { WordPlace } from "../store/types";
+import type { PdfSelection, WordPlace } from "../store/types";
 
 /** Eased in and out, cubic: what is lifted rises and settles. */
 export const ease = (u: number) => {
@@ -79,6 +80,7 @@ export default function Pdfs2D() {
   const pdfFind = useEditor((s) => s.pdfFind);
   const found = pdfFind?.found ?? NOTHING_FOUND;
   const foundNow = pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null;
+  const pdfFlash = useEditor((s) => s.pdfFlash);
   const store = useEditorStore();
   const { camera, gl, invalidate, size } = useThree();
   const [, setTick] = useState(0);
@@ -175,6 +177,9 @@ export default function Pdfs2D() {
       // (drawn until a little past the end, so that the last frame drawn is the end's)
       if ((m.turned && now - m.turned.start < TURN_MS + 80) || (m.spread && now - m.spread.start < SPREAD_MS + 20 * SPREAD_STAGGER_MS + 80)) animating = true;
     }
+    // (a place shown marked, fading)
+    const flash = store.getState().pdfFlash;
+    if (flash && now - flash.start < FLASH_MS + 80) animating = true;
     for (const m of motion.current.values()) {
       if (m.lit && now - m.lit.start < FADE_MS + 80) animating = true;
       if (m.icon && now - m.icon.start < ICON_MS + 80) animating = true;
@@ -230,6 +235,25 @@ export default function Pdfs2D() {
     pics.letGo(now);
     if (asked) redraw();
   });
+
+  /** Words selected pressed on a stack: carried out as the pointer moves (components/wordsDrag); let go where they were, nothing selected. */
+  const liftWords = (p: PdfItem, ev: Pointerish, sel: PdfSelection) => {
+    store.getState().beginPanHold(ev.pointerId ?? null);
+    let carried = false;
+    const onMove = (m: PointerEvent) => {
+      if (carried || Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) < CLICK_PX) return;
+      carried = true;
+      void dragWords(store, p, sel, { x: m.clientX, y: m.clientY });
+    };
+    const onUp = (u: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp, true);
+      store.getState().endPanHold(u.pointerId);
+      if (!carried) store.getState().setPdfSel(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, true);
+  };
 
   // two or three presses in a row on a PDF's words: a word, a line
   const pressed = useRef({ n: 0, t: 0, x: 0, y: 0 });
@@ -317,8 +341,14 @@ export default function Pdfs2D() {
     if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null) return;
     e.stopPropagation();
     const q = toWorld(ev.clientX, ev.clientY);
-    // (on its words, at a size they can be read: a selection drawn, not the PDF moved)
+    // (on its words, at a size they can be read: a selection drawn, not the PDF moved -
+    // or, on those selected, the words carried out)
     const w = wordsOn(p, q);
+    const sel = st.pdfSel;
+    if (w && selects(sel) && sel.id === p.id && onSelected(w.t, sel, w.page, w.x, w.y)) {
+      liftWords(p, ev, sel);
+      return;
+    }
     const letter = w ? letterNear(w.t, w.x, w.y) : null;
     if (w && letter != null) {
       selectWords(p, ev, w, letter);
@@ -360,7 +390,7 @@ export default function Pdfs2D() {
           motion={motion.current.get(p.id)}
           previewOf={(page) => pics.preview(p, page)}
           tilesOf={(page) => pics.tilesOf(p.sha256, page, view.current.level.get(p.id * 100000 + page) ?? 0)}
-          marksOf={(page) => marksOn(p, page, pdfSel, found, foundNow, redraw)}
+          marksOf={(page) => marksOn(p, page, pdfSel, found, foundNow, redraw, pdfFlash)}
           onOver={() => store.getState().setHoveredPdf(p.id)}
           onOut={() => {
             hoverAt(null);

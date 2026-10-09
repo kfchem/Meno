@@ -10,7 +10,7 @@ import { arrowEnds } from "../../../../lib/chem/reactionScheme";
 import { fragmentOf, partOf } from "../chem/cleanUp";
 import { forFlatReaders } from "../chem/drawing";
 import { notOneReaction, reactionFileText } from "../chem/reactionFile";
-import type { Arrow, Atom, Bond, Caption, Carried3D, CarriedList, Drawn, Measure3D, Plus, Sel, Turn3D } from "../store/types";
+import type { Arrow, Atom, Bond, Caption, Carried3D, CarriedList, Drawn, Measure3D, Plus, Sel, Turn3D, WordsFrom } from "../store/types";
 import { asSeen } from "./molecule3d";
 import { readCalc } from "../../../../lib/calc/output";
 import { readWorkflow } from "../workflow/saved";
@@ -49,6 +49,18 @@ export function partToCopy(drawn: Drawn, sel: Sel, around: number | null): Drawn
  * middle - or over an arrow that is. What goes with a selection that is
  * copied, cut, deleted or moved.
  */
+/** Where words taken out of a PDF came from, as far as it reads: its SHA-256, and two places in it. */
+function wordsFromOf(v: unknown): WordsFrom | null {
+  const f = v as Partial<WordsFrom> | undefined;
+  const place = (p: unknown) => {
+    const q = p as { page?: unknown; at?: unknown } | undefined;
+    return q && Number.isInteger(q.page) && Number.isInteger(q.at) && (q.page as number) >= 0 && (q.at as number) >= 0 ? { page: q.page as number, at: q.at as number } : null;
+  };
+  const from = place(f?.from);
+  const to = place(f?.to);
+  return f && typeof f.sha256 === "string" && /^[0-9a-f]{64}$/.test(f.sha256) && from && to ? { sha256: f.sha256, from, to } : null;
+}
+
 export function schemeAmong(drawn: Drawn, ids: Set<number>): { arrows: Arrow[]; pluses: Plus[]; captions: Caption[] } {
   const atoms = drawn.atoms.filter((a) => ids.has(a.id));
   if (!atoms.length) return { arrows: [], pluses: [], captions: [] };
@@ -183,7 +195,8 @@ export function readDrawn(data: unknown): Drawn | null {
   const arrowIds = new Set(arrows.map((a) => a.id));
   const captions = (Array.isArray(r.captions) ? (r.captions as Partial<Caption>[]) : []).flatMap((c): Caption[] => {
     if (!isNum(c.id) || !isNum(c.x) || !isNum(c.y) || typeof c.text !== "string" || !c.text.trim()) return [];
-    return [{ id: c.id, x: c.x, y: c.y, text: c.text, ...(isNum(c.arrow) && arrowIds.has(c.arrow) ? { arrow: c.arrow } : {}) }];
+    const from = wordsFromOf(c.from);
+    return [{ id: c.id, x: c.x, y: c.y, text: c.text, ...(isNum(c.arrow) && arrowIds.has(c.arrow) ? { arrow: c.arrow } : {}), ...(from ? { from } : {}) }];
   });
   const molecules3d = (Array.isArray(r.molecules3d) ? r.molecules3d : []).flatMap((m) => {
     const read = readCarried3D(m);

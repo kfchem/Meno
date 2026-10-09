@@ -25,7 +25,7 @@ import { setViewGoal, viewGoalOf } from "./viewGoal";
 import { pagesInView } from "../../../../lib/pdf/column";
 import { textHad } from "../../../../lib/pdf/text";
 import { BASE, levelFor, Page, TILE, usePictures } from "./pdfPictures";
-import { marksOn } from "./pdfMarks";
+import { FLASH_MS, marksOn } from "./pdfMarks";
 import { HEADER_PX, readerOf } from "./pdfColumnReader";
 import { ease, SETTLE_MS } from "./Pdfs2D";
 
@@ -81,6 +81,7 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
   // (words selected, and places found, marked on the pages)
   const pdfSel = useEditor((s) => s.pdfSel);
   const pdfFind = useEditor((s) => s.pdfFind);
+  const pdfFlash = useEditor((s) => s.pdfFlash);
   const [, setTick] = useState(0);
   const redraw = useCallback(() => {
     setTick((t) => t + 1);
@@ -164,6 +165,8 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
         else window.setTimeout(() => invalidate(), SETTLE_MS + 20);
       }
       if (pics.fading(now)) redraw();
+      // (a place shown marked, fading)
+      if (st.pdfFlash && now - st.pdfFlash.start < FLASH_MS + 80) redraw();
     }
     // a page between the page and the column
     if (flight) {
@@ -269,7 +272,7 @@ function ColumnPass({ pdf, flight, flown }: { pdf: PdfItem | null; flight: PdfFl
             px={1}
             preview={pics.preview(pdf, i)}
             tiles={pics.tilesOf(pdf.sha256, i, clock.current.levels.get(i) ?? 0)}
-            marks={marksOn(pdf, i, pdfSel, pdfFind?.found ?? [], pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null, redraw)}
+            marks={marksOn(pdf, i, pdfSel, pdfFind?.found ?? [], pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null, redraw, pdfFlash)}
           />
         );
       });

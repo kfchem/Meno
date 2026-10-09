@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { ArrowUpTrayIcon, ChevronDoubleRightIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { ArrowUpTrayIcon, ChevronDoubleRightIcon, ChevronDownIcon, ChevronUpIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { exists, writeTextFile } from "@tauri-apps/plugin-fs";
 import TextEditor from "../TextEditor";
 import { DURATION, EASE_SLIDE, FADE } from "../../theme/motion";
 import { useEditor, useEditorStore } from "./store";
-import type { PdfItem, WordPlace, WorkspaceText } from "./store/types";
+import type { PdfFind, PdfItem, WordPlace, WorkspaceText } from "./store/types";
 import { COLUMN_NARROWEST, COLUMN_WIDEST, columnWidthFor, textExportPath } from "./utils/texts";
 import { takenBeside } from "../../../lib/io/beside";
 import { isPinch, wheelReader } from "../../../lib/input/wheel";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { pageUnder, pointOn } from "../../../lib/pdf/column";
-import { letterAt, letterNear, lineAt, placeAt, textHad, wordAt } from "../../../lib/pdf/text";
-import { placeBefore } from "./utils/pdfSelection";
+import { letterAt, letterNear, lineAt, placeAt, textHad, wordAt, wordsBetween } from "../../../lib/pdf/text";
+import { goToFound, runFind, stepFound } from "./components/pdfFind";
+import { FOUND_COLOR } from "./components/pdfMarks";
+import { placeBefore, selects } from "./utils/pdfSelection";
+import { dragWords, onSelected } from "./components/wordsDrag";
 import { linkAt, linksOf, type PdfLink } from "../../../lib/pdf/reader";
 import { followLink, goBack, isBackKey, readerOf } from "./components/pdfColumnReader";
 import { DOUBLE_CLICK_MS } from "./constants";
@@ -124,6 +127,7 @@ function Column({ texts, read, shown, pdf, width }: { texts: WorkspaceText[]; re
   const removeText = useEditor((s) => s.removeText);
   const showPdf = useEditor((s) => s.showPdf);
   const stopReadingPdf = useEditor((s) => s.stopReadingPdf);
+  const find = useEditor((s) => s.pdfFind);
   const editText = useEditor((s) => s.editText);
   const closeTexts = useEditor((s) => s.closeTexts);
   const [error, setError] = useState<string | null>(null);
@@ -186,10 +190,154 @@ function Column({ texts, read, shown, pdf, width }: { texts: WorkspaceText[]; re
           )}
         </AnimatePresence>
         {pdf && <PdfBody key={`pdf-${pdf.id}`} pdf={pdf} />}
+        {/* (over the top of what is read: what is read stays where the canvas draws it) */}
+        <AnimatePresence initial={false}>{find && <FindRow key="find" />}</AnimatePresence>
+        <AnimatePresence initial={false}>{find?.all && find.q.trim() && <FoundList key="found" />}</AnimatePresence>
       </div>
     </aside>
   );
 }
+
+/** How long typing rests before what is typed is looked for, in ms. */
+const FIND_AFTER_MS = 160;
+
+/**
+ * Looking for words in the PDFs (docs/PDF.md, *Search*), at the column's
+ * top: what is looked for, in this PDF or all of them, how many places are
+ * found and which is gone to; Enter goes to the next, Shift+Enter to the
+ * one before, Esc closes it.
+ */
+/** The search, as it is - or, closed and going, as it was last (it is drawn as it goes out of view). */
+function useFindKept(): PdfFind {
+  const live = useEditor((s) => s.pdfFind);
+  const kept = useRef<PdfFind>(live ?? { q: "", all: false, found: [], now: 0, busy: false });
+  if (live) kept.current = live;
+  return kept.current;
+}
+
+function FindRow() {
+  const store = useEditorStore();
+  const find = useFindKept();
+  const [q, setQ] = useState(find.q);
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => void (timer.current != null && window.clearTimeout(timer.current)), []);
+  const look = (text: string, all: boolean) => {
+    if (timer.current != null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => void runFind(store, text, all), FIND_AFTER_MS);
+  };
+  // (a search begun with words in it - those selected - looked for at once)
+  useEffect(() => {
+    if (find.q && !find.found.length && !find.busy) void runFind(store, find.q, find.all);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const said = find.busy ? "…" : find.found.length ? `${find.now + 1} of ${find.found.length}` : q.trim() ? "None" : "";
+  const choice = (all: boolean, name: string) => (
+    <button
+      onClick={() => void runFind(store, q, all)}
+      aria-pressed={find.all === all}
+      className={clsx("h-6 px-2 rounded text-[11px] transition-colors duration-150 ease-meno", find.all === all ? "bg-gh-base text-gh-black" : "text-gh-gray hover:text-gh-black")}
+    >
+      {name}
+    </button>
+  );
+  return (
+    <motion.div {...FADE} role="search" className="absolute inset-x-0 top-0 z-20 flex items-center gap-1 pl-2.5 pr-1.5 h-10 border-b border-gh-line bg-white/95 backdrop-blur">
+      <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-gh-gray" />
+      <input
+        data-pdf-find
+        autoFocus
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        aria-label="Find in PDF"
+        placeholder="Find"
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          look(e.target.value, find.all);
+        }}
+        onFocus={(e) => e.target.select()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            stepFound(store, e.shiftKey ? -1 : 1);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            store.getState().setPdfFind(null);
+          }
+        }}
+        className="flex-1 min-w-0 h-7 bg-transparent outline-none text-xs text-gh-black placeholder:text-gh-gray"
+      />
+      <span className="shrink-0 text-[11px] text-gh-gray tabular-nums">{said}</span>
+      <div className="shrink-0 flex items-center rounded-md border border-gh-line p-px">
+        {choice(false, "This PDF")}
+        {choice(true, "All PDFs")}
+      </div>
+      <button aria-label="Previous" title="Previous (Shift+Enter)" onClick={() => stepFound(store, -1)} className="h-7 w-7 shrink-0 rounded-md flex items-center justify-center hover:bg-gh-base">
+        <ChevronUpIcon className="h-4 w-4" />
+      </button>
+      <button aria-label="Next" title="Next (Enter)" onClick={() => stepFound(store, 1)} className="h-7 w-7 shrink-0 rounded-md flex items-center justify-center hover:bg-gh-base">
+        <ChevronDownIcon className="h-4 w-4" />
+      </button>
+      <button aria-label="Close" title="Close (Esc)" onClick={() => store.getState().setPdfFind(null)} className="h-7 w-7 shrink-0 rounded-md flex items-center justify-center hover:bg-gh-base">
+        <XMarkIcon className="h-4 w-4" />
+      </button>
+    </motion.div>
+  );
+}
+
+/** The places found in all the PDFs, listed under each one's name with the words round them: one clicked is gone to, its PDF shown. */
+function FoundList() {
+  const store = useEditorStore();
+  const find = useFindKept();
+  const pdfs = useEditor((s) => s.pdfs);
+  const [, setTick] = useState(0);
+  const groups = pdfs
+    .map((p) => ({ p, places: find.found.map((f, i) => ({ f, i })).filter(({ f }) => f.id === p.id) }))
+    .filter((g) => g.places.length);
+  return (
+    <motion.div {...FADE} className="absolute inset-x-0 top-10 max-h-[45%] overflow-y-auto border-b border-gh-line bg-white/95 backdrop-blur shadow-sm text-xs z-10">
+      {groups.map(({ p, places }) => (
+        <section key={p.id} aria-label={p.name}>
+          <h3 className="sticky top-0 bg-white/95 px-3 pt-2 pb-1 text-[11px] font-medium text-gh-gray">
+            {p.name} <span className="font-normal tabular-nums">{places.length}</span>
+          </h3>
+          {places.slice(0, FOUND_LISTED).map(({ f, i }) => {
+            const t = textHad(p.sha256, f.page, () => setTick((n) => n + 1));
+            return (
+              <button
+                key={i}
+                onClick={() => void goToFound(store, i)}
+                className={clsx("w-full text-left px-3 py-1 flex gap-2 hover:bg-gh-base", i === find.now && "bg-gh-base")}
+              >
+                <span className="shrink-0 w-8 text-gh-gray tabular-nums">p. {f.page + 1}</span>
+                <span className="min-w-0 truncate text-gh-black">
+                  {t ? (
+                    <>
+                      {wordsBetween(t, f.from - AROUND, f.from).slice(-AROUND)}{" "}
+                      <mark className="bg-transparent font-medium text-gh-black underline decoration-2 underline-offset-2" style={{ textDecorationColor: FOUND_COLOR }}>
+                        {wordsBetween(t, f.from, f.to)}
+                      </mark>{" "}
+                      {wordsBetween(t, f.to, f.to + AROUND)}
+                    </>
+                  ) : (
+                    "…"
+                  )}
+                </span>
+              </button>
+            );
+          })}
+          {places.length > FOUND_LISTED && <p className="px-3 py-1 text-gh-gray">and {places.length - FOUND_LISTED} more</p>}
+        </section>
+      ))}
+    </motion.div>
+  );
+}
+
+/** How many places a PDF's list shows, and how many letters round each. */
+const FOUND_LISTED = 50;
+const AROUND = 40;
 
 /** A text's or a PDF's name along the column's top: shown by a click, closed by its cross. */
 function Name({ name, title, chosen, onShow, onClose }: { name: string; title: string; chosen: boolean; onShow: () => void; onClose: () => void }) {
@@ -321,11 +469,22 @@ function PdfBody({ pdf }: { pdf: PdfItem }) {
     // a selection being drawn: by letters, words or lines, from the first's ends
     let drawing: { unit: "letter" | "word" | "line"; first: [WordPlace, WordPlace]; x: number; y: number; moved: boolean } | null = null;
     let clicks = { n: 0, t: 0, x: 0, y: 0 };
+    // words selected, pressed: carried out once the pointer moves (components/wordsDrag)
+    let lifting: { x: number; y: number; carried: boolean } | null = null;
     const onMove = (e: PointerEvent) => {
       over = true;
       setOver(true);
       const q = inPdf(e);
       lit(q.on);
+      if (lifting) {
+        if (!lifting.carried && e.buttons & 1 && Math.hypot(e.clientX - lifting.x, e.clientY - lifting.y) >= CLICK_PX) {
+          lifting.carried = true;
+          const st = store.getState();
+          const pdfNow = st.pdfs.find((x) => x.id === id);
+          if (pdfNow && selects(st.pdfSel)) void dragWords(store, pdfNow, st.pdfSel, { x: e.clientX, y: e.clientY });
+        }
+        return;
+      }
       if (drawing && e.buttons & 1) {
         if (!drawing.moved && Math.hypot(e.clientX - drawing.x, e.clientY - drawing.y) < CLICK_PX) return;
         drawing.moved = true;
@@ -365,6 +524,15 @@ function PdfBody({ pdf }: { pdf: PdfItem }) {
       // on words: a selection begun - a letter's place, a word, a line - and drawn on
       const q = inPdf(e);
       const t = q.on ? lettersOf(q.page) : null;
+      // (on words selected, once: carried out, as the pointer moves)
+      const sel = store.getState().pdfSel;
+      if (t && clicks.n === 1 && selects(sel) && sel.id === id && onSelected(t, sel, q.page, q.x, q.y)) {
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        drawing = null;
+        lifting = { x: e.clientX, y: e.clientY, carried: false };
+        return;
+      }
       const letter = t ? letterNear(t, q.x, q.y) : null;
       if (!t || letter == null) {
         drawing = null;
@@ -387,6 +555,13 @@ function PdfBody({ pdf }: { pdf: PdfItem }) {
       }
       const drawn = drawing;
       drawing = null;
+      // (words selected pressed and let go where they were: a click, nothing selected)
+      const lifted = lifting;
+      lifting = null;
+      if (lifted) {
+        if (!lifted.carried) store.getState().setPdfSel(null);
+        return;
+      }
       if (e.button !== 0 || !press || Math.hypot(e.clientX - press.x, e.clientY - press.y) > CLICK_PX) return;
       press = null;
       // a click: a link followed, nothing selected

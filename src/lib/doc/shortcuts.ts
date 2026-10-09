@@ -50,6 +50,11 @@ export function addsToSelection(
 }
 
 /** Ctrl/Cmd+A selects everything - but not while a text field has the keys. */
+/** Ctrl/Cmd+F looks for words, in the PDFs - not while a text field has the keys. */
+export function isFindKey(event: KeyLike & { altKey?: boolean }): boolean {
+  return (event.ctrlKey || event.metaKey) === true && !event.shiftKey && !event.altKey && (event.key || "").toLowerCase() === "f" && !isTextTarget(event.target);
+}
+
 export function isSelectAllKey(event: KeyLike): boolean {
   return (
     (event.ctrlKey || event.metaKey) === true &&

@@ -43,6 +43,7 @@ export function createPdfsSlice(doc: DocumentStore<StructureDocument>, set: SetS
     endPdfFlight: () => set({ pdfFlight: null }),
     setPdfFind: (find: EditorState["pdfFind"]) => set({ pdfFind: find }),
     askPdfMenu: (ask: EditorState["menuAsk"]) => set({ menuAsk: ask }),
+    setPdfFlash: (flash: EditorState["pdfFlash"]) => set({ pdfFlash: flash }),
     // (words selected let the drawing's selection go: one selection, what is copied)
     setPdfSel: (sel: EditorState["pdfSel"]) =>
       set((prev: EditorState) =>
