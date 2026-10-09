@@ -21,7 +21,6 @@ import { composed, composingIn, editOf, inText, windowOf, withTakenAway, type Fi
 import { commandOf } from "../../../lib/text/keys";
 import type { Editor } from "./editor";
 import { LINE_PX, xAt } from "./linePictures";
-import { typingProbe } from "./typingProbe";
 
 export interface TypingField {
   focus(): void;
@@ -32,19 +31,8 @@ export interface TypingField {
   dispose(): void;
 }
 
-/**
- * Whether the webview has an EditContext to type through - unless, for the
- * trial, the textarea is asked for (`localStorage["meno.typingField"] =
- * "textarea"`), to set the two side by side.
- */
-export function hasEditContext(): boolean {
-  if (typeof window === "undefined" || !("EditContext" in window)) return false;
-  try {
-    return window.localStorage.getItem("meno.typingField") !== "textarea";
-  } catch {
-    return true;
-  }
-}
+/** Whether the webview has an EditContext to type through. */
+export const hasEditContext = () => typeof window !== "undefined" && "EditContext" in window;
 
 /** The field for a text: an EditContext on its element, where there is one; else the textarea. */
 export function typingField(el: HTMLElement, ed: Editor): TypingField {
@@ -60,10 +48,7 @@ abstract class Field implements TypingField {
     protected el: HTMLElement,
     protected ed: Editor,
   ) {
-    this.on<KeyboardEvent>(el, "keydown", (e) => {
-      typingProbe.key();
-      this.onKey(e);
-    });
+    this.on<KeyboardEvent>(el, "keydown", (e) => this.onKey(e));
     this.on<ClipboardEvent>(el, "copy", (e) => this.onCopy(e, false));
     this.on<ClipboardEvent>(el, "cut", (e) => this.onCopy(e, true));
     this.on<ClipboardEvent>(el, "paste", (e) => this.onPaste(e));

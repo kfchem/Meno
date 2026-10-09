@@ -19,7 +19,6 @@ import type { WorkspaceText } from "../store/types";
 import { columnText } from "../../TextEditor/columnText";
 import { GUTTER_PX, PAD_PX } from "../../TextEditor/editor";
 import { BAND_PX, INK, LINE_PX, linePicture, typeReady, xAt } from "../../TextEditor/linePictures";
-import { typingProbe } from "../../TextEditor/typingProbe";
 
 /** The column of line numbers: its colour, and its numbers'. */
 const GUTTER = "rgb(246, 248, 250)";
@@ -71,7 +70,6 @@ export default function ColumnText({ text }: { text: WorkspaceText }) {
   }, [ed, invalidate]);
   const caretRef = useRef<THREE.Mesh>(null);
   useFrame(() => {
-    typingProbe.drawn();
     const since = performance.now() - ed.stirred;
     if (caretRef.current) caretRef.current.visible = ed.focused && (since < BLINK_MS || Math.floor(since / BLINK_MS) % 2 === 0);
   });
@@ -79,7 +77,6 @@ export default function ColumnText({ text }: { text: WorkspaceText }) {
   const plane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   useEffect(() => () => plane.dispose(), [plane]);
   if (!typeIn) return null;
-  typingProbe.rendered();
   const first = Math.max(0, Math.floor(ed.scrollTop / LINE_PX));
   const last = Math.min(ed.lines.count - 1, Math.floor((ed.scrollTop + ed.viewH) / LINE_PX));
   const left = GUTTER_PX + PAD_PX - ed.scrollLeft;
