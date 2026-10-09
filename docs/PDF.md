@@ -7,7 +7,8 @@ figures - are taken out onto the page. Stage 5 - figures read as
 structures - builds on it.
 
 Written on 2026-10-09, before anything is built, and revised the same
-day with the maintainer's answers. What is left to decide is at the end.
+day with the maintainer's answers, twice. What is left to decide is at
+the end.
 
 Judge it against [PURPOSE.md](PURPOSE.md). A chemist reads a paper to
 find a molecule, how it was made and what was found about it. Here the
@@ -53,6 +54,13 @@ stops being part of the work.
      app**.
    - **Previews are made.** Every part of the interface is joined to
      every other.
+5. The answers to the second draft's questions:
+   - **A drag that starts on text selects it; one that starts where there
+     is no text draws a box - and inside a figure, a box from anywhere**,
+     where PDFium says the figure's paths and pictures lie (*Taking
+     things out*).
+   - **Words dragged out become words on the page**, the kind #177 made.
+   - **Texts are coloured by Lezer** (*A text*).
 
 ## What a thing on the page is
 
@@ -160,8 +168,10 @@ stops being part of the work.
   - Let go anywhere else, they go back.
   - The words keep where they came from: *Show in the PDF* in their
     right-click menu shows that place, marked for a moment.
-- **A figure**: a drag that starts where there is no text - on a figure,
-  or in a margin - draws a box (question 1). Let go, the box stays,
+- **A figure**: a drag that starts where there is no text - in a margin,
+  or anywhere inside a figure, its own labels included - draws a box.
+  Where a figure lies is known from what the page is made of: PDFium
+  says where its paths and pictures are. Let go, the box stays,
   outlined.
   - Dragged on, the box lifts off as a picture and follows the pointer,
     and settles where it is let go.
@@ -207,7 +217,10 @@ stops being part of the work.
     Meno draws the text, the caret, the selection and what the IME is
     composing. (Words on the page are typed today in a field shown over
     the page, in HTML; they would be typed this way too.)
-- **Coloured by what it is**, where that is known (question 3):
+- **Coloured by what it is**, where that is known, by Lezer (MIT, the
+  parsers CodeMirror is built on, which take up an edit without starting
+  over). Lezer says which part of the text is what; Meno draws the
+  colours.
   - a Python script, JSON or XML by their usual grammars;
   - a calculation's input or output by what its plugin says of its kind
     - its keywords, its numbers, and its warnings and errors - so that
@@ -308,7 +321,7 @@ together, in short eased transitions.
 - **What it adds**: about 3 MB to each system's download (the Mac's
   disk image was 8.1 MB for 0.1.8, the Windows installer 6.6 MB), and
   about 7 MB once installed.
-- **The text colouring** (question 3): some tens of kilobytes for each
+- **The text colouring** (Lezer): some tens of kilobytes for each
   grammar.
 
 ### Licences
@@ -414,26 +427,9 @@ to it.
 
 ## Questions
 
-1. **A drag that starts on text selects text; one that starts where
-   there is no text draws a box** - is that the drag meant for cutting
-   out a figure? A figure's own labels (an *OH*, an *Me*) are text too:
-   a drag that starts on one of them, inside a figure, selects it. To
-   start a box there, the drag starts on the figure's lines or between
-   its letters - or PDFium's knowledge of where a figure's paths and
-   pictures are draws the box from anywhere inside it (recommended, to
-   be tried in step 3).
-2. **Words dragged out become words on the page** (recommended), the
-   kind #177 made. Or a text of their own in the workspace, a sheet with
-   them in it?
-3. **Which colouring**: Lezer (MIT; the parsers CodeMirror is built
-   on, which take up an edit without starting over; recommended), or
-   Shiki (MIT; the grammars VS Code colours with, the closest to what a
-   chemist sees in an editor, but larger and slower on very long files)?
-   Either gives Meno the parts of the text and their kinds, which Meno
-   draws itself.
-4. **Texts drawn with WebGL** (recommended, step 5), as the first part
-   of this answer asked? Or kept in HTML in the column, with only the
-   sheet on the page in WebGL? Drawn by Meno, a text can rise from the
-   page into the column as a PDF does, and a long log scrolls as fast as
-   a short one; but Meno then draws the caret, the selection and what
-   an IME is composing itself, which no part of Meno does yet.
+1. **Texts drawn with WebGL** (recommended, step 5)? Or kept in HTML in
+   the column, with only the sheet on the page in WebGL? Drawn by Meno, a
+   text can rise from the page into the column as a PDF does, and a long
+   log scrolls as fast as a short one; but Meno then draws the caret, the
+   selection and what an IME is composing itself, which no part of Meno
+   does yet.
