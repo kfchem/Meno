@@ -55,6 +55,7 @@ src/
                           (see samples/README.md)
   ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "New…" menu, online/offline, Settings, window buttons
   ui/layouts/MenoMenu     the logo's menu: the app's commands and those the tab in front offers (commands.ts)
+  ui/layouts/ErrorBoundary a part that fails as it is drawn, and the card left in its place (see *When a part fails*)
   ui/fonts/               the typefaces labels are drawn in, read from their files
   ui/network/             consent dialog, activity cards, Settings › Network
   ui/views/registry       TabKind -> { Component, create } table
@@ -137,6 +138,57 @@ imports React.
 Adoption is incremental. The structure canvas, with its molecules in 3D
 and the texts in its column, is on a document.
 
+## When a part fails
+
+A part of the window that throws as it is drawn takes nothing else with
+it. Without a boundary React unmounts the whole tree, and the window goes
+white - title bar, tabs and all - with no way back but quitting.
+`ui/layouts/ErrorBoundary` puts a card in the failed part's place, drawn as
+Meno's notices are (`StoppedCard`): what stopped, that what it showed is
+kept, the error in grey beneath, and **Reload**, which makes the part again
+from nothing. Each logs the error with `console.error`, naming the part
+("Meno: the canvas stopped working.") and where in the tree it was.
+
+| Part | Where | Its card | Reload also |
+| --- | --- | --- | --- |
+| The canvas | `StructureCanvas.tsx`, `CanvasBoundary` round `StructureCanvasContent` | in the middle of what the column leaves in view | lets go of what the canvas was in the middle of (`letGo`) |
+| The column | `StructureCanvas.tsx`, `ColumnBoundary` round `TextColumn` | at the column's top right; **Hide** closes the column, its texts and PDFs kept | slides the column back in |
+| A tab | `ui/views/Deck.tsx`, round each tab's view | at the top of the tab | lets go of what its canvas was in the middle of |
+| The window | `App.tsx`, round all it draws | at the top of the window, which can be dragged by any of it meanwhile; **Close Meno** | lets go of what every canvas was in the middle of |
+
+Each part is caught by the nearest of them: the canvas's scene (react-three-
+fiber passes an error inside its `<Canvas>` out to the tree round it) and
+the canvas's own HTML by the canvas's; the panel beside the canvas, Settings
+and the Python console by their tab's; the title bar and the notices by the
+window's. Errors thrown in event handlers, timers, promises and `useFrame`
+are not React's to catch and do not blank the window; they are not shown.
+
+Nothing a part shows lives in the part, so a part made again shows the same:
+
+- **Documents** are held by `App.tsx`, outside every boundary, and so are
+  the tabs. The window's boundary sits inside App's root, so even its Reload
+  keeps them; the dialog asking before closing, and the bridges that keep
+  each tab's dirty marker, are drawn beside it, not in it.
+- **The canvas's store** is kept with its document (`storeOf`), not made
+  per provider: a canvas made again - at any of the three levels - finds the
+  molecules in 3D turned as they were, the column as it was, the selection,
+  and Save writing where it wrote.
+- **What a canvas was opened with** - a file, a workspace - is taken into
+  its store once (`takeOpening`), not once per mount: taken again, the file
+  would stand in for everything done since.
+- **A gesture under way** is let go as the canvas is made again (`letGo`:
+  before it is made, when the canvas itself failed; as it is, with its tab
+  or the window): the press that would have ended a drag, a lasso or a
+  bond being drawn was lost with the canvas. Hover, the label and words being typed, Quick Add
+  and a workflow menu go with it; what is selected, how the molecules in 3D
+  are turned and the column stay.
+
+A part that fails again as it is made shows its card again. The column's
+Hide is the way on when the column itself is what fails. For the canvas
+there is none yet: its document is kept while Meno runs, but Save is the
+canvas's own (`useFileActions`, `setSaver`), and so is not there until the
+canvas draws again.
+
 ## How things move
 
 Nothing on screen changes at a jump (asked for by the maintainer, for all
@@ -198,8 +250,8 @@ What is left before the editor counts as finished, and in what order, is in
 
 - **State**: the structure itself - atoms, bonds, arrows, aromatic circles and
   the id counters - lives in the tab's document (`document.ts`), which is what
-  undo, redo and saving act on. A Zustand store per canvas (`store/index.tsx`)
-  holds the ephemeral half (hover, drag and extend gestures, fit requests, the
+  undo, redo and saving act on. A Zustand store per document (`store/index.tsx`,
+  `storeOf`: a canvas made again after it failed finds it as it was) holds the ephemeral half (hover, drag and extend gestures, fit requests, the
   label edit buffer) **and mirrors the document**, so components keep reading
   `model` and `arrows` from the store with `useEditor(selector)`.
   `connectStoreToDocument` maintains that mirror; the slices never write model
