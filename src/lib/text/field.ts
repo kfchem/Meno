@@ -59,3 +59,25 @@ export function editOf(before: string, a: number, b: number, now: string): Edit 
 
 /** An edit of the field's text, as an edit of the whole: moved on by where the field begins. */
 export const inText = (e: Edit, start: number): Edit => ({ from: e.from + start, to: e.to + start, insert: e.insert });
+
+/**
+ * What a composition the IME begins takes the place of, from its first
+ * change: `before` the context's text as it began, `data` the words it
+ * said it began on, and the change - `[p, q)` replaced by `text`. Where it
+ * puts in again, at the caret, the very words it began on, lying just after
+ * or just before the caret - converting again a word the caret is in, as
+ * Chromium's EditContext passes it on - those words are what it replaces.
+ * `at` is where what it composes lies in the context's text, `tail` how
+ * much of that text after it is not its; `[from, to)` what it replaces, in
+ * `before`.
+ */
+export function composingIn(before: string, data: string, p: number, q: number, text: string): { at: number; tail: number; from: number; to: number } {
+  if (p === q && data && text === data) {
+    if (before.slice(p, p + data.length) === data) return { at: p, tail: before.length - p, from: p, to: p + data.length };
+    if (before.slice(p - data.length, p) === data) return { at: p, tail: before.length - p, from: p - data.length, to: p };
+  }
+  return { at: p, tail: before.length - q, from: p, to: q };
+}
+
+/** What the IME has so far, in the context's text: from `at`, all but the `tail` that is not its. */
+export const composed = (now: string, at: number, tail: number) => now.slice(at, Math.max(at, now.length - tail));

@@ -17,7 +17,7 @@
  */
 import { IS_MAC } from "../../../lib/doc/shortcuts";
 import { caretAt, plainLines, selFrom, selTo } from "../../../lib/text/editing";
-import { editOf, inText, windowOf, type FieldWindow } from "../../../lib/text/field";
+import { composed, composingIn, editOf, inText, windowOf, type FieldWindow } from "../../../lib/text/field";
 import { commandOf } from "../../../lib/text/keys";
 import type { Editor } from "./editor";
 import { LINE_PX, xAt } from "./linePictures";
@@ -258,8 +258,23 @@ type BoundsAsked = Event & { rangeStart: number; rangeEnd: number };
  */
 class EditContextField extends Field {
   private ec: EditContextLike;
-  /** The IME composing: what the context held as it began, what it replaces in that once it says, and where the field began. */
-  private composing: { before: string; a: number | null; b: number; start: number; clauses?: { from: number; to: number; thick: boolean }[] } | null = null;
+  /**
+   * The IME composing: what the context held as it began, the words it
+   * began on, where the field began - and, once it says, where what it
+   * composes lies in the context's text and what it replaces (lib/text/field
+   * `composingIn`).
+   */
+  private composing: {
+    before: string;
+    data: string;
+    start: number;
+    in: { at: number; tail: number; from: number; to: number } | null;
+    clauses?: { from: number; to: number; thick: boolean }[];
+  } | null = null;
+  /** Where the IME was last told the text lies, and its caret: told again only once they move, after the text is drawn. */
+  private told = { control: "", caret: "" };
+  private telling = false;
+  private gone = false;
 
   constructor(el: HTMLElement, ed: Editor) {
     super(el, ed);
@@ -269,8 +284,8 @@ class EditContextField extends Field {
     this.on<TextUpdate>(this.ec, "textupdate", (e) => this.onTextUpdate(e));
     this.on<TextFormats>(this.ec, "textformatupdate", (e) => this.onFormats(e));
     this.on<BoundsAsked>(this.ec, "characterboundsupdate", (e) => this.onBoundsAsked(e));
-    this.on(this.ec, "compositionstart", () => {
-      this.composing = { before: this.ec.text, a: null, b: 0, start: this.win?.start ?? 0 };
+    this.on<CompositionEvent>(this.ec, "compositionstart", (e) => {
+      this.composing = { before: this.ec.text, data: e.data ?? "", start: this.win?.start ?? 0, in: null };
     });
     this.on(this.ec, "compositionend", () => this.onCompositionEnd());
     // (a line's end, Enter's - the context leaves it to the page)
@@ -288,6 +303,7 @@ class EditContextField extends Field {
 
   dispose(): void {
     super.dispose();
+    this.gone = true;
     (this.el as HTMLElement & { editContext: EditContextLike | null }).editContext = null;
   }
 
@@ -319,14 +335,43 @@ class EditContextField extends Field {
     this.place();
   }
 
+  /** The IME told where the text and its caret lie - once the frame they are drawn in has gone to the screen, and only where they have moved. */
   place(): void {
+    if (this.telling) return;
+    this.telling = true;
+    requestAnimationFrame(() =>
+      window.setTimeout(() => {
+        this.telling = false;
+        if (!this.gone) this.tell();
+      }, 0),
+    );
+  }
+
+  private tell(): void {
     const ed = this.ed;
     const box = this.el.getBoundingClientRect();
-    this.ec.updateControlBounds(new DOMRect(box.left, box.top, box.width, box.height));
-    const at = ed.composing ? ed.composing.from + ed.composing.sel[1] : ed.sel.head;
+    const control = `${box.left},${box.top},${box.width},${box.height}`;
+    if (control !== this.told.control) {
+      this.told.control = control;
+      this.ec.updateControlBounds(new DOMRect(box.left, box.top, box.width, box.height));
+    }
+    const at = ed.composing ? ed.composing.from : ed.sel.head;
     const line = ed.lines.at(Math.min(at, ed.text.length));
     const x = ed.composing ? this.composedX(ed.composing.sel[1]) : ed.xOf(ed.sel.head);
-    this.ec.updateSelectionBounds(new DOMRect(box.left + x, box.top + ed.topOf(line), 1, LINE_PX));
+    const caret = `${box.left + x},${box.top + ed.topOf(line)}`;
+    if (caret !== this.told.caret) {
+      this.told.caret = caret;
+      this.ec.updateSelectionBounds(new DOMRect(box.left + x, box.top + ed.topOf(line), 1, LINE_PX));
+    }
+  }
+
+  /** What the IME has so far drawn: in place of what it replaces, its caret and clauses as it says. */
+  private show(): void {
+    const c = this.composing!;
+    const k = c.in!;
+    const text = composed(this.ec.text, k.at, k.tail);
+    const s: [number, number] = [Math.min(Math.max(this.ec.selectionStart - k.at, 0), text.length), Math.min(Math.max(this.ec.selectionEnd - k.at, 0), text.length)];
+    this.ed.setComposing({ from: c.start + k.from, to: c.start + k.to, text, sel: s, clauses: c.clauses });
   }
 
   /** How far across the view a place in what the IME has so far lies. */
@@ -344,12 +389,9 @@ class EditContextField extends Field {
     if (!w) return;
     const c = this.composing;
     if (c) {
-      // (what it replaces, as it first says: in a word already written, that word)
-      if (c.a == null) {
-        c.a = e.updateRangeStart;
-        c.b = e.updateRangeEnd;
-      }
-      this.composeFrom(c.before, c.a, c.b, c.start, this.ec.text, [this.ec.selectionStart, this.ec.selectionEnd], c.clauses);
+      // (what it replaces, as it first says - or, converting again the word the caret is in, that word)
+      c.in ??= composingIn(c.before, c.data, e.updateRangeStart, e.updateRangeEnd, e.text);
+      this.show();
       return;
     }
     const insert = plainLines(e.text);
@@ -360,27 +402,28 @@ class EditContextField extends Field {
 
   private onFormats(e: TextFormats): void {
     const c = this.composing;
-    if (!c || c.a == null) return;
-    const a = c.a;
+    if (!c?.in) return;
+    const at = c.in.at;
     c.clauses = e
       .getTextFormats()
       .filter((f) => f.underlineStyle !== "none")
-      .map((f) => ({ from: f.rangeStart - a, to: f.rangeEnd - a, thick: f.underlineThickness === "thick" }));
-    this.composeFrom(c.before, a, c.b, c.start, this.ec.text, [this.ec.selectionStart, this.ec.selectionEnd], c.clauses);
+      .map((f) => ({ from: f.rangeStart - at, to: f.rangeEnd - at, thick: f.underlineThickness === "thick" }));
+    this.show();
   }
 
   /** Where each letter the IME composes lies on the screen, for its candidates: one box each, of the text's offsets. */
   private onBoundsAsked(e: BoundsAsked): void {
     const c = this.composing;
     const ed = this.ed;
-    if (!c || c.a == null || !ed.composing) return;
+    if (!c?.in || !ed.composing) return;
+    const at = c.in.at;
     const box = this.el.getBoundingClientRect();
     const line = ed.lines.at(ed.composing.from);
     const top = box.top + ed.topOf(line);
     const rects: DOMRect[] = [];
     for (let i = e.rangeStart; i < e.rangeEnd; i++) {
-      const x0 = this.composedX(i - c.a);
-      const x1 = this.composedX(i + 1 - c.a);
+      const x0 = this.composedX(i - at);
+      const x1 = this.composedX(i + 1 - at);
       rects.push(new DOMRect(box.left + x0, top, Math.max(1, x1 - x0), LINE_PX));
     }
     this.ec.updateCharacterBounds(e.rangeStart, rects);
@@ -390,19 +433,14 @@ class EditContextField extends Field {
     const c = this.composing;
     this.composing = null;
     this.ed.setComposing(null);
-    if (!c || c.a == null) {
+    if (!c?.in) {
       this.sync();
       return;
     }
-    const now = this.ec.text;
-    const tail = c.before.length - c.b;
-    const insert = now.slice(c.a, Math.max(c.a, now.length - tail));
-    const replaced = c.before.slice(c.a, c.b);
-    this.win = this.win && { ...this.win, text: now, end: this.win.start + now.length };
-    if (insert !== replaced) {
-      const typed = inText({ from: c.a, to: c.b, insert: plainLines(insert) }, c.start);
-      this.ed.edit(typed, caretAt(c.start + this.ec.selectionEnd + (typed.insert.length - insert.length)));
-    }
+    const k = c.in;
+    const insert = plainLines(composed(this.ec.text, k.at, k.tail));
+    if (insert !== c.before.slice(k.from, k.to)) this.ed.edit(inText({ from: k.from, to: k.to, insert }, c.start), caretAt(c.start + k.from + insert.length));
+    // (the context given the lines about the caret again - what the IME put in twice, once)
     this.sync();
   }
 }

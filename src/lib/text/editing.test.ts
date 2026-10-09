@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyEdit, caretAt, letterStep, lineAround, Lines, mapThrough, paragraphStep, plainLines, typed, wordAround, wordStep } from "./editing";
 import { commandOf } from "./keys";
-import { editOf, windowOf, AROUND, MOST } from "./field";
+import { composed, composingIn, editOf, windowOf, AROUND, MOST } from "./field";
 
 describe("a text being edited", () => {
   it("knows its lines: where each begins and ends, and which an offset is on", () => {
@@ -126,4 +126,19 @@ describe("the field typed through", () => {
     // (the field changed elsewhere than at the selection)
     expect(editOf("abcdef", 6, 6, "abXdef")).toEqual({ from: 2, to: 3, insert: "X" });
   });
+
+  it("reads what a composition takes the place of: what it said it replaces, or the word it began on, put in again at the caret", () => {
+    const before = "化学反応です";
+    // (typed at the caret: nothing)
+    expect(composingIn(before, "", 2, 2, "か")).toEqual({ at: 2, tail: 4, from: 2, to: 2 });
+    // (a word selected, converted again: the word)
+    expect(composingIn(before, "反応", 2, 4, "反応")).toEqual({ at: 2, tail: 2, from: 2, to: 4 });
+    // (the caret in a word, the word put in again at it: the word after the caret, or before it)
+    const after = composingIn(before, "反応", 2, 2, "反応");
+    expect(after).toEqual({ at: 2, tail: 4, from: 2, to: 4 });
+    expect(composed("化学飯能反応です", after.at, after.tail)).toBe("飯能");
+    expect(composingIn(before, "化学", 2, 2, "化学")).toEqual({ at: 2, tail: 4, from: 0, to: 2 });
+    expect(composed("化学反応です", 2, 2)).toBe("反応");
+  });
 });
+
