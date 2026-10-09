@@ -9,7 +9,7 @@
  */
 import * as THREE from "three";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type MutableRefObject, type ReactNode } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, flushSync, useFrame, useThree } from "@react-three/fiber";
 import { COLORS } from "../../theme/colors";
 import { selFrom, selTo } from "../../../lib/text/editing";
 import { Editor, GUTTER_PX, PAD_PX } from "./editor";
@@ -178,8 +178,17 @@ function Scene({ ed, field }: { ed: Editor; field: MutableRefObject<TypingField 
     void typeReady().then(() => setTypeIn(true));
   }, []);
   useEffect(() => {
+    // (drawn again before the next frame, once for all a task changed: an update made in an event React
+    // does not know - an EditContext's textupdate - would wait otherwise for a task after that frame)
+    let due = false;
     ed.onChange = () => {
-      setTick((t) => t + 1);
+      if (!due) {
+        due = true;
+        queueMicrotask(() => {
+          due = false;
+          flushSync(() => setTick((t) => t + 1));
+        });
+      }
       field.current?.place();
       invalidate();
     };
