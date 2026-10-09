@@ -10,9 +10,10 @@
  */
 import * as THREE from "three";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { flushSync, useFrame, useThree } from "@react-three/fiber";
 import { COLORS } from "../../../theme/colors";
 import { selFrom, selTo } from "../../../../lib/text/editing";
+import { lineComposing } from "../../../../lib/text/field";
 import { useEditorStore } from "../store";
 import type { WorkspaceText } from "../store/types";
 import { columnText } from "../../TextEditor/columnText";
@@ -46,8 +47,17 @@ export default function ColumnText({ text }: { text: WorkspaceText }) {
     void typeReady().then(() => setTypeIn(true));
   }, []);
   useEffect(() => {
+    // (drawn again before the next frame, once for all a task changed: an update made in an event React
+    // does not know - an EditContext's textupdate - would wait otherwise for a task after that frame)
+    let due = false;
     entry.redraw = () => {
-      setTick((t) => t + 1);
+      if (!due) {
+        due = true;
+        queueMicrotask(() => {
+          due = false;
+          flushSync(() => setTick((t) => t + 1));
+        });
+      }
       invalidate();
     };
     return () => {
@@ -90,7 +100,7 @@ export default function ColumnText({ text }: { text: WorkspaceText }) {
     const end = ed.lines.end(i);
     let line = ed.lines.line(i);
     // (what the IME has so far, in place of what it takes the place of)
-    if (i === compLine && comp) line = line.slice(0, comp.from - start) + comp.text + (comp.to <= end ? line.slice(comp.to - start) : "");
+    if (i === compLine && comp) line = lineComposing(line, start, comp);
     for (let band = Math.max(0, Math.floor(ed.scrollLeft / BAND_PX)); band * BAND_PX < ed.scrollLeft + ed.viewW; band++) {
       const p = linePicture(line, band, dpr);
       if (!p) break;
