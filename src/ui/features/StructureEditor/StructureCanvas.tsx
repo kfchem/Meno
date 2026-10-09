@@ -98,6 +98,10 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import QuickAdd from "./QuickAdd";
 import Captions2D from "./components/Captions2D";
 import Pdfs2D from "./components/Pdfs2D";
+import PdfColumn from "./components/PdfColumn";
+import { goBack, isBackKey } from "./components/pdfColumnReader";
+import { PdfPictures } from "./components/pdfPictures";
+import { FollowCover, PageHtmlLayer } from "./components/coverLayer";
 import CaptionEditor2D from "./components/CaptionEditor2D";
 import Workflow2D from "./components/Workflow2D";
 import { selectionFrame } from "./workflow/selectionSet";
@@ -161,6 +165,9 @@ function StructureCanvasContent({
   // (a canvas opened from a document keeps that document's name)
   const named = officeId == null ? nameTab : undefined;
 
+  // the column over the canvas's right side, and the layer the page's HTML goes in, cut off where it begins
+  const cover = useEditor((s) => s.cover);
+  const [htmlLayer, setHtmlLayer] = useState<HTMLDivElement | null>(null);
   // (where PDFs opened go: the middle of what is in view, as a paste - set once the events are known)
   const pdfTarget = useRef<() => { x: number; y: number }>(() => ({ x: 0, y: 0 }));
   const {
@@ -254,7 +261,9 @@ function StructureCanvasContent({
     if (!cam || !el || !cam.zoom) return null;
     const w = el.clientWidth / 2 / cam.zoom;
     const h = el.clientHeight / 2 / cam.zoom;
-    return { x0: cam.position.x - w, x1: cam.position.x + w, y0: cam.position.y - h, y1: cam.position.y + h };
+    // (the column over the canvas's right side hides what lies under it)
+    const covered = store.getState().cover / cam.zoom;
+    return { x0: cam.position.x - w, x1: cam.position.x + w - covered, y0: cam.position.y - h, y1: cam.position.y + h };
   }, [camRef, domRef]);
   // Structures made in 3D (chem/make3d): asked first about what their
   // drawing leaves open, then their conformers made and risen out of them
@@ -496,10 +505,13 @@ function StructureCanvasContent({
         // a PDF under the pointer, and nothing else
         e.preventDefault();
         st.removePdf(st.hoveredPdf);
+      } else if (!busy && st.hoveredPdf != null && isBackKey(e) && goBack(store, st.hoveredPdf)) {
+        // Back, over a PDF: to where it was before a link was followed in it
+        e.preventDefault();
       } else if (!busy && st.hoveredPdf != null && !e.metaKey && !e.ctrlKey && !e.altKey && ["ArrowRight", "ArrowLeft", "PageDown", "PageUp"].includes(e.key)) {
         // a PDF's pages turned, over it (docs/PDF.md)
         const pdf = st.pdfs.find((p) => p.id === st.hoveredPdf);
-        if (pdf && !pdf.spread) {
+        if (pdf && !pdf.spread && !pdf.icon) {
           e.preventDefault();
           const next = pdf.page + (e.key === "ArrowRight" || e.key === "PageDown" ? 1 : -1);
           if (next >= 0 && next < pdf.pages.length) st.turnPdf(pdf.id, next);
@@ -770,6 +782,7 @@ function StructureCanvasContent({
   const texts = useEditor((s) => s.texts);
   const steps = useEditor((s) => s.steps);
   const textsOpen = useEditor((s) => s.textsOpen);
+  const reading = useEditor((s) => s.pdfs.some((p) => p.reading));
   const commandsNow = useRef<() => CommandGroup[]>(() => []);
   commandsNow.current = () => [
     {
@@ -821,11 +834,20 @@ function StructureCanvasContent({
       items: [
         { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit },
         { name: chemistry.stereoLabels ? "Hide R and S" : "Show R and S", run: toggleStereoLabels },
-        ...(texts.length
+        ...(texts.length || reading
           ? [
               textsOpen
                 ? { name: "Hide texts", run: () => store.getState().closeTexts() }
-                : { name: "Show texts", run: () => store.getState().showText(store.getState().textShown ?? texts[0].id) },
+                : {
+                    name: "Show texts",
+                    run: () => {
+                      // (the PDF it showed, rising into it again; or the text)
+                      const st = store.getState();
+                      if (st.pdfShown != null && st.pdfs.some((p) => p.id === st.pdfShown && p.reading)) st.readPdf(st.pdfShown);
+                      else if (st.texts.length) st.showText(st.textShown ?? st.texts[0].id);
+                      else if (st.pdfs.some((p) => p.reading)) st.readPdf(st.pdfs.find((p) => p.reading)!.id);
+                    },
+                  },
             ]
           : []),
       ],
@@ -1096,9 +1118,12 @@ function StructureCanvasContent({
             const st = store.getState();
             return {
               spread: !!p.spread,
+              icon: !!p.icon,
               onSpread: () => st.spreadPdf(p.id, !p.spread),
-              ...(!p.spread && p.page < p.pages.length - 1 ? { onNext: () => st.turnPdf(p.id, p.page + 1) } : {}),
-              ...(!p.spread && p.page > 0 ? { onPrevious: () => st.turnPdf(p.id, p.page - 1) } : {}),
+              onIcon: () => st.iconPdf(p.id, !p.icon),
+              ...(!p.spread && !p.icon && p.page < p.pages.length - 1 ? { onNext: () => st.turnPdf(p.id, p.page + 1) } : {}),
+              ...(!p.spread && !p.icon && p.page > 0 ? { onPrevious: () => st.turnPdf(p.id, p.page - 1) } : {}),
+              onRead: () => st.readPdf(p.id),
             };
           })()}
           onCleanUp={() =>
@@ -1146,6 +1171,7 @@ function StructureCanvasContent({
       </AnimatePresence>
       {/* (a molecule in 3D made again from its changed drawing: asked of the plugin here) */}
       <Remake3D.Provider value={remake3d}>
+      <PageHtmlLayer.Provider value={htmlLayer}>
       <Canvas
         key={tabId}
         // The page is seen straight from above, orthographically: the drawing
@@ -1174,10 +1200,13 @@ function StructureCanvasContent({
       >
         <color attach="background" args={["#ffffff"]} />
         <FitToContent2D trigger={fitNonce} />
-        {/* PDFs, under the drawing (docs/PDF.md) */}
-        <Pdfs2D />
         {/* The drawing, laid out once for every layer below to draw from */}
         <DrawnLayoutProvider>
+          {/* PDFs, under the drawing - an icon's name in its type - and one read in the column over the canvas's right side (docs/PDF.md) */}
+          <PdfPictures>
+            <Pdfs2D />
+            <PdfColumn />
+          </PdfPictures>
           {/* Bonds */}
           <Bonds2D />
           <Atoms2D />
@@ -1231,7 +1260,12 @@ function StructureCanvasContent({
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />
         <PanZoom2D />
+        {/* (the view following the column over the canvas's right side) */}
+        <FollowCover />
       </Canvas>
+      </PageHtmlLayer.Provider>
+      {/* the page's HTML, cut off where the column begins (coverLayer) */}
+      <div ref={setHtmlLayer} className="absolute inset-0 pointer-events-none" style={{ clipPath: cover > 0 ? `inset(0 ${cover}px 0 0)` : undefined }} />
       </Remake3D.Provider>
     </div>
   );
@@ -1274,6 +1308,8 @@ export default function StructureCanvas({
   return (
     <EditorProvider tabId={tabId} document={document}>
       <div className="w-full h-full flex">
+        {/* the canvas, and over its right side the column of texts and PDFs (docs/PDF.md, *One canvas*) */}
+        <div className="relative flex-1 min-w-0 h-full flex">
         <StructureCanvasContent
           active={active}
           tabId={tabId}
@@ -1291,6 +1327,7 @@ export default function StructureCanvas({
         />
         {/* The texts the workspace holds, in their column */}
         <TextColumn />
+        </div>
         {/* The panel beside the canvas slides open and shut, the canvas giving
             way as it does; one going as another comes takes as long, so the
             canvas keeps its width. */}

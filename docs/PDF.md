@@ -111,6 +111,13 @@ stops being part of the work.
   - The right-click menu has *Spread pages*. The pages lift off the
     stack one after another and lie side by side on the page, in rows,
     to be read and compared at once. *Gather pages* puts them back.
+- **It comes onto the page as an icon**, its top page on it and its name
+  under it. The name is set in the drawing's type, at the size of its
+  labels, and the icon is five times as tall as it, as a file's icon is
+  to its name on a desktop: three and a half bonds in ACS 1996's style.
+  *Show full size*, in its menu, makes it the stack at the size it is
+  printed; *Minimize to an icon* makes it small again. An icon is moved,
+  read in the column and deleted as the stack is.
 - **Its figures and words are taken out from here** as from the column
   (*Taking things out*, below).
 
@@ -516,7 +523,56 @@ Decided while building it, for the maintainer to confirm:
 Not yet, and where it comes:
 - **Selecting PDFs with others**: by a click, a box or a lasso, and copying, cutting and pasting them. This comes with pictures (step 4); for now a PDF is moved alone.
 - **Pasting a PDF copied in the Finder or Explorer.** For now it is opened or dropped.
-- **A double-click opening it in the column**: step 2.
+- **A double-click opening it in the column**: came in step 2.
+
+### Step 2: a PDF read in the column (2026-10-09)
+
+Built:
+- **The column lies over the canvas.** The canvas spans the window, and the column of texts lies over its right side; its header stays in HTML, and what it shows of a PDF is drawn by the canvas under it, in a view of its own (`PdfColumn.tsx`). As the column opens, shuts or is dragged wider:
+  - the view moves by half as much, eased, so that what was in the middle of what could be seen stays there;
+  - fitting, pasting and bringing a PDF into view use the part it does not cover;
+  - what is on the page in HTML (a step's card, words being written) is cut off where the column begins.
+- **Reading a PDF there.** A double-click on its stack, or *Read* in its menu, opens it in the column. Its page rises from the stack, growing to the column's width as the column opens. Closed by its ×, or the column hidden, the page lifts from where it is and goes back down to the stack.
+  - A PDF is read in three quarters of the canvas, a page being for reading; a text keeps the column's narrower width. Each keeps its own width once dragged, up to 85 % of the canvas.
+  - The column hidden on a PDF and shown again (*Show texts*) opens on it, its page rising again.
+  - As the column opens on a PDF, the view eases with it so that the PDF is all in what is left in view, in its middle: made smaller where it would not be, never larger, and left as it is where it already would be (`viewBesideColumn`).
+  - Its name is among the texts' along the column's top. Its × closes the column's view of it; the PDF stays on the page.
+  - Several can be read there, each kept where it was read; closing the one shown shows the next.
+- **Its pages** lie one under another, as wide as the column.
+  - The wheel and two fingers move them. A notch is eased, fingers are followed as they go.
+  - A pinch, or Ctrl or ⌘ with the wheel, makes them larger or smaller about the pointer, from a quarter of the column's width to eight times it.
+  - With the pointer over them, the arrow keys, Page Up and Page Down, Home and End move them, and ← and → go a page.
+- **Joined to its stack.**
+  - The page most in view is the page on top of the stack. The column moves it quietly, with no turn on the stack.
+  - A page turned on the stack (its corner, the arrow keys, its menu, an undo) is gone to in the column.
+  - A page under the pointer in the column lights the stack, as the stack is lit when hovered on the page.
+- **The page number** (*3 / 12*) shows at the column's foot as it moves, and while the pointer is over it. A click asks for a page to go to; a double-click makes the pages as wide as the column again.
+- **Links.**
+  - A link to a place in the PDF goes there: in the column where the column shows the PDF, else on the stack, its page turned.
+  - Back returns to where it was: ⌘[ on a Mac, Alt+← on Windows, or the mouse's back button.
+  - A link to a web page opens in the system's browser.
+  - PDFium reads each page's links when the pointer first comes over it (`pdf_links`).
+- **Saved** with the workspace: where each PDF read in the column is read (`reading`: pages down, and how large), and which one the column showed (`pdfShown`).
+- **A PDF comes as an icon** (*Show full size* in its menu, and *Minimize to an icon* back), shrinking to it about its middle and growing back, its name going under its middle.
+  - Its name is set in the drawing's type at its labels' size (10 points in ACS 1996's style), zoomed with the drawing; the icon is five times as tall (`ICON_TO_NAME`), as a file's icon is to its name on a desktop - 64 to 12 points in the Finder, 48 to 12 pixels in Explorer: three and a half bonds.
+  - PDFs put down where others lie are moved along to the right, clear of them and their names.
+  - Double-clicked, it is read in the column, its page rising from the icon. Saved with the workspace (`icon`).
+- **Its size checked**: a benzene ring printed as ACS 1996 prints it, 14.4-point bonds, in a PDF lies the size of one Meno draws beside it.
+
+Decided while building it, for the maintainer to confirm:
+- **Three quarters of the canvas for a PDF** (the maintainer asked for a wider column for reading PDFs, about three quarters), the stack brought beside it into the quarter left (the maintainer asked for that too).
+- **The column over the canvas, not beside it.** The canvas no longer narrows as the column opens. One canvas then draws the page and the column, and a page goes from one to the other as one thing (*One canvas*). The view follows the column instead.
+- **The page shown** is the one most in view. After a link, *Go to page* or Back, it is the page gone to, until the column is moved by hand: a place low on a page, or the last pages all in view at the end, would otherwise show the page after it.
+- **Reading is not a step to undo**, as where a text is scrolled to is not. The page the column brings on top of the stack is not one either. Turns made on the stack still are, and undoing them goes back past the column's pages, not through them.
+- **Closing a PDF in the column** forgets where it was read; read again, it opens at its page on top.
+- **Only the web's and mail's links open** (`http`, `https`, `mailto`). Any other a PDF holds (a file, a script, another program) is not followed.
+- **Links on the stack** are followed by a click that does not move it; the pointer is the system's hand over them.
+- **An icon at first** (the maintainer chose it, the full-size page being too large to put down among the drawing), its size set by its name's type (the maintainer suggested the labels' size). An icon gathers a PDF's pages first; it shows its top page's small picture alone (no tiles), and its corners do not turn. A full-size stack's name stays as small on the screen as before.
+- **The look:** the column's pages on Meno's pale grey, 12-pixel margins and 10-pixel gaps; the page number a chip at the foot of the column.
+
+Not yet, and where it comes:
+- **Selecting and copying text, and search**: step 3.
+- **The mouse's back button on a Mac** is not checked yet. It is heard where WebKit passes it on; ⌘[ is the Mac's own.
 
 ## In order
 
@@ -531,8 +587,9 @@ Not yet, and where it comes:
 1. **A PDF on the page** (built, 2026-10-09; *As built*, above): opened,
    dropped or pasted, held and saved; its stack, coming up as it is zoomed
    into, its pages turned and spread.
-2. **The column on the canvas**: a PDF read there, joined to its stack;
-   its page number and links; texts still in HTML beside it until step 5.
+2. **The column on the canvas** (built, 2026-10-09; *As built*, above): a
+   PDF read there, joined to its stack; its page number and links; texts
+   still in HTML beside it until step 5.
 3. **Text and search**: selecting and copying, on the stack and in the
    column; *This PDF* and *All PDFs*; words dragged out onto the page.
 4. **Pictures**: from image files and the clipboard, and figures dragged

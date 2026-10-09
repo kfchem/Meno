@@ -15,100 +15,87 @@
  * the pages lift off one after another and settle in their places.
  */
 import * as THREE from "three";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import { pageAt } from "../utils/page";
 import { setViewGoal } from "./viewGoal";
 import { useEditor, useEditorStore } from "../store";
 import type { PdfItem } from "../store/types";
-import { drawPart, type DrawnPart } from "../../../../lib/pdf/reader";
-import { pdfBounds, POINT, spreadSheets, stackSheets, topSheet, type Sheet } from "../../../../lib/pdf/layout";
+import { ICON_NAME_WIDTH, iconScale, pdfBounds, POINT, spreadSheets, stackSheets, topSheet, type Sheet } from "../../../../lib/pdf/layout";
+import { useDrawnLayout } from "./drawnLayoutContext";
+import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
+import { COLORS } from "../../../theme/colors";
+import { BASE, FADE_MS, GRAY, levelFor, LINE, Page, TILE, usePictures, type Pic, type Tile } from "./pdfPictures";
+import { followLink, readerOf } from "./pdfColumnReader";
+import { linkAt, linksOf, type PdfLink } from "../../../../lib/pdf/reader";
 
-/** Meno's hairline and its grey (App.css: --color-gh-line, --color-gh-gray, --color-gh-base). */
-const LINE = "#d1d9e0";
-const GRAY = "#59636e";
-const BASE = "#f6f8fa";
 /** Eased in and out, cubic: what is lifted rises and settles. */
-const ease = (u: number) => {
+export const ease = (u: number) => {
   const t = Math.min(Math.max(u, 0), 1);
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 };
 
 /** Where PDFs lie: under the drawing, which is drawn over them. */
-const Z = -0.4;
-/** A tile's side, in pixels. */
-const TILE = 512;
-/** A page's first picture: this many pixels across, whatever its size. */
-const PREVIEW_PX = 360;
+export const Z = -0.4;
 /** How long the view stays still before sharper tiles are asked for, in ms - still being under these a frame: a share of the zoom, and pixels moved. */
-const SETTLE_MS = 90;
+export const SETTLE_MS = 90;
 const STILL_ZOOM = 0.003;
 const STILL_PX = 0.5;
-/** How long things take: a tile fading in, a page turned, a page spread or gathered, in ms. */
-const FADE_MS = 160;
+/** How long things take: a page turned, a page spread or gathered, in ms. */
 const TURN_MS = 380;
 const SPREAD_MS = 460;
 const SPREAD_STAGGER_MS = 45;
+/** How long a PDF takes to be made an icon, or full size again, in ms. */
+const ICON_MS = 380;
+
 /** The corner that folds, on the screen, in pixels. */
 const FOLD_PX = 30;
+
+/** The light round a PDF hovered, or one whose page in the column is: as words on the page are lit. */
+const LIT = 0.16;
+const LIT_PAD_PX = 5;
+/** How far a press may move and still be a click, in pixels. */
+const CLICK_PX = 4;
 
 type Pointerish = { button?: number; clientX: number; clientY: number; pointerId?: number };
 const native = (e: unknown): Pointerish => ((e as { nativeEvent?: Pointerish }).nativeEvent ?? (e as Pointerish));
 
-/** A picture of a page or a part of one, as WebGL has it, and when it came. */
-type Pic = { tex: THREE.Texture; born: number };
-
-function textureOf(d: DrawnPart, mip: boolean): THREE.Texture {
-  const tex = new THREE.Texture(d.bitmap);
-  // (taken apart upside down already: lib/pdf/reader)
-  tex.flipY = false;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.generateMipmaps = mip;
-  tex.minFilter = mip ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.anisotropy = 4;
-  tex.needsUpdate = true;
-  return tex;
-}
-
-/** The pictures drawn of the PDFs' pages, kept while the canvas is: previews by page, tiles by level and place. */
-class Pictures {
-  previews = new Map<string, Pic | "asked">();
-  tiles = new Map<string, Pic | "asked">();
-  /** When each tile was last wanted, so that those long unwanted are let go. */
-  wanted = new Map<string, number>();
-  dispose(): void {
-    for (const p of [...this.previews.values(), ...this.tiles.values()]) if (p !== "asked") p.tex.dispose();
-    this.previews.clear();
-    this.tiles.clear();
-  }
-}
-
 export default function Pdfs2D() {
   const pdfs = useEditor((s) => s.pdfs);
   const hoveredPdf = useEditor((s) => s.hoveredPdf);
+  const litPdf = useEditor((s) => s.litPdf);
   const store = useEditorStore();
   const { camera, gl, invalidate, size } = useThree();
-  const pics = useMemo(() => new Pictures(), []);
-  useEffect(() => () => pics.dispose(), [pics]);
   const [, setTick] = useState(0);
-  const redraw = () => {
+  const redraw = useCallback(() => {
     setTick((t) => t + 1);
     invalidate();
-  };
+  }, [invalidate]);
+  const pics = usePictures(redraw);
+  // (an icon's name in the drawing's type, as its labels are set)
+  const { opts } = useDrawnLayout();
+  const family = opts.fontFamily ?? "Arial";
+  const nameFont = useLabelFontUrl(family, needsFallback(pdfs.map((p) => p.name)));
 
   // the view: where it is, how near, and since when it has been still
   const view = useRef({ zoom: 0, x: 0, y: 0, still: 0, level: new Map<number, number>() });
   const settleTimer = useRef<number | null>(null);
   useEffect(() => () => void (settleTimer.current != null && window.clearTimeout(settleTimer.current)), []);
-  // each PDF's motion: a page turned (the one that went), and its pages spread or gathered
-  const motion = useRef(new Map<number, { turned?: { page: number; start: number }; spread?: { to: boolean; start: number } }>());
+  // each PDF's motion: a page turned (the one that went), its pages spread or gathered, and its light
+  const motion = useRef(new Map<number, Motion>());
   const was = useRef(new Map<number, PdfItem>());
+  const reader = readerOf(store);
   for (const p of pdfs) {
     const before = was.current.get(p.id);
-    if (before && before.page !== p.page && !p.spread) motion.current.set(p.id, { ...motion.current.get(p.id), turned: { page: before.page, start: performance.now() } });
+    // (the page the column has come to comes on top quietly: it was turned there, not here)
+    const quiet = p.reading && reader.id === p.id && reader.page === p.page;
+    if (before && before.page !== p.page && !p.spread && !quiet) motion.current.set(p.id, { ...motion.current.get(p.id), turned: { page: before.page, start: performance.now() } });
+    const lit = hoveredPdf === p.id || litPdf === p.id;
+    const m = motion.current.get(p.id);
+    if (!!m?.lit?.on !== lit && (m?.lit || lit)) motion.current.set(p.id, { ...m, lit: { on: lit, start: performance.now(), from: litOf(m, performance.now()) } });
     if (before && !!before.spread !== !!p.spread) motion.current.set(p.id, { ...motion.current.get(p.id), spread: { to: !!p.spread, start: performance.now() } });
+    if (before && !!before.icon !== !!p.icon) motion.current.set(p.id, { ...motion.current.get(p.id), icon: { to: !!p.icon, start: performance.now() } });
   }
   was.current = new Map(pdfs.map((p) => [p.id, p]));
 
@@ -128,11 +115,14 @@ export default function Pdfs2D() {
     const cam = camera as THREE.OrthographicCamera;
     const a = pageAt(-1, -1, cam);
     const c = pageAt(1, 1, cam);
-    const inView = b.x0 >= Math.min(a.x, c.x) && b.x1 <= Math.max(a.x, c.x) && b.y0 >= Math.min(a.y, c.y) && b.y1 <= Math.max(a.y, c.y);
+    // (what can be seen: the column over the canvas's right side left out)
+    const cover = store.getState().cover;
+    const right = Math.max(a.x, c.x) - cover / cam.zoom;
+    const inView = b.x0 >= Math.min(a.x, c.x) && b.x1 <= right && b.y0 >= Math.min(a.y, c.y) && b.y1 <= Math.max(a.y, c.y);
     if (inView) return;
     const pad = 1.12;
-    const zoom = Math.min(size.width / ((b.x1 - b.x0) * pad), size.height / ((b.y1 - b.y0) * pad), cam.zoom);
-    setViewGoal(cam, { zoom, x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 });
+    const zoom = Math.min((size.width - cover) / ((b.x1 - b.x0) * pad), size.height / ((b.y1 - b.y0) * pad), cam.zoom);
+    setViewGoal(cam, { zoom, x: (b.x0 + b.x1) / 2 + cover / 2 / zoom, y: (b.y0 + b.y1) / 2 });
     invalidate();
   }, [pdfs, camera, size, invalidate]);
 
@@ -140,25 +130,6 @@ export default function Pdfs2D() {
     const rect = (gl.domElement as HTMLCanvasElement).getBoundingClientRect();
     const p = pageAt(((cx - rect.left) / rect.width) * 2 - 1, -(((cy - rect.top) / rect.height) * 2 - 1), camera);
     return { x: p.x, y: p.y };
-  };
-
-  /** A page's preview, asked for the first time it is wanted. */
-  const previewOf = (p: PdfItem, page: number): Pic | null => {
-    const key = `${p.sha256}:${page}`;
-    const had = pics.previews.get(key);
-    if (had && had !== "asked") return had;
-    if (!had) {
-      pics.previews.set(key, "asked");
-      const [w] = p.pages[page];
-      void drawPart({ sha256: p.sha256, page, scale: PREVIEW_PX / w }, () => -1)
-        .then((d) => {
-          if (!d) return pics.previews.delete(key);
-          pics.previews.set(key, { tex: textureOf(d, true), born: performance.now() });
-          redraw();
-        })
-        .catch(() => pics.previews.delete(key));
-    }
-    return null;
   };
 
   // which sheets are in view, and the tiles they want at the level the view wants
@@ -190,10 +161,12 @@ export default function Pdfs2D() {
       // (drawn until a little past the end, so that the last frame drawn is the end's)
       if ((m.turned && now - m.turned.start < TURN_MS + 80) || (m.spread && now - m.spread.start < SPREAD_MS + 20 * SPREAD_STAGGER_MS + 80)) animating = true;
     }
+    for (const m of motion.current.values()) {
+      if (m.lit && now - m.lit.start < FADE_MS + 80) animating = true;
+      if (m.icon && now - m.icon.start < ICON_MS + 80) animating = true;
+    }
     // (the tiles' fading in, and the motions, ask for frames while they last)
-    let fading = false;
-    for (const t of pics.tiles.values()) if (t !== "asked" && now - t.born < FADE_MS + 80) fading = true;
-    for (const t of pics.previews.values()) if (t !== "asked" && now - t.born < FADE_MS + 80) fading = true;
+    const fading = pics.fading(now);
     // (what moves is worked out as it is drawn: drawn again each frame while it moves)
     if (animating || fading) redraw();
     if (!settled) return;
@@ -206,59 +179,57 @@ export default function Pdfs2D() {
     const want = cam.zoom * dpr * POINT;
     let asked = false;
     for (const p of pdfs) {
+      // (an icon is its small picture: no tiles)
+      if (p.icon) {
+        v.level.set(p.id * 100000 + p.page, 0);
+        continue;
+      }
       const sheets = p.spread ? spreadSheets(p).map((s, i) => ({ s, page: i })) : [{ s: topSheet(p), page: p.page }];
       for (const { s, page } of sheets) {
         if (s.x + s.w / 2 < seen.x0 || s.x - s.w / 2 > seen.x1 || s.y + s.h / 2 < seen.y0 || s.y - s.h / 2 > seen.y1) continue;
-        const [pw] = p.pages[page];
-        const previewScale = PREVIEW_PX / pw;
         // (the level: pixels a point, a power of two above what the screen wants; none, where the preview is enough)
-        const level = want <= previewScale * 1.15 ? 0 : Math.min(32, Math.pow(2, Math.ceil(Math.log2(want))));
+        const level = levelFor(want, p.pages[page][0]);
         v.level.set(p.id * 100000 + page, level);
         if (!level) continue;
-        const [w, h] = p.pages[page];
-        const left = Math.max(0, ((seen.x0 - (s.x - s.w / 2)) / POINT) * level);
-        const right = Math.min(w * level, ((seen.x1 - (s.x - s.w / 2)) / POINT) * level);
-        const top = Math.max(0, (((s.y + s.h / 2) - seen.y1) / POINT) * level);
-        const bottom = Math.min(h * level, (((s.y + s.h / 2) - seen.y0) / POINT) * level);
-        for (let j = Math.floor(top / TILE); j * TILE < bottom; j++)
-          for (let i = Math.floor(left / TILE); i * TILE < right; i++) {
-            const key = `${p.sha256}:${page}:${level}:${i}:${j}`;
-            pics.wanted.set(key, now);
-            if (pics.tiles.has(key)) continue;
-            pics.tiles.set(key, "asked");
-            asked = true;
-            const cx = s.x - s.w / 2 + ((i + 0.5) * TILE * POINT) / level;
-            const cy = s.y + s.h / 2 - ((j + 0.5) * TILE * POINT) / level;
-            void drawPart(
-              { sha256: p.sha256, page, scale: level, x: i * TILE, y: j * TILE, w: TILE, h: TILE },
-              () => Math.hypot(cx - mid.x, cy - mid.y),
-              () => (pics.wanted.get(key) ?? 0) >= view.current.still,
-            )
-              .then((d) => {
-                // (dropped, the view having moved on: asked for again where it is still wanted)
-                if (!d) {
-                  pics.tiles.delete(key);
-                  invalidate();
-                  return;
-                }
-                pics.tiles.set(key, { tex: textureOf(d, false), born: performance.now() });
-                redraw();
-              })
-              .catch(() => pics.tiles.delete(key));
-          }
+        const left = s.x - s.w / 2;
+        const top = s.y + s.h / 2;
+        asked =
+          pics.ask(
+            {
+              sha256: p.sha256,
+              page,
+              size: p.pages[page],
+              level,
+              part: { x0: (seen.x0 - left) / POINT, x1: (seen.x1 - left) / POINT, y0: (top - seen.y1) / POINT, y1: (top - seen.y0) / POINT },
+              nearness: (i, j) => Math.hypot(left + ((i + 0.5) * TILE * POINT) / level - mid.x, top - ((j + 0.5) * TILE * POINT) / level - mid.y),
+              stillSince: () => view.current.still,
+            },
+            now,
+          ) || asked;
       }
     }
     // tiles not wanted for a while let go
-    for (const [key, t] of pics.tiles) {
-      if (t === "asked" || now - (pics.wanted.get(key) ?? 0) < 4000) continue;
-      t.tex.dispose();
-      pics.tiles.delete(key);
-      pics.wanted.delete(key);
-    }
+    pics.letGo(now);
     if (asked) redraw();
   });
 
-  /** A press on a PDF: it follows the pointer, as one step. */
+  /** The link, if any, at a point of the page on a PDF's page in view: its top page, or one of its pages spread. */
+  const linkOn = (p: PdfItem, q: { x: number; y: number }): PdfLink | null => {
+    if (p.icon) return null;
+    const sheets = p.spread ? spreadSheets(p).map((s, page) => ({ s, page })) : [{ s: topSheet(p), page: p.page }];
+    const hit = sheets.find(({ s }) => Math.abs(q.x - s.x) <= s.w / 2 && Math.abs(q.y - s.y) <= s.h / 2);
+    if (!hit) return null;
+    const links = linksOf(p.sha256, hit.page, invalidate);
+    return links ? linkAt(links, (q.x - (hit.s.x - hit.s.w / 2)) / POINT, (hit.s.y + hit.s.h / 2 - q.y) / POINT) : null;
+  };
+  /** Over a link on a PDF, the system's hand. */
+  const hoverAt = (p: PdfItem | null, q?: { x: number; y: number }) => {
+    const want = p && q && linkOn(p, q) ? "pointer" : "";
+    const dom = gl.domElement as HTMLCanvasElement;
+    if (dom.style.cursor !== want) dom.style.cursor = want;
+  };
+
+  /** A press on a PDF: it follows the pointer, as one step - or, let go where it was pressed, on a link, the link is followed. */
   const startMove = (p: PdfItem, e: { stopPropagation: () => void }) => {
     const ev = native(e);
     if ((ev.button ?? 0) !== 0) return;
@@ -278,6 +249,10 @@ export default function Pdfs2D() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp, true);
       store.getState().endPanHold(u.pointerId);
+      if (Math.hypot(u.clientX - ev.clientX, u.clientY - ev.clientY) > CLICK_PX) return;
+      const now = store.getState().pdfs.find((x) => x.id === p.id);
+      const link = now ? linkOn(now, toWorld(u.clientX, u.clientY)) : null;
+      if (now && link) followLink(store, now, link);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, true);
@@ -296,24 +271,18 @@ export default function Pdfs2D() {
           px={px}
           hovered={hoveredPdf === p.id}
           motion={motion.current.get(p.id)}
-          previewOf={(page) => previewOf(p, page)}
-          tilesOf={(page) => {
-            const level = view.current.level.get(p.id * 100000 + page) ?? 0;
-            const out: { key: string; pic: Pic; i: number; j: number; level: number }[] = [];
-            if (!level) return out;
-            for (const [key, t] of pics.tiles) {
-              if (t === "asked" || !key.startsWith(`${p.sha256}:${page}:`)) continue;
-              const [, , l, i, j] = key.split(":").map(Number);
-              // (the level wanted, over the one before it where that is all there is yet)
-              if (l === level || l === level / 2) out.push({ key, pic: t, i, j, level: l });
-            }
-            return out.sort((x, y) => x.level - y.level);
-          }}
+          previewOf={(page) => pics.preview(p, page)}
+          tilesOf={(page) => pics.tilesOf(p.sha256, page, view.current.level.get(p.id * 100000 + page) ?? 0)}
           onOver={() => store.getState().setHoveredPdf(p.id)}
-          onOut={() => store.getState().hoveredPdf === p.id && store.getState().setHoveredPdf(null)}
+          onOut={() => {
+            hoverAt(null);
+            if (store.getState().hoveredPdf === p.id) store.getState().setHoveredPdf(null);
+          }}
+          onHover={(q) => hoverAt(p, q)}
           onDown={(e) => startMove(p, e)}
           onTurn={(page) => store.getState().turnPdf(p.id, page)}
           size={size}
+          type={{ size: opts.fontPx, font: nameFont }}
         />
       ))}
     </group>
@@ -325,14 +294,17 @@ function PdfStack(props: {
   now: number;
   px: number;
   hovered: boolean;
-  motion?: { turned?: { page: number; start: number }; spread?: { to: boolean; start: number } };
+  motion?: Motion;
   previewOf: (page: number) => Pic | null;
-  tilesOf: (page: number) => { key: string; pic: Pic; i: number; j: number; level: number }[];
+  tilesOf: (page: number) => Tile[];
   onOver: () => void;
   onOut: () => void;
+  onHover: (q: { x: number; y: number }) => void;
   onDown: (e: { stopPropagation: () => void }) => void;
   onTurn: (page: number) => void;
   size: { width: number; height: number };
+  /** The drawing's type: its labels' size, in the page's units, and its font, once it is had. */
+  type: { size: number; font: string | null };
 }) {
   const { p, now, px, motion } = props;
   const top = topSheet(p);
@@ -348,9 +320,55 @@ function PdfStack(props: {
   };
   const spreading = !!sm && now - sm.start < SPREAD_MS + p.pages.length * SPREAD_STAGGER_MS;
   const showSpread = p.spread || spreading;
+  // how large it is: 1 full size, an icon's size made small, or on its way between them
+  const small = iconScale(p);
+  const im = motion?.icon;
+  const it = im ? ease((now - im.start) / ICON_MS) : 1;
+  const k = im ? (im.to ? 1 + (small - 1) * it : small + (1 - small) * it) : p.icon ? small : 1;
+  // (how much of an icon it is, 0 to 1: its name going under its middle)
+  const iconness = small < 1 ? (1 - k) / (1 - small) : 0;
+  const atSize = (node: ReactNode) =>
+    k === 1 ? (
+      node
+    ) : (
+      <group position={[p.x, p.y, 0]} scale={[k, k, 1]}>
+        <group position={[-p.x, -p.y, 0]}>{node}</group>
+      </group>
+    );
+  // (lit, round all of it: hovered, or its page in the column)
+  const lit = litOf(motion, now);
+  const full = pdfBounds({ ...p, icon: false });
+  const b = showSpread
+    ? full
+    : { x0: p.x + (full.x0 - p.x) * k, x1: p.x + (full.x1 - p.x) * k, y0: p.y + (full.y0 - p.y) * k, y1: p.y + (full.y1 - p.y) * k };
+  const pad = LIT_PAD_PX * px;
+  const light = lit > 0.001 && (
+    <mesh position={[(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, -0.02]} scale={[b.x1 - b.x0 + 2 * pad, b.y1 - b.y0 + 2 * pad, 1]}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial color={COLORS.highlight} transparent opacity={lit} depthWrite={false} toneMapped={false} />
+    </mesh>
+  );
+  // its name under it, in the drawing's type: at its left as a page, as
+  // small on the screen however near it is seen; under its middle as an
+  // icon, at the size of the drawing's labels, as a file's under its icon -
+  // and on its way between them
+  const nameX = showSpread ? spread[0].x - spread[0].w / 2 : p.x - (top.w * k) / 2 + ((top.w * k) / 2) * iconness;
+  const nameY = showSpread ? Math.min(...spread.map((s) => s.y - s.h / 2)) : b.y0;
+  const nameSize = 12 * px * (1 - iconness) + props.type.size * iconness;
+  const nameGap = 14 * px * (1 - iconness) + 0.4 * props.type.size * iconness;
+  const nameWidth = Math.max(120 * px, top.w) * (1 - iconness) + ICON_NAME_WIDTH * iconness;
   const name = (
-    <group position={[showSpread ? spread[0].x - spread[0].w / 2 : top.x - top.w / 2, (showSpread ? Math.min(...spread.map((s) => s.y - s.h / 2)) : top.y - top.h / 2 - 0.7 * Math.min(4, p.pages.length - 1)) - 14 * px, 0.01]} scale={[px, px, 1]}>
-      <Text fontSize={12} anchorX="left" anchorY="top" color={GRAY} maxWidth={Math.max(120, (top.w / px) * 1.0)}>
+    <group position={[nameX, nameY - nameGap, 0.01]}>
+      {/* (troika takes a share of the text's width as its anchor; drei's types do not say so) */}
+      <Text
+        font={props.type.font ?? undefined}
+        fontSize={nameSize}
+        anchorX={`${50 * iconness}%` as unknown as number}
+        anchorY="top"
+        color={GRAY}
+        maxWidth={nameWidth}
+        textAlign={iconness > 0.5 ? "center" : "left"}
+      >
         {p.name}
       </Text>
     </group>
@@ -358,15 +376,16 @@ function PdfStack(props: {
 
   if (showSpread) {
     return (
-      <group onPointerOver={props.onOver} onPointerOut={props.onOut} onPointerDown={props.onDown}>
+      <group onPointerOver={props.onOver} onPointerOut={props.onOut} onPointerDown={props.onDown} onPointerMove={(e) => props.onHover(e.point)}>
         {p.pages.map((_, i) => {
           const k = spreadAt(i);
           const from = i === p.page ? top : { ...top, x: top.x + UNDER(i, p), y: top.y - UNDER(i, p) };
           const to = spread[i];
           const lift = Math.sin(Math.PI * k);
           const s: Sheet = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k, w: from.w + (to.w - from.w) * k, h: from.h + (to.h - from.h) * k };
-          return <Page key={i} page={i} s={s} lift={lift} z={0.02 * i + 0.2 * lift} now={now} px={px} previewOf={props.previewOf} tilesOf={props.tilesOf} />;
+          return <Page key={i} s={s} pt={p.pages[i]} lift={lift} z={0.02 * i + 0.2 * lift} now={now} px={px} preview={props.previewOf(i)} tiles={props.tilesOf(i)} />;
         })}
+        {light}
         {name}
       </group>
     );
@@ -377,18 +396,23 @@ function PdfStack(props: {
   const tt = tm ? Math.min(1, (now - tm.start) / TURN_MS) : 1;
   const going = tm && tt < 1 ? tm.page : null;
   const forward = tm ? p.page > tm.page : true;
-  const hasNext = p.page < p.pages.length - 1;
-  const hasPrev = p.page > 0;
+  // (its corners turn its pages full size only)
+  const hasNext = p.page < p.pages.length - 1 && k === 1;
+  const hasPrev = p.page > 0 && k === 1;
   const fold = FOLD_PX * px;
+  // (what is drawn made smaller is drawn with a screen's pixel the larger)
+  const inPx = px / k;
   return (
-    <group onPointerOver={props.onOver} onPointerOut={props.onOut} onPointerDown={props.onDown}>
-      {under.map((s, k) => (
-        <BlankSheet key={k} s={s} z={0.01 * k} />
-      ))}
-      <Page page={p.page} s={top} lift={0} z={0.06} now={now} px={px} previewOf={props.previewOf} tilesOf={props.tilesOf} />
+    <group onPointerOver={props.onOver} onPointerOut={props.onOut} onPointerDown={props.onDown} onPointerMove={(e) => props.onHover(e.point)}>
+      {atSize(
+        <>
+          {under.map((s, i) => (
+            <BlankSheet key={i} s={s} z={0.01 * i} />
+          ))}
+          <Page s={top} pt={p.pages[p.page]} lift={0} z={0.06} now={now} px={inPx} preview={props.previewOf(p.page)} tiles={props.tilesOf(p.page)} />
       {going != null && (
         <Page
-          page={going}
+          pt={p.pages[going]}
           s={{
             ...top,
             x: top.x + (forward ? 1 : -1) * ease(tt) * top.w * 0.12,
@@ -398,16 +422,34 @@ function PdfStack(props: {
           z={0.3}
           opacity={1 - ease(tt)}
           now={now}
-          px={px}
-          previewOf={props.previewOf}
-          tilesOf={() => []}
+          px={inPx}
+          preview={props.previewOf(going)}
+          tiles={[]}
         />
+      )}
+        </>,
       )}
       {props.hovered && hasNext && <Fold s={top} size={fold} corner="right" onTurn={() => props.onTurn(p.page + 1)} />}
       {props.hovered && hasPrev && <Fold s={top} size={fold} corner="left" onTurn={() => props.onTurn(p.page - 1)} />}
+      {light}
       {name}
     </group>
   );
+}
+
+/** What moves of a PDF: a page turned (the one that went), its pages spread or gathered, it made an icon or full size, its light coming or going. */
+type Motion = {
+  turned?: { page: number; start: number };
+  spread?: { to: boolean; start: number };
+  icon?: { to: boolean; start: number };
+  lit?: { on: boolean; start: number; from: number };
+};
+
+/** How lit a PDF is now, easing to lit or not. */
+function litOf(m: Motion | undefined, now: number): number {
+  if (!m?.lit) return 0;
+  const to = m.lit.on ? LIT : 0;
+  return m.lit.from + (to - m.lit.from) * ease((now - m.lit.start) / FADE_MS);
 }
 
 /** Where page `i` lies in the stack before it is spread: on top, or under it. */
@@ -424,66 +466,6 @@ function BlankSheet({ s, z }: { s: Sheet; z: number }) {
       </mesh>
       <lineSegments geometry={edges} scale={[s.w, s.h, 1]}>
         <lineBasicMaterial color={LINE} toneMapped={false} />
-      </lineSegments>
-    </group>
-  );
-}
-
-/** A page: its sheet, its preview and the tiles drawn of it; lifted, larger and with its shadow under it. */
-function Page(props: {
-  page: number;
-  s: Sheet;
-  lift: number;
-  z: number;
-  opacity?: number;
-  now: number;
-  px: number;
-  previewOf: (page: number) => Pic | null;
-  tilesOf: (page: number) => { key: string; pic: Pic; i: number; j: number; level: number }[];
-}) {
-  const { page, s, lift, now } = props;
-  const opacity = props.opacity ?? 1;
-  const preview = props.previewOf(page);
-  const tiles = props.tilesOf(page);
-  const grow = 1 + 0.04 * lift;
-  const left = -s.w / 2;
-  const topY = s.h / 2;
-  const edges = useMemo(() => new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)), []);
-  const fade = (born: number) => Math.min(1, (now - born) / FADE_MS) * opacity;
-  return (
-    <group position={[s.x, s.y + lift * 6 * props.px, props.z]} scale={[grow, grow, 1]}>
-      {lift > 0.01 && (
-        <mesh position={[8 * props.px * lift, -10 * props.px * lift, -0.005]} scale={[s.w, s.h, 1]}>
-          <planeGeometry args={[1, 1]} />
-          <meshBasicMaterial color="#000000" transparent opacity={0.12 * lift * opacity} depthWrite={false} toneMapped={false} />
-        </mesh>
-      )}
-      <mesh scale={[s.w, s.h, 1]}>
-        <planeGeometry args={[1, 1]} />
-        {/* (see-through from the first where it is to fade: a material's being so is set as it is made) */}
-        <meshBasicMaterial color="#ffffff" transparent={props.opacity != null} opacity={opacity} toneMapped={false} />
-      </mesh>
-      {preview && (
-        <mesh scale={[s.w, s.h, 1]} position={[0, 0, 0.001]}>
-          <planeGeometry args={[1, 1]} />
-          <meshBasicMaterial map={preview.tex} transparent opacity={fade(preview.born)} toneMapped={false} />
-        </mesh>
-      )}
-      {tiles.map((t) => {
-        const img = t.pic.tex.image as { width: number; height: number };
-        const tw = (img.width / t.level) * POINT;
-        const th = (img.height / t.level) * POINT;
-        const x = left + ((t.i * TILE) / t.level) * POINT + tw / 2;
-        const y = topY - ((t.j * TILE) / t.level) * POINT - th / 2;
-        return (
-          <mesh key={t.key} position={[x, y, 0.002 + 0.0001 * Math.log2(t.level)]} scale={[tw, th, 1]}>
-            <planeGeometry args={[1, 1]} />
-            <meshBasicMaterial map={t.pic.tex} transparent opacity={fade(t.pic.born)} toneMapped={false} />
-          </mesh>
-        );
-      })}
-      <lineSegments geometry={edges} scale={[s.w, s.h, 1]} position={[0, 0, 0.003]}>
-        <lineBasicMaterial color={LINE} transparent opacity={opacity} toneMapped={false} />
       </lineSegments>
     </group>
   );

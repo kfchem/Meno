@@ -16,6 +16,9 @@ export function createUiSlice(
   get: GetState,
 ) {
   return {
+    setCover: (px: number) => {
+      if (Math.abs(get().cover - px) > 0.25) set({ cover: px });
+    },
     markSavedAs: (path: string) => {
       set((prev: EditorState) => ({ ...prev, savedPath: path }));
       doc.markSaved();

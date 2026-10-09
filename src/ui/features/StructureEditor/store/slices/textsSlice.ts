@@ -22,7 +22,12 @@ export function createTextsSlice(doc: DocumentStore<StructureDocument>, set: Set
     editText: (id: number, text: string) =>
       doc.edit("type text", (d) => ops.editText(d, id, text), { coalesceKey: `text:${id}` }),
     removeText: (id: number) => doc.edit("close text", (d) => ops.removeText(d, id)),
-    showText: (id: number) => set({ textShown: id, textsOpen: true }),
-    closeTexts: () => set({ textsOpen: false }),
+    showText: (id: number) => set({ textShown: id, textsOpen: true, pdfShown: null }),
+    closeTexts: () =>
+      set((prev: EditorState) => {
+        // (a PDF shown: its page goes back down to it on the page as the column shuts - docs/PDF.md)
+        const pdf = prev.textsOpen && prev.pdfShown != null ? prev.pdfs.find((p) => p.id === prev.pdfShown) : undefined;
+        return { ...prev, textsOpen: false, ...(pdf ? { pdfFlight: { id: pdf.id, page: pdf.page, to: "page" as const, start: performance.now() } } : {}) };
+      }),
   };
 }

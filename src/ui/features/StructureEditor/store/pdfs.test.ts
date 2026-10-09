@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
 import { createStructureDocument, isBlankDocument } from "../document";
 import { readWorkspace, workspaceText } from "../utils/workspace";
-import { pdfBounds, POINT, spreadColumns, spreadSheets, stackSheets, topSheet, UNDER_MOST } from "../../../../lib/pdf/layout";
+import { ICON_HEIGHT, ICON_NAME_PT, ICON_NAME_WIDTH, ICON_TO_NAME, iconScale, pdfBounds, POINT, shownSheet, spreadColumns, spreadSheets, stackSheets, topSheet, UNDER_MOST } from "../../../../lib/pdf/layout";
+import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
 const SHA = "a".repeat(64);
 const SHA2 = "b".repeat(64);
@@ -26,9 +27,11 @@ describe("PDFs on the page", () => {
       { x: 10, y: 20 },
     );
     const [a, b] = state().pdfs;
-    expect(a).toMatchObject({ name: "paper.pdf", x: 10, y: 20, page: 0 });
-    // (the second to the right of the first, clear of it)
-    expect(b.x - b.pages[0][0] * POINT / 2).toBeGreaterThan(a.x + a.pages[0][0] * POINT / 2);
+    // (each an icon at first, the second to the right of the first, clear of it and of its name)
+    expect(a).toMatchObject({ name: "paper.pdf", x: 10, y: 20, page: 0, icon: true });
+    expect(b.icon).toBe(true);
+    expect(pdfBounds(b).x0).toBeGreaterThan(pdfBounds(a).x1);
+    expect(b.x - a.x).toBeGreaterThanOrEqual(ICON_NAME_WIDTH);
     expect(isBlankDocument(doc.getState())).toBe(false);
     expect(doc.history().undoDepth).toBe(1);
 
@@ -53,9 +56,33 @@ describe("PDFs on the page", () => {
     expect(state().pdfs.map((p) => p.name)).toEqual(["paper.pdf", "si.pdf"]);
   });
 
+  it("put down where others lie already, lie clear of them, names and all", () => {
+    const { state } = editor();
+    state().addPdfs([{ name: "paper.pdf", sha256: SHA, pages: [A4] }], { x: 0, y: 0 });
+    state().addPdfs([{ name: "si.pdf", sha256: SHA2, pages: [A4] }], { x: 0, y: 0 });
+    const [a, b] = state().pdfs;
+    expect(b.x - a.x).toBeGreaterThanOrEqual(ICON_NAME_WIDTH);
+    expect(b.y).toBe(a.y);
+  });
+
+  it("are made icons, their pages gathered, and full size again, each one step, and saved so", () => {
+    const { doc, state } = editor();
+    state().addPdfs([{ name: "paper.pdf", sha256: SHA, pages: [A4, A4] }], { x: 0, y: 0 });
+    state().spreadPdf(1, true);
+    state().iconPdf(1, true);
+    expect(state().pdfs[0]).toMatchObject({ icon: true });
+    expect(state().pdfs[0].spread).toBeUndefined();
+    expect(readWorkspace(workspaceText(state()))?.pdfs[0].icon).toBe(true);
+    state().iconPdf(1, false);
+    expect(state().pdfs[0].icon).toBeUndefined();
+    expect(doc.history().undoDepth).toBe(4);
+    doc.undo();
+    expect(state().pdfs[0].icon).toBe(true);
+  });
+
   it("are taken by a canvas opened for them", () => {
     const { state } = editor({ pdfs: [{ name: "paper.pdf", sha256: SHA, pages: [A4], size: 1000 }] });
-    expect(state().pdfs).toEqual([{ id: 1, name: "paper.pdf", sha256: SHA, pages: [A4], x: 0, y: 0, page: 0 }]);
+    expect(state().pdfs).toEqual([{ id: 1, name: "paper.pdf", sha256: SHA, pages: [A4], x: 0, y: 0, page: 0, icon: true }]);
   });
 
   it("leave out what is not a PDF held", () => {
@@ -104,8 +131,139 @@ describe("PDFs on the page", () => {
   });
 });
 
+describe("PDFs read in the column", () => {
+  const three = { name: "paper.pdf", sha256: SHA, pages: [A4, A4, A4] };
+
+  it("are named and shown there from their page on top, where they are read kept with them, no step to undo", () => {
+    const { doc, state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().turnPdf(1, 1);
+    expect(doc.history().undoDepth).toBe(2);
+    state().readPdf(1);
+    expect(state().pdfs[0].reading).toEqual({ at: 1, zoom: 1 });
+    expect(state()).toMatchObject({ pdfShown: 1, textsOpen: true, pdfFlight: { id: 1, page: 1, to: "column" } });
+    state().setPdfReading(1, { at: 1.5, zoom: 2 });
+    expect(state().pdfs[0].reading).toEqual({ at: 1.5, zoom: 2 });
+    expect(doc.history().undoDepth).toBe(2);
+    // (undone past and redone, it is still read where it was)
+    doc.undo();
+    expect(state().pdfs[0]).toMatchObject({ page: 0, reading: { at: 1.5, zoom: 2 } });
+    doc.redo();
+    expect(state().pdfs[0]).toMatchObject({ page: 1, reading: { at: 1.5, zoom: 2 } });
+    expect(state().pdfShown).toBe(1);
+  });
+
+  it("bring the page they come to on top on the page, the pages turned there still undone", () => {
+    const { doc, state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().turnPdf(1, 2);
+    state().readPdf(1);
+    state().readToPage(1, 2, 1);
+    expect(state().pdfs[0].page).toBe(1);
+    expect(doc.history().undoDepth).toBe(2);
+    // (the turn undone goes back to the page before it, and redone, to where the column is)
+    doc.undo();
+    expect(state().pdfs[0].page).toBe(0);
+    doc.redo();
+    expect(state().pdfs[0].page).toBe(1);
+    // (from a page it is not on: nothing)
+    state().readToPage(1, 0, 2);
+    expect(state().pdfs[0].page).toBe(1);
+  });
+
+  it("read no longer, go back to the page, the column showing the text it holds or shutting", () => {
+    const { state } = editor();
+    state().addTexts([{ name: "notes.txt", text: "hello" }]);
+    state().addPdfs([three, { ...three, name: "si.pdf", sha256: SHA2 }], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().readPdf(2);
+    expect(state().pdfShown).toBe(2);
+    state().showPdf(1);
+    expect(state().pdfShown).toBe(1);
+    // (a text shown: the PDFs still read there, named)
+    state().showText(state().texts[0].id);
+    expect(state().pdfShown).toBeNull();
+    state().showPdf(1);
+    state().stopReadingPdf(1);
+    expect(state().pdfs[0].reading).toBeUndefined();
+    expect(state()).toMatchObject({ pdfShown: 2, textsOpen: true, pdfFlight: { id: 1, to: "page" } });
+    state().stopReadingPdf(2);
+    expect(state()).toMatchObject({ pdfShown: null, textShown: state().texts[0].id, textsOpen: true });
+    state().removeText(state().texts[0].id);
+    expect(state().textsOpen).toBe(false);
+  });
+
+  it("go back to the page as the column is hidden on them, and rise into it again as it is shown", () => {
+    const { state } = editor();
+    state().addTexts([{ name: "notes.txt", text: "hello" }]);
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().endPdfFlight();
+    state().closeTexts();
+    expect(state()).toMatchObject({ textsOpen: false, pdfShown: 1, pdfFlight: { id: 1, to: "page" } });
+    state().readPdf(1);
+    expect(state()).toMatchObject({ textsOpen: true, pdfFlight: { id: 1, to: "column" } });
+    // (a text shown: nothing goes back)
+    state().endPdfFlight();
+    state().showText(state().texts[0].id);
+    state().closeTexts();
+    expect(state().pdfFlight).toBeNull();
+  });
+
+  it("deleted, are shown no longer; brought back, are shown again", () => {
+    const { doc, state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().removePdf(1);
+    expect(state()).toMatchObject({ pdfShown: null, textsOpen: false });
+    doc.undo();
+    expect(state()).toMatchObject({ pdfShown: 1, textsOpen: true });
+  });
+
+  it("are saved where they were read, the column showing the one it showed, and read back so", () => {
+    const { state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().setPdfReading(1, { at: 2.25, zoom: 1.5 });
+    const ws = readWorkspace(workspaceText(state()));
+    expect(ws?.pdfs[0].reading).toEqual({ at: 2.25, zoom: 1.5 });
+    expect(ws?.pdfShown).toBe(0);
+    const { state: again } = editor();
+    again().openWorkspace(ws!, true);
+    expect(again()).toMatchObject({ pdfShown: 1, textsOpen: true });
+    expect(again().pdfs[0].reading).toEqual({ at: 2.25, zoom: 1.5 });
+    // (the column closed: none shown)
+    again().closeTexts();
+    expect(readWorkspace(workspaceText(again()))?.pdfShown).toBeUndefined();
+  });
+
+  it("are read as far as they can be: no further than the last page, neither far smaller nor far larger", () => {
+    const { state } = editor();
+    state().addPdfs([three], { x: 0, y: 0 });
+    state().readPdf(1);
+    state().setPdfReading(1, { at: 9, zoom: 100 });
+    expect(state().pdfs[0].reading).toEqual({ at: 2.999, zoom: 8 });
+    state().setPdfReading(1, { at: -1, zoom: 0 });
+    expect(state().pdfs[0].reading).toEqual({ at: 0, zoom: 0.25 });
+  });
+});
+
 describe("where a PDF's pages lie", () => {
   const p = { pages: Array.from({ length: 7 }, () => A4), x: 0, y: 0, page: 0 };
+
+  it("as an icon: five times as tall as its name's type, the drawing's labels' - three and a half bonds - about its middle, its top page alone to be seen", () => {
+    expect(ICON_HEIGHT).toBeCloseTo(ICON_TO_NAME * ICON_NAME_PT * POINT);
+    expect(ICON_HEIGHT / NOMINAL_BOND_LENGTH).toBeCloseTo(50 / 14.4);
+    const icon = { ...p, x: 5, y: 7, icon: true };
+    const s = shownSheet(icon, 0)!;
+    expect(s.h).toBeCloseTo(ICON_HEIGHT);
+    expect(s.w / s.h).toBeCloseTo(595 / 842);
+    expect(s).toMatchObject({ x: 5, y: 7 });
+    expect(shownSheet(icon, 1)).toBeNull();
+    const b = pdfBounds(icon);
+    expect(b.y1 - b.y0).toBeLessThan(ICON_HEIGHT * 1.1);
+    expect(iconScale(icon)).toBeCloseTo(ICON_HEIGHT / (842 * POINT));
+  });
 
   it("stacked: the top page where the PDF is, at its printed size, a few sheets under it", () => {
     expect(topSheet(p)).toEqual({ x: 0, y: 0, w: 595 * POINT, h: 842 * POINT });

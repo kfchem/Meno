@@ -447,7 +447,10 @@ work.meno (zip)
   once - and `workspace.json` lists them in order (`texts`: each one's
   name and SHA-256) with the one its column showed (`textShown`). Where a
   text was opened from is not saved, as an output kept is not. A text the
-  file does not hold is left out as the workspace opens, and named.
+  file does not hold is left out as the workspace opens, and named. A PDF
+  read in the column keeps where it was read (`reading`, in its entry in
+  `pdfs`), and `pdfShown` names the one the column showed, in place of
+  `textShown` (docs/PDF.md, step 2).
 - **Written off the page.** The files kept are compressed in a worker of
   their own as the workspace is saved (`lib/doc/menoFileWorker.ts`), so a
   long output never holds the canvas up.

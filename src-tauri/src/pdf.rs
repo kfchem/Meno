@@ -98,6 +98,17 @@ fn png_of(rgba: &[u8], w: u32, h: u32) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// How finely a point on a page is found where it is drawn: an eighth of a point.
+const ON_PAGE_SCALE: f32 = 8.0;
+
+/// Where a point of a page's own space lies on the page as it is drawn, in
+/// points from its top left - its box, and its turn, as PDFium draws them.
+fn on_page(page: &PdfPage, x: f32, y: f32) -> Option<(f32, f32)> {
+    let cfg = PdfRenderConfig::new().scale_page_by_factor(ON_PAGE_SCALE);
+    let (dx, dy) = page.points_to_pixels(PdfPoints::new(x), PdfPoints::new(y), &cfg).ok()?;
+    Some((dx as f32 / ON_PAGE_SCALE, dy as f32 / ON_PAGE_SCALE))
+}
+
 /// A request answered: its JSON, and its bytes.
 fn answer(docs: &mut HashMap<String, PdfDocument<'static>>, pdfium: &'static Pdfium, cache: &Path, ask: &Value) -> Result<(Value, Vec<u8>), String> {
     let t = Instant::now();
@@ -138,6 +149,37 @@ fn answer(docs: &mut HashMap<String, PdfDocument<'static>>, pdfium: &'static Pdf
             let packed = ask["packed"].as_bool().unwrap_or(false);
             let bytes = if packed { png_of(&rgba, w as u32, h as u32)? } else { rgba };
             Ok((json!({"w": w, "h": h, "packed": packed, "drawn_ms": drawn_ms, "ms": ms(t)}), bytes))
+        }
+        "links" => {
+            let page = doc.pages().get(ask["page"].as_i64().unwrap_or(0) as i32).map_err(|_| "no such page".to_string())?;
+            let mut links = vec![];
+            for link in page.links().iter() {
+                let Ok(r) = link.rect() else { continue };
+                let (Some(a), Some(b)) = (on_page(&page, r.left().value, r.bottom().value), on_page(&page, r.right().value, r.top().value)) else {
+                    continue;
+                };
+                let rect = [a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1)];
+                let action = link.action();
+                // (a place in the PDF - given by the link, or by its action - or a web page)
+                let dest = link
+                    .destination()
+                    .or_else(|| action.as_ref().and_then(|a| a.as_local_destination_action()).and_then(|l| l.destination().ok()));
+                if let Some(d) = dest {
+                    let Ok(i) = d.page_index() else { continue };
+                    let y = match d.view_settings() {
+                        Ok(PdfDestinationViewSettings::SpecificCoordinatesAndZoom(_, Some(y), _))
+                        | Ok(PdfDestinationViewSettings::FitPageHorizontallyToWindow(Some(y)))
+                        | Ok(PdfDestinationViewSettings::FitBoundsHorizontallyToWindow(Some(y))) => Some(y.value),
+                        Ok(PdfDestinationViewSettings::FitPageToRectangle(r)) => Some(r.top().value),
+                        _ => None,
+                    };
+                    let y = y.and_then(|y| doc.pages().get(i).ok().and_then(|p| on_page(&p, 0.0, y))).map(|(_, y)| y);
+                    links.push(json!({"rect": rect, "page": i, "y": y}));
+                } else if let Some(uri) = action.as_ref().and_then(|a| a.as_uri_action()).and_then(|u| u.uri().ok()) {
+                    links.push(json!({"rect": rect, "uri": uri}));
+                }
+            }
+            Ok((json!({"links": links, "ms": ms(t)}), vec![]))
         }
         "close" => {
             docs.remove(&sha);
@@ -355,6 +397,15 @@ pub async fn pdf_render(
     Ok(tauri::ipc::Response::new(out))
 }
 
+/// The links on a page: where each lies, in points from the page's top
+/// left, and where it goes - a page, and how far down it, in points; or a
+/// web page, by its address.
+#[tauri::command]
+pub async fn pdf_links(app: tauri::AppHandle, sha: String, page: u32) -> Result<Value, String> {
+    let (head, _) = ask(&app, json!({"op": "links", "sha": sha, "page": page})).await?;
+    Ok(head["links"].clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,6 +424,76 @@ mod tests {
         assert!(!is_sha(&"A".repeat(64)));
         assert!(!is_sha("../../etc/passwd"));
         assert!(!is_sha(&"a".repeat(63)));
+    }
+
+    /// A PDF of three pages, written here: on the first, a link to a place
+    /// half way down the third, and one to a web page.
+    fn linked_pdf() -> Vec<u8> {
+        let contents = [
+            "BT /F1 14 Tf 72 700 Td (To page three) Tj ET",
+            "BT /F1 14 Tf 72 700 Td (Two) Tj ET",
+            "BT /F1 14 Tf 72 700 Td (Three) Tj ET",
+        ];
+        let mut objs: Vec<(u32, String)> = vec![
+            (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
+            (2, "<< /Type /Pages /Kids [10 0 R 11 0 R 12 0 R] /Count 3 >>".into()),
+            (3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into()),
+        ];
+        for (i, c) in contents.iter().enumerate() {
+            let annots = if i == 0 { " /Annots [30 0 R 31 0 R]" } else { "" };
+            objs.push((10 + i as u32, format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents {} 0 R{annots} >>", 20 + i)));
+            objs.push((20 + i as u32, format!("<< /Length {} >>\nstream\n{c}\nendstream", c.len())));
+        }
+        objs.push((30, "<< /Type /Annot /Subtype /Link /Rect [70 692 292 716] /Dest [12 0 R /XYZ 0 470 null] >>".into()));
+        objs.push((31, "<< /Type /Annot /Subtype /Link /Rect [70 652 202 676] /A << /S /URI /URI (https://example.com/) >> >>".into()));
+        objs.sort_by_key(|o| o.0);
+        let mut out = String::from("%PDF-1.7\n");
+        let mut at = std::collections::BTreeMap::new();
+        for (n, body) in &objs {
+            at.insert(*n, out.len());
+            out += &format!("{n} 0 obj\n{body}\nendobj\n");
+        }
+        let xref = out.len();
+        let size = objs.last().unwrap().0 + 1;
+        out += &format!("xref\n0 {size}\n0000000000 65535 f \n");
+        for n in 1..size {
+            out += &match at.get(&n) {
+                Some(o) => format!("{o:010} 00000 n \n"),
+                None => "0000000000 65535 f \n".to_string(),
+            };
+        }
+        out += &format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        out.into_bytes()
+    }
+
+    #[test]
+    fn a_pages_links_are_read_where_they_lie_and_where_they_go() {
+        // (PDFium as the build fetched it: scripts/fetch-pdfium.mjs)
+        let Ok(bindings) = Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(&library_dir())) else {
+            eprintln!("PDFium is not here: node scripts/fetch-pdfium.mjs");
+            return;
+        };
+        let pdfium: &'static Pdfium = Box::leak(Box::new(Pdfium::new(bindings)));
+        let cache = std::env::temp_dir().join(format!("meno-pdf-links-{}", std::process::id()));
+        std::fs::create_dir_all(&cache).unwrap();
+        let sha = "c".repeat(64);
+        std::fs::write(cache.join(format!("{sha}.pdf")), linked_pdf()).unwrap();
+        let mut docs = HashMap::new();
+        let (head, _) = answer(&mut docs, pdfium, &cache, &json!({"op": "links", "sha": sha, "page": 0})).unwrap();
+        let links = head["links"].as_array().unwrap();
+        assert_eq!(links.len(), 2);
+        // (from the page's top left, in points: its box 842 points tall)
+        let near = |v: &Value, want: f64| (v.as_f64().unwrap() - want).abs() < 0.5;
+        let place = &links[0];
+        assert_eq!(place["page"], json!(2));
+        assert!(near(&place["y"], 842.0 - 470.0));
+        let rect = place["rect"].as_array().unwrap();
+        assert!(near(&rect[0], 70.0) && near(&rect[1], 842.0 - 716.0) && near(&rect[2], 292.0) && near(&rect[3], 842.0 - 692.0));
+        assert_eq!(links[1]["uri"], json!("https://example.com/"));
+        let (none, _) = answer(&mut docs, pdfium, &cache, &json!({"op": "links", "sha": sha, "page": 1})).unwrap();
+        assert_eq!(none["links"], json!([]));
+        drop(docs);
+        let _ = std::fs::remove_dir_all(&cache);
     }
 
     #[test]

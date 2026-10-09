@@ -12,8 +12,39 @@ export const POINT = NOMINAL_BOND_LENGTH / 14.4;
 /** A rectangle on the page: its middle, and its width and height. */
 export type Sheet = { x: number; y: number; w: number; h: number };
 
-/** What of a PDF its layout needs: its pages' sizes, in points, where its top page's middle lies, which page is on top, and whether they are spread. */
-export type PdfPlace = { pages: readonly (readonly [number, number])[]; x: number; y: number; page: number; spread?: boolean };
+/** What of a PDF its layout needs: its pages' sizes, in points, where its top page's middle lies, which page is on top, whether they are spread, and whether it is made an icon. */
+export type PdfPlace = { pages: readonly (readonly [number, number])[]; x: number; y: number; page: number; spread?: boolean; icon?: boolean };
+
+/**
+ * The type a PDF's name is set in under its icon, in points: the drawing's
+ * labels' in ACS 1996's style. And how many times as tall as it the icon
+ * is: as a file's icon is to its name on a desktop - 64 points to 12 in
+ * the Finder, 48 pixels to 12 in Explorer.
+ */
+export const ICON_NAME_PT = 10;
+export const ICON_TO_NAME = 5;
+
+/** How tall a PDF made an icon is, in the page's units: five times its name's type, three and a half bonds - a small molecule's height as it is drawn. */
+export const ICON_HEIGHT = ICON_TO_NAME * ICON_NAME_PT * POINT;
+
+/** How wide an icon's name may be before it goes onto another line, in the page's units, as a file's under its icon. */
+export const ICON_NAME_WIDTH = 2 * ICON_HEIGHT;
+
+/** How much smaller than its printed size a PDF made an icon is drawn: its top page as tall as `ICON_HEIGHT`. */
+export function iconScale(p: PdfPlace): number {
+  const [, h] = p.pages[p.page] ?? p.pages[0] ?? [612, 792];
+  return ICON_HEIGHT / (h * POINT);
+}
+
+/** A sheet as it is drawn made `k` times its size about the PDF's middle - an icon's, or one on its way to being one. */
+export const shrunk = (s: Sheet, p: PdfPlace, k: number): Sheet => ({ x: p.x + (s.x - p.x) * k, y: p.y + (s.y - p.y) * k, w: s.w * k, h: s.h * k });
+
+/** Where a page of a PDF lies as it is drawn: on its icon, among its pages spread, or on top of its stack - none, where it is not to be seen. */
+export function shownSheet(p: PdfPlace, page: number): Sheet | null {
+  if (p.icon) return page === p.page ? shrunk(topSheet(p), p, iconScale(p)) : null;
+  if (p.spread) return spreadSheets(p)[page] ?? null;
+  return page === p.page ? topSheet(p) : null;
+}
 
 /** How many sheets show under the top one, at most, and how far each lies from the one over it (down and to the right), in the page's units. */
 export const UNDER_MOST = 4;
@@ -64,9 +95,10 @@ export function spreadSheets(p: PdfPlace): Sheet[] {
   return out;
 }
 
-/** What a PDF covers on the page, as it lies: its stack, or its pages spread. */
+/** What a PDF covers on the page, as it lies: its stack, its pages spread, or its icon. */
 export function pdfBounds(p: PdfPlace): { x0: number; y0: number; x1: number; y1: number } {
-  const sheets = p.spread ? spreadSheets(p) : [...stackSheets(p), topSheet(p)];
+  const stack = [...stackSheets(p), topSheet(p)];
+  const sheets = p.icon ? stack.map((s) => shrunk(s, p, iconScale(p))) : p.spread ? spreadSheets(p) : stack;
   return {
     x0: Math.min(...sheets.map((s) => s.x - s.w / 2)),
     x1: Math.max(...sheets.map((s) => s.x + s.w / 2)),

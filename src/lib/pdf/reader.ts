@@ -106,3 +106,36 @@ export function drawPart(ask: PartAsk, nearness: () => number = () => 0, wanted:
     pump();
   });
 }
+
+/** A link on a page: where it lies, in points from the page's top left, and where it goes - a page of the PDF and how far down it, in points; or a web page. */
+export type PdfLink = { rect: [number, number, number, number]; page?: number; y?: number | null; uri?: string };
+
+/** Each page's links, as they have come; asked for once. */
+const links = new Map<string, PdfLink[] | "asked">();
+
+/** A page's links, if they have come - asked for, the first time, and `came` called once they have. */
+export function linksOf(sha256: string, page: number, came: () => void = () => {}): PdfLink[] | null {
+  const key = `${sha256}:${page}`;
+  const had = links.get(key);
+  if (had && had !== "asked") return had;
+  if (!had && isTauri()) {
+    links.set(key, "asked");
+    // (once the PDF is held, if it is being held)
+    void Promise.resolve(holding.get(sha256))
+      .then(() => invoke<PdfLink[]>("pdf_links", { sha: sha256, page }))
+      .then((l) => {
+        links.set(key, Array.isArray(l) ? l : []);
+        came();
+      })
+      .catch(() => links.set(key, []));
+  }
+  return null;
+}
+
+/** The link, if any, at a point of a page, in points from its top left. */
+export function linkAt(l: readonly PdfLink[], x: number, y: number): PdfLink | null {
+  return l.find((k) => x >= k.rect[0] && x <= k.rect[2] && y >= k.rect[1] && y <= k.rect[3]) ?? null;
+}
+
+/** Whether a web page's address is one to open in the system's browser: the web's, or mail's. */
+export const isWebAddress = (uri: string) => /^(https?:\/\/|mailto:)/i.test(uri.trim());

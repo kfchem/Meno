@@ -20,7 +20,7 @@ import { createCaptionsSlice } from "./slices/captionsSlice";
 import { createPdfsSlice } from "./slices/pdfsSlice";
 import { createWorkflowSlice } from "./slices/workflowSlice";
 import { turnsAcross } from "./turnJournal";
-import { shownText } from "../utils/texts";
+import { COLUMN_WIDTH, shownPdf, shownText } from "../utils/texts";
 
 // Re-export types for backward compatibility
 export * from "./types";
@@ -97,10 +97,11 @@ export function connectStoreToDocument(
         }
         held.turns3d = turns3d;
       }
-      // (the text its column shows, as texts come and go: utils/texts)
+      // (the text or the PDF its column shows, as they come and go: utils/texts)
       const texts = shownText(prev.texts, mirrored.texts, prev.textShown);
-      const textsOpen = texts.shown != null && (texts.open ?? prev.textsOpen);
-      return { ...prev, ...mirrored, ...held, textShown: texts.shown, textsOpen };
+      const pdf = shownPdf(prev.pdfs, mirrored.pdfs, prev.pdfShown, texts);
+      const textsOpen = (texts.shown != null || pdf.shown != null) && (texts.open ?? pdf.open ?? prev.textsOpen);
+      return { ...prev, ...mirrored, ...held, textShown: texts.shown, pdfShown: pdf.shown, textsOpen };
     });
   sync();
   return doc.subscribe(sync);
@@ -116,6 +117,12 @@ export function createEditorStore(
     // (a canvas opened for a text shows it)
     textShown: doc.getState().texts?.slice(-1)[0]?.id ?? null,
     textsOpen: !!doc.getState().texts?.length,
+    cover: 0,
+    columnWidth: COLUMN_WIDTH,
+    pdfColumnWidth: null,
+    pdfShown: null,
+    litPdf: null,
+    pdfFlight: null,
 
     // Ephemeral view state: hover, gestures, camera requests, edit buffers.
     sel: { atoms: new Set<number>(), bonds: new Set<number>() },
@@ -174,7 +181,7 @@ export function createEditorStore(
     ...createMolecules3dSlice(doc, set, get),
     ...createTextsSlice(doc, set),
     ...createCaptionsSlice(doc, set),
-    ...createPdfsSlice(doc, set),
+    ...createPdfsSlice(doc, set, get),
     ...createWorkflowSlice(doc, set, get),
   }));
 

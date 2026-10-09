@@ -13,7 +13,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
 import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
-import { POINT, SPREAD_GAP } from "../../../lib/pdf/layout";
+import { ICON_NAME_PT, ICON_NAME_WIDTH, pdfBounds, POINT } from "../../../lib/pdf/layout";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
 import { newTextName } from "./utils/texts";
@@ -111,16 +111,36 @@ export function createStructureDocument(data?: unknown): DocumentStore<Structure
 }
 
 /** PDFs held, as they go on the page: the first's top page in the middle of `at`, the others to its right, a little apart. */
+/** A row of PDFs put down clear of those already on the page: moved along to the right, a place at a time, until none of them, nor their names, lies over another. */
+export function clearOfPdfs<T extends Omit<PdfItem, "id">>(row: T[], others: readonly Omit<PdfItem, "id">[]): T[] {
+  // (an icon's name is as wide as its room in a row)
+  const room = (p: Omit<PdfItem, "id">) => {
+    const b = pdfBounds(p);
+    return p.icon ? { ...b, x0: Math.min(b.x0, p.x - ICON_NAME_WIDTH / 2), x1: Math.max(b.x1, p.x + ICON_NAME_WIDTH / 2), y0: b.y0 - ICON_NAME_PT * POINT * 3 } : b;
+  };
+  const taken = others.map(room);
+  const step = ICON_NAME_WIDTH + NOMINAL_BOND_LENGTH;
+  for (let n = 0; n < 200; n++) {
+    const moved = row.map((p) => ({ ...p, x: p.x + n * step }));
+    if (!moved.some((p) => taken.some((t) => overlaps(room(p), t)))) return moved;
+  }
+  return row;
+}
+
+const overlaps = (a: { x0: number; x1: number; y0: number; y1: number }, b: { x0: number; x1: number; y0: number; y1: number }) =>
+  a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
 export function pdfsInRow(held: readonly unknown[], at: { x: number; y: number }): Omit<PdfItem, "id">[] {
   const out: Omit<PdfItem, "id">[] = [];
   let x = at.x;
   for (const h of held as Partial<PdfItem>[]) {
     const pages = Array.isArray(h?.pages) ? h.pages.filter((p): p is [number, number] => Array.isArray(p) && p.length === 2 && p.every((v) => Number.isFinite(v) && v > 0)) : [];
     if (typeof h?.name !== "string" || typeof h.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(h.sha256) || !pages.length) continue;
-    const w = pages[0][0] * POINT;
+    // (each an icon at first, room for its name beside the next)
+    const w = ICON_NAME_WIDTH;
     if (out.length) x += w / 2;
-    out.push({ name: h.name, sha256: h.sha256, pages, x, y: at.y, page: 0 });
-    x += w / 2 + SPREAD_GAP * 2;
+    out.push({ name: h.name, sha256: h.sha256, pages, x, y: at.y, page: 0, icon: true });
+    x += w / 2 + NOMINAL_BOND_LENGTH;
   }
   return out;
 }
@@ -1060,17 +1080,33 @@ export function addPdf(doc: StructureDocument, pdf: Omit<PdfItem, "id">): Struct
   return { ...doc, pdfs: [...(doc.pdfs ?? []), { ...pdf, id }], nextPdfId: id + 1 };
 }
 
-/** `doc` with a PDF moved, turned to another page, or spread - unchanged where it has no such PDF, or the page is none of its. */
-export function updatePdf(doc: StructureDocument, id: number, patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread">>): StructureDocument {
+/** `doc` with a PDF moved, turned to another page, spread, or made an icon - unchanged where it has no such PDF, or the page is none of its. */
+export function updatePdf(
+  doc: StructureDocument,
+  id: number,
+  patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread" | "icon">> & { reading?: PdfItem["reading"] | null },
+): StructureDocument {
   const pdf = doc.pdfs?.find((p) => p.id === id);
   if (!pdf) return doc;
   if (patch.page != null && (!Number.isInteger(patch.page) || patch.page < 0 || patch.page >= pdf.pages.length)) return doc;
-  const next = { ...pdf, ...patch };
+  const { reading, ...rest } = patch;
+  const next: PdfItem = { ...pdf, ...rest };
   if (next.spread === false) delete next.spread;
+  if (next.icon === false) delete next.icon;
+  // (read no longer; or read from where it was, no further than its last page, neither far smaller nor far larger)
+  if (reading === null) delete next.reading;
+  else if (reading) next.reading = readingOf(reading, pdf.pages.length);
   return { ...doc, pdfs: doc.pdfs!.map((p) => (p.id === id ? next : p)) };
 }
 
 /** `doc` without a PDF. */
+/** Where a PDF is read in the column, as far as it can be: its pages there, at a size between a quarter and eight times the column's width. */
+export function readingOf(r: { at: number; zoom: number }, pages: number): NonNullable<PdfItem["reading"]> {
+  const at = Number.isFinite(r.at) ? Math.min(Math.max(0, r.at), Math.max(0, pages - 1) + 0.999) : 0;
+  const zoom = Number.isFinite(r.zoom) ? Math.min(8, Math.max(0.25, r.zoom)) : 1;
+  return { at, zoom };
+}
+
 export function removePdf(doc: StructureDocument, id: number): StructureDocument {
   if (!doc.pdfs?.some((p) => p.id === id)) return doc;
   return { ...doc, pdfs: doc.pdfs.filter((p) => p.id !== id) };

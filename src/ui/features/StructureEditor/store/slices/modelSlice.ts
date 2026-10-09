@@ -320,8 +320,9 @@ export const createModelSlice = (
       // (a list open as it was saved, its row chosen and its surface's value)
       if (m.list) lists3d[i + 1] = { list: m.list.id, row: m.list.row, pointed: null, ...(m.list.iso != null ? { iso: m.list.iso } : {}) };
     });
-    // (and its column showing the text it showed, or closed)
-    set((prev: EditorState) => ({ ...prev, turns3d, frames3d, lists3d, textShown: texts[Math.max(shown, 0)]?.id ?? null, textsOpen: shown >= 0 }));
+    // (and its column showing the text or the PDF it showed, or closed)
+    const pdfShown = ws.pdfShown != null ? ws.pdfShown + 1 : null;
+    set((prev: EditorState) => ({ ...prev, turns3d, frames3d, lists3d, textShown: texts[Math.max(shown, 0)]?.id ?? null, pdfShown, textsOpen: shown >= 0 || pdfShown != null }));
   },
 
   /** A file opened over what the canvas holds: one step, arrow and all. */

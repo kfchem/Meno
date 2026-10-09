@@ -714,6 +714,23 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   stack at the size it is printed - a 14.4-point bond is a bond - or its
   pages spread; a small picture of each page shown at once, tiles at the
   screen's resolution asked for once the view is still, each fading in.
+  The pictures are the canvas's, shared by the stacks and the column
+  (`components/pdfPictures.tsx`): a tile drawn for one is drawn for both.
+- **In the column** (`components/PdfColumn.tsx`, `lib/pdf/column`): the
+  column of texts lies over the canvas's right side (`TextColumn.tsx`, which
+  says how much it covers: `cover`), and a PDF read there is drawn by the
+  canvas under its header. While one is, the canvas is drawn in three goes:
+  the page; the column's part, its own scene and camera, cut off where the
+  column is (a scissor); and a page on its way between them. Where the
+  column is read lives in its reader (`components/pdfColumnReader.ts`), one
+  a canvas, which the column's HTML moves - the wheel, a pinch, the keys, a
+  link - and the canvas eases and draws; it is kept with the PDF
+  (`reading`) once it rests, by amending the document rather than editing
+  it, so that it is no step to undo.
+- **Links** (`pdf_links`): each page's, read by PDFium when first wanted -
+  where each lies, in points from the page's top left as it is drawn
+  (`FPDF_PageToDevice`), and where it goes: a page and how far down it, or
+  a web page's address.
 
 ### Tauri commands
 
@@ -727,6 +744,7 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
 | `pdf_hold_path`, `pdf_hold_bytes` | `lib/pdf/reader.ts` | A PDF held in Meno's cache by its SHA-256; its pages' sizes (`pdf.rs`). |
 | `pdf_bytes` | `utils/workspace.ts` | A PDF held, as its bytes, for a workspace's file. |
 | `pdf_render` | `lib/pdf/reader.ts` | A part of a page drawn by PDFium, as a PNG. |
+| `pdf_links` | `lib/pdf/reader.ts` | A page's links: where each lies, and where it goes. |
 | `font_families` | `ui/fonts/typefaces.ts` | Every typeface installed (fontdb), for the label typeface picker. |
 | `font_file` | `ui/fonts/typefaces.ts` | One family's regular face as a font file of its own - out of its collection, its character map made plain (`fonts.rs`). |
 | `net_state` | `lib/net/network.ts` | Offline or not, what is allowed, tasks under way, recent connections. |
