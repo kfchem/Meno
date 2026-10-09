@@ -18,6 +18,8 @@ import { goToFound, runFind, stepFound } from "./components/pdfFind";
 import { FOUND_COLOR } from "./components/pdfMarks";
 import { placeBefore, selects } from "./utils/pdfSelection";
 import { dragWords, onSelected } from "./components/wordsDrag";
+import { dragBox, inBox } from "./components/boxDrag";
+import { figureAt, figuresHad, type Box } from "../../../lib/pdf/figures";
 import { linkAt, linksOf, type PdfLink } from "../../../lib/pdf/reader";
 import { followLink, goBack, isBackKey, readerOf } from "./components/pdfColumnReader";
 import { DOUBLE_CLICK_MS } from "./constants";
@@ -34,6 +36,8 @@ const NUMBER_STAYS_MS = 1200;
 const CLICK_PX = 4;
 /** How near the column's top or foot words being selected move it on, in pixels. */
 const EDGE_PX = 28;
+/** How small a box drawn may be, either way, in points: less, it is let go. */
+const MIN_BOX_PT = 6;
 
 /**
  * The texts the workspace holds, in a column beside the canvas (docs/
@@ -474,6 +478,22 @@ function PdfBody({ pdf }: { pdf: PdfItem }) {
     let clicks = { n: 0, t: 0, x: 0, y: 0 };
     // words selected, pressed: carried out once the pointer moves (components/wordsDrag)
     let lifting: { x: number; y: number; carried: boolean } | null = null;
+    // a box being drawn, from where it was pressed - in a figure, its box were it let go there
+    let boxing: { page: number; x: number; y: number; fig: Box | null; cx: number; cy: number; moved: boolean } | null = null;
+    // a box drawn, pressed: carried out once the pointer moves (components/boxDrag)
+    let carrying: { x: number; y: number; carried: boolean } | null = null;
+    /** How a point of a page lies on the screen now, for something carried out of it. */
+    const onScreen = () => {
+      const { l, top, left } = reader.seen();
+      const r = el.getBoundingClientRect();
+      return {
+        pxPerPoint: l.scale,
+        at: (page: number, x: number, y: number) => {
+          const p = l.pages[page] ?? l.pages[0];
+          return { x: r.left + p.x - left + x * l.scale, y: r.top + p.y - top + y * l.scale };
+        },
+      };
+    };
     const onMove = (e: PointerEvent) => {
       over = true;
       setOver(true);
@@ -485,17 +505,30 @@ function PdfBody({ pdf }: { pdf: PdfItem }) {
           const st = store.getState();
           const pdfNow = st.pdfs.find((x) => x.id === id);
           // (from where it was pressed, where the words lie on the screen now)
-          const { l, top, left } = reader.seen();
-          const r = el.getBoundingClientRect();
-          if (pdfNow && selects(st.pdfSel))
-            void dragWords(store, pdfNow, st.pdfSel, { x: lifting.x, y: lifting.y }, {
-              pxPerPoint: l.scale,
-              at: (page, x, y) => {
-                const p = l.pages[page] ?? l.pages[0];
-                return { x: r.left + p.x - left + x * l.scale, y: r.top + p.y - top + y * l.scale };
-              },
-            });
+          if (pdfNow && selects(st.pdfSel)) void dragWords(store, pdfNow, st.pdfSel, { x: lifting.x, y: lifting.y }, onScreen());
         }
+        return;
+      }
+      if (carrying) {
+        if (!carrying.carried && e.buttons & 1 && Math.hypot(e.clientX - carrying.x, e.clientY - carrying.y) >= CLICK_PX) {
+          carrying.carried = true;
+          const st = store.getState();
+          const pdfNow = st.pdfs.find((x) => x.id === id);
+          if (pdfNow && st.pdfBox) void dragBox(store, pdfNow, st.pdfBox, { x: carrying.x, y: carrying.y }, onScreen());
+        }
+        return;
+      }
+      if (boxing && e.buttons & 1) {
+        if (!boxing.moved && Math.hypot(e.clientX - boxing.cx, e.clientY - boxing.cy) < CLICK_PX) return;
+        boxing.moved = true;
+        // (near the column's top or foot, it goes on with the pointer)
+        if (q.sy < EDGE_PX) reader.scrollBy(0, -(EDGE_PX - q.sy) / 2, true);
+        else if (q.sy > reader.tall - EDGE_PX) reader.scrollBy(0, (q.sy - reader.tall + EDGE_PX) / 2, true);
+        // (on its own page, to its edge where the pointer has gone on to another)
+        const [w, h] = reader.sizes[boxing.page] ?? [0, 0];
+        const x = Math.min(Math.max(q.x, 0), w);
+        const y = q.page === boxing.page ? Math.min(Math.max(q.y, 0), h) : q.page > boxing.page ? h : 0;
+        store.getState().setPdfBox({ id, page: boxing.page, box: [Math.min(boxing.x, x), Math.min(boxing.y, y), Math.max(boxing.x, x), Math.max(boxing.y, y)] });
         return;
       }
       if (drawing && e.buttons & 1) {
@@ -546,7 +579,28 @@ function PdfBody({ pdf }: { pdf: PdfItem }) {
         lifting = { x: e.clientX, y: e.clientY, carried: false };
         return;
       }
+      // (on a box drawn, once: carried out, as the pointer moves)
+      const box = store.getState().pdfBox;
+      if (q.on && clicks.n === 1 && box?.id === id && inBox(box, q.page, q.x, q.y)) {
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        drawing = null;
+        carrying = { x: e.clientX, y: e.clientY, carried: false };
+        return;
+      }
       const letter = t ? letterNear(t, q.x, q.y) : null;
+      // in a figure, or where there are no words: a box drawn as the pointer goes - in a figure, let go where it
+      // was pressed, the figure's (two clicks and three are words', its labels' too)
+      const sha = shaOf();
+      const figures = q.on && sha ? figuresHad(sha, q.page, () => reader.redraw()) : null;
+      const fig = figures ? figureAt(figures, q.x, q.y) : null;
+      if (q.on && clicks.n === 1 && (fig || letter == null)) {
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        drawing = null;
+        boxing = { page: q.page, x: q.x, y: q.y, fig, cx: e.clientX, cy: e.clientY, moved: false };
+        return;
+      }
       if (!t || letter == null) {
         drawing = null;
         store.getState().setPdfSel(null);
@@ -574,6 +628,29 @@ function PdfBody({ pdf }: { pdf: PdfItem }) {
       if (lifted) {
         if (!lifted.carried) store.getState().setPdfSel(null);
         return;
+      }
+      // (a box pressed and let go where it was: it stays)
+      const carried = carrying;
+      carrying = null;
+      if (carried) return;
+      const boxed = boxing;
+      boxing = null;
+      if (boxed?.moved) {
+        // (a box drawn: kept - unless it is next to nothing)
+        const b = store.getState().pdfBox;
+        if (b && (b.box[2] - b.box[0] < MIN_BOX_PT || b.box[3] - b.box[1] < MIN_BOX_PT)) store.getState().setPdfBox(null);
+        return;
+      }
+      // (let go where it was pressed, in a figure - its figures come since, if they had not - its box; on a link, the link followed)
+      const sha = shaOf();
+      const fig = boxed && !linkUnder(e) ? (boxed.fig ?? (sha ? figureAt(figuresHad(sha, boxed.page) ?? [], boxed.x, boxed.y) : null)) : null;
+      if (boxed && fig) {
+        store.getState().setPdfBox({ id, page: boxed.page, box: fig });
+        return;
+      }
+      if (boxed) {
+        store.getState().setPdfBox(null);
+        store.getState().setPdfSel(null);
       }
       if (e.button !== 0 || !press || Math.hypot(e.clientX - press.x, e.clientY - press.y) > CLICK_PX) return;
       press = null;

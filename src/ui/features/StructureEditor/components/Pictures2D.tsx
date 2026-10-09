@@ -103,6 +103,8 @@ function useTexture(p: Pick<PictureItem, "sha256" | "media">, gl: THREE.WebGLRen
 export default function Pictures2D() {
   const pictures = useEditor((s) => s.pictures);
   const selPictures = useEditor((s) => s.selPictures);
+  // (a box carried out of a PDF, settling where it was let go: the picture it became, once it has)
+  const landing = useEditor((s) => s.pdfPicture?.landing ?? null);
   const hovered = useEditor((s) => s.hoveredPicture);
   const store = useEditorStore();
   const { camera, gl, invalidate, size } = useThree();
@@ -115,8 +117,11 @@ export default function Pictures2D() {
       newest.current = Math.max(newest.current ?? 0, top);
       return;
     }
-    const added = pictures.filter((p) => p.id > newest.current!);
+    // (one let go where the chemist put it - a box carried out of a PDF - stays as the view is)
+    const landing = store.getState().pdfPicture?.landing;
+    const added = pictures.filter((p) => p.id > newest.current! && p.id !== landing);
     newest.current = top;
+    if (!added.length) return;
     const pts = added.flatMap(cornersOf);
     const b = { x0: Math.min(...pts.map((q) => q.x)), x1: Math.max(...pts.map((q) => q.x)), y0: Math.min(...pts.map((q) => q.y)), y1: Math.max(...pts.map((q) => q.y)) };
     const cam = camera as THREE.OrthographicCamera;
@@ -139,13 +144,28 @@ export default function Pictures2D() {
   return (
     <group>
       {pictures.map((p, i) => (
-        <Picture key={p.id} p={p} z={Z + i * Z_STEP} selected={selPictures.has(p.id)} hovered={hovered === p.id} toWorld={toWorld} />
+        // (one landing there, unseen till then, but decoded meanwhile)
+        <Picture key={p.id} p={p} z={Z + i * Z_STEP} selected={selPictures.has(p.id)} hovered={hovered === p.id} hidden={p.id === landing} toWorld={toWorld} />
       ))}
     </group>
   );
 }
 
-function Picture({ p, z, selected, hovered, toWorld }: { p: PictureItem; z: number; selected: boolean; hovered: boolean; toWorld: (cx: number, cy: number) => Pt }) {
+function Picture({
+  p,
+  z,
+  selected,
+  hovered,
+  hidden,
+  toWorld,
+}: {
+  p: PictureItem;
+  z: number;
+  selected: boolean;
+  hovered: boolean;
+  hidden: boolean;
+  toWorld: (cx: number, cy: number) => Pt;
+}) {
   const store = useEditorStore();
   const { camera, gl, invalidate } = useThree();
   const texture = useTexture(p, gl);
@@ -248,7 +268,7 @@ function Picture({ p, z, selected, hovered, toWorld }: { p: PictureItem; z: numb
   const pad = LIT_PAD_PX * px;
   const now = performance.now();
   return (
-    <group position={[p.x, p.y, z]} rotation={[0, 0, p.turn ?? 0]}>
+    <group position={[p.x, p.y, z]} rotation={[0, 0, p.turn ?? 0]} visible={!hidden}>
       {/* (round it, not under it: a light under a picture shows through it at so near a depth) */}
       <group position={[0, 0, -Z_STEP / 2]}>
         {[

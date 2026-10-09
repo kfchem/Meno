@@ -1155,7 +1155,7 @@ export function picturesInRow(held: readonly PictureToAdd[], at: { x: number; y:
     const size = printedSize(h);
     const w = size.w * POINT;
     if (out.length) x += w / 2;
-    out.push({ name: h.name, sha256: h.sha256, media: h.media, px: [h.width, h.height], x, y: at.y, w, h: size.h * POINT });
+    out.push({ name: h.name, sha256: h.sha256, media: h.media, px: [h.width, h.height], x, y: at.y, w, h: size.h * POINT, ...(h.from ? { from: h.from } : {}) });
     x += w / 2 + NOMINAL_BOND_LENGTH;
   }
   return out;

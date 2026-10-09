@@ -23,9 +23,10 @@ export function createPicturesSlice(doc: DocumentStore<StructureDocument>, set: 
         else selPictures.add(id);
         return { ...prev, selPictures };
       }),
-    addPictures: (pictures: PictureToAdd[], at: { x: number; y: number }) => {
-      // (clear of what lies there already, not over it)
-      const row = ops.clearOfPictures(ops.picturesInRow(pictures, at), doc.getState());
+    addPictures: (pictures: PictureToAdd[], at: { x: number; y: number }, just = false) => {
+      // (clear of what lies there already, not over it - unless put down just there)
+      const inRow = ops.picturesInRow(pictures, at);
+      const row = just ? inRow : ops.clearOfPictures(inRow, doc.getState());
       if (!row.length) return [];
       const first = doc.getState().nextPictureId ?? 1;
       if (!doc.edit(row.length > 1 ? "add pictures" : "add picture", (d) => row.reduce(ops.addPicture, d))) return [];

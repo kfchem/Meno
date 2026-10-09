@@ -21,6 +21,19 @@ export function setCanvasPlace(store: EditorStore, place: CanvasPlace | null): v
   else places.delete(store);
 }
 
+/** Where on the page something carried out of a PDF and let go at a point of the window is put down: on the canvas, not on the PDF it came from (`home`) - else nowhere. */
+export function putDownAt(store: EditorStore, home: number, e: PointerEvent): { x: number; y: number } | null {
+  const onCanvas = overCanvasAt(store, e.clientX, e.clientY);
+  return e.type === "pointerup" && onCanvas && store.getState().hoveredPdf !== home ? (places.get(store)?.worldAt(e.clientX, e.clientY) ?? null) : null;
+}
+
+/** Whether a point of the window is over the canvas, not what lies over it. */
+export function overCanvasAt(store: EditorStore, x: number, y: number): boolean {
+  const place = places.get(store);
+  const over = document.elementFromPoint(x, y);
+  return !!place && !!over && over === place.canvas();
+}
+
 /** Whether a point of a page, in points from its top left, lies on the words selected there. */
 export function onSelected(t: PageText, sel: PdfSelection, page: number, x: number, y: number): boolean {
   const range = onPage(sel, page, t.codes.length);
@@ -56,17 +69,12 @@ export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "id" | "s
   let pointer = { x: at.x, y: at.y };
   let letGo: PointerEvent | null = null;
   let flight: WordsFlight | null = null;
-  const overCanvas = (x: number, y: number) => {
-    const canvas = places.get(store);
-    const over = document.elementFromPoint(x, y);
-    return !!canvas && !!over && over === canvas.canvas();
-  };
   const onMove = (e: PointerEvent) => {
     pointer = { x: e.clientX, y: e.clientY };
     if (!flight) return;
     flight.now.x = e.clientX;
     flight.now.y = e.clientY;
-    flight.now.over = overCanvas(e.clientX, e.clientY);
+    flight.now.over = overCanvasAt(store, e.clientX, e.clientY);
   };
   const stop = () => {
     window.removeEventListener("pointermove", onMove);
@@ -104,10 +112,7 @@ export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "id" | "s
   });
 
   /** Where on the page words let go are put down: on the canvas, not on the PDF they came from - else nowhere, and back. */
-  const putAt = (e: PointerEvent) => {
-    const home = store.getState().hoveredPdf === pdf.id;
-    return e.type === "pointerup" && !home && overCanvas(e.clientX, e.clientY) ? (places.get(store)?.worldAt(e.clientX, e.clientY) ?? null) : null;
-  };
+  const putAt = (e: PointerEvent) => putDownAt(store, pdf.id, e);
   /** Let go: words on the page where they are held; or back. */
   function land(f: WordsFlight, e: PointerEvent) {
     const world = putAt(e);
@@ -131,7 +136,7 @@ export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "id" | "s
     from: { left: corner.x, top: corner.y, k: screen.pxPerPoint / POINT },
     grab: { x: at.x, y: at.y },
     start: performance.now(),
-    now: { x: pointer.x, y: pointer.y, over: overCanvas(pointer.x, pointer.y), held: null, end: null },
+    now: { x: pointer.x, y: pointer.y, over: overCanvasAt(store, pointer.x, pointer.y), held: null, end: null },
     landing: null,
   };
   store.getState().setPdfWords(flight);

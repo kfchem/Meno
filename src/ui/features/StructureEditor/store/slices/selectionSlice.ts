@@ -86,8 +86,8 @@ export function createSelectionSlice(set: SetState) {
     /** Nothing selected, and no atom of a molecule in 3D chosen. */
     clearSel: () =>
       set((prev: EditorState) =>
-        prev.sel.atoms.size || prev.sel.bonds.size || prev.sel3d.size || prev.chosen3d || prev.selFlow.sets.size || prev.selFlow.steps.size || prev.pdfSel || prev.selPictures.size
-          ? { ...prev, sel: none(), selAnchor: null, sel3d: new Set<number>(), chosen3d: null, selFlow: noFlow(), pdfSel: null, selPictures: new Set<number>() }
+        prev.sel.atoms.size || prev.sel.bonds.size || prev.sel3d.size || prev.chosen3d || prev.selFlow.sets.size || prev.selFlow.steps.size || prev.pdfSel || prev.pdfBox || prev.selPictures.size
+          ? { ...prev, sel: none(), selAnchor: null, sel3d: new Set<number>(), chosen3d: null, selFlow: noFlow(), pdfSel: null, pdfBox: null, selPictures: new Set<number>() }
           : prev,
       ),
 

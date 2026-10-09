@@ -124,6 +124,22 @@ describe("pictures on the page", () => {
     expect([...state().selPictures]).toEqual([state().pictures[1].id]);
   });
 
+  it("cut out of a PDF keep where they came from, saved, copied and read back; put down just where they were let go", async () => {
+    const { store, state } = editor();
+    const from = { sha256: "c".repeat(64), page: 2, box: [72, 100, 300, 260] as [number, number, number, number] };
+    const pic = { ...(await held("figure.png", 96, 96, 9)), from };
+    state().addPictures([pic], { x: 0, y: 0 });
+    // (put down just where it was let go, over the first)
+    const [id] = state().addPictures([pic], { x: 0, y: 0 }, true);
+    const second = state().pictures.find((p) => p.id === id)!;
+    expect(second).toMatchObject({ x: 0, y: 0, from });
+    expect(state().pictures[0].x).toBe(0);
+    expect(readWorkspace(workspaceText(store.getState()))?.drawn.pictures?.[0].from).toEqual(from);
+    expect(readRecord(recordText({ atoms: [], bonds: [], pictures: [second] }))?.pictures?.[0].from).toEqual(from);
+    // (a source that does not read is left out, not the picture)
+    expect(readRecord(recordText({ atoms: [], bonds: [], pictures: [{ ...second, from: { ...from, box: [5, 5, 1, 1] } }] }))?.pictures?.[0].from).toBeUndefined();
+  });
+
   it("have corners where they are turned to", () => {
     const c = cornersOf({ x: 1, y: 2, w: 4, h: 2, turn: Math.PI / 2 });
     expect(c[0].x).toBeCloseTo(2);

@@ -107,8 +107,37 @@ export function drawPart(ask: PartAsk, nearness: () => number = () => 0, wanted:
   });
 }
 
+/** The most pixels a box of a page is drawn with, as a picture: past it, its resolution is lowered to fit. */
+const MOST_BOX_PIXELS = 48_000_000;
+
+/**
+ * A box of a page - left, top, right, bottom, in points from its top left -
+ * drawn by PDFium as a PNG at `dpi` (lowered where it would come to more
+ * than `MOST_BOX_PIXELS`): its bytes, its size in pixels, and the
+ * resolution it was drawn at. What a figure taken out of a PDF is.
+ */
+export async function boxPicture(sha256: string, page: number, box: readonly [number, number, number, number], dpi: number): Promise<{ png: Uint8Array; width: number; height: number; dpi: number }> {
+  await holding.get(sha256);
+  const [x0, y0, x1, y1] = box;
+  const inches = ((x1 - x0) / 72) * ((y1 - y0) / 72);
+  const at = Math.min(dpi, Math.sqrt(MOST_BOX_PIXELS / Math.max(inches, 1e-6)));
+  const scale = at / 72;
+  const buf = await invoke<ArrayBuffer>("pdf_render", {
+    sha: sha256,
+    page,
+    scale,
+    x: Math.floor(x0 * scale),
+    y: Math.floor(y0 * scale),
+    w: Math.max(1, Math.ceil((x1 - x0) * scale)),
+    h: Math.max(1, Math.ceil((y1 - y0) * scale)),
+    packed: true,
+  });
+  const head = new DataView(buf, 0, 16);
+  return { png: new Uint8Array(buf, 16), width: head.getUint32(0, true), height: head.getUint32(4, true), dpi: at };
+}
+
 /** A link on a page: where it lies, in points from the page's top left, and where it goes - a page of the PDF and how far down it, in points; or a web page. */
-export type PdfLink = { rect: [number, number, number, number]; page?: number; y?: number | null; uri?: string };
+export type PdfLink ={ rect: [number, number, number, number]; page?: number; y?: number | null; uri?: string };
 
 /** Each page's links, as they have come; asked for once. */
 const links = new Map<string, PdfLink[] | "asked">();
