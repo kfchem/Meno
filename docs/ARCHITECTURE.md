@@ -179,6 +179,7 @@ what a drag there does, not what grabs it, and none is a hand:
 | `turning`, the same in Meno's accent | while it turns | `grabbing` |
 | `move`, four arrowheads | over a molecule in 3D selected, which a drag moves, and while it moves | `move` |
 | `sideways`, a double arrowhead | a slider, and a chip's bars, dragged along | `ew-resize` |
+| `corner-down`, `corner-up`, a double arrowhead aslant | a selected picture's corner, which a drag makes larger or smaller, as the corner points on the screen | `nwse-resize`, `nesw-resize` |
 
 - **One place**: `ui/theme/cursors.ts` draws each as SVG on a 24-pixel
   grid, dark with a white edge to be seen on anything, its spot in the
@@ -744,6 +745,29 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   where each lies, in points from the page's top left as it is drawn
   (`FPDF_PageToDevice`), and where it goes: a page and how far down it, or
   a web page's address.
+
+### Pictures
+
+A picture on the page (docs/PDF.md, *A picture*, step 4a) is an image the
+window decodes; nothing of it goes through Rust but the clipboard.
+
+- **Held by its SHA-256** for the session (`lib/picture/held`): its bytes,
+  what the document's `PictureItem` names, what a workspace's file keeps,
+  and what a copy carries. `lib/picture/image` reads what it is, its size
+  in pixels and its resolution from its headers, and the size it would be
+  printed at; `utils/pictures` decodes it as the window shows it
+  (`createImageBitmap`), and makes a PNG of a JPEG or of a Windows bitmap
+  read off the clipboard (`lib/binary/dib` `rgbaOfDib`).
+- **Drawn** by `components/Pictures2D.tsx`: a texture each, shared by
+  SHA-256 and let go once nothing draws it, on a plane turned and scaled
+  as the picture is; under the drawing and over the PDFs, each one put
+  there later a step over the one before in depth. Its frame and corner
+  handles, and its hold's light (`components/HeldLight.tsx`, shared with
+  the PDFs), are drawn in its own turned frame.
+- **Selected** with the rest (`selPictures`): a box or a lasso takes those
+  whose middle it holds (`molecules3dIn`), a dragged selection carries
+  them (`utils/dragSelection`, `MarkPlaces.pictures`), and the selection's
+  handle turns them about its middle with it (`Selection2D`).
 
 ### Tauri commands
 
