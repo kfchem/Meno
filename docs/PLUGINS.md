@@ -215,12 +215,14 @@ The same for every plugin and for Meno's own parts:
   - `prepare {step, entries, options, cores}` and `collect {step,
     entries, options, files, log, ended}` - a kind of step its program
     does (WORKFLOWS.md, *What changes in the contract*): the jobs Meno is
-    to run, and what one gave, read back;
+    to run - each its program and arguments, its input files, and, where
+    its program reads one of them as its standard input, which
+    (`stdin`: Gaussian's) - and what one gave, read back;
   - `collect` may answer, for each entry, not an output but which of
     what the job wrote is an output of a kind Meno's readers read -
-    `{"read": [{"kind": "orca", "log": true, "name": "water.out"}]}`, or
-    a file it read back - for them to read as an opened one is (ORCA's,
-    Gaussian's);
+    `{"read": [{"kind": "orca", "log": true, "name": "water.out"}]}` - or
+    a file it read back, for them to read as an opened one is (ORCA's and
+    Gaussian's: what each printed);
   - `run {step, entries, options, holds}` - a kind of step it does at
     once, in its worker, with no job: the entries it kept, by their
     place (RDKit's *Duplicates*). `holds` says whether they came as a

@@ -74,6 +74,10 @@ pub struct JobSpec {
     pub name: String,
     pub program: String,
     pub args: Vec<String>,
+    /// A file in its folder that it reads as its input (its standard input) -
+    /// Gaussian's, run as `g16 <input`; none, it reads nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stdin: Option<String>,
     /// What it is given beside the environment its runner was started in.
     pub env: BTreeMap<String, String>,
     /// How many jobs may run at once, as it was when this one was asked for.
@@ -356,11 +360,16 @@ impl Drop for Program {
 
 fn spawn_program(dir: &Path, spec: &JobSpec) -> std::io::Result<Program> {
     let log = OpenOptions::new().create(true).append(true).open(dir.join(LOG))?;
+    let input = match &spec.stdin {
+        None => Stdio::null(),
+        Some(name) if inside_name(name) => Stdio::from(File::open(dir.join(WORK).join(name))?),
+        Some(name) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("not a file in its folder: {name}"))),
+    };
     let mut cmd = Command::new(&spec.program);
     cmd.args(&spec.args)
         .envs(&spec.env)
         .current_dir(dir.join(WORK))
-        .stdin(Stdio::null())
+        .stdin(input)
         .stdout(log.try_clone()?)
         .stderr(log);
     #[cfg(unix)]
@@ -801,6 +810,9 @@ pub struct JobAsk {
     pub args: Vec<String>,
     #[serde(default)]
     pub files: Vec<JobFile>,
+    /// One of its files, given to its program as what it reads (`JobSpec::stdin`).
+    #[serde(default)]
+    pub stdin: Option<String>,
     #[serde(default)]
     pub slots: Option<u32>,
     #[serde(default)]
@@ -816,6 +828,9 @@ pub async fn job_start(app: AppHandle, net: State<'_, crate::net::Net>, payload:
     let data = crate::app_data_dir(&app)?;
     if !plugin_id(&payload.plugin) {
         return Err(format!("not a plugin: {}", payload.plugin));
+    }
+    if let Some(name) = payload.stdin.as_deref().filter(|n| !payload.files.iter().any(|f| f.name == *n)) {
+        return Err(format!("a job reads only a file written for it: {name}"));
     }
     let plugin_dir = crate::resource_path(&app, &Path::new("resources/plugins").join(&payload.plugin))?;
     let found = match installed_program(&plugin_dir, &payload.plugin, &payload.program, payload.path.as_deref())? {
@@ -847,6 +862,7 @@ pub async fn job_start(app: AppHandle, net: State<'_, crate::net::Net>, payload:
         name: payload.program.clone(),
         program: found.program.to_string_lossy().into_owned(),
         args: payload.args,
+        stdin: payload.stdin,
         env,
         slots: payload.slots.unwrap_or(1).clamp(1, 64),
         created: now_ms(),
@@ -992,6 +1008,7 @@ mod tests {
             name: "shell".into(),
             program,
             args: vec![flag.into(), script.into()],
+            stdin: None,
             env: BTreeMap::from([("MENO_JOB_SAYS".into(), "hello".into())]),
             slots,
             created: now_ms(),
@@ -1038,6 +1055,31 @@ mod tests {
         let r = current_record(&bad).unwrap();
         assert_eq!((r.state, r.code), (JobState::Failed, Some(3)));
         assert_eq!(read_log(&bad, 0, LOG_MOST).0.trim_end(), "nope");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    const READS: &str = "cat";
+    #[cfg(windows)]
+    const READS: &str = "sort";
+
+    #[test]
+    fn gives_its_program_a_file_of_its_own_to_read() {
+        let root = temp();
+        let dir = shell(&root, READS, 1);
+        let spec = JobSpec { stdin: Some("input.txt".into()), ..read_spec(&dir).unwrap() };
+        fs::write(dir.join(SPEC), serde_json::to_string(&spec).unwrap()).unwrap();
+        assert_eq!(run_job(&dir), 0);
+        assert_eq!(read_log(&dir, 0, LOG_MOST).0.trim_end(), "input");
+
+        // (a file not in its folder: it never starts)
+        let away = shell(&root, READS, 1);
+        let spec = JobSpec { stdin: Some("../job.json".into()), ..read_spec(&away).unwrap() };
+        fs::write(away.join(SPEC), serde_json::to_string(&spec).unwrap()).unwrap();
+        run_job(&away);
+        let r = current_record(&away).unwrap();
+        assert_eq!(r.state, JobState::Failed);
+        assert!(r.why.unwrap().contains("not a file in its folder"));
         let _ = fs::remove_dir_all(root);
     }
 

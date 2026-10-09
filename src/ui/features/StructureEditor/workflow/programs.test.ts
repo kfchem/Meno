@@ -41,6 +41,9 @@ describe("the jobs a plugin prepares", () => {
 
   it("are taken as they are where they can be run: each entry in one, programs by name, files inside the job's folder", () => {
     expect(readPrepared({ jobs: [job, { ...job, entries: [1] }] }, 2)).toEqual([job, { ...job, entries: [1] }]);
+    // (its program given one of its files to read: Gaussian's, run as `g16 <input`)
+    const read = { ...job, program: "g16", args: [], stdin: "input.xyz" };
+    expect(readPrepared({ jobs: [read] }, 1)).toEqual([read]);
   });
 
   it("are refused where they cannot", () => {
@@ -54,6 +57,10 @@ describe("the jobs a plugin prepares", () => {
       { ...job, files: [{ name: "/etc/passwd", text: "" }] },
       { ...job, reads: ["../../secret"] },
       { ...job, args: "--opt" },
+      // (what its program reads must be a file written for it)
+      { ...job, stdin: "other.xyz" },
+      { ...job, stdin: "../input.xyz" },
+      { ...job, stdin: 1 },
     ])
       expect(readPrepared({ jobs: [bad] }, 1)).toBe("It prepared a job Meno cannot run");
   });

@@ -9,7 +9,7 @@ import { canWire, givesOf, inputOf, resultOf, stateOf, stepsBefore } from "./flo
 import { setList } from "./list";
 import { KCAL_PER_HARTREE, boltzmann, runMeno } from "./meno";
 import { addSet, addStep, connect, moveSet, removeSet, removeStep, removeWire, updateStep } from "./model";
-import { runStep, type RunWith } from "./run";
+import { laidOver, placeResults, runStep, type RunWith } from "./run";
 import { offeredSteps } from "./offered";
 import { doerOf } from "./doers";
 import { pluginById } from "../../../../lib/calc/catalog";
@@ -404,5 +404,35 @@ describe("the selection as a set", () => {
     expect(f.x1).toBeGreaterThan(1.8);
     // (room under its tab)
     expect(f.y1 - 0).toBeGreaterThan(0 - f.y0);
+  });
+});
+
+describe("results laid over what went in", () => {
+  const into = (m: Omit<Molecule3D, "id">, id: number) => setEntries([{ ...m, id }], "molecules");
+
+  it("turns each the way that lays it over the entry of its atoms nearest to it - then as that one's molecule is turned", () => {
+    const water = bent({ x: 0, y: 0 });
+    const more = into(bent({ x: 0, y: 0 }, 2), 7)[1];
+    const entries = [...into(water, 4), more, ...into(bent({ x: 0, y: 0 }, 1, undefined, 0.4, "S"), 9)];
+    // (water given back turned a half turn about z: its atoms where the half turn takes them)
+    const back = { atoms: water.atoms.map((a) => ({ ...a, x: -a.x, y: -a.y })) };
+    const [t] = laidOver([back], entries, () => undefined);
+    expect(t![0]).toBeCloseTo(0, 6);
+    expect(t![1]).toBeCloseTo(0, 6);
+    expect(Math.abs(t![2])).toBeCloseTo(1, 6);
+    // (as the molecule it came from is turned, after: a turn of its own composed with the half turn)
+    const [u] = laidOver([back], entries, (e) => (e.from === 4 ? [1, 0, 0, 0] : undefined));
+    expect(u!.map((v) => Math.abs(v))).toEqual([expect.closeTo(0, 6), expect.closeTo(1, 6), expect.closeTo(0, 6), expect.closeTo(0, 6)]);
+    // (no entry of its atoms: left as it is)
+    expect(laidOver([{ atoms: back.atoms.map((a) => ({ ...a, el: "C" })) }], entries, () => undefined)).toEqual([undefined]);
+  });
+
+  it("gives each molecule room as it will be turned", () => {
+    let doc = addStep(page(), "optimise", 20, 0);
+    doc = connect(doc, { set: 1 }, 2);
+    const turns: unknown[] = [];
+    const w = { extentOf: (_m: unknown, turn?: unknown) => (turns.push(turn), { w: 1, h: 1 }) };
+    placeResults(doc, doc.steps![0], { molecules: [bent({ x: 0, y: 0 })], aside: [], holds: "molecules" }, w, [[0, 0, 1, 0]]);
+    expect(turns).toEqual([[0, 0, 1, 0]]);
   });
 });

@@ -143,14 +143,20 @@ ENTRY = {**WATER, "charge": 0, "multiplicity": 1}
 FAILED = """ Some atoms are too close together.
  Error termination via Lnk1e in /Applications/g16/l202.exe at Thu Oct  8 12:00:00 2026.
 """
+# (a run whose link died: its output stops where it was, with no termination line)
+DIED = """ Harmonic frequencies (cm**-1), IR intensities (KM/Mole)
+
+ Berny optimization.
+"""
 
 
 class Steps(unittest.TestCase):
-    def test_a_job_for_each_entry_run_as_g16_job_name(self):
+    def test_a_job_for_each_entry_run_as_g16_with_its_input_as_standard_input(self):
         jobs = ask("prepare", step="optimise", entries=[ENTRY, {**ENTRY, "name": "water 2"}], options=step_defaults("optimise"), cores=4)["jobs"]
         self.assertEqual(len(jobs), 2)
         job = jobs[0]
-        self.assertEqual((job["entries"], job["program"], job["args"], job["reads"]), ([0], "g16", ["input"], ["input.log"]))
+        # ("g16 <input-file >output-file": its output what it prints, the job's log)
+        self.assertEqual((job["entries"], job["program"], job["args"], job["stdin"], job["reads"]), ([0], "g16", [], "input.gjf", []))
         text = job["files"][0]["text"]
         self.assertEqual(job["files"][0]["name"], "input.gjf")
         lines = text.splitlines()
@@ -183,11 +189,14 @@ class Steps(unittest.TestCase):
         self.assertEqual(manifest["installed"][0]["name"], "g16")
 
     def test_its_output_is_read_by_meno_s_readers_and_a_failure_says_why(self):
-        read = ask("collect", step="optimise", entries=[ENTRY], options={}, files={"input.log": " Normal termination of Gaussian 16"}, log="", ended="done")
-        self.assertEqual(read, {"read": [{"kind": "gaussian", "file": "input.log", "name": "water.log"}]})
-        why = ask("collect", step="optimise", entries=[ENTRY], options={}, files={"input.log": FAILED}, log="", ended="failed")
+        read = ask("collect", step="optimise", entries=[ENTRY], options={}, files={}, log=" Normal termination of Gaussian 16", ended="done")
+        self.assertEqual(read, {"read": [{"kind": "gaussian", "log": True, "name": "water.log"}]})
+        why = ask("collect", step="optimise", entries=[ENTRY], options={}, files={}, log=FAILED, ended="failed")
         self.assertEqual(why, {"why": "Some atoms are too close together."})
-        self.assertEqual(ask("collect", step="energy", entries=[ENTRY], options={}, files={}, log="", ended="stopped"), {"why": "Gaussian said nothing"})
+        # (a link that dies says nothing of why: what it printed last is said)
+        died = ask("collect", step="frequencies", entries=[ENTRY], options={}, files={}, log=DIED, ended="failed")
+        self.assertEqual(died, {"why": "Gaussian stopped without saying why, after: Berny optimization."})
+        self.assertEqual(ask("collect", step="energy", entries=[ENTRY], options={}, files={}, log="", ended="failed"), {"why": "Gaussian said nothing"})
 
 
 if __name__ == "__main__":

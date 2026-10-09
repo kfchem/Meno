@@ -18,11 +18,11 @@ import { blocksOf, moleculeOf } from "../../chem/make3d";
 import { byOf, installedFor, optionsFor, programsFor } from "../../workflow/doers";
 import { setEntries, type SetEntry } from "../../workflow/entries";
 import { findSet, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "../../workflow/flow";
-import { kindInfo, optionsOf, type SetKind } from "../../workflow/kinds";
+import { kindInfo, optionsOf, type SetKind, type StepKind } from "../../workflow/kinds";
 import { setRan, setRunning } from "../../workflow/model";
 import { clock, conformersWorked, doneSaid, jobEntries, notFound, pluginEntry, readCollected, readKept, readPrepared, workedOf, type ToRead } from "../../workflow/programs";
-import { keepRun, runStep as runMenoStep, showRun, whyNot, withResults, type RunWith, type Worked } from "../../workflow/run";
-import type { EditorState, JobSeen, StepJob, StepRan } from "../types";
+import { keepRun, laidOver, LAID_OVER, resultsOf, runStep as runMenoStep, showRun, whyNot, withResults, type RunResults, type RunWith, type Worked } from "../../workflow/run";
+import type { EditorState, JobSeen, StepJob, StepRan, Turn3D } from "../types";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -122,14 +122,35 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     if (!step) return;
     const before = new Set((d.molecules3d ?? []).map((m) => m.id));
     // (what it did before kept among its runs)
-    if (!worked.length) doc.edit("run", (x) => setRan(keepRun(x, stepOf(x, id)!), id, ran));
-    else doc.edit("results", (x) => setRan(withResults(keepRun(x, stepOf(x, id)!), step, { ok: true, holds, kept: worked, aside, said: ran.said }, w), id, ran));
+    if (!worked.length) return void doc.edit("run", (x) => setRan(keepRun(x, stepOf(x, id)!), id, ran));
+    const outcome = { ok: true as const, holds, kept: worked, aside, said: ran.said };
+    const turns = turnsFor(d, id, ran.kind ?? step.kind, resultsOf(outcome));
+    doc.edit("results", (x) => setRan(withResults(keepRun(x, stepOf(x, id)!), step, outcome, w, turns), id, ran));
     atTheirEnds(before);
+    turnNew(before, turns);
   }
 
   /** Molecules new on the page that are an optimisation's path, shown at their ends. */
   function atTheirEnds(before: ReadonlySet<number>) {
     for (const m of doc.getState().molecules3d ?? []) if (!before.has(m.id) && m.path && m.frames?.length) get().setFrame3d(m.id, m.frames.length);
+  }
+
+  /** How a step's results are first turned, where they are what came in worked out: each laid over what it was worked out from, turned as that is (workflow/run `laidOver`). */
+  function turnsFor(d: StructureDocument, id: number, kind: StepKind, results: RunResults): (Turn3D | undefined)[] | undefined {
+    const input = inputOf(d, id);
+    if (!LAID_OVER.includes(kind) || !input || input.holds === "structures" || results.holds === "conformers") return undefined;
+    const turns = get().turns3d;
+    return laidOver(results.molecules, setEntries(input.molecules, input.holds), (e) => (e.from != null ? turns[e.from] : undefined));
+  }
+
+  /** Molecules new on the page, in the order they were put down, turned as `turns` says. */
+  function turnNew(before: ReadonlySet<number>, turns: readonly (Turn3D | undefined)[] | undefined) {
+    if (!turns) return;
+    const made = (doc.getState().molecules3d ?? []).filter((m) => !before.has(m.id));
+    made.forEach((m, i) => {
+      const turn = turns[i];
+      if (turn) get().setTurn3d(m.id, turn);
+    });
   }
 
   /** The steps after a step: those that take what it gives, and those after them. */
@@ -286,7 +307,8 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     try {
       for (const p of prepared) {
         const path = paths.get(p.program);
-        jobs.push({ id: await startJob({ plugin: plugin.id, program: p.program, args: p.args, files: p.files, slots, cores, ...(path ? { path } : {}) }), entries: p.entries, reads: p.reads });
+        const ask = { plugin: plugin.id, program: p.program, args: p.args, files: p.files, ...(p.stdin ? { stdin: p.stdin } : {}), slots, cores, ...(path ? { path } : {}) };
+        jobs.push({ id: await startJob(ask), entries: p.entries, reads: p.reads });
       }
     } catch (e) {
       for (const j of jobs) void stopJob(j.id).catch(() => {});
@@ -518,8 +540,10 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
     },
     showRun: (id: number, index: number) => {
       const was = new Set((doc.getState().molecules3d ?? []).map((m) => m.id));
-      doc.edit("show run", (x) => showRun(x, id, index, w));
+      let turns: (Turn3D | undefined)[] | undefined;
+      doc.edit("show run", (x) => showRun(x, id, index, w, (results, kind) => (turns = turnsFor(x, id, kind, results))));
       atTheirEnds(was);
+      turnNew(was, turns);
     },
     showStepLog: async (id: number) => {
       const step = stepOf(doc.getState(), id);

@@ -2,6 +2,7 @@ import { Html } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import type { ComponentProps, RefObject } from "react";
 import { usePageHtmlLayer } from "./coverLayer";
+import { pageHtmlStyle } from "./pageHtmlStyle";
 
 /**
  * drei's Html, laid over the canvas only once the canvas's events are
@@ -15,5 +16,5 @@ export default function PageHtml(props: ComponentProps<typeof Html>) {
   const connected = useThree((s) => s.events.connected);
   // (in the layer cut off where the column begins, where there is one: coverLayer)
   const layer = usePageHtmlLayer();
-  return connected ? <Html {...(layer ? { portal: layer as RefObject<HTMLElement> } : {})} {...props} /> : null;
+  return connected ? <Html {...(layer ? { portal: layer as RefObject<HTMLElement> } : {})} {...props} style={pageHtmlStyle(props)} /> : null;
 }

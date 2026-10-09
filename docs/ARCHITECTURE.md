@@ -401,7 +401,11 @@ not taken from either.
   Meno's table of kinds; Meno does the steps on entries alone
   (`workflow/meno.ts`, the RMSD in `workflow/rmsd.ts`), and a run
   (`workflow/run.ts`) puts what it gave in a result set to the right of
-  its step, in one edit.
+  its step, in one edit. What came in, worked out by a program (*Optimise*,
+  *Energy*, *Frequencies*), is then turned in the view (`turns3d`) to lie
+  over what it was worked out from (`laidOver`, Horn's quaternion in
+  `utils/align3d`), room made for it so turned: a program may hand a
+  molecule back turned (Gaussian's standard orientation).
 - **Drawn** by `components/Workflow2D.tsx`: wires are the canvas's own
   ribbons; sets, step cards (`workflow/SetFrame.tsx`, `StepCard.tsx`) and
   ports are HTML on **one** layer laid on the page at its scale (drei's
@@ -481,7 +485,9 @@ closes*).
   (`File::lock`): the earliest asked for among those waiting starts when
   fewer are running than it allows (`slots`, Settings' *Jobs at once* when
   it was asked for).
-- **Its program** runs in `work/`, its output and errors in `log.txt`, in a
+- **Its program** runs in `work/`, its output and errors in `log.txt` -
+  given one of its input files as what it reads, where its plugin says so
+  (`stdin`: Gaussian's, run as `g16 <input`), else nothing - in a
   process group of its own (macOS, Linux) or a job object that kills what
   is in it when it closes (Windows), so that *Stop* - a `stop` file the
   runner looks for - stops it and everything it started: asked, then made

@@ -38,8 +38,13 @@ export function pluginEntry(e: SetEntry): PluginEntry {
   return { ...molecule, charge: Number(known.charge), multiplicity: Number(known.multiplicity) };
 }
 
-/** A job as a plugin prepares it: the entries it is for, by their place; its program, by name; its arguments; its input files; and the files it reads back. */
-export type Prepared = { entries: number[]; program: string; args: string[]; files: JobFile[]; reads: string[] };
+/**
+ * A job as a plugin prepares it: the entries it is for, by their place; its
+ * program, by name; its arguments; its input files, and the one of them its
+ * program reads as its input, where it reads one (Gaussian's, run as
+ * `g16 <input`); and the files it reads back.
+ */
+export type Prepared = { entries: number[]; program: string; args: string[]; files: JobFile[]; stdin?: string; reads: string[] };
 
 /** A file's name in a job's folder: inside it, never above it. */
 const inside = (name: string) => !!name && name.length <= 200 && !name.startsWith("/") && !/^[A-Za-z]:/.test(name) && name.split(/[\\/]/).every((p) => p && p !== "." && p !== "..");
@@ -67,9 +72,12 @@ export function readPrepared(raw: unknown, count: number): Prepared[] | string {
           return typeof g?.name === "string" && inside(g.name) && typeof g.text === "string" ? [{ name: g.name, text: g.text }] : [];
         })
       : [];
-    if (!entries?.length || !program || !args || !reads || reads.some((n) => !inside(n)) || files.length !== (r?.files as unknown[]).length) return "It prepared a job Meno cannot run";
+    const stdin = r?.stdin;
+    const given = stdin === undefined || (typeof stdin === "string" && files.some((f) => f.name === stdin));
+    if (!entries?.length || !program || !args || !reads || reads.some((n) => !inside(n)) || files.length !== (r?.files as unknown[]).length || !given)
+      return "It prepared a job Meno cannot run";
     entries.forEach((i) => covered.add(i));
-    out.push({ entries: [...entries], program, args: [...args], files, reads: [...reads] });
+    out.push({ entries: [...entries], program, args: [...args], files, ...(typeof stdin === "string" ? { stdin } : {}), reads: [...reads] });
   }
   if (covered.size !== count) return "It prepared no job for some of what came in";
   return out;
