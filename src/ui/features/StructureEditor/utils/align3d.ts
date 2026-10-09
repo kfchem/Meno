@@ -8,27 +8,59 @@ import type { Turn3D } from "../store/types";
  * eigenvalue of his 4 x 4 matrix, found by Jacobi's sweeps.
  */
 export function turnOnto(from: ArrayLike<number>, to: ArrayLike<number>): Turn3D {
-  const n = Math.min(from.length / 3, to.length / 2);
+  const n = Math.floor(Math.min(from.length / 3, to.length / 2));
   if (n < 2) return [0, 0, 0, 1];
-  let fx = 0, fy = 0, fz = 0, tx = 0, ty = 0;
+  // (the page's points stood in 3D, at no height)
+  const flat = new Float64Array(3 * n);
   for (let i = 0; i < n; i++) {
-    fx += from[3 * i];
-    fy += from[3 * i + 1];
-    fz += from[3 * i + 2];
-    tx += to[2 * i];
-    ty += to[2 * i + 1];
+    flat[3 * i] = to[2 * i];
+    flat[3 * i + 1] = to[2 * i + 1];
   }
-  fx /= n; fy /= n; fz /= n; tx /= n; ty /= n;
-  // the cross-covariance, S[a][b] = sum of from_a * to_b (to's z is 0)
-  let sxx = 0, sxy = 0, syx = 0, syy = 0, szx = 0, szy = 0;
+  return hornTurn(from, flat, n);
+}
+
+/**
+ * The turn that lays points in 3D best over others in 3D - the same atoms,
+ * in the same order, as two calculations gave them: of all rotations, the
+ * one taking `from` (x, y and z in turn, about its own centre) nearest to
+ * `to` (about its), as the quaternion x, y, z, w. Horn's, as `turnOnto`.
+ */
+export function turnOver(from: ArrayLike<number>, to: ArrayLike<number>): Turn3D {
+  const n = Math.floor(Math.min(from.length, to.length) / 3);
+  return n < 2 ? [0, 0, 0, 1] : hornTurn(from, to, n);
+}
+
+/** The turn `then` made after the turn `first`, as one: the quaternions' product. */
+export function turnAfter(then: Turn3D, first: Turn3D): Turn3D {
+  const [ax, ay, az, aw] = then;
+  const [bx, by, bz, bw] = first;
+  return [
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+    aw * bw - ax * bx - ay * by - az * bz,
+  ];
+}
+
+/** Horn's turn of the first `n` points of `from` onto those of `to`, both in 3D: the eigenvector of the largest eigenvalue of his 4 x 4 matrix. */
+function hornTurn(from: ArrayLike<number>, to: ArrayLike<number>, n: number): Turn3D {
+  const cf = [0, 0, 0];
+  const ct = [0, 0, 0];
   for (let i = 0; i < n; i++) {
-    const px = from[3 * i] - fx, py = from[3 * i + 1] - fy, pz = from[3 * i + 2] - fz;
-    const qx = to[2 * i] - tx, qy = to[2 * i + 1] - ty;
-    sxx += px * qx; sxy += px * qy;
-    syx += py * qx; syy += py * qy;
-    szx += pz * qx; szy += pz * qy;
+    for (let a = 0; a < 3; a++) {
+      cf[a] += from[3 * i + a] / n;
+      ct[a] += to[3 * i + a] / n;
+    }
   }
-  const sxz = 0, syz = 0, szz = 0;
+  // the cross-covariance, S[a][b] = sum of from_a * to_b, about their centres
+  const s = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < n; i++) {
+    for (let a = 0; a < 3; a++) {
+      const p = from[3 * i + a] - cf[a];
+      for (let b = 0; b < 3; b++) s[3 * a + b] += p * (to[3 * i + b] - ct[b]);
+    }
+  }
+  const [sxx, sxy, sxz, syx, syy, syz, szx, szy, szz] = s;
   const m = [
     [sxx + syy + szz, syz - szy, szx - sxz, sxy - syx],
     [syz - szy, sxx - syy - szz, sxy + syx, szx + sxz],
@@ -41,8 +73,8 @@ export function turnOnto(from: ArrayLike<number>, to: ArrayLike<number>): Turn3D
   const [w, x, y, z] = [0, 1, 2, 3].map((r) => vectors[r][best]);
   const len = Math.hypot(w, x, y, z) || 1;
   // (the same turn either way round: w kept positive, so the same points give the same quaternion)
-  const s = w < 0 ? -1 / len : 1 / len;
-  return [x * s, y * s, z * s, w * s];
+  const sign = w < 0 ? -1 / len : 1 / len;
+  return [x * sign, y * sign, z * sign, w * sign];
 }
 
 /** The eigenvalues and eigenvectors (by column) of a small symmetric matrix, by Jacobi's sweeps. */

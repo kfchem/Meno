@@ -6,19 +6,25 @@
  * takes the run's results away.
  */
 import { addMolecule3d, removeMolecules3d, type StructureDocument } from "../document";
-import type { AsideEntry, Molecule3D, StepRunKept, WorkflowStep } from "../store/types";
+import type { AsideEntry, Molecule3D, StepRunKept, Turn3D, WorkflowStep } from "../store/types";
 import type { CalcInfo } from "../../../../lib/calc/output";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
-import { setMembers, inside, setEntries, type Frame, type SetEntry } from "./entries";
+import { turnAfter, turnOver } from "../utils/align3d";
+import { setMembers, inside, setEntries, frameXyz, framesOf, type Frame, type SetEntry } from "./entries";
 import { findSet, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "./flow";
-import { kindInfo, MENO_DOES, takes, type SetKind } from "./kinds";
+import { kindInfo, MENO_DOES, takes, type SetKind, type StepKind } from "./kinds";
 import { setList } from "./list";
 import { BETWEEN, SET_PAD, SET_TOP, CARD_H, CARD_W, CHIP, GAP, LIST_W, PX, ROW } from "./look";
 import { runMeno, type Outcome } from "./meno";
 import { addSet, resizeSet, markMade, RUNS_KEPT, setRan, withStepRuns } from "./model";
+import { rmsd } from "./rmsd";
 
-/** What a run needs of the canvas: how far a molecule in 3D reaches from its middle on the page, across and up, in any of its frames; who does a step; and the time. */
-export type RunWith = { extentOf: (m: Omit<Molecule3D, "id">) => { w: number; h: number }; byOf: (step: WorkflowStep) => string; now: number };
+/**
+ * What a run needs of the canvas: how far a molecule in 3D reaches from its
+ * middle on the page, across and up, in any of its frames - turned by
+ * `turn`, where it is; who does a step; and the time.
+ */
+export type RunWith = { extentOf: (m: Omit<Molecule3D, "id">, turn?: Turn3D) => { w: number; h: number }; byOf: (step: WorkflowStep) => string; now: number };
 
 /** What each kind of set is called, where a step says what it takes. */
 const SET_NAMES: Record<SetKind, string> = { structures: "structures drawn", molecules: "molecules in 3D", conformers: "conformer sets" };
@@ -97,7 +103,13 @@ export function keepRun(doc: StructureDocument, step: WorkflowStep): StructureDo
  * step's result set and it as what the step last did - and what the step
  * showed till then kept among its runs in its place.
  */
-export function showRun(doc: StructureDocument, id: number, index: number, w: Pick<RunWith, "extentOf">): StructureDocument {
+export function showRun(
+  doc: StructureDocument,
+  id: number,
+  index: number,
+  w: Pick<RunWith, "extentOf">,
+  lay?: (results: RunResults, kind: StepKind) => (Turn3D | undefined)[] | undefined,
+): StructureDocument {
   const step = stepOf(doc, id);
   const shown = step?.runs?.[index];
   if (!step || !shown) return doc;
@@ -109,7 +121,7 @@ export function showRun(doc: StructureDocument, id: number, index: number, w: Pi
     ? [{ ...was, kind: was.kind ?? step.kind, ...((was.options ?? step.options) ? { options: was.options ?? step.options } : {}), ...(now ? { results: now } : {}) }]
     : [];
   doc = withStepRuns(doc, id, [...current, ...others].slice(0, RUNS_KEPT));
-  if (results) doc = placeResults(doc, stepOf(doc, id)!, results, w);
+  if (results) doc = placeResults(doc, stepOf(doc, id)!, results, w, lay?.(results, ran.kind ?? step.kind));
   return setRan(doc, id, ran);
 }
 
@@ -133,23 +145,78 @@ export type Worked = SetEntry & {
   keep?: Pick<Molecule3D, "drawnFrom" | "drawnAs" | "stereo" | "made">;
 };
 
-/** `doc` with what a step gave as the entries of its result set: made to the right of it, or the one it made before, emptied of what it held. */
-export function withResults(doc: StructureDocument, step: WorkflowStep, outcome: Extract<Outcome, { ok: true }>, w: Pick<RunWith, "extentOf">): StructureDocument {
+/** What a step gave, as its result set is to hold it: its molecules in 3D, those it set aside, and what kind of set they make. */
+export function resultsOf(outcome: Extract<Outcome, { ok: true }>): RunResults {
   const aside: AsideEntry[] = outcome.aside.map((e) => ({ compound: e.compound, number: e.number, ...(e.energy != null ? { energy: e.energy } : {}) }));
-  return placeResults(doc, step, { molecules: moleculesOf(outcome), aside, holds: outcome.holds }, w);
+  return { molecules: moleculesOf(outcome), aside, holds: outcome.holds };
+}
+
+/** `doc` with what a step gave as the entries of its result set: made to the right of it, or the one it made before, emptied of what it held - each molecule given room as `turns` turns it. */
+export function withResults(
+  doc: StructureDocument,
+  step: WorkflowStep,
+  outcome: Extract<Outcome, { ok: true }>,
+  w: Pick<RunWith, "extentOf">,
+  turns?: readonly (Turn3D | undefined)[],
+): StructureDocument {
+  return placeResults(doc, step, resultsOf(outcome), w, turns);
+}
+
+/** The kinds of step whose results are what came in, worked out: each laid over what it was worked out from as it is put down (`laidOver`). */
+export const LAID_OVER: readonly StepKind[] = ["optimise", "energy", "frequencies"];
+
+/**
+ * How each molecule a step gave is first turned, where it is what came in
+ * worked out (docs/WORKFLOWS.md, *Results*): as what it was worked out from
+ * lies - its geometry as it is shown, its last frame, laid best over that of
+ * the entry of the same atoms nearest to it (Horn's quaternion,
+ * utils/align3d), and turned as that entry's molecule is (`turnOf`). A
+ * program may give a molecule turned and moved - Gaussian, in its standard
+ * orientation - and it is seen as it went. Unset, where no entry has its
+ * atoms.
+ */
+export function laidOver(
+  molecules: readonly Pick<Molecule3D, "atoms" | "frames">[],
+  entries: readonly SetEntry[],
+  turnOf: (e: SetEntry) => Turn3D | undefined,
+): (Turn3D | undefined)[] {
+  return molecules.map((m) => {
+    const xyz = frameXyz(m, framesOf(m) - 1);
+    let best: SetEntry | undefined;
+    let least = Infinity;
+    for (const e of entries) {
+      if (e.atoms.length !== m.atoms.length || e.atoms.some((a, i) => a.el !== m.atoms[i].el)) continue;
+      const d = rmsd(xyz, e.xyz);
+      if (d < least) {
+        least = d;
+        best = e;
+      }
+    }
+    if (!best) return undefined;
+    const fit = turnOver(xyz, best.xyz);
+    const turn = turnOf(best);
+    return turn ? turnAfter(turn, fit) : fit;
+  });
 }
 
 /**
  * `doc` with a step's results - its molecules in 3D, those it set aside,
  * and what kind of set they make - as the entries of its result set: made
  * to the right of it, or the one it made before, emptied of what it held.
+ * Each molecule is given room as it will be turned (`turns`), where it is.
  */
-export function placeResults(doc: StructureDocument, step: WorkflowStep, results: RunResults, w: Pick<RunWith, "extentOf">): StructureDocument {
+export function placeResults(
+  doc: StructureDocument,
+  step: WorkflowStep,
+  results: RunResults,
+  w: Pick<RunWith, "extentOf">,
+  turns?: readonly (Turn3D | undefined)[],
+): StructureDocument {
   const { molecules: made, aside, holds } = results;
   // its list under the set's tab; below it, the molecules in rows, left to
   // right - each with room for its frames chip below it, where it has frames
-  const sizes = made.map((m) => {
-    const e = w.extentOf({ ...m, at: { x: 0, y: 0 } });
+  const sizes = made.map((m, i) => {
+    const e = w.extentOf({ ...m, at: { x: 0, y: 0 } }, turns?.[i]);
     return { w: Math.max(e.w, NOMINAL_BOND_LENGTH / 2), h: Math.max(e.h, NOMINAL_BOND_LENGTH / 2), chip: m.frames?.length ? CHIP : 0 };
   });
   const places: { x: number; y: number }[] = [];

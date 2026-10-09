@@ -11,20 +11,20 @@ import type { StepKind } from "../../workflow/kinds";
 import * as wf from "../../workflow/model";
 import { appendParts, partsBounds } from "../../workflow/parts";
 import { proceduresSaved } from "../../workflow/procedures";
-import type { EditorState, Molecule3D, WorkflowView } from "../types";
+import type { EditorState, Molecule3D, Turn3D, WorkflowView } from "../types";
 import { createStepRuns } from "./stepRuns";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
 
-/** How far a molecule in 3D reaches from its middle on the page, across and up, as it stands unturned, in any of its frames. */
-function extentOf(m: Molecule3D, style: Style3D): { w: number; h: number } {
+/** How far a molecule in 3D reaches from its middle on the page, across and up, as it stands turned by `turn` (unset, unturned), in any of its frames. */
+function extentOf(m: Molecule3D, style: Style3D, turn?: Turn3D): { w: number; h: number } {
   const solid = solidOf(m, style);
   const look = lookOf(m, style);
   let w = 0;
   let h = 0;
   for (let f = 0; f < solid.frames.length; f++) {
-    const b = seenBounds(poseOf({ ...m, at: { x: 0, y: 0 } }, solid, look, undefined, f));
+    const b = seenBounds(poseOf({ ...m, at: { x: 0, y: 0 } }, solid, look, turn, f));
     w = Math.max(w, -b.minX, b.maxX);
     h = Math.max(h, -b.minY, b.maxY);
   }
@@ -41,7 +41,7 @@ export const stepRole = (kind: StepKind, by: string) => `step:${by}:${kind}`;
  */
 export function createWorkflowSlice(doc: DocumentStore<StructureDocument>, set: SetState, get: GetState) {
   const coalesce = (what: string, id: number, gesture?: string) => (gesture ? { coalesceKey: `${what}:${id}:${gesture}` } : {});
-  const { forgetJobs, ...runs } = createStepRuns(doc, set, get, { extentOf: (m) => extentOf({ ...m, id: 0 }, currentStyle3D()) });
+  const { forgetJobs, ...runs } = createStepRuns(doc, set, get, { extentOf: (m, turn) => extentOf({ ...m, id: 0 }, currentStyle3D(), turn) });
   return {
     ...runs,
     forgetStepJobs: forgetJobs,

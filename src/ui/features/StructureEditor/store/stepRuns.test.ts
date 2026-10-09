@@ -193,6 +193,47 @@ describe("a step that runs a plugin's program", () => {
     expect(m.calc).toMatchObject({ program: "ORCA", readers: ["cclib 1.9rc1"], source: { name: "water.out", kind: "orca" } });
   });
 
+  it("gives a program one of its files to read, and lays what it gave back turned over what went in - as that is turned", async () => {
+    useReaders.setState({ state: { gaussian: "added" }, problem: {} });
+    installedAt.g16 = "/Applications/g16/g16";
+    worker.prepare.mockImplementationOnce(
+      async () => ({ jobs: [{ entries: [0], program: "g16", args: [], files: [{ name: "input.gjf", text: "# SP\n" }], stdin: "input.gjf", reads: [] }] }) as never,
+    );
+    worker.collect.mockImplementationOnce(async () => ({ read: [{ kind: "gaussian", log: true, name: "water.log" }] }) as never);
+    // (water as Gaussian gives it back: in its standard orientation - turned a half turn about z, and moved)
+    readOutput.mockImplementationOnce(async () => ({
+      output: { schema: 1, program: "Gaussian", version: "2016+B.01", method: "B3LYP", atoms: ["O", "H", "H"], frames: [[0.1, 0, 0, 0.1, -0.76, 0.59, 0.1, 0.76, 0.59]], energies: [-76.4] },
+      readers: ["cclib 1.9rc1"],
+    }));
+    const { st } = editor();
+    const water = st().molecules3d[0].id;
+    // (water turned on the page a quarter turn about x)
+    const quarter: [number, number, number, number] = [Math.SQRT1_2, 0, 0, Math.SQRT1_2];
+    st().setTurn3d(water, quarter);
+    const step = st().addStep("energy", "gaussian", 10, 10);
+    st().connect({ set: st().sets[0].id }, step);
+    const ran = st().runStep(step);
+    await settle();
+    await settle();
+    expect(asked.started).toEqual([expect.objectContaining({ program: "g16", args: [], stdin: "input.gjf" })]);
+    Object.assign(jobs.get(idOf(1))!, { state: "done", started: 1000, ended: 61_000, log: "Gaussian's output" });
+    await st().lookAtJobs();
+    await ran;
+    const m = st().molecules3d[st().molecules3d.length - 1];
+    // (its geometry as Gaussian gave it - shown turned back, then as the water that went in is)
+    expect(m.atoms[1]).toMatchObject({ x: 0.1, y: -0.76 });
+    const [x, y, z, w] = st().turns3d[m.id];
+    const half: [number, number, number, number] = [0, 0, 1, 0];
+    const want = [
+      quarter[3] * half[0] + quarter[0] * half[3] + quarter[1] * half[2] - quarter[2] * half[1],
+      quarter[3] * half[1] - quarter[0] * half[2] + quarter[1] * half[3] + quarter[2] * half[0],
+      quarter[3] * half[2] + quarter[0] * half[1] - quarter[1] * half[0] + quarter[2] * half[3],
+      quarter[3] * half[3] - quarter[0] * half[0] - quarter[1] * half[1] - quarter[2] * half[2],
+    ];
+    const sign = Math.sign(w * want[3] + x * want[0] + y * want[1] + z * want[2]);
+    [x, y, z, w].forEach((v, i) => expect(v).toBeCloseTo(sign * want[i], 6));
+  });
+
   it("says where to locate a program installed separately that is found nowhere - and starts nothing", async () => {
     useReaders.setState({ state: { orca: "added" }, problem: {} });
     installedAt.orca = null;
