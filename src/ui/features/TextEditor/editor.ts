@@ -25,8 +25,13 @@ import {
 import type { Command, Unit } from "../../../lib/text/keys";
 import { colAt, LINE_PX, lineWidth, xAt } from "./linePictures";
 
-/** What the IME is composing: the part of the text it takes the place of, what it has so far, and what it has selected in that. */
-export type Composing = { from: number; to: number; text: string; sel: [number, number] };
+/**
+ * What the IME is composing: the part of the text it takes the place of,
+ * what it has so far, and what it has selected in that - and, where the
+ * system says, how each part of it is underlined (its clauses, the one
+ * being converted thick), in its own offsets.
+ */
+export type Composing = { from: number; to: number; text: string; sel: [number, number]; clauses?: { from: number; to: number; thick: boolean }[] };
 
 /** How wide the column of line numbers is, and how far in from it the lines begin, in CSS pixels. */
 export const GUTTER_PX = 44;
@@ -220,6 +225,8 @@ export class Editor {
       return;
     }
     const vertical = c.unit === "line" || c.unit === "page";
+    // (a page on: the view moved a page too, the caret where it was on it)
+    if (c.kind === "move" && c.unit === "page") this.scrollTo(this.scrollTop + c.dir * this.pageLines * LINE_PX);
     if (c.kind === "move") {
       // (a selection let go by an arrow across: the caret at its edge that way)
       if (!c.extend && !isCaret(this.sel) && c.unit === "letter") {

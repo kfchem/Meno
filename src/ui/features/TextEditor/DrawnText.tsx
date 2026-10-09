@@ -13,8 +13,8 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { COLORS } from "../../theme/colors";
 import { selFrom, selTo } from "../../../lib/text/editing";
 import { Editor, GUTTER_PX, PAD_PX } from "./editor";
-import { BAND_PX, FONT, LINE_PX, linePicture, TAB, typeReady, xAt } from "./linePictures";
-import { TypingField } from "./typingField";
+import { BAND_PX, FONT, INK, LINE_PX, linePicture, TAB, typeReady, xAt } from "./linePictures";
+import { hasEditContext, typingField, type TypingField } from "./typingField";
 
 type Props = { value: string; onChange: (v: string) => void };
 
@@ -33,7 +33,9 @@ const BLINK_MS = 530;
 export default function DrawnText({ value, onChange }: Props) {
   const ed = useMemo(() => new Editor(value), []); // eslint-disable-line react-hooks/exhaustive-deps
   const boxRef = useRef<HTMLDivElement>(null);
-  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  // (typed through an EditContext on the text's own element, where the webview has one; else a textarea)
+  const ec = useMemo(hasEditContext, []);
+  const fieldRef = useRef<HTMLTextAreaElement & HTMLDivElement>(null);
   const field = useRef<TypingField | null>(null);
   const changed = useRef(onChange);
   changed.current = onChange;
@@ -49,7 +51,7 @@ export default function DrawnText({ value, onChange }: Props) {
   }, [ed, value]);
 
   useLayoutEffect(() => {
-    const f = new TypingField(fieldRef.current!, ed);
+    const f = typingField(fieldRef.current!, ed);
     field.current = f;
     return () => f.dispose();
   }, [ed]);
@@ -128,37 +130,41 @@ export default function DrawnText({ value, onChange }: Props) {
       >
         <Scene ed={ed} field={field} />
       </Canvas>
-      <textarea
-        ref={fieldRef}
-        aria-label="Text"
-        spellCheck={false}
-        autoCorrect="off"
-        autoCapitalize="off"
-        autoComplete="off"
-        wrap="off"
-        style={{
-          position: "absolute",
-          zIndex: -1,
-          margin: 0,
-          padding: 0,
-          border: 0,
-          outline: "none",
-          resize: "none",
-          overflow: "hidden",
-          whiteSpace: "pre",
-          font: FONT,
-          lineHeight: `${LINE_PX}px`,
-          tabSize: TAB,
-          color: "transparent",
-          background: "transparent",
-          caretColor: "transparent",
-          pointerEvents: "none",
-        }}
-      />
+      {ec ? (
+        <div ref={fieldRef} data-text-field="" tabIndex={-1} aria-label="Text" style={{ position: "absolute", inset: 0, zIndex: -1, outline: "none" }} />
+      ) : (
+        <textarea
+          ref={fieldRef}
+          data-text-field=""
+          aria-label="Text"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          autoComplete="off"
+          wrap="off"
+          style={{
+            position: "absolute",
+            zIndex: -1,
+            margin: 0,
+            padding: 0,
+            border: 0,
+            outline: "none",
+            resize: "none",
+            overflow: "hidden",
+            whiteSpace: "pre",
+            font: FONT,
+            lineHeight: `${LINE_PX}px`,
+            tabSize: TAB,
+            color: "transparent",
+            background: "transparent",
+            caretColor: "transparent",
+            pointerEvents: "none",
+          }}
+        />
+      )}
     </div>
   );
 }
-
 
 function Scene({ ed, field }: { ed: Editor; field: MutableRefObject<TypingField | null> }) {
   const { size, camera, invalidate } = useThree();
@@ -237,16 +243,17 @@ function Scene({ ed, field }: { ed: Editor; field: MutableRefObject<TypingField 
       box(`s${i}`, x0, top, Math.max(1, x1 - x0), LINE_PX, COLORS.highlight, ed.focused ? SELECTED : SELECTED_AWAY, 1);
     }
     if (i === compLine && comp) {
-      // (underlined; the part the IME is working on, more strongly)
-      const x0 = left + xAt(line, comp.from - start);
-      const x1 = left + xAt(line, comp.from - start + comp.text.length);
-      box("u", x0, top + LINE_PX - 3, Math.max(1, x1 - x0), 1, "#1f2328", 1, 2);
+      // (underlined, clause by clause as the system says - the one being converted thick - or else
+      // all of it, and what the IME has selected in it more strongly; a gap between clauses)
+      const at = (k: number) => left + xAt(line, comp.from - start + k);
+      const clauses = comp.clauses?.length ? comp.clauses : [{ from: 0, to: comp.text.length, thick: false }];
+      clauses.forEach((c, k) => {
+        const x0 = at(c.from) + (k > 0 ? 1 : 0);
+        const x1 = at(c.to) - (k < clauses.length - 1 ? 1 : 0);
+        box(`u${k}`, x0, top + LINE_PX - (c.thick ? 4 : 3), Math.max(1, x1 - x0), c.thick ? 2 : 1, INK, 1, 2);
+      });
       const [a, b] = comp.sel;
-      if (b > a) {
-        const c0 = left + xAt(line, comp.from - start + a);
-        const c1 = left + xAt(line, comp.from - start + b);
-        box("U", c0, top + LINE_PX - 4, Math.max(1, c1 - c0), 2, "#1f2328", 1, 2);
-      }
+      if (!comp.clauses?.length && b > a) box("U", at(a), top + LINE_PX - 4, Math.max(1, at(b) - at(a)), 2, INK, 1, 2);
     }
   }
   // the caret - in what the IME has so far, where it says

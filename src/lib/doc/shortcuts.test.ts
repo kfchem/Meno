@@ -48,6 +48,12 @@ describe("undoIntent", () => {
     expect(undoIntent(key({ target: null }))).toBe("undo");
   });
 
+  it("claims what a text Meno draws is typed through, as a textarea", () => {
+    const field = { tagName: "DIV", dataset: { textField: "" } };
+    expect(undoIntent(key({ target: field }))).toBe("undo");
+    expect(isDeleteKey({ key: "Backspace", target: field })).toBe(false);
+  });
+
   it("leaves a textarea that says so to the browser: words on the page, as they are written", () => {
     expect(undoIntent(key({ target: { tagName: "TEXTAREA", dataset: { nativeUndo: "" } } }))).toBeNull();
   });
