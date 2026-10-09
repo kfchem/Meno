@@ -5,7 +5,7 @@ import { pageTextFrom, type PageText } from "../../../../lib/pdf/text";
 import { goToFound, runFind, stepFound } from "./pdfFind";
 import { onPage, ordered, placeBefore, selects } from "../utils/pdfSelection";
 import { readWorkspace, workspaceText } from "../utils/workspace";
-import { linesWidth } from "./wordsDrag";
+import { setAsTheyWere } from "./wordsDrag";
 import { POINT } from "../../../../lib/pdf/layout";
 
 /** Each PDF's pages' words, as PDFium would read them: a line each, the letters 6 points wide. */
@@ -102,12 +102,13 @@ describe("words selected in a PDF", () => {
     expect(ws?.drawn.captions?.[0]).toMatchObject({ text: "hydroxyl", from });
   });
 
-  it("taken from more than one line, are as wide as their widest line was, at the page's printed size", () => {
-    expect(linesWidth([[72, 100, 300, 112]])).toBeUndefined();
-    expect(linesWidth([[100, 100, 300, 112], [72, 114, 312, 126]])).toBeCloseTo(240 * POINT);
+  it("taken from more than one line, are as wide as their lines were, at the page's printed size, and lie as they did", () => {
+    expect(setAsTheyWere({ x0: 72, y0: 100, x1: 312, lines: 1, align: "left" }, 1)).toEqual({});
+    expect(setAsTheyWere({ x0: 72, y0: 100, x1: 312, lines: 2, align: "justify" }, 1)).toEqual({ width: 240 * POINT, align: "justify" });
+    expect(setAsTheyWere({ x0: 72, y0: 100, x1: 312, lines: 1, align: "center" }, 2)).toEqual({ width: 240 * POINT });
     const { state } = editor();
     const from = { sha256: "a".repeat(64), from: { page: 0, at: 0 }, to: { page: 0, at: 40 } };
-    state().addCaption("two lines of words", 0, 0, undefined, from, 240 * POINT);
-    expect(state().captions[0]).toMatchObject({ width: 240 * POINT, from });
+    state().addCaption("two lines of words", 0, 0, undefined, from, 240 * POINT, "justify");
+    expect(state().captions[0]).toMatchObject({ width: 240 * POINT, align: "justify", from });
   });
 });

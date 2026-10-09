@@ -33,16 +33,18 @@ type Laid = { c: Caption } & CaptionSet;
  * edges, shown as it is lit, are dragged to make it wider or narrower: its
  * words broken into lines as wide as it is made, the other edge staying
  * where it was. The one being written is not drawn: its box stands in its
- * place.
+ * place; nor are words carried out of a PDF until they have settled.
  */
 export default function Captions2D() {
   const captions = useEditor((s) => s.captions);
   const editing = useEditor((s) => s.captionEdit?.id ?? null);
+  // (words carried out of a PDF, settling where they were let go: these, once they have)
+  const landing = useEditor((s) => s.pdfWords?.landing ?? null);
   const { opts } = useDrawnLayout();
   const laid = useMemo<Laid[]>(() => {
     const set = labelSetOf(opts);
-    return captions.filter((c) => c.id !== editing).map((c) => ({ c, ...captionSet(c.text, c.x, c.y, opts.fontPx, set, c.width, c.align) }));
-  }, [captions, editing, opts]);
+    return captions.filter((c) => c.id !== editing && c.id !== landing).map((c) => ({ c, ...captionSet(c.text, c.x, c.y, opts.fontPx, set, c.width, c.align) }));
+  }, [captions, editing, landing, opts]);
   const texts = useMemo(() => laid.flatMap((l) => l.items), [laid]);
   return (
     <group>

@@ -192,6 +192,29 @@ export type PdfFind = { q: string; all: boolean; found: PdfFound[]; now: number;
 
 /** A PDF's page on its way into the column, or back to the page: which page, and when it set off. */
 export type PdfFlight = { id: number; page: number; to: "column" | "page"; start: number };
+/**
+ * Words being carried out of a PDF (components/WordsFlight): set as they
+ * will be on the page - as wide as their lines were, and lying as they did -
+ * and where each word was on the PDF's page, in the window's pixels (left,
+ * top, right, bottom; none, on a page not in view); where the box they are
+ * set in lay at first - its top left, and how many pixels a unit of the page
+ * was there - where they were pressed, and when. `now` is changed in place
+ * as the pointer goes, and read each frame: where it is, whether over the
+ * canvas, where under it they are held - set once they are, in units of the
+ * page from their middle - and how they end. `landing`: the words on the
+ * page they have become, not drawn until these have settled where they are.
+ */
+export type WordsFlight = {
+  text: string;
+  width?: number;
+  align?: "left" | "right" | "justify";
+  boxes: ([number, number, number, number] | null)[];
+  from: { left: number; top: number; k: number };
+  grab: { x: number; y: number };
+  start: number;
+  now: { x: number; y: number; over: boolean; held: { x: number; y: number } | null; end: { to: "page" | "back"; start: number } | null };
+  landing?: number | null;
+};
 
 export type WorkspaceText = { id: number; name: string; text: string; path?: string };
 /**
@@ -344,9 +367,9 @@ export type EditorState = {
   /** The canvas asked to open a PDF's menu where the column was right-clicked, in the window's pixels. */
   menuAsk: { id: number; clientX: number; clientY: number } | null;
   askPdfMenu: (ask: { id: number; clientX: number; clientY: number } | null) => void;
-  /** Words being carried out of a PDF: where they were on its page shows bare until they are let go. */
-  pdfLifted: { id: number; from: WordPlace; to: WordPlace } | null;
-  setPdfLifted: (lifted: { id: number; from: WordPlace; to: WordPlace } | null) => void;
+  /** Words being carried out of a PDF, as Meno's own, peeling off it. */
+  pdfWords: WordsFlight | null;
+  setPdfWords: (words: WordsFlight | null) => void;
   /** A place in a PDF shown, marked for a moment: words gone back to where they came from. */
   pdfFlash: { id: number; from: WordPlace; to: WordPlace; start: number } | null;
   setPdfFlash: (flash: { id: number; from: WordPlace; to: WordPlace; start: number } | null) => void;
@@ -507,8 +530,8 @@ export type EditorState = {
    */
   captionEdit: { id: number | null; at: { x: number; y: number } } | null;
   setCaptionEdit: (edit: EditorState["captionEdit"]) => void;
-  /** Words added, as one step - taken out of a PDF, where they came from, and as wide as their lines were; their id. */
-  addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number) => number;
+  /** Words added, as one step - taken out of a PDF, where they came from, as wide as their lines were and lying as they did; their id. */
+  addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number, align?: Caption["align"]) => number;
   /**
    * Words changed - written anew, moved, put over an arrow or taken from
    * one (`arrow` null), made as wide as something or as their words

@@ -121,6 +121,79 @@ export function linesOf(t: PageText): Line[] {
   return out;
 }
 
+/** How a block's lines lie in the width they share: from its left edge, about its middle, to its right edge, or spread to both. */
+export type LinesAlign = "left" | "center" | "right" | "justify";
+
+/** Lines as a block: the box round them - its left, top and right, in points - how many there are, and how they lie. */
+export type Block = { x0: number; y0: number; x1: number; lines: number; align: LinesAlign };
+
+/** How many lines either way are looked at, at most, to see how a block's lines lie; and how many of them must reach an edge, or its middle, for it to be set so. */
+const ABOUT = 12;
+const MOST = 0.6;
+
+/** Whether a line ends in a word broken there, PDFium's own hyphen in place of its last letter: short of the edge it reaches. */
+function brokenAtEnd(t: PageText, l: Line): boolean {
+  for (let i = l.end - 1; i >= l.start; i--) {
+    const c = t.codes[i];
+    if (c !== LINE_END && c !== RETURN) return c === BROKEN;
+  }
+  return false;
+}
+
+/**
+ * The lines the letters between two places lie on, as a block (docs/PDF.md,
+ * *Taking things out*): the box round them, and how they lie in it - seen
+ * from them and the lines about them in the same column, of the same size
+ * and as far apart: spread to both edges where most reach both, to the left
+ * where most start there, to the right where most end there, about the
+ * middle where most are centred on it; to the left, else. None, where there
+ * are no letters between them.
+ */
+export function blockOf(t: PageText, a: number, b: number): Block | null {
+  const lines = linesOf(t);
+  const on = lines.flatMap((l, k) => {
+    for (let i = Math.max(a, l.start); i < Math.min(b, l.end); i++) if (hasBox(t, i)) return [k];
+    return [];
+  });
+  if (!on.length) return null;
+  const touched = on.map((k) => lines[k]);
+  const heights = touched.map((l) => l.y1 - l.y0).sort((p, q) => p - q);
+  const tall = heights[Math.floor(heights.length / 2)];
+  // (the next line in the column: as tall, under it - a paragraph's space at most - and across the same width)
+  const alike = (p: Line, q: Line) =>
+    [p, q].every((l) => Math.abs(l.y1 - l.y0 - tall) <= 0.3 * tall) &&
+    q.y0 - p.y1 >= -0.3 * tall &&
+    q.y0 - p.y1 <= 1.5 * tall &&
+    Math.min(p.x1, q.x1) - Math.max(p.x0, q.x0) >= 0.5 * Math.min(p.x1 - p.x0, q.x1 - q.x0);
+  let i0 = on[0];
+  let i1 = on[on.length - 1];
+  while (i0 > 0 && on[0] - i0 < ABOUT && alike(lines[i0 - 1], lines[i0])) i0--;
+  while (i1 < lines.length - 1 && i1 - on[on.length - 1] < ABOUT && alike(lines[i1], lines[i1 + 1])) i1++;
+  const block = lines.slice(i0, i1 + 1);
+  // how they lie: by how many reach each edge, or the middle (a line broken at its end falls short of its edge by a hyphen)
+  const tol = Math.max(0.75, 0.08 * tall);
+  const left = Math.min(...block.map((l) => l.x0));
+  const right = Math.max(...block.map((l) => l.x1));
+  const share = (of: Line[], ok: (l: Line) => boolean) => (of.length ? of.filter(ok).length / of.length : 0);
+  const atLeft = share(block, (l) => l.x0 - left <= tol);
+  const atRight = share(
+    block.filter((l) => !brokenAtEnd(t, l)),
+    (l) => right - l.x1 <= tol,
+  );
+  const mids = block.map((l) => (l.x0 + l.x1) / 2).sort((p, q) => p - q);
+  const mid = mids[Math.floor(mids.length / 2)];
+  const centred = share(block, (l) => Math.abs((l.x0 + l.x1) / 2 - mid) <= tol);
+  const align: LinesAlign =
+    block.length < 2 ? "left" : atLeft >= MOST && atRight >= MOST ? "justify" : atLeft >= MOST ? "left" : atRight >= MOST ? "right" : centred >= MOST ? "center" : "left";
+  return {
+    x0: Math.min(...touched.map((l) => l.x0)),
+    y0: Math.min(...touched.map((l) => l.y0)),
+    x1: Math.max(...touched.map((l) => l.x1)),
+    lines: touched.length,
+    align,
+  };
+}
+
 /** The letter, if any, whose box holds a point of the page, in points - within `slack` of it. */
 export function letterAt(t: PageText, x: number, y: number, slack = 0.5): number | null {
   for (let i = 0; i < t.codes.length; i++) {
@@ -242,9 +315,10 @@ export function marksBetween(t: PageText, a: number, b: number): [number, number
   return out;
 }
 
-/** The words from letter `a` to before `b`, as they are copied: a line's end a space, a word broken at one whole. */
-export function wordsBetween(t: PageText, a: number, b: number): string {
-  let out = "";
+/** The letters from `a` to before `b` as they are copied, each with the letter of the page it is - or -1, a space for a line's end. */
+function copied(t: PageText, a: number, b: number): { ch: string; i: number }[] {
+  const out: { ch: string; i: number }[] = [];
+  const last = () => out[out.length - 1]?.ch;
   for (let i = Math.max(0, a); i < Math.min(b, t.codes.length); i++) {
     const c = t.codes[i];
     if (c === BROKEN) {
@@ -253,12 +327,49 @@ export function wordsBetween(t: PageText, a: number, b: number): string {
       continue;
     }
     if (c === RETURN || c === LINE_END) {
-      if (out && !out.endsWith(" ") && !out.endsWith("-")) out += " ";
+      if (out.length && last() !== " " && last() !== "-") out.push({ ch: " ", i: -1 });
       continue;
     }
-    out += String.fromCodePoint(c);
+    out.push({ ch: String.fromCodePoint(c), i });
   }
-  return out.trim();
+  return out;
+}
+
+/** The words from letter `a` to before `b`, as they are copied: a line's end a space, a word broken at one whole. */
+export function wordsBetween(t: PageText, a: number, b: number): string {
+  return copied(t, a, b)
+    .map((c) => c.ch)
+    .join("")
+    .trim();
+}
+
+/**
+ * Where each word copied from letter `a` to before `b` (`wordsBetween`,
+ * split at its spaces) lies on the page: the box round its letters - left,
+ * top, right, bottom, in points - on the line it starts on (a word broken
+ * at a line's end, its first part); none, where none of its letters is seen.
+ */
+export function wordBoxesBetween(t: PageText, a: number, b: number): ([number, number, number, number] | null)[] {
+  const out: ([number, number, number, number] | null)[] = [];
+  let word: number[] | null = null;
+  const close = () => {
+    if (!word) return;
+    const seen = word.filter((i) => i >= 0 && hasBox(t, i));
+    if (!seen.length) out.push(null);
+    else {
+      // (its letters on the line its first is on)
+      const [, top0, , bottom0] = boxOf(t, seen[0]);
+      const on = seen.map((i) => boxOf(t, i)).filter(([, top, , bottom]) => Math.min(bottom, bottom0) - Math.max(top, top0) > 0);
+      out.push([Math.min(...on.map((q) => q[0])), Math.min(...on.map((q) => q[1])), Math.max(...on.map((q) => q[2])), Math.max(...on.map((q) => q[3]))]);
+    }
+    word = null;
+  };
+  for (const { ch, i } of copied(t, a, b)) {
+    if (/\s/.test(ch)) close();
+    else (word ??= []).push(i);
+  }
+  close();
+  return out;
 }
 
 /**

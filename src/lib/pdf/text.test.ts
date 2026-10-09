@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { findIn, letterAt, letterNear, lineAt, linesOf, marksBetween, pageTextFrom, pageTextOf, placeAt, searchable, wordAt, wordsBetween, type PageText } from "./text";
+import { blockOf, findIn, letterAt, letterNear, lineAt, linesOf, marksBetween, pageTextFrom, pageTextOf, placeAt, searchable, wordAt, wordBoxesBetween, wordsBetween, type PageText } from "./text";
 
-/** A page of lines as PDFium reads them: each letter 6 points wide, each line 12 tall, 14 apart; its ends "\r\n" with no box. */
-function page(lines: string[]): PageText {
+/** A page of lines as PDFium reads them: each letter 6 points wide, each line 12 tall, 14 apart, starting where it is given (72, else); its ends "\r\n" with no box. */
+function page(lines: (string | [string, number])[]): PageText {
   let text = "";
   const boxes: ([number, number, number, number] | null)[] = [];
-  lines.forEach((line, l) => {
+  lines.forEach((given, l) => {
+    const [line, x] = typeof given === "string" ? [given, 72] : given;
     [...line].forEach((ch, k) => {
       text += ch;
-      boxes.push(ch === "\u0002" ? null : [72 + k * 6, 100 + l * 14, 78 + k * 6, 112 + l * 14]);
+      boxes.push(ch === "\u0002" ? null : [x + k * 6, 100 + l * 14, x + 6 + k * 6, 112 + l * 14]);
     });
     if (l < lines.length - 1) {
       text += "\r\n";
@@ -78,6 +79,12 @@ describe("a PDF page's words", () => {
     expect(marksBetween(p, from, to)[0][0]).toBe(72 + 11 * 6);
     // (a hyphen PDFium left at a line's end kept, as a word's own)
     expect(wordsBetween(p, from, to)).toBe("barriers of the hy-droxyl group were conformational");
+    // (each word where it lies, on the line it starts on)
+    const boxes = wordBoxesBetween(p, from, to);
+    expect(boxes).toHaveLength(7);
+    expect(boxes[0]).toEqual([72 + 11 * 6, 100, 72 + 19 * 6, 112]);
+    expect(boxes[3]).toEqual([72 + 27 * 6, 100, 72 + 30 * 6, 112]);
+    expect(boxes[6]).toEqual([72 + 18 * 6, 114, 72 + 24 * 6, 126]);
   });
 
   it("are searched without regard to case, across a line's end, and whole where broken there", () => {
@@ -93,5 +100,24 @@ describe("a PDF page's words", () => {
     expect(findIn(p, "confor-mational")).toHaveLength(1);
     expect(findIn(p, "were confor")).toHaveLength(1);
     expect(findIn(p, "  ")).toEqual([]);
+  });
+
+  it("lie in blocks, set as the lines about them are: spread, to the left, to the right, or centred", () => {
+    const words = (q: PageText, from: number, to: number) => blockOf(q, linesOf(q)[from].start + 1, linesOf(q)[to].start + 2);
+    // spread to both edges, a paragraph's last line short, and a word broken at a line's end short by its hyphen
+    const spread = page(["the quick brown fox jumps over", "lazy dogs and runs far away in", "the night, and comes back in \u0002", "the day, as foxes do in tales.", "and stories."]);
+    expect(words(spread, 1, 2)).toMatchObject({ x0: 72, y0: 114, x1: 72 + 30 * 6, lines: 2, align: "justify" });
+    // to the left, ragged at the right
+    const ragged = page(["the quick brown fox", "jumps over the lazy dog and", "runs far away", "in the night"]);
+    expect(words(ragged, 1, 2)?.align).toBe("left");
+    // to the right, and centred
+    const toRight = page([["the quick brown fox", 120], ["jumps over", 174], ["the lazy dog and runs", 108]]);
+    expect(words(toRight, 0, 1)?.align).toBe("right");
+    const centred = page([["the quick brown fox", 120], ["jumps over", 147], ["the lazy dog and runs", 114]]);
+    expect(words(centred, 0, 1)?.align).toBe("center");
+    // (only lines of the same column: one after its foot, at the top, is another's)
+    const columns = page(["the quick brown fox", "jumps over the lazy dog and", "runs far away"]);
+    expect(blockOf(columns, 0, 3)).toMatchObject({ lines: 1, align: "left" });
+    expect(blockOf(spread, 0, 0)).toBeNull();
   });
 });

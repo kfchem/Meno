@@ -1,17 +1,15 @@
 /**
  * Words taken out of a PDF (docs/PDF.md, *Taking things out*): a selection
- * dragged lifts off the page, rising toward the viewer and following the
- * pointer; let go on the canvas, it settles there as words on the page, in
- * the drawing's type, keeping where it came from; let go anywhere else, it
- * goes back.
+ * dragged comes off the page as Meno's own words, rising toward the viewer
+ * and following the pointer; let go on the canvas, they settle there as
+ * words on the page, in the drawing's type, set as their lines were and
+ * keeping where they came from; let go anywhere else, they go back.
  */
 import type { EditorStore } from "../store";
-import type { PdfItem, PdfSelection, WordsFrom } from "../store/types";
-import { marksBetween, textOf, type PageText } from "../../../../lib/pdf/text";
-import { partPicture } from "../../../../lib/pdf/reader";
+import type { Caption, PdfItem, PdfSelection, WordsFlight, WordsFrom } from "../store/types";
+import { blockOf, marksBetween, textOf, wordBoxesBetween, type Block, type PageText } from "../../../../lib/pdf/text";
 import { POINT } from "../../../../lib/pdf/layout";
 import { onPage, ordered, selectedWords } from "../utils/pdfSelection";
-import { DURATION } from "../../../theme/motion";
 
 /** Where the canvas is, and the page under a point of the window: what words let go are put down by. */
 type CanvasPlace = { canvas: () => HTMLElement | null; worldAt: (clientX: number, clientY: number) => { x: number; y: number } | null };
@@ -30,132 +28,111 @@ export function onSelected(t: PageText, sel: PdfSelection, page: number, x: numb
   return marksBetween(t, range[0], range[1]).some(([x0, y0, x1, y1]) => x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1);
 }
 
-/** How wide words taken from more than one line are made on the page: as wide as their widest line was, at the size the page is printed - none, from one. */
-export function linesWidth(rects: readonly (readonly [number, number, number, number])[]): number | undefined {
-  return rects.length > 1 ? Math.max(...rects.map((r) => r[2] - r[0])) * POINT : undefined;
+/**
+ * How words taken from lines are set on the page: as wide as those lines
+ * were, at the size the page is printed, and lying in that width as they and
+ * the lines about them did (lib/pdf/text `blockOf`) - from one line, as they
+ * come, on one line.
+ */
+export function setAsTheyWere(block: Block, pages: number): { width?: number; align?: Caption["align"] } {
+  if (block.lines < 2 && pages < 2) return {};
+  return { width: (block.x1 - block.x0) * POINT, ...(block.align !== "center" ? { align: block.align } : {}) };
 }
-
-/** How long words take to peel off, to settle once let go, and to go back, in ms. */
-const PEEL_MS = 240;
-const SETTLE_MS = DURATION.base * 1000;
-const BACK_MS = 300;
-/** How far words peeling off lift and lean, toward the viewer, and how they are seen in depth. */
-const LIFT_SCALE = 1.06;
-const LEAN_DEG = 9;
-const DEPTH_PX = 700;
-const SHADOW_UP = "drop-shadow(0 0 0 rgba(0,0,0,0))";
-const SHADOW_LIFTED = "drop-shadow(0 12px 16px rgba(0,0,0,0.22))";
 
 /** Where a point of a PDF's page lies in the window, in its pixels: where the words are drawn, on the stack or in the column. */
 export type OnScreen = { at: (page: number, x: number, y: number) => { x: number; y: number }; pxPerPoint: number };
 
 /**
  * Words selected in a PDF carried out, from where the pointer pressed them
- * (docs/PDF.md, *Taking things out*). They peel off the page: their own
- * picture - drawn by PDFium where they lie, cut to their shape - lifts at
- * the edge the pointer pulls, leaning toward the viewer, its shadow
- * deepening, the page left bare where they were; then follows the pointer.
- * Let go on the canvas, they are words on the page there, one step - as
- * wide as their lines were, broken into lines at it - the picture settling
- * as they come; anywhere else, it goes back down into the page.
+ * (docs/PDF.md, *Taking things out*): Meno's own words come off the PDF's,
+ * the PDF left as it is, and follow the pointer (components/WordsFlight).
+ * Let go on the canvas, they are words on the page there, one step - set as
+ * their lines were, as wide and lying as they did - where they were held;
+ * anywhere else, or on the PDF they came from, they go back down onto the
+ * words they were.
  */
 export async function dragWords(store: EditorStore, pdf: Pick<PdfItem, "id" | "sha256">, sel: PdfSelection, at: { x: number; y: number }, screen: OnScreen): Promise<void> {
-  const words = await selectedWords(sel, pdf);
-  if (!words) return;
-  const { from, to } = ordered(sel);
-  const source: WordsFrom = { sha256: pdf.sha256, from, to };
-  // where they are on their first page, and the box round them there
-  const t = await textOf(pdf.sha256, from.page);
-  const range = onPage(sel, from.page, t.codes.length);
-  const rects = range ? marksBetween(t, range[0], range[1]) : [];
-  if (!rects.length) return;
-  const pad = 1;
-  const x0 = Math.min(...rects.map((r) => r[0])) - pad;
-  const y0 = Math.min(...rects.map((r) => r[1])) - pad;
-  const x1 = Math.max(...rects.map((r) => r[2])) + pad;
-  const y1 = Math.max(...rects.map((r) => r[3])) + pad;
-  const k = screen.pxPerPoint;
-  const topLeft = screen.at(from.page, x0, y0);
-  const box = { left: topLeft.x, top: topLeft.y, width: (x1 - x0) * k, height: (y1 - y0) * k };
-  // their picture, as sharp as the screen shows it
-  const scale = k * (window.devicePixelRatio || 1);
-  const url = await partPicture(pdf.sha256, from.page, scale, x0 * scale, y0 * scale, (x1 - x0) * scale, (y1 - y0) * scale).catch(() => null);
-  if (!url) return;
-  const card = document.createElement("div");
-  card.setAttribute("aria-hidden", "true");
-  Object.assign(card.style, {
-    position: "fixed",
-    left: `${box.left}px`,
-    top: `${box.top}px`,
-    width: `${box.width}px`,
-    height: `${box.height}px`,
-    zIndex: "100",
-    pointerEvents: "none",
-    willChange: "transform, filter",
-    filter: SHADOW_UP,
-  } satisfies Partial<CSSStyleDeclaration>);
-  // (lifting at the edge it is pulled by, the far edge the last to leave the page)
-  const grab = { x: at.x - box.left, y: at.y - box.top };
-  const towardRight = grab.x > box.width / 2;
-  const towardBottom = grab.y > box.height / 2;
-  card.style.transformOrigin = `${towardRight ? 0 : 100}% ${towardBottom ? 0 : 100}%`;
-  const lean = `rotateY(${towardRight ? -LEAN_DEG : LEAN_DEG}deg) rotateX(${towardBottom ? LEAN_DEG / 2 : -LEAN_DEG / 2}deg)`;
-  const lifted = (dx: number, dy: number) => `perspective(${DEPTH_PX}px) translate(${dx}px, ${dy}px) ${lean} scale(${LIFT_SCALE})`;
-  const flat = (dx: number, dy: number, s = 1) => `perspective(${DEPTH_PX}px) translate(${dx}px, ${dy}px) rotateY(0deg) rotateX(0deg) scale(${s})`;
-  card.style.transform = flat(0, 0);
-  const img = document.createElement("img");
-  img.src = url;
-  img.alt = "";
-  Object.assign(img.style, { width: "100%", height: "100%", display: "block" } satisfies Partial<CSSStyleDeclaration>);
-  // (cut to the words' own shape: the lines selected, not the whole box)
-  const path = rects.map(([a, b, c, d]) => `M${(a - x0) * k} ${(b - y0) * k}H${(c - x0) * k}V${(d - y0) * k}H${(a - x0) * k}Z`).join("");
-  img.style.clipPath = `path("${path}")`;
-  card.appendChild(img);
-  await img.decode().catch(() => undefined);
-  document.body.appendChild(card);
-  store.getState().setPdfLifted({ id: pdf.id, from, to });
+  // (the pointer followed from the first, in case it is let go before the words are read)
   let pointer = { x: at.x, y: at.y };
-  const peeled = performance.now();
-  // peeling off: lifting and leaning toward the viewer, its shadow deepening
-  requestAnimationFrame(() => {
-    card.style.transition = `transform ${PEEL_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1), filter ${PEEL_MS}ms ease`;
-    card.style.transform = lifted(pointer.x - at.x, pointer.y - at.y);
-    card.style.filter = SHADOW_LIFTED;
-  });
-  const done = (ms: number) =>
-    window.setTimeout(() => {
-      card.remove();
-      URL.revokeObjectURL(url);
-      store.getState().setPdfLifted(null);
-    }, ms + 40);
+  let letGo: PointerEvent | null = null;
+  let flight: WordsFlight | null = null;
+  const overCanvas = (x: number, y: number) => {
+    const canvas = places.get(store);
+    const over = document.elementFromPoint(x, y);
+    return !!canvas && !!over && over === canvas.canvas();
+  };
   const onMove = (e: PointerEvent) => {
     pointer = { x: e.clientX, y: e.clientY };
-    // (once peeled, it keeps up with the pointer)
-    if (performance.now() - peeled > PEEL_MS) card.style.transition = "filter 160ms ease";
-    card.style.transform = lifted(pointer.x - at.x, pointer.y - at.y);
+    if (!flight) return;
+    flight.now.x = e.clientX;
+    flight.now.y = e.clientY;
+    flight.now.over = overCanvas(e.clientX, e.clientY);
   };
-  const onUp = (e: PointerEvent) => {
+  const stop = () => {
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp, true);
-    const canvas = places.get(store);
-    const over = document.elementFromPoint(e.clientX, e.clientY);
-    const world = canvas && over && over === canvas.canvas() ? canvas.worldAt(e.clientX, e.clientY) : null;
-    if (world) {
-      // let go on the canvas: words on the page there, the picture settling as they come
-      store.getState().addCaption(words, world.x, world.y, undefined, source, linesWidth(rects));
-      card.style.transition = `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1), filter ${SETTLE_MS}ms ease, opacity ${SETTLE_MS}ms ease`;
-      card.style.transform = flat(e.clientX - at.x, e.clientY - at.y);
-      card.style.filter = SHADOW_UP;
-      card.style.opacity = "0";
-      done(SETTLE_MS);
-    } else {
-      // elsewhere: back down into the page, where they were
-      card.style.transition = `transform ${BACK_MS}ms cubic-bezier(0.45, 0, 0.55, 1), filter ${BACK_MS}ms ease`;
-      card.style.transform = flat(0, 0);
-      card.style.filter = SHADOW_UP;
-      done(BACK_MS);
-    }
+    window.removeEventListener("pointercancel", onUp, true);
+  };
+  const onUp = (e: PointerEvent) => {
+    stop();
+    letGo = e;
+    if (flight) land(flight, e);
   };
   window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerup", onUp, true);
+  window.addEventListener("pointercancel", onUp, true);
+
+  const words = await selectedWords(sel, pdf);
+  const { from, to } = ordered(sel);
+  const source: WordsFrom = { sha256: pdf.sha256, from, to };
+  // the lines they were on, on their first page, and where each word lay there
+  const t = await textOf(pdf.sha256, from.page);
+  const range = onPage(sel, from.page, t.codes.length);
+  const block = range ? blockOf(t, range[0], range[1]) : null;
+  if (!words || !range || !block) {
+    stop();
+    return;
+  }
+  const set = setAsTheyWere(block, to.page - from.page + 1);
+  const first = marksBetween(t, range[0], range[1])[0];
+  const corner = set.width != null ? screen.at(from.page, block.x0, block.y0) : screen.at(from.page, first[0], first[1]);
+  const boxes = wordBoxesBetween(t, range[0], range[1]).map((b) => {
+    if (!b) return null;
+    const p = screen.at(from.page, b[0], b[1]);
+    const q = screen.at(from.page, b[2], b[3]);
+    return [p.x, p.y, q.x, q.y] as [number, number, number, number];
+  });
+
+  /** Where on the page words let go are put down: on the canvas, not on the PDF they came from - else nowhere, and back. */
+  const putAt = (e: PointerEvent) => {
+    const home = store.getState().hoveredPdf === pdf.id;
+    return e.type === "pointerup" && !home && overCanvas(e.clientX, e.clientY) ? (places.get(store)?.worldAt(e.clientX, e.clientY) ?? null) : null;
+  };
+  /** Let go: words on the page where they are held; or back. */
+  function land(f: WordsFlight, e: PointerEvent) {
+    const world = putAt(e);
+    const held = f.now.held ?? { x: 0, y: 0 };
+    f.now.end = { to: world ? "page" : "back", start: performance.now() };
+    if (!world) return;
+    const id = store.getState().addCaption(words, world.x - held.x, world.y - held.y, undefined, source, set.width, set.align);
+    store.getState().setPdfWords({ ...f, landing: id });
+  }
+
+  // (let go before they were read: put down where it was let go, at once, or not at all)
+  if (letGo) {
+    const world = putAt(letGo);
+    if (world) store.getState().addCaption(words, world.x, world.y, undefined, source, set.width, set.align);
+    return;
+  }
+  flight = {
+    text: words,
+    ...set,
+    boxes,
+    from: { left: corner.x, top: corner.y, k: screen.pxPerPoint / POINT },
+    grab: { x: at.x, y: at.y },
+    start: performance.now(),
+    now: { x: pointer.x, y: pointer.y, over: overCanvas(pointer.x, pointer.y), held: null, end: null },
+    landing: null,
+  };
+  store.getState().setPdfWords(flight);
 }

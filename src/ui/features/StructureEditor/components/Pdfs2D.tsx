@@ -81,7 +81,6 @@ export default function Pdfs2D() {
   const found = pdfFind?.found ?? NOTHING_FOUND;
   const foundNow = pdfFind ? (pdfFind.found[pdfFind.now] ?? null) : null;
   const pdfFlash = useEditor((s) => s.pdfFlash);
-  const pdfLifted = useEditor((s) => s.pdfLifted);
   const store = useEditorStore();
   const { camera, gl, invalidate, size } = useThree();
   const [, setTick] = useState(0);
@@ -389,7 +388,7 @@ export default function Pdfs2D() {
           motion={motion.current.get(p.id)}
           previewOf={(page) => pics.preview(p, page)}
           tilesOf={(page) => pics.tilesOf(p.sha256, page, view.current.level.get(p.id * 100000 + page) ?? 0)}
-          marksOf={(page) => marksOn(p, page, pdfSel, found, foundNow, redraw, pdfFlash, pdfLifted)}
+          marksOf={(page) => marksOn(p, page, pdfSel, found, foundNow, redraw, pdfFlash)}
           onOver={() => store.getState().setHoveredPdf(p.id)}
           onOut={() => {
             hoverAt(null);

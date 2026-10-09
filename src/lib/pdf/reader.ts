@@ -107,26 +107,6 @@ export function drawPart(ask: PartAsk, nearness: () => number = () => 0, wanted:
   });
 }
 
-/**
- * A part of a page drawn as a picture the window shows - not as WebGL takes
- * it: at `scale` pixels a point, from `x`, `y` (pixels, from its top left),
- * `w` by `h`. Its address, to be let go (`URL.revokeObjectURL`) once shown.
- */
-export async function partPicture(sha256: string, page: number, scale: number, x: number, y: number, w: number, h: number): Promise<string> {
-  await holding.get(sha256);
-  const buf = await invoke<ArrayBuffer>("pdf_render", {
-    sha: sha256,
-    page,
-    scale,
-    x: Math.round(x),
-    y: Math.round(y),
-    w: Math.max(1, Math.round(w)),
-    h: Math.max(1, Math.round(h)),
-    packed: true,
-  });
-  return URL.createObjectURL(new Blob([new Uint8Array(buf, 16)], { type: "image/png" }));
-}
-
 /** A link on a page: where it lies, in points from the page's top left, and where it goes - a page of the PDF and how far down it, in points; or a web page. */
 export type PdfLink = { rect: [number, number, number, number]; page?: number; y?: number | null; uri?: string };
 
