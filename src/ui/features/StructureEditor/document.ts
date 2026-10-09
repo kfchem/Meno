@@ -12,7 +12,7 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, PictureItem, PictureToAdd, Plus, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
+import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, PictureItem, PictureToAdd, Plus, TextOf, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
 import { ICON_NAME_WIDTH, pdfRoom, POINT } from "../../../lib/pdf/layout";
 import { sheetOf, sheetRoom } from "./utils/textSheets";
 import { printedSize } from "../../../lib/picture/image";
@@ -1294,7 +1294,7 @@ export function addTexts(
       last = same.id;
       continue;
     }
-    held.push({ id: next, name: t.name || newTextName(held), text: t.text, ...(t.path ? { path: t.path } : {}), ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false as const } : {}), ...(t.icon ? { icon: true as const } : {}) });
+    held.push({ id: next, name: t.name || newTextName(held), text: t.text, ...(t.path ? { path: t.path } : {}), ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false as const } : {}), ...(t.icon ? { icon: true as const } : {}), ...(t.of ? { of: t.of } : {}) });
     last = next++;
   }
   if (held.length === (doc.texts ?? []).length) return { doc, last };
@@ -1323,6 +1323,15 @@ export function setTextIcon(doc: StructureDocument, id: number, icon: boolean): 
   const texts = doc.texts!.slice();
   const { icon: _, ...rest } = texts[at];
   texts[at] = icon ? { ...rest, icon: true } : rest;
+  return { ...doc, texts };
+}
+
+/** What a text without a sheet is the text of, its body on the page: a step, or a molecule. */
+export function setTextOf(doc: StructureDocument, id: number, of: TextOf): StructureDocument {
+  const at = (doc.texts ?? []).findIndex((t) => t.id === id);
+  if (at < 0 || doc.texts![at].at || JSON.stringify(doc.texts![at].of) === JSON.stringify(of)) return doc;
+  const texts = doc.texts!.slice();
+  texts[at] = { ...texts[at], of };
   return { ...doc, texts };
 }
 

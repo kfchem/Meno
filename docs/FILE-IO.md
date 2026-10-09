@@ -452,7 +452,9 @@ work.meno (zip)
   once - and `workspace.json` lists them in order (`texts`: each one's
   name and SHA-256 - and, a text with a sheet on the page, the sheet's top
   left, `at`, `icon: true` where it is made an icon, and `reading: false`
-  where its column has no tab for it;
+  where its column has no tab for it; a text with no sheet, what it is the
+  text of, `of` - a step's log its step's id, an output its molecule's
+  place among `molecules3d`;
   docs/PDF.md, step 5) with the one its column showed (`textShown`). Where a
   text was opened from is not saved, as an output kept is not. A text the
   file does not hold is left out as the workspace opens, and named. A PDF

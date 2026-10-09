@@ -668,14 +668,17 @@ function StructureCanvasContent({
   // a molecule's output shown in the column of texts, held in the
   // workspace: held this session or in its workspace, read again where it
   // was, or else found by the chemist
-  const showOutput = async (source: CalcSource) => {
+  const showOutput = async (molecule: number, source: CalcSource) => {
     try {
       const out = (await outputOf(source)) ?? ((await findOutput(source)) ? await outputOf(source) : undefined);
       if (out) {
-        store.getState().addTexts([{ name: out.name, text: out.text, ...(source.path ? { path: source.path } : {}) }]);
-        // (rising from its molecule into the column - docs/PDF.md, *A text*)
+        store.getState().addTexts([{ name: out.name, text: out.text, ...(source.path ? { path: source.path } : {}), of: { molecule } }]);
+        // (rising from its molecule into the column - docs/PDF.md, *A text*: this one, shown from another before)
         const shown = store.getState().textShown;
-        if (shown != null) store.getState().riseText(shown);
+        if (shown != null) {
+          store.getState().setTextOf(shown, { molecule });
+          store.getState().riseText(shown);
+        }
       }
     } catch (e) {
       setChemError(e instanceof Error ? e.message : String(e));
@@ -703,7 +706,7 @@ function StructureCanvasContent({
             }
           : {}),
         ...(menuMolecule.calc?.source
-          ? { output: { name: menuMolecule.calc.source.name, show: () => void showOutput(menuMolecule.calc!.source!) } }
+          ? { output: { name: menuMolecule.calc.source.name, show: () => void showOutput(menuMolecule.id, menuMolecule.calc!.source!) } }
           : {}),
         ...((menuMolecule.frames?.length ?? 0) > 0
           ? {

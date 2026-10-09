@@ -376,7 +376,10 @@ once (*Several at once*).
 *Show log* opens the job's log in the workspace's column of texts (PR
 #172), updating while the job runs - its last lines kept in view unless
 the chemist scrolled up. A step of many entries has a log for each,
-named for the entry. A log is a text of the workspace like any other.
+named for the entry. A log is a text of the workspace like any other,
+but with no sheet on the page: its step is its body, and it rises out of
+the step's card into the column, and goes back into it as the column
+shuts (docs/PDF.md, step 5).
 
 ### Results
 

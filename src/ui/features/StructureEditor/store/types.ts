@@ -271,10 +271,13 @@ export type WordsFlight = {
  * from - and, where it lies on the page as a sheet of its own (docs/PDF.md,
  * *A text*), its sheet's top left; and whether it is read in the column,
  * as a tab there (unless `reading` is false), and whether its sheet is
- * made an icon, as a PDF is. A calculation's output, or a
- * step's log, has no sheet: its molecule, or its step, is its body.
+ * made an icon, as a PDF is. A calculation's output shown from a molecule,
+ * or a step's log, has no sheet: that molecule, or its step, is its body
+ * (`of`) - what it rises out of into the column, and goes back into.
  */
-export type WorkspaceText = { id: number; name: string; text: string; path?: string; at?: { x: number; y: number }; reading?: false; icon?: true };
+export type WorkspaceText = { id: number; name: string; text: string; path?: string; at?: { x: number; y: number }; reading?: false; icon?: true; of?: TextOf };
+/** What a text without a sheet is the text of, its body on the page: a step, whose log it is; or a molecule, shown from whose menu it is that molecule's output. */
+export type TextOf = { step: number } | { molecule: number };
 /**
  * A set on the page (docs/WORKFLOWS.md): its frame, in world units, x0 to
  * x1 and y0 (its foot) to y1 (its top) - what lies inside it its entries.
@@ -459,6 +462,8 @@ export type EditorState = {
   readText: (id: number) => void;
   /** A text's sheet made an icon, or shown full size again, as one step. */
   setTextIcon: (id: number, icon: boolean) => void;
+  /** What a text is the text of, its body on the page - not a step to undo, as reading it is not. */
+  setTextOf: (id: number, of: TextOf) => void;
   /** A text's tab in the column closed: one with a sheet on the page is read there no longer; one without goes. */
   stopReadingText: (id: number) => void;
   /**

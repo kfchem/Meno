@@ -27,7 +27,7 @@ const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
 /**
  * The text on its way: `sheet` where its body lies on the screen - its
- * sheet, or a molecule - and `set` how it is set there; `column` where the
+ * sheet, a molecule or a step - and `set` how it is set there; `column` where the
  * column's body is; `k` how far it has gone toward the
  * column (0 the sheet, 1 the column), `lift` how high it is, `seen` how
  * much of it shows - fading as it hands over. Its lines are laid out by

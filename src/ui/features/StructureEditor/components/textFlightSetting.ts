@@ -1,7 +1,7 @@
 /**
  * How a text on its way between the page and the column (TextFlight) is
  * set at either end: as its sheet sets it, as the column does, or as the
- * column does made as small as a molecule it comes out of.
+ * column does made as small as a molecule or a step it comes out of.
  */
 import { POINT } from "../../../../lib/pdf/layout";
 import { GUTTER_PX, PAD_PX } from "../../TextEditor/editor";
@@ -23,7 +23,7 @@ export function sheetSetting(zoom: number): Setting {
   return { size: SHEET_TYPE_PT * pt, line: SHEET_LINE_PT * pt, left: SHEET_PAD_PT * pt, top: SHEET_PAD_PT * pt, right: SHEET_PAD_PT * pt };
 }
 
-/** As the column sets it, made as small as a box `w` pixels wide: going into a molecule, or coming out of one. */
+/** As the column sets it, made as small as a box `w` pixels wide: going into a molecule or a step, or coming out of one. */
 export function columnSettingAt(w: number, column: Rect): Setting {
   const k = Math.min(1, w / Math.max(1, column.w));
   return { size: FONT_PX * k, line: LINE_PX * k, left: (GUTTER_PX + PAD_PX) * k, top: 0, right: 0 };

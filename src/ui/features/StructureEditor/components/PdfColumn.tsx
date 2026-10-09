@@ -42,24 +42,32 @@ import { columnSettingAt, sheetSetting } from "./textFlightSetting";
 import { drawnSheetBox, iconScaleOf, sheetOf } from "../utils/textSheets";
 import { lookOf, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
 import { currentStyle3D } from "../style3d";
+import { CARD_H, CARD_W } from "../workflow/look";
 import { keepColumnTexts } from "../../TextEditor/columnText";
 
 /** How long a page takes between the page and the column, in ms; and a text's lines, once settled, to hand over to the column's own. */
 export const FLIGHT_MS = 420;
 const HANDOVER_MS = 140;
-/** How far toward the column an output's lines have come out of its molecule once they are quite seen. */
-const MOLECULE_FADE = 0.35;
+/** How far toward the column an output's lines, or a log's, have come out of its molecule or its step once they are quite seen. */
+const OUT_FADE = 0.35;
 /** How long a text's flight waits at most for its lines to be laid out, in ms. */
 const READY_MOST_MS = 250;
 
 /**
- * Where a text's body lies on the page: its sheet - or, an output shown
- * from a molecule (its source's file, or else its name), that molecule as
- * it is seen; none, a text with neither.
+ * Where a text's body lies on the page: its sheet - or, what it is the text
+ * of (`of`): a step's log, its step's card; an output shown from a
+ * molecule, that molecule as it is seen; none, a text with none of them, or
+ * whose body has gone.
  */
 function bodyBoxOf(st: EditorState, t: WorkspaceText): { x0: number; x1: number; y0: number; y1: number } | null {
   if (t.at) return drawnSheetBox(t);
-  const m = st.molecules3d.find((x) => x.calc?.source && (t.path ? x.calc.source.path === t.path : x.calc.source.name === t.name));
+  const of = t.of;
+  if (!of) return null;
+  if ("step" in of) {
+    const s = st.steps.find((x) => x.id === of.step);
+    return s ? { x0: s.x, x1: s.x + CARD_W, y0: s.y - CARD_H, y1: s.y } : null;
+  }
+  const m = st.molecules3d.find((x) => x.id === of.molecule);
   if (!m) return null;
   const style = currentStyle3D();
   const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m, style), st.turns3d[m.id], st.frames3d[m.id]));
@@ -451,14 +459,14 @@ function ColumnPass({
     const z = c.zoom || 1;
     const s = sheetOf(flownText.text);
     const onPage = { x: size.width / 2 + (b.x0 - c.position.x) * z, y: size.height / 2 - (b.y1 - c.position.y) * z, w: (b.x1 - b.x0) * z, h: (b.y1 - b.y0) * z };
-    // (from a molecule, not a sheet: coming up out of it, and going down into it, fading)
-    const fromMolecule = !flownText.at;
+    // (from a molecule or a step, not a sheet: coming up out of it, and going down into it, fading)
+    const outOfBody = !flownText.at;
     const inColumn = textFlight.to === "column" ? { x: size.width - store.getState().cover, y: HEADER_PX, w: width, h: tall } : textFrom.current?.rect;
     if (!inColumn) return null;
     const t = Math.min(1, textT);
     const k = textFlight.to === "column" ? ease(t) : 1 - ease(t);
     const handing = textT <= 1 ? 1 : Math.max(0, 1 - ((textT - 1) * FLIGHT_MS) / HANDOVER_MS);
-    const out = fromMolecule ? Math.min(1, k / MOLECULE_FADE) : 1;
+    const out = outOfBody ? Math.min(1, k / OUT_FADE) : 1;
     const seen = begunAt == null ? 0 : handing * out;
     const flightStart = textFlight.start;
     const onReady = () => {
@@ -467,7 +475,7 @@ function ColumnPass({
       redraw();
     };
     // (from an icon, its lines as small as it shows them)
-    const set = fromMolecule ? columnSettingAt(onPage.w, inColumn) : sheetSetting(z * (flownText.icon ? iconScaleOf(s) : 1));
+    const set = outOfBody ? columnSettingAt(onPage.w, inColumn) : sheetSetting(z * (flownText.icon ? iconScaleOf(s) : 1));
     return <TextFlight key={flightStart} sheet={onPage} column={inColumn} set={set} k={k} lift={Math.sin(Math.PI * t)} seen={seen} lines={s.lines} onReady={onReady} />;
   })();
 

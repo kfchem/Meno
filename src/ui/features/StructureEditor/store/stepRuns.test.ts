@@ -88,6 +88,7 @@ import { useReaders } from "../../../../lib/calc/workers";
 import { useAppSettings } from "../../../../lib/settings/appSettings";
 import { createStructureDocument, addMolecule3d } from "../document";
 import { readWorkflow } from "../workflow/saved";
+import { readWorkspace, workspaceText } from "../utils/workspace";
 
 /** A page with water in a set, wired into a step that optimises it, done by xTB. */
 function editor() {
@@ -268,6 +269,28 @@ describe("a step that runs a plugin's program", () => {
     await st().lookAtJobs();
     await ran;
     expect(st().steps.find((s) => s.id === step)!.ran).toMatchObject({ ok: false, said: "Some atoms are very close" });
+  });
+
+  it("shows its log in the column, rising out of its step - its step its body, kept with the workspace", async () => {
+    const { st, step } = editor();
+    const ran = st().runStep(step);
+    await settle();
+    await settle();
+    Object.assign(jobs.get(idOf(1))!, { state: "failed", started: 1000, ended: 2000, code: 1, log: "cycle 1\nfailed\n" });
+    await st().lookAtJobs();
+    await ran;
+    await st().showStepLog(step);
+    const log = st().texts.find((t) => t.name.endsWith("log"))!;
+    expect(log).toMatchObject({ text: "cycle 1\nfailed\n", of: { step } });
+    expect(log.at).toBeUndefined();
+    expect(st()).toMatchObject({ textShown: log.id, textsOpen: true, textFlight: { id: log.id, to: "column" } });
+    st().endTextFlight();
+    // (shown again, the column showing it already: nothing rises)
+    await st().showStepLog(step);
+    expect(st().texts.filter((t) => t.name.endsWith("log"))).toHaveLength(1);
+    expect(st().textFlight).toBeNull();
+    const ws = readWorkspace(workspaceText(st(), new Set(), st().texts.map(() => "a".repeat(64))));
+    expect(ws?.texts.find((t) => t.name === log.name)?.of).toEqual({ step });
   });
 
   it("is its plugin's: its calculation changed to another the plugin does, with the options it takes for that one, those they share kept - never to one it does not", () => {

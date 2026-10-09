@@ -711,7 +711,9 @@ Step 5 comes in parts: the trial of typing alone, shown first; the column's text
 **Between the page and the column.**
 - **Read**, by two clicks, *Read*, or as it is opened or made new, a text's lines rise from its sheet - from its icon, as small as the icon shows them - a white sheet with a soft shadow under it, and go into the column as it opens, growing to its width; the view eases so that the sheet lies beside the column, as a PDF's does. **Closed**, they go back down to the sheet as the column shuts. A tab gone to in the column, the column open already, comes as it did.
 - **On the way they move in the page's type** - signed-distance glyphs, as large as the sheet shows them at one end and as the column's at the other - and once settled, the column's own lines, drawn in the system's type, take their place under them as they fade (140 ms). The flight sets off once its lines are laid out, a frame or two after, so as never to be blank.
-- **A calculation's output shown from its molecule** (*Show <name>*) rises out of the molecule likewise, coming up as the column's lines made as small as the molecule, and goes back down into it as the column shuts. Its molecule is the one read from the output's file, or else of its name.
+- **A calculation's output shown from its molecule** (*Show <name>*) rises out of the molecule likewise, coming up as the column's lines made as small as the molecule, and goes back down into it as the column shuts. This holds for any output read as a molecule, opened from outside Meno or brought in by a step: its molecule is the one whose menu showed it. Shown again from another molecule read from the same file, it is that one's.
+- **A step's log** (*Show log*) - what the program said as Meno ran it, read as no molecule - rises out of its step's card likewise, and goes back down into it.
+- **A text without a sheet keeps what it is the text of** (`of`): its step, or its molecule. Saved in the workspace, a step by its id and a molecule by its place among the molecules, as they are numbered again when it opens. Its body gone - the step or the molecule deleted - it comes into the column and goes with it, as a text with no body does.
 
 Decided while building it, for the maintainer to confirm:
 - **On a Mac the textarea, on Windows the EditContext**: each the one its system's webview takes the IME through best. WebKit has no EditContext.
@@ -721,7 +723,6 @@ Decided while building it, for the maintainer to confirm:
 - **Closing a text's tab leaves its sheet on the page**; deleting the sheet takes the text out of the workspace.
 
 Not yet, and where it comes:
-- **A step's log rising from its step**, as an output does from its molecule.
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
 - **Colouring** (Lezer), **words on the page typed in place**: after.
 

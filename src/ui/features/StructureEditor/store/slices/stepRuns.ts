@@ -550,6 +550,9 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
       const jobs = step?.running?.jobs.map((j) => j.id) ?? step?.ran?.jobs ?? [];
       if (!step || !jobs.length) return;
       const name = kindInfo(step.kind).name;
+      // (what the column shows as it is asked: a log come is shown by the store at once)
+      const was = get();
+      const showing = was.textsOpen && was.pdfShown == null ? was.textShown : null;
       let last: number | null = null;
       for (const [k, job] of jobs.entries()) {
         const open = shown.get(job);
@@ -558,14 +561,15 @@ export function createStepRuns(doc: DocumentStore<StructureDocument>, set: SetSt
           continue;
         }
         const text = await wholeLog(job);
-        const made = ops.addTexts(doc.getState(), [{ name: `${name} log${jobs.length > 1 ? ` ${k + 1}` : ""}`, text: text || "(Nothing yet)" }]);
+        const made = ops.addTexts(doc.getState(), [{ name: `${name} log${jobs.length > 1 ? ` ${k + 1}` : ""}`, text: text || "(Nothing yet)", of: { step: id } }]);
         if (made.doc !== doc.getState()) doc.edit("open text", () => made.doc);
         if (made.last != null) {
           last ??= made.last;
           if (step.running) shown.set(job, made.last);
         }
       }
-      if (last != null) set({ textShown: last, textsOpen: true });
+      // (rising out of its step into the column, where the column is not showing it already)
+      if (last != null) set({ textShown: last, textsOpen: true, pdfShown: null, ...(showing === last ? {} : { textFlight: { id: last, to: "column" as const, start: performance.now() } }) });
     },
     showStepFiles: async (id: number) => {
       const step = stepOf(doc.getState(), id);

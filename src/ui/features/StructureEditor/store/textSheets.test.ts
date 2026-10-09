@@ -141,6 +141,27 @@ describe("texts on the page", () => {
     expect(state().texts[0].icon).toBeUndefined();
   });
 
+  it("without a sheet keep what they are the text of - a molecule by its place, as the molecules are numbered again", () => {
+    const { doc, state } = editor();
+    const water = { atoms: [{ el: "O", x: 0, y: 0, z: 0 }], bonds: [], at: { x: 0, y: 0 } };
+    doc.edit("two", (d) => ops.addMolecule3d(ops.addMolecule3d(d, water), { ...water, at: { x: 9, y: 0 } }));
+    const [, second] = state().molecules3d;
+    state().addTexts([{ name: "water.log", text: "out", of: { molecule: second.id } }]);
+    const t = state().texts[0];
+    expect(t.of).toEqual({ molecule: second.id });
+    // (shown from another molecule: of that one now - no step to undo)
+    const depth = doc.history().undoDepth;
+    state().setTextOf(t.id, { molecule: state().molecules3d[0].id });
+    expect(state().texts[0].of).toEqual({ molecule: state().molecules3d[0].id });
+    expect(doc.history().undoDepth).toBe(depth);
+    state().setTextOf(t.id, { molecule: second.id });
+    const ws = readWorkspace(workspaceText(state(), new Set(), ["a".repeat(64)]));
+    expect(ws?.texts[0].of).toEqual({ molecule: 1 });
+    const again = editor();
+    again.state().openWorkspace({ ...ws!, texts: ws!.texts.map((x) => ({ ...x, text: "out" })) }, true);
+    expect(again.state().texts[0].of).toEqual({ molecule: again.state().molecules3d[1].id });
+  });
+
   it("keep their sheets' places, whether they are icons and whether they are read, in the workspace", () => {
     const { state } = editor();
     state().addTexts([{ name: "a.txt", text: "a" }, { name: "b.txt", text: "b" }], { x: 1, y: 2 });

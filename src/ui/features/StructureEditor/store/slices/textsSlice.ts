@@ -2,7 +2,7 @@ import type { StoreApi } from "zustand";
 import type { DocumentStore } from "../../../../../lib/doc";
 import * as ops from "../../document";
 import type { StructureDocument } from "../../document";
-import type { EditorState } from "../types";
+import type { EditorState, TextOf } from "../types";
 
 type SetState = StoreApi<EditorState>["setState"];
 
@@ -60,6 +60,7 @@ export function createTextsSlice(doc: DocumentStore<StructureDocument>, set: Set
     riseText: (id: number) => set({ textFlight: { id, to: "column", start: performance.now() } }),
     endTextFlight: () => set({ textFlight: null }),
     setTextIcon: (id: number, icon: boolean) => doc.edit(icon ? "minimize text" : "expand text", (d) => ops.setTextIcon(d, id, icon)),
+    setTextOf: (id: number, of: TextOf) => doc.amend((d) => ops.setTextOf(d, id, of)),
     setHoveredText: (id: number | null) => set((prev: EditorState) => (prev.hoveredText === id ? prev : { ...prev, hoveredText: id })),
     selectTexts: (ids: Iterable<number>, add = false) =>
       set((prev: EditorState) => ({ ...prev, selTexts: new Set([...(add ? prev.selTexts : []), ...ids]), pdfSel: null, pdfBox: null })),
