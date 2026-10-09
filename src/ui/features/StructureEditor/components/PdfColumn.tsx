@@ -121,9 +121,10 @@ function ColumnPass({
     const x0 = size.width - store.getState().cover;
     if (p) from.current = { start: flight.start, rect: { x: x0 + p.x - left, y: HEADER_PX + p.y - top, w: p.w, h: p.h } };
   }
-  if (pdf) reader.take(pdf);
+  // (its size first, as far as it is known: a place asked for in it is worked out at it)
   reader.width = width;
   reader.tall = tall;
+  if (pdf) reader.take(pdf);
   useEffect(() => {
     reader.redraw = redraw;
     return () => {

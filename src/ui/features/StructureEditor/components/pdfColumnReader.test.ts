@@ -122,6 +122,30 @@ describe("the column's reader", () => {
     expect(r.pageNow().page).toBe(7);
   });
 
+  it("keeps to a place gone to as the column comes to its size - until it is moved otherwise", () => {
+    const sent = (width: number, tall: number) => {
+      const { r } = reading();
+      r.width = width;
+      r.tall = tall;
+      r.goToWhenRead(1, 7, 400, 0.3);
+      return r;
+    };
+    const there = sent(1200, 900);
+    settle(there);
+    // (sent before the column knew its size)
+    const r = sent(440, 800);
+    r.width = 1200;
+    r.tall = 900;
+    settle(r);
+    expect(r.at).toBeCloseTo(there.at, 4);
+    // (moved by a hand, it keeps no more to it)
+    r.scrollBy(0, 300, true);
+    const moved = r.at;
+    r.width = 900;
+    settle(r);
+    expect(r.at).toBeCloseTo(moved, 4);
+  });
+
   it("hears the system's Back keys", () => {
     const key = (k: Partial<KeyboardEvent>) => ({ metaKey: false, altKey: false, ctrlKey: false, key: "", code: "", ...k }) as KeyboardEvent;
     expect(isBackKey(key({ metaKey: true, key: "[" }))).toBe(true);
