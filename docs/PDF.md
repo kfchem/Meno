@@ -681,6 +681,38 @@ Not yet, and where it comes:
 - **A scanned page**: it is one picture over most of the page, so no figure is found on it. A box drawn by hand takes part of it.
 - **Reading a figure as a structure**: stage 5.
 
+### Step 5: texts drawn by Meno (2026-10-10, under way)
+
+Step 5 comes in parts: the trial of typing alone, shown first; the column's text drawn on the canvas, typed through Meno's field (5a); texts' sheets on the page (5b); the movement between the page and the column; colouring; and words on the page typed in place.
+
+**The trial of typing** (branch `agent/typing-trial`, not to be merged; its work goes on in 5a):
+- **A text in the column drawn by Meno** with WebGL: each line a picture drawn by the system's own type - Meno's monospaced first, any letter it lacks from the system's - only the lines in view, numbered; the caret, what is selected and what the IME is composing drawn over them. As sharp as the textarea it took the place of, at 100% and at 175%; a log of 5000 lines scrolls as a short file does.
+- **Typing through a field kept out of sight**, where the IME's candidates show at the caret, holding the caret's line and two either side, and what is selected, so that a word already written can be converted again.
+  - **On a Mac** (WebKit), a textarea, lying just where the drawn lines lie. Composing, its clauses, committing, Escape, and converting again (the kana key twice) were tried with Apple's Japanese input in the built app.
+  - **On Windows** (WebView2), an EditContext on the text's own element. A textarea there tells the page neither the IME's clauses - every clause was underlined alike - nor, converting again a word the caret is in, what it replaces; through the EditContext, the clause being converted is underlined thick, and the candidates follow it. Converting again from within a word, Microsoft's IME may first take away the part before the caret, then put the whole word in again at the caret: Meno takes that as one change of the word (lib/text/field `composingIn`, `withTakenAway`), undone at once, or none where it comes back as it was.
+- **The keys are each system's** (lib/text/keys): on a Mac, Option by words, Command to the ends, Control's keys (A, E, B, F, P, N, H, D, K), Home, End and a page moving the view, with Option the caret; on Windows, Ctrl by words, Home and End a line's ends, Ctrl with Home or End the text's, Ctrl with an arrow up or down the view a line. A page on moves the view a page with the caret.
+- **Still being looked into, on Windows**: typing through the EditContext showed 30-40 ms later than through the textarea; a probe of the trial's (`__menoTyping`) says where the time goes.
+
+**5a: the column's text on the canvas.** A text read in the column is drawn by the workspace's one canvas, in the column's pass, as a PDF read there is (*One canvas*): on a white sheet of its own, cut off where the column is, sliding with it. Its HTML half over it is see-through: it takes the pointer - a click puts the caret, two clicks a word, three a line, a drag selects on - the wheel, and holds the field it is typed through. Each text keeps where it was read, and what was selected, while the workspace is open.
+
+**5b: texts' sheets on the page.**
+- **A text opened, dropped or made new** lies on the page as a sheet as well as being read in the column: where it was dropped, or beside what is in view, clear of what lies there. A calculation's output shown from its molecule, and a step's log, have no sheet: their molecule, or their step, is their body.
+- **The sheet** shows the text's first lines as they would be printed - Meno's monospaced type at 9 points, a line every 12 - as wide as its longest line among them (at most 80 letters, at least 32), as tall as its first 40 lines (at least 3); its name lies under it, as a PDF's does. Seen from far off, its lines are grey strokes; nearer, its words come up over them, sharp at every zoom (troika). A line with a letter Meno's monospaced type lacks takes it from IBM Plex Sans JP.
+- **Handled as a picture is**: a drag on it moves the view; held still, it is taken hold of, the selection's shade spreading from the pointer, and the drag moves it; a click selects it, Ctrl/Cmd and a click adds it or takes it out; a box or a lasso takes it by its middle; selected, it moves with the selection, and is deleted with it, each as one step. Delete over one deletes it. Fit takes sheets in.
+- **Read in the column** by two clicks, or *Read* in its right-click menu (*Read*, *Delete text*). A text's tab closed in the column leaves its sheet on the page, read there no longer; a text with no sheet goes, as before.
+- **Saved** in the workspace: each text's sheet's place (`at`, its top left) and whether it is read in the column (`reading`).
+
+Decided while building it, for the maintainer to confirm:
+- **On a Mac the textarea, on Windows the EditContext**: each the one its system's webview takes the IME through best. WebKit has no EditContext.
+- **A Mac's Home, End and Page keys move the view**, the caret staying, as in the Mac's own texts; with Option, a page moves the caret too. Tab moves the keys on, as the textarea did.
+- **A sheet's size** (above), and its top left where it lies, so that a text growing at its end grows down.
+- **Closing a text's tab leaves its sheet on the page**; deleting the sheet takes the text out of the workspace.
+
+Not yet, and where it comes:
+- **The movement between the page and the column** - a sheet rising into the column as it is read, going back as it is closed, the column's lines coming up sharp once it settles - and an output rising from its molecule: next.
+- **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
+- **Colouring** (Lezer), **words on the page typed in place**: after.
+
 ## In order
 
 0. **A trial, kept off main** (done, 2026-10-09; *The trial*, above):

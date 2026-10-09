@@ -64,7 +64,7 @@ src/
   ui/features/
     StructureEditor/      2D editor (see below)
     PythonConsole/        UI for the Python sidecar
-    TextEditor/           plain textarea with line numbers
+    TextEditor/           a text Meno draws: its editor, line pictures, and the field typed through
     StyleEditor/          every drawing setting, with a preview
     SettingsPanel/        Settings: drawing style, molecules in 3D, chemistry, files, calculations
                           and their jobs, plugins, dictionary, network
@@ -788,6 +788,23 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   link - and the canvas eases and draws; it is kept with the PDF
   (`reading`) once it rests, by amending the document rather than editing
   it, so that it is no step to undo.
+- **A text in the column** (`components/ColumnText.tsx`): drawn in the
+  column's pass as a PDF's pages are, on a white sheet of its own, from the
+  text's editor (`TextEditor/editor.ts`: its lines, what is selected, how
+  far it is scrolled, what the IME composes), which its HTML half
+  (`TextEditor/TextBody.tsx`) shares, kept for each workspace by the text's
+  id (`TextEditor/columnText.ts`). Each line is a picture drawn by the
+  system's type (`TextEditor/linePictures.ts`), only those in view. Typing
+  goes through a field kept out of sight (`TextEditor/typingField.ts`): an
+  EditContext on Windows, a textarea elsewhere; what it holds and how a
+  change in it is read is `lib/text/field.ts`, an editor's keys
+  `lib/text/keys.ts`, moving and selecting `lib/text/editing.ts`.
+- **Texts' sheets on the page** (`components/TextSheets2D.tsx`,
+  `utils/textSheets.ts`): a text with a place (`WorkspaceText.at`) lies on
+  the page, its first lines in troika's signed-distance type (IBM Plex Mono,
+  bundled). Selected with the rest (`selTexts`), moved with a dragged
+  selection (`MarkPlaces.texts`); whether it is read in the column is the
+  text's (`reading`), amended as a PDF's is.
 - **Words** (`pdf_text`, `lib/pdf/text`): each page's letters, read by
   PDFium when first wanted, each with its box in points from the page's
   top left. The place nearest the pointer, words, lines, the marks of a

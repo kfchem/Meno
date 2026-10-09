@@ -450,7 +450,9 @@ work.meno (zip)
   held in the workspace, editable, written back by Export). Each is a file
   kept, `text/plain`, by its SHA-256 - one that is an output's words kept
   once - and `workspace.json` lists them in order (`texts`: each one's
-  name and SHA-256) with the one its column showed (`textShown`). Where a
+  name and SHA-256 - and, a text with a sheet on the page, the sheet's top
+  left, `at`, and `reading: false` where its column has no tab for it;
+  docs/PDF.md, step 5) with the one its column showed (`textShown`). Where a
   text was opened from is not saved, as an output kept is not. A text the
   file does not hold is left out as the workspace opens, and named. A PDF
   read in the column keeps where it was read (`reading`, in its entry in
