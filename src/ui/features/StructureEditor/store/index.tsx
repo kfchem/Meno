@@ -116,6 +116,7 @@ export function createEditorStore(
     // (a canvas opened for a text shows it)
     textShown: doc.getState().texts?.slice(-1)[0]?.id ?? null,
     textsOpen: !!doc.getState().texts?.length,
+    cover: 0,
 
     // Ephemeral view state: hover, gestures, camera requests, edit buffers.
     sel: { atoms: new Set<number>(), bonds: new Set<number>() },

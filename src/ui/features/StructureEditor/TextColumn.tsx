@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
 import { ArrowUpTrayIcon, ChevronDoubleRightIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -6,7 +6,7 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { exists, writeTextFile } from "@tauri-apps/plugin-fs";
 import TextEditor from "../TextEditor";
 import { DURATION, EASE_SLIDE, FADE } from "../../theme/motion";
-import { useEditor } from "./store";
+import { useEditor, useEditorStore } from "./store";
 import type { WorkspaceText } from "./store/types";
 import { textExportPath } from "./utils/texts";
 import { takenBeside } from "../../../lib/io/beside";
@@ -23,7 +23,8 @@ const WIDEST = 0.7;
  * as any other - and written to a file by Export. Closing a text takes it
  * out of the workspace; hiding the column keeps them all. The column slides
  * open and shut as the panel beside the canvas does, and is as wide as its
- * left edge is dragged.
+ * left edge is dragged. It lies over the canvas's right side (docs/PDF.md,
+ * *One canvas*), and says how much of it it covers as it goes (`cover`).
  */
 export default function TextColumn() {
   const texts = useEditor((s) => s.texts);
@@ -32,17 +33,33 @@ export default function TextColumn() {
   const shown = texts.find((t) => t.id === shownId);
   const [width, setWidth] = useState(WIDTH);
   const [dragging, setDragging] = useState(false);
+  // (how much of the canvas it covers, as it slides and as it is dragged: what is in view is the rest)
+  const store = useEditorStore();
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!el) {
+      store.getState().setCover(0);
+      return;
+    }
+    const seen = new ResizeObserver(() => store.getState().setCover(el.getBoundingClientRect().width));
+    seen.observe(el);
+    return () => {
+      seen.disconnect();
+      store.getState().setCover(0);
+    };
+  }, [el, store]);
   return (
     <AnimatePresence initial={false}>
       {open && shown && (
         <motion.div
           key="texts"
+          ref={setEl}
           initial={{ width: 0, opacity: 0 }}
           animate={{ width, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           // (dragged, it follows the pointer)
           transition={dragging ? { duration: 0 } : { duration: DURATION.move, ease: EASE_SLIDE }}
-          className={clsx("shrink-0 h-full overflow-hidden relative", dragging && "select-none")}
+          className={clsx("absolute top-0 right-0 z-20 h-full overflow-hidden", dragging && "select-none")}
         >
           <Column texts={texts} shown={shown} width={width} />
           <Edge width={width} setWidth={setWidth} setDragging={setDragging} />

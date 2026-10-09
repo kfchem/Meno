@@ -103,7 +103,9 @@ export default function FitToContent2D({
     const poses = molecules3d.map((m) =>
       poseOf(m, solidOf(m, style3d), lookOf(m, style3d), turns3d[m.id], frames3d[m.id]),
     );
-    const w = size.width;
+    // (what can be seen: the column, over the canvas's right side, left out)
+    const cover = Math.min(store.getState().cover, size.width * 0.8);
+    const w = size.width - cover;
     const h = size.height;
     const pad = Math.max(0, Math.min(paddingPx, Math.min(w, h) * 0.45));
     const fitFrom = (over?: { x: number; y: number }) => {
@@ -128,7 +130,8 @@ export default function FitToContent2D({
     if (poses.length && eyeHeight != null) seen = fitFrom({ x: seen.cx, y: seen.cy });
     const fit = seen.zoom;
     const z = first ? Math.min(fit, cam.zoom || fit) : fit;
-    const cx = seen.cx;
+    // (the middle of what can be seen lies half the column to the left of the canvas's)
+    const cx = seen.cx + cover / 2 / z;
     const cy = seen.cy;
     if (fitted.current) {
       setViewGoal(cam, { zoom: z, x: cx, y: cy });

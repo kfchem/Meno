@@ -128,11 +128,14 @@ export default function Pdfs2D() {
     const cam = camera as THREE.OrthographicCamera;
     const a = pageAt(-1, -1, cam);
     const c = pageAt(1, 1, cam);
-    const inView = b.x0 >= Math.min(a.x, c.x) && b.x1 <= Math.max(a.x, c.x) && b.y0 >= Math.min(a.y, c.y) && b.y1 <= Math.max(a.y, c.y);
+    // (what can be seen: the column over the canvas's right side left out)
+    const cover = store.getState().cover;
+    const right = Math.max(a.x, c.x) - cover / cam.zoom;
+    const inView = b.x0 >= Math.min(a.x, c.x) && b.x1 <= right && b.y0 >= Math.min(a.y, c.y) && b.y1 <= Math.max(a.y, c.y);
     if (inView) return;
     const pad = 1.12;
-    const zoom = Math.min(size.width / ((b.x1 - b.x0) * pad), size.height / ((b.y1 - b.y0) * pad), cam.zoom);
-    setViewGoal(cam, { zoom, x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 });
+    const zoom = Math.min((size.width - cover) / ((b.x1 - b.x0) * pad), size.height / ((b.y1 - b.y0) * pad), cam.zoom);
+    setViewGoal(cam, { zoom, x: (b.x0 + b.x1) / 2 + cover / 2 / zoom, y: (b.y0 + b.y1) / 2 });
     invalidate();
   }, [pdfs, camera, size, invalidate]);
 

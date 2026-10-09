@@ -514,7 +514,9 @@ export function useStructureEvents(
   const pasteTarget = () => {
     const p = pointerRef.current && clientToWorld(pointerRef.current.x, pointerRef.current.y);
     const cam = camRef.current;
-    return p ?? { x: cam?.position.x ?? 0, y: cam?.position.y ?? 0 };
+    // (the middle of what can be seen: the column over the canvas's right side left out)
+    const cover = store.getState().cover;
+    return p ?? { x: (cam?.position.x ?? 0) - (cam?.zoom ? cover / 2 / cam.zoom : 0), y: cam?.position.y ?? 0 };
   };
 
   return {

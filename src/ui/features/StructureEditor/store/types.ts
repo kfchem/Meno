@@ -269,6 +269,13 @@ export type EditorState = {
   /** Whether the column of texts is open beside the canvas. */
   textsOpen: boolean;
   /**
+   * How much of the canvas, from its right edge, the column covers now, in
+   * CSS pixels - the column lies over the canvas (docs/PDF.md, *One
+   * canvas*), so what is in view is the rest of it.
+   */
+  cover: number;
+  setCover: (px: number) => void;
+  /**
    * Texts added to the workspace, as one undo step, the last shown: each
    * one the workspace holds already - the same name and text - shown instead.
    */
