@@ -19,7 +19,7 @@ import {
   AromaticCircles2D,
   Wedges2D,
   Labels2D,
-  LabelEditor2D,
+  LabelTyping2D,
   HoverOverlay2D,
   ChemMarks2D,
   SnapArc2D,
@@ -1437,7 +1437,7 @@ function WorkspaceContent({
           {/* stereo drawn without a configuration, while Meno asks about it */}
           <OpenStereo2D atoms={ask3d?.open.flatMap((o) => o.atoms) ?? NO_IDS} bonds={ask3d?.open.flatMap((o) => o.bonds) ?? NO_IDS} />
           {/* Label editor */}
-          <LabelEditor2D />
+          <LabelTyping2D />
           {/* Words being written, in place */}
           <CaptionTyping2D />
           {/* Hover overlay */}

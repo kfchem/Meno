@@ -25,33 +25,24 @@
  */
 import * as THREE from "three";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { flushSync, useFrame, useThree } from "@react-three/fiber";
-import { CAPTION_LINE, captionPlace, captionPlaces, captionSet, type CaptionPlaces } from "../../../../lib/chem/captions";
+import { useFrame, useThree } from "@react-three/fiber";
+import { CAPTION_LINE, captionPlace, captionPlaces, captionSet } from "../../../../lib/chem/captions";
 import { fontStack, labelSetOf, sameTexts, type TextItem } from "../../../../lib/chem/layout2d";
-import { IS_MAC } from "../../../../lib/doc/shortcuts";
-import { selFrom, selTo, type Sel } from "../../../../lib/text/editing";
 import { COLORS } from "../../../theme/colors";
 import { TAU, follow } from "../../../theme/motion";
 import { useEditor, useEditorStore } from "../store";
 import type { Caption, EditorState } from "../store/types";
 import { pageAt } from "../utils/page";
 import { WordsEditor } from "../utils/wordsEditor";
-import type { Composing } from "../../TextEditor/editor";
 import { useDrawnLayout } from "./drawnLayoutContext";
 import { WholeTexts2D } from "./Labels2D";
-import { hasEditContext, typingField, type TypingField } from "../../TextEditor/typingField";
+import { usePressAmong, useWriting, writingMarks, measured, type WritingDrawn } from "./writing";
+import type { TypingField } from "../../TextEditor/typingField";
+import { pageField } from "./pageField";
 
 /** How far round the words they are lit, and taken as theirs by a press, in ems; how strongly the light shows. */
 const MARGIN = 0.3;
 const LIT = 0.16;
-/** What is selected, lit as in the column. */
-const SELECTED = 0.3;
-/** The caret: how wide on the screen, in pixels, and how long it shows and hides - steadily, a moment after a key. */
-const CARET_PX = 1.5;
-const BLINK_MS = 530;
-/** Two presses this near in time and place are two clicks: in ms, and in pixels. */
-const CLICKS_MS = 500;
-const CLICKS_PX = 4;
 /** How long words kept or let go are drawn at most, waiting for their caption's own to be drawn, in ms. */
 const LEFT_MS = 500;
 
@@ -67,18 +58,6 @@ export default function CaptionTyping2D() {
   if (left) out.push(<Writing key={left.n} edit={{ id: left.id, at: left.at, n: left.n }} caption={captions.find((c) => c.id === left.id)} left />);
   if (edit?.n != null) out.push(<Writing key={edit.n} edit={edit} caption={edit.id != null ? captions.find((c) => c.id === edit.id) : undefined} />);
   return <>{out}</>;
-}
-
-/** What is drawn of words being written: their letters - about their middle - where each place lies, what is selected and composed, and how far they reach. */
-type Drawn = { items: readonly TextItem[]; places: CaptionPlaces; shown: CaptionPlaces; sel: Sel; c: Composing | null; halfW: number; halfH: number };
-
-let measurer: CanvasRenderingContext2D | null = null;
-/** How wide a text is set in a CSS font, in the screen's pixels. */
-function measured(font: string, text: string): number {
-  measurer ??= document.createElement("canvas").getContext("2d");
-  if (!measurer) return text.length * 8;
-  measurer.font = font;
-  return measurer.measureText(text).width;
 }
 
 /**
@@ -119,9 +98,9 @@ function Writing({ edit, caption, left = false }: { edit: Edit; caption?: Captio
   const halfW = Math.max(laid.halfW, fs / 2);
   const halfH = Math.max(laid.halfH, fs / 2);
   // what is drawn: the caret, what is selected and the light round them as the words drawn have them - those last given, until they are drawn
-  const latest = useRef<Drawn | null>(null);
-  const drawnNow = useRef<Drawn | null>(null);
-  const now: Drawn = { items: laid.items, places, shown, sel: ed.sel, c, halfW, halfH };
+  const latest = useRef<WritingDrawn | null>(null);
+  const drawnNow = useRef<WritingDrawn | null>(null);
+  const now: WritingDrawn = { items: laid.items, places, shown, sel: ed.sel, c, halfW, halfH };
   latest.current = now;
   if (drawnNow.current && sameTexts(drawnNow.current.items, now.items)) drawnNow.current = now;
   const onDrawn = (items: readonly TextItem[]) => {
@@ -179,9 +158,9 @@ function Writing({ edit, caption, left = false }: { edit: Edit; caption?: Captio
   };
   const finishing = useRef(finish);
   finishing.current = finish;
-  /** Where on the page a point of the screen is; and whether it is among the words, theirs to take. */
-  const room = useRef({ at, halfW, halfH, margin });
-  room.current = { at, halfW, halfH, margin };
+  /** Where on the page a point of the screen is; and whether a point of the page is among the words, theirs to take. */
+  const among = useRef((q: Pt) => Math.abs(q.x - at.x) <= halfW + margin && Math.abs(q.y - at.y) <= halfH + margin);
+  among.current = (q: Pt) => Math.abs(q.x - at.x) <= halfW + margin && Math.abs(q.y - at.y) <= halfH + margin;
   const world = useRef((cx: number, cy: number): Pt => {
     const r = gl.domElement.getBoundingClientRect();
     const p = pageAt(((cx - r.left) / r.width) * 2 - 1, -(((cy - r.top) / r.height) * 2 - 1), camera);
@@ -193,71 +172,8 @@ function Writing({ edit, caption, left = false }: { edit: Edit; caption?: Captio
   // the field: made as the words are written, given the keys, laid at the caret - gone with them
   useLayoutEffect(() => {
     if (left) return;
-    const host = gl.domElement.parentElement ?? document.body;
-    const ec = hasEditContext();
-    const el: HTMLElement = document.createElement(ec ? "div" : "textarea");
-    // (its words not the document's until kept: its undo its own - and no drawing's shortcut while it has the keys)
-    el.dataset.textField = "";
-    el.dataset.nativeUndo = "";
-    el.setAttribute("aria-label", "Text");
-    if (el instanceof HTMLTextAreaElement) {
-      el.spellcheck = false;
-      el.setAttribute("autocorrect", "off");
-      el.setAttribute("autocapitalize", "off");
-      el.setAttribute("autocomplete", "off");
-      el.wrap = "off";
-    } else el.tabIndex = -1;
-    Object.assign(el.style, {
-      position: "absolute",
-      margin: "0",
-      padding: "0",
-      border: "0",
-      outline: "none",
-      resize: "none",
-      overflow: "hidden",
-      whiteSpace: "pre",
-      opacity: "0",
-      pointerEvents: "none",
-      background: "transparent",
-      ...(ec ? { inset: "0" } : {}),
-    });
-    host.appendChild(el);
-    // (Enter, Escape and undo the words' own - before the field takes the keys)
-    const onKey = (e: KeyboardEvent) => {
-      if (e.isComposing || e.keyCode === 229 || ed.composing) return;
-      const mod = IS_MAC ? e.metaKey : e.ctrlKey;
-      const key = e.key.toLowerCase();
-      const stop = () => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-      };
-      if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-        stop();
-        finishing.current(true);
-      } else if (e.key === "Escape") {
-        stop();
-        finishing.current(false);
-      } else if (mod && key === "z") {
-        stop();
-        if (e.shiftKey) ed.redo();
-        else ed.undo();
-        field.current?.sync();
-      } else if (!IS_MAC && e.ctrlKey && key === "y") {
-        stop();
-        ed.redo();
-        field.current?.sync();
-      }
-    };
-    el.addEventListener("keydown", onKey);
-    const f = typingField(el, ed);
+    const { field: f, dispose } = pageField(gl.domElement, ed, { label: "Text", lines: true, keep: () => finishing.current(true), letGo: () => finishing.current(false) });
     field.current = f;
-    // (the keys gone elsewhere - a press away from the words, another window: kept)
-    const onBlur = () =>
-      window.setTimeout(() => {
-        if (document.activeElement !== el) finishing.current(true);
-      }, 0);
-    el.addEventListener("blur", onBlur);
-    f.focus();
     // (opened by a press among the words: the caret there - or, the press dragged on, what it selects)
     const press = edit.press;
     if (press) {
@@ -281,11 +197,8 @@ function Writing({ edit, caption, left = false }: { edit: Edit; caption?: Captio
     return () => {
       dragging.current?.();
       dragging.current = null;
-      el.removeEventListener("keydown", onKey);
-      el.removeEventListener("blur", onBlur);
-      f.dispose();
+      dispose();
       field.current = null;
-      el.remove();
     };
     // (the press that opened them, once - as they open)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -301,103 +214,9 @@ function Writing({ edit, caption, left = false }: { edit: Edit; caption?: Captio
     return () => window.clearTimeout(t);
   }, [left, n, store]);
 
-  // anything drawn changed: drawn again, the field laid at the caret
-  useEffect(() => {
-    // (drawn again before the next frame, once for all a task changed, as the column's text is (ColumnText): an update
-    // made in an event React does not know - an EditContext's textupdate - would wait otherwise for a task after that frame)
-    let due = false;
-    ed.onChange = () => {
-      if (!due) {
-        due = true;
-        queueMicrotask(() => {
-          due = false;
-          flushSync(() => setTick((t) => t + 1));
-        });
-      }
-      invalidate();
-      field.current?.place();
-    };
-    return () => {
-      ed.onChange = () => {};
-    };
-  }, [ed, invalidate]);
-  // (drawn again: the field laid at the caret)
-  useEffect(() => {
-    field.current?.place();
-  });
-
-  // a press among the words: the caret there, two clicks a word, three a line, a drag selecting on - the field keeping the keys
-  useEffect(() => {
-    if (left) return;
-    const toWorld = world.current;
-    const among = (e: MouseEvent) => {
-      if (e.target !== gl.domElement) return null;
-      const q = toWorld(e.clientX, e.clientY);
-      const r = room.current;
-      return Math.abs(q.x - r.at.x) <= r.halfW + r.margin && Math.abs(q.y - r.at.y) <= r.halfH + r.margin ? q : null;
-    };
-    // (the press that opened them its first click)
-    const p = edit.press;
-    let last = p && !p.drag ? { t: p.t, x: p.client.x, y: p.client.y, clicks: 1 } : { t: 0, x: 0, y: 0, clicks: 0 };
-    const onDown = (e: PointerEvent) => {
-      const q = among(e);
-      // (elsewhere: the press its own, the words kept as the field lets the keys go)
-      if (!q) return;
-      // (theirs: no box begun, no view moved - nor the field's keys let go)
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.button !== 0) return;
-      const now = performance.now();
-      const clicks = now - last.t < CLICKS_MS && Math.hypot(e.clientX - last.x, e.clientY - last.y) < CLICKS_PX ? Math.min(3, last.clicks + 1) : 1;
-      last = { t: now, x: e.clientX, y: e.clientY, clicks };
-      const from = ed.pressAt(q, clicks, e.shiftKey);
-      field.current?.focus();
-      field.current?.sync();
-      const onMove = (m: PointerEvent) => ed.dragTo(toWorld(m.clientX, m.clientY), from, clicks);
-      const onUp = () => {
-        window.removeEventListener("pointermove", onMove, true);
-        window.removeEventListener("pointerup", onUp, true);
-        field.current?.sync();
-      };
-      window.addEventListener("pointermove", onMove, true);
-      window.addEventListener("pointerup", onUp, true);
-    };
-    // (two clicks among them, or a right-click: no Quick Add, no menu)
-    const swallow = (e: MouseEvent) => {
-      if (!among(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    window.addEventListener("pointerdown", onDown, true);
-    window.addEventListener("dblclick", swallow, true);
-    window.addEventListener("contextmenu", swallow, true);
-    return () => {
-      window.removeEventListener("pointerdown", onDown, true);
-      window.removeEventListener("dblclick", swallow, true);
-      window.removeEventListener("contextmenu", swallow, true);
-    };
-    // (the press that opened them, once - as they open)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ed, gl, camera, left]);
-
-  // the caret blinking, while the words have the keys
-  useEffect(() => {
-    const t = window.setInterval(() => ed.focused && invalidate(), BLINK_MS / 2);
-    return () => window.clearInterval(t);
-  }, [ed, invalidate]);
-  const caretRef = useRef<THREE.Mesh>(null);
-  // (the view moved or zoomed: drawn again at its size, the field laid at the caret again)
-  const view = useRef("");
-  useFrame(() => {
-    const now = `${cam.zoom},${cam.position.x},${cam.position.y},${size.width},${size.height}`;
-    if (now === view.current) return;
-    view.current = now;
-    setTick((t) => t + 1);
-  });
-  useFrame(() => {
-    const since = performance.now() - ed.stirred;
-    if (caretRef.current) caretRef.current.visible = ed.focused && (since < BLINK_MS || Math.floor(since / BLINK_MS) % 2 === 0);
-  });
+  // drawn again as the words change and the view moves; a press among them theirs
+  const caretRef = useWriting(ed, field, () => setTick((t) => t + 1));
+  usePressAmong({ ed, field, among, world, seed: edit.press, off: left });
 
   // (lit as they open, and no longer as they are kept or let go)
   const light = useRef<THREE.MeshBasicMaterial>(null);
@@ -413,52 +232,9 @@ function Writing({ edit, caption, left = false }: { edit: Edit; caption?: Captio
     invalidate();
   });
 
-  const out: ReactNode[] = [];
-  const box = (key: string, x0: number, x1: number, y: number, h: number, color: string, opacity: number, order: number, ref?: React.Ref<THREE.Mesh>) =>
-    out.push(
-      <mesh key={key} ref={ref} position={[(x0 + x1) / 2, y, 0.05]} scale={[Math.max(px, x1 - x0), h, 1]} renderOrder={order}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial color={color} transparent opacity={opacity} depthTest={false} depthWrite={false} toneMapped={false} />
-      </mesh>,
-    );
-  const lineH = fs * CAPTION_LINE;
   // the caret, what is selected and what the IME has so far, as the words drawn have them
   const d = drawnNow.current;
-  if (d && !left) {
-    const dc = d.c;
-    // what is selected, line by line
-    const from = selFrom(d.sel);
-    const to = selTo(d.sel);
-    if (!dc && to > from) {
-      const a = d.places.at[from];
-      const b = d.places.at[to];
-      for (let i = a.line; i <= b.line; i++) {
-        const l = d.places.lines[i];
-        box(`s${i}`, i === a.line ? a.x : l.x0, i === b.line ? b.x : l.x1 + fs * 0.25, l.y, lineH, COLORS.highlight, SELECTED, 4);
-      }
-    }
-    // what the IME has so far, underlined - clause by clause where the system says, the one converted thick
-    if (dc) {
-      const clauses = dc.clauses?.length ? dc.clauses : [{ from: 0, to: dc.text.length, thick: false }];
-      clauses.forEach((k, n) => {
-        const a = d.shown.at[dc.from + k.from];
-        const b = d.shown.at[dc.from + k.to];
-        for (let i = a.line; i <= b.line; i++) {
-          const l = d.shown.lines[i];
-          const x0 = (i === a.line ? a.x : l.x0) + (n > 0 ? px : 0);
-          const x1 = (i === b.line ? b.x : l.x1) - (n < clauses.length - 1 ? px : 0);
-          const thick = (k.thick ? 2 : 1) * px;
-          box(`u${n}:${i}`, x0, x1, l.y - fs * 0.62 - thick / 2, thick, opts.labelColor ?? "#000000", 1, 6);
-        }
-      });
-    }
-    // the caret - in what the IME has so far, where it says
-    if (!dc || dc.sel[0] === dc.sel[1]) {
-      const p = dc ? d.shown.at[dc.from + dc.sel[1]] : d.places.at[d.sel.head];
-      const l = (dc ? d.shown : d.places).lines[p.line];
-      box("caret", p.x - (CARET_PX * px) / 2, p.x + (CARET_PX * px) / 2, l.y - fs * 0.05, fs * 1.15, opts.labelColor ?? "#000000", 1, 7, caretRef);
-    }
-  }
+  const out = d && !left ? writingMarks(d, { fs, lineH: fs * CAPTION_LINE, px, ink: opts.labelColor ?? "#000000", caretRef }) : [];
   const lit = d ?? now;
   return (
     <group>

@@ -402,6 +402,23 @@ All hover-based, as above.
   typing - N+, NH3+, O-, Fe2+, 13C, or a charge alone - by + and - over
   an atom, or from its menu, which also gives or takes an unpaired
   electron.)
+- **Labels typed in place** (the maintainer, 2026-10-10: no HTML box). A
+  label is written where it stands, drawn by Meno as words on the page are
+  (*Text*, below; `LabelTyping2D`): set as a label is set, in the drawing's
+  typeface at its size, its first letter on the atom - a two-letter
+  symbol's middle - on a light of its own that hides the label it had, its
+  charge too; with the caret, what is selected and what an input method
+  composes drawn over it. Typed through the field words on the page are
+  typed through (`pageField`), laid at the caret so that an input method's
+  candidates show there - an input method's full-width letters are taken
+  as the ordinary ones once it gives them. Begun by a click on an atom, or
+  by a letter typed over one; Enter keeps it, Escape lets it go, a press
+  elsewhere keeps it; a click in it puts the caret, a drag selects. Kept,
+  it is drawn as written until the drawing's own label is drawn in its
+  place, then goes in a moment, the label coming through: never a frame
+  with no label, nor with the old one. The drawing's labels are drawn each
+  by its atom (`Labels2D` `keyOf`): a label added or taken away sets no
+  other label's letters again.
 - Ring templates (3- to 8-membered, benzene), fused onto a bond or an atom;
   chains. (Chains and rings came back on 2026-10-03 as the honeycomb: three
   clicks on an atom or two on empty space, the honeycomb's ring where a

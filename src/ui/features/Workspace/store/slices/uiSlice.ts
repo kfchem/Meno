@@ -10,6 +10,9 @@ import { labelTextOf, readLabel } from "../../utils/labelTyping";
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
 
+/** How many label edits have begun: each its own number. */
+let labelEdits = 0;
+
 export function createUiSlice(
   doc: DocumentStore<WorkspaceDocument>,
   set: SetState,
@@ -45,6 +48,7 @@ export function createUiSlice(
             value: val,
             autoCap,
             opened: { at: typeof performance !== "undefined" ? performance.now() : Date.now(), value: val },
+            n: ++labelEdits,
           },
         };
       }),
@@ -68,6 +72,7 @@ export function createUiSlice(
       // An element with a charge, or a charge alone, sets the atom's
       // chemistry (labelTyping); anything else is a label as typed.
       const atom = get().model.atoms.find((a) => a.id === id);
+      let changed = false;
       if (value && atom) {
         const read = readLabel(value, isElementSymbol);
         const chem =
@@ -85,13 +90,17 @@ export function createUiSlice(
                 /^R\d+$/.test(read.el)
                 ? { el: "R#", rgroups: [Number.parseInt(read.el.slice(1), 10)] }
                 : { el: read.el };
-        doc.edit("rename atom", (d) => ops.setAtomChemistry(d, id, chem));
+        changed = doc.edit("rename atom", (d) => ops.setAtomChemistry(d, id, chem));
       }
       set((prev: EditorState) => ({
         ...prev,
         labelEdit: { active: false, atomId: null, value: "", autoCap: true },
+        // (written anew: drawn as written until the drawing's own label is)
+        labelLeft: changed && labelEdit.n != null ? { atomId: id, n: labelEdit.n, text: value } : prev.labelLeft,
       }));
     },
+
+    labelShown: () => set((prev: EditorState) => (prev.labelLeft ? { ...prev, labelLeft: null } : prev)),
 
     cancelLabelEdit: () =>
       set((prev: EditorState) => ({

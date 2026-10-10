@@ -7,6 +7,7 @@ import { labelSetOf, placeLabel, sameTexts, type TextItem } from "../../../../li
 import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
 import { labelFont } from "../../../../lib/chem/labelFonts";
 import { useDrawnLayout } from "./drawnLayoutContext";
+import { useEditor, useEditorStore } from "../store";
 
 /**
  * How far an italic run leans: about the slant of a sans-serif's italic.
@@ -23,10 +24,20 @@ function slanted(x: number, y: number): THREE.Matrix4 {
 /**
  * The drawing's atom labels, from the shared layout - which puts an atom
  * being dragged where it is being dragged to, so its label goes with it.
+ * Each is drawn by what its atom is: a label added or taken away sets no
+ * other label's letters again. A label just written is told when it is
+ * drawn (LabelTyping2D), drawn over until then by what was written.
  */
 export default function Labels2D() {
-  const { layout } = useDrawnLayout();
-  return <Texts2D texts={layout.texts} />;
+  const { layout, atoms } = useDrawnLayout();
+  const store = useEditorStore();
+  const waited = useEditor((s) => s.labelLeft != null);
+  const keyOf = (t: TextItem, i: number) => {
+    const index = t.beside ? t.markOf : t.atom;
+    const id = index != null ? atoms[index]?.id : undefined;
+    return id != null ? `${t.beside ? "mark" : "atom"}-${id}` : `txt-${i}`;
+  };
+  return <Texts2D texts={layout.texts} keyOf={keyOf} onDrawn={waited ? () => store.getState().labelShown() : undefined} />;
 }
 
 /** troika's text, as far as Meno looks into it: whether its letters are still to be set, or being set. */
@@ -51,6 +62,7 @@ export function Texts2D({
   renderOrder = 30,
   fade = true,
   onDrawn,
+  keyOf,
 }: {
   texts: readonly TextItem[];
   moved?: boolean;
@@ -58,6 +70,8 @@ export function Texts2D({
   renderOrder?: number;
   fade?: boolean;
   onDrawn?: (texts: readonly TextItem[]) => void;
+  /** What each text is drawn by, from one set to the next: by default its place in the set. */
+  keyOf?: (t: TextItem, i: number) => string;
 }) {
   const { opts, zoom } = useDrawnLayout();
 
@@ -121,7 +135,7 @@ export function Texts2D({
     return items.map((t, i) => {
       const fontWorld = labelZoom != null ? t.fontPx / Math.max(labelZoom, 1e-6) : t.fontPx;
       return (
-        <group key={`txt-${i}`}>
+        <group key={keyOf ? keyOf(t, i) : `txt-${i}`}>
           {/* (a mark - a charge's circle, a radical's dot - is drawn with the lines) */}
           {placeLabel(t, fontWorld, set).map((run, k) => run.mark ? null : (
             // (an italic run - the t of t-Bu - slanted about its baseline)
@@ -146,6 +160,7 @@ export function Texts2D({
         </group>
       );
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyOf: what each is drawn by, as the texts are
   }, [items, opts, labelZoom, labelColor, font, moved, shadow, renderOrder]);
   if (font === null) return null;
   return <group ref={group}>{labels}</group>;
@@ -162,7 +177,7 @@ export function Texts2D({
  * is in view. Moved, they are moved by what holds them: a set placed
  * elsewhere is another set.
  */
-export function WholeTexts2D({ texts, fadeIn = false, onDrawn }: { texts: readonly TextItem[]; fadeIn?: boolean; onDrawn?: (texts: readonly TextItem[]) => void }) {
+export function WholeTexts2D({ texts, fadeIn = false, onDrawn, renderOrder }: { texts: readonly TextItem[]; fadeIn?: boolean; onDrawn?: (texts: readonly TextItem[]) => void; renderOrder?: number }) {
   // (two sets, one shown and one being set - each set made anew, so that it waits in its own Suspense)
   const sets = useRef<{ at: [readonly TextItem[] | null, readonly TextItem[] | null]; front: 0 | 1; told: readonly TextItem[] | null }>({ at: [null, null], front: 0, told: null });
   const [, setShown] = useState(0);
@@ -194,7 +209,7 @@ export function WholeTexts2D({ texts, fadeIn = false, onDrawn }: { texts: readon
         return (
           <Suspense key={i} fallback={null}>
             <group visible={i === s.front}>
-              <Texts2D texts={items} fade={fadeIn && first.current} onDrawn={(t) => drawn(i, t)} />
+              <Texts2D texts={items} fade={fadeIn && first.current} onDrawn={(t) => drawn(i, t)} renderOrder={renderOrder} />
             </group>
           </Suspense>
         );

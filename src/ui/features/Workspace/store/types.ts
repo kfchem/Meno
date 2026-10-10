@@ -795,7 +795,17 @@ export type EditorState = {
     autoCap: boolean;
     /** When it was begun, and with what: a double-click takes back one its first click began. */
     opened?: { at: number; value: string };
+    /** Each edit its own number, given as it begins. */
+    n?: number;
   };
+  /**
+   * A label just written, drawn as it was written until the drawing's own is
+   * drawn in its place (LabelTyping2D), so that it never goes from the page
+   * for a frame: its atom, its edit's number, what it says.
+   */
+  labelLeft: { atomId: number; n: number; text: string } | null;
+  /** The drawing's labels drawn again: a label just written no longer drawn over its own. */
+  labelShown: () => void;
   moveDrag: {
     active: boolean;
     atomId: number | null;
