@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { DocumentStore } from "../../../../lib/doc";
 import { createWorkspaceDocument, type WorkspaceDocument } from "../document";
-import type { Caption, EditorState, PdfItem, PictureItem, SelFlow, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
+import type { Caption, EditorState, Model, PdfItem, PictureItem, Sel, SelFlow, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./types";
 import { createModelSlice } from "./slices/modelSlice";
 import { createSelectionSlice } from "./slices/selectionSlice";
 import { createHoverSlice } from "./slices/hoverSlice";
@@ -56,6 +56,20 @@ function mirrorOf(doc: WorkspaceDocument) {
   };
 }
 
+/**
+ * The atoms and bonds selected, kept to those the drawing still has: an undo
+ * that takes back what was pasted, say, takes it out of the selection too -
+ * else nothing would be seen selected and the keys and the menu would still
+ * act on a selection.
+ */
+function drawingHeld(sel: Sel, model: Pick<Model, "atoms" | "bonds">): Sel {
+  if (!sel.atoms.size && !sel.bonds.size) return sel;
+  const atoms = new Set(model.atoms.map((a) => a.id));
+  const bonds = new Set(model.bonds.map((b) => b.id));
+  if ([...sel.atoms].every((id) => atoms.has(id)) && [...sel.bonds].every((id) => bonds.has(id))) return sel;
+  return { atoms: new Set([...sel.atoms].filter((id) => atoms.has(id))), bonds: new Set([...sel.bonds].filter((id) => bonds.has(id))) };
+}
+
 /** The sets and steps selected, kept to those the document still has. */
 function flowHeld(sel: SelFlow, sets: readonly WorkflowSet[], steps: readonly WorkflowStep[]): SelFlow {
   if (!sel.sets.size && !sel.steps.size) return sel;
@@ -100,6 +114,8 @@ export function connectStoreToDocument(
       was = now;
       const held = {
         ...heldOf(prev, mirrored.molecules3d),
+        sel: drawingHeld(prev.sel, mirrored.model),
+        selAnchor: prev.selAnchor != null && !mirrored.model.atoms.some((a) => a.id === prev.selAnchor) ? null : prev.selAnchor,
         selFlow: flowHeld(prev.selFlow, mirrored.sets, mirrored.steps),
         selPictures: picturesHeld(prev.selPictures, mirrored.pictures),
         // (sheets selected kept to those still on the page - and the one under the pointer, if it still is)

@@ -7,7 +7,7 @@ const stop = (e: MouseEvent) => e.stopPropagation();
 
 /**
  * How much of the title bar's left a Mac's own window buttons take, their
- * margin to the logo included: where tauri.macos.conf.json puts them
+ * margin to the tabs included: where tauri.macos.conf.json puts them
  * (`trafficLightPosition`), and the three of them as wide as the system
  * draws them.
  */
@@ -52,7 +52,7 @@ export default function WindowButtons() {
 /**
  * Room at the title bar's left for a Mac's own window buttons, which the
  * system draws over the bar: none in full screen, where it hides them, the
- * logo and the tabs moving over as the room closes.
+ * tabs moving over as the room closes.
  */
 export function SystemButtonsRoom() {
   const full = useFullScreen();

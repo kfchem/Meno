@@ -24,3 +24,17 @@ export function doubleClickedSince(since: number): boolean {
 export function clickClock(): number {
   return now();
 }
+
+/** A press on empty space: when, and where in the window. */
+export type EmptyPress = { t: number; x: number; y: number };
+
+/**
+ * Which press of a double-click a press on empty space is: the second, soon
+ * after a first (within `within` ms) and near it (8 px); else a first - a
+ * third among them too, since three on empty space ask for nothing two did
+ * not (a chain is Quick Add's: the maintainer, 2026-10-10).
+ */
+export function pressOnEmpty(last: (EmptyPress & { count: number }) | null, press: EmptyPress, within: number): 1 | 2 {
+  const near = !!last && press.t - last.t <= within && Math.hypot(press.x - last.x, press.y - last.y) < 8;
+  return near && last!.count === 1 ? 2 : 1;
+}

@@ -669,6 +669,12 @@ export type EditorState = {
     wire?: WireEnd;
   } | null;
   setQuickAdd: (q: EditorState["quickAdd"]) => void;
+  /**
+   * A double-click on empty space: Quick Add there - or, with the column
+   * open beside the canvas, the column shut, the work coming back to the
+   * canvas (the maintainer, 2026-10-10).
+   */
+  doubleClickOnEmpty: (q: NonNullable<EditorState["quickAdd"]>) => void;
   /** A workflow on the page (docs/WORKFLOWS.md): its sets, steps and wires. */
   sets: WorkflowSet[];
   steps: WorkflowStep[];

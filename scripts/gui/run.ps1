@@ -128,40 +128,68 @@ function Open-MenoFile {
     Wait-MenoSettled -TimeoutMs 8000 | Out-Null
 }
 
-function Invoke-MenoMenu {
+function Invoke-MenoQuickAdd {
     <#
       .SYNOPSIS
-      A command from Meno's menu, the one its logo opens at the top left:
-      Invoke-MenoMenu "SMILES..." opens the SMILES card.
+      Quick Add at a point of empty space, and one of its icons:
+      Invoke-MenoQuickAdd -X 1300 -Y 1300 -Item Chain begins a chain there,
+      which the pointer then leads with the button up until a click ends it.
 
       .DESCRIPTION
-      The items are where a workspace in front has them, read off a
-      Mac's shot (2560x1720); the menu is at the window's left, so they do
-      not move with its size. On a Mac the logo, and the menu under it, sit
-      to the right of the system's window buttons (SYSTEM_BUTTONS_ROOM in
-      src/ui/layouts/WindowButtons.tsx, 80 px, 160 in a shot). Three dots
-      stand for the ellipsis. A canvas holding texts has *Show texts* or
-      *Hide texts* after *Show R and S*, and *Drawing style...* a row lower.
+      A double-click at the point opens Quick Add, and the icon is clicked
+      where src/ui/features/Workspace/QuickAdd.tsx puts it: up and to the
+      right of the point, or below it or to its left where the canvas has
+      no room (OFF 14, SIZE 36, a border of 1 and padding of 4, icons 2
+      apart - CSS px, twice as many in a shot; the canvas begins under the
+      40 px title bar). Change this with that. SMILES opens the field below
+      the row, which then takes the keys.
     #>
-    param([Parameter(Mandatory)] [ValidateSet(
-        "Open...", "Save", "Save As...", "Export...", "New text", "SMILES...", "Clean up all",
-        "3D structures", "Fit to content", "Show R and S", "Drawing style...")] [string] $Item)
-    $at = @{
-        "Open..." = 170; "Save" = 234; "Save As..." = 298; "Export..." = 362; "New text" = 426
-        "SMILES..." = 550; "Clean up all" = 614; "3D structures" = 678; "Fit to content" = 804
-        "Show R and S" = 868; "Drawing style..." = 994
-    }
-    $dx = if ($onMac) { 160 } else { 0 }
-    Invoke-MenoClick -X (42 + $dx) -Y 42
-    Start-Sleep -Milliseconds 400
-    Invoke-MenoClick -X (200 + $dx) -Y $at[$Item]
+    param(
+        [Parameter(Mandatory)] [int] $X,
+        [Parameter(Mandatory)] [int] $Y,
+        [Parameter(Mandatory)] [ValidateSet("Bond", "Chain", "SMILES", "Text", "Reaction arrow", "Plus")] [string] $Item
+    )
+    $row = @("Bond", "Chain", "SMILES", "Text", "Reaction arrow", "Plus")
+    $size = Get-ClientSize
+    $cw = $size.Width / 2; $ch = $size.Height / 2 - 40
+    $px = $X / 2; $py = $Y / 2 - 40
+    # (the row and the Calculations button after a rule; its height with its padding)
+    $w = ($row.Count + 1) * 36 + 8 + 9; $h = 36 + 8
+    $left = if ($px + 14 + $w -le $cw - 4) { $px + 14 } else { [Math]::Max(4, $px - 14 - $w) }
+    $top = if ($py - 14 - $h -ge 4) { $py - 14 - $h } else { [Math]::Min($ch - $h - 4, $py + 14) }
+    $ix = $left + 1 + 4 + $row.IndexOf($Item) * 38 + 18
+    $iy = $top + 1 + 4 + 18
+    Invoke-MenoClick -X $X -Y $Y -Count 2
+    Start-Sleep -Milliseconds 350
+    Invoke-MenoClick -X ([int](2 * $ix)) -Y ([int](2 * ($iy + 40)))
     Start-Sleep -Milliseconds 300
+}
+
+function Add-MenoSmiles {
+    <#
+      .SYNOPSIS
+      A structure from a SMILES, by Quick Add's SMILES field, centred at a
+      point of empty space - the middle of the canvas unless told - and let
+      go of (it comes in selected, as a paste does). The first one waits
+      for the plugin that reads SMILES to start.
+    #>
+    param([Parameter(Mandatory)] [string] $Smiles, [int] $X = 0, [int] $Y = 0, [int] $WaitSec = 8)
+    if (-not $X -and -not $Y) {
+        $size = Get-ClientSize
+        $X = [int]($size.Width / 2); $Y = [int](80 + ($size.Height - 80) / 2)
+    }
+    Invoke-MenoQuickAdd -X $X -Y $Y -Item SMILES
+    Send-MenoText $Smiles -CharMs 10
+    Send-MenoKey Enter
+    Start-Sleep -Seconds $WaitSec
+    Send-MenoKey Escape
 }
 
 function Save-MenoFile {
     <#
       .SYNOPSIS
-      Save the canvas in front under a path, through Save As in Meno's menu.
+      Save the canvas in front under a path, through Save As
+      (Ctrl/Cmd+Shift+S).
 
       .DESCRIPTION
       Save As asks where whatever the canvas was saved as before, so a
@@ -170,7 +198,7 @@ function Save-MenoFile {
     #>
     param([Parameter(Mandatory)] [string] $Path)
     if (Test-Path $Path) { throw "'$Path' is there already: save under a new name, or the system asks whether to replace it" }
-    Invoke-MenoMenu -Item "Save As..."
+    Send-MenoShortcut S -Shift
     Complete-SaveDialog -Path $Path
     Get-MenoWindow -ProcessName Meno -TimeoutSec 10 | Out-Null
     Set-MenoWindow -Width $Width -Height $Height

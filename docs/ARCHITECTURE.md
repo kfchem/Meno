@@ -53,14 +53,14 @@ src/
   utils/atomUtils         element table (radii, colours)
   samples/                textbook structures and reactions for the tests and the workflow's 3D node
                           (see samples/README.md)
-  ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "+" (a new workspace), online/offline, Settings,
+  ui/layouts/TopBar       custom title bar: tabs, "+" (a new workspace), online/offline, Save (the workspace in front), Settings,
                           and the window's buttons - Meno's own on Windows and Linux (WindowButtons), the system's
                           on a Mac, whose window keeps the system's frame, rounded corners and shadow with the
                           title bar laid over the page (tauri.macos.conf.json: titleBarStyle Overlay,
                           trafficLightPosition; SystemButtonsRoom keeps their room, none in full screen)
   ui/layouts/Tabs         the tab strip: reorder by dragging, the chosen tab's curved corners, the one line under
                           the tabs (the bar's, which a tab not chosen leaves showing)
-  ui/layouts/MenoMenu     the logo's menu: the app's commands and those the tab in front offers (commands.ts)
+  ui/layouts/commands     Open… asked for from inside a view (the menu on empty space), shown by App as Ctrl/Cmd+O is
   ui/layouts/ErrorBoundary a part that fails as it is drawn, and the card left in its place (see *When a part fails*)
   ui/fonts/               the typefaces labels are drawn in, read from their files; troika, which draws
                           them, takes each letter from the first font that has it and places letters
@@ -116,14 +116,18 @@ src-tauri/
   canvas nothing is drawn on (`REPLACE_TAB`). A structure from an Office
   document opens the same way, as Meno's own record.
 - **Closing the last tab quits Meno.**
-- **Commands.** The canvas carries nothing but the drawing. Every command
-  is in Meno's menu, which its logo opens, with its key; the app's own
-  (Open…) and those the tab in front offers through `offerCommands`
-  (`ui/layouts/commands.ts`), asked for as the menu opens. A structure
-  canvas offers Save, Save As, Export, SMILES, Clean up all, Fit to
-  content (Ctrl/Cmd+1), R and S, and Drawing style, and puts the same on its
-  right-click menu on empty space. The system's own menu bar is left as the
-  system has it.
+- **Commands.** The canvas carries nothing but the drawing. Commands are
+  on the right-click menus, with their keys: what is under the pointer, or
+  the selection, has its own; on empty space, what the workspace does as a
+  whole - Open…, Save As…, New text, Fit to content (Ctrl/Cmd+1), R and S,
+  the texts, Drawing style, Run all. Save is a button in the title bar, by
+  Settings (`ctl.save`, the front tab's saver from `lib/doc/savers`), and
+  Ctrl/Cmd+S; Export is the selection's (Select all first, for the whole
+  page); a SMILES is drawn from Quick Add. Open… from the menu goes through
+  `askToOpen` (`ui/layouts/commands.ts`) to App's file dialog. (Meno's
+  menu, from its logo, held them all until 2026-10-10, when the maintainer
+  found it full of what Select all and a right-click do already.) The
+  system's own menu bar is left as the system has it.
 
 ## Documents and undo (`lib/doc`, being adopted)
 
