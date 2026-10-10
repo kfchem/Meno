@@ -73,12 +73,15 @@ function Tab({
       exit={{ opacity: 0, y: 20, transition: LEAVE }}
       // Chosen or not, a tab goes over in the same time and the same
       // way as its curved corners, which are drawn beside it: the
-      // two change together, never one ahead of the other.
+      // two change together, never one ahead of the other. The line
+      // under the tabs is the bar's, drawn once: the chosen tab covers it
+      // with its white and its corners turn out into it, and a tab not
+      // chosen is clear, so the line runs on under it unbroken.
       className={clsx(
         "relative rounded-t-lg w-48 h-8.5 text-xs flex justify-between items-top0 min-w-8 transition-[background-color,border-color,color] duration-150 ease-meno",
         selected
           ? "bg-white text-gh-black border border-gh-line border-b-transparent"
-          : "bg-gh-base text-gh-gray border border-transparent"
+          : "bg-transparent text-gh-gray border border-transparent"
       )}
       onDragStart={() => (draggingRef.current = true)}
       onDragEnd={() => (draggingRef.current = false)}
@@ -88,12 +91,6 @@ function Tab({
       title={tab.label}
     >
       <Shoulders shown={selected} />
-      <div
-        className={clsx(
-          "h-px bg-transparent border-b border-gh-line absolute -bottom-[0.5px] right-0 left-0 transition-opacity duration-150 ease-meno",
-          selected ? "opacity-0" : "opacity-100",
-        )}
-      />
       <div
         className={clsx(
           "flex items-center w-full py-1 justify-between rounded-lg h-7 mx-0.5 px-2 transition-colors duration-150 ease-meno",
