@@ -8,7 +8,6 @@ import { rememberOutput } from "../../../../../lib/calc/asks";
 import { pluginClient } from "../../../../../lib/calc/workers";
 import { finished, jobFiles, jobFolder, jobOf, listJobs, readJobFile, readJobLog, removeJob, runningOf, startJob, stopJob, type Job } from "../../../../../lib/jobs";
 import type { OptionValues } from "../../../../../lib/options";
-import { roleOptionsRole } from "../../../../../lib/plugins/roles";
 import { lookFor } from "../../../../../lib/plugins/installed";
 import { pluginWorker } from "../../../../../lib/roles/worker";
 import { useAppSettings } from "../../../../../lib/settings/appSettings";
@@ -16,7 +15,7 @@ import * as ops from "../../document";
 import type { WorkspaceDocument } from "../../document";
 import { blocksOf, moleculeOf } from "../../chem/make3d";
 import { byOf, installedFor, optionsFor, programsFor } from "../../workflow/doers";
-import { setEntries, type SetEntry } from "../../workflow/entries";
+import { frameXyz, framesOf, setEntries, type SetEntry } from "../../workflow/entries";
 import { findSet, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "../../workflow/flow";
 import { kindInfo, optionsOf, type SetKind, type StepKind } from "../../workflow/kinds";
 import { setRan, setRunning } from "../../workflow/model";
@@ -104,8 +103,8 @@ export function createStepRuns(doc: DocumentStore<WorkspaceDocument>, set: SetSt
     if (by === "meno") return void doc.edit("run", (x) => runMenoStep(x, id, { ...w, byOf, now: at }));
     const plugin = pluginById(by);
     if (!plugin) return void fail(id, "Nothing added does this step", at, key);
+    if (step.kind === "conformers" && inputOf(d, id)?.holds === "structures") return searchDrawn(id, plugin, at);
     if (programsFor(step.kind, by).length) return runJobs(id, plugin, at);
-    if (step.kind === "structure-3d") return runInWorker(id, plugin, at);
     return runAtOnce(id, plugin, at);
   }
 
@@ -206,42 +205,54 @@ export function createStepRuns(doc: DocumentStore<WorkspaceDocument>, set: SetSt
     await Promise.all([...wanted].map(run));
   }
 
-  /** A step a plugin does in its worker: a 3D structure made of each structure drawn, as a molecule in 3D is made from it on the canvas. */
-  async function runInWorker(id: number, plugin: PythonPlugin, at: number): Promise<void> {
+  /**
+   * A conformer search on structures drawn, in the plugin's worker - as *3D
+   * structures* on the canvas makes them (its `conformers`), with the
+   * step's own options: the first stereoisomer of each structure, its
+   * conformers lowest energy first, a compound each (docs/WORKFLOWS.md,
+   * *Kinds of step*).
+   */
+  async function searchDrawn(id: number, plugin: PythonPlugin, at: number): Promise<void> {
     const d = doc.getState();
     const step = stepOf(d, id)!;
     const key = inputKey(d, step, plugin.id);
     const input = inputOf(d, id);
-    if (step.kind !== "structure-3d" || !input) return void fail(id, `${plugin.name} does this step in no way Meno knows`, at, key);
-    const options = { ...(useAppSettings.getState().options[roleOptionsRole("conformers")] ?? {}), count: 1 };
+    if (!input) return void fail(id, "Nothing comes into it", at, key);
+    const options = optionsOf(optionsFor(step.kind, plugin.id), step.options);
     const worked: Worked[] = [];
+    let compounds = 0;
     try {
       const chem = await pluginWorker(plugin);
-      for (const [i, atoms] of input.structures.entries()) {
+      for (const atoms of input.structures) {
         const block = blocksOf(d.model, atoms)[0];
         if (!block) continue;
         const made = (await chem.request("conformers", { molblock: block.molblock, isomers: "one", options }, MAKE_3D_MS)).isomers[0];
         if (!made) continue;
         const m = moleculeOf(made, block);
-        worked.push({
-          compound: i,
-          number: 1,
-          atoms: m.atoms,
-          bonds: m.bonds,
-          xyz: m.atoms.flatMap((a) => [a.x, a.y, a.z]),
-          ...(m.energies?.[0] != null ? { energy: m.energies[0] } : {}),
-          keep: { drawnFrom: m.drawnFrom, drawnAs: m.drawnAs, ...(m.stereo ? { stereo: m.stereo } : {}), ...(m.made ? { made: m.made } : {}) },
-        });
+        // (what worked out their energies, for the steps that rank them: the plugin, and its force field)
+        const calc = { readers: [], program: plugin.name, ...(made.field ? { method: made.field } : {}) };
+        for (let f = 0; f < framesOf(m); f++) {
+          worked.push({
+            compound: compounds,
+            number: f + 1,
+            atoms: m.atoms,
+            bonds: m.bonds,
+            xyz: frameXyz(m, f),
+            ...(m.energies?.[f] != null ? { energy: m.energies[f] } : {}),
+            ...(f === 0 ? { calc, keep: { drawnFrom: m.drawnFrom, drawnAs: m.drawnAs, ...(m.stereo ? { stereo: m.stereo } : {}), ...(m.made ? { made: m.made } : {}) } } : {}),
+          });
+        }
+        compounds++;
       }
     } catch (e) {
       return void fail(id, message(e), at, key);
     }
     if (!worked.length) return void fail(id, "No structure drawn could be made in 3D", at, key);
     const took = Date.now() - at;
-    bringIn(id, worked, givesFor(step.kind, input.holds), {
+    bringIn(id, worked, "conformers", {
       at,
       ok: true,
-      said: `${clock(took)} \u00b7 ${worked.length} of ${input.structures.length}`,
+      said: `${clock(took)} \u00b7 ${worked.length} conformer${worked.length === 1 ? "" : "s"}${compounds > 1 ? ` of ${compounds} compounds` : ""}`,
       input: key,
       took,
       kind: step.kind,

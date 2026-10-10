@@ -83,7 +83,8 @@ Everything a plugin is lives in one folder, named by its id:
                      its files' names, what its lines begin with and its
                      grammar (`texts`);
                      the kinds of a workflow's step it fills, each with the
-                     programs it runs and its options (`steps`); the
+                     programs it runs and its options - and what it takes,
+                     where less than the kind takes (`takes`) - (`steps`); the
                      systems it can be added on, where not every one
                      (`systems`: macos, windows, linux); and the programs
                      installed separately its steps run (`installed`)
@@ -93,6 +94,13 @@ Everything a plugin is lives in one folder, named by its id:
    pixi.lock)
 ```
 
+- **A plugin's step may take less than its kind does**: `takes` in its
+  `steps` names what may flow into it - `structures` (drawn),
+  `molecules` (in 3D), `conformers` (sets) - of what the kind takes. CREST's
+  conformer search starts from a molecule in 3D, so it takes `molecules`
+  and `conformers`; RDKit's says nothing, and takes structures drawn as
+  well, making them in 3D as its `conformers` role does. None said, a step
+  takes all its kind takes.
 - **A plugin may be for some systems only**: its manifest's `systems`
   names them - CREST, whose program conda-forge builds for macOS and
   Linux - and elsewhere Settings, *Plugins*, says so in place of *Add*.
@@ -230,7 +238,10 @@ The same for every plugin and for Meno's own parts:
     does (WORKFLOWS.md, *What changes in the contract*): the jobs Meno is
     to run - each its program and arguments, its input files, and, where
     its program reads one of them as its standard input, which
-    (`stdin`: Gaussian's) - and what one gave, read back;
+    (`stdin`: Gaussian's) - and what one gave, read back: a job may be
+    for several entries (CREST optimising an ensemble), each read back
+    in Meno's output form, with each geometry's `populations` where its
+    program works them out (CREST's, its rotamers counted in);
   - `collect` may answer, for each entry, not an output but which of
     what the job wrote is an output of a kind Meno's readers read -
     `{"read": [{"kind": "orca", "log": true, "name": "water.out"}]}` - or

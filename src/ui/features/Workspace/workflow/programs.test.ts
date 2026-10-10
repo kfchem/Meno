@@ -5,6 +5,7 @@ import { countOf, setEntries } from "./entries";
 import { addSet } from "./model";
 import { clock, conformersWorked, doneSaid, hartrees, jobEntries, pluginEntry, readCollected, readKept, readPrepared, workedOf } from "./programs";
 import type { SetEntry } from "./entries";
+import { resultsOf } from "./run";
 
 const WATER: SetEntry = {
   compound: 0,
@@ -123,6 +124,18 @@ describe("a conformer search", () => {
       [3, 2, -0.99],
     ]);
     expect(made[0].calc).toMatchObject({ program: "RDKit" });
+  });
+
+  it("keeps the program's own populations, where it gives one for each conformer", () => {
+    const out = { schema: 1, program: "CREST", atoms: ["O", "H", "H"], frames: [WATER.xyz as number[], [0, 0, 0.1, 0, 0.7, 0.6, 0, -0.7, 0.6]], energies: [-1, -0.99], populations: [0.7, 0.3] };
+    const made = conformersWorked(WATER, out, []);
+    if (typeof made === "string") throw new Error(made);
+    expect(made.map((w) => w.share)).toEqual([0.7, 0.3]);
+    const without = conformersWorked(WATER, { ...out, populations: [0.7] }, []);
+    if (typeof without === "string") throw new Error(without);
+    expect(without.map((w) => w.share)).toEqual([undefined, undefined]);
+    // (as the molecule's own shares, in its conformer set)
+    expect(resultsOf({ ok: true, holds: "conformers", kept: made, aside: [], said: "" }).molecules[0].shares).toEqual([0.7, 0.3]);
   });
 
   it("takes what a plugin kept at once by place - never one it was not given", () => {

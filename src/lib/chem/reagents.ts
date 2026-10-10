@@ -210,7 +210,6 @@ export const REAGENTS: Reagent[] = [
   { label: "SOCl2", use: "halogenation", smiles: "O=S(Cl)Cl", name: "thionyl chloride", formula: true },
   { label: "POCl3", use: "halogenation", smiles: "O=P(Cl)(Cl)Cl", name: "phosphoryl chloride", formula: true },
   { label: "PCl5", use: "halogenation", smiles: "ClP(Cl)(Cl)(Cl)Cl", name: "phosphorus pentachloride", formula: true },
-  { label: "(COCl)2", also: ["oxalyl chloride"], use: "halogenation", smiles: "O=C(Cl)C(=O)Cl", name: "oxalyl chloride", formula: true },
 
   // --- acylation, sulfonylation, silylation and alkylation -----------------------
   { label: "TFAA", also: ["(CF3CO)2O"], use: "electrophile", smiles: "O=C(OC(=O)C(F)(F)F)C(F)(F)F", name: "trifluoroacetic anhydride" },

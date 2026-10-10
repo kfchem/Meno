@@ -10,11 +10,13 @@ every plugin's:
     {"id": 5, "op": "collect", "step": "conformers", "entries": [...], "options": {...}, "files": {...}, "log": "...", "ended": "done"}
     {"id": 5, "ok": true, "result": {"outputs": [{...}]}}
 
-It fills one kind of step - Conformers - and runs nothing itself:
-`prepare` says what each job is - its input, and the command Meno runs,
-apart from Meno, in the job's folder - and `collect` reads back what a job
-wrote, as Meno's own output form (lib/calc/output), or says why it failed.
-One job for each entry.
+It fills two kinds of step - Conformers and Optimise - and runs nothing
+itself: `prepare` says what each job is - its input, and the command Meno
+runs, apart from Meno, in the job's folder - and `collect` reads back what
+a job wrote, as Meno's own output form (lib/calc/output), or says why it
+failed. A conformer search is one job for each entry; an optimisation one
+job for each molecule's entries together, CREST optimising them all from
+one ensemble file.
 
 What CREST is asked, and what is read of what it writes, are as CREST's
 own documentation has them (crest-lab.github.io/crest-docs: "Command Line
@@ -28,7 +30,17 @@ nothing else:
   `--T` the cores;
 - the conformers in `crest_conformers.xyz`, an ensemble file: Xmol
   frames, in angstroms, each one's comment line its energy in hartrees,
-  lowest first.
+  lowest first;
+- each conformer's population - its Boltzmann weight at 298.15 K, the
+  rotamers that are degenerate forms of it counted in - from the table
+  CREGEN prints ("Metadynamics-based Conformational Sampling": the
+  columns Erel/kcal, Etot, weight/tot, conformer, set, degen, origin; the
+  row that begins each conformer's set of rotamers gives the set's weight,
+  its number and its degeneracy), the sets in the order of
+  `crest_conformers.xyz`;
+- an ensemble optimised with `--mdopt <file>` ("Ensemble Optimization"):
+  each structure of the ensemble file given, optimised, written to
+  `crest_ensemble.xyz` in the same order, each comment line its energy.
 
 It keeps nothing between requests, and reaches no network.
 """
@@ -45,6 +57,8 @@ SCHEMA = 1
 
 INPUT = "input.xyz"
 CONFORMERS = "crest_conformers.xyz"
+ENSEMBLE_IN = "ensemble.xyz"
+ENSEMBLE_OUT = "crest_ensemble.xyz"
 
 METHODS = {
     "gfn2": (["--gfn2"], "GFN2-xTB"),
@@ -61,7 +75,7 @@ SOLVENTS = {
 SEARCHES = {"full": [], "quick": ["--quick"], "squick": ["--squick"], "mquick": ["--mquick"]}
 # the energy window CREST's conformer search keeps by default (kcal/mol)
 EWIN = 6.0
-STEPS = {"conformers"}
+STEPS = {"conformers", "optimise"}
 FLOAT = r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eEdD][-+]?\d+)?"
 
 
@@ -111,27 +125,44 @@ def window_of(options):
     return float(ewin)
 
 
-def args_for(options, entry, cores):
+def level_args(options, entry):
+    """What both kinds of run are told: the method, the charge and unpaired electrons, the solvent."""
     method = METHODS.get(options.get("method", "gfn2"))
     if method is None:
         raise Refused(f"no method is called {options.get('method')!r}")
     solvent = options.get("solvent", "none")
     if solvent != "none" and solvent not in SOLVENTS:
         raise Refused(f"no solvent is called {solvent!r}")
-    search = SEARCHES.get(options.get("search", "full"))
-    if search is None:
-        raise Refused(f"no search is called {options.get('search')!r}")
     charge = whole(entry.get("charge", 0), "The charge")
     multiplicity = whole(entry.get("multiplicity", 1), "The multiplicity")
     if multiplicity < 1:
         raise Refused("the multiplicity is less than one")
-    args = [INPUT] + method[0] + ["--chrg", str(charge), "--uhf", str(multiplicity - 1)]
+    args = method[0] + ["--chrg", str(charge), "--uhf", str(multiplicity - 1)]
     if solvent != "none":
         args += ["--alpb", solvent]
-    args += search + ["--ewin", f"{window_of(options):g}"]
-    if cores:
-        args += ["--T", str(whole(cores, "The cores"))]
     return args
+
+
+def cores_args(cores):
+    return ["--T", str(whole(cores, "The cores"))] if cores else []
+
+
+def args_for(options, entry, cores):
+    search = SEARCHES.get(options.get("search", "full"))
+    if search is None:
+        raise Refused(f"no search is called {options.get('search')!r}")
+    return [INPUT] + level_args(options, entry) + search + ["--ewin", f"{window_of(options):g}"] + cores_args(cores)
+
+
+def optimise_args(options, entry, cores):
+    if options.get("method", "gfn2") == "gfn2//gfnff":
+        raise Refused("an optimisation is done with one method")
+    return ["--mdopt", ENSEMBLE_IN] + level_args(options, entry) + cores_args(cores)
+
+
+def molecule_key(entry):
+    """What an ensemble's structures must share: their atoms, in the same order, and their charge and spin."""
+    return (tuple(elements_of(entry)), entry.get("charge", 0), entry.get("multiplicity", 1))
 
 
 def op_prepare(m):
@@ -139,8 +170,27 @@ def op_prepare(m):
     if step not in STEPS:
         raise Refused(f"this plugin does no {step!r}")
     options = m.get("options") or {}
+    entries = m.get("entries") or []
+    if step == "optimise":
+        # (the entries of each molecule together: one ensemble, one job)
+        groups = {}
+        for i, entry in enumerate(entries):
+            groups.setdefault(molecule_key(entry), []).append(i)
+        jobs = [
+            {
+                "entries": members,
+                "program": PROGRAM,
+                "args": optimise_args(options, entries[members[0]], m.get("cores")),
+                "files": [{"name": ENSEMBLE_IN, "text": "".join(xyz_of(entries[i]) for i in members)}],
+                "reads": [ENSEMBLE_OUT],
+            }
+            for members in groups.values()
+        ]
+        if not jobs:
+            raise Refused("nothing came in")
+        return {"jobs": jobs}
     jobs = []
-    for i, entry in enumerate(m.get("entries") or []):
+    for i, entry in enumerate(entries):
         jobs.append({
             "entries": [i],
             "program": PROGRAM,
@@ -205,6 +255,59 @@ def why_of(log):
     return said[-1] if said else lines[-1] if lines else "CREST said nothing"
 
 
+def populations_in(log):
+    """Each conformer's population, as CREGEN's last table gives it: the weight of each set of rotamers, in the
+    order of the sets - which is crest_conformers.xyz's. None, where there is no such table."""
+    lines = log.splitlines()
+    heads = [i for i, line in enumerate(lines) if "Erel/kcal" in line and "weight/tot" in line and "degen" in line]
+    if not heads:
+        return None
+    weights = {}
+    for line in lines[heads[-1] + 1:]:
+        parts = line.split()
+        if not parts or not parts[0].isdigit():
+            break
+        # (the row that begins a set: rank, Erel, Etot, its own weight, the set's weight, the set, its degeneracy)
+        if len(parts) >= 7 and parts[5].isdigit() and parts[6].isdigit():
+            try:
+                weights[int(parts[5])] = number(parts[4])
+            except ValueError:
+                return None
+    if not weights or sorted(weights) != list(range(1, len(weights) + 1)):
+        return None
+    return [weights[k] for k in range(1, len(weights) + 1)]
+
+
+def optimised_of(entries, options, files, log):
+    """An ensemble's structures, optimised: each entry's geometry and energy, in the order they went."""
+    if not entries:
+        return []
+    elements = elements_of(entries[0])
+    found = frames_of(files.get(ENSEMBLE_OUT) or "", len(elements))
+    if len(found) != len(entries):
+        raise Refused("CREST wrote back another number of structures")
+    if any(els != elements for els, _, _ in found):
+        raise Refused("CREST wrote back another molecule")
+    method = METHODS.get(options.get("method", "gfn2"), (None, None))[1]
+    solvent = options.get("solvent", "none")
+    out = []
+    for entry, (_, xyz, comment) in zip(entries, found):
+        energy = energy_in(comment)
+        out.append({
+            "schema": SCHEMA,
+            "program": "CREST",
+            "version": version_in(log),
+            "method": (method + (f" (ALPB, {solvent})" if solvent != "none" else "")) if method else None,
+            "charge": whole(entry.get("charge", 0), "The charge"),
+            "multiplicity": whole(entry.get("multiplicity", 1), "The multiplicity"),
+            "atoms": elements,
+            "frames": [xyz],
+            "energies": None if energy is None else [energy],
+            "results": [],
+        })
+    return out
+
+
 def output_of(entry, options, files, log):
     elements = elements_of(entry)
     n = len(elements)
@@ -216,6 +319,7 @@ def output_of(entry, options, files, log):
     energies = [energy_in(c) for _, _, c in found]
     method = METHODS.get(options.get("method", "gfn2"), (None, None))[1]
     solvent = options.get("solvent", "none")
+    populations = populations_in(log)
     return {
         "schema": SCHEMA,
         "program": "CREST",
@@ -226,6 +330,7 @@ def output_of(entry, options, files, log):
         "atoms": elements,
         "frames": [xyz for _, xyz, _ in found],
         "energies": None if any(e is None for e in energies) else energies,
+        "populations": populations if populations and len(populations) == len(found) else None,
         "results": [],
     }
 
@@ -237,8 +342,11 @@ def op_collect(m):
     files = m.get("files") or {}
     log = m.get("log") or ""
     entries = m.get("entries") or []
-    if m.get("ended") != "done" or CONFORMERS not in files:
+    wrote = ENSEMBLE_OUT if step == "optimise" else CONFORMERS
+    if m.get("ended") != "done" or wrote not in files:
         return {"why": why_of(log)}
+    if step == "optimise":
+        return {"outputs": optimised_of(entries, m.get("options") or {}, files, log)}
     return {"outputs": [output_of(e, m.get("options") or {}, files, log) for e in entries]}
 
 

@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RISE } from "../../theme/motion";
 import { CalculationsGlyph, ProcedureGlyph, StepGlyph } from "./workflow/icons";
+import { placeQuickAdd } from "./quickAddPlace";
 import type { StepKind } from "./workflow/kinds";
 import type { QuickGroup } from "./workflow/offered";
 
@@ -10,9 +11,9 @@ export type QuickAddChoice = "bond" | "text" | "arrow" | "plus";
 
 /** What opens below Quick Add's row: nothing, the calculations, or the field a SMILES is typed in. */
 type QuickPanel = "none" | "calculations" | "smiles";
+const QUICK_PANELS: readonly QuickPanel[] = ["none", "calculations", "smiles"];
 
-/** How far from the point it was opened at the icons stand, up and to the right, and each one's size, in px. */
-const OFF = 14;
+/** Each icon's size, in px. */
 const SIZE = 36;
 /** How wide the name of who does a row of steps stands, beside its kinds: "Gaussian 16" and "Procedures" whole. */
 const LABEL_W = 84;
@@ -145,10 +146,19 @@ export default function QuickAdd({
   // (a wire's: as wide as its rows, or the words saying there are none)
   const width = wired ? (steps.length ? calcWidth : 200) : calcOpen ? Math.max(rowWidth, calcWidth) : rowWidth;
   const rows = Math.max(1, steps.length) + (offered.length ? 1 : 0);
-  const height = SIZE + 8 + (calcOpen && !wired ? rows * SIZE + 9 : open === "smiles" ? SMILES_H : 0);
-  // (up and to the right, clear of the point; inside the canvas, below it or to its left where it must)
-  const left = x + OFF + width <= within.width - 4 ? x + OFF : Math.max(4, x - OFF - width);
-  const top = y - OFF - height >= 4 ? y - OFF - height : Math.min(within.height - height - 4, y + OFF);
+  // (its size with each panel open below its row - a wire's, its calculations alone - and where it stands, chosen once, as it opens)
+  const sizeOf = (panel: QuickPanel): { width: number; height: number } => {
+    if (wired) return { width, height: Math.max(1, steps.length) * SIZE + 8 };
+    switch (panel) {
+      case "none":
+        return { width: rowWidth, height: SIZE + 8 };
+      case "calculations":
+        return { width: Math.max(rowWidth, calcWidth), height: SIZE + 8 + rows * SIZE + 9 };
+      case "smiles":
+        return { width: rowWidth, height: SIZE + 8 + SMILES_H };
+    }
+  };
+  const [place] = useState(() => placeQuickAdd(x, y, within, sizeOf(wired ? "calculations" : "none"), QUICK_PANELS.map(sizeOf)));
   return (
     <motion.div
       ref={ref}
@@ -156,7 +166,7 @@ export default function QuickAdd({
       role="toolbar"
       aria-label="Add"
       className="absolute z-50 rounded-lg border border-gh-line bg-white p-1 shadow-lg"
-      style={{ left, top, transformOrigin: "bottom left" }}
+      style={{ left: place.left, top: place.top, transformOrigin: place.origin }}
     >
       {!wired && (
         <div className="flex items-center gap-0.5">

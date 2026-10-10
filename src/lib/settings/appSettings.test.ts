@@ -21,6 +21,7 @@ describe("the settings file", () => {
       plugins: { removed: ["rdkit"], roles: { smiles: "rdkit" }, programs: { "orca:orca": "/Applications/orca_6_1_0/orca" } },
       pictures: { dpi: 1200 as const },
       pointer: { wheelUp: "out" as const },
+      labels: { smart: false },
       calculations: { atOnce: 2, cores: 4 },
       procedures: [{ id: "p-1", name: "Optimise, then energies", saved: 1, flow: { sets: [{ id: 1, x0: 0, y0: -4, x1: 4, y1: 0 }], steps: [{ id: 2, kind: "optimise", x: 6, y: 0 }], wires: [{ id: 3, from: { set: 1 }, to: 2 }] } }],
     };

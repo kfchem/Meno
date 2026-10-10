@@ -20,7 +20,7 @@ import {
   AromaticCircles2D,
   Wedges2D,
   Labels2D,
-  LabelEditor2D,
+  LabelTyping2D,
   HoverOverlay2D,
   ChemMarks2D,
   SnapArc2D,
@@ -63,9 +63,9 @@ import { isElementSymbol } from "../../../lib/roles/molblock";
 /** No atoms or bonds: the same array each time, so that nothing redraws for it. */
 const NO_IDS: number[] = [];
 
-/** Whether an atom is an abbreviation that can be drawn out: a file's, or one the dictionary knows. */
+/** Whether an atom is an abbreviation that can be drawn out: a file's, one typed as a group named as an element is (Ac), or one the dictionary knows. */
 function expandable(a: { el: string; abbrev?: unknown } | undefined): boolean {
-  return !!a && !isElementSymbol(a.el) && (!!a.abbrev || !!abbreviationOf(a.el));
+  return !!a && (!!a.abbrev || (!isElementSymbol(a.el) && !!abbreviationOf(a.el)));
 }
 import { useClipboardActions } from "./clipboardActions";
 import {
@@ -116,7 +116,9 @@ import { writeClipboard } from "../../../lib/clipboard";
 import { PdfPictures } from "./components/pdfPictures";
 import { FollowCover, PageHtmlLayer } from "./components/coverLayer";
 import CaptionTyping2D from "./components/CaptionTyping2D";
+import { ChargeHolds2D } from "./components/MarkHold2D";
 import Workflow2D from "./components/Workflow2D";
+import PageScale from "./components/PageScale";
 import { selectionFrame } from "./workflow/selectionSet";
 import { offeredSteps } from "./workflow/offered";
 import { PORT_DOWN } from "./workflow/look";
@@ -306,7 +308,9 @@ function WorkspaceContent({
           return { x0: b.minX, x1: b.maxX, y0: b.minY, y1: b.maxY };
         });
         for (const block of blocks) {
-          const ms = (await conformersOf(chem, block, isomers, options)).map((c) => moleculeOf(c, block));
+          const isomersMade = await conformersOf(chem, block, isomers, options);
+          // (several stereoisomers: their R and S shown, to tell them apart)
+          const ms = isomersMade.map((c) => moleculeOf(c, block, isomersMade.length > 1));
           const model = store.getState().model;
           const turned = ms.map((m) => turnedOver(m, model, look3d));
           // beside the drawing, where they can be seen as the view is now,
@@ -826,8 +830,12 @@ function WorkspaceContent({
       open({ kind: "wire", id: hoveredWire, selection: "none", ...place });
       return;
     }
-    // likewise words on the page
-    if (!kind && hoveredCaption != null && captions.some((c) => c.id === hoveredCaption)) {
+    // likewise words on the page, unless they are selected with more
+    const wordsWithMore = (() => {
+      const s = store.getState();
+      return s.sel.atoms.size > 0 || s.sel3d.size > 0 || s.selFlow.sets.size > 0 || s.selFlow.steps.size > 0 || s.selPictures.size > 0 || s.selTexts.size > 0 || s.selCaptions.size > 1;
+    })();
+    if (!kind && hoveredCaption != null && captions.some((c) => c.id === hoveredCaption) && !(store.getState().selCaptions.has(hoveredCaption) && wordsWithMore)) {
       const target: MenuTarget = { kind: "caption", id: hoveredCaption, selection: "none", ...place };
       if (r?.down) r.pending = target;
       else if (!r?.moved) setMenu(target);
@@ -1307,6 +1315,10 @@ function WorkspaceContent({
               ? () => store.getState().expandAbbreviation(menu.id!)
               : undefined
           }
+          asTyped={(() => {
+            const a = menu.kind === "atom" && menu.id != null ? model.atoms.find((x) => x.id === menu.id) : undefined;
+            return a?.typed && a.typed !== a.el ? { typed: a.typed, run: () => store.getState().labelAsTyped(a.id) } : undefined;
+          })()}
           canvas={canvasCommands(menu.at)}
           onExport={menu.selection === "here" ? () => {
             const taken = clip.part();
@@ -1389,12 +1401,14 @@ function WorkspaceContent({
           </Suspense>
           {/* the plugin's marks: valence problems, R/S and E/Z */}
           <ChemMarks2D marks={marks} />
+          {/* charges, each taken hold of on its own ink and moved by hand */}
+          <ChargeHolds2D />
           {/* the atom a molecule in 3D under the pointer was made from */}
           <LinkedHover2D />
           {/* stereo drawn without a configuration, while Meno asks about it */}
           <OpenStereo2D atoms={ask3d?.open.flatMap((o) => o.atoms) ?? NO_IDS} bonds={ask3d?.open.flatMap((o) => o.bonds) ?? NO_IDS} />
           {/* Label editor */}
-          <LabelEditor2D />
+          <LabelTyping2D />
           {/* Words being written, in place */}
           <CaptionTyping2D />
           {/* Hover overlay */}
@@ -1411,9 +1425,11 @@ function WorkspaceContent({
           <Suspense fallback={null}>
             <Captions2D />
           </Suspense>
+          {/* A workflow on the page: its sets, steps and wires (within the drawing's layout: an input set is made round its labels) */}
+          <Workflow2D />
         </DrawnLayoutProvider>
-        {/* A workflow on the page: its sets, steps and wires */}
-        <Workflow2D />
+        {/* the page's scale, for chips drawn on it in HTML */}
+        <PageScale />
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />
         <PanZoom2D />

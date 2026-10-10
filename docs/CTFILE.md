@@ -150,7 +150,21 @@ What is put together from them is read by rule, not listed:
   I, CF3, OMe, OEt, OCF3, OH, OAc, OBn, NO2, CN, NH2, NMe2, NHAc, SMe, Ac
   and CO2Me, each either way round (MeO, OMe). Positions must lie on the
   ring (2 to 6, o-, m-, p-), once each; counts must match them, and a
-  formula's hydrogens make up the rest.
+  formula's hydrogens make up the rest;
+- last, a condensed formula (`src/lib/chem/chain.ts`; the maintainer,
+  2026-10-10): a label that, with an H put before it, makes a whole
+  molecule - closed-shell, each atom at a valence it has - is that
+  molecule without the H, bound where the H was: OCH3 (HOCH3), CH2OH,
+  CH2Ph, COMe (HCOMe), CO2CH3, OCOMe, SO2Me, CONHMe, COCl, OCHF2,
+  CH(CH3)2, NO (HNO). It is read left to right as such a formula is
+  written: the first atom is the one bound; an element's H follow it; a
+  group or a halogen hangs on the atom before it; an O or an S is either
+  =O on the atom before it or the chain's next atom - =O tried first,
+  whichever leaves every atom at a valence it has (C 4, N 3, O 2; S 2, 4
+  or 6; P 3 or 5); what parentheses hold, with its count, hangs on the
+  atom before them. CO and CH2 are none, nor anything with a charge; Cp is
+  in none. A reagent this reads as the same molecule leaves the
+  dictionary: (COCl)2, oxalyl chloride, is read so now.
 
 **Ligands and complexes** (`src/lib/chem/ligands.ts`). The ligands of
 transition-metal chemistry are known by their labels, each the molecule it
@@ -321,7 +335,12 @@ ester as a group does.
 
 A label known any of these ways can be expanded, is counted and written out
 whole, and is what RDKit is asked about; one not known is text. Ar is
-argon's symbol as well as aryl's (GR-9.2): typed, it is argon. Settings ›
+argon's symbol as well as aryl's (GR-9.2): typed, it is argon. The groups
+named as an element is - Ac (acetyl), Pr (propyl), Ts (tosyl), Fm
+(fluorenylmethyl), At (HOAt's) - are the groups (the maintainer,
+2026-10-10): typed, or written by Clean-up, the atom holds the group
+(`abbrev`), drawn as a label, written out whole and expanded as any
+abbreviation is; typed with more - AcH, Ac+ - it is the element. Settings ›
 Abbreviations shows Meno's list, each drawn as what it stands for.
 
 A bond that came from a file as one of these becomes an ordinary bond once

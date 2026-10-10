@@ -13,7 +13,7 @@ import type { InstalledDecl } from "../../../../lib/plugins/manifest";
 import { whereIs } from "../../../../lib/plugins/installed";
 import { systemHere } from "../../../../lib/plugins/here";
 import type { WorkflowStep } from "../store/types";
-import { KINDS, kindInfo, MENO_DOES, type StepKind } from "./kinds";
+import { KINDS, kindInfo, MENO_DOES, takes, type SetKind, type StepKind } from "./kinds";
 
 export type Doer = { id: string; name: string };
 
@@ -32,6 +32,19 @@ export function kindsOf(by: string): StepKind[] {
   const here = systemHere();
   const runsHere = (programs: readonly string[]) => here == null || p.installed.every((d) => !programs.includes(d.name) || !!d.files[here]);
   return KINDS.filter((k) => p.steps.some((d) => d.kind === k.kind && runsHere(d.programs))).map((k) => k.kind);
+}
+
+/**
+ * Whether a step of `kind` done by `by` takes a set that holds `holds`:
+ * the kind takes it, and - done by a plugin - its manifest does not leave
+ * it out (`takes`: CREST's conformer search starts from molecules in 3D,
+ * not from structures drawn).
+ */
+export function takesBy(kind: StepKind, by: string, holds: SetKind): boolean {
+  if (!takes(kind, holds)) return false;
+  if (!by || by === MENO.id) return true;
+  const decl = pluginById(by)?.steps.find((d) => d.kind === kind);
+  return !decl?.takes || decl.takes.includes(holds);
 }
 
 /**

@@ -29,6 +29,12 @@ export type ReaderOutput = {
   frames: number[][];
   /** Each geometry's energy, in hartrees, where every one has one. */
   energies?: number[] | null;
+  /**
+   * Each geometry's population - its share of its compound, the program's
+   * own Boltzmann weight, adding up to one - where the program works them
+   * out: a conformer search's (CREST counts each conformer's rotamers in).
+   */
+  populations?: number[] | null;
   /** Whether an optimisation came to an end, where it was one. */
   optimised?: boolean | null;
   /** Everything else it found, in the general form (results.ts) - read, and those that do not read as results left out. */

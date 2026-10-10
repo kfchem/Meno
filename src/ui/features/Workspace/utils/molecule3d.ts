@@ -345,6 +345,25 @@ export function seenBounds(pose: Pose, eye?: Eye): { minX: number; maxX: number;
   return b;
 }
 
+/**
+ * How far a molecule reaches on the page about its middle, in any of its
+ * frames, as it stands turned by `turn` (unset, unturned): left, right,
+ * down and up - what a set holding it makes room for.
+ */
+export function reachOverFrames(m: Molecule3D, style: Style3D, turn?: Turn3D): { x0: number; x1: number; y0: number; y1: number } {
+  const solid = solidOf(m, style);
+  const look = lookOf(m, style);
+  const r = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+  for (let f = 0; f < solid.frames.length; f++) {
+    const b = seenBounds(poseOf({ ...m, at: { x: 0, y: 0 } }, solid, look, turn, f));
+    r.x0 = Math.min(r.x0, b.minX);
+    r.x1 = Math.max(r.x1, b.maxX);
+    r.y0 = Math.min(r.y0, b.minY);
+    r.y1 = Math.max(r.y1, b.maxY);
+  }
+  return r;
+}
+
 /** The atom seen at a point of the page, the nearest of those there; null where there is none. */
 export function atomAt(pose: Pose, eye: Eye | undefined, x: number, y: number): number | null {
   let best: number | null = null;

@@ -128,7 +128,8 @@ function prepared(model: WriterModel): { model: WriterModel; sups: Sup[]; aliase
   let nextId = Math.max(0, ...model.atoms.map((a) => a.id)) + 1;
   const byId = new Map(atoms.map((a) => [a.id, a]));
   for (const a of model.atoms) {
-    if (ELEMENT_SYMBOLS.has(a.el) || RESERVED.has(a.el) || a.list) continue;
+    // (a group named as an element is - Ac, Pr, Ts - written out as the group it holds)
+    if ((ELEMENT_SYMBOLS.has(a.el) && !a.abbrev) || RESERVED.has(a.el) || a.list) continue;
     const touching = bonds.filter((b) => b.a === a.id || b.b === a.id);
     const first = touching[0] ? byId.get(touching[0].a === a.id ? touching[0].b : touching[0].a) : undefined;
     const structure: AbbreviationStructure | null =

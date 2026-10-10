@@ -6,8 +6,8 @@
 import type { WorkspaceDocument } from "../document";
 import type { Molecule3D, Wire, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
 import { holdsOf, setMembers } from "./entries";
-import { kindInfo, optionsOf, takes, type SetKind } from "./kinds";
-import { optionsFor } from "./doers";
+import { kindInfo, optionsOf, type SetKind } from "./kinds";
+import { byOf, optionsFor, takesBy } from "./doers";
 
 type Flow = Pick<WorkspaceDocument, "model" | "molecules3d" | "sets" | "steps" | "wires">;
 
@@ -55,7 +55,7 @@ export function stepsBefore(doc: Flow, step: number): number[] {
   return out;
 }
 
-/** Whether a wire may go from `from` into the step `to`: the step takes what it gives - or what that is is not known yet - and no loop is made. */
+/** Whether a wire may go from `from` into the step `to`: the step - done by whom it is - takes what it gives, or what that is is not known yet; and no loop is made. */
 export function canWire(doc: Flow, from: WireEnd, to: number): boolean {
   const step = stepOf(doc, to);
   if (!step) return false;
@@ -68,7 +68,7 @@ export function canWire(doc: Flow, from: WireEnd, to: number): boolean {
   const madeBy = "step" in from ? from.step : findSet(doc, from.set)?.made?.step;
   if (madeBy != null && [madeBy, ...stepsBefore(doc, madeBy)].includes(to)) return false;
   const holds = givesOf(doc, from);
-  return holds == null || takes(step.kind, holds);
+  return holds == null || takesBy(step.kind, byOf(step), holds);
 }
 
 /** What comes into a step: the kind of set, and its molecules in 3D and structures drawn, in order. Null where nothing does - or what would has not been made yet. */

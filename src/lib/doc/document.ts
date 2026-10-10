@@ -80,15 +80,21 @@ type Entry<T> = {
   at: number;
 };
 
-export type DocumentOptions = {
+export type DocumentOptions<T = unknown> = {
   limit?: number;
   /** Injectable clock, so coalescing can be tested without waiting. */
   now?: () => number;
+  /**
+   * What follows from an edit, made part of it - one step to undo: given
+   * the state it made and the one before it (a workspace's sets growing to
+   * keep a structure drawn on inside them).
+   */
+  settle?: (next: T, before: T) => T;
 };
 
 export function createDocument<T>(
   initial: T,
-  options: DocumentOptions = {},
+  options: DocumentOptions<T> = {},
 ): DocumentStore<T> {
   const limit = Math.max(1, options.limit ?? DEFAULT_HISTORY_LIMIT);
   const now = options.now ?? (() => Date.now());
@@ -114,8 +120,9 @@ export function createDocument<T>(
     },
 
     edit(label, updater, meta = {}) {
-      const next = updater(present.state);
+      let next = updater(present.state);
       if (Object.is(next, present.state)) return false;
+      if (options.settle) next = options.settle(next, present.state);
 
       const at = now();
       const window = meta.coalesceWithinMs ?? DEFAULT_COALESCE_MS;

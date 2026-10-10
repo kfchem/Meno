@@ -54,6 +54,13 @@ describe("the right-click menu", () => {
       listed: ["Unpaired electron", "Select this structure"],
     });
     expect(menu(target({ kind: "bond", id: 2 })).icons).toEqual(["Clean up this structure", "3D structure", "Delete bond"]);
+    // (a label read as something else than was typed: had back as typed, beside what else concerns the label)
+    expect(menu(target({ kind: "atom", id: 1 }), { onExpand: none, asTyped: { typed: "obz", run: none } }).listed).toEqual([
+      "Unpaired electron",
+      "Expand abbreviation",
+      "As typed: obz",
+      "Select this structure",
+    ]);
   });
 
   it("gives the selection its clipboard, clean-up and 3D as icons - Paste where it was opened on empty space - and Export among the rest", () => {

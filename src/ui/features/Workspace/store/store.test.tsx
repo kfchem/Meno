@@ -97,7 +97,7 @@ describe("a canvas made again", () => {
       pressHold: { atomId: atom, start: 0 },
       moveDrag: { active: true, atomId: atom, pointer: { x: 1, y: 1 }, mode: "free", preview: null },
       panHold: { active: true, pointerId: 1 },
-      labelEdit: { active: true, atomId: atom, value: "N", autoCap: true },
+      labelEdit: { active: true, atomId: atom, value: "N" },
       captionEdit: { id: null, at: { x: 0, y: 0 } },
       quickAdd: { at: { x: 0, y: 0 }, x: 0, y: 0, within: { width: 100, height: 100 } },
       pdfWords: {} as never,

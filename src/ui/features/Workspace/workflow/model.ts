@@ -6,7 +6,9 @@
 import type { WorkspaceDocument } from "../document";
 import type { StepRunKept, WireEnd, WorkflowSet, WorkflowStep } from "../store/types";
 import type { OptionValues } from "../../../../lib/options";
-import { setMembers, type Frame } from "./entries";
+import { setMembers, structuresOf, type Frame } from "./entries";
+import { drawnBox } from "../../../../utils/importers";
+import { SET_PAD, SET_TOP } from "./look";
 import { canWire, wireInto } from "./flow";
 import type { StepKind } from "./kinds";
 
@@ -140,4 +142,52 @@ export function removeWire(doc: WorkspaceDocument, id: number): WorkspaceDocumen
 /** What made a set, and the entries it set aside, said of it. */
 export function markMade(doc: WorkspaceDocument, id: number, made: NonNullable<WorkflowSet["made"]>, aside: WorkflowSet["aside"]): WorkspaceDocument {
   return withSet(doc, id, ({ aside: _a, ...b }) => ({ ...b, made, ...(aside?.length ? { aside } : {}) }));
+}
+
+/**
+ * `doc` after an edit, its sets grown to keep inside them the structures
+ * drawn on in them (docs/WORKFLOWS.md, *An input: a set from the
+ * selection*): a structure that was in a set before the edit - its middle
+ * inside the frame - and whose shape the edit changed - an atom added,
+ * moved on its own, or made another element - is kept inside its frame,
+ * its labels and all, the frame growing as far as it must. A structure
+ * moved whole, or a frame sized anew, leaves the frame as it is: a
+ * structure is dragged out of a set, and a set made smaller than what it
+ * holds, on purpose.
+ */
+export function fitSets(doc: WorkspaceDocument, before: WorkspaceDocument): WorkspaceDocument {
+  if (!doc.sets?.length || doc.model === before.model) return doc;
+  const was = new Map(before.model.atoms.map((a) => [a.id, a]));
+  const shaped = structuresOf(doc.model).filter((ids) => {
+    const atoms = ids.map((id) => doc.model.atoms.find((a) => a.id === id)!);
+    if (atoms.some((a) => !was.has(a.id))) return true;
+    const first = was.get(atoms[0].id)!;
+    const dx = atoms[0].x - first.x;
+    const dy = atoms[0].y - first.y;
+    return atoms.some((a) => {
+      const b = was.get(a.id)!;
+      return a.el !== b.el || (a.charge ?? 0) !== (b.charge ?? 0) || Math.abs(a.x - b.x - dx) > 1e-9 || Math.abs(a.y - b.y - dy) > 1e-9;
+    });
+  });
+  if (!shaped.length) return doc;
+  let out = doc;
+  for (const set of doc.sets) {
+    const prior = before.sets?.find((b) => b.id === set.id);
+    if (!prior) continue;
+    const held = new Set(setMembers(before, prior).structures.flat());
+    let frame: Frame = set;
+    for (const ids of shaped) {
+      if (!ids.some((id) => held.has(id))) continue;
+      const atoms = new Set(ids);
+      const b = drawnBox({ atoms: doc.model.atoms.filter((a) => atoms.has(a.id)), bonds: doc.model.bonds.filter((x) => atoms.has(x.a) && atoms.has(x.b)) });
+      frame = {
+        x0: Math.min(frame.x0, b.minX - SET_PAD),
+        x1: Math.max(frame.x1, b.maxX + SET_PAD),
+        y0: Math.min(frame.y0, b.minY - SET_PAD),
+        y1: Math.max(frame.y1, b.maxY + SET_TOP),
+      };
+    }
+    out = resizeSet(out, set.id, frame);
+  }
+  return out;
 }

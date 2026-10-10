@@ -22,6 +22,7 @@ import type { Model } from "../store/types";
 import { useDrawnLayout } from "./drawnLayoutContext";
 import { usePresence } from "../../../theme/presence";
 import StereoText from "./StereoText";
+import { MarkHold } from "./MarkHold2D";
 
 /** Marks sit over the drawing, and under the canvas's buttons and cards. */
 const Z_RANGE = [20, 10];
@@ -91,6 +92,28 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
   // view, as they are once past their least size - go where they went: a
   // zoom does not place them all again)
   const markSize = (fontPx / z).toPrecision(12);
+  // what each is measured from - its atom, its bond's middle - and those put by hand, where they were put
+  const from = useMemo(() => {
+    const at = new Map(drawn.atoms.map((a) => [a.id, a]));
+    const out = new Map<string, { x: number; y: number }>();
+    for (const a of drawn.atoms) out.set(`centre-${a.id}`, { x: a.x, y: a.y });
+    for (const b of drawn.bonds) {
+      const p = at.get(b.a);
+      const q = at.get(b.b);
+      if (p && q) out.set(`bond-${b.id}`, { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+    }
+    return out;
+  }, [drawn]);
+  const fixed = useMemo(() => {
+    const out = new Map<string, { x: number; y: number }>();
+    const put = (key: string, by?: { x: number; y: number }) => {
+      const f = from.get(key);
+      if (f && by) out.set(key, { x: f.x + by.x * labelFont, y: f.y + by.y * labelFont });
+    };
+    for (const a of drawn.atoms) put(`centre-${a.id}`, a.stereoAt);
+    for (const b of drawn.bonds) put(`bond-${b.id}`, b.stereoAt);
+    return out;
+  }, [drawn, from, labelFont]);
   const stereo = useMemo(() => {
     // (none to place: nothing to keep them off)
     if (!marks || (!marks.centres.size && !marks.doubleBonds.size)) return [];
@@ -108,9 +131,10 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
       apart: (MARKS_APART * fontPx) / z,
       off: gap * labelFont,
       bond: NOMINAL_BOND_LENGTH,
+      fixed,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fontPx, z: as far as they make markSize
-  }, [marks, drawn, boxes, markSize, parentheses, labelFont, gap]);
+  }, [marks, drawn, boxes, markSize, parentheses, labelFont, gap, fixed]);
 
   // Each mark where it goes: a valence problem's box round its atom's label
   // (or a ring round its atom), and the stereodescriptors.
@@ -182,6 +206,23 @@ export default function ChemMarks2D({ marks }: { marks: ChemMarks | null }) {
 
   return (
     <group>
+      {/* each R, S, E and Z taken hold of on its letters, and moved by hand */}
+      {stereoShown.map(({ key, item: m, leaving }) => {
+        const base = from.get(key);
+        if (leaving || !base) return null;
+        const id = Number(key.slice(key.indexOf("-") + 1));
+        return (
+          <MarkHold
+            key={`hold-${key}`}
+            of={key.startsWith("bond-") ? { bond: id } : { atom: id, kind: "stereo" }}
+            at={m}
+            halfW={(fontPx * stereoTextEms(m.text, parentheses)) / 2 / z}
+            halfH={(fontPx * MARK_HALF_HEIGHT) / z}
+            from={base}
+            em={labelFont}
+          />
+        );
+      })}
       {valenceShown.map(({ key, item: m, leaving }) => (
         <PageHtml key={key} position={[m.x, m.y, 0]} center zIndexRange={Z_RANGE} style={{ pointerEvents: "none" }}>
           <div

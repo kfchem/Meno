@@ -75,6 +75,16 @@ describe("Export", () => {
     expect(exportKinds(both)).toEqual(["mol", "sdf", "pdb", "svg"]);
   });
 
+  it("offers nothing that would come out empty: words, pictures or arrows alone only as a picture", () => {
+    // (words or pictures alone: no structure, no molecule in 3D)
+    expect(exportKinds({ solid: false, reaction: false, drawn: false })).toEqual(["svg"]);
+    // (an arrow and words, with nothing drawn: no reaction to write)
+    expect(exportKinds({ solid: false, reaction: true, drawn: false })).toEqual(["svg"]);
+    // (an arrow beside molecules in 3D alone: those, as their own files)
+    expect(exportKinds({ solid: true, reaction: true, drawn: false })).toEqual(["sdf", "pdb", "svg"]);
+    expect(suggestedExportPath({ savedPath: "/work/a.meno", openedName: null }, { solid: false, reaction: false, drawn: false })).toBe("/work/a.svg");
+  });
+
   it("suggests the canvas's name as the first kind it can be written as, unless it is of one already", () => {
     expect(suggestedExportPath({ savedPath: "/work/a.meno", openedName: null }, structure)).toBe("/work/a.mol");
     // (never the file it came from: beside it, numbered, the first free)

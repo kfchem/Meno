@@ -19,6 +19,7 @@
 import { readSmiles, type Smiles } from "./smiles";
 import { substitutedAryl } from "./substitutedAryl";
 import { condensedStructure } from "./condensed";
+import { chainGroup } from "./chain";
 import { complexStructure, LIGAND_UNITS, ligandStructure, namedLigand, type GroupStructure } from "./ligands";
 import { precatalystPicture, precatalystStructure, REAGENT_UNITS, reagentOf, reagentStructure } from "./reagents";
 import { kekuleOrders } from "./kekulize";
@@ -411,6 +412,12 @@ function composedGroupOf(label: string): Abbreviation | undefined {
     const own = c.prefix + g.label;
     return { label: own, ...(own !== label ? { also: [label] } : {}), smiles: c.smiles + g.smiles.slice(1), name: composedName(g.name, c.word) };
   }
+  // (last, a condensed formula: OCH3, CH2OH, COMe, SO2Me, NO - ./chain; Cp in none, only on a metal)
+  const chain = chainGroup(label, {
+    at: (text, i) => groupLabels().find((l) => l.length > 1 && l !== "Cp" && text.startsWith(l, i)),
+    smiles: (l) => (BY_LABEL.get(l) ?? custom.get(l))?.smiles,
+  });
+  if (chain) return { label, smiles: chain, name: label };
   return undefined;
 }
 
@@ -596,6 +603,11 @@ function setUnits(): void {
     .sort((x, y) => y.length - x.length);
 }
 setUnits();
+
+/** The names labels are read into - the groups', the user's own among them, ligands' and reagents' - as they are written. */
+export function labelUnitNames(): readonly string[] {
+  return UNITS;
+}
 
 /**
  * A label's units, as a chemist reads it: each element or group with its

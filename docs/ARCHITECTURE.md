@@ -441,8 +441,9 @@ not taken from either.
   each started once the step before it has ended well, those that do not
   wait on one another at once (`runSteps`; *Run from here* adds the steps
   after, *Run all* every step not done); each run - Meno's at once, as
-  one edit; a plugin's in its worker (RDKit's 3D structure, through the
-  roles' `conformers`); a plugin's step on entries alone at once, `run`
+  one edit; a plugin's conformer search on structures drawn in its worker
+  (RDKit's, through the roles' `conformers`, with the step's options); a
+  plugin's step on entries alone at once, `run`
   asked of its worker and the entries it kept brought in, the rest set
   aside (RDKit's *Duplicates*); a plugin's
   program as jobs: `prepare` asked of its worker, a job started for each
