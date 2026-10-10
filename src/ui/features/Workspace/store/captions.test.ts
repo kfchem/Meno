@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
+import { selectedOf } from "./slices/selectionSlice";
 import { createWorkspaceDocument, isBlankDocument } from "../document";
 import { centredAt, readRecord, recordText, schemeAmong } from "../utils/copyPaste";
 import { readWorkspace, workspaceText } from "../utils/workspace";
@@ -116,6 +117,8 @@ describe("words on the page", () => {
     const two = state().addCaption("two", -30, 30);
     state().selectCaptions([one]);
     expect([...state().selCaptions]).toEqual([one]);
+    // (words alone selected are a selection: the keys act on it, a right-click on empty space opens its menu)
+    expect(selectedOf(state())).toEqual({ any: true, drawing: false });
     // (Select all takes every word on the page; nothing selected, none)
     state().selectAll();
     expect([...state().selCaptions].sort()).toEqual([one, two]);
