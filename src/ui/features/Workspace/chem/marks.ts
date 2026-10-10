@@ -387,7 +387,8 @@ export type StereoPlace = { key: string; x: number; y: number; text: string };
  * beyond its label; a double bond's to the side of it with fewer of its
  * neighbours on. `half` is how far a mark reaches across and up from its
  * middle; a mark placed keeps the next `apart` off; `bond` is a bond's
- * length.
+ * length. Those `fixed` - put by hand, by their key - go where they were
+ * put, first, and the rest keep clear of them.
  */
 export function stereoPlaces(o: {
   model: Model;
@@ -398,6 +399,7 @@ export function stereoPlaces(o: {
   apart: number;
   off: number;
   bond: number;
+  fixed?: ReadonlyMap<string, Vec>;
 }): StereoPlace[] {
   const { model, boxes, half, apart, off, bond: L } = o;
   const index = markIndex(model);
@@ -426,7 +428,17 @@ export function stereoPlaces(o: {
     obstacles.add({ minX: r.minX - apart, maxX: r.maxX + apart, minY: r.minY - apart, maxY: r.maxY + apart });
     out.push({ key, text, x: (r.minX + r.maxX) / 2, y: (r.minY + r.maxY) / 2 });
   };
-  for (const [id, cip] of o.centres) {
+  const fixed = o.fixed ?? new Map<string, Vec>();
+  const put0 = (key: string, cip: string) => {
+    const p = fixed.get(key);
+    if (!p) return false;
+    const h = half(cip);
+    put(key, cip, { minX: p.x - h.x, maxX: p.x + h.x, minY: p.y - h.y, maxY: p.y + h.y });
+    return true;
+  };
+  const centres = [...o.centres].filter(([id, cip]) => !put0(`centre-${id}`, cip));
+  const doubleBonds = [...o.doubleBonds].filter(([id, cip]) => !put0(`bond-${id}`, cip));
+  for (const [id, cip] of centres) {
     const a = at.get(id);
     if (!a) continue;
     const box = boxes.get(id);
@@ -440,7 +452,7 @@ export function stereoPlaces(o: {
     });
     put(`centre-${id}`, cip, r);
   }
-  for (const [id, cip] of o.doubleBonds) {
+  for (const [id, cip] of doubleBonds) {
     const side = bondSide(model, id, index);
     if (!side) continue;
     const r = placeMark({

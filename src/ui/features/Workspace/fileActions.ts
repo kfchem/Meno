@@ -197,7 +197,7 @@ export function drawingLayout(
   aromatic: Pick<EditorState, "aromaticEnabled" | "aromaticRings">,
   style: DrawingStyle,
 ): { layout: Layout; opts: LayoutOptions } {
-  const atoms = model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el, ...chemistry(a), ...(a.z != null ? { z: a.z } : {}) }));
+  const atoms = model.atoms.map((a) => ({ id: a.id, x: a.x, y: a.y, el: a.el, ...chemistry(a), ...(a.z != null ? { z: a.z } : {}), ...(a.chargeAt ? { chargeAt: a.chargeAt } : {}) }));
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const bonds = layoutBonds(model.bonds, index);
   const enabled = Object.keys(aromatic.aromaticRings || {}).filter(

@@ -114,6 +114,7 @@ import { writeClipboard } from "../../../lib/clipboard";
 import { PdfPictures } from "./components/pdfPictures";
 import { FollowCover, PageHtmlLayer } from "./components/coverLayer";
 import CaptionTyping2D from "./components/CaptionTyping2D";
+import { ChargeHolds2D } from "./components/MarkHold2D";
 import Workflow2D from "./components/Workflow2D";
 import { selectionFrame } from "./workflow/selectionSet";
 import { offeredSteps } from "./workflow/offered";
@@ -1429,6 +1430,8 @@ function WorkspaceContent({
           </Suspense>
           {/* the plugin's marks: valence problems, R/S and E/Z */}
           <ChemMarks2D marks={marks} />
+          {/* charges, each taken hold of on its own ink and moved by hand */}
+          <ChargeHolds2D />
           {/* the atom a molecule in 3D under the pointer was made from */}
           <LinkedHover2D />
           {/* stereo drawn without a configuration, while Meno asks about it */}

@@ -5,8 +5,8 @@ import { useReadings } from "../../../../../lib/calc/readings";
 import type { ImportedScheme, WorkspaceDocument } from "../../document";
 import type { ArrowLook } from "../../../../../lib/chem/reactionArrow";
 import { ARROW_LENGTH_BONDS } from "../../../../../lib/chem/reactionScheme";
-import { EditorState, Bond, Arrow, Model, Drawn } from "../types";
-import { turnedOver } from "../../utils/selection";
+import { EditorState, Bond, Arrow, Model, Drawn, type MarkAt } from "../types";
+import { marksAtOf, turnedOver } from "../../utils/selection";
 import { schemeAmong } from "../../utils/copyPaste";
 import { relinked } from "../../utils/drawnLink";
 import { pictureBytes } from "../../../../../lib/picture/held";
@@ -143,7 +143,13 @@ export const createModelSlice = (
     const { sel, model } = get();
     if (!sel.atoms.size) return;
     const over = turnedOver(model, sel.atoms, axis);
-    doc.edit("turn over", (d) => ops.placeAtoms(d, over.atoms, over.bonds));
+    // (marks put by hand turned over with them)
+    const markAts = marksAtOf(model, sel.atoms, (p) => (axis === "vertical" ? { x: -p.x, y: p.y } : { x: p.x, y: -p.y }));
+    doc.edit("turn over", (d) => ops.placeMarks(ops.placeAtoms(d, over.atoms, over.bonds), { markAts }));
+  },
+
+  putMark: (of: ops.MarkOf, at: MarkAt | null, gesture?: string) => {
+    doc.edit(at ? "move mark" : "put mark back", (d) => ops.putMark(d, of, at), gesture ? { coalesceKey: `mark:${gesture}` } : undefined);
   },
 
   deleteSelection: () => {

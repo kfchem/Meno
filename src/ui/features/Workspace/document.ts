@@ -12,7 +12,7 @@ import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
-import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, Model, Molecule3D, PdfItem, PictureItem, PictureToAdd, Plus, TextOf, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
+import type { Arrow, Atom, Bond, Caption, CarriedList, Drawn, Look3D, MarkAt, Model, Molecule3D, PdfItem, PictureItem, PictureToAdd, Plus, TextOf, Wire, WorkflowSet, WorkflowStep, WorkspaceText } from "./store/types";
 import { ICON_NAME_WIDTH, pdfRoom, POINT } from "../../../lib/pdf/layout";
 import { sheetOf, sheetRoom } from "./utils/textSheets";
 import { printedSize } from "../../../lib/picture/image";
@@ -387,13 +387,14 @@ export function relayout(doc: WorkspaceDocument, change: Relayout): WorkspaceDoc
   const to = new Map(change.atoms.map((a) => [a.id, a]));
   const gone = new Set(change.removed ?? []);
   let changed = gone.size > 0 || (change.added?.length ?? 0) > 0;
+  // (marks put by hand, put back where the drawing puts them: they were put for the drawing as it was)
   const atoms = doc.model.atoms.flatMap((a): Atom[] => {
     if (gone.has(a.id)) return [];
     const p = to.get(a.id);
     if (!p) return [a];
-    if (p.x === a.x && p.y === a.y && p.z === a.z && !!p.stereoCentre === !!a.stereoCentre) return [a];
+    if (p.x === a.x && p.y === a.y && p.z === a.z && !!p.stereoCentre === !!a.stereoCentre && !a.chargeAt && !a.stereoAt) return [a];
     changed = true;
-    const { z: _z, stereoCentre: _c, ...rest } = a;
+    const { z: _z, stereoCentre: _c, chargeAt: _q, stereoAt: _s, ...rest } = a;
     return [
       {
         ...rest,
@@ -409,9 +410,15 @@ export function relayout(doc: WorkspaceDocument, change: Relayout): WorkspaceDoc
     if (gone.has(b.a) || gone.has(b.b)) return [];
     const p = patch.get(b.id);
     const display = p && "display" in p ? p.display : b.display;
+    const laid = to.has(b.a) && to.has(b.b);
+    if (laid && b.stereoAt && (!p || (p.stereo === b.stereo && p.stereoOrient === b.stereoOrient && display === b.display))) {
+      changed = true;
+      const { stereoAt: _at, ...kept } = b;
+      return [kept];
+    }
     if (!p || (p.stereo === b.stereo && p.stereoOrient === b.stereoOrient && display === b.display)) return [b];
     changed = true;
-    const { display: _display, ...rest } = b;
+    const { display: _display, stereoAt: _at, ...rest } = b;
     return [{ ...rest, stereo: p.stereo, stereoOrient: p.stereoOrient, ...(display ? { display } : {}) }];
   });
   if (!changed) return doc;
@@ -988,10 +995,16 @@ export type MarkPlaces = {
   /** A workflow's sets and steps moved with the rest: where each set's frame, and each step's card, now stands. */
   sets?: { id: number; x0: number; y0: number; x1: number; y1: number }[];
   steps?: { id: number; x: number; y: number }[];
+  /** Charges and R, S, E and Z put by hand, turned with the rest: where each now stands from what it is of (`withMarksAt`). */
+  markAts?: MarksAt;
 };
+
+/** Where marks put by hand stand from what they are of - each atom's charge and R or S, each bond's E or Z - none, put back. */
+export type MarksAt = { atoms: { id: number; chargeAt?: MarkAt; stereoAt?: MarkAt }[]; bonds: { id: number; stereoAt?: MarkAt }[] };
 
 /** `doc` with the arrows, pluses, molecules in 3D, sets and steps `places` names where it says. */
 export function placeMarks(doc: WorkspaceDocument, places?: MarkPlaces): WorkspaceDocument {
+  if (places?.markAts) return placeMarks(withMarksAt(doc, places.markAts), { ...places, markAts: undefined });
   if (places?.molecules3d?.length) return placeMarks(moveMolecules3d(doc, places.molecules3d), { ...places, molecules3d: [] });
   if (places?.texts?.length) {
     const at = new Map(places.texts.map((t) => [t.id, t]));
@@ -1042,6 +1055,46 @@ export function placeMarks(doc: WorkspaceDocument, places?: MarkPlaces): Workspa
     ...(doc.captions ? { captions: doc.captions.map((c) => at(c, captionAt)) } : {}),
   };
   return withCaptionsBy(moved, by, new Set(captionAt.keys()));
+}
+
+/** Something a hand can put a mark of: an atom's charge, an atom's R or S, a bond's E or Z. */
+export type MarkOf = { atom: number; kind: "charge" | "stereo" } | { bond: number };
+
+/** `doc` with a mark put where a hand put it - `at`, from what it is of - or (null) back where the drawing puts it. */
+export function putMark(doc: WorkspaceDocument, of: MarkOf, at: MarkAt | null): WorkspaceDocument {
+  const same = (p?: MarkAt) => (p && at ? p.x === at.x && p.y === at.y : !p && !at);
+  if ("bond" in of) {
+    const b = doc.model.bonds.find((x) => x.id === of.bond);
+    if (!b || same(b.stereoAt)) return doc;
+    return withMarksAt(doc, { atoms: [], bonds: [{ id: b.id, ...(at ? { stereoAt: at } : {}) }] });
+  }
+  const a = doc.model.atoms.find((x) => x.id === of.atom);
+  const key = of.kind === "charge" ? "chargeAt" : "stereoAt";
+  if (!a || same(a[key])) return doc;
+  return withMarksAt(doc, { atoms: [{ id: a.id, chargeAt: a.chargeAt, stereoAt: a.stereoAt, [key]: at ?? undefined }], bonds: [] });
+}
+
+/** `doc` with the marks of the atoms and bonds `marks` names standing where it says - those it leaves unset put back. */
+export function withMarksAt(doc: WorkspaceDocument, marks: MarksAt): WorkspaceDocument {
+  const atomAt = new Map(marks.atoms.map((m) => [m.id, m]));
+  const bondAt = new Map(marks.bonds.map((m) => [m.id, m]));
+  let changed = false;
+  const same = (p?: MarkAt, q?: MarkAt) => (p && q ? p.x === q.x && p.y === q.y : !p && !q);
+  const atoms = doc.model.atoms.map((a) => {
+    const m = atomAt.get(a.id);
+    if (!m || (same(a.chargeAt, m.chargeAt) && same(a.stereoAt, m.stereoAt))) return a;
+    changed = true;
+    const { chargeAt: _q, stereoAt: _s, ...rest } = a;
+    return { ...rest, ...(m.chargeAt ? { chargeAt: m.chargeAt } : {}), ...(m.stereoAt ? { stereoAt: m.stereoAt } : {}) };
+  });
+  const bonds = doc.model.bonds.map((b) => {
+    const m = bondAt.get(b.id);
+    if (!m || same(b.stereoAt, m.stereoAt)) return b;
+    changed = true;
+    const { stereoAt: _s, ...rest } = b;
+    return { ...rest, ...(m.stereoAt ? { stereoAt: m.stereoAt } : {}) };
+  });
+  return changed ? { ...doc, model: { atoms, bonds } } : doc;
 }
 
 /** `doc` without the atoms and bonds given, nor the arrows, pluses and words: what a cut takes. */

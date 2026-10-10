@@ -8,7 +8,8 @@
  * - where the selected atoms go when the selection is turned about its
  *   middle, or turned over.
  */
-import type { Bond, Model, Sel } from "../store/types";
+import type { Bond, MarkAt, Model, Sel } from "../store/types";
+import type { MarksAt } from "../document";
 
 type Pt = { x: number; y: number };
 
@@ -113,6 +114,30 @@ export function middleOf(model: Model, atoms: ReadonlySet<number>): Pt | null {
   const ys = at.map((a) => a.y);
   return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
 }
+
+/**
+ * The marks put by hand on the atoms `atoms` holds - their charges and R
+ * and S - and on the bonds among them - their E and Z - each where `f`
+ * takes it from what it is of: turned with them, or turned over. None,
+ * where none was put by hand.
+ */
+export function marksAtOf(model: Model, atoms: ReadonlySet<number>, f: (p: MarkAt) => MarkAt): MarksAt | undefined {
+  const out: MarksAt = { atoms: [], bonds: [] };
+  for (const a of model.atoms) {
+    if (!atoms.has(a.id) || (!a.chargeAt && !a.stereoAt)) continue;
+    out.atoms.push({ id: a.id, ...(a.chargeAt ? { chargeAt: f(a.chargeAt) } : {}), ...(a.stereoAt ? { stereoAt: f(a.stereoAt) } : {}) });
+  }
+  for (const b of model.bonds) {
+    if (b.stereoAt && atoms.has(b.a) && atoms.has(b.b)) out.bonds.push({ id: b.id, stereoAt: f(b.stereoAt) });
+  }
+  return out.atoms.length || out.bonds.length ? out : undefined;
+}
+
+/** A mark's place from what it is of, turned by `angle` (radians, anticlockwise). */
+export const turnedBy = (angle: number) => (p: MarkAt): MarkAt => ({
+  x: p.x * Math.cos(angle) - p.y * Math.sin(angle),
+  y: p.x * Math.sin(angle) + p.y * Math.cos(angle),
+});
 
 /** Where the selected atoms go, the selection turned by `angle` (radians, anticlockwise) about `about`. */
 export function turned(

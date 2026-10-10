@@ -211,8 +211,8 @@ export function useStructureEvents(
       clickTimerRef.current = null;
     }
     if (!camRef.current || !domRef.current) return;
-    // (twice on a molecule in 3D: nothing drawn on the page under it)
-    if (store.getState().hovered3d) return;
+    // (twice on a molecule in 3D: nothing drawn on the page under it - nor on a mark, put back by it)
+    if (store.getState().hovered3d || store.getState().hoveredMark) return;
     // (Ctrl or ⌘, or Shift, clicked twice: the selection's, not a bond drawn)
     if (addsToSelection(e) || e.shiftKey) return;
     const stNow = store.getState();
@@ -353,6 +353,8 @@ export function useStructureEvents(
     if (endsDrag(press, e.clientX, e.clientY)) return;
     // A click with Ctrl (⌘) or Shift works the selection, and edits nothing
     if (addsToSelection(e) || e.shiftKey) return;
+    // (nor one on a charge, an R or S, an E or Z: the mark's, taken hold of to be moved)
+    if (store.getState().hoveredMark) return;
     // A click on nothing lets the selection go (not the end of a turn of it)
     const stClick = store.getState();
     const nowClick =

@@ -441,6 +441,26 @@ All hover-based, as above.
     they look further off at that, and the maintainer asked for them
     nearer (2026-10-05): 15% in Meno's style and the other bare ones. On a
     molecule in 3D, the same share beyond its ball.
+  - Hidden unless asked for, on the drawing and in 3D (the maintainer,
+    2026-10-10): *Show R and S* (the menu, or Settings › Chemistry) shows
+    them; making every stereoisomer a drawing leaves open shows each
+    one's open centres, to tell them apart (docs/WORKSPACE.md, *Told
+    apart*).
+- **Charges, R and S put by hand** (the maintainer, 2026-10-10). A charge
+  - with its radical's dots - an R or S, and an E or Z are each taken hold
+  of on their own ink, and nowhere else (a press beside one is the atom's),
+  lit and with Meno's moving pointer as the pointer is on them; dragged,
+  each goes where the pointer takes it and stays there, as one undo step.
+  Two clicks on one put it back where the drawing puts it. Where it was
+  put is kept from its atom - an E or Z from its bond's middle - in ems of
+  the labels, so it goes with the atom as the atom moves, is turned and
+  turned over with the selection, is saved and copied with the drawing,
+  and a charge so put is in an exported picture (R and S never are). Clean-up puts
+  every mark of the structures it cleans back where the drawing puts
+  them: they were put for the drawing as it was, and Clean-up draws it
+  anew; undo brings them back. A label's charge put by hand leaves the
+  label, set beside it where it was put (`Atom.chargeAt`, `stereoAt`;
+  `Bond.stereoAt`; `MarkHold2D`).
 - Everything a molfile, SDfile or Rxnfile can hold, read after CTfile Formats
   and drawn after IUPAC's recommendations: docs/CTFILE.md, step by step.
 - Abbreviations: Meno's own, those put together by rule (OTBS, 2,6-diMeBz)

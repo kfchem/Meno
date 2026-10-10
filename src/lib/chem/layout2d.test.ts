@@ -7,8 +7,11 @@ import {
   joinsAtAtoms,
   buildTextLabels,
   implicitHydrogens,
+  isTail,
   labelHulls,
+  labelSetOf,
   layoutMolecule,
+  markExtent,
   mitreJoinPolys,
   placeLabel,
   roundPolyCorners,
@@ -2228,6 +2231,34 @@ describe("charges, radicals and isotopes", () => {
     // and with its C, where the style asks for it
     const shown = buildTextLabels(cation, opts({ showChargedCarbons: true }), bonds);
     expect(shown.find((t) => t.atom === 0)!.runs!.map((r) => r.text)).toEqual(["C", "+"]);
+  });
+
+  it("puts a charge a hand moved where it was put, the label without it - first just where it stood", () => {
+    const o = opts();
+    const set = labelSetOf(o);
+    // ammonium's N+, after its H3: where the charge stands, taken from the label
+    const t = labelOf(ammonium, [single(0, 1)], 1);
+    const runs = t.runs!;
+    const inline = markExtent(placeLabel(t, o.fontPx, set).filter((_, k) => isTail(runs, k, t.anchorRun ?? 0)), set);
+    const at = { x: (inline.x - L) / o.fontPx, y: inline.y / o.fontPx };
+    // (put just where it was: drawn just as it was)
+    const moved = ammonium.map((a, i) => (i === 1 ? { ...a, chargeAt: at } : a));
+    const texts = buildTextLabels(moved, o, [single(0, 1)]);
+    expect(texts.find((x) => x.atom === 1)!.runs!.map((r) => r.text)).toEqual(["N", "H", "3"]);
+    const beside = texts.find((x) => x.beside)!;
+    expect(beside.markOf).toBe(1);
+    const there = markExtent(placeLabel(beside, o.fontPx, set), set);
+    expect(there.x).toBeCloseTo(inline.x, 9);
+    expect(there.y).toBeCloseTo(inline.y, 9);
+    // (put elsewhere: there)
+    const far = buildTextLabels(ammonium.map((a, i) => (i === 1 ? { ...a, chargeAt: { x: -1, y: 2 } } : a)), o, [single(0, 1)]).find((x) => x.beside)!;
+    expect(far.x).toBeCloseTo(L - o.fontPx, 9);
+    expect(far.y).toBeCloseTo(2 * o.fontPx, 9);
+    // (a carbon's beside its vertex likewise; and one moved with no charge to move: nothing drawn)
+    const cation = [atom(0, 0, 0, "C", { charge: 1, chargeAt: { x: 1, y: -1 } }), atom(1, L, 0, "C")];
+    const c = buildTextLabels(cation, o, [single(0, 1)]).find((x) => x.beside)!;
+    expect([c.x, c.y, c.markOf]).toEqual([o.fontPx, -o.fontPx, 0]);
+    expect(buildTextLabels([atom(0, 0, 0, "N", { chargeAt: { x: 1, y: 1 } })], o, []).some((x) => x.beside)).toBe(false);
   });
 
   it("draws a circled charge's circle and sign, and a radical's dot, with the lines", () => {

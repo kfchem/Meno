@@ -1,4 +1,4 @@
-import type { ImportedScheme, MarkPlaces, Relayout, WrittenAsLabel } from "../document";
+import type { ImportedScheme, MarkOf, MarkPlaces, Relayout, WrittenAsLabel } from "../document";
 import type { SetKind, StepKind } from "../workflow/kinds";
 import type { OptionValues } from "../../../../lib/options";
 import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
@@ -24,7 +24,17 @@ export type Atom = EditorAtom & {
    * with no wedge: it is read from where its bonds point (lib/layout/drawn).
    */
   stereoCentre?: boolean;
+  /**
+   * Where its charge - with a radical's dots - was put by hand: its middle,
+   * from the atom, in ems of the drawing's labels. Unset, where the drawing
+   * puts it (lib/chem/layout2d).
+   */
+  chargeAt?: MarkAt;
+  /** Where its R or S was put by hand, likewise (chem/marks). */
+  stereoAt?: MarkAt;
 };
+/** Where a mark was put by hand: its middle, from what it is of - an atom, a bond's middle - in ems of the drawing's labels. */
+export type MarkAt = { x: number; y: number };
 export type Bond = BondChem & {
   id: number;
   a: number;
@@ -43,6 +53,8 @@ export type Bond = BondChem & {
   display?: "plain" | "bold" | "hashed" | "dashed" | "wedge";
   /** A dative bond, drawn as an arrow from `a`, the donor, to `b`. */
   dative?: boolean;
+  /** Where its E or Z - an axis's Ra or Sa - was put by hand, from the bond's middle (`MarkAt`). */
+  stereoAt?: MarkAt;
 };
 
 import type { FlowParts } from "../workflow/parts";
@@ -640,6 +652,15 @@ export type EditorState = {
   selCaptions: Set<number>;
   /** These words selected: alone, or (`add`) besides what is already. */
   selectCaptions: (ids: Iterable<number>, add?: boolean) => void;
+  /**
+   * A charge, an R or S, an E or Z put where a hand put it - `at`, from what
+   * it is of, in ems of the drawing's labels - or (null) back where the
+   * drawing puts it; a run of changes in one gesture one step.
+   */
+  putMark: (of: MarkOf, at: MarkAt | null, gesture?: string) => void;
+  /** The mark under the pointer: a charge or an R or S of an atom, or an E or Z of a bond. */
+  hoveredMark: MarkOf | null;
+  setHoveredMark: (mark: MarkOf | null) => void;
   /** Words on the page. */
   captions: Caption[];
   nextCaptionId: number;
