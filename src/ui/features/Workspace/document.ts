@@ -19,6 +19,7 @@ import { printedSize } from "../../../lib/picture/image";
 import { readerLine, sameAtoms, type Found, type Unread } from "../../../lib/calc/read";
 import { readResults } from "../../../lib/calc/results";
 import { newTextName } from "./utils/texts";
+import { fitSets } from "./workflow/model";
 
 export type WorkspaceDocument = {
   model: Model;
@@ -115,7 +116,8 @@ export function createWorkspaceDocument(data?: unknown): DocumentStore<Workspace
   for (const p of pdfsInRow(Array.isArray(held) ? held : [], { x: 0, y: 0 })) doc = addPdf(doc, p);
   const pictures = (data as { pictures?: unknown } | null | undefined)?.pictures;
   for (const p of picturesInRow(Array.isArray(pictures) ? (pictures as PictureToAdd[]) : [], { x: 0, y: 0 })) doc = addPicture(doc, p);
-  return createDocument<WorkspaceDocument>(doc);
+  // (each edit's sets grown to keep what is drawn on in them inside them, as part of it)
+  return createDocument<WorkspaceDocument>(doc, { settle: fitSets });
 }
 
 /** PDFs held, as they go on the page: the first's top page in the middle of `at`, the others to its right, a little apart. */

@@ -302,7 +302,7 @@ export function computeScaleForMols(mols: ParsedMol[]): number {
  * draw, not only its atoms - in Meno's own style, whose labels are as large
  * against the bond as any preset's.
  */
-function drawnBox(model: EditorModel): { minX: number; maxX: number; minY: number; maxY: number } {
+export function drawnBox(model: EditorModel): { minX: number; maxX: number; minY: number; maxY: number } {
   if (!model.atoms.length) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
   const index = new Map(model.atoms.map((a, i) => [a.id, i]));
   const atoms: LayoutAtom[] = model.atoms.map((a) => ({
