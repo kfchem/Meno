@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const listPath = resolve(here, "molecules.json");
 
 // Wikimedia asks tools to say who they are.
-const AGENT = "Meno-layout-benchmark/1.0 (https://github.com/kfchem/Meno; dev tool)";
+const AGENT = "Meno-layout-benchmark/1.0 (https://github.com/kfchem/meno; dev tool)";
 
 export type Reference = {
   /** The image's own address, on upload.wikimedia.org. */
