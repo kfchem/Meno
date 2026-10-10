@@ -351,7 +351,9 @@ What is left before the editor counts as finished, and in what order, is in
   always-on loop.
 
 - **Molecules in 3D** (`Molecules3D`, `Molecule3DView`, `Frames3D`,
-  `utils/molecule3d.ts`, `utils/measure3d.ts`):
+  `utils/molecule3d.ts`, `utils/measure3d.ts`, `utils/edit3d.ts` - a
+  distance, an angle or a torsion angle set: docs/WORKSPACE.md, *Editing
+  in 3D*):
   - What they are: the document's `molecules3d`. Each has its atoms in
     ångströms, its other frames and their energies, its look (ball and
     stick or space-filling), its measurements, and where on the page its
