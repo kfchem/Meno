@@ -19,9 +19,9 @@ import RoleChoices from "./RoleChoices";
 import { useSettingsSection, type SettingsSection } from "./section";
 
 const SECTIONS: { id: SettingsSection; name: string }[] = [
+  { id: "general", name: "General" },
   { id: "style", name: "Drawing style" },
   { id: "style3d", name: "Molecules in 3D" },
-  { id: "pointer", name: "Mouse and trackpad" },
   { id: "chemistry", name: "Chemistry" },
   { id: "files", name: "Files" },
   { id: "calculations", name: "Calculations" },
@@ -31,9 +31,9 @@ const SECTIONS: { id: SettingsSection; name: string }[] = [
 ];
 
 /**
- * The application's settings: the drawing style every structure is drawn
+ * The application's settings: Meno's as a whole (how the mouse and the
+ * trackpad work the canvas), the drawing style every structure is drawn
  * in unless its document has its own, how molecules in 3D look and turn,
- * how the mouse and the trackpad work the canvas,
  * what is pointed out on a structure, who reads and writes each kind
  * of file and how sharp a copied picture is, the calculations of a workflow and how its jobs run, the plugins, what the labels Meno reads stand for, and what Meno
  * may do on the network.
@@ -48,9 +48,12 @@ export default function SettingsPanel() {
   return (
     <div className="w-full h-full overflow-auto bg-gh-base/40">
       <div className="max-w-[88rem] mx-auto px-6 py-6">
-        <div className="flex items-center gap-6">
+        {/* The sections' names each on one line, and as many on a row as
+            the window has room for: past that they go on to a row of
+            their own, under the heading, and on from there. */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <h1 className="text-xl font-semibold text-gh-black">Settings</h1>
-          <div role="tablist" className="flex gap-1">
+          <div role="tablist" className="flex flex-wrap gap-1">
             {SECTIONS.map((s) => (
               <button
                 key={s.id}
@@ -58,7 +61,7 @@ export default function SettingsPanel() {
                 aria-selected={section === s.id}
                 onClick={() => useSettingsSection.setState({ section: s.id })}
                 className={clsx(
-                  "h-8 px-3 rounded-md text-sm border transition-[background-color,border-color,color,box-shadow] duration-150 ease-meno",
+                  "h-8 px-3 shrink-0 whitespace-nowrap rounded-md text-sm border transition-[background-color,border-color,color,box-shadow] duration-150 ease-meno",
                   section === s.id
                     ? "bg-white border-gh-line text-gh-black shadow-sm"
                     : "border-transparent text-gh-gray hover:text-gh-black",
@@ -83,7 +86,13 @@ export default function SettingsPanel() {
           )}
         </AnimatePresence>
         <div key={section} className="meno-fade-in">
-        {section === "style" ? (
+        {section === "general" ? (
+          <section className="mt-6 max-w-4xl">
+            <h2 className="text-base font-semibold text-gh-black">General</h2>
+            <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">How Meno works as a whole. Changes are saved as you make them.</p>
+            <PointerSettings />
+          </section>
+        ) : section === "style" ? (
           <section className="mt-6">
             <h2 className="text-base font-semibold text-gh-black">
               Drawing style
@@ -115,12 +124,6 @@ export default function SettingsPanel() {
             >
               <RoleChoices where="molecules3d" heading="Made by" />
             </Style3DEditor>
-          </section>
-        ) : section === "pointer" ? (
-          <section className="mt-6 max-w-4xl">
-            <h2 className="text-base font-semibold text-gh-black">Mouse and trackpad</h2>
-            <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">How the mouse and the trackpad work the canvas. Changes are saved as you make them.</p>
-            <PointerSettings />
           </section>
         ) : section === "chemistry" ? (
           <section className="mt-6 max-w-4xl">

@@ -124,7 +124,7 @@ view was still before it or already moving, at any frame rate: what is left
 to zoom is gone over a share a frame (`zoomTaken`), all of it in the end.
 The wheel over what is laid on the canvas - a molecule's frames chip, its
 note - zooms as over the canvas. The wheel turned upwards zooms in, as maps
-do, or out where Settings, *Mouse and trackpad*, says so (the maintainer,
+do, or out where Settings, *General*, says so (the maintainer,
 2026-10-08); a pinch zooms as the fingers go, whichever is chosen.
 A pinch let go while still zooming goes on zooming, as a drag let go goes on
 moving, and slows to a stop: as fast as it went over its last 64 ms, unless
