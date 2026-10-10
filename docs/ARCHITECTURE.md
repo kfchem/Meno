@@ -56,7 +56,10 @@ src/
   ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "New…" menu, online/offline, Settings, window buttons
   ui/layouts/MenoMenu     the logo's menu: the app's commands and those the tab in front offers (commands.ts)
   ui/layouts/ErrorBoundary a part that fails as it is drawn, and the card left in its place (see *When a part fails*)
-  ui/fonts/               the typefaces labels are drawn in, read from their files
+  ui/fonts/               the typefaces labels are drawn in, read from their files; troika, which draws
+                          them, takes each letter from the first font that has it and places letters
+                          by GPOS's kerning and marks alone, as a browser does (scripts/patch-troika.mjs,
+                          run after every install)
   ui/network/             consent dialog, activity cards, Settings › Network
   ui/views/registry       TabKind -> { Component, create } table
   ui/views/Deck           renders every open tab, hides inactive ones with CSS
