@@ -93,7 +93,8 @@ export function MarkdownRows({
   const at = (x: number, y: number): [number, number, number] => [x * scale, -y * scale, 0];
   const mesh = (key: string, geometry: THREE.BufferGeometry, x: number, y: number, sx: number, sy: number, colour: string, z = 0) => (
     <mesh key={key} visible={within(y - sy / 2)} geometry={geometry} position={[x * scale, -y * scale, z]} scale={[sx * scale, sy * scale, 1]} renderOrder={order} raycast={noRaycast}>
-      <meshBasicMaterial color={colour} transparent={opacity < 1} opacity={opacity} depthWrite={false} depthTest={order == null} toneMapped={false} />
+      {/* (in a pass's order, all of it drawn as what is seen through is, after the paper it lies on - never among the opaque, before it) */}
+      <meshBasicMaterial color={colour} transparent={order != null || opacity < 1} opacity={opacity} depthWrite={false} depthTest={order == null} toneMapped={false} />
     </mesh>
   );
   const decoOf = (d: Deco, top: number, key: string) => {

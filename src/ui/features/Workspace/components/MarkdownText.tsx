@@ -85,24 +85,28 @@ export default function MarkdownText({ text, hidden = false }: { text: Workspace
         </mesh>,
       );
     }
-    // (what is selected of its words)
+    // (what is selected of its words: one band a line, as tall as its largest type - and on past its end, where it goes on)
     if (from === to) return;
-    r.pieces.forEach((p, k) => {
-      if (p.at < 0 || p.at >= to || p.at + p.text.length <= from) return;
+    const lines = new Map<number, { x0: number; x1: number; px: number }>();
+    for (const p of r.pieces) {
+      if (p.at < 0 || p.at >= to || p.at + p.text.length <= from) continue;
       const a = Math.max(0, from - p.at);
       const b = Math.min(p.text.length, to - p.at);
       const x0 = p.x + measureText(p.text.slice(0, a), p.font);
-      const x1 = p.x + measureText(p.text.slice(0, b), p.font);
-      // (and the space after it, where what is selected goes on past it)
-      const past = to > p.at + p.text.length ? measureText(" ", p.font) : 0;
-      const h = Math.round(p.font.px * 1.45);
-      const y = r.y - top + p.y - Math.round(p.font.px * 1.08);
+      const x1 = p.x + measureText(p.text.slice(0, b), p.font) + (to > p.at + p.text.length ? measureText(" ", p.font) : 0);
+      const l = lines.get(p.y);
+      lines.set(p.y, l ? { x0: Math.min(l.x0, x0), x1: Math.max(l.x1, x1), px: Math.max(l.px, p.font.px) } : { x0, x1, px: p.font.px });
+    }
+    for (const [base, l] of lines) {
+      const h = Math.round(l.px * 1.45);
+      const y = r.y - top + base - Math.round(l.px * 1.08);
+      const w = Math.max(1, l.x1 - l.x0);
       out.push(
-        <mesh key={`s${i}:${k}`} geometry={plane} position={at(x0, y, Math.max(1, x1 - x0 + past), h)} scale={[Math.max(1, x1 - x0 + past), h, 1]} renderOrder={1}>
+        <mesh key={`s${i}:${base}`} geometry={plane} position={at(l.x0, y, w, h)} scale={[w, h, 1]} renderOrder={1}>
           <meshBasicMaterial color={COLORS.highlight} transparent opacity={reader.focused ? SELECTED : SELECTED_AWAY} depthTest={false} depthWrite={false} toneMapped={false} />
         </mesh>,
       );
-    });
+    }
   });
   return <>{out}</>;
 }

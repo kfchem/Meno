@@ -55,11 +55,11 @@ const XML = tagHighlighter([...SHARED, { tag: t.tagName, class: "tag" }, { tag: 
 /**
  * Markdown's (docs/PDF.md, *Markdown*): its headings as what a definition
  * names, code as strings, addresses and labels as keys, its marks - a
- * heading's, a list's, a quote's, emphasis's, code's, a rule - grey; and
+ * heading's, a list's, a quote's, emphasis's, code's, a task's, a rule - grey; and
  * code in Python, JSON or XML as those are.
  */
 const MARKDOWN = tagHighlighter([
-  { tag: t.processingInstruction, class: "comment" },
+  { tag: [t.processingInstruction, t.atom], class: "comment" },
   { tag: t.contentSeparator, class: "comment" },
   { tag: t.heading, class: "name" },
   { tag: t.monospace, class: "string" },

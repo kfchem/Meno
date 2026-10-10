@@ -81,6 +81,11 @@ describe("a text's colours, by Lezer's grammars", () => {
     ]);
     expect(toned(c, md, 2)).toEqual(expect.arrayContaining([["x", "string"], ["https://a.org", "property"]]));
     expect(toned(c, md, 4)).toEqual([["-", "comment"]]);
+    const task = "- [x] done\n";
+    expect(toned(await coloured("t.md", task), task, 0)).toEqual([
+      ["-", "comment"],
+      ["[x]", "comment"],
+    ]);
     expect(toned(c, md, 7)).toEqual([
       ["def", "keyword"],
       ["f", "name"],
