@@ -336,7 +336,7 @@ export function readCarried3D(given: unknown): Carried3D | null {
     at: { x: at.x, y: at.y, ...(isNum(at.z) ? { z: at.z } : {}) },
     ...(frames.length ? { frames } : {}),
     ...(energies ? { energies } : {}),
-    ...(m.look === "space" || m.look === "balls" ? { look: m.look } : {}),
+    ...(m.look === "secondary" ? { look: m.look } : {}),
     ...(measures.length ? { measures } : {}),
     ...(typeof m.name === "string" ? { name: m.name } : {}),
     ...(turn ? { turn } : {}),

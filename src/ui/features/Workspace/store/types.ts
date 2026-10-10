@@ -5,6 +5,7 @@ import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
 import type { EditorAtom } from "../../../../utils/importers";
 import type { Stroke, StrokeNode } from "../utils/stroke";
 import type { StyleChoice } from "../../../../lib/chem/style";
+import type { Role3D } from "../../../../lib/chem/style3d";
 import type { BondChem, ParsedAtom, ParsedBond } from "../../../../lib/chem/molecule";
 import type { Workspace } from "../utils/workspace";
 import type { CalcInfo } from "../../../../lib/calc/output";
@@ -166,8 +167,8 @@ export type PictureToAdd = { name: string; sha256: string; media: PictureMedia; 
 
 /** Where a PDF is read in the column, and how large: `PdfItem.reading`. */
 export type PdfReading = { at: number; zoom: number };
-/** How a molecule in 3D is drawn: balls and sticks, or space-filling. */
-export type Look3D = "balls" | "space";
+/** Which of the 3D style's two looks a molecule is drawn in (lib/chem/style3d). */
+export type Look3D = Role3D;
 /**
  * A measurement on a molecule in 3D, between its atoms by index, in the
  * order they were chosen: two, a distance; three, the angle at the middle
@@ -196,7 +197,7 @@ export type Molecule3D = {
   frames?: number[][];
   /** Each frame's energy, where its file gives one, in hartrees: the first frame's first. */
   energies?: number[];
-  /** Its own look; unset, the 3D style's. */
+  /** Switched to the 3D style's secondary look; unset, drawn in its primary. */
   look?: Look3D;
   measures?: Measure3D[];
   /** The file it came from. */
@@ -607,7 +608,10 @@ export type EditorState = {
   /** Moves molecules in 3D on the page together; moves sharing `gesture` are one undo step. */
   moveMolecules3d: (moves: { id: number; at: { x: number; y: number; z?: number } }[], gesture?: string) => void;
   removeMolecule3d: (id: number) => void;
-  setLook3d: (id: number, look: Look3D) => void;
+  /** Molecules in 3D drawn in the primary look or the secondary, in one step. */
+  setLook3d: (ids: number[], look: Look3D) => void;
+  /** A molecule in 3D switched to its other look - the secondary, or back to the primary - and those selected with it to the same. */
+  switchLook3d: (id: number) => void;
   /** A measurement of the atoms and bonds chosen, which are then let go. */
   measureChosen3d: () => void;
   removeMeasure3d: (id: number, measure: number) => void;

@@ -11,7 +11,7 @@ describe("the settings file", () => {
   it("reads back what it wrote", () => {
     const settings = {
       drawingStyle: { preset: "rsc", changes: { ends: "round" as const } },
-      style3d: { preset: "glossy", changes: { bondRadius: 0.15 } },
+      style3d: { primary: "glossy", secondary: "space", looks: { glossy: { bondRadius: 0.15 } }, shared: { keyLight: 2 } },
       network: { offline: true, granted: ["python-env:console"] },
       chemistry: { valenceWarnings: false, stereoLabels: true },
       updates: { asked: true },

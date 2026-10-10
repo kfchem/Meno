@@ -378,3 +378,23 @@ describe("a molecule's calculation's lists", () => {
     expect(again.state().lists3d).toEqual({});
   });
 });
+
+describe("a molecule in 3D switched to its other look", () => {
+  it("goes to the secondary and back, one undo step each - alone, or with those selected with it", () => {
+    const { doc, state } = editor();
+    state().switchLook3d(1);
+    expect(state().molecules3d.map((m) => m.look)).toEqual(["secondary", undefined]);
+    expect(doc.history().undoLabel).toBe("secondary style");
+    state().switchLook3d(1);
+    expect(state().molecules3d.map((m) => m.look)).toEqual([undefined, undefined]);
+    // selected together, both go over to the other look of the one switched
+    state().switchLook3d(2);
+    state().selectMolecules3d([1, 2], false);
+    state().switchLook3d(1);
+    expect(state().molecules3d.map((m) => m.look)).toEqual(["secondary", "secondary"]);
+    state().switchLook3d(2);
+    expect(state().molecules3d.map((m) => m.look)).toEqual([undefined, undefined]);
+    doc.undo();
+    expect(state().molecules3d.map((m) => m.look)).toEqual(["secondary", "secondary"]);
+  });
+});

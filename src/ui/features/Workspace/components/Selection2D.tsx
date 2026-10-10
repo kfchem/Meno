@@ -33,7 +33,7 @@ const turningOf =
   (turns: Record<number, Turn3D>, style: Style3D) =>
   (m: Molecule3D): Turning3D => {
     const solid = solidOf(m, style);
-    return { id: m.id, at: m.at, turn: turns[m.id], standing: standingHeight(solid, lookOf(m, style)) };
+    return { id: m.id, at: m.at, turn: turns[m.id], standing: standingHeight(solid, lookOf(m)) };
   };
 
 /**
@@ -63,7 +63,7 @@ function selectionExtent(
   }
   for (const m of molecules) {
     if (!sel3d.has(m.id)) continue;
-    const pose = poseOf(m, solidOf(m, style), lookOf(m, style), turns[m.id], frames[m.id]);
+    const pose = poseOf(m, solidOf(m, style), lookOf(m), turns[m.id], frames[m.id]);
     const b = seenBounds(pose, eyeHeight == null ? undefined : { x: m.at.x, y: m.at.y, z: eyeHeight });
     xs.push(b.minX, b.maxX);
     ys.push(b.minY, b.maxY);

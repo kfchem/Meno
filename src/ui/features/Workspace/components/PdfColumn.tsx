@@ -70,7 +70,7 @@ function bodyBoxOf(st: EditorState, t: WorkspaceText): { x0: number; x1: number;
   const m = st.molecules3d.find((x) => x.id === of.molecule);
   if (!m) return null;
   const style = currentStyle3D();
-  const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m, style), st.turns3d[m.id], st.frames3d[m.id]));
+  const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m), st.turns3d[m.id], st.frames3d[m.id]));
   return { x0: b.minX, x1: b.maxX, y0: b.minY, y1: b.maxY };
 }
 

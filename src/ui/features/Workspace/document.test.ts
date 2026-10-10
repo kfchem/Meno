@@ -387,11 +387,14 @@ describe("molecules in 3D on the page", () => {
     expect(ops.removeMolecules3d(d, [7])).toBe(d);
   });
 
-  it("are drawn space-filling, or balls and sticks, each its own way", () => {
-    const d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
-    const space = ops.setLook3d(d, 1, "space");
-    expect(space.molecules3d![0].look).toBe("space");
-    expect(ops.setLook3d(d, 1, "balls")).toBe(d);
+  it("are drawn in the 3D style's primary look or its secondary, each its own way - several at once", () => {
+    let d = ops.addMolecule3d(doc(), { ...water, at: { x: 0, y: 0 } });
+    d = ops.addMolecule3d(d, { ...water, at: { x: 9, y: 0 } });
+    const second = ops.setLook3d(d, [1, 2], "secondary");
+    expect(second.molecules3d!.map((m) => m.look)).toEqual(["secondary", "secondary"]);
+    expect(ops.setLook3d(d, [1, 2], "primary")).toBe(d);
+    // (back to the primary: no look of its own left)
+    expect("look" in ops.setLook3d(second, [1], "primary").molecules3d![0]).toBe(false);
   });
 
   it("keep measurements of two, three or four of their atoms, each once", () => {
