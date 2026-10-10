@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import PageHtml from "./PageHtml";
 import { useEditor, useEditorStore } from "../store";
@@ -10,13 +10,16 @@ import { MOV_PX } from "../constants";
 import { useStyle3D } from "../style3d";
 import SetFrame, { type Edge } from "../workflow/SetFrame";
 import StepCard, { Port, type PortLook, type RunRow, type RunView } from "../workflow/StepCard";
-import { setMembers, countOf, type Frame } from "../workflow/entries";
-import { selectionFrame } from "../workflow/selectionSet";
+import { countOf, type Frame } from "../workflow/entries";
+import { labelReach, selectionFrame } from "../workflow/selectionSet";
+import { useDrawnLayout } from "./drawnLayoutContext";
+import { wordsTooSmall } from "../utils/pageScale";
+import { usePresence } from "../../../theme/presence";
+import { DURATION } from "../../../theme/motion";
 import { canWire, stateOf } from "../workflow/flow";
 import { howOf, kindInfo, madeName, optionsOf } from "../workflow/kinds";
 import { useReaders } from "../../../../lib/calc/workers";
 import { finished } from "../../../../lib/jobs";
-import { setList } from "../workflow/list";
 import { CARD_W, HTML_DISTANCE, PORT_DOWN, PX } from "../workflow/look";
 import { byOf, doerOf, installedFor, kindsOf, missingFor, optionsFor, stepOptions } from "../workflow/doers";
 import { lookFor, useInstalled } from "../../../../lib/plugins/installed";
@@ -27,8 +30,6 @@ type Pt = { x: number; y: number };
 
 /** The least a set is sized to, each way. */
 const LEAST = 48 * PX;
-/** The smallest of a card's words, in px at 100 %: below 9 px on the screen it shows its icon and its state's mark alone. */
-const SMALLEST = 11.5;
 /**
  * A wire's colours, from Meno's palette (docs/WORKFLOWS.md, *How it looks*):
  * its grey; the accent while it is drawn; the attention colour into a step
@@ -142,17 +143,44 @@ function MovingWire({ p, q, color, zoom }: { p: Pt; q: Pt; color: string; zoom: 
   );
 }
 
-/** A wire drawn from `p` to `q`; where it can be pointed at, a wider band round it that the pointer takes. */
-function WireLine({ p, q, color, zoom, onHover }: { p: Pt; q: Pt; color: string; zoom: number; onHover?: (on: boolean) => void }) {
+/**
+ * How much of a wire is seen: none as it is put down, all a moment later -
+ * and back to none as it goes (`leaving`) - in a short ease, so that a wire
+ * neither appears nor vanishes at once (theme/motion).
+ */
+function useFade(material: React.RefObject<THREE.Material | null>, leaving: boolean) {
+  const from = useRef({ at: performance.now(), opacity: 0 });
+  const was = useRef(leaving);
+  const { invalidate } = useThree();
+  if (was.current !== leaving) {
+    was.current = leaving;
+    from.current = { at: performance.now(), opacity: material.current?.opacity ?? 1 };
+  }
+  useFrame(() => {
+    const m = material.current;
+    if (!m) return;
+    const goal = leaving ? 0 : 1;
+    const t = Math.min(1, (performance.now() - from.current.at) / (DURATION.quick * 1000));
+    const opacity = from.current.opacity + (goal - from.current.opacity) * t;
+    if (opacity === m.opacity) return;
+    m.opacity = opacity;
+    invalidate();
+  });
+}
+
+/** A wire drawn from `p` to `q`; where it can be pointed at, a wider band round it that the pointer takes. It fades in as it comes, and out as it goes (`leaving`). */
+function WireLine({ p, q, color, zoom, onHover, leaving = false }: { p: Pt; q: Pt; color: string; zoom: number; onHover?: (on: boolean) => void; leaving?: boolean }) {
   // (as wide on the screen at any zoom: a hair, as the frames' lines are)
   const line = useMemo(() => ribbon(p, q, WIRE_PX / zoom), [p.x, p.y, q.x, q.y, zoom]); // eslint-disable-line react-hooks/exhaustive-deps
-  const hit = useMemo(() => (onHover ? ribbon(p, q, WIRE_HIT_PX / zoom) : null), [p.x, p.y, q.x, q.y, zoom, !!onHover]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hit = useMemo(() => (onHover && !leaving ? ribbon(p, q, WIRE_HIT_PX / zoom) : null), [p.x, p.y, q.x, q.y, zoom, !!onHover, leaving]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => line.dispose(), [line]);
   useEffect(() => () => hit?.dispose(), [hit]);
+  const material = useRef<THREE.MeshBasicMaterial>(null);
+  useFade(material, leaving);
   return (
     <group position={[0, 0, 0.012]}>
       <mesh geometry={line} renderOrder={4}>
-        <meshBasicMaterial color={color} depthTest={false} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial ref={material} color={color} transparent opacity={0} depthTest={false} depthWrite={false} toneMapped={false} />
       </mesh>
       {hit && (
         <mesh
@@ -174,7 +202,7 @@ function WireLine({ p, q, color, zoom, onHover }: { p: Pt; q: Pt; color: string;
 function runRows(s: WorkflowStep): RunRow[] {
   const by = byOf(s);
   const how = (kind: WorkflowStep["kind"], options: WorkflowStep["options"]) =>
-    [kind !== s.kind ? kindInfo(kind).name : "", howOf(optionsFor(kind, by), options)].filter(Boolean).join(" \u00b7 ");
+    [kind !== s.kind ? kindInfo(kind).name : "", howOf(optionsFor(kind, by), options, by === "meno" ? kindInfo(kind).how : undefined)].filter(Boolean).join(" \u00b7 ");
   return [
     ...(s.ran ? [{ at: s.ran.at, said: s.ran.said, how: how(s.ran.kind ?? s.kind, s.ran.options ?? s.options), shown: true }] : []),
     ...(s.runs ?? []).map((r) => ({ at: r.at, said: r.said, how: how(r.kind, r.options), shown: false })),
@@ -247,7 +275,7 @@ export default function Workflow2D() {
   const layer = useRef<HTMLDivElement>(null);
   useFrame(() => {
     const z = (camera as THREE.OrthographicCamera).zoom || 1;
-    const small = SMALLEST * PX * z < 9;
+    const small = wordsTooSmall(z);
     if (small !== compact) setCompact(small);
     if (Math.abs(Math.log(z / zoom)) > 0.03) setZoom(z);
     layer.current?.style.setProperty("--hair", `${1 / (z * PX)}px`);
@@ -520,13 +548,12 @@ export default function Workflow2D() {
     }
     return out;
   }, [steps, jobsSeen]);
-  // each set's tab and list: what it holds, worked out as the page changes, not as the pointer moves
+  // each set's name and count: what it holds, worked out as the page changes, not as the pointer moves
   const setInfo = useMemo(
     () =>
       new Map(
         sets.map((b) => {
           const count = countOf(flow, b);
-          const molecules = setMembers(flow, b).molecules.map((id) => molecules3d.find((m) => m.id === id)!);
           const made = b.made ? steps.find((s) => s.id === b.made!.step) : undefined;
           const aside = b.aside?.length ?? 0;
           const counted = !count.entries
@@ -536,10 +563,10 @@ export default function Workflow2D() {
               : count.holds === "molecules"
                 ? `${plural(count.compounds, "compound")}${aside ? ` · ${count.entries} of ${count.entries + aside}` : ""}`
                 : `${plural(count.compounds, "compound")} · ${aside ? `${count.entries} of ${count.entries + aside}` : count.entries}`;
-          return [b.id, { name: made ? madeName(made.kind, stepOptions(made), made.options) : "Input", count: counted, rows: setList(molecules, b.aside ?? [], count.holds) }];
+          return [b.id, { name: made ? madeName(made.kind, stepOptions(made), made.options) : "Input", count: counted }];
         }),
       ),
-    [flow, sets, steps, molecules3d],
+    [flow, sets, steps],
   );
 
   // while a wire is drawn: the ports that would take it lit, the others faint
@@ -551,10 +578,12 @@ export default function Workflow2D() {
     return "plain";
   };
 
-  // the selection, where it holds whole structures or molecules in 3D: the frame an input set would take
+  // the selection, where it holds whole structures or molecules in 3D: the frame an input set would take, round its labels as they are drawn
+  const drawing = useDrawnLayout();
+  const labels = useMemo(() => labelReach(drawing.layout, drawing.atoms, drawing.opts), [drawing.layout, drawing.atoms, drawing.opts]);
   const asSet = useMemo(
-    () => selectionFrame(model, sel.atoms, molecules3d, sel3d, style3d, turns3d, frames3d),
-    [sel, sel3d, model, molecules3d, style3d, turns3d, frames3d],
+    () => selectionFrame(model, sel.atoms, molecules3d, sel3d, style3d, turns3d, frames3d, labels),
+    [sel, sel3d, model, molecules3d, style3d, turns3d, frames3d, labels],
   );
 
   /** The selection made a set, an input, and a wire drawn out of it. */
@@ -582,32 +611,104 @@ export default function Workflow2D() {
     return s ? { p: wireDrag.at, q: stepTakes(s) } : null;
   })();
 
+  // sets and steps, each drawn as it is - and those just gone, as they last were, fading out
+  const parts = [
+    ...sets.map((b) => {
+      const info = setInfo.get(b.id)!;
+      return (
+        <div key={`b${b.id}`} style={onLayer(b.x0, b.y1)}>
+          <SetFrame
+            set={b}
+            name={info.name}
+            count={info.count}
+            hovered={hoveredSet === b.id}
+            chosen={chosenSet === b.id || selFlow.sets.has(b.id)}
+            compact={compact}
+            give={portLook("give", { set: b.id })}
+            onTabDown={(e) => dragSet(e, b)}
+            onEdgeDown={(edge, e) => sizeSet(edge, e, b)}
+            onGiveDown={(e) => drawFrom(e, { set: b.id })}
+            onContextMenu={menuOf("set", b.id)}
+            onHover={(on) => (on ? hover({ hoveredSet: b.id }) : unhover("hoveredSet", b.id))}
+          />
+        </div>
+      );
+    }),
+    ...steps.map((s) => {
+      const info = kindInfo(s.kind);
+      const doer = doerOf(s);
+      const takes = stepOptions(s);
+      const how = howOf(takes, s.options, byOf(s) === "meno" ? info.how : undefined);
+      const run = runs.get(s.id);
+      return (
+        // (its top at its place: the card grows downwards as it opens)
+        <div key={`s${s.id}`} data-step-card={s.id} style={onLayer(s.x, s.y)}>
+          <StepCard
+            step={s}
+            info={info}
+            who={doer?.name ?? "Nothing added"}
+            how={how}
+            state={run?.waiting ? "waiting" : (states.get(s.id) ?? "ready")}
+            run={run?.view}
+            missing={missingFor(s)}
+            compact={compact}
+            selected={selFlow.steps.has(s.id)}
+            open={openStep === s.id}
+            ports={{ take: portLook("take", s.id), give: portLook("give", { step: s.id }) }}
+            optionList={takes}
+            options={optionsOf(takes, s.options)}
+            kinds={kindsOf(byOf(s)).map((k) => ({ kind: k, name: kindInfo(k).name }))}
+            runs={runRows(s)}
+            onOptions={(values) => store.getState().updateStep(s.id, { options: values })}
+            onKind={(kind) => store.getState().updateStep(s.id, { kind })}
+            onShowRun={(index) => store.getState().showRun(s.id, index)}
+            onCardDown={(e) => dragStep(e, s)}
+            onTakeDown={(e) => drawInto(e, s.id)}
+            onGiveDown={(e) => drawFrom(e, { step: s.id })}
+            onContextMenu={menuOf("step", s.id)}
+            onHover={(on) => (on ? hover({ hoveredStep: s.id }) : unhover("hoveredStep", s.id))}
+          />
+        </div>
+      );
+    }),
+  ];
+  const shownParts = usePresence(parts, (el) => String(el.key));
+  // the wires: each drawn, and each step's to the set it made
+  const wireParts = [
+    ...wires.flatMap((w) => {
+      if (w.id === wireDrag?.was) return [];
+      const p = gives(w.from);
+      const s = stepById.get(w.to);
+      if (!p || !s) return [];
+      const failed = states.get(s.id) === "failed";
+      return [
+        {
+          key: `w${w.id}`,
+          p,
+          q: stepTakes(s),
+          moving: !!s.running && hoveredWire !== w.id,
+          color: hoveredWire === w.id ? COLORS.highlight : failed ? ATTENTION : WIRE,
+          onHover: (on: boolean) => (on ? hover({ hoveredWire: w.id }) : unhover("hoveredWire", w.id)),
+        },
+      ];
+    }),
+    ...sets.flatMap((b) => {
+      const s = b.made ? stepById.get(b.made.step) : undefined;
+      return s ? [{ key: `m${b.id}`, p: stepGives(s), q: setTakes(b), moving: false, color: WIRE, onHover: undefined }] : [];
+    }),
+  ];
+  const shownWires = usePresence(wireParts, (w) => w.key);
+
   return (
     <group>
-      {/* wires: those drawn, and each step's to the set it made */}
-      {wires.map((w) => {
-        if (w.id === wireDrag?.was) return null;
-        const p = gives(w.from);
-        const s = stepById.get(w.to);
-        if (!p || !s) return null;
-        const failed = states.get(s.id) === "failed";
-        if (s.running && hoveredWire !== w.id)
-          return <MovingWire key={`w${w.id}`} p={p} q={stepTakes(s)} color={WIRE} zoom={zoom} />;
-        return (
-          <WireLine
-            key={`w${w.id}`}
-            p={p}
-            q={stepTakes(s)}
-            color={hoveredWire === w.id ? COLORS.highlight : failed ? ATTENTION : WIRE}
-            zoom={zoom}
-            onHover={(on) => (on ? hover({ hoveredWire: w.id }) : unhover("hoveredWire", w.id))}
-          />
-        );
-      })}
-      {sets.map((b) => {
-        const s = b.made ? stepById.get(b.made.step) : undefined;
-        return s ? <WireLine key={`m${b.id}`} p={stepGives(s)} q={setTakes(b)} color={WIRE} zoom={zoom} /> : null;
-      })}
+      {/* wires: those drawn, and each step's to the set it made - and those just gone, fading */}
+      {shownWires.map(({ key, item, leaving }) =>
+        item.moving && !leaving ? (
+          <MovingWire key={key} p={item.p} q={item.q} color={WIRE} zoom={zoom} />
+        ) : (
+          <WireLine key={key} p={item.p} q={item.q} color={item.color} zoom={zoom} onHover={leaving ? undefined : item.onHover} leaving={leaving} />
+        ),
+      )}
       {drawn && <WireLine p={drawn.p} q={drawn.q} color={ACCENT} zoom={zoom} />}
 
       {/* Sets and steps drawn in HTML on one layer laid on the page at its
@@ -616,65 +717,16 @@ export default function Workflow2D() {
           selection's port - and not behind a layer of another's. */}
       <PageHtml transform distanceFactor={HTML_DISTANCE} position={[0, 0, 0]} zIndexRange={[18, 18]} pointerEvents="none">
         <div ref={layer} style={{ position: "relative", width: 0, height: 0 }}>
-          {sets.map((b) => {
-            const info = setInfo.get(b.id)!;
-            return (
-              <div key={`b${b.id}`} style={onLayer(b.x0, b.y1)}>
-                <SetFrame
-                  set={b}
-                  name={info.name}
-                  count={info.count}
-                  rows={info.rows}
-                  hovered={hoveredSet === b.id}
-                  chosen={chosenSet === b.id || selFlow.sets.has(b.id)}
-                  give={portLook("give", { set: b.id })}
-                  onTabDown={(e) => dragSet(e, b)}
-                  onEdgeDown={(edge, e) => sizeSet(edge, e, b)}
-                  onGiveDown={(e) => drawFrom(e, { set: b.id })}
-                  onContextMenu={menuOf("set", b.id)}
-                  onHover={(on) => (on ? hover({ hoveredSet: b.id }) : unhover("hoveredSet", b.id))}
-                />
+          {shownParts.map(({ key, item, leaving }) =>
+            leaving ? (
+              // (gone: as it last was, fading, and no longer taking the pointer)
+              <div key={key} inert className="meno-fade-out">
+                {item}
               </div>
-            );
-          })}
-
-          {steps.map((s) => {
-            const info = kindInfo(s.kind);
-            const doer = doerOf(s);
-            const takes = stepOptions(s);
-            const how = howOf(takes, s.options);
-            const run = runs.get(s.id);
-            return (
-              // (its top at its place: the card grows downwards as it opens)
-              <div key={`s${s.id}`} data-step-card={s.id} style={onLayer(s.x, s.y)}>
-                <StepCard
-                  step={s}
-                  info={info}
-                  who={doer?.name ?? "Nothing added"}
-                  how={how}
-                  state={run?.waiting ? "waiting" : (states.get(s.id) ?? "ready")}
-                  run={run?.view}
-                  missing={missingFor(s)}
-                  compact={compact}
-                  selected={selFlow.steps.has(s.id)}
-                  open={openStep === s.id}
-                  ports={{ take: portLook("take", s.id), give: portLook("give", { step: s.id }) }}
-                  optionList={takes}
-                  options={optionsOf(takes, s.options)}
-                  kinds={kindsOf(byOf(s)).map((k) => ({ kind: k, name: kindInfo(k).name }))}
-                  runs={runRows(s)}
-                  onOptions={(values) => store.getState().updateStep(s.id, { options: values })}
-                  onKind={(kind) => store.getState().updateStep(s.id, { kind })}
-                  onShowRun={(index) => store.getState().showRun(s.id, index)}
-                  onCardDown={(e) => dragStep(e, s)}
-                  onTakeDown={(e) => drawInto(e, s.id)}
-                  onGiveDown={(e) => drawFrom(e, { step: s.id })}
-                  onContextMenu={menuOf("step", s.id)}
-                  onHover={(on) => (on ? hover({ hoveredStep: s.id }) : unhover("hoveredStep", s.id))}
-                />
-              </div>
-            );
-          })}
+            ) : (
+              <Fragment key={key}>{item}</Fragment>
+            ),
+          )}
     
           {/* the selection's port: pulled, the selection becomes an input set */}
           {asSet && !wireDrag && (

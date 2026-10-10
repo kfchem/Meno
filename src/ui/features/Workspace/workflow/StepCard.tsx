@@ -7,7 +7,7 @@ import type { WorkflowStep } from "../store/types";
 import type { StepState } from "./flow";
 import { StepGlyph } from "./icons";
 import type { KindInfo, StepKind } from "./kinds";
-import { CARD_W, PORT_DOWN, PX } from "./look";
+import { CARD_H, CARD_W, PORT_DOWN, PX } from "./look";
 import { clock } from "./programs";
 
 /**
@@ -155,14 +155,17 @@ export type StepCardProps = {
 /**
  * A step's card (docs/WORKFLOWS.md, *What is on the page*), drawn as
  * Meno's cards are: who does it - a plugin, or Meno - with the icon of
- * what it does; what it does and how; a rule; and what state it is in, in
- * words and an icon. It takes on its left edge and gives on its right.
+ * what it does; what it does and how; and what state it is in, in words
+ * and an icon - running several jobs, a thin bar saying how many have
+ * ended. It takes on its left edge and gives on its right.
  * Clicked, it opens in place to what it does - another of the kinds who
  * does it fills - and its options.
  */
 export default function StepCard(p: StepCardProps) {
   const line = stateLine(p.state, p.step.ran?.said, p.run, Date.now(), p.missing);
   const said = p.state === "running" && p.run?.line ? p.run.line : undefined;
+  // (a run of several jobs: how many have ended, as a share)
+  const progress = p.state === "running" && p.run && p.run.total > 1 ? p.run.ended / p.run.total : undefined;
   const w = CARD_W / PX;
   return (
     <div
@@ -180,30 +183,43 @@ export default function StepCard(p: StepCardProps) {
         style={{ borderWidth: HAIR, borderStyle: "solid", cursor: "default" }}
       >
         {p.compact ? (
-          <div className="flex items-center justify-center gap-3 text-gh-black" style={{ height: 56 }}>
+          <div className="flex items-center justify-center gap-3 text-gh-black" style={{ height: CARD_H / PX }}>
             <StepGlyph icon={p.info.icon} size={28} />
             {line.Icon && <line.Icon className={clsx("h-6 w-6 transition-colors duration-200 ease-meno", line.tone, line.turning && "animate-spin motion-reduce:animate-none [animation-duration:2s]")} aria-hidden />}
           </div>
         ) : (
-          <div className="px-3 pt-2.5 pb-2">
-            <div className="flex items-center gap-2 text-gh-black">
-              <span className="text-gh-gray">
-                <StepGlyph icon={p.info.icon} />
-              </span>
-              <span className="text-[13px] font-medium leading-5 truncate">{p.who}</span>
-            </div>
-            <div className="pl-6 text-[11px] leading-4 text-gh-gray truncate">{[p.info.name, p.how].filter(Boolean).join(" \u00b7 ")}</div>
-            <div className="mt-2 mb-1.5 border-gh-line" style={{ borderTopWidth: HAIR, borderTopStyle: "solid" }} />
-            <div className={clsx("flex items-center gap-1.5 text-[11px] leading-4 transition-colors duration-200 ease-meno", line.tone)}>
-              {line.Icon && <line.Icon className={clsx("h-3.5 w-3.5 shrink-0", line.turning && "animate-spin motion-reduce:animate-none [animation-duration:2s]")} aria-hidden />}
-              <span className="truncate" title={line.text}>
-                {line.text}
-              </span>
-            </div>
+          // (two columns: the icons - what it does, and its state - and the words beside them; its first line level with its ports)
+          <div className="grid items-start gap-x-2 px-3 pt-2 pb-2.5" style={{ gridTemplateColumns: "16px minmax(0, 1fr)", minHeight: CARD_H / PX }}>
+            <span className="flex h-5 items-center text-gh-gray">
+              <StepGlyph icon={p.info.icon} />
+            </span>
+            <span className="h-5 truncate text-[13px] font-medium leading-5 text-gh-black">{p.who}</span>
+            <span />
+            <span className="text-[11px] leading-4 text-gh-gray line-clamp-2" title={[p.info.name, p.how].filter(Boolean).join(" \u00b7 ")}>
+              {[p.info.name, p.how].filter(Boolean).join(" \u00b7 ")}
+            </span>
+            <span className={clsx("mt-1.5 flex h-4 items-center transition-colors duration-200 ease-meno", line.tone)}>
+              {line.Icon && <line.Icon className={clsx("h-3.5 w-3.5", line.turning && "animate-spin motion-reduce:animate-none [animation-duration:2s]")} aria-hidden />}
+            </span>
+            <span className={clsx("mt-1.5 line-clamp-2 text-[11px] leading-4 transition-colors duration-200 ease-meno", line.tone)} title={line.text}>
+              {line.text}
+            </span>
             {said && (
-              <div className="pl-5 text-[10px] leading-4 text-gh-gray truncate font-mono" title={said}>
-                {said}
-              </div>
+              <>
+                <span />
+                <span className="truncate font-mono text-[10px] leading-4 text-gh-gray" title={said}>
+                  {said}
+                </span>
+              </>
+            )}
+            {progress != null && (
+              <>
+                <span />
+                {/* (how far its jobs have got: a thin bar, filling as each ends) */}
+                <span role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)} className="mt-1.5 block h-[3px] overflow-hidden rounded-full bg-gh-line">
+                  <span className="block h-full rounded-full bg-accel-base transition-[width] duration-300 ease-meno" style={{ width: `${progress * 100}%` }} />
+                </span>
+              </>
             )}
           </div>
         )}

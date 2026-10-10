@@ -137,26 +137,36 @@ function Invoke-MenoQuickAdd {
 
       .DESCRIPTION
       A double-click at the point opens Quick Add, and the icon is clicked
-      where src/ui/features/Workspace/QuickAdd.tsx puts it: up and to the
-      right of the point, or below it or to its left where the canvas has
-      no room (OFF 14, SIZE 36, a border of 1 and padding of 4, icons 2
-      apart - CSS px, twice as many in a shot; the canvas begins under the
-      40 px title bar). Change this with that. SMILES opens the field below
+      where src/ui/features/Workspace/quickAddPlace.ts puts it: up and to
+      the right of the point, or below it or to its left where the canvas
+      has no room for it at its largest - its calculations or its SMILES
+      field open - held there by its top left corner (OFF 14, SIZE 36, a
+      border of 1 and padding of 4, icons 2 apart - CSS px, twice as many in
+      a shot; the canvas begins under the 40 px title bar). Its
+      calculations' size depends on the plugins added: -CalcRows rows of
+      steps (and procedures), at most -CalcMost icons in one - Meno's three,
+      alone, by default. Change this with that. SMILES opens the field below
       the row, which then takes the keys.
     #>
     param(
         [Parameter(Mandatory)] [int] $X,
         [Parameter(Mandatory)] [int] $Y,
-        [Parameter(Mandatory)] [ValidateSet("Bond", "Chain", "SMILES", "Text", "Reaction arrow", "Plus")] [string] $Item
+        [Parameter(Mandatory)] [ValidateSet("Bond", "Chain", "SMILES", "Text", "Reaction arrow", "Plus")] [string] $Item,
+        [int] $CalcRows = 1,
+        [int] $CalcMost = 3
     )
     $row = @("Bond", "Chain", "SMILES", "Text", "Reaction arrow", "Plus")
     $size = Get-ClientSize
     $cw = $size.Width / 2; $ch = $size.Height / 2 - 40
     $px = $X / 2; $py = $Y / 2 - 40
-    # (the row and the Calculations button after a rule; its height with its padding)
+    # (the row and the Calculations button after a rule, its height with its padding; and its largest, a panel open)
     $w = ($row.Count + 1) * 36 + 8 + 9; $h = 36 + 8
-    $left = if ($px + 14 + $w -le $cw - 4) { $px + 14 } else { [Math]::Max(4, $px - 14 - $w) }
-    $top = if ($py - 14 - $h -ge 4) { $py - 14 - $h } else { [Math]::Min($ch - $h - 4, $py + 14) }
+    $mostW = [Math]::Max($w, 84 + $CalcMost * 36 + 8)
+    $mostH = [Math]::Max($h + $CalcRows * 36 + 9, $h + 32 + 9)
+    $right = ($px + 14 + $mostW -le $cw - 4) -or ($px - 14 - $mostW -lt 4)
+    $left = if ($right) { [Math]::Max(4, [Math]::Min($px + 14, $cw - 4 - $mostW)) } else { $px - 14 - $mostW }
+    $top = if ($py - 14 - $h -ge 4) { $py - 14 - $h } else { $py + 14 }
+    $top = [Math]::Max(4, [Math]::Min($top, $ch - 4 - $mostH))
     $ix = $left + 1 + 4 + $row.IndexOf($Item) * 38 + 18
     $iy = $top + 1 + 4 + 18
     Invoke-MenoClick -X $X -Y $Y -Count 2

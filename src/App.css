@@ -142,6 +142,19 @@ body {
   animation: meno-fade-out 120ms var(--ease-meno-leave) both;
 }
 
+/* A chip on the page - a molecule's frames chip, a measurement's value -
+   grows and shrinks with the page, as its cards and sets do: drawn at the
+   page's scale, `--page` (components/PageScale), from where it hangs; and
+   fades out where its words would be too small to read, as a step's card
+   shows its icons alone (utils/pageScale). */
+.meno-page-chip {
+  transition: opacity 150ms var(--ease-meno);
+}
+[data-words-small] .meno-page-chip {
+  opacity: 0;
+  pointer-events: none !important;
+}
+
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;

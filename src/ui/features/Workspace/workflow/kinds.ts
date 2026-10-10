@@ -10,7 +10,6 @@ import type { Option } from "../../../../lib/options";
 export type SetKind = "structures" | "molecules" | "conformers";
 
 export type StepKind =
-  | "structure-3d"
   | "conformers"
   | "optimise"
   | "energy"
@@ -18,10 +17,11 @@ export type StepKind =
   | "energy-window"
   | "duplicates"
   | "populations"
-  | "as-conformers";
+  | "as-conformers"
+  | "choose";
 
-/** Which icon a kind has (workflow/icons: QuickAdd, a step's card): a cube, a stack, a trend downwards, a bolt, a signal, a funnel, two squares, bars, shapes grouped. */
-export type StepIcon = "cube" | "rings" | "curve" | "level" | "wave" | "band" | "twins" | "bars" | "grouped";
+/** Which icon a kind has (workflow/icons: QuickAdd, a step's card): a stack, a trend downwards, a bolt, a signal, a funnel, two squares, bars, shapes grouped, a pointer choosing. */
+export type StepIcon = "rings" | "curve" | "level" | "wave" | "band" | "twins" | "bars" | "grouped" | "pointer";
 
 export type KindInfo = {
   kind: StepKind;
@@ -37,11 +37,12 @@ export type KindInfo = {
   options?: readonly Option[];
   /** What its result set is called; `{id}`, an option's value. */
   made: string;
+  /** How it does its work, in a line, from its options' values - where Meno does it and says it its own way (howOf). */
+  how?: (values: Record<string, string | number | boolean>) => string;
 };
 
 export const KINDS: readonly KindInfo[] = [
-  { kind: "structure-3d", name: "3D structure", icon: "cube", takes: ["structures"], gives: "molecules", runs: "program", made: "3D structures" },
-  { kind: "conformers", name: "Conformers", icon: "rings", takes: ["molecules", "conformers"], gives: "conformers", runs: "program", made: "Conformers" },
+  { kind: "conformers", name: "Conformers", icon: "rings", takes: ["structures", "molecules", "conformers"], gives: "conformers", runs: "program", made: "Conformers" },
   { kind: "optimise", name: "Optimise", icon: "curve", takes: ["molecules", "conformers"], gives: "same", runs: "program", made: "Optimised" },
   { kind: "energy", name: "Energy", icon: "level", takes: ["molecules", "conformers"], gives: "same", runs: "program", made: "Energies" },
   { kind: "frequencies", name: "Frequencies", icon: "wave", takes: ["molecules", "conformers"], gives: "same", runs: "program", made: "Frequencies" },
@@ -76,6 +77,29 @@ export const KINDS: readonly KindInfo[] = [
     options: [{ id: "temperature", label: "At", type: "number", default: 298.15, min: 1, step: 1, unit: "K" }],
   },
   { kind: "as-conformers", name: "As conformers", icon: "grouped", takes: ["molecules"], gives: "conformers", runs: "entries", made: "Conformers" },
+  {
+    kind: "choose",
+    name: "Choose one",
+    icon: "pointer",
+    takes: ["conformers"],
+    gives: "molecules",
+    runs: "entries",
+    made: "Chosen",
+    options: [
+      {
+        id: "which",
+        label: "Which",
+        type: "choice",
+        choices: [
+          { value: "lowest", label: "Lowest in energy" },
+          { value: "number", label: "By its number" },
+        ],
+        default: "lowest",
+      },
+      { id: "number", label: "Its number", type: "number", default: 1, min: 1, step: 1 },
+    ],
+    how: (v) => (v.which === "number" ? `Number ${v.number}` : "Lowest in energy"),
+  },
 ];
 
 export const kindInfo = (kind: StepKind): KindInfo => KINDS.find((k) => k.kind === kind)!;
@@ -99,9 +123,14 @@ export function madeName(kind: StepKind, options: readonly Option[], own: Record
   return kindInfo(kind).made.replace(/\{([a-z0-9-]+)\}/g, (_, id: string) => String(values[id] ?? ""));
 }
 
-/** How a step does its work, in a line: each option's value, a number with its unit, a choice by its name - one of none left out. */
-export function howOf(options: readonly Option[], own: Record<string, string | number | boolean> | undefined): string {
+/** How a step does its work, in a line: each option's value, a number with its unit, a choice by its name - one of none left out; or as `said` says it (a kind's `how`, where Meno does it). */
+export function howOf(
+  options: readonly Option[],
+  own: Record<string, string | number | boolean> | undefined,
+  said?: KindInfo["how"],
+): string {
   const values = optionsOf(options, own);
+  if (said) return said(values);
   return options
     .flatMap((o) => {
       const v = values[o.id];

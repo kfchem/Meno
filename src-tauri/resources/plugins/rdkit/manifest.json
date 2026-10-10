@@ -24,7 +24,6 @@
   "reads": [],
   "kinds": [],
   "steps": [
-    {"kind": "structure-3d"},
     {"kind": "conformers", "programs": ["python"], "options": [
       {"id": "count", "label": "Conformers sought", "type": "number", "default": 30, "min": 1, "max": 500, "step": 1},
       {"id": "field", "label": "Force field", "type": "choice", "choices": [{"value": "MMFF94", "label": "MMFF94"}, {"value": "MMFF94s", "label": "MMFF94s"}, {"value": "UFF", "label": "UFF"}], "default": "MMFF94"},
