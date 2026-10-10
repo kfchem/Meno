@@ -117,6 +117,7 @@ import { PdfPictures } from "./components/pdfPictures";
 import { FollowCover, PageHtmlLayer } from "./components/coverLayer";
 import CaptionTyping2D from "./components/CaptionTyping2D";
 import Workflow2D from "./components/Workflow2D";
+import PageScale from "./components/PageScale";
 import { selectionFrame } from "./workflow/selectionSet";
 import { offeredSteps } from "./workflow/offered";
 import { PORT_DOWN } from "./workflow/look";
@@ -1410,9 +1411,11 @@ function WorkspaceContent({
           <Suspense fallback={null}>
             <Captions2D />
           </Suspense>
+          {/* A workflow on the page: its sets, steps and wires (within the drawing's layout: an input set is made round its labels) */}
+          <Workflow2D />
         </DrawnLayoutProvider>
-        {/* A workflow on the page: its sets, steps and wires */}
-        <Workflow2D />
+        {/* the page's scale, for chips drawn on it in HTML */}
+        <PageScale />
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />
         <PanZoom2D />

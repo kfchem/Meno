@@ -1066,19 +1066,22 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
                 is found by its box - Molecules3D - for its menu and the
                 Delete key) */}
             <PageHtml center zIndexRange={[30, 20]} style={{ pointerEvents: "none" }}>
-              <div
-                ref={(el) => {
-                  const l = labels.current.get(x.id) ?? { anchor: null, el: null };
-                  l.el = el;
-                  labels.current.set(x.id, l);
-                }}
-                data-measure3d={`${m.id}:${x.id}`}
-                className={`pointer-events-none px-1.5 rounded-full bg-white/90 border text-[11px] leading-[18px] text-gh-black tabular-nums whitespace-nowrap select-none shadow-sm transition-colors duration-150 ${
-                  props.hoveredMeasure === x.id ? "border-[#1e90ff]" : "border-gh-line"
-                }`}
-                style={{ opacity: 0 }}
-              >
-                {measureTexts[x.id] ?? ""}
+              {/* (as large as the page draws it: a chip on the page) */}
+              <div className="meno-page-chip" style={{ transform: "scale(var(--page, 1))" }}>
+                <div
+                  ref={(el) => {
+                    const l = labels.current.get(x.id) ?? { anchor: null, el: null };
+                    l.el = el;
+                    labels.current.set(x.id, l);
+                  }}
+                  data-measure3d={`${m.id}:${x.id}`}
+                  className={`pointer-events-none px-1.5 rounded-full bg-white/90 border text-[11px] leading-[18px] text-gh-black tabular-nums whitespace-nowrap select-none shadow-sm transition-colors duration-150 ${
+                    props.hoveredMeasure === x.id ? "border-[#1e90ff]" : "border-gh-line"
+                  }`}
+                  style={{ opacity: 0 }}
+                >
+                  {measureTexts[x.id] ?? ""}
+                </div>
               </div>
             </PageHtml>
           </group>
@@ -1158,7 +1161,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
           ) : (
             props.onRemake && (
               <PageHtml zIndexRange={[30, 20]}>
-                <div style={{ transform: "translate(-50%, 10px)" }}>
+                <div className="meno-page-chip" style={{ transform: "translate(-50%, calc(10px * var(--page, 1))) scale(var(--page, 1))", transformOrigin: "50% 0" }}>
                   <Changed onRemake={props.onRemake} />
                 </div>
               </PageHtml>

@@ -11,20 +11,21 @@ import type { CalcInfo } from "../../../../lib/calc/output";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { turnAfter, turnOver } from "../utils/align3d";
 import { setMembers, inside, setEntries, frameXyz, framesOf, type Frame, type SetEntry } from "./entries";
+import { hasChip } from "./selectionSet";
 import { findSet, inputKey, inputOf, resultOf, stateOf, stepOf, wireInto } from "./flow";
-import { kindInfo, MENO_DOES, takes, type SetKind, type StepKind } from "./kinds";
-import { setList } from "./list";
-import { BETWEEN, SET_PAD, SET_TOP, CARD_H, CARD_W, CHIP, GAP, LIST_W, PX, ROW } from "./look";
+import { kindInfo, MENO_DOES, type SetKind, type StepKind } from "./kinds";
+import { takesBy } from "./doers";
+import { BETWEEN, SET_PAD, SET_TOP, CARD_H, CARD_W, CHIP, GAP, PX } from "./look";
 import { runMeno, type Outcome } from "./meno";
 import { addSet, resizeSet, markMade, RUNS_KEPT, setRan, withStepRuns } from "./model";
 import { rmsd } from "./rmsd";
 
 /**
- * What a run needs of the canvas: how far a molecule in 3D reaches from its
- * middle on the page, across and up, in any of its frames - turned by
- * `turn`, where it is; who does a step; and the time.
+ * What a run needs of the canvas: how far a molecule in 3D reaches on the
+ * page about its middle - left, right, down and up - in any of its frames,
+ * turned by `turn`, where it is; who does a step; and the time.
  */
-export type RunWith = { extentOf: (m: Omit<Molecule3D, "id">, turn?: Turn3D) => { w: number; h: number }; byOf: (step: WorkflowStep) => string; now: number };
+export type RunWith = { extentOf: (m: Omit<Molecule3D, "id">, turn?: Turn3D) => Frame; byOf: (step: WorkflowStep) => string; now: number };
 
 /** What each kind of set is called, where a step says what it takes. */
 const SET_NAMES: Record<SetKind, string> = { structures: "structures drawn", molecules: "molecules in 3D", conformers: "conformer sets" };
@@ -48,7 +49,7 @@ export function runStep(doc: WorkspaceDocument, id: number, w: RunWith, depth = 
   if (why) return fail(why);
   if (by !== "meno" || !MENO_DOES.includes(step.kind)) return fail("Nothing added does this step");
   if (!input) return fail("Nothing comes into it");
-  const outcome = runMeno(step.kind, setEntries(input.molecules, input.holds as "molecules" | "conformers"), input.holds, step.options);
+  const outcome = runMeno(step.kind, setEntries(input.molecules, input.holds as "molecules" | "conformers"), input.holds, step.options, energiesBy(input.molecules));
   if (!outcome.ok) return fail(outcome.said);
   return setRan(withResults(keepRun(doc, step), step, outcome, w), id, { at: w.now, ok: true, said: outcome.said, input: key, ...as });
 }
@@ -65,9 +66,20 @@ export function whyNot(doc: WorkspaceDocument, step: WorkflowStep, by: string): 
   if (before != null && stepOf(doc, before)?.ran?.ok === false) return "The step before it failed";
   const input = inputOf(doc, step.id);
   if (!input) return "Nothing comes into it";
-  if (!takes(step.kind, input.holds)) return `Takes ${kindInfo(step.kind).takes.map((s) => SET_NAMES[s]).join(" or ")}`;
+  if (!takesBy(step.kind, by, input.holds)) return `Takes ${kindInfo(step.kind).takes.filter((s) => takesBy(step.kind, by, s)).map((s) => SET_NAMES[s]).join(" or ")}`;
   if (!by) return "Nothing added does this step";
   return null;
+}
+
+/**
+ * What the energies of molecules in 3D are, where a calculation worked them
+ * out: its program and method, as the first that says says them -
+ * "RDKit · ETKDG v3, MMFF94", "xtb · GFN2-xTB". None, where none says.
+ */
+export function energiesBy(molecules: readonly Pick<Molecule3D, "calc" | "energies">[]): string | undefined {
+  const c = molecules.find((m) => m.energies?.length && (m.calc?.program || m.calc?.method))?.calc;
+  if (!c) return undefined;
+  return [c.program, [c.method, c.basis].filter(Boolean).join("/")].filter(Boolean).join(" \u00b7 ");
 }
 
 /** What a run gave, as its result set holds it: its molecules in 3D, those it set aside, and what kind of set they make. */
@@ -130,6 +142,8 @@ const frameAt = (x: number, y: number, w: number, h: number): Frame => ({ x0: x,
 
 /** The most a row of molecules in a result set spans before the next row begins. */
 const ROW_MOST = 12 * NOMINAL_BOND_LENGTH;
+/** The least a result set's inside is wide: its name and count read whole. */
+const LEAST_W = 120 * PX;
 
 /**
  * What a step gave as an entry, where a program worked it out: besides its
@@ -143,6 +157,8 @@ export type Worked = SetEntry & {
   calc?: CalcInfo;
   /** What the molecule made keeps besides: the drawing it was made from, its stereo labels, how it was made. */
   keep?: Pick<Molecule3D, "drawnFrom" | "drawnAs" | "stereo" | "made">;
+  /** Its share of its compound, where the program that found it worked one out (a conformer search's populations). */
+  share?: number;
 };
 
 /** What a step gave, as its result set is to hold it: its molecules in 3D, those it set aside, and what kind of set they make. */
@@ -213,11 +229,13 @@ export function placeResults(
   turns?: readonly (Turn3D | undefined)[],
 ): WorkspaceDocument {
   const { molecules: made, aside, holds } = results;
-  // its list under the set's tab; below it, the molecules in rows, left to
-  // right - each with room for its frames chip below it, where it has frames
+  // under its name, the molecules in rows, left to right, each as far as it
+  // reaches - with room for its frames chip below it, where it has one - and
+  // the whole in the middle of the set, where its name is wider
+  const least = NOMINAL_BOND_LENGTH / 4;
   const sizes = made.map((m, i) => {
     const e = w.extentOf({ ...m, at: { x: 0, y: 0 } }, turns?.[i]);
-    return { w: Math.max(e.w, NOMINAL_BOND_LENGTH / 2), h: Math.max(e.h, NOMINAL_BOND_LENGTH / 2), chip: m.frames?.length ? CHIP : 0 };
+    return { x0: Math.min(e.x0, -least), x1: Math.max(e.x1, least), y0: Math.min(e.y0, -least), y1: Math.max(e.y1, least), chip: hasChip(m) ? CHIP : 0 };
   });
   const places: { x: number; y: number }[] = [];
   let x = 0;
@@ -225,27 +243,27 @@ export function placeResults(
   let rowH = 0;
   let wide = 0;
   sizes.forEach((size) => {
-    const d = 2 * size.w;
+    const d = size.x1 - size.x0;
     if (x > 0 && x + d > ROW_MOST) {
       y -= rowH + BETWEEN;
       x = 0;
       rowH = 0;
     }
-    places.push({ x: x + size.w, y: y - size.h });
+    places.push({ x: x - size.x0, y: y - size.y1 });
     x += d + BETWEEN;
-    rowH = Math.max(rowH, 2 * size.h + size.chip);
+    rowH = Math.max(rowH, size.y1 - size.y0 + size.chip);
     wide = Math.max(wide, x - BETWEEN);
   });
   const tall = -y + rowH;
-  const rows = setList(made, aside, holds).length;
-  const listH = rows ? rows * ROW + BETWEEN : 0;
-  const width = Math.max(wide, rows ? LIST_W : 0, 120 * PX) + 2 * SET_PAD;
-  const height = SET_TOP + tall + listH + SET_PAD;
+  const inner = Math.max(wide, LEAST_W);
+  const width = inner + 2 * SET_PAD;
+  const height = SET_TOP + tall + SET_PAD;
+  const middle = (inner - wide) / 2;
 
   const was = resultOf(doc, step.id);
   if (was) doc = removeMolecules3d(doc, setMembers(doc, was).molecules);
   const frame = was ? frameAt(was.x0, was.y1, width, height) : placeFor(doc, step, width, height);
-  for (const [i, m] of made.entries()) doc = addMolecule3d(doc, { ...m, at: { x: frame.x0 + SET_PAD + places[i].x, y: frame.y1 - SET_TOP - listH + places[i].y } });
+  for (const [i, m] of made.entries()) doc = addMolecule3d(doc, { ...m, at: { x: frame.x0 + SET_PAD + middle + places[i].x, y: frame.y1 - SET_TOP + places[i].y } });
   const madeBy = { step: step.id, holds };
   if (was) return markMade(resizeSet(doc, was.id, frame), was.id, madeBy, aside);
   const id = doc.nextWorkflowId ?? 1;
@@ -282,7 +300,8 @@ function placeFor(doc: WorkspaceDocument, step: WorkflowStep, width: number, hei
  */
 function moleculesOf(outcome: Extract<Outcome, { ok: true }>): Omit<Molecule3D, "id" | "at">[] {
   const atomsAt = (e: SetEntry, xyz: readonly number[] = e.xyz) => e.atoms.map((a, i) => ({ ...a, x: xyz[3 * i], y: xyz[3 * i + 1], z: xyz[3 * i + 2] }));
-  const share = new Map(outcome.kept.map((e, i) => [e, outcome.shares?.[i]]));
+  // (the shares a step worked out - Meno's Populations - else those the program that found them gave)
+  const share = new Map(outcome.kept.map((e, i) => [e, outcome.shares?.[i] ?? (e as Worked).share]));
   if (outcome.holds !== "conformers") {
     return (outcome.kept as Worked[]).map((e) => {
       const path = e.path?.length ? e.path : undefined;
@@ -316,6 +335,7 @@ function moleculesOf(outcome: Extract<Outcome, { ok: true }>): Omit<Molecule3D, 
       ...(calc ? { calc: { ...calc, results: undefined, source: undefined } } : {}),
       conformerSet: true,
       ...(first.name ? { name: first.name } : {}),
+      ...(first as Worked).keep,
     };
   });
 }

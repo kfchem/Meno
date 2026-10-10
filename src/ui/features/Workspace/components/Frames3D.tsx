@@ -18,6 +18,8 @@ const LEAST_BAR = 3;
 const LINGER_MS = 400;
 /** The chip kept clear of the canvas's lower edge, in pixels. */
 const EDGE = 8;
+/** How far below its molecule it hangs, in page pixels (workflow/look CHIP makes room for it). */
+const GAP = 10;
 
 /** A conformer's share of its set, as it is written: "62%", "<1%". */
 function share(p: number): string {
@@ -171,8 +173,8 @@ export default function Frames3D({
   return (
     <PageHtml zIndexRange={[30, 20]}>
       <div
-        className="flex flex-col items-center select-none"
-        style={{ transform: `translate(-50%, ${10 - lift}px)` }}
+        className="meno-page-chip flex flex-col items-center select-none"
+        style={{ transform: `translate(-50%, calc(${GAP}px * var(--page, 1) - ${lift}px)) scale(var(--page, 1))`, transformOrigin: "50% 0" }}
         onPointerEnter={() => setHovered(true)}
         onPointerLeave={() => {
           setHovered(false);
