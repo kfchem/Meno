@@ -25,6 +25,7 @@ import {
 import { lineComposing } from "../../../lib/text/field";
 import type { Command, Unit } from "../../../lib/text/keys";
 import { colAt, LINE_PX, lineWidth, xAt } from "./linePictures";
+import type { FieldBox, FieldHost } from "./typingField";
 
 /**
  * What the IME is composing: the part of the text it takes the place of,
@@ -40,7 +41,7 @@ export const PAD_PX = 20;
 /** How near its end, in px, a text scrolled is taken to be at it - one growing there, a job's log, staying there. */
 const AT_END_PX = 8;
 
-export class Editor {
+export class Editor implements FieldHost {
   lines: Lines;
   sel: Sel = caretAt(0);
   /** Where up and down keep the caret across, until it is moved across. */
@@ -97,6 +98,32 @@ export class Editor {
     const i = this.lines.at(at);
     return GUTTER_PX + PAD_PX - this.scrollLeft + xAt(this.lines.line(i), at - this.lines.start(i));
   }
+  /** Where a place lies on the view, for the field: across, its line's top, and a line's height. */
+  boxAt(at: number): FieldBox {
+    return { x: this.xOf(at), top: this.topOf(this.lines.at(at)), height: LINE_PX };
+  }
+
+  /** Where a place in what the IME has so far lies on the view, `i` into it. */
+  composedBoxAt(i: number): FieldBox {
+    const c = this.composing;
+    if (!c) return this.boxAt(this.sel.head);
+    const line = this.lines.at(c.from);
+    const start = this.lines.start(line);
+    const shown = this.lines.line(line).slice(0, c.from - start) + c.text;
+    return { x: this.xOf(start) + xAt(shown, c.from - start + i), top: this.topOf(line), height: LINE_PX };
+  }
+
+  /** The textarea laid just where the lines it holds are drawn, in the same type, so that its caret is the drawn one. */
+  layField(ta: HTMLTextAreaElement, start: number, end: number): void {
+    const first = this.lines.at(start);
+    const last = this.lines.at(end);
+    const s = ta.style;
+    s.left = `${this.xOf(start)}px`;
+    s.top = `${this.topOf(first)}px`;
+    s.height = `${(last - first + 1) * LINE_PX}px`;
+    s.width = `${Math.max(this.viewW, 400)}px`;
+  }
+
   /** The place in the text nearest a point on the view. */
   at(x: number, y: number): number {
     const i = Math.min(Math.max(0, Math.floor((y + this.scrollTop) / LINE_PX)), this.lines.count - 1);

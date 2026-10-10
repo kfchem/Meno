@@ -87,7 +87,7 @@ available:
 | `Move-MenoPointerAlong -Path @(@(x, y), ...) [-StepMs] [-AtStep]` | the pointer led through points with no button down - a chain traced with the button up |
 | `Invoke-MenoWheel -X -Y -Notches` | zoom; positive is away from you, in |
 | `Invoke-MenoSwipe -X -Y [-DX] [-DY] [-Steps]` | two fingers on a trackpad: moves the view; positive DY scrolls down |
-| `Send-MenoText`, `Send-MenoKey` | typing |
+| `Send-MenoText`, `Send-MenoKey` | typing (`Send-MenoKey Enter -Shift` for Shift+Enter) |
 | `Send-MenoShortcut -Key [-Shift]` | Ctrl (Windows) or Cmd (Mac) with a key: `Z` is undo, `1` fits the drawing to the view |
 | `Get-ClientSize`, `Wait-MenoSettled` | |
 

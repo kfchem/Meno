@@ -113,7 +113,7 @@ import { marksBetween, textOf } from "../../../lib/pdf/text";
 import { writeClipboard } from "../../../lib/clipboard";
 import { PdfPictures } from "./components/pdfPictures";
 import { FollowCover, PageHtmlLayer } from "./components/coverLayer";
-import CaptionEditor2D from "./components/CaptionEditor2D";
+import CaptionTyping2D from "./components/CaptionTyping2D";
 import Workflow2D from "./components/Workflow2D";
 import { selectionFrame } from "./workflow/selectionSet";
 import { offeredSteps } from "./workflow/offered";
@@ -1430,7 +1430,7 @@ function StructureCanvasContent({
           {/* Label editor */}
           <LabelEditor2D />
           {/* Words being written, in place */}
-          <CaptionEditor2D />
+          <CaptionTyping2D />
           {/* Hover overlay */}
           <ExtendPreview2D />
           {/* The 120-degree arc while a bond snaps to it */}

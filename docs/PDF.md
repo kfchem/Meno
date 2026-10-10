@@ -247,8 +247,8 @@ stops being part of the work.
     should; Meno draws the text, the caret, the selection and what the
     IME is composing. The lines around the caret are kept in that field
     too, so that a word already written can be converted again.
-    (Words on the page are typed today in a field shown over the page,
-    in HTML.)
+    Words on the page are typed in place the same way (*As built*,
+    step 5).
   - **The keys are an editor's**: arrows, by word and by line, to a
     line's ends and the text's, page by page, with Shift to select, each
     as the system has them on a Mac and on Windows.
@@ -725,6 +725,13 @@ Step 5 comes in parts: the trial of typing alone, shown first; the column's text
   - Gaussian's input (the Gaussian interface, `.gjf`, `.com`): Link 0 commands (*%*) and the route section (*#*) are keywords, and a comment begins with *!* (Gaussian's *Input* page).
 - **Drawn in the column**: each line's parts in their tones, the line drawn whole in each colour and kept to its parts, so that its letters lie just where they would in one. What the IME is composing is drawn uncoloured, as it is. The colours are from the palette the column's look is taken from: red keywords, dark blue strings, blue numbers, names and keys, grey comments, purple definitions, green XML names, amber warnings, and Meno's own attention for errors.
 
+**Words on the page typed in place** (`components/CaptionTyping2D.tsx`, `utils/wordsEditor.ts`), in place of the field shown over them in HTML:
+- **Drawn by Meno as they will be kept**: set as the drawing sets its labels (a formula's counts low, a prefix in italics), in its typeface at its size, broken into lines as wide as they were made where they were given a width, laid as they will lie - so that what is written is what is kept, its lines broken as they will be. Lit round while they are written.
+- **The caret, what is selected and what the IME composes** are drawn over them, in the drawing's units: the caret blinking, the selection in Meno's light, what is composed underlined clause by clause. Where each place lies comes from how the words are set (lib/chem/captions `captionPlaces`): before each letter, a formula's count no wider than it is set, and spaces the setting runs together standing where the space it keeps does.
+- **Typed through the column's field** (TextEditor/typingField, now typing into any text Meno draws, `FieldHost`): an EditContext on Windows, a textarea on a Mac, laid with its caret on the drawn one, in the words' type at the size they are seen, so that the IME's candidates show at the caret.
+- **The keys**: an editor's, as in the column - up and down by the lines as they are set, Home and End (Command with the arrows on a Mac) to a set line's ends. Enter keeps the words, Shift+Enter starts another line, Escape lets them go; their own undo while they are written (a run of typing one step), one step for the document once kept.
+- **The pointer**: a click among them puts the caret, two select a word, three a line, a drag selects on; the press is theirs - no box begun, no view moved. A press elsewhere keeps them, as before, and does what it does there.
+
 Decided while building it, for the maintainer to confirm:
 - **On a Mac the textarea, on Windows the EditContext**: each the one its system's webview takes the IME through best. WebKit has no EditContext.
 - **A Mac's Home, End and Page keys move the view**, the caret staying, as in the Mac's own texts; with Option, a page moves the caret too. Tab moves the keys on, as the textarea did.
@@ -738,7 +745,7 @@ Decided while building it, for the maintainer to confirm:
 Not yet, and where it comes:
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
 - **A step's card lies over the canvas**, in HTML, as all a workflow's cards do: a log's lines come out from under its step's card, and pass under the other cards on their way, as a PDF's page does.
-- **Words on the page typed in place**: after.
+- **Windows' IME on words on the page**: built as in the column, through the EditContext; checked on a Mac only so far.
 - **More grammars**: a language Lezer has a grammar for is a line here and its few tens of kilobytes; Python, JSON and XML for now, as the specification lists.
 
 ## In order

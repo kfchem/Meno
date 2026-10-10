@@ -16,11 +16,40 @@
  * candidates show at the caret.
  */
 import { IS_MAC } from "../../../lib/doc/shortcuts";
-import { caretAt, plainLines, selFrom, selTo } from "../../../lib/text/editing";
+import { caretAt, plainLines, selFrom, selTo, type Edit, type Lines, type Sel } from "../../../lib/text/editing";
 import { composed, composingIn, editOf, inText, windowOf, withTakenAway, type FieldWindow } from "../../../lib/text/field";
-import { commandOf } from "../../../lib/text/keys";
-import type { Editor } from "./editor";
-import { LINE_PX, xAt } from "./linePictures";
+import { commandOf, type Command } from "../../../lib/text/keys";
+import type { Composing } from "./editor";
+
+/** Where a place in a text lies on its field's element: how far across, its line's top, and how tall the line is, in CSS pixels. */
+export type FieldBox = { x: number; top: number; height: number };
+
+/**
+ * What a field types into: a text Meno draws - the column's (./editor), or
+ * words on the page - its lines, what is selected and what the IME
+ * composes, what its keys and typing do, and where its places lie, for the
+ * field to lie there and the IME's candidates to show at the caret.
+ */
+export interface FieldHost {
+  lines: Lines;
+  sel: Sel;
+  readonly text: string;
+  composing: Composing | null;
+  focused: boolean;
+  stirred: number;
+  onChange(): void;
+  command(c: Command, mac: boolean): void;
+  selectedText(): string;
+  replaceSelection(insert: string): void;
+  edit(e: Edit, sel?: Sel): void;
+  setComposing(c: Composing | null): void;
+  /** Where a place in the text lies. */
+  boxAt(at: number): FieldBox;
+  /** Where a place in what the IME has so far lies, `i` into it. */
+  composedBoxAt(i: number): FieldBox;
+  /** The textarea laid where the lines it holds - from `start` to `end` in the text - are drawn, its caret where the drawn caret is. */
+  layField(ta: HTMLTextAreaElement, start: number, end: number): void;
+}
 
 export interface TypingField {
   focus(): void;
@@ -35,7 +64,7 @@ export interface TypingField {
 export const hasEditContext = () => typeof window !== "undefined" && "EditContext" in window;
 
 /** The field for a text: an EditContext on its element, where there is one; else the textarea. */
-export function typingField(el: HTMLElement, ed: Editor): TypingField {
+export function typingField(el: HTMLElement, ed: FieldHost): TypingField {
   return el instanceof HTMLTextAreaElement ? new TextareaField(el, ed) : new EditContextField(el, ed);
 }
 
@@ -46,7 +75,7 @@ abstract class Field implements TypingField {
 
   constructor(
     protected el: HTMLElement,
-    protected ed: Editor,
+    protected ed: FieldHost,
   ) {
     this.on<KeyboardEvent>(el, "keydown", (e) => this.onKey(e));
     this.on<ClipboardEvent>(el, "copy", (e) => this.onCopy(e, false));
@@ -128,7 +157,7 @@ class TextareaField extends Field {
 
   constructor(
     private ta: HTMLTextAreaElement,
-    ed: Editor,
+    ed: FieldHost,
   ) {
     super(ta, ed);
     this.on<InputEvent>(ta, "beforeinput", (e) => this.onBeforeInput(e));
@@ -154,15 +183,7 @@ class TextareaField extends Field {
 
   place(): void {
     const w = this.win;
-    if (!w) return;
-    const ed = this.ed;
-    const first = ed.lines.at(w.start);
-    const last = ed.lines.at(w.end);
-    const s = this.ta.style;
-    s.left = `${ed.xOf(w.start)}px`;
-    s.top = `${ed.topOf(first)}px`;
-    s.height = `${(last - first + 1) * LINE_PX}px`;
-    s.width = `${Math.max(ed.viewW, 400)}px`;
+    if (w) this.ed.layField(this.ta, w.start, w.end);
   }
 
   protected onKey(e: KeyboardEvent): boolean {
@@ -288,7 +309,7 @@ class EditContextField extends Field {
   private telling = false;
   private gone = false;
 
-  constructor(el: HTMLElement, ed: Editor) {
+  constructor(el: HTMLElement, ed: FieldHost) {
     super(el, ed);
     const Ctx = (window as unknown as { EditContext: new () => EditContextLike }).EditContext;
     this.ec = new Ctx();
@@ -383,13 +404,11 @@ class EditContextField extends Field {
       this.told.control = control;
       this.ec.updateControlBounds(new DOMRect(box.left, box.top, box.width, box.height));
     }
-    const at = ed.composing ? ed.composing.from : ed.sel.head;
-    const line = ed.lines.at(Math.min(at, ed.text.length));
-    const x = ed.composing ? this.composedX(ed.composing.sel[1]) : ed.xOf(ed.sel.head);
-    const caret = `${box.left + x},${box.top + ed.topOf(line)}`;
+    const b = ed.composing ? ed.composedBoxAt(ed.composing.sel[1]) : ed.boxAt(ed.sel.head);
+    const caret = `${box.left + b.x},${box.top + b.top},${b.height}`;
     if (caret !== this.told.caret) {
       this.told.caret = caret;
-      this.ec.updateSelectionBounds(new DOMRect(box.left + x, box.top + ed.topOf(line), 1, LINE_PX));
+      this.ec.updateSelectionBounds(new DOMRect(box.left + b.x, box.top + b.top, 1, b.height));
     }
   }
 
@@ -409,16 +428,6 @@ class EditContextField extends Field {
     if (!c.taken) return c.in;
     const [from, to] = withTakenAway(c.in.from, c.in.to, c.taken.from, c.taken.to);
     return { ...c.in, from, to };
-  }
-
-  /** How far across the view a place in what the IME has so far lies. */
-  private composedX(i: number): number {
-    const c = this.ed.composing!;
-    const ed = this.ed;
-    const line = ed.lines.at(c.from);
-    const start = ed.lines.start(line);
-    const shown = ed.lines.line(line).slice(0, c.from - start) + c.text;
-    return ed.xOf(start) + xAt(shown, c.from - start + i);
   }
 
   private onTextUpdate(e: TextUpdate): void {
@@ -462,13 +471,11 @@ class EditContextField extends Field {
     if (!k || !ed.composing) return;
     const at = k.at;
     const box = this.el.getBoundingClientRect();
-    const line = ed.lines.at(ed.composing.from);
-    const top = box.top + ed.topOf(line);
     const rects: DOMRect[] = [];
     for (let i = e.rangeStart; i < e.rangeEnd; i++) {
-      const x0 = this.composedX(i - at);
-      const x1 = this.composedX(i + 1 - at);
-      rects.push(new DOMRect(box.left + x0, top, Math.max(1, x1 - x0), LINE_PX));
+      const a = ed.composedBoxAt(i - at);
+      const b = ed.composedBoxAt(i + 1 - at);
+      rects.push(new DOMRect(box.left + a.x, box.top + a.top, Math.max(1, b.top === a.top ? b.x - a.x : 1), a.height));
     }
     this.ec.updateCharacterBounds(e.rangeStart, rects);
   }

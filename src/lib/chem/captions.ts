@@ -187,6 +187,111 @@ function setWords(text: string, x: number, y: number, fontSize: number, set: Lab
   return { items, halfW, halfH, words };
 }
 
+/** The first `n` letters of runs, cut as they are set. */
+function cutRuns(runs: readonly TextRun[], n: number): TextRun[] {
+  const out: TextRun[] = [];
+  let left = n;
+  for (const r of runs) {
+    if (left <= 0) break;
+    if (r.text.length <= left) out.push(r);
+    else out.push({ ...r, text: r.text.slice(0, left) });
+    left -= r.text.length;
+  }
+  return out;
+}
+
+/**
+ * Where each place in a caption's text lies as `captionSet` sets it - the
+ * places a caret stands at, before each of its letters and at its end:
+ * the line it falls on, as the lines are broken and laid, and how far
+ * across; and each line's middle, and where it begins and ends across.
+ * Spaces the setting runs together, and those it leaves off a line's ends,
+ * stand where the space it keeps does, or at the line's edge.
+ */
+export type CaptionPlaces = { at: { line: number; x: number }[]; lines: { y: number; x0: number; x1: number }[] };
+
+export function captionPlaces(
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  set: LabelSet = ACS_LABEL_SET,
+  width?: number,
+  align: CaptionAlign = "center",
+): CaptionPlaces {
+  const laid = linesOf(text, fontSize, set, width);
+  const step = fontSize * CAPTION_LINE;
+  const top = ((laid.length - 1) / 2) * step;
+  const wide = (t: string) => runsWidth(captionRuns(t), fontSize, set);
+  const box = width != null && width > 0 ? width : Math.max(0, ...laid.map((l) => wide(l.text)));
+  // (each laid line: how far across each place in it lies - its words where setWords sets them, each letter as far into its word as its runs reach)
+  const xsOf = laid.map((l) => {
+    const words = [...l.text.matchAll(/\S+/g)];
+    const w = wide(l.text);
+    let starts: number[];
+    const lineStart = align === "left" || align === "justify" ? x - box / 2 : align === "right" ? x + box / 2 - w : x - w / 2;
+    if (align === "justify" && !l.ends && words.length > 1) {
+      const widths = words.map((m) => wide(m[0]));
+      const gap = (box - widths.reduce((a, b) => a + b, 0)) / (words.length - 1);
+      let at = x - box / 2;
+      starts = widths.map((ww) => {
+        const s = at;
+        at += ww + gap;
+        return s;
+      });
+    } else starts = words.map((m) => lineStart + (m.index ? wide(l.text.slice(0, m.index)) : 0));
+    const xs: (number | undefined)[] = new Array(l.text.length + 1);
+    words.forEach((m, k) => {
+      const runs = captionRuns(m[0]);
+      for (let j = 0; j <= m[0].length; j++) xs[m.index! + j] = starts[k] + runsWidth(cutRuns(runs, j), fontSize, set);
+    });
+    // (what lies between them, where the setting keeps it: on from the word before - an empty line, where it begins)
+    for (let c = 0; c < xs.length; c++) xs[c] ??= c === 0 ? lineStart : xs[c - 1];
+    return xs as number[];
+  });
+  const lines = laid.map((l, i) => ({ y: y + top - i * step, x0: xsOf[i][0], x1: xsOf[i][l.text.length] }));
+  const at: { line: number; x: number }[] = [];
+  const place = (li: number, ci: number) => at.push({ line: li, x: xsOf[li][Math.min(ci, laid[li].text.length)] });
+  let li = 0;
+  for (const para of text.split("\n")) {
+    let ci = 0;
+    for (const ch of para) {
+      // (a letter, its place on - on the next line, where the line it was on was broken there)
+      for (let k = 0; k < ch.length; k++) {
+        const L = laid[li].text;
+        if (/\s/.test(ch)) {
+          place(li, ci);
+          if (ci > 0 && ci < L.length && /\s/.test(L[ci])) ci++;
+          continue;
+        }
+        if (ci >= L.length && !laid[li].ends && li + 1 < laid.length) {
+          li++;
+          ci = 0;
+        }
+        place(li, ci);
+        ci++;
+      }
+    }
+    place(li, ci);
+    while (li + 1 < laid.length && !laid[li].ends) li++;
+    li = Math.min(li + 1, laid.length - 1);
+  }
+  return { at, lines };
+}
+
+/** The place in a caption's text nearest a point, as `captionPlaces` lays its places: on the line nearest it, the place nearest across. */
+export function captionPlaceAt(p: CaptionPlaces, q: { x: number; y: number }): number {
+  let line = 0;
+  p.lines.forEach((l, i) => {
+    if (Math.abs(l.y - q.y) < Math.abs(p.lines[line].y - q.y)) line = i;
+  });
+  let best = -1;
+  p.at.forEach((a, k) => {
+    if (a.line === line && (best < 0 || Math.abs(a.x - q.x) < Math.abs(p.at[best].x - q.x))) best = k;
+  });
+  return Math.max(0, best);
+}
+
 /** How near an arrow a caption put down is taken to be its: within this many ems of it, across. */
 const ARROW_REACH = 2.5;
 /** How far a caption over or under an arrow stands clear of it - its ink, of the arrow's line - in ems. */
