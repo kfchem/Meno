@@ -29,6 +29,7 @@ import type { PdfItem } from "../store/types";
 import { ICON_NAME_WIDTH, iconScale, pdfBounds, pdfRoom, POINT, shownSheet, spreadSheets, stackSheets, topSheet, type Sheet } from "../../../../lib/pdf/layout";
 import { useDrawnLayout } from "./drawnLayoutContext";
 import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
+import { labelFont } from "../../../../lib/chem/labelFonts";
 import { COLORS } from "../../../theme/colors";
 import { BASE, FADE_MS, GRAY, levelFor, LINE, Page, TILE, usePictures, type Mark, type Pic, type Tile } from "./pdfPictures";
 import { FLASH_MS, marksOn } from "./pdfMarks";
@@ -523,7 +524,7 @@ export default function Pdfs2D() {
           onDown={(e) => startMove(p, e)}
           onTurn={(page) => store.getState().turnPdf(p.id, page)}
           size={size}
-          type={{ size: opts.fontPx, font: nameFont }}
+          type={{ size: opts.fontPx, font: nameFont, family }}
         />
       ))}
     </group>
@@ -546,7 +547,7 @@ function PdfStack(props: {
   onTurn: (page: number) => void;
   size: { width: number; height: number };
   /** The drawing's type: its labels' size, in the page's units, and its font, once it is had. */
-  type: { size: number; font: string | null };
+  type: { size: number; font: string | null; family: string };
 }) {
   const { p, now, px, motion } = props;
   const top = topSheet(p);
@@ -612,7 +613,7 @@ function PdfStack(props: {
         maxWidth={nameWidth}
         textAlign={iconness > 0.5 ? "center" : "left"}
       >
-        {p.name}
+        {labelFont(props.type.family).shown(p.name)}
       </Text>
     </group>
   );

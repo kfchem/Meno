@@ -982,9 +982,11 @@ to be able to work with nothing going out at all.
 - **The window reaches nothing.** Its content security policy
   (`tauri.conf.json`) keeps it to the app: fonts, workers and pictures come
   from the app or from blobs it made. Anything it is kept from reaching is
-  put on the record (`securitypolicyviolation`), and so are characters no
-  font of Meno's has, which the canvas's text renderer would otherwise look
-  for on its CDN.
+  put on the record (`securitypolicyviolation`). A letter no typeface of
+  Meno's has - an emoji - is drawn on the canvas as a white square, and
+  measured as one (`lib/chem/labelFonts` `STAND_IN`), so that the canvas's
+  text renderer never looks for it on its CDN - which it may not reach,
+  and which left the whole text the letter was in undrawn.
 - **Everything else goes through the app's proxy** (`src-tauri/src/net.rs`),
   on the loopback address. A child process that may use the network - uv
   setting up Python, a Python sidecar - is begun as a *task* with a

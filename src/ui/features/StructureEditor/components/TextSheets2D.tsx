@@ -25,6 +25,7 @@ import { iconScaleOf, SHEET_LETTER, SHEET_LINE_PT, SHEET_PAD_PT, SHEET_TYPE_PT, 
 import { dragSelection } from "../utils/dragSelection";
 import { follow, TAU } from "../../../theme/motion";
 import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
+import { DEFAULT_LABEL_FAMILY, labelFont } from "../../../../lib/chem/labelFonts";
 import { useDrawnLayout } from "./drawnLayoutContext";
 import { pageAt } from "../utils/page";
 import { HeldLight } from "./HeldLight";
@@ -75,7 +76,7 @@ export default function TextSheets2D() {
   return (
     <group>
       {sheets.map((t, i) => (
-        <Sheet key={t.id} t={t} z={Z + i * Z_STEP} selected={selTexts.has(t.id)} hovered={hovered === t.id} nameFont={nameFont ?? undefined} nameSize={opts.fontPx} toWorld={toWorld} />
+        <Sheet key={t.id} t={t} z={Z + i * Z_STEP} selected={selTexts.has(t.id)} hovered={hovered === t.id} nameFont={nameFont ?? undefined} nameFamily={opts.fontFamily ?? "Arial"} nameSize={opts.fontPx} toWorld={toWorld} />
       ))}
     </group>
   );
@@ -87,6 +88,7 @@ function Sheet({
   selected,
   hovered,
   nameFont,
+  nameFamily,
   nameSize,
   toWorld,
 }: {
@@ -95,6 +97,7 @@ function Sheet({
   selected: boolean;
   hovered: boolean;
   nameFont?: string;
+  nameFamily: string;
   nameSize: number;
   toWorld: (cx: number, cy: number) => Pt;
 }) {
@@ -130,9 +133,11 @@ function Sheet({
   });
   const b = sheetBoxAt(at, s, k);
   const mid = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
-  // (its words as large on the screen as they are: strokes where too small to read, the words over them, coming up)
+  // (its words as large on the screen as they are: strokes where too small to read, the words over them, coming up -
+  // once the letters Meno's typefaces have are known, those they have not drawn as squares: lib/chem/labelFonts `STAND_IN`)
+  const lettersKnown = useLabelFontUrl(DEFAULT_LABEL_FAMILY, needsFallback(s.lines)) != null;
   const wordsPx = SHEET_TYPE_PT * POINT * zoom * k;
-  const words = Math.min(1, Math.max(0, (wordsPx - WORDS_FROM_PX) / (WORDS_AT_PX - WORDS_FROM_PX)));
+  const words = lettersKnown ? Math.min(1, Math.max(0, (wordsPx - WORDS_FROM_PX) / (WORDS_AT_PX - WORDS_FROM_PX))) : 0;
 
   // the light round it while the pointer is on it, coming and going
   const lightMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: COLORS.highlight, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }), []);
@@ -290,7 +295,7 @@ function Sheet({
                   clipRect={[0, -line, s.w - 2 * pad, line]}
                   raycast={noRaycast}
                 >
-                  {l}
+                  {labelFont(DEFAULT_LABEL_FAMILY).shown(l)}
                 </Text>
               ) : null,
             )}
@@ -320,7 +325,7 @@ function Sheet({
           textAlign={iconness > 0.5 ? "center" : "left"}
           raycast={noRaycast}
         >
-          {t.name}
+          {labelFont(nameFamily).shown(t.name)}
         </Text>
       </group>
       {held && <HeldLight b={b} at={held} held={held} now={now} z={Z_STEP / 2} />}

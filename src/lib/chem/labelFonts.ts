@@ -50,7 +50,20 @@ export interface LabelFont {
   has(ch: string): boolean;
   advance(ch: string): number;
   hull(ch: string): GlyphPoint[];
+  /** A text as it is drawn: each letter none of its sources has as `STAND_IN`, the marks and joiners that come with one left out - as it is measured. */
+  shown(text: string): string;
 }
+
+/**
+ * What a letter no typeface of Meno's has - an emoji - is drawn as, and
+ * measured as: a white square. The text renderer would look for it on the
+ * network otherwise, which the window may not reach, and leave the whole
+ * text it is in undrawn. Only once a typeface that has the square is read;
+ * until then, a letter not yet known is a capital's box, as before.
+ */
+export const STAND_IN = "\u25A1";
+/** A mark, or a format character - a variation selector, a joiner - that comes with a letter: none of its own, where its letter is a stand-in. */
+const WITH_A_LETTER = /^[\p{Mn}\p{Me}\p{Cf}]$/u;
 
 function isTableChar(ch: string): boolean {
   const code = ch.codePointAt(0) ?? 0;
@@ -185,7 +198,8 @@ export function hasLabelFont(family: string): boolean {
 /**
  * `family`, letter by letter: its own sources first, then the fallbacks,
  * then the default typeface's; a character none of them has is taken as a
- * capital's box.
+ * white square, once one of them has it (`STAND_IN`) - as a capital's box
+ * until then.
  */
 export function labelFont(family: string | undefined): LabelFont {
   const name = family ?? DEFAULT_LABEL_FAMILY;
@@ -200,12 +214,23 @@ export function labelFont(family: string | undefined): LabelFont {
   const first = own[0] ?? byDefault[0] ?? chain[0];
   if (!first) throw new Error("no label typeface registered");
   const pick = (ch: string) => chain.find((s) => s.has(ch)) ?? first;
+  const has = (ch: string) => chain.some((s) => s.has(ch));
+  // (a letter as it is drawn: itself, the stand-in, or nothing)
+  const standing = has(STAND_IN);
+  const as = (ch: string) => (!standing || !ch.trim() || has(ch) ? ch : WITH_A_LETTER.test(ch) ? "" : STAND_IN);
   const font: LabelFont = {
     family: own.length ? name : DEFAULT_LABEL_FAMILY,
     capHeight: first.capHeight,
-    has: (ch) => chain.some((s) => s.has(ch)),
-    advance: (ch) => pick(ch).advance(ch),
-    hull: (ch) => pick(ch).hull(ch),
+    has,
+    advance: (ch) => {
+      const c = as(ch);
+      return c ? pick(c).advance(c) : 0;
+    },
+    hull: (ch) => {
+      const c = as(ch);
+      return c ? pick(c).hull(c) : [];
+    },
+    shown: (text) => (standing ? [...text].map(as).join("") : text),
   };
   fonts.set(k, font);
   return font;

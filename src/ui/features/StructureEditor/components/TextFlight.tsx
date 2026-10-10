@@ -12,6 +12,8 @@ import { useEffect, useRef } from "react";
 import { Text } from "@react-three/drei";
 import { GUTTER_PX } from "../../TextEditor/editor";
 import { COLUMN_SETTING, type Rect, type Setting } from "./textFlightSetting";
+import { DEFAULT_LABEL_FAMILY, labelFont } from "../../../../lib/chem/labelFonts";
+import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
 import plexMono from "../../../../assets/fonts/IBMPlexMono-Regular.ttf?url";
 
 const PAPER = "#ffffff";
@@ -64,6 +66,8 @@ export default function TextFlight({
   // (as many lines as it will show at its tallest - laid out once, those it shows now drawn)
   const most = Math.max(0, Math.min(lines.length, Math.ceil(Math.max(sheet.h - set.top, column.h) / Math.max(1e-3, Math.min(set.line, c.line)))));
   const shown = Math.max(0, Math.min(lines.length, Math.ceil((r.h - top) / line)));
+  // (set once the letters Meno's typefaces have are known: those they have not as squares, lib/chem/labelFonts `STAND_IN`)
+  const lettersKnown = useLabelFontUrl(DEFAULT_LABEL_FAMILY, needsFallback(lines.slice(0, most))) != null;
   const laid = useRef(new Set<number>());
   const ready = useRef(onReady);
   ready.current = onReady;
@@ -118,7 +122,7 @@ export default function TextFlight({
       ))}
       {/* its lines, the type a size throughout, scaled - not set again each frame */}
       {lines.slice(0, most).map((l, i) =>
-        l.trim() ? (
+        l.trim() && lettersKnown ? (
           <Text
             key={`line${i}`}
             visible={i < shown}
@@ -135,7 +139,7 @@ export default function TextFlight({
             clipRect={[0, -line / size, Math.max(0, (r.w - left - right) / size), line / size]}
             raycast={noRaycast}
           >
-            {l}
+            {labelFont(DEFAULT_LABEL_FAMILY).shown(l)}
           </Text>
         ) : null,
       )}
