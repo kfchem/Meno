@@ -39,6 +39,13 @@ describe("charges, R and S put by hand", () => {
     expect(back.stereoAt).toEqual({ x: -1, y: 0 });
     doc.undo();
     expect(state().model.atoms.find((a) => a.id === n)!.chargeAt).toEqual({ x: 1, y: 1 });
+    // (its charge changed, still where it was put; no charge left to put, gone - and a new one where the drawing puts it)
+    state().stepCharge(n, 1);
+    expect(state().model.atoms.find((a) => a.id === n)!.chargeAt).toEqual({ x: 1, y: 1 });
+    state().stepCharge(n, -1);
+    state().stepCharge(n, -1);
+    expect(state().model.atoms.find((a) => a.id === n)!.charge).toBeUndefined();
+    expect(state().model.atoms.find((a) => a.id === n)!.chargeAt).toBeUndefined();
   });
 
   it("are kept in a saved workspace and a copy - those that do not read as a place left where the drawing puts them", () => {

@@ -599,10 +599,13 @@ export function setAtomChemistry(
     valence: _v,
     hCount: _h,
     abbrev: _a,
+    chargeAt,
     ...rest
   } = was;
   const next = atoms.slice();
-  next[index] = { ...rest, el: chem.el, ...chemistry(chem) };
+  // (a charge put by hand stays where it was put while there is a charge - or a radical's dots - to put)
+  const marked = (chem.charge ?? 0) !== 0 || !!chem.radical;
+  next[index] = { ...rest, el: chem.el, ...chemistry(chem), ...(marked && chargeAt ? { chargeAt } : {}) };
   return { ...doc, model: { atoms: next, bonds: doc.model.bonds } };
 }
 
