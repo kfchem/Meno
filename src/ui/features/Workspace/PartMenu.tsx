@@ -33,6 +33,9 @@ export type MenuTarget = {
   within: { width: number; height: number };
 };
 
+/** What setting a measurement of two, three or four atoms is called. */
+const SET_NAME = ["", "", "Set distance…", "Set angle…", "Set torsion angle…"];
+
 const MAC =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -78,6 +81,8 @@ export type MenuMolecule3D = {
   /** How many atoms what is chosen of it measures: two, three or four make a measurement. */
   chosen: number;
   onMeasure: () => void;
+  /** What is chosen measured and its value opened to be typed, to set it; unset, where it cannot be set (a torsion angle about a ring's bond). */
+  onSetChosen?: () => void;
   /** Turned back to face as its file has it. */
   onResetTurn: () => void;
   /** It alone, cut or copied. */
@@ -135,6 +140,7 @@ export default function PartMenu({
   canvas = [],
   clipboard,
   molecule3d,
+  measure3d,
   onClose,
 }: {
   target: MenuTarget;
@@ -204,6 +210,8 @@ export default function PartMenu({
   clipboard: MenuClipboard;
   /** The molecule in 3D right-clicked, when it is one. */
   molecule3d?: MenuMolecule3D;
+  /** A measurement right-clicked that can be set: how many atoms it is of, and its value opened to be typed. */
+  measure3d?: { atoms: number; onSet: () => void };
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -264,6 +272,9 @@ export default function PartMenu({
         ...(molecule3d.chosen >= 2 && molecule3d.chosen <= 4
           ? [{ name: measureName[molecule3d.chosen], keys: "", run: molecule3d.onMeasure }]
           : []),
+        ...(molecule3d.chosen >= 2 && molecule3d.chosen <= 4 && molecule3d.onSetChosen
+          ? [{ name: SET_NAME[molecule3d.chosen], keys: "", run: molecule3d.onSetChosen }]
+          : []),
         ...(molecule3d.overlay
           ? [
               {
@@ -284,7 +295,7 @@ export default function PartMenu({
   // Delete at its right end, always - and the rest listed under them.
   const items: Item[] =
     target.kind === "measure3d"
-      ? [del("Delete measurement")]
+      ? [del("Delete measurement"), ...(measure3d ? [{ name: SET_NAME[measure3d.atoms], keys: "", run: measure3d.onSet }] : [])]
       : target.kind === "molecule3d" && target.selection !== "here" && molecule3d
       ? [
           { name: "Cut", keys: keys ? shortcut("X") : "", run: molecule3d.onCut, icon: MENU_ICONS.cut },

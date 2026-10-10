@@ -176,6 +176,12 @@ export type Molecule3DViewProps = {
   /** The surface it shows - a list's row chosen - and the value it is drawn at; none, none (or one fading out). */
   surface?: Grid | null;
   surfaceIso?: number;
+  /** Its measurement whose value is being typed, by id: its chip a field; none, none. */
+  editingMeasure?: number | null;
+  /** A value typed for a measurement, and Enter pressed: set it (utils/edit3d). */
+  onSetMeasure?: (measure: number, value: number) => void;
+  /** The typing let go of - Escape, or the field left. */
+  onEditDone?: () => void;
 };
 
 /**
@@ -1131,11 +1137,19 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
                   }}
                   data-measure3d={`${m.id}:${x.id}`}
                   className={`pointer-events-none px-1.5 rounded-full bg-white/90 border text-[11px] leading-[18px] text-gh-black tabular-nums whitespace-nowrap select-none shadow-sm transition-colors duration-150 ${
-                    props.hoveredMeasure === x.id ? "border-[#1e90ff]" : "border-gh-line"
+                    props.hoveredMeasure === x.id || props.editingMeasure === x.id ? "border-[#1e90ff]" : "border-gh-line"
                   }`}
                   style={{ opacity: 0 }}
                 >
-                  {measureTexts[x.id] ?? ""}
+                  {props.editingMeasure === x.id && props.onSetMeasure ? (
+                    <MeasureField
+                      text={measureTexts[x.id] ?? ""}
+                      onSet={(v) => props.onSetMeasure!(x.id, v)}
+                      onDone={() => props.onEditDone?.()}
+                    />
+                  ) : (
+                    (measureTexts[x.id] ?? "")
+                  )}
                 </div>
               </div>
             </PageHtml>
@@ -1188,7 +1202,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       {/* (rising out of its drawing, it shows its frames once it has risen) */}
       {/* (read from a calculation, it says what the calculation was - a
           single geometry's only when it is pointed at) */}
-      {(solid.frames.length > 1 || props.onRemake || m.calc) && !props.rising && (
+      {(solid.frames.length > 1 || props.onRemake || m.calc || m.edited) && !props.rising && (
         <group ref={pill}>
           {solid.frames.length > 1 || m.calc ? (
             <Frames3D
@@ -1214,13 +1228,15 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
               area={gl.domElement}
             />
           ) : (
-            props.onRemake && (
-              <PageHtml zIndexRange={[30, 20]}>
-                <div className="meno-page-chip" style={{ transform: "translate(-50%, calc(10px * var(--page, 1))) scale(var(--page, 1))", transformOrigin: "50% 0" }}>
-                  <Changed onRemake={props.onRemake} />
-                </div>
-              </PageHtml>
-            )
+            <PageHtml zIndexRange={[30, 20]}>
+              <div
+                className="meno-page-chip flex flex-col items-center"
+                style={{ transform: "translate(-50%, calc(10px * var(--page, 1))) scale(var(--page, 1))", transformOrigin: "50% 0" }}
+              >
+                {m.edited && <Edited from={m.edited.from} />}
+                {props.onRemake && <Changed onRemake={props.onRemake} />}
+              </div>
+            </PageHtml>
           )}
         </group>
       )}
@@ -1307,6 +1323,55 @@ function HiddenMark({ on }: { on: boolean }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Made by editing a result: what from, said quietly under it - an edited result is no longer that result. */
+function Edited({ from }: { from: string }) {
+  return (
+    <div className="mt-1.5 w-max whitespace-nowrap rounded-full border border-gh-line bg-white/90 px-2 text-[11px] leading-[20px] text-gh-gray shadow-sm">
+      Edited from {from}
+    </div>
+  );
+}
+
+/**
+ * A measurement's value being typed, in its chip: the number as it is now,
+ * selected, and its unit; Enter sets what is typed (a comma or a true minus
+ * read as well), Escape or leaving the field lets it go.
+ */
+function MeasureField({ text, onSet, onDone }: { text: string; onSet: (value: number) => void; onDone: () => void }) {
+  const unit = text.endsWith("Å") ? " Å" : "°";
+  const [value, setValue] = useState(() => text.replace(/\s*(Å|°)$/, "").replace("\u2212", "-"));
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    field.current?.focus();
+    field.current?.select();
+  }, []);
+  const read = () => Number(value.trim().replace("\u2212", "-").replace(",", "."));
+  return (
+    <span className="inline-flex items-baseline">
+      <input
+        ref={field}
+        value={value}
+        inputMode="decimal"
+        aria-label="Value"
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            const v = read();
+            if (Number.isFinite(v)) onSet(v);
+            else onDone();
+          } else if (e.key === "Escape") onDone();
+        }}
+        onBlur={onDone}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="pointer-events-auto w-[5ch] bg-transparent text-right tabular-nums outline-none select-text"
+        style={{ width: `${Math.max(3, value.length + 0.5)}ch` }}
+      />
+      <span>{unit}</span>
+    </span>
   );
 }
 

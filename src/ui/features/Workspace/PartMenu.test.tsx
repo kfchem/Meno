@@ -98,3 +98,26 @@ describe("the right-click menu", () => {
     expect(html).toMatch(/aria-label="Align left" aria-pressed="false"/);
   });
 });
+
+describe("the menu of a molecule in 3D, and of a measurement on one", () => {
+  const molecule3d = (extra: object = {}) => ({
+    otherLook: { name: "Space-filling", atoms: "space" as const, run: none },
+    chosen: 3,
+    onMeasure: none,
+    onResetTurn: none,
+    onCut: none,
+    onCopy: none,
+    ...extra,
+  });
+  it("offers to set what is chosen, beside measuring it, where it can be set", () => {
+    const t = target({ kind: "molecule3d", id: 1 });
+    expect(menu(t, { molecule3d: molecule3d({ onSetChosen: none }) }).listed).toEqual(["Measure angle", "Set angle…"]);
+    // (a torsion angle about a ring's bond cannot be set: measured only)
+    expect(menu(t, { molecule3d: molecule3d({ chosen: 4 }) }).listed).toEqual(["Measure torsion angle"]);
+  });
+  it("offers to set a measurement right-clicked, where it can be set", () => {
+    const t = target({ kind: "measure3d", id: 1, measure: 1 });
+    expect(menu(t, { measure3d: { atoms: 2, onSet: none } })).toMatchObject({ icons: ["Delete measurement"], listed: ["Set distance…"] });
+    expect(menu(t).listed).toEqual([]);
+  });
+});

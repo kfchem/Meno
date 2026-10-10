@@ -721,6 +721,58 @@ space-filling side by side is better science than either alone.
 - **Not read from before.** A settings file from before keeps none of
   its 3D look (pre-alpha: no migration).
 
+## Editing in 3D
+
+Built in lane L5 on 2026-10-10, as proposed to the maintainer and agreed:
+a molecule in 3D is edited as a quantum-chemistry program's builder edits
+one, by setting a distance, an angle or a torsion angle to a value. Only
+its shape changes; what it is made of stays the drawing's business (draw
+it, then *Make again*). Holding values fixed while a force field tidies
+the rest is for later, through a plugin.
+
+- **Picking.** As before: atoms (or bonds) clicked in order choose what is
+  measured. With two, three or four chosen, the right-click menu has *Set
+  distance…*, *Set angle…* or *Set torsion angle…* beside *Measure …*: it
+  measures them, in the order chosen, and opens the value to be typed. A
+  measurement right-clicked has the same item.
+- **The value.** A double-click on a measurement's value opens it to type
+  a number (a comma and a true minus are read too): Enter sets it, Escape
+  or leaving the field lets it go. A drag across the value sets it as the
+  pointer goes - a hundredth of an ångström, or half a degree, a pixel -
+  in one undo step; the pointer turns to the sideways one over it.
+  Distances go from 0.5 to 20 Å, angles from 1 to 179°, and a torsion
+  angle goes round (IUPAC's sign, as it is measured).
+- **What moves.** The side of the last atom chosen - for a torsion angle,
+  of the third - cut off at the bond before it: along the bond for a
+  distance, about the middle atom in the three atoms' plane for an angle,
+  about the middle bond for a torsion angle. Where that bond is in a ring,
+  and cutting it parts nothing, the last atom moves with only what hangs on
+  it alone (a methyl's hydrogens); a torsion angle about a ring's bond is
+  not offered. Atoms bonded to none of the others (a complex's two
+  molecules) take their whole piece with them. Pointing at a value lights
+  the atoms setting it would move, as does dragging it.
+- **Which frame.** The frame shown, with the bonds that frame has.
+- **Results are never edited.** A conformer set, a trajectory, what a
+  calculation or a step gave, or a molecule whose file gives its energy is
+  a result, and an edited result is no longer that result. The first edit
+  of one makes a copy of the frame shown, beside it (out of any set it
+  would fall in) and turned as it is: its own molecule, with no other
+  frames, energies, populations, numbers or calculation, its drawing,
+  look and measurements kept, saying *Edited from conformer 7* (or *frame
+  12*, or the output's name) under it. A drag that began on the result
+  goes on editing the copy, and the copy and the drag are one undo step.
+  A molecule of its own is edited in place.
+- **Stereo labels follow.** A centre turned inside out has its R and S
+  swapped, and a double bond turned past square its E and Z (the
+  priorities round them are as they were). The drawing is not told: a 3D
+  turned to the other configuration no longer matches it, which the link
+  to the drawing does not yet say.
+- **Found on the way.** The measurements' values are in the page's HTML
+  layer (the one cut off where the column begins) since the column came;
+  the molecules looked for them where the canvas's events are, so the
+  value under the pointer was never found - no highlight, no menu, no
+  keeping values apart. They now look in that layer.
+
 ## Risks
 
 - **The 2D drawing changing.** The thinnest lines and the place of every
