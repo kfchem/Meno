@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyEdit, caretAt, letterStep, lineAround, Lines, mapThrough, paragraphStep, plainLines, typed, wordAround, wordStep } from "./editing";
 import { commandOf } from "./keys";
-import { composed, composingIn, editOf, lineComposing, windowOf, withTakenAway, AROUND, MOST } from "./field";
+import { clausesWithin, composed, composingIn, editOf, lineComposing, windowOf, withTakenAway, AROUND, MOST } from "./field";
 
 describe("a text being edited", () => {
   it("knows its lines: where each begins and ends, and which an offset is on", () => {
@@ -158,6 +158,22 @@ describe("the field typed through", () => {
     expect(lineComposing("化学反応です", 10, { from: 12, to: 14, text: "飯能" })).toBe("化学飯能です");
     // (what it replaces reaching past the line's end, into the next: nothing of the line after it)
     expect(lineComposing("化学反応です", 10, { from: 12, to: 20, text: "はんのう" })).toBe("化学はんのう");
+  });
+
+  it("keeps the IME's clauses to what it has so far, where its text changed before it gave them again", () => {
+    // (かがくはんのう in two clauses, converted to 科学飯能 before its clauses come again)
+    const before = [
+      { from: 0, to: 3, thick: true },
+      { from: 3, to: 7, thick: false },
+    ];
+    expect(clausesWithin(before, 7)).toEqual(before);
+    expect(clausesWithin(before, 4)).toEqual([
+      { from: 0, to: 3, thick: true },
+      { from: 3, to: 4, thick: false },
+    ]);
+    // (a clause lying past it altogether: none)
+    expect(clausesWithin(before, 3)).toEqual([{ from: 0, to: 3, thick: true }]);
+    expect(clausesWithin(undefined, 3)).toBeUndefined();
   });
 });
 

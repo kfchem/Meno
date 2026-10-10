@@ -738,6 +738,8 @@ Step 5 comes in parts: the trial of typing alone, shown first; the column's text
 - **Drawn by Meno as they will be kept**: set as the drawing sets its labels (a formula's counts low, a prefix in italics), in its typeface at its size, broken into lines as wide as they were made where they were given a width, laid as they will lie - so that what is written is what is kept, its lines broken as they will be. Lit round while they are written.
 - **The caret, what is selected and what the IME composes** are drawn over them, in the drawing's units: the caret blinking, the selection in Meno's light, what is composed underlined clause by clause. Where each place lies comes from how the words are set (lib/chem/captions `captionPlaces`): before each letter, a formula's count no wider than it is set, and spaces the setting runs together standing where the space it keeps does.
 - **Typed through the column's field** (TextEditor/typingField, now typing into any text Meno draws, `FieldHost`): an EditContext on Windows, a textarea on a Mac, laid with its caret on the drawn one, in the words' type at the size they are seen, so that the IME's candidates show at the caret.
+  - **Drawn in the frame after a change**, as the column's text is: a change through the EditContext came in an event React does not know and was drawn a frame late - 10 ms at 100 Hz, 33 ms over Remote Desktop. Drawn at once, a conversion shows before the clauses the IME gives just after it: those it gave before are kept to what it has now (lib/text/field `clausesWithin`), where the conversion made it shorter.
+  - **Checked on Windows** with Microsoft's IME (2026-10-10): composing, its clauses, Enter, Escape, converting again a word selected, the candidates at the caret after the view is zoomed or moved. Shown, the candidates stay where they are while the view moves under them, as the IME keeps them, and come to the caret again as they are next shown.
 - **The keys**: an editor's, as in the column - up and down by the lines as they are set, Home and End (Command with the arrows on a Mac) to a set line's ends. Enter keeps the words, Shift+Enter starts another line, Escape lets them go; their own undo while they are written (a run of typing one step), one step for the document once kept.
 - **The pointer**: a click among them puts the caret, two select a word, three a line, a drag selects on; the press is theirs - no box begun, no view moved. A press elsewhere keeps them, as before, and does what it does there.
 
@@ -757,7 +759,6 @@ Decided while building it, for the maintainer to confirm:
 Not yet, and where it comes:
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
 - **A step's card lies over the canvas**, in HTML, as all a workflow's cards do: a log's lines come out from under its step's card, and pass under the other cards on their way, as a PDF's page does.
-- **Windows' IME on words on the page**: built as in the column, through the EditContext; checked on a Mac only so far.
 - **More grammars**: a language Lezer has a grammar for is a line here and its few tens of kilobytes; Python, JSON and XML for now, as the specification lists.
 
 ## In order

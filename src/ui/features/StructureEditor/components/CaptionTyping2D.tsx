@@ -17,7 +17,7 @@
  */
 import * as THREE from "three";
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { flushSync, useFrame, useThree } from "@react-three/fiber";
 import { CAPTION_LINE, captionPlace, captionPlaces, captionSet } from "../../../../lib/chem/captions";
 import { fontStack, labelSetOf } from "../../../../lib/chem/layout2d";
 import { IS_MAC } from "../../../../lib/doc/shortcuts";
@@ -217,8 +217,17 @@ function Writing({ edit, caption }: { edit: Edit; caption?: Caption }) {
 
   // anything drawn changed: drawn again, the field laid at the caret
   useEffect(() => {
+    // (drawn again before the next frame, once for all a task changed, as the column's text is (ColumnText): an update
+    // made in an event React does not know - an EditContext's textupdate - would wait otherwise for a task after that frame)
+    let due = false;
     ed.onChange = () => {
-      setTick((t) => t + 1);
+      if (!due) {
+        due = true;
+        queueMicrotask(() => {
+          due = false;
+          flushSync(() => setTick((t) => t + 1));
+        });
+      }
       invalidate();
       field.current?.place();
     };

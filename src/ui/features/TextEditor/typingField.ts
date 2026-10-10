@@ -17,7 +17,7 @@
  */
 import { IS_MAC } from "../../../lib/doc/shortcuts";
 import { caretAt, plainLines, selFrom, selTo, type Edit, type Lines, type Sel } from "../../../lib/text/editing";
-import { composed, composingIn, editOf, inText, windowOf, withTakenAway, type FieldWindow } from "../../../lib/text/field";
+import { clausesWithin, composed, composingIn, editOf, inText, windowOf, withTakenAway, type FieldWindow } from "../../../lib/text/field";
 import { commandOf, type Command } from "../../../lib/text/keys";
 import type { Composing } from "./editor";
 
@@ -418,7 +418,7 @@ class EditContextField extends Field {
     const k = this.replaced()!;
     const text = composed(this.ec.text, k.at, k.tail);
     const s: [number, number] = [Math.min(Math.max(this.ec.selectionStart - k.at, 0), text.length), Math.min(Math.max(this.ec.selectionEnd - k.at, 0), text.length)];
-    this.ed.setComposing({ from: c.start + k.from, to: c.start + k.to, text, sel: s, clauses: c.clauses });
+    this.ed.setComposing({ from: c.start + k.from, to: c.start + k.to, text, sel: s, clauses: clausesWithin(c.clauses, text.length) });
   }
 
   /** Where what the IME composes lies in the context's text, and what it replaces in the text as Meno holds it - what it took away first too. */

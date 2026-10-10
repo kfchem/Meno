@@ -100,6 +100,16 @@ export function withTakenAway(from: number, to: number, d0: number, d1: number):
 export const composed = (now: string, at: number, tail: number) => now.slice(at, Math.max(at, now.length - tail));
 
 /**
+ * The IME's clauses as far as what it has so far reaches, `length` long:
+ * those it gave before its text last changed - until it gives them again,
+ * just after - may reach past it, where a conversion made it shorter.
+ */
+export function clausesWithin<K extends { from: number; to: number }>(clauses: K[] | undefined, length: number): K[] | undefined {
+  const within = (x: number) => Math.min(Math.max(x, 0), length);
+  return clauses?.map((k) => ({ ...k, from: within(k.from), to: within(k.to) })).filter((k) => k.to > k.from);
+}
+
+/**
  * A line as it shows while the IME composes in it: `line`, beginning at
  * `start` in the text, with what the IME has so far (`text`) in place of
  * what it takes the place of (`[from, to)`, in the text's offsets) - and
