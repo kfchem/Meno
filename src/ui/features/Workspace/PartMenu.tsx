@@ -112,6 +112,7 @@ export default function PartMenu({
   onRadical,
   radical,
   onExpand,
+  asTyped,
   onArrowStyle,
   onEditText,
   onShowSource,
@@ -149,6 +150,8 @@ export default function PartMenu({
   radical: boolean;
   /** An abbreviation's atoms drawn out; unset, where the atom is none. */
   onExpand?: () => void;
+  /** Its label as it was typed (obz, read as OBz), and the label made that again; unset, where it was read as typed. */
+  asTyped?: { typed: string; run: () => void };
   /** A reaction arrow's own line and head, in a panel beside the canvas. */
   onArrowStyle: () => void;
   /** The words right-clicked, written anew. */
@@ -405,6 +408,7 @@ export default function PartMenu({
             ? [
                 { name: radical ? "No unpaired electron" : "Unpaired electron", keys: "", run: onRadical },
                 ...(onExpand ? [{ name: "Expand abbreviation", keys: "", run: onExpand }] : []),
+                ...(asTyped ? [{ name: `As typed: ${asTyped.typed}`, keys: "", run: asTyped.run }] : []),
               ]
             : []),
           { name: "Select this structure", keys: "", run: onSelectStructure },

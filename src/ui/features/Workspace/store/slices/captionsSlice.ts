@@ -6,6 +6,9 @@ import type { Caption, EditorState, WordsFrom } from "../types";
 
 type SetState = StoreApi<EditorState>["setState"];
 
+/** How many writings of words have been opened: each its own number. */
+let writings = 0;
+
 /**
  * Words on the page (lib/chem/captions): edits to the document, so that
  * undo takes them back and Save keeps them; which are under the pointer,
@@ -14,7 +17,18 @@ type SetState = StoreApi<EditorState>["setState"];
 export function createCaptionsSlice(doc: DocumentStore<WorkspaceDocument>, set: SetState) {
   return {
     setHoveredCaption: (id: number | null) => set({ hoveredCaption: id }),
-    setCaptionEdit: (edit: EditorState["captionEdit"]) => set({ captionEdit: edit }),
+    selectCaptions: (ids: Iterable<number>, add = false) =>
+      set((prev: EditorState) => ({ ...prev, selCaptions: new Set([...(add ? prev.selCaptions : []), ...ids]), pdfSel: null, pdfBox: null })),
+    setCaptionEdit: (edit: EditorState["captionEdit"]) => set({ captionEdit: edit && { ...edit, n: edit.n ?? ++writings } }),
+    markCaptionDrawn: (n: number) =>
+      set((prev: EditorState) => (prev.captionEdit?.n === n && !prev.captionEdit.drawn ? { ...prev, captionEdit: { ...prev.captionEdit, drawn: true } } : prev)),
+    leaveCaptionEdit: (n: number, id: number | null) =>
+      set((prev: EditorState) => {
+        const edit = prev.captionEdit;
+        if (edit?.n !== n) return prev;
+        return { ...prev, captionEdit: null, captionLeft: id != null ? { id, n, at: edit.at } : prev.captionLeft };
+      }),
+    captionShown: (id: number) => set((prev: EditorState) => (prev.captionLeft?.id === id ? { ...prev, captionLeft: null } : prev)),
     setQuickAdd: (q: EditorState["quickAdd"]) => set({ quickAdd: q }),
     addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number, align?: Caption["align"]) => {
       const id = doc.getState().nextCaptionId ?? 1;
@@ -40,7 +54,12 @@ export function createCaptionsSlice(doc: DocumentStore<WorkspaceDocument>, set: 
         },
       ),
     removeCaption: (id: number) => {
-      if (doc.edit("delete text", (d) => ops.removeCaption(d, id))) set((prev: EditorState) => ({ ...prev, hoveredCaption: prev.hoveredCaption === id ? null : prev.hoveredCaption }));
+      if (doc.edit("delete text", (d) => ops.removeCaption(d, id)))
+        set((prev: EditorState) => ({
+          ...prev,
+          hoveredCaption: prev.hoveredCaption === id ? null : prev.hoveredCaption,
+          selCaptions: prev.selCaptions.has(id) ? new Set([...prev.selCaptions].filter((c) => c !== id)) : prev.selCaptions,
+        }));
     },
   };
 }

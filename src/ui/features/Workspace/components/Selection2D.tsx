@@ -10,7 +10,7 @@ import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
 import { pressOnEmpty } from "../utils/clickCount";
-import { cornersOf, inBox, inLasso, middleOf, molecules3dIn, turned } from "../utils/selection";
+import { cornersOf, inBox, inLasso, marksAtOf, middleOf, molecules3dIn, turned, turnedBy } from "../utils/selection";
 import { flowIn } from "../workflow/parts";
 import type { Style3D } from "../../../../lib/chem/style3d";
 import { currentStyle3D, useStyle3D } from "../style3d";
@@ -178,7 +178,7 @@ export default function Selection2D() {
       if (e.button !== 0 || e.target !== gl.domElement) return;
       const st = store.getState();
       // (on an arrow, a "+", words, a workflow's wire, a PDF, a picture or a text's sheet: theirs)
-      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null || st.hoveredPdf != null || st.hoveredPicture != null || st.hoveredText != null;
+      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null || st.hoveredPdf != null || st.hoveredPicture != null || st.hoveredText != null || st.hoveredMark != null;
       if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || onMark || st.labelEdit.active || st.extend.active || st.captionEdit) return;
       const add = addsToSelection(e);
       const count = pressOnEmpty(lastEmpty, { t: e.timeStamp, x: e.clientX, y: e.clientY }, DOUBLE_CLICK_MS);
@@ -277,6 +277,9 @@ export default function Selection2D() {
     const about = selectionExtent(st.model, st.sel.atoms, st.molecules3d, st.sel3d, st.turns3d, st.frames3d, currentStyle3D(), eyeOf(camera)?.z, pics)?.mid;
     if (!about) return;
     const from = st.model.atoms.filter((a) => st.sel.atoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y }));
+    // (marks put by hand turned with it: from where they were as the turn began)
+    const model0 = st.model;
+    const marksAt = (angle: number) => marksAtOf(model0, st.sel.atoms, turnedBy(angle));
     // (pictures carried round, and turned as far)
     const picturesAt = (angle: number) => turned(pics, about, angle).map((q, i) => ({ ...q, turn: (pics[i].turn ?? 0) + angle }));
     const carried = molecules.map(turningOf(st.turns3d, currentStyle3D()));
@@ -295,7 +298,8 @@ export default function Selection2D() {
       const step = (TURN_STEP * Math.PI) / 180;
       const angle = free ? a : Math.round(a / step) * step;
       // (molecules with the drawing: carried round in its plane, and turned with it)
-      const marks = pics.length ? { pictures: picturesAt(angle) } : undefined;
+      const markAts = marksAt(angle);
+      const marks = pics.length || markAts ? { ...(pics.length ? { pictures: picturesAt(angle) } : {}), ...(markAts ? { markAts } : {}) } : undefined;
       if (carried.length) store.getState().turnMolecules3d(turnedInPlane(carried, about, angle), gesture, turned(from, about, angle), marks);
       else store.getState().moveAtoms(turned(from, about, angle), gesture, marks);
     };

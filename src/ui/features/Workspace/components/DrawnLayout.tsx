@@ -89,6 +89,8 @@ export function DrawnLayoutProvider({ children }: { children: ReactNode }) {
       el: a.el,
       ...chemistry(a),
       ...(a.z != null ? { z: a.z } : {}),
+      // (its charge where a hand put it)
+      ...(a.chargeAt ? { chargeAt: a.chargeAt } : {}),
     }));
     // (a stroke on empty space: its own new atom where it starts)
     if (stroke && stroke.baseId === NEW_ATOM && stroke.start) {

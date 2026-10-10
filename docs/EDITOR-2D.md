@@ -445,6 +445,50 @@ All hover-based, as above.
   typing - N+, NH3+, O-, Fe2+, 13C, or a charge alone - by + and - over
   an atom, or from its menu, which also gives or takes an unpaired
   electron.)
+- **Labels typed in place** (the maintainer, 2026-10-10: no HTML box). A
+  label is written where it stands, drawn by Meno as words on the page are
+  (*Text*, below; `LabelTyping2D`): set as a label is set, in the drawing's
+  typeface at its size, its first letter on the atom - a two-letter
+  symbol's middle - on a light of its own that hides the label it had, its
+  charge too; with the caret, what is selected and what an input method
+  composes drawn over it. Typed through the field words on the page are
+  typed through (`pageField`), laid at the caret so that an input method's
+  candidates show there - an input method's full-width letters are taken
+  as the ordinary ones once it gives them. Begun by a click on an atom, or
+  by a letter typed over one; Enter keeps it, Escape lets it go, a press
+  elsewhere keeps it; a click in it puts the caret, a drag selects. Kept,
+  it is drawn as written until the drawing's own label is drawn in its
+  place, then goes in a moment, the label coming through: never a frame
+  with no label, nor with the old one. The drawing's labels are drawn each
+  by its atom (`Labels2D` `keyOf`): a label added or taken away sets no
+  other label's letters again.
+- **Labels read as they are meant** (the maintainer, 2026-10-10: nh2 is
+  NH2, obz OBz, hnfmoc NHFmoc; `lib/chem/smartLabel.ts`). No list of what
+  is typed: of the labels Meno reads (docs/CTFILE.md, *Atoms that are not
+  elements*), the one the letters typed spell, by these rules.
+  1. A letter typed small may be a capital, one typed as a capital stays
+     one. Part of a structure - an element, a group - comes before a whole
+     molecule - a reagent, a complex - as a label on a structure stands
+     for part of one (co2me is CO2Me, not a complex of cobalt; hf is Hf,
+     HF typed so); then the fewest letters made capitals (co is Co, ph Ph,
+     ipr iPr - not the NHC IPr).
+  2. No element after uranium is read from letters typed small: nh is NH,
+     cn CN, no NO; ts is tosyl, fm Fm.
+  3. Typed as it is drawn on a bond's left - aco, meo, bochn, ho2c, h2n,
+     or HN before a group, hnfmoc - it is kept as it reads from the bond:
+     OAc, OMe, NHBoc, CO2H, NH2, NHFmoc (and drawn the other way round
+     again where its bond leaves to the left).
+  4. A prefix set in italics gets its hyphen: tbu is t-Bu, co2tbu CO2t-Bu;
+     iPr stays.
+  5. What reads as nothing stays exactly as typed - no capital made.
+
+  As it is typed, only its letters' case changes, as they are read so far
+  - the same letters in the same places, the caret where it was; rules 3
+  and 4 as it is kept. An input method's composition is left alone until
+  it is given. Where what is kept is not what was typed, the atom's menu
+  has it back, read as nothing else (*As typed: obz*, one step); Settings
+  › General, *Read labels as they are meant*, turned off keeps every label
+  exactly as typed.
 - Ring templates (3- to 8-membered, benzene), fused onto a bond or an atom;
   chains. (Chains and rings came back on 2026-10-03 as the honeycomb: three
   clicks on an atom or two on empty space, the honeycomb's ring where a
@@ -484,6 +528,26 @@ All hover-based, as above.
     they look further off at that, and the maintainer asked for them
     nearer (2026-10-05): 15% in Meno's style and the other bare ones. On a
     molecule in 3D, the same share beyond its ball.
+  - Hidden unless asked for, on the drawing and in 3D (the maintainer,
+    2026-10-10): *Show R and S* (the menu, or Settings › Chemistry) shows
+    them; making every stereoisomer a drawing leaves open shows each
+    one's open centres, to tell them apart (docs/WORKSPACE.md, *Told
+    apart*).
+- **Charges, R and S put by hand** (the maintainer, 2026-10-10). A charge
+  - with its radical's dots - an R or S, and an E or Z are each taken hold
+  of on their own ink, and nowhere else (a press beside one is the atom's),
+  lit and with Meno's moving pointer as the pointer is on them; dragged,
+  each goes where the pointer takes it and stays there, as one undo step.
+  Two clicks on one put it back where the drawing puts it. Where it was
+  put is kept from its atom - an E or Z from its bond's middle - in ems of
+  the labels, so it goes with the atom as the atom moves, is turned and
+  turned over with the selection, is saved and copied with the drawing,
+  and a charge so put is in an exported picture (R and S never are). Clean-up puts
+  every mark of the structures it cleans back where the drawing puts
+  them: they were put for the drawing as it was, and Clean-up draws it
+  anew; undo brings them back. A label's charge put by hand leaves the
+  label, set beside it where it was put (`Atom.chargeAt`, `stereoAt`;
+  `Bond.stereoAt`; `MarkHold2D`).
 - Everything a molfile, SDfile or Rxnfile can hold, read after CTfile Formats
   and drawn after IUPAC's recommendations: docs/CTFILE.md, step by step.
 - Abbreviations: Meno's own, those put together by rule (OTBS, 2,6-diMeBz)
@@ -501,16 +565,29 @@ All hover-based, as above.
 - **Text** (the maintainer, 2026-10-08: reagents' labels): words on the
   page - a reaction's reagents and conditions, or anything else
   (`lib/chem/captions`, `Captions2D`, `CaptionTyping2D`).
-  - Written in place, from Quick Add; written anew by a double-click on it or its menu's *Edit text*.
-    Enter keeps them, Shift+Enter starts another line, Escape lets them go,
-    a press elsewhere keeps them; written away, they are gone. As they are
-    written, undo is their own; kept, one undo step.
+  - Written in place, from Quick Add; written anew as words are anywhere
+    (the maintainer, 2026-10-10): a click on them puts the caret there, a drag on them
+    selects letters from where it pressed, a second click selects a word
+    and a third a line - the click that opened them counted among those -
+    and their menu's *Edit text* puts the caret at their end. Enter keeps
+    them, Shift+Enter starts another line, Escape lets them go, a press
+    elsewhere keeps them; written away, they are gone. As they are
+    written, undo is their own; kept, one undo step. Over them the pointer
+    is the system's text pointer.
   - Written where they stand, drawn by Meno as they will be kept - set as
     below, broken into lines as wide as they are made - lit round while
     they are written, with the caret, what is selected and what an input
     method composes drawn over them (docs/PDF.md, step 5). A click among
     them puts the caret, two select a word, three a line, a drag selects
     on; an editor's keys move and select as in the column of texts.
+  - Drawn whole: the type draws a text's letters a frame or two after it
+    is given them, and showed the old ones meanwhile - a letter deleted
+    stayed on the page for a moment, the caret already before it (the
+    maintainer, 2026-10-10). Each change is now set out of sight and shown
+    once every letter of it is drawn, the caret and what is selected with
+    it; the words being written take the place of their own only once they
+    are drawn, and give it back, kept or let go, only once those are
+    (`Labels2D` `WholeTexts2D`).
   - Set as a label is set, word by word: a formula's counts low (K₂CO₃,
     Pd₂(dba)₃, Pd(PPh₃)₄), a prefix's t- in italics at a word's start
     (*t*-BuOK, not the o of co-solvent), a sign at a formula's end its
@@ -521,8 +598,15 @@ All hover-based, as above.
     its middle and half an em clear of it, beyond any words already there;
     and go where the arrow goes, moved or drawn out, until they are dragged
     off it. Put down elsewhere, they stay where they are put.
-  - Lit from behind under the pointer, dragged to move, deleted by Delete
-    or Backspace under the pointer or from their menu.
+  - Lit from behind under the pointer. Held still a moment (a long press,
+    as on a structure), they are taken hold of - lit from the pointer out -
+    and selected, as one thing, with the selection's shade; a drag on from
+    there moves them, or the whole selection where they are selected with
+    more, as one undo step. Ctrl (⌘) and a click adds them to the selection
+    or takes them out; Select all takes them. Selected, they are deleted,
+    cut and copied with the rest of the selection, pasted selected; words
+    alone go on the clipboard as Meno's own record. Deleted by Delete or
+    Backspace under the pointer or from their menu, too.
   - Made wider or narrower by their edges, shown as they are lit (the
     maintainer, 2026-10-09): dragged sideways, with Meno's own pointer for
     it, the other edge staying where it is, their words are broken at

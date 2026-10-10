@@ -34,6 +34,12 @@ export type Atom = AtomChem & {
    * through it would hide (`cumulatedShown`).
    */
   shown?: boolean;
+  /**
+   * Where its charge - and a radical's dots - was put by hand: their middle,
+   * from the atom, in ems of the labels' size. Unset, where the drawing
+   * puts them: after the label, or beside it, or beside a bare vertex.
+   */
+  chargeAt?: Vec2;
 };
 export type Bond = BondChem & {
   a1: number;
@@ -308,7 +314,14 @@ export type TextItem = {
    * superscript rather than on a baseline.
    */
   beside?: boolean;
+  /** Set beside: the atom, by index, whose charge it is. */
+  markOf?: number;
 };
+
+/** Whether two sets of texts are drawn alike: the same letters, set the same way, in the same places. */
+export function sameTexts(a: readonly TextItem[], b: readonly TextItem[]): boolean {
+  return a === b || (a.length === b.length && JSON.stringify(a) === JSON.stringify(b));
+}
 
 /** How far a label's ink reaches from its atom: left, right, up and down. */
 export type LabelBox = {
@@ -711,6 +724,24 @@ export function placeLabel(
   return out;
 }
 
+/**
+ * Where a charge's runs, placed, are together - their middle: across, and
+ * up where a superscript's middle is - and how far their ink reaches from it
+ * either way. A charge put beside an atom is centred so (`beside`).
+ */
+export function markExtent(runs: readonly PlacedRun[], set: LabelSet = ACS_LABEL_SET): { x: number; y: number; halfW: number; halfH: number } {
+  const font = labelFont(set.fontFamily);
+  const x0 = Math.min(...runs.map((r) => r.x));
+  const x1 = Math.max(...runs.map((r) => r.x + (r.mark ? r.size * MARK_WIDTH : runWidth(font, r.text, r.size))));
+  const first = runs[0];
+  return {
+    x: (x0 + x1) / 2,
+    y: first.y + first.size * MARK_MIDDLE,
+    halfW: (x1 - x0) / 2,
+    halfH: Math.max(...runs.map((r) => r.size * (r.mark ? MARK_RADIUS : 0.4))),
+  };
+}
+
 /** Where a placed mark's circle is: a charge's, or the one a radical's dots sit in. */
 export function markCircle(run: PlacedRun): { c: Vec2; r: number } {
   return {
@@ -762,6 +793,11 @@ function labelMarks(
   return { lines, polys, fills };
 }
 
+/** Whether a label's run `k` is its atom's charge or its radical's dots: set after its symbol, above the line. */
+export function isTail(runs: readonly TextRun[], k: number, anchor: number): boolean {
+  return k > anchor && !!(runs[k]?.sup || runs[k]?.mark) && !runs[k]?.part;
+}
+
 /**
  * The ink of a label, as the convex outline of each of its letters, around
  * its atom: the atom is at the origin.
@@ -779,7 +815,7 @@ export function labelHulls(
   for (const [k, run] of placeLabel(t, fontSize, set).entries()) {
     // (its charge and a radical's dots, which a bond is kept clear of by
     // where they are put, not by stopping short of them)
-    if (!tail && k > anchor && (runs[k]?.sup || runs[k]?.mark) && !runs[k]?.part) continue;
+    if (!tail && isTail(runs, k, anchor)) continue;
     let pen = run.x - t.x;
     if (run.mark) {
       const { c, r } = markCircle(run);
@@ -1979,7 +2015,8 @@ function specialLabel(a: Atom, fromRight: boolean): { runs: TextRun[]; anchor: n
     const text = `${a.list.not ? "NOT " : ""}[${a.list.symbols.join(",")}]`;
     return { runs: [{ text }], anchor: 0 };
   }
-  if (ELEMENT_SYMBOLS.has(a.el)) return null;
+  // (a group named as an element is - Ac, Pr, Ts - set as the group it holds)
+  if (ELEMENT_SYMBOLS.has(a.el) && !a.abbrev) return null;
   // (a ring's substituents named before it - 2,6-diMeBz - are not read
   // outward: on the right of its bond, the label starts at the bond)
   const ringFirst = namesRingFirst(a.el);
@@ -2086,6 +2123,19 @@ function besideVertex(
     runs,
     anchorRun: 0,
     // (the whole of it centred there, set as a superscript would be)
+    beside: true,
+  };
+}
+
+/** An atom's charge where a hand put it: `at` ems of the labels from the atom (`Atom.chargeAt`). */
+function besideAt(a: Atom, at: Vec2, runs: TextRun[], opts: Pick<LayoutOptions, "fontPx">): TextItem {
+  return {
+    x: a.x + at.x * opts.fontPx,
+    y: a.y + at.y * opts.fontPx,
+    text: runs.map((r) => r.text).join(""),
+    fontPx: opts.fontPx,
+    runs,
+    anchorRun: 0,
     beside: true,
   };
 }
@@ -2204,8 +2254,10 @@ export function buildTextLabels(
     // A label's charge goes after it, above the line - unless a bond runs
     // there (a nitro group's N=O); then beside the label, where its bonds
     // leave most room.
+    // (put by hand: where it was put, whatever the drawing would do)
+    const nudged = tail.length > 0 && a.chargeAt ? a.chargeAt : null;
     const push = (item: TextItem) => {
-      const clash = tail.length > 0 && tailClashes(item, tail, ways.get(i) ?? [], a, opts);
+      const clash = tail.length > 0 && (!!nudged || tailClashes(item, tail, ways.get(i) ?? [], a, opts));
       if (!clash) {
         out.push(item);
         return;
@@ -2213,23 +2265,28 @@ export function buildTextLabels(
       const runs = (item.runs ?? []).filter((r) => !tail.includes(r));
       const bare = { ...item, runs, text: runs.map((r) => r.text).join("") };
       out.push(bare);
+      if (nudged) {
+        out.push({ ...besideAt(a, nudged, tail, opts), markOf: i });
+        return;
+      }
       const set = labelSetOf(opts);
       const size = opts.fontPx * set.subscriptSize;
-      out.push(
-        besideVertex(a, ways.get(i) ?? [], tail, opts, (dir) => {
+      out.push({
+        ...besideVertex(a, ways.get(i) ?? [], tail, opts, (dir) => {
           let far = 0;
           for (const hull of labelHulls(bare, opts.fontPx, set, false)) {
             for (const p of hull) far = Math.max(far, p.x * dir.x + p.y * dir.y);
           }
           return far + size * (MARK_RADIUS + 0.2);
         }),
-      );
+        markOf: i,
+      });
     };
     if (!show) {
       // A carbon drawn as its bonds' meeting carries its charge beside it,
       // where its bonds leave most room - above and to the right, if that
       // is free.
-      if (tail.length) out.push(besideVertex(a, ways.get(i) ?? [], tail, opts));
+      if (tail.length) out.push({ ...(nudged ? besideAt(a, nudged, tail, opts) : besideVertex(a, ways.get(i) ?? [], tail, opts)), markOf: i });
       continue;
     }
     // A label that is not an element: an Rgroup, an atom list, an
