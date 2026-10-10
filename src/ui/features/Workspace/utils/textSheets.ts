@@ -83,8 +83,11 @@ export function sheetOf(text: string, name = ""): TextSheet {
 
 /** A Markdown text's sheet: its first rows formatted, as many as a sheet's 40 lines' height holds - never fewer than a few lines' room. */
 function markdownSheet(text: string): TextSheet {
-  const laid = layOut(readMarkdown(text).blocks, SHEET_MD_PX, measureText);
   const most = (SHEET_MOST_LINES * SHEET_LINE_PT + 2 * SHEET_PAD_PT) / SHEET_PT_PER_PX;
+  // (its first blocks alone, as many as fill it: a long text's sheet laid out as quickly as a short one's)
+  const blocks = readMarkdown(text).blocks;
+  let laid = layOut(blocks.slice(0, 8), SHEET_MD_PX, measureText);
+  for (let n = 16; laid.height < most && n / 2 < blocks.length; n *= 2) laid = layOut(blocks.slice(0, n), SHEET_MD_PX, measureText);
   const least = (SHEET_LEAST_LINES * SHEET_LINE_PT + 2 * SHEET_PAD_PT) / SHEET_PT_PER_PX;
   let rows = 0;
   let foot = 0;
