@@ -1,7 +1,7 @@
 // Meno's website: the visitor's own system first, and the story - scrolling
-// through it plays Meno's work, recorded from the app, as a film the scroll
-// position runs: each chapter's frames drawn on a canvas, the two either
-// side of where the scroll is laid over each other, so it moves on smoothly.
+// through it runs a film of Meno at work, recorded from the app: each
+// chapter a short video whose position the scroll sets. A phone gets the
+// smaller cut; with Save-Data on, no film is fetched and the stills stay.
 
 (() => {
   const root = document.documentElement;
@@ -24,60 +24,45 @@
   const chapters = [...document.querySelectorAll(".chapter")];
   story.style.setProperty("--chapters", String(chapters.length));
 
-  // Each chapter's frames: frames/<name>/001.avif, 002.avif, ...
-  const sources = chapters.map((ch) =>
-    Array.from({ length: Number(ch.dataset.count) }, (_, i) => `${ch.dataset.frames}/${String(i + 1).padStart(3, "0")}.avif`),
-  );
-  const frames = sources.map(() => null);
-  const ready = (img) => img && img.complete && img.naturalWidth > 0;
-  /** Starts loading a chapter's frames, once. */
-  function load(c) {
-    if (c < 0 || c >= chapters.length || frames[c]) return;
-    frames[c] = sources[c].map((src) => {
-      const img = new Image();
-      img.decoding = "async";
-      img.addEventListener("load", request, { once: true });
-      img.src = src;
-      return img;
+  // frames/<name>.mp4, or frames/<name>-s.mp4 where the window is small (a phone);
+  // frames/<name>.avif is its first frame, shown until the film has come.
+  const small = screen.getBoundingClientRect().width < 720;
+  const saveData = !!(navigator.connection && navigator.connection.saveData);
+  const films = chapters.map((ch) => {
+    const v = document.createElement("video");
+    v.muted = true;
+    v.playsInline = true;
+    v.setAttribute("muted", "");
+    v.setAttribute("playsinline", "");
+    v.disablePictureInPicture = true;
+    v.preload = "none";
+    v.poster = `${ch.dataset.film}.avif`;
+    v.setAttribute("aria-hidden", "true");
+    v.addEventListener("loadedmetadata", request);
+    v.addEventListener("seeked", () => {
+      // the latest position asked for while it was seeking
+      if (v.want !== undefined) seek(v, v.want);
     });
+    screen.appendChild(v);
+    return v;
+  });
+  /** Starts fetching a chapter's film, once. */
+  function load(c) {
+    if (saveData || c < 0 || c >= films.length || films[c].src) return;
+    const v = films[c];
+    v.preload = "auto";
+    v.src = `${chapters[c].dataset.film}${small ? "-s" : ""}.mp4`;
+    v.load();
   }
-
-  const canvas = document.createElement("canvas");
-  canvas.setAttribute("aria-hidden", "true");
-  screen.appendChild(canvas);
-  const ctx = canvas.getContext("2d");
-  function size() {
-    const r = screen.getBoundingClientRect();
-    const d = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, Math.round(r.width * d));
-    canvas.height = Math.max(1, Math.round(r.height * d));
-  }
-  /** The nearest frame of a chapter that has come, from `i` outwards. */
-  function nearest(list, i) {
-    for (let k = 0; k < list.length; k++) {
-      if (ready(list[i - k])) return list[i - k];
-      if (ready(list[i + k])) return list[i + k];
+  /** Puts a film at `p` (0 to 1) of its length - or, while it is still seeking, remembers to. */
+  function seek(v, p) {
+    if (!v.duration || v.seeking) {
+      v.want = p;
+      return;
     }
-    return null;
-  }
-  /** Draws chapter `c` at `p` (0 to 1) through its frames. */
-  function draw(c, p) {
-    const list = frames[c];
-    if (!list) return;
-    const at = p * (list.length - 1);
-    const i = Math.floor(at);
-    const t = at - i;
-    const a = ready(list[i]) ? list[i] : nearest(list, i);
-    if (!a) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.globalAlpha = 1;
-    ctx.drawImage(a, 0, 0, canvas.width, canvas.height);
-    const b = list[i + 1];
-    if (a === list[i] && t > 0.01 && ready(b)) {
-      ctx.globalAlpha = t;
-      ctx.drawImage(b, 0, 0, canvas.width, canvas.height);
-    }
-    screen.classList.add("playing");
+    v.want = undefined;
+    const t = Math.min(v.duration - 0.001, p * v.duration);
+    if (Math.abs(v.currentTime - t) > 0.004) v.currentTime = t;
   }
 
   const pips = chapters.map((ch, i) => {
@@ -104,22 +89,22 @@
 
     // Scrolling through the story runs the film.
     const span = story.offsetHeight - vh;
-    const p = Math.min(0.9999, Math.max(0, (y - story.offsetTop) / span));
+    const p = span > 0 ? Math.min(0.9999, Math.max(0, (y - story.offsetTop) / span)) : 0;
     const at = p * chapters.length;
     const c = Math.floor(at);
     const local = at - c;
     if (story.getBoundingClientRect().top < vh * 2) {
       load(c);
       load(c + 1);
-      load(c - 1);
     }
     chapters.forEach((ch, i) => ch.classList.toggle("on", i === c));
+    films.forEach((v, i) => v.classList.toggle("on", i === c));
     pips.forEach((b, i) => {
       b.classList.toggle("on", i === c);
       b.setAttribute("aria-current", i === c ? "step" : "false");
       b.style.setProperty("--p", i < c ? "1" : i > c ? "0" : local.toFixed(3));
     });
-    draw(c, local);
+    seek(films[c], local);
   }
 
   let ticking = false;
@@ -130,10 +115,6 @@
     }
   }
   addEventListener("scroll", request, { passive: true });
-  addEventListener("resize", () => {
-    size();
-    request();
-  });
-  size();
+  addEventListener("resize", request);
   update();
 })();

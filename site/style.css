@@ -116,9 +116,11 @@ h1 b { font-weight: 600; }
 /* The window: the app's own, as captured, its corners and title bar its own */
 .window { filter: drop-shadow(0 24px 40px rgba(26, 31, 43, 0.22)) drop-shadow(0 6px 12px rgba(26, 31, 43, 0.12)); }
 .screen { position: relative; aspect-ratio: 16 / 10; }
-.screen img, .screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.screen img { object-fit: contain; transition: opacity 160ms linear; }
-.screen.playing img { opacity: 0; }
+.screen img, .screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+/* The story's films are the window recorded, on white: its corners are rounded here, as the window's are */
+.screen.film { border-radius: 1.5625% / 2.5%; overflow: hidden; }
+.screen video { opacity: 0; transition: opacity 160ms linear; }
+.screen video.on { opacity: 1; }
 @media (prefers-color-scheme: dark) {
   .window { filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.7)); }
 }
