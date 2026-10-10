@@ -19,12 +19,6 @@ export const ATOM_HOVER_RING_RADIUS_RATIO = 0.26; // world-units ratio
  * already begun editing.
  */
 export const DOUBLE_CLICK_MS = 500;
-/**
- * How long after a double-click on empty space its Quick Add opens, a
- * third click not having come: one quicker than that is a triple-click's,
- * a chain (a slower third still closes it and draws the chain).
- */
-export const QUICK_ADD_MS = 280;
 
 /**
  * How far a press has to travel to be a drag rather than a click, in px.

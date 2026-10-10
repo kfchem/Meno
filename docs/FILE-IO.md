@@ -350,8 +350,9 @@ How these behave:
     for the file, as now.
 - **Closing a tab with unsaved changes** offers Save, beside Keep and
   Discard.
-- **Export…** offers every kind a writer added writes, each written by
-  the one assigned:
+- **Export…** (on the selection's menu since 2026-10-10: what is
+  selected, Select all first for the whole page) offers every kind a
+  writer added writes, each written by the one assigned:
   - MOL, SDF, RXN, PDB and SVG, by Meno;
   - Gaussian's input, by its plugin, where it is added (step 7).
 

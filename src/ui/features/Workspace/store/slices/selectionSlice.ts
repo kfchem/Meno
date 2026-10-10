@@ -6,6 +6,17 @@ import { pathBetween } from "../../utils/selection";
 type SetState = StoreApi<EditorState>["setState"];
 
 const none = (): Sel => ({ atoms: new Set(), bonds: new Set() });
+
+/**
+ * Whether anything is selected - atoms or bonds, molecules in 3D, a
+ * workflow's sets or steps, pictures, texts' sheets - and whether any of it
+ * is the drawing's: what the keys act on, and whose menu a right-click on
+ * empty space opens.
+ */
+export function selectedOf(st: Pick<EditorState, "sel" | "sel3d" | "selFlow" | "selPictures" | "selTexts">): { any: boolean; drawing: boolean } {
+  const drawing = st.sel.atoms.size > 0 || st.sel.bonds.size > 0;
+  return { drawing, any: drawing || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0 || st.selPictures.size > 0 || st.selTexts.size > 0 };
+}
 const noFlow = (): SelFlow => ({ sets: new Set(), steps: new Set() });
 
 /**

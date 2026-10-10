@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
+import { selectedOf } from "./slices/selectionSlice";
 import { createWorkspaceDocument } from "../document";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 
@@ -316,6 +317,31 @@ describe("editor store over a document", () => {
     expect([...state().sel.bonds]).toEqual([bond.id]);
     doc.undo();
     expect(state().model.atoms.map((a) => a.id)).toEqual([c]);
+  });
+
+  it("takes what an undo takes back out of the selection, and nothing is left selected", () => {
+    const { doc, state } = editor();
+    state().addAtom(0, 0, "C");
+    state().pasteModel({
+      atoms: [
+        { id: 1, x: 5, y: 0, r: 0.9, el: "C" },
+        { id: 2, x: 6, y: 0, r: 0.9, el: "O" },
+      ],
+      bonds: [{ id: 1, a: 1, b: 2, order: 1 }],
+    });
+    expect(selectedOf(state())).toEqual({ any: true, drawing: true });
+    doc.undo();
+    // (nothing seen selected: a right-click on empty space opens the canvas's menu, not the selection's)
+    expect(state().sel.atoms.size + state().sel.bonds.size).toBe(0);
+    expect(state().selAnchor).toBeNull();
+    expect(selectedOf(state())).toEqual({ any: false, drawing: false });
+    // (what is still there stays selected: undo does not change the selection otherwise)
+    const kept = state().model.atoms[0].id;
+    state().setSel({ atoms: new Set([kept]), bonds: new Set() }, kept);
+    state().addAtom(9, 9, "N");
+    doc.undo();
+    expect([...state().sel.atoms]).toEqual([kept]);
+    expect(state().selAnchor).toBe(kept);
   });
 
   it("pastes a reaction with its arrow and plus, ids of their own, and selects all a group's atoms and bonds", () => {

@@ -70,6 +70,11 @@ export function createTextsSlice(doc: DocumentStore<WorkspaceDocument>, set: Set
         if (!next.delete(id)) next.add(id);
         return { ...prev, selTexts: next, pdfSel: null, pdfBox: null };
       }),
+    // (a double-click on the canvas, the column open: the work comes back to the canvas, and Quick Add waits for the next)
+    doubleClickOnEmpty: (q: NonNullable<EditorState["quickAdd"]>) => {
+      if (getState().textsOpen) getState().closeTexts();
+      else set({ quickAdd: q });
+    },
     closeTexts: () =>
       set((prev: EditorState) => {
         // (a PDF shown: its page goes back down to it on the page as the column shuts - docs/PDF.md; a text, to its sheet)

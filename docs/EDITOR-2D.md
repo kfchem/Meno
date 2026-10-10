@@ -51,12 +51,15 @@ and in particular:
   - A bond led within reach of an atom closes onto it, and so does one led
     onto an atom however far away - a long bond closes a ring too; the
     preview shows it closed before the button comes up.
-  - **Chains** (agreed 2026-10-03): three clicks on an atom, or on empty
-    space, draw a chain - led by a drag, or, the last click let go where it
-    was, traced with the button up until a click ends it; Escape lets it
-    go. The third click takes back the bond the double-click drew. (Two on
-    empty space drew one until 2026-10-08, when the maintainer gave the
-    double-click there to *Quick Add*, below.)
+  - **Chains** (agreed 2026-10-03): three clicks on an atom draw a chain,
+    and so does Quick Add's *Chain* from empty space - led by a drag, or,
+    the last click (or the press on the icon) let go where it was, traced
+    with the button up until a click ends it; Escape lets it go. The third
+    click takes back the bond the double-click drew. (Two clicks on empty
+    space drew one until 2026-10-08, when the maintainer gave the
+    double-click there to *Quick Add*, below; three did until 2026-10-10,
+    when the maintainer moved the chain from empty space into Quick Add, so
+    that Quick Add need not wait to see whether a third click comes.)
     - It runs on a honeycomb of the drawing's own lengths and angles laid
       out from its start (`utils/honeycomb`), turned so that a bond the
       atom already has is one of its own; across at 30 degrees from empty
@@ -151,6 +154,35 @@ molecule selects it. A right-click, or a press with two fingers,
 opens the menu for what is under the pointer; it waits for the button to
 come up, so a right drag is a move, not a menu.
 
+**A menu's first row is icons** (the maintainer, 2026-10-10: the menus had
+grown busy, and a row of icons for what is done most - as Windows has -
+was asked for). What is done most to the thing right-clicked comes first,
+each an icon at Quick Add's size, named as the pointer rests on it (with
+its key, if it has one), and Delete at the row's right end, always; the
+rest is listed under them, a row each as before (`PartMenu`, `menuIcons`).
+
+| Right-clicked | Icons | Listed |
+|---|---|---|
+| An atom | charge one up, one down, clean up its structure, its structure in 3D; Delete | unpaired electron, expand an abbreviation, select its structure |
+| A bond | clean up, 3D; Delete | select its structure |
+| The selection | cut, copy, paste (opened on empty space), clean up, 3D; Delete | copy as SMILES, export, turn over either way, use as input, save as abbreviation |
+| Empty space | paste, select all | open, save as, new text, fit, R and S, the texts, find in PDFs, drawing style, run all |
+| A molecule in 3D | cut, copy, the other look, reset its turn; Delete | measure, all its conformers, its lists, its output, turn like its drawing, make it again, draw its formula |
+| Words on the page | edit, align left, centre, right, justify; Delete | show in the PDF, as wide as its words |
+| A PDF | read, previous page, next page, an icon or full size; Delete | copy, put on the page, copy picture, spread or gather pages |
+| A text's sheet | read, an icon or full size; Delete | |
+| A picture | copy picture; Delete | show in the PDF |
+| A step | run (or stop), run from here, options; Delete | show log, show files, save as procedure |
+| A set, an arrow, a "+", a wire, a measurement | Delete | save as procedure (a set), arrow style (an arrow) |
+
+The icon that turns a molecule in 3D to its other look is where the
+second 3D style will go (decisions of 2026-10-10: one step from the
+right-click and double-click menus). An item that does not apply now - the
+previous page, on the first - is shown, but cannot be pressed, so that the
+icons keep their places. What Quick Add puts down - an arrow, a "+", words
+- is no longer on the menus on empty space; and what concerns the whole
+workspace is done by selecting all of it first.
+
 **Selecting**, the same in both views:
 
 | | Windows | macOS |
@@ -176,19 +208,28 @@ as it comes (`suppressDoubleClick`), not when the edit would begin. On a
 trackpad that taps to click, a long press is a press of
 the pad held.
 
-A triple-click on empty space begins a chain (above); a double-click and
-a drag that starts on an atom draws one bond out of it.
+A double-click and a drag that starts on an atom draws one bond out of it.
 
 **Quick Add** (the maintainer, 2026-10-08). A double-click on empty space
 opens, up and to the right of it, what can be put down there, each an
 icon - named as the pointer rests on it - and none in words: a bond
-(across at 30 degrees, as a chain from empty space begins), text, a
-reaction arrow and a "+". A choice puts it down where the double-click
-was; Escape, a press elsewhere or a turn of the wheel closes it. It opens
-QUICK_ADD_MS (0.28 s) after the double-click, a third click not having
-come: a quicker third click draws a chain instead, and a slower one still
-closes it and draws the chain. A double-click on an atom still draws one
-bond; on an arrow, a "+" or text, none of this (`Selection2D`, `QuickAdd`).
+(across at 30 degrees, as a chain from empty space begins), a chain, a
+SMILES, text, a reaction arrow and a "+". A choice puts it down where the
+double-click was; Escape, a press elsewhere or a turn of the wheel closes
+it. It opens as the second click's button comes up: a third click asks
+for nothing more (the chain is Quick Add's own since 2026-10-10 - before,
+Quick Add waited 0.28 s for a third click that would draw one, and the
+maintainer found it slow). *Chain* begins one where the double-click was,
+led by a drag from the icon or traced with the button up. *SMILES* opens a
+field below the row: Enter draws what is typed there, laid out by Meno's
+engine, centred where the double-click was and selected, as a paste is -
+the first time, once the plugin that reads SMILES is set up; what went
+wrong is said under the field. A double-click on an atom still draws one
+bond; on an arrow, a "+" or text, none of this (`Selection2D`, `QuickAdd`,
+`chainFrom`). With the column open beside the canvas (PDF.md, *One
+canvas*), a double-click on empty space shuts it instead - the work comes
+back to the canvas (the maintainer, 2026-10-10) - and the next opens
+Quick Add.
 After a thin rule, one more button - *Calculations* - opens below the
 row to the kinds of step a workflow can have (WORKFLOWS.md, *A step: from
 Quick Add*); a wire let go on empty space opens Quick Add at those alone.
@@ -208,13 +249,16 @@ highlight's colour, under the drawing, and a small handle stands above it.
   instead, once there is one: Delete or Backspace deletes it, and
   Ctrl/⌘+Shift+K cleans up every structure it is in.
 - A right-click on something selected, or on empty space, opens the
-  selection's menu: *Delete selection*, *Turn over left to right*, *Turn
-  over top to bottom*, *Clean up these structures*. Turning over is seeing
+  selection's menu (above): among its items *Delete selection*, *Turn
+  over left to right*, *Turn over top to bottom*, *Clean up these
+  structures* and *Export…*, which writes what is selected. Turning over is seeing
   the molecule from its other side, not its mirror image: the drawing is
   mirrored and every wedge on it becomes hashes and every hash a wedge, so
   each stereocentre keeps its configuration.
 - The selection is the view's, not the document's: undo does not change it,
-  and what an edit deletes leaves it.
+  and what an edit deletes leaves it - an undo too: a paste undone leaves
+  nothing selected (before 2026-10-10 its atoms stayed selected, unseen,
+  and a right-click on empty space opened the selection's menu).
 
 **Copy, cut and paste** (PR #68; pictures, PR #69). Ctrl/⌘ with C, X and
 V, as everywhere, and the same from the menus.
@@ -252,11 +296,10 @@ V, as everywhere, and the same from the menus.
 - A paste reads Meno's own record first, then a picture that carries one
   (Office's clip format, as Word and PowerPoint hand it back, or a PNG),
   then a MOL file, then plain text that is a MOL file or a SMILES (drawn by
-  the engine, as the SMILES card draws one).
+  the engine, as a SMILES typed in Quick Add is).
 - On empty space with nothing selected, a right-click opens *Paste* and
-  *Select all*; the selection's menu starts with *Cut*, *Copy* and *Copy
-  as SMILES*, and *Paste* when it was opened on empty space. Either, opened
-  on empty space, ends with *Add reaction arrow*, *Add plus* and *Add text*.
+  *Select all*; the selection's menu has *Cut*, *Copy* and *Copy as
+  SMILES*, and *Paste* when it was opened on empty space.
 
 ## Who does what
 
@@ -325,7 +368,7 @@ Both go together, because both touch every layer.
 - **Scope.** An application default; a document's own style over it; and
   per-bond and per-atom overrides over that (a coloured atom, a bold bond).
 - **Where it is set.** Settings holds the application's style, and
-  *Drawing style…* (Meno's menu, or a right-click on empty space) gives a
+  *Drawing style…* (a right-click on empty space) gives a
   document one of its own. Either is
   a preset - ACS 1996, RSC, Wiley or Nature - and what was changed from it;
   every setting has its name, description, unit and range in
@@ -484,8 +527,7 @@ All hover-based, as above.
   and the user's own, from Settings › Dictionary or a selection's *Save
   as abbreviation…*: docs/CTFILE.md, "Atoms that are not elements".
 - Reaction arrows, "+" and text: create, move, edit, delete. (An arrow or
-  a "+" is added from the menu a right-click on empty space opens, where it
-  was opened: the arrow pointing right, two and two-thirds of a bond long.
+  a "+" is added from Quick Add, where it was opened: the arrow pointing right, two and two-thirds of a bond long.
   Either is moved by dragging it and deleted by Delete or Backspace under
   the pointer, or from its menu. The arrow under the pointer shows a handle
   at each end: dragged, that end goes where the pointer goes and the other
@@ -496,9 +538,8 @@ All hover-based, as above.
 - **Text** (the maintainer, 2026-10-08: reagents' labels): words on the
   page - a reaction's reagents and conditions, or anything else
   (`lib/chem/captions`, `Captions2D`, `CaptionTyping2D`).
-  - Written in place, from Quick Add or the menu on empty space (*Add
-    text*); written anew as words are anywhere (the maintainer,
-    2026-10-10): a click on them puts the caret there, a drag on them
+  - Written in place, from Quick Add; written anew as words are anywhere
+    (the maintainer, 2026-10-10): a click on them puts the caret there, a drag on them
     selects letters from where it pressed, a second click selects a word
     and a third a line - the click that opened them counted among those -
     and their menu's *Edit text* puts the caret at their end. Enter keeps
@@ -674,7 +715,7 @@ traced from reference drawings.
   something to lose. (PR #43) Since 2026-10-06 (docs/FILE-IO.md), Save and
   Save As write the workspace (`.meno`) alone; MOL, SDF, RXN and SVG are
   written by Export; and closing offers Save beside Close without saving.
-- Open (Ctrl/Cmd+O, or Meno's menu) puts a file in a tab of its own - or
+- Open (Ctrl/Cmd+O, or the menu on empty space) puts a file in a tab of its own - or
   in place of a blank canvas - named for the file; text goes into the
   column of the workspace in front (docs/WORKSPACE.md, *Texts*). The canvas is saved
   nowhere then: Save asks where, suggesting that name. A save names the
@@ -682,16 +723,21 @@ traced from reference drawings.
   document's name either way.
 - Import that keeps charges, isotopes, radicals, atom lists and S-groups, and
   V3000 reactions.
-- SMILES in and out. (PR #52: a SMILES card on the canvas)
+- SMILES in and out: in from Quick Add's *SMILES* (2026-10-10; a card on
+  the canvas before, PR #52), out by *Copy as SMILES* in the selection's
+  menu.
 - SVG export, drawn exactly as on the canvas - with the drawing style it was
   drawn in - and PNG. The SVG export draws what the canvas draws (PR #36),
   at ACS 1996's own size (PR #43); PNG to come.
-- No buttons on the canvas (2026-10-04): Open (Ctrl/Cmd+O), Save, Save As,
-  Export, SMILES, Clean up all, Fit to content (Ctrl/Cmd+1), R and
-  S, and Drawing style are in Meno's menu, from its logo, and - all but the
-  files - on the right-click menu on empty space. Open puts a file in a tab
-  of its own, never over what is drawn; a file dropped on the drawing is
-  added to it.
+- No buttons on the canvas (2026-10-04): Open (Ctrl/Cmd+O), Save As, New
+  text, Fit to content (Ctrl/Cmd+1), R and S and Drawing style are on the
+  right-click menu on empty space; Save is a button in the title bar, by
+  Settings, and Ctrl/Cmd+S; Export is on the selection's menu; Clean-up
+  and 3D structures of everything are Select all and the selection's menu
+  (or Ctrl/Cmd+Shift+K on nothing); a SMILES is drawn from Quick Add.
+  (Meno's menu, from its logo, held them until 2026-10-10.) Open puts a
+  file in a tab of its own, never over what is drawn; a file dropped on
+  the drawing is added to it.
 - The clipboard, for Word and PowerPoint: a vector picture in each platform's
   own form (EMF on Windows, PDF on macOS), PNG and MOL alongside it.
   Agreed 2026-09-29: the structure is re-edited from Office - on Windows by

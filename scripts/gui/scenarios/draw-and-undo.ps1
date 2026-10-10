@@ -1,4 +1,4 @@
-# Draw a chain from empty space, undo it once, and look for what is left.
+# Draw a chain from empty space (Quick Add's), undo it once, and look for what is left.
 #
 # A drawing gesture is one undo step: a single Ctrl/Cmd+Z takes all of it
 # away. What used to be left behind - the two new carbons, without their
@@ -15,10 +15,10 @@ Send-MenoShortcut 1                          # fit to content
 Wait-MenoSettled | Out-Null
 Save-Step "fitted"
 
-# Empty space above the chain; two clicks there start a chain at the
+# Empty space above the chain; Quick Add's chain there starts one at the
 # point, traced with the button up some two bonds to the right and ended by
 # a click.
-Invoke-MenoClick -X 1500 -Y 180 -Count 2
+Invoke-MenoQuickAdd -X 1500 -Y 180 -Item Chain
 Move-MenoPointerAlong -Path @(@(1560, 180), @(1620, 180), @(1680, 180), @(1740, 180), @(1800, 180), @(1860, 180))
 Invoke-MenoClick -X 1860 -Y 180
 Wait-MenoSettled | Out-Null

@@ -5,6 +5,7 @@ import {
   exportKinds,
   exportPxPerWorld,
   fileNameOf,
+  holdsOfDrawn,
   structureFileText,
   suggestedExportPath,
   suggestedSavePath,
@@ -97,6 +98,17 @@ describe("Export", () => {
     expect(exportKindOf({ savedPath: "/work/a.meno", openedName: "b.sdf" }, structure)).toBeUndefined();
     expect(suggestedExportPath({ savedPath: null, openedName: "/data/b.sdf" }, structure, "svg")).toBe("/data/b.svg");
     expect(suggestedExportPath({ savedPath: null, openedName: null }, structure, "sdf")).toBe("structure.sdf");
+  });
+
+  it("offers what a selection can be written as, by what it holds, whatever else the page holds", () => {
+    const atom = { id: 1, x: 0, y: 0, r: 0.9, el: "C" };
+    // (a structure selected beside a reaction's arrow left out: a MOL file first, no RXN)
+    expect(holdsOfDrawn({ atoms: [atom], bonds: [] })).toEqual(structure);
+    expect(exportKinds(holdsOfDrawn({ atoms: [atom], bonds: [], arrows: [] }))).toEqual(["mol", "sdf", "svg"]);
+    expect(holdsOfDrawn({ atoms: [atom], bonds: [], arrows: [{ id: 1, x: 2, y: 0, angle: 0, length: 2 }] })).toEqual(reaction);
+    // (a molecule in 3D selected alone)
+    const carried = { atoms: [], bonds: [], molecules3d: [{ name: "m", atoms: [], bonds: [], at: { x: 0, y: 0 } }] } as unknown as Parameters<typeof holdsOfDrawn>[0];
+    expect(holdsOfDrawn(carried)).toEqual(solid);
   });
 
   it("offers kinds Meno writes, each named, with its options' defaults among their choices", () => {

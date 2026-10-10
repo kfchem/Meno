@@ -177,5 +177,6 @@ export function useClipboardActions(
     [store, onError],
   );
 
-  return useMemo(() => ({ copy, cut, paste, copySmiles, copyPicture }), [copy, cut, paste, copySmiles, copyPicture]);
+  // (what a copy would take - the selection, as it is seen - for Export to write)
+  return useMemo(() => ({ copy, cut, paste, copySmiles, copyPicture, part }), [copy, cut, paste, copySmiles, copyPicture, part]);
 }

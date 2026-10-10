@@ -350,8 +350,8 @@ Conformers go through a workflow as any set does (decided):
 | | *Run from here* - this step and every step after it |
 | | *Stop* - while it is waiting or running |
 | | *Show log*, *Show files*, *Options…*, *Delete step* |
-| Meno's menu | *Run all* - every step on the page that has not run or has changed, in order |
-| | *Stop all* |
+| The menu on empty space | *Run all* - every step on the page that has not run or has changed, in order |
+| | *Stop all* - while any runs |
 
 No key starts a run (decided: menus, at first). Steps run in the order
 their wires give; steps that do not depend on one another may run at
@@ -754,7 +754,8 @@ Not yet, and where it comes:
 
 Built: *Run from here* in a step's menu - the step and every step after
 it, those that take what it gives and those after them; *Run all* and
-*Stop all* in Meno's menu, under *Calculations* - every step that has not
+*Stop all* in Meno's menu, under *Calculations* (on the right-click menu
+on empty space since 2026-10-10) - every step that has not
 run or has changed, in the order their wires give; steps that do not wait
 on one another run at once, their jobs queued as Settings allows; a step
 after one that failed is not run. A step keeps its earlier runs: opened,
