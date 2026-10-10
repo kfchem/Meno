@@ -69,6 +69,26 @@ describe("a text's colours, by Lezer's grammars", () => {
     expect(wrongs(await coloured("a.json", broken), broken).length).toBeGreaterThan(0);
   });
 
+  it("are Markdown's: headings, code, addresses, its marks grey - its code in Python as Python's", async () => {
+    const md = "# Rates *fast*\n\nSee `x` at <https://a.org>.\n\n- item\n\n```python\ndef f(): pass\n```\n";
+    const c = await coloured("notes.md", md);
+    expect(toned(c, md, 0)).toEqual([
+      ["#", "comment"],
+      [" Rates ", "name"],
+      ["*", "comment"],
+      ["fast", "name"],
+      ["*", "comment"],
+    ]);
+    expect(toned(c, md, 2)).toEqual(expect.arrayContaining([["x", "string"], ["https://a.org", "property"]]));
+    expect(toned(c, md, 4)).toEqual([["-", "comment"]]);
+    expect(toned(c, md, 7)).toEqual([
+      ["def", "keyword"],
+      ["f", "name"],
+      ["pass", "keyword"],
+    ]);
+    expect(wrongs(c, md)).toEqual([]);
+  });
+
   it("are a long text's as far as it is read, and again from where it changed", async () => {
     const rows = Array.from({ length: 40_000 }, (_, i) => `  {"step": ${i}, "energy": -76.4},`);
     const text = `[\n${rows.join("\n")}\n  {"step": -1}\n]\n`;
