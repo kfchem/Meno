@@ -1055,10 +1055,10 @@ who reads and writes each kind: [`FILE-IO.md`](./FILE-IO.md); what plugins
 do beyond files, and which are kept running: [`PLUGINS.md`](./PLUGINS.md).
 
 The kinds, as the table of kinds has them (`lib/io/kinds.ts`, `MENO_KINDS`),
-with the kinds Meno writes (`lib/io/writers.ts`, `WRITERS`) and those the
-plugins Meno carries bring and write (their manifests,
-`src-tauri/resources/plugins/*/manifest.json`). A plugin's kinds are
-registered only while it is added. `src/lib/io/architecture.test.ts` checks
+with the kinds Meno writes (`lib/io/writers.ts`, `WRITERS`) and every kind
+the plugins Meno carries know - those they read, write, or only colour as
+text (their manifests' `kinds`, `src-tauri/resources/plugins/*/manifest.json`).
+A plugin's kinds are registered only while it is added. `src/lib/io/architecture.test.ts` checks
 that every kind of these is in this table, by its id, and no other.
 
 | Kind | Id | Files | Told by | Read by | Written by | Becomes |
@@ -1075,6 +1075,7 @@ that every kind of these is in this table, by its id, and no other.
 | Calculation programs' outputs (cclib's) | `adf`, `cfour`, `dalton`, `gamess`, `gamess-uk`, `gaussian`, `gaussian-fchk`, `jaguar`, `molcas`, `molpro`, `mopac`, `nwchem`, `orca`, `psi4`, `qchem`, `turbomole`, `xtb` | each its own: `.out`, `.log`, `.fchk`... | each program's banner, as cclib's manifest brings it | cclib (plugin, uv); `orca`, `gaussian` and `gaussian-fchk` also PySCF | never | a molecule in 3D, each geometry a frame - its bonds by distance, frame by frame - and what the calculation found |
 | Molden file | `molden` | `.molden`, `.mld` | `[Molden Format]`, as PySCF's manifest brings it | PySCF (plugin, pixi) | never | a molecule in 3D, its orbitals and densities promises |
 | Gaussian input | `gaussian-input` | `.gjf`, `.com` | - | never | Export, by the Gaussian plugin (uv, Python alone) | - |
+| ORCA input | `orca-input` | `.inp` | its name, and what its lines begin with (`!`, `%`, `*`), as the ORCA interface's manifest brings it | the workspace, as text coloured by the plugin's grammar, while it is added | never | a text in the workspace's column |
 | KET | - | `.ket` | - | not read | never | Open does not offer it; one dropped says "not supported yet" |
 | Text | - | anything not told otherwise | its name, or nothing else telling it; dropped, no NUL in its start (`opensAsText`) | the workspace, as it is | Export, from the column of texts (`TextColumn.tsx`) | a text the workspace holds, in its column; saved in `.meno` |
 

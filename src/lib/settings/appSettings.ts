@@ -13,6 +13,7 @@ import { acceptStyleChoice } from "../chem/styleFields";
 import { acceptStyle3dChoice, DEFAULT_STYLE_3D_CHOICE, type Style3DChoice } from "../chem/style3d";
 import { setCustomAbbreviations, structureProblem, type CustomAbbreviation } from "../chem/abbreviations";
 import type { OptionValues } from "../options";
+import { isRole } from "../plugins/roles";
 
 /**
  * The application's own settings: what applies to every tab unless a tab
@@ -243,7 +244,8 @@ function acceptPlugins(raw: unknown): PluginSettings {
   const removed = Array.isArray(r.removed) ? [...new Set(r.removed.filter(id))] : [];
   const roles: Record<string, string> = {};
   if (r.roles && typeof r.roles === "object" && !Array.isArray(r.roles)) {
-    for (const [role, plugin] of Object.entries(r.roles)) if (id(role) && id(plugin)) roles[role] = plugin;
+    // (the roles Meno defines only)
+    for (const [role, plugin] of Object.entries(r.roles)) if (isRole(role) && id(plugin)) roles[role] = plugin;
   }
   // (each a place the chemist located: a full path, of some length)
   const programs: Record<string, string> = {};

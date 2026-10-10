@@ -905,7 +905,7 @@ function WorkspaceContent({
     if (!stereoLabels) return;
     // asked for: what labels them set up now, if it has not been
     setChemError(null);
-    chemWorker("stereo-labels").catch((e: unknown) => {
+    chemWorker("checks").catch((e: unknown) => {
       setChemistry({ ...useAppSettings.getState().chemistry, stereoLabels: false });
       setChemError(
         `R and S cannot be shown: ${e instanceof Error ? e.message : String(e)}`,

@@ -61,7 +61,8 @@ export type PluginGrammar = { plugin: string; decl: GrammarDecl };
 /**
  * A kind of text a plugin knows by its files' names - one it writes, or an
  * input to its program written by hand - coloured by its grammar: told by
- * its name, and, where it says, by what one of its first lines begins with.
+ * its name, and, where it says, by what one of its first lines begins with
+ * (the manifest's `lines`, each a mark at a line's start).
  */
 export type TextKind = { id: string; extensions: readonly string[]; marks: readonly Mark[]; grammar: PluginGrammar };
 
@@ -106,7 +107,8 @@ export function registered(manifests: readonly Manifest[]): { kinds: Kind[]; ref
   const brought = new Map<string, Kind>();
   const own = new Set(Object.values(MENO_KINDS).map((k) => k.id as string));
   for (const m of manifests) {
-    for (const k of m.kinds) {
+    // (the kinds it reads: one it only colours or writes is no file Meno takes in by it)
+    for (const k of m.kinds.filter((k) => m.reads.includes(k.id))) {
       if (own.has(k.id)) continue;
       const marks = k.marks.filter((mark) => {
         const claims = samples.some((s) => holdsMark(s, mark));
@@ -130,10 +132,14 @@ export function registered(manifests: readonly Manifest[]): { kinds: Kind[]; ref
       );
     }
   }
-  const texts = manifests.flatMap((m) => [
-    ...m.writes.flatMap((w): TextKind[] => (w.grammar ? [{ id: w.id, extensions: w.extensions, marks: [], grammar: { plugin: m.id, decl: w.grammar } }] : [])),
-    ...m.texts.map((t): TextKind => ({ id: t.id, extensions: t.extensions, marks: t.marks, grammar: { plugin: m.id, decl: t.grammar } })),
-  ]);
+  // (the kinds it knows but does not read - those it writes, inputs to its program written by hand - as texts it colours)
+  const texts = manifests.flatMap((m) =>
+    m.kinds.flatMap((k): TextKind[] =>
+      !m.reads.includes(k.id) && k.grammar && k.extensions.length
+        ? [{ id: k.id, extensions: k.extensions, marks: k.lines.map((line) => ({ text: line, at: "line-start" as const })), grammar: { plugin: m.id, decl: k.grammar } }]
+        : [],
+    ),
+  );
   return { kinds: [...Object.values(MENO_KINDS), ...brought.values()], refused, texts };
 }
 

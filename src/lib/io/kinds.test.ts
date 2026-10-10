@@ -139,9 +139,9 @@ describe("kinds a plugin registers", () => {
       id: "nbo",
       name: "NBO",
       version: "7",
-      environment: { maker: "uv", lock: "requirements.lock" },
-      worker: "worker.py",
-      reads: ["nbo-out", "gaussian"],
+      environment: "uv",
+      // (every kind it brings, read: one it only colours is no file Meno takes in)
+      reads: ["gaussian", ...kinds.map((k) => (k as { id: string }).id)],
       kinds,
     })!;
 
@@ -195,7 +195,11 @@ describe("kinds a plugin registers", () => {
   });
 
   it("may not be told by marks too short to tell anything: what a molfile holds, say", () => {
-    expect(nbo([{ id: "short", name: "Short", program: "S", extensions: [], marks: [{ text: "V2000" }, { text: "M  END" }] }]).kinds).toEqual([]);
+    // (marks that short are not read; a kind it reads that is told no other way is not read either)
+    const short = nbo([{ id: "short", name: "Short", program: "S", extensions: [], marks: [{ text: "V2000" }, { text: "M  END" }] }]);
+    expect(short.kinds[0].marks).toEqual([]);
+    expect(short.reads).toEqual(["gaussian"]);
+    expect(registered([short]).kinds.map((k) => k.id)).not.toContain("short");
   });
 
   it("told only by asking their plugin, are asked about only for files of their names", () => {
