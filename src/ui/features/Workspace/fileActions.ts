@@ -49,6 +49,13 @@ export const holdsOf = (state: Pick<EditorState, "molecules3d" | "arrows" | "mod
   drawn: state.model.atoms.length > 0,
 });
 
+/** What a part of the canvas holds - the selection, say - as far as what it can be exported as goes. */
+export const holdsOfDrawn = (part: Drawn): Holds => ({
+  solid: (part.molecules3d?.length ?? 0) > 0,
+  reaction: (part.arrows?.length ?? 0) > 0,
+  drawn: part.atoms.length > 0,
+});
+
 /**
  * What a canvas can be exported as, the one suggested first (docs/FILE-IO.md:
  * Save writes a workspace, everything else is Export): a reaction, as an
@@ -369,19 +376,20 @@ export function useFileActions(nameTab?: (label: string) => void) {
   }, [attempt, saveAs, saveTo, store]);
 
   /**
-   * The canvas written by `writer` with `options`, where the chemist says:
-   * by Meno - a MOL, SD or RXN file, a picture - or by a plugin, given the
+   * `part` of the canvas - the selection, as a copy takes it - or else all
+   * of it, written by `writer` with `options`, where the chemist says: by
+   * Meno - a MOL, SD or RXN file, a picture - or by a plugin, given the
    * molecules in 3D `molecules` (by id) as one molecule (utils/written) and
    * giving back the file's text, which Meno writes.
    */
   const exportAs = useCallback(
-    (writer: Writer, options: OptionValues, molecules: readonly number[] = []) =>
+    (writer: Writer, options: OptionValues, molecules: readonly number[] = [], part?: Drawn) =>
       attempt("Export", async () => {
         const state = store.getState();
         const ext = extensionOf(writer);
         const picked = await saveDialog({
           title: "Export",
-          defaultPath: suggestedExportPath(state, holdsOf(state), ext, state.openedName ? await takenBeside(withExtension(state.openedName, ext), (p) => exists(p)) : undefined),
+          defaultPath: suggestedExportPath(state, part ? holdsOfDrawn(part) : holdsOf(state), ext, state.openedName ? await takenBeside(withExtension(state.openedName, ext), (p) => exists(p)) : undefined),
           filters: [{ name: writer.name, extensions: writer.extensions.map((e) => e.slice(1)) }],
         });
         if (!picked) return;
@@ -397,8 +405,8 @@ export function useFileActions(nameTab?: (label: string) => void) {
           return;
         }
         const kind = writer.id as WriterId;
-        // (everything on the canvas, the molecules in 3D as they are seen)
-        const drawn = { ...drawnOf(state), molecules3d: carriedOf(state) };
+        // (the part, or everything on the canvas - the molecules in 3D as they are seen)
+        const drawn = part ?? { ...drawnOf(state), molecules3d: carriedOf(state) };
         if (kind === "svg") {
           // The style the canvas is drawn in: the document's own, or the app's.
           const style = styleOf(state.docStyle ?? useAppSettings.getState().drawingStyle);

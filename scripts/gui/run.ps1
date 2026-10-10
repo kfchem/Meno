@@ -128,36 +128,6 @@ function Open-MenoFile {
     Wait-MenoSettled -TimeoutMs 8000 | Out-Null
 }
 
-function Invoke-MenoMenu {
-    <#
-      .SYNOPSIS
-      A command from Meno's menu, the one its logo opens at the top left:
-      Invoke-MenoMenu "Clean up all" cleans up everything drawn.
-
-      .DESCRIPTION
-      The items are where a workspace in front has them, read off a
-      Mac's shot (2560x1720); the menu is at the window's left, so they do
-      not move with its size. On a Mac the logo, and the menu under it, sit
-      to the right of the system's window buttons (SYSTEM_BUTTONS_ROOM in
-      src/ui/layouts/WindowButtons.tsx, 80 px, 160 in a shot). Three dots
-      stand for the ellipsis. A canvas holding texts has *Show texts* or
-      *Hide texts* after *Show R and S*, and *Drawing style...* a row lower.
-    #>
-    param([Parameter(Mandatory)] [ValidateSet(
-        "Open...", "Save", "Save As...", "Export...", "New text", "Clean up all",
-        "3D structures", "Fit to content", "Show R and S", "Drawing style...")] [string] $Item)
-    $at = @{
-        "Open..." = 170; "Save" = 234; "Save As..." = 298; "Export..." = 362; "New text" = 426
-        "Clean up all" = 550; "3D structures" = 614; "Fit to content" = 740
-        "Show R and S" = 804; "Drawing style..." = 930
-    }
-    $dx = if ($onMac) { 160 } else { 0 }
-    Invoke-MenoClick -X (42 + $dx) -Y 42
-    Start-Sleep -Milliseconds 400
-    Invoke-MenoClick -X (200 + $dx) -Y $at[$Item]
-    Start-Sleep -Milliseconds 300
-}
-
 function Invoke-MenoQuickAdd {
     <#
       .SYNOPSIS
@@ -218,7 +188,8 @@ function Add-MenoSmiles {
 function Save-MenoFile {
     <#
       .SYNOPSIS
-      Save the canvas in front under a path, through Save As in Meno's menu.
+      Save the canvas in front under a path, through Save As
+      (Ctrl/Cmd+Shift+S).
 
       .DESCRIPTION
       Save As asks where whatever the canvas was saved as before, so a
@@ -227,7 +198,7 @@ function Save-MenoFile {
     #>
     param([Parameter(Mandatory)] [string] $Path)
     if (Test-Path $Path) { throw "'$Path' is there already: save under a new name, or the system asks whether to replace it" }
-    Invoke-MenoMenu -Item "Save As..."
+    Send-MenoShortcut S -Shift
     Complete-SaveDialog -Path $Path
     Get-MenoWindow -ProcessName Meno -TimeoutSec 10 | Out-Null
     Set-MenoWindow -Width $Width -Height $Height

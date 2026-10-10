@@ -337,7 +337,7 @@ Both go together, because both touch every layer.
 - **Scope.** An application default; a document's own style over it; and
   per-bond and per-atom overrides over that (a coloured atom, a bold bond).
 - **Where it is set.** Settings holds the application's style, and
-  *Drawing style…* (Meno's menu, or a right-click on empty space) gives a
+  *Drawing style…* (a right-click on empty space) gives a
   document one of its own. Either is
   a preset - ACS 1996, RSC, Wiley or Nature - and what was changed from it;
   every setting has its name, description, unit and range in
@@ -629,7 +629,7 @@ traced from reference drawings.
   something to lose. (PR #43) Since 2026-10-06 (docs/FILE-IO.md), Save and
   Save As write the workspace (`.meno`) alone; MOL, SDF, RXN and SVG are
   written by Export; and closing offers Save beside Close without saving.
-- Open (Ctrl/Cmd+O, or Meno's menu) puts a file in a tab of its own - or
+- Open (Ctrl/Cmd+O, or the menu on empty space) puts a file in a tab of its own - or
   in place of a blank canvas - named for the file; text goes into the
   column of the workspace in front (docs/WORKSPACE.md, *Texts*). The canvas is saved
   nowhere then: Save asks where, suggesting that name. A save names the
@@ -643,12 +643,15 @@ traced from reference drawings.
 - SVG export, drawn exactly as on the canvas - with the drawing style it was
   drawn in - and PNG. The SVG export draws what the canvas draws (PR #36),
   at ACS 1996's own size (PR #43); PNG to come.
-- No buttons on the canvas (2026-10-04): Open (Ctrl/Cmd+O), Save, Save As,
-  Export, SMILES, Clean up all, Fit to content (Ctrl/Cmd+1), R and
-  S, and Drawing style are in Meno's menu, from its logo, and - all but the
-  files - on the right-click menu on empty space. Open puts a file in a tab
-  of its own, never over what is drawn; a file dropped on the drawing is
-  added to it.
+- No buttons on the canvas (2026-10-04): Open (Ctrl/Cmd+O), Save As, New
+  text, Fit to content (Ctrl/Cmd+1), R and S and Drawing style are on the
+  right-click menu on empty space; Save is a button in the title bar, by
+  Settings, and Ctrl/Cmd+S; Export is on the selection's menu; Clean-up
+  and 3D structures of everything are Select all and the selection's menu
+  (or Ctrl/Cmd+Shift+K on nothing); a SMILES is drawn from Quick Add.
+  (Meno's menu, from its logo, held them until 2026-10-10.) Open puts a
+  file in a tab of its own, never over what is drawn; a file dropped on
+  the drawing is added to it.
 - The clipboard, for Word and PowerPoint: a vector picture in each platform's
   own form (EMF on Windows, PDF on macOS), PNG and MOL alongside it.
   Agreed 2026-09-29: the structure is re-edited from Office - on Windows by

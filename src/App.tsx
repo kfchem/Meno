@@ -24,6 +24,7 @@ import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
 import { keepClipboard, keepPageUnselected, openIntent, undoIntent } from "./lib/doc/shortcuts";
 import { saverOf } from "./lib/doc/savers";
+import { useOpenAsked } from "./ui/layouts/commands";
 import { isBlankDocument, type WorkspaceDocument } from "./ui/features/Workspace/document";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "@tauri-apps/api/core";
@@ -475,6 +476,10 @@ export default function App() {
       dispatch({ type: "ADD_TAB", tab: viewRegistry.workspace.create("Workspace") });
     },
     openFiles: pickFiles,
+    // (the workspace in front, as Ctrl/Cmd+S saves it)
+    ...(state.activeId && state.tabsById[state.activeId]?.content.kind === "workspace"
+      ? { save: () => void saverOf(state.activeId!)?.() }
+      : {}),
     openByKind: async (kind: TabKind, opts?: { label?: string }) => {
       // There is one Settings tab: asking again brings it to the front.
       if (kind === "settings") {
@@ -501,6 +506,8 @@ export default function App() {
   const ctlNow = useRef(ctl);
   ctlNow.current = ctl;
   useEffect(() => useSettingsAsked.subscribe(() => void ctlNow.current.openByKind?.("settings", { label: "Settings" })), []);
+  // (Open… asked for from inside a view - the menu on empty space - as Ctrl/Cmd+O)
+  useEffect(() => useOpenAsked.subscribe(() => void pickRef.current()), []);
 
   const resolveView = useCallback(
     (kind: string): ViewEntry | Promise<ViewEntry> => {

@@ -55,6 +55,9 @@ export type MenuClipboard = {
 
 type Item = { name: string; keys: string; run: () => void; divider?: boolean; checked?: boolean };
 
+/** What the workspace does as a whole, offered on empty space: a rule above it where `divider` says. */
+export type CanvasCommand = { name: string; keys: string; run: () => void; divider?: boolean };
+
 /** What can be done to a molecule in 3D from the menu. */
 export type MenuMolecule3D = {
   /** How it is drawn: the menu offers the other. */
@@ -116,6 +119,7 @@ export default function PartMenu({
   onSaveProcedure,
   onUseAsInput,
   onSaveAbbreviation,
+  onExport,
   canvas = [],
   clipboard,
   molecule3d,
@@ -182,8 +186,10 @@ export default function PartMenu({
   onUseAsInput?: () => void;
   /** The selection saved as an abbreviation of the user's own. */
   onSaveAbbreviation: () => void;
-  /** What the canvas does as a whole - fit, R and S, its style - offered on empty space. */
-  canvas?: { name: string; keys: string; run: () => void }[];
+  /** The selection exported - written as a file of another kind - where the menu is the selection's. */
+  onExport?: () => void;
+  /** What the workspace does as a whole - open, save as, fit, R and S, its style - offered on empty space. */
+  canvas?: CanvasCommand[];
   clipboard: MenuClipboard;
   /** The molecule in 3D right-clicked, when it is one. */
   molecule3d?: MenuMolecule3D;
@@ -344,6 +350,7 @@ export default function PartMenu({
           ...(molecule.length ? [...molecule, { ...cutItem, divider: true }] : [cutItem]),
           { name: "Copy", keys: shortcut("C"), run: clipboard.onCopy },
           ...(drawing ? [{ name: "Copy as SMILES", keys: "", run: clipboard.onCopySmiles }] : []),
+          ...(onExport ? [{ name: "Export…", keys: "", run: onExport }] : []),
           // (on empty space, a paste goes there)
           ...(target.kind == null ? [paste] : []),
           { name: "Delete selection", keys: deleteKey, run: onDelete, divider: true },
@@ -365,7 +372,7 @@ export default function PartMenu({
             paste,
             { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll },
             ...scheme,
-            ...canvas.map((item, i) => ({ ...item, divider: i === 0 })),
+            ...canvas.map((item, i) => ({ ...item, divider: i === 0 || item.divider })),
           ]
         : [
           {

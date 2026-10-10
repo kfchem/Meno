@@ -53,9 +53,9 @@ import { WRITER_PLUGINS } from "../../../lib/calc/catalog";
 import { useReaders } from "../../../lib/calc/workers";
 import { offeredNames, writtenOf } from "./utils/written";
 import { carriedOf } from "./utils/workspace";
-import PartMenu, { type MenuMolecule3D, type MenuTarget } from "./PartMenu";
+import PartMenu, { type CanvasCommand, type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { currentStyle3D, useStyle3D } from "./style3d";
-import { offerCommands, type CommandGroup } from "../../layouts/commands";
+import { askToOpen } from "../../layouts/commands";
 import { chosenPath, frameOf, lookOf, poseOf, seenBounds, solidOf } from "./utils/molecule3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/roles/molblock";
@@ -86,7 +86,7 @@ import { valuesOf } from "../../../lib/options";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { cleanUp } from "./chem/cleanUp";
 import { useChemMarks } from "./chem/useChemMarks";
-import { exportKindOf, exportKinds, holdsOf, useFileActions, type Holds } from "./fileActions";
+import { exportKindOf, exportKinds, holdsOfDrawn, useFileActions, type Holds } from "./fileActions";
 import { setSaver } from "../../../lib/doc/savers";
 import { useReadings } from "../../../lib/calc/readings";
 import { CANVAS_DPR } from "./constants";
@@ -127,7 +127,7 @@ import { blocksOf, boxOf, conformersOf, formulaOf, formulaPlace, likeOf, linkOf,
 import { centredAt } from "./utils/copyPaste";
 import { Remake3D } from "./components/remake3d";
 import { turnOnto } from "./utils/align3d";
-import type { Molecule3D, PictureFrom, WordsFrom } from "./store/types";
+import type { Drawn, Molecule3D, PictureFrom, WordsFrom } from "./store/types";
 import { resultKey, resultsOn } from "../../../lib/calc/results";
 import { titled } from "../../../lib/calc/sources";
 import { missingFor } from "./workflow/doers";
@@ -253,13 +253,11 @@ function WorkspaceContent({
   const setChemistry = useAppSettings((s) => s.setChemistry);
   const chem = useChem();
   const [chemError, setChemError] = useState<string | null>(null);
-  const [cleaning, setCleaning] = useState(false);
   const cleaningNow = useRef(false); // one clean-up at a time, keys included
   const runCleanUp = useCallback(
     (aroundAtom: number | Iterable<number> | null) => {
       if (cleaningNow.current) return;
       cleaningNow.current = true;
-      setCleaning(true);
       setChemError(null);
       cleanUp(store, aroundAtom)
         .catch((e: unknown) =>
@@ -269,7 +267,6 @@ function WorkspaceContent({
         )
         .finally(() => {
           cleaningNow.current = false;
-          setCleaning(false);
         });
     },
     [store],
@@ -922,106 +919,69 @@ function WorkspaceContent({
   const dropRef = useRef<HTMLDivElement>(null);
   useDropZone(dropRef, dropZone);
   // Export: the kind and its options asked in a card over the canvas, then the file's name
-  const [exporting, setExporting] = useState<{ writers: Writer[]; from?: string; what: Holds; molecules: Offered3D[]; selected: number[] } | null>(null);
+  const [exporting, setExporting] = useState<{ writers: Writer[]; from?: string; what: Holds; molecules: Offered3D[]; selected: number[]; part: { part: Drawn; ids3d: number[] } } | null>(null);
 
-  // What the canvas does besides drawing - saving, fitting, R and S, its
-  // style, its texts - offered to the app's menu while its tab is in front,
-  // and on empty space in the right-click menu; the keys say the same.
+  // Export: what is selected - its structures, arrows and words, its
+  // molecules in 3D - as Meno writes it, or a plugin added that writes
+  // molecules in 3D, where it holds any (the maintainer, 2026-10-10: Export
+  // is for the selection; the whole page, by Select all first)
+  const startExport = (taken: { part: Drawn; ids3d: number[] }) => {
+    const state = store.getState();
+    const what = holdsOfDrawn(taken.part);
+    const added = useReaders.getState().state;
+    const theirs = what.solid ? pluginWriters(WRITER_PLUGINS.filter((p) => added[p.id] === "added")) : [];
+    const names = offeredNames(state.molecules3d);
+    const molecules = state.molecules3d.flatMap((m, i) => (taken.ids3d.includes(m.id) ? [{ id: m.id, name: names[i] }] : []));
+    setExporting({ writers: [...exportKinds(what).map((k) => WRITERS[k]), ...theirs], from: exportKindOf(state, what), what, molecules, selected: taken.ids3d, part: taken });
+  };
+
+  // What the workspace does as a whole - opening, saving as, fitting, R and
+  // S, its texts, its style, its workflow - on the right-click menu on empty
+  // space; the keys say the same. (Save is the title bar's, and Ctrl/Cmd+S.)
   const texts = useEditor((s) => s.texts);
   const steps = useEditor((s) => s.steps);
   const textsOpen = useEditor((s) => s.textsOpen);
   const reading = useEditor((s) => s.pdfs.some((p) => p.reading));
   const pdfsHeld = useEditor((s) => s.pdfs.length > 0);
-  const commandsNow = useRef<() => CommandGroup[]>(() => []);
-  commandsNow.current = () => [
-    {
-      title: "File",
-      items: [
-        { name: "Save", keys: shortcutLabel("S"), run: () => void save() },
-        { name: "Save As…", keys: shortcutLabel("S", true), run: () => void saveAs() },
-        {
-          name: "Export…",
-          run: () => {
-            const state = store.getState();
-            const what = holdsOf(state);
-            // (Meno's own, and the plugins' added that write molecules in 3D, where the page holds any)
-            const added = useReaders.getState().state;
-            const theirs = what.solid ? pluginWriters(WRITER_PLUGINS.filter((p) => added[p.id] === "added")) : [];
-            const names = offeredNames(state.molecules3d);
-            const molecules = state.molecules3d.map((m, i) => ({ id: m.id, name: names[i] }));
-            const selected = state.molecules3d.filter((m) => state.sel3d.has(m.id)).map((m) => m.id);
-            setExporting({ writers: [...exportKinds(what).map((k) => WRITERS[k]), ...theirs], from: exportKindOf(state, what), what, molecules, selected });
-          },
-        },
-        // (a text of its own, in the column of texts)
-        ...(officeId == null ? [{ name: "New text", run: () => store.getState().addTexts([{ name: "", text: "" }], pasteTarget()) }] : []),
-      ],
-    },
-    {
-      title: "Edit",
-      items: [
-        ...(pdfsHeld ? [{ name: "Find in PDF…", keys: shortcutLabel("F"), run: openFind }] : []),
-        {
-          name: "Clean up all",
-          keys: shortcutLabel("K", true),
-          run: () => runCleanUp(null),
-          disabled: cleaning || model.bonds.length === 0,
-        },
-        {
-          // (what is selected, or else everything drawn)
-          name: "3D structures",
-          run: () => {
-            const { sel, model: m } = store.getState();
-            void make3d(sel.atoms.size ? sel.atoms : m.atoms.map((a) => a.id));
-          },
-          disabled: working3d != null || ask3d != null || model.bonds.length === 0,
-        },
-      ],
-    },
-    {
-      title: "View",
-      items: [
-        { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit },
-        { name: chemistry.stereoLabels ? "Hide R and S" : "Show R and S", run: toggleStereoLabels },
-        ...(texts.length || reading
-          ? [
-              textsOpen
-                ? { name: "Hide texts", run: () => store.getState().closeTexts() }
-                : {
-                    name: "Show texts",
-                    run: () => {
-                      // (the PDF it showed, rising into it again; or the text)
-                      const st = store.getState();
-                      if (st.pdfShown != null && st.pdfs.some((p) => p.id === st.pdfShown && p.reading)) st.readPdf(st.pdfShown);
-                      else if (st.texts.length) st.showText(st.textShown ?? st.texts[0].id);
-                      else if (st.pdfs.some((p) => p.reading)) st.readPdf(st.pdfs.find((p) => p.reading)!.id);
-                    },
-                  },
-            ]
-          : []),
-      ],
-    },
-    {
-      title: "Format",
-      items: [{ name: ownStyle ? "Drawing style (its own)…" : "Drawing style…", run: () => !styleOpen && toggleStyle() }],
-    },
+  const canvasCommands = (): CanvasCommand[] => [
+    // (a tab's own workspace: not one in a document's object, which keeps its own)
+    ...(ownTab
+      ? [
+          { name: "Open…", keys: shortcutLabel("O"), run: askToOpen },
+          { name: "Save As…", keys: shortcutLabel("S", true), run: () => void saveAs() },
+          // (a text of its own, in the column of texts)
+          ...(officeId == null ? [{ name: "New text", keys: "", run: () => store.getState().addTexts([{ name: "", text: "" }], pasteTarget()) }] : []),
+        ]
+      : []),
+    { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit, divider: true },
+    { name: chemistry.stereoLabels ? "Hide R and S" : "Show R and S", keys: "", run: toggleStereoLabels },
+    ...(texts.length || reading
+      ? [
+          textsOpen
+            ? { name: "Hide texts", keys: "", run: () => store.getState().closeTexts() }
+            : {
+                name: "Show texts",
+                keys: "",
+                run: () => {
+                  // (the PDF it showed, rising into it again; or the text)
+                  const st = store.getState();
+                  if (st.pdfShown != null && st.pdfs.some((p) => p.id === st.pdfShown && p.reading)) st.readPdf(st.pdfShown);
+                  else if (st.texts.length) st.showText(st.textShown ?? st.texts[0].id);
+                  else if (st.pdfs.some((p) => p.reading)) st.readPdf(st.pdfs.find((p) => p.reading)!.id);
+                },
+              },
+        ]
+      : []),
+    ...(pdfsHeld ? [{ name: "Find in PDF…", keys: shortcutLabel("F"), run: openFind }] : []),
+    { name: ownStyle ? "Drawing style (its own)…" : "Drawing style…", keys: "", run: () => !styleOpen && toggleStyle(), divider: true },
     // a workflow's steps on the page: every one that has not run or has changed, run - or all stopped
     ...(steps.length
       ? [
-          {
-            title: "Calculations",
-            items: [
-              { name: "Run all", run: () => void store.getState().runAll() },
-              { name: "Stop all", run: () => store.getState().stopAll(), disabled: !steps.some((s) => s.running) },
-            ],
-          },
+          { name: "Run all", keys: "", run: () => void store.getState().runAll(), divider: true },
+          ...(steps.some((x) => x.running) ? [{ name: "Stop all", keys: "", run: () => store.getState().stopAll() }] : []),
         ]
       : []),
   ];
-  useEffect(() => {
-    if (!active || !ownTab) return;
-    return offerCommands(tabId, () => commandsNow.current());
-  }, [active, ownTab, tabId]);
 
   return (
     <div
@@ -1116,7 +1076,7 @@ function WorkspaceContent({
             onCancel={() => setExporting(null)}
             onExport={(writer, options, molecules) => {
               setExporting(null);
-              void files.exportAs(writer, options, molecules);
+              void files.exportAs(writer, options, molecules, exporting.part.part);
             }}
           />
         )}
@@ -1348,11 +1308,11 @@ function WorkspaceContent({
               ? () => store.getState().expandAbbreviation(menu.id!)
               : undefined
           }
-          canvas={commandsNow.current()
-            .filter((g) => g.title !== "File")
-            .flatMap((g) => g.items)
-            .filter((c) => !c.disabled)
-            .map((c) => ({ name: c.name, keys: c.keys ?? "", run: c.run }))}
+          canvas={canvasCommands()}
+          onExport={menu.selection === "here" ? () => {
+            const taken = clip.part();
+            if (taken) startExport(taken);
+          } : undefined}
           clipboard={{
             onCut: () => void clip.cut(),
             onCopy: () => void clip.copy(),
