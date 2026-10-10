@@ -3,8 +3,8 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { useReaders } from "../../../lib/calc/workers";
-import { ProcedureGlyph } from "../StructureEditor/workflow/icons";
-import { procedureLine, procedureNeeds, proceduresSaved, procedureWorkspace, removeProcedure, renameProcedure, type Procedure } from "../StructureEditor/workflow/procedures";
+import { ProcedureGlyph } from "../Workspace/workflow/icons";
+import { procedureLine, procedureNeeds, proceduresSaved, procedureWorkspace, removeProcedure, renameProcedure, type Procedure } from "../Workspace/workflow/procedures";
 
 const BUTTON = "h-7 shrink-0 rounded-md border border-gh-line bg-white px-3 text-xs text-gh-black hover:bg-gh-base disabled:opacity-50";
 

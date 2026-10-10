@@ -4,7 +4,7 @@
  * how it takes them, while it is there, and the app asks the one in front.
  * Where none is in front, a canvas opens for them.
  */
-import type { PictureToAdd } from "../features/StructureEditor/store/types";
+import type { PictureToAdd } from "../features/Workspace/store/types";
 
 const takers = new Map<string, (pictures: PictureToAdd[]) => void>();
 

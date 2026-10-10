@@ -35,7 +35,7 @@ export type AppSettings = {
   files: FileSettings;
   /** The plugins and the roles they fill (docs/PLUGINS.md). */
   plugins: PluginSettings;
-  /** The pictures a copy puts beside a structure, for other programs (StructureEditor/picture). */
+  /** The pictures a copy puts beside a structure, for other programs (Workspace/picture). */
   pictures: PictureSettings;
   /** How the mouse and the trackpad work the canvas. */
   pointer: PointerSettings;
@@ -50,7 +50,7 @@ export type AppSettings = {
  * them and the empty sets they take their input from - without their data
  * - by an id of its own, with its name and when it was saved. Its flow is
  * kept as data; the workflow reads it, as it reads a workspace's
- * (StructureEditor/workflow/procedures).
+ * (Workspace/workflow/procedures).
  */
 export type SavedProcedure = { id: string; name: string; saved: number; flow: { sets: unknown[]; steps: unknown[]; wires: unknown[] } };
 

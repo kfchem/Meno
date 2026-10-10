@@ -33,7 +33,7 @@ export default tseslint.config(
       // best-effort/parsing errors (file import, canvas setup, etc).
       "no-empty": ["error", { allowEmptyCatch: true }],
       // `cond && fn()` / `cond ? a() : b()` are used intentionally for their
-      // side effects throughout the StructureEditor interaction code.
+      // side effects throughout the Workspace interaction code.
       "@typescript-eslint/no-unused-expressions": [
         "error",
         { allowShortCircuit: true, allowTernary: true },

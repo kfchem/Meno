@@ -58,7 +58,7 @@ export function workspaceOfFile(bytes: Uint8Array): string | null {
  * one, goes with it; `kind`, where it was told otherwise - by a plugin, asked.
  */
 export function openedAs(name: string, text: string, path?: string, kind: Kind | null = kindOf(name, text)): Opened {
-  if (kind) return { kind: "structure", label: name, data: { filename: name, payload: text, kind: kind.id, ...(path ? { path } : {}) } };
+  if (kind) return { kind: "workspace", label: name, data: { filename: name, payload: text, kind: kind.id, ...(path ? { path } : {}) } };
   return openedTexts([{ name, text, ...(path ? { path } : {}) }]);
 }
 
@@ -66,7 +66,7 @@ export function openedAs(name: string, text: string, path?: string, kind: Kind |
 export function openedTexts(texts: OpenedText[]): Opened {
   const [first] = texts;
   return {
-    kind: "structure",
+    kind: "workspace",
     label: first?.name || "Untitled.txt",
     data: { texts, ...(first?.name ? { filename: first.name } : {}), ...(first?.path ? { path: first.path } : {}) },
   };

@@ -1,4 +1,4 @@
-import type { Molecule3D } from "../StructureEditor/store/types";
+import type { Molecule3D } from "../Workspace/store/types";
 
 /**
  * Paracetamol in 3D, its atoms placed by a force field: the molecule the 3D

@@ -8,10 +8,8 @@ export type TabMeta = {
 };
 
 export type TabKind =
-  | "2d"
   | "settings"
-  | "pyconsole"
-  | "structure";
+  | "workspace";
 
 export type TabContentBase = {
   kind: TabKind;

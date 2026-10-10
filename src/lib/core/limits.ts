@@ -6,8 +6,7 @@ import type { State, TabKind } from "./types";
  * so views are budgeted by the number of canvases they mount.
  */
 export const CANVASES_PER_KIND: Partial<Record<TabKind, number>> = {
-  "2d": 1,
-  structure: 1,
+  workspace: 1,
 };
 
 export const MAX_CANVASES = 16;
@@ -38,4 +37,4 @@ export function canOpenKind(
   return countCanvases(state) - freed + canvasCost(kind) <= MAX_CANVASES;
 }
 
-export const TOO_MANY_CANVASES = `Too many graphics views are open (limit ${MAX_CANVASES} canvases). Close a 2D, 3D or Workflow tab first.`;
+export const TOO_MANY_CANVASES = `Too many workspaces are open (at most ${MAX_CANVASES}). Close one first.`;

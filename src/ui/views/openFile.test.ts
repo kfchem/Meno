@@ -14,9 +14,9 @@ M  END
 `;
 
 describe("openedAs", () => {
-  it("opens a chemical file on a structure canvas, named for the file", () => {
+  it("opens a chemical file on a workspace, named for the file", () => {
     expect(openedAs("ethanol.mol", MOL)).toEqual({
-      kind: "structure",
+      kind: "workspace",
       label: "ethanol.mol",
       data: { filename: "ethanol.mol", payload: MOL, kind: "mol" },
     });
@@ -24,17 +24,17 @@ describe("openedAs", () => {
     expect(openedAs("ethanol.mol", MOL, "/data/ethanol.mol").data).toMatchObject({ kind: "mol", path: "/data/ethanol.mol" });
   });
 
-  it("opens an XYZ file and a Meno workspace on a structure canvas too, where 3D stands in 3D", () => {
+  it("opens an XYZ file and a Meno workspace on a workspace too, where 3D stands in 3D", () => {
     const xyz = "3\nwater\nO 0 0 0\nH 0.76 0.59 0\nH -0.76 0.59 0\n";
-    expect(openedAs("water.xyz", xyz)).toEqual({ kind: "structure", label: "water.xyz", data: { filename: "water.xyz", payload: xyz, kind: "xyz" } });
+    expect(openedAs("water.xyz", xyz)).toEqual({ kind: "workspace", label: "water.xyz", data: { filename: "water.xyz", payload: xyz, kind: "xyz" } });
     // (known by its content, whatever it is called)
-    expect(openedAs("water.out", xyz).kind).toBe("structure");
-    expect(openedAs("work.meno", "{}").kind).toBe("structure");
+    expect(openedAs("water.out", xyz).kind).toBe("workspace");
+    expect(openedAs("work.meno", "{}").kind).toBe("workspace");
   });
 
   it("opens text into a workspace's column, as it is - on a canvas of its own where none takes it", () => {
     expect(openedAs("run.py", "print(1)\n", "/w/run.py")).toEqual({
-      kind: "structure",
+      kind: "workspace",
       label: "run.py",
       data: { texts: [{ name: "run.py", text: "print(1)\n", path: "/w/run.py" }], filename: "run.py", path: "/w/run.py" },
     });
@@ -46,9 +46,9 @@ describe("openedAs", () => {
 
   it("opens texts together on one canvas, named for the first - a new one, with no name, as Untitled", () => {
     const opened = openedTexts([{ name: "a.txt", text: "a" }, { name: "b.txt", text: "b" }]);
-    expect(opened).toMatchObject({ kind: "structure", label: "a.txt", data: { filename: "a.txt" } });
+    expect(opened).toMatchObject({ kind: "workspace", label: "a.txt", data: { filename: "a.txt" } });
     expect(textsOf(opened)).toHaveLength(2);
-    expect(openedTexts([{ name: "", text: "" }])).toEqual({ kind: "structure", label: "Untitled.txt", data: { texts: [{ name: "", text: "" }] } });
+    expect(openedTexts([{ name: "", text: "" }])).toEqual({ kind: "workspace", label: "Untitled.txt", data: { texts: [{ name: "", text: "" }] } });
   });
 
   it("offers chemical files, calculations' output - of the plugins on offer, added or not - and text to Open, and no kind nothing reads", () => {
@@ -66,9 +66,9 @@ describe("openedAs", () => {
     beforeEach(() => registerKinds(MANIFESTS));
     afterEach(() => registerKinds([]));
 
-    it("opens a calculation's output on a structure canvas, a log of something else as text", () => {
-      expect(openedAs("job.out", "\n                                 * O   R   C   A *\n")).toMatchObject({ kind: "structure", label: "job.out" });
-      expect(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n")).toMatchObject({ kind: "structure" });
+    it("opens a calculation's output on a workspace, a log of something else as text", () => {
+      expect(openedAs("job.out", "\n                                 * O   R   C   A *\n")).toMatchObject({ kind: "workspace", label: "job.out" });
+      expect(openedAs("run.log", " Entering Gaussian System, Link 0=g16\n")).toMatchObject({ kind: "workspace" });
       expect(textsOf(openedAs("build.log", "compiled in 3 s\n"))).toHaveLength(1);
     });
   });

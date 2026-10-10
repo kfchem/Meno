@@ -19,7 +19,7 @@
 # wheel is not.
 
 Start-Meno
-Wait-MenoSettled | Out-Null          # Meno starts on a structure canvas
+Wait-MenoSettled | Out-Null          # Meno starts on a workspace
 Invoke-MenoMenu "SMILES..."                    # its box takes the keys
 Start-Sleep -Seconds 2
 Send-MenoText "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O.OCC" -CharMs 10

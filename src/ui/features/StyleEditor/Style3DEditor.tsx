@@ -15,9 +15,9 @@ import {
   type Style3DChoice,
   type Style3DField,
 } from "../../../lib/chem/style3d";
-import type { Turn3D } from "../StructureEditor/store/types";
-import Molecule3DView from "../StructureEditor/components/Molecule3DView";
-import { lookOf, solidOf } from "../StructureEditor/utils/molecule3d";
+import type { Turn3D } from "../Workspace/store/types";
+import Molecule3DView from "../Workspace/components/Molecule3DView";
+import { lookOf, solidOf } from "../Workspace/utils/molecule3d";
 import { SAMPLE_3D } from "./sample3d";
 
 /**

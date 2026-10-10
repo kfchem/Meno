@@ -135,11 +135,13 @@ function Invoke-MenoMenu {
       Invoke-MenoMenu "SMILES..." opens the SMILES card.
 
       .DESCRIPTION
-      The items are where a structure canvas in front has them, read off a
+      The items are where a workspace in front has them, read off a
       Mac's shot (2560x1720); the menu is at the window's left, so they do
-      not move with its size. Three dots stand for the ellipsis. A canvas
-      holding texts has *Show texts* or *Hide texts* after *Show R and S*,
-      and *Drawing style...* a row lower.
+      not move with its size. On a Mac the logo, and the menu under it, sit
+      to the right of the system's window buttons (SYSTEM_BUTTONS_ROOM in
+      src/ui/layouts/WindowButtons.tsx, 80 px, 160 in a shot). Three dots
+      stand for the ellipsis. A canvas holding texts has *Show texts* or
+      *Hide texts* after *Show R and S*, and *Drawing style...* a row lower.
     #>
     param([Parameter(Mandatory)] [ValidateSet(
         "Open...", "Save", "Save As...", "Export...", "New text", "SMILES...", "Clean up all",
@@ -149,9 +151,10 @@ function Invoke-MenoMenu {
         "SMILES..." = 550; "Clean up all" = 614; "3D structures" = 678; "Fit to content" = 804
         "Show R and S" = 868; "Drawing style..." = 994
     }
-    Invoke-MenoClick -X 42 -Y 42
+    $dx = if ($onMac) { 160 } else { 0 }
+    Invoke-MenoClick -X (42 + $dx) -Y 42
     Start-Sleep -Milliseconds 400
-    Invoke-MenoClick -X 200 -Y $at[$Item]
+    Invoke-MenoClick -X (200 + $dx) -Y $at[$Item]
     Start-Sleep -Milliseconds 300
 }
 

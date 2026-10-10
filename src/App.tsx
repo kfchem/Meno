@@ -17,14 +17,14 @@ import { pdfTakerOf, type OpenedPdf } from "./ui/views/pdfs";
 import { pictureTakerOf } from "./ui/views/pictures";
 import { holdPdfPath } from "./lib/pdf/reader";
 import { isPictureName } from "./lib/picture/image";
-import { pictureToAdd } from "./ui/features/StructureEditor/utils/pictures";
-import type { PictureToAdd } from "./ui/features/StructureEditor/store/types";
+import { pictureToAdd } from "./ui/features/Workspace/utils/pictures";
+import type { PictureToAdd } from "./ui/features/Workspace/store/types";
 import { textTakerOf, type OpenedText } from "./ui/views/texts";
 import type { Action, State, TabInstance } from "./lib/core";
 import type { DocumentStore } from "./lib/doc";
 import { keepClipboard, keepPageUnselected, openIntent, undoIntent } from "./lib/doc/shortcuts";
 import { saverOf } from "./lib/doc/savers";
-import { isBlankDocument, type StructureDocument } from "./ui/features/StructureEditor/document";
+import { isBlankDocument, type WorkspaceDocument } from "./ui/features/Workspace/document";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -34,7 +34,7 @@ import { kindOfFile } from "./lib/calc/probe";
 import { addedReaders } from "./lib/calc/workers";
 import { PLUGINS, READERS } from "./lib/calc/catalog";
 import { stopJob } from "./lib/jobs";
-import { jobsUnderWay } from "./ui/features/StructureEditor/workflow/flow";
+import { jobsUnderWay } from "./ui/features/Workspace/workflow/flow";
 import ConfirmDiscard from "./ui/layouts/ConfirmDiscard";
 import { ErrorBoundary, StoppedCard } from "./ui/layouts/ErrorBoundary";
 import { loadAppSettings, useAppSettings } from "./lib/settings/appSettings";
@@ -179,9 +179,9 @@ export default function App() {
   // A canvas nothing is drawn on, nor opened into: what a file opened takes
   // the place of, and nothing to keep a Meno started for Office open.
   const isBlankTab = (t: TabInstance | undefined): t is TabInstance => {
-    if (!t || t.content.kind !== "structure" || officeIdOf(t) != null) return false;
+    if (!t || t.content.kind !== "workspace" || officeIdOf(t) != null) return false;
     if ((t.content.data as { payload?: string } | undefined)?.payload) return false;
-    const doc = documentsRef.current.get(t.meta.id)?.doc as DocumentStore<StructureDocument> | undefined;
+    const doc = documentsRef.current.get(t.meta.id)?.doc as DocumentStore<WorkspaceDocument> | undefined;
     return !doc || isBlankDocument(doc.getState());
   };
 
@@ -217,14 +217,14 @@ export default function App() {
   // PDFs opened, likewise: on the page of the workspace in front, or on a canvas of their own (ui/views/pdfs)
   const openPdfs = (pdfs: OpenedPdf[], into: string | null): boolean => {
     const take = into ? pdfTakerOf(into) : undefined;
-    if (!take) return openTab({ kind: "structure", label: pdfs[0].name, data: { pdfs, filename: pdfs[0].name } });
+    if (!take) return openTab({ kind: "workspace", label: pdfs[0].name, data: { pdfs, filename: pdfs[0].name } });
     take(pdfs);
     return true;
   };
   // and pictures (ui/views/pictures)
   const openPictures = (pictures: PictureToAdd[], into: string | null): boolean => {
     const take = into ? pictureTakerOf(into) : undefined;
-    if (!take) return openTab({ kind: "structure", label: pictures[0].name, data: { pictures, filename: pictures[0].name } });
+    if (!take) return openTab({ kind: "workspace", label: pictures[0].name, data: { pictures, filename: pictures[0].name } });
     take(pictures);
     return true;
   };
@@ -308,7 +308,7 @@ export default function App() {
   const jobsIn = (ids: readonly string[]): string[] =>
     ids.flatMap((id) => {
       const held = documentsRef.current.get(id);
-      return held?.kind === "structure" ? jobsUnderWay((held.doc as DocumentStore<StructureDocument>).getState()) : [];
+      return held?.kind === "workspace" ? jobsUnderWay((held.doc as DocumentStore<WorkspaceDocument>).getState()) : [];
     });
   const jobsSaid = (n: number, they: string) => (n ? `, and stops the ${n === 1 ? "job" : `${n} jobs`} ${they} running - saved first, ${n === 1 ? "it goes" : "they go"} on` : "");
   // Each saved in turn - its tab brought forward, so that it is seen which
@@ -397,7 +397,7 @@ export default function App() {
         const label = s.name ? `${s.name} - Office` : "Structure from Office";
         // (Meno's own record, read as what it is)
         const data = { payload: s.record, kind: MENO_KINDS.record.id, officeId: s.id };
-        if (!openTab({ kind: "structure", label, data })) void letOfficeGo(s.id);
+        if (!openTab({ kind: "workspace", label, data })) void letOfficeGo(s.id);
       }
     };
     void open(); // (any asked for before the page was up)
@@ -468,16 +468,13 @@ export default function App() {
     },
     // "+": a canvas, the page everything else is opened from
     add: () => {
-      if (!canOpenKind(state, "structure")) {
+      if (!canOpenKind(state, "workspace")) {
         setNotice(TOO_MANY_CANVASES);
         return;
       }
-      dispatch({ type: "ADD_TAB", tab: viewRegistry.structure.create("Structure Canvas") });
+      dispatch({ type: "ADD_TAB", tab: viewRegistry.workspace.create("Workspace") });
     },
     openFiles: pickFiles,
-    newText: () => {
-      openTexts([{ name: "", text: "" }], state.activeId);
-    },
     openByKind: async (kind: TabKind, opts?: { label?: string }) => {
       // There is one Settings tab: asking again brings it to the front.
       if (kind === "settings") {
@@ -493,7 +490,7 @@ export default function App() {
         setNotice(TOO_MANY_CANVASES);
         return;
       }
-      const entry: ViewEntry = viewRegistry[kind] ?? viewRegistry.structure;
+      const entry: ViewEntry = viewRegistry[kind] ?? viewRegistry.workspace;
       const label = opts?.label ?? "New Tab";
       const tab = entry.create(label);
       dispatch({ type: "ADD_TAB", tab });
@@ -507,8 +504,8 @@ export default function App() {
 
   const resolveView = useCallback(
     (kind: string): ViewEntry | Promise<ViewEntry> => {
-      if (kind in viewRegistry) return viewRegistry[kind];
-      return viewRegistry.structure;
+      if (kind in viewRegistry) return viewRegistry[kind as TabKind];
+      return viewRegistry.workspace;
     },
     []
   );

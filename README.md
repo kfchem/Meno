@@ -73,7 +73,7 @@ is structured, Tauri commands, supported file formats) and
 
 Known limitations (pre-alpha):
 
-- The embedded Python Console/Workflow sidecar (`src/lib/pyEnv.ts`, the `py_env_setup_uv` / `ext_spawn_sidecar` Tauri commands) depends on a bundled `uv` binary at `src-tauri/resources/py/`. Only the Windows binary (`uv.exe`) is currently checked in, so this feature does not work on macOS/Linux builds yet.
+- The Python sidecars of plugins and workflows (`src/lib/pyEnv.ts`, the `py_env_setup_uv` / `ext_spawn_sidecar` Tauri commands) depends on a bundled `uv` binary at `src-tauri/resources/py/`. Only the Windows binary (`uv.exe`) is currently checked in, so this feature does not work on macOS/Linux builds yet.
 - Unit tests cover parsing and state logic only; there are no rendering or end-to-end tests yet.
 
 ## License

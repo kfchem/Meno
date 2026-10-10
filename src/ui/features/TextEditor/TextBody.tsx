@@ -1,6 +1,6 @@
 /**
  * A text read in the column, its HTML half (docs/PDF.md, *A text*): see-
- * through, over the canvas, which draws the text under it (StructureEditor
+ * through, over the canvas, which draws the text under it (Workspace
  * components/ColumnText). It takes the pointer - a click puts the caret,
  * two select a word, three a line, a drag selects on - and the wheel, and
  * holds the field the text is typed through (typingField), kept out of

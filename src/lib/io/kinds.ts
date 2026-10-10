@@ -77,7 +77,7 @@ export const MENO_KINDS = {
   cube: { id: "cube", name: "Cube file", extensions: [".cube", ".cub"], output: {}, layout: CUBE_MARK },
 } as const satisfies Record<string, Kind>;
 
-/** The kinds Meno writes itself: the workspace by Save, the rest by Export (StructureEditor/fileActions). */
+/** The kinds Meno writes itself: the workspace by Save, the rest by Export (Workspace/fileActions). */
 export const MENO_WRITES: readonly string[] = [MENO_KINDS.workspace.id, MENO_KINDS.mol.id, MENO_KINDS.sdf.id, MENO_KINDS.rxn.id, MENO_KINDS.pdb.id];
 
 /** Files of Meno's own kinds a plugin's marks are tried on: a mark one of them holds is not the plugin's to claim. */

@@ -1,22 +1,12 @@
-import { AnimatePresence, Reorder, motion } from "motion/react";
-import { DURATION, EASE, FADE, LEAVE, RISE } from "../theme/motion";
-import {
-  XMarkIcon,
-  PlusIcon,
-  MinusIcon,
-  StopIcon,
-  ChevronDownIcon,
-  Cog6ToothIcon,
-} from "@heroicons/react/24/outline";
+import { PlusIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import { useMemo, MouseEvent, useRef, useState, useEffect } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { MouseEvent } from "react";
 import { TabKind } from "../../lib/core";
-import { shortcutLabel } from "../../lib/doc/shortcuts";
+import { IS_MAC, shortcutLabel } from "../../lib/doc/shortcuts";
 import OfflineToggle from "../network/OfflineToggle";
 import MenoMenu from "./MenoMenu";
-
-type TabMeta = { id: string; label: string; dirty?: boolean };
+import { TabStrip, type TabMeta } from "./Tabs";
+import WindowButtons, { SystemButtonsRoom } from "./WindowButtons";
 
 export type TabsController = {
   tabOrder: string[];
@@ -29,224 +19,48 @@ export type TabsController = {
   openByKind?: (kind: TabKind, opts?: { label?: string }) => void;
   /** Files picked in the system's dialog, each opened in a tab (Open…). */
   openFiles: () => void;
-  /** A new text, in the column of the workspace in front - or of a canvas of its own. */
-  newText?: () => void;
 };
 
-export default function TopBar({ ctl }: { ctl: TabsController }) {
-  const {
-    tabOrder,
-    tabsById,
-    activeId,
-    reorder,
-    select,
-    close,
-    add,
-    openByKind,
-  } = ctl;
-  const draggingRef = useRef(false);
-  const appWindow = useMemo(() => getCurrentWindow(), []);
-  const stop = (e: MouseEvent) => e.stopPropagation();
+const stop = (e: MouseEvent) => e.stopPropagation();
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc as any);
-    return () => document.removeEventListener("mousedown", onDoc as any);
-  }, []);
-  // Escape closes the menu, as a click elsewhere does - and only that: the
-  // tab beneath does not take it as well
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      setMenuOpen(false);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [menuOpen]);
-
-  const onSelectMenu = (
-    profile: "texteditor" | "pyconsole" | "structure"
-  ) => {
-    setMenuOpen(false);
-    if (!openByKind) return;
-    if (profile === "texteditor") ctl.newText?.();
-    if (profile === "pyconsole")
-      openByKind("pyconsole", { label: "Python Console" });
-    if (profile === "structure") openByKind("structure", { label: "Structure Canvas" });
-  };
-
+/**
+ * The window's title bar, drawn by Meno: its menu, the tabs on the line
+ * that runs under them, "+" for a new workspace, online or offline,
+ * Settings, and the window's buttons - on a Mac the system's own, at the
+ * left, on a window with the system's rounded corners and shadow
+ * (tauri.macos.conf.json); elsewhere Meno's, at the right. Dragged by any
+ * of it that is not a button, it moves the window.
+ */
+export default function TopBar({ ctl, mac = IS_MAC }: { ctl: TabsController; mac?: boolean }) {
+  const { tabOrder, tabsById, activeId, reorder, select, close, add, openByKind } = ctl;
   return (
     <div
       data-tauri-drag-region
       className="w-full flex items-stretch justify-between h-10 min-h-10 bg-gh-base select-none relative"
     >
+      {mac && <SystemButtonsRoom />}
       <MenoMenu own={[{ title: "File", items: [{ name: "Open…", keys: shortcutLabel("O"), run: ctl.openFiles }] }]} />
       <div className="h-px bg-transparent border-t border-gh-line absolute bottom-0 right-0 left-0" />
 
-      <Reorder.Group
-        axis="x"
-        values={tabOrder}
-        onReorder={reorder}
-        className="flex h-full items-end space-x-1 flex-1 px-1.5 overflow-hidden relative"
-        data-tauri-drag-region
-      >
-        {/* A tab comes in rising, and closed goes the same way, the others
-            closing up after it. */}
-        <AnimatePresence initial={false}>
-        {tabOrder.map((id) => {
-          const tab = tabsById[id];
-          const selected = id === activeId;
-          return (
-            <Reorder.Item
-              key={id}
-              value={id}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: DURATION.base, ease: EASE } }}
-              exit={{ opacity: 0, y: 20, transition: LEAVE }}
-              // Chosen or not, a tab goes over in the same time and the same
-              // way as its curved corners, which are drawn beside it: the
-              // two change together, never one ahead of the other.
-              className={clsx(
-                "relative rounded-t-lg w-48 h-8.5 text-xs flex justify-between items-top0 min-w-8 transition-[background-color,border-color,color] duration-150 ease-meno",
-                selected
-                  ? "bg-white text-gh-black border border-gh-line border-b-transparent"
-                  : "bg-gh-base text-gh-gray border border-transparent"
-              )}
-              onDragStart={() => (draggingRef.current = true)}
-              onDragEnd={() => (draggingRef.current = false)}
-              onPointerDown={() => {
-                if (!draggingRef.current) select(id);
-              }}
-              title={tab.label}
-            >
-              {/* the curved corners of the chosen tab, and the line under one
-                  not chosen: both always there, one or the other seen */}
-              <div className={clsx("transition-opacity duration-150 ease-meno", selected ? "opacity-100" : "opacity-0")}>
-                <div className="absolute -bottom-[1px] -left-2 h-2 w-2 bg-white" />
-                <div className="absolute -bottom-[1px] -left-2 h-2 w-2 bg-gh-base rounded-br-xl border-b border-r border-gh-line" />
-                <div className="absolute -bottom-[1px] -right-2 h-2 w-2 bg-white" />
-                <div className="absolute -bottom-[1px] -right-2 h-2 w-2 bg-gh-base rounded-bl-xl border-b border-l border-gh-line" />
-              </div>
-              <div
-                className={clsx(
-                  "h-px bg-transparent border-b border-gh-line absolute -bottom-[0.5px] right-0 left-0 transition-opacity duration-150 ease-meno",
-                  selected ? "opacity-0" : "opacity-100",
-                )}
-              />
-              <div
-                className={clsx(
-                  "flex items-center w-full py-1 justify-between rounded-lg h-7 mx-0.5 px-2 transition-colors duration-150 ease-meno",
-                  !selected && "hover:bg-gh-gray/10"
-                )}
-              >
-                <span className="truncate">
-                  <AnimatePresence initial={false}>
-                    {tab.dirty && (
-                      <motion.span
-                        key="dirty"
-                        {...FADE}
-                        className="mr-1 text-gh-gray"
-                        aria-label="Unsaved changes"
-                        title="Unsaved changes"
-                      >
-                        ●
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                  {tab.label}
-                </span>
-                <button
-                  // Closing on the press made a tab easy to lose while
-                  // reaching to drag it: a full click closes, and the press
-                  // is kept from starting a drag.
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    close(id);
-                  }}
-                  className="h-4 w-4 rounded-full p-0.5 transition-colors duration-150 ease-meno hover:bg-gh-line shrink-0"
-                  aria-label="Close tab"
-                  title="Close"
-                >
-                  <XMarkIcon className="w-full h-full" />
-                </button>
-              </div>
-            </Reorder.Item>
-          );
-        })}
-        </AnimatePresence>
-      </Reorder.Group>
+      <TabStrip
+        tabOrder={tabOrder}
+        tabsById={tabsById}
+        activeId={activeId}
+        reorder={reorder}
+        select={select}
+        close={close}
+      />
 
-      <div className="h-full flex items-center gap-1">
-        <div className="relative flex" ref={menuRef}>
-          <button
-            aria-label="New tab"
-            onClick={() => {
-              // (beside the menu's own button, so not a click elsewhere: it closes the menu itself)
-              setMenuOpen(false);
-              add();
-            }}
-            onMouseDown={stop}
-            className="h-7 px-2 rounded-l-md border border-gh-line bg-white transition-colors duration-150 ease-meno hover:bg-gray-100"
-          >
-            <div className="flex items-center gap-1">
-              <PlusIcon className="h-3 w-3" />
-            </div>
-          </button>
-          <button
-            aria-label="New…"
-            title="New…"
-            onMouseDown={stop}
-            onClick={() => setMenuOpen((v) => !v)}
-            className="h-7 px-2 rounded-r-md border border-l-0 border-gh-line bg-white transition-colors duration-150 ease-meno hover:bg-gray-100 -ml-px"
-          >
-            <ChevronDownIcon className="h-3.5 w-3.5" />
-          </button>
-
-          <AnimatePresence>
-          {menuOpen && (
-            <motion.div
-              key="new-menu"
-              {...RISE}
-              style={{ transformOrigin: "top right" }}
-              className="absolute right-0 mt-7 w-56 rounded-md border border-gh-line bg-white shadow-lg z-50 overflow-hidden"
-              onMouseDown={stop}
-            >
-              <div className="py-1">
-                <button
-                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
-                  onClick={() => onSelectMenu("texteditor")}
-                >
-                  <span>Text</span>
-                  <span className="text-xs text-gray-500">new</span>
-                </button>
-                <button
-                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
-                  onClick={() => onSelectMenu("pyconsole")}
-                >
-                  <span>Python Console</span>
-                  <span className="text-xs text-gray-500">accel</span>
-                </button>
-                <button
-                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
-                  onClick={() => onSelectMenu("structure")}
-                >
-                  <span>Structure Canvas</span>
-                  <span className="text-xs text-gray-500">test</span>
-                </button>
-              </div>
-            </motion.div>
-          )}
-          </AnimatePresence>
-        </div>
+      <div className={clsx("h-full flex items-center gap-1", mac && "pr-2")}>
+        <button
+          aria-label="New workspace"
+          title="New workspace"
+          onClick={add}
+          onMouseDown={stop}
+          className="h-7 px-2 rounded-md border border-gh-line bg-white transition-colors duration-150 ease-meno hover:bg-gray-100"
+        >
+          <PlusIcon className="h-3 w-3" />
+        </button>
 
         <OfflineToggle />
         <button
@@ -259,35 +73,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
           <Cog6ToothIcon className="h-4.5 w-4.5" />
         </button>
 
-        <div className="ml-2 h-full flex">
-          <button
-            aria-label="Minimize"
-            title="Minimize"
-            onMouseDown={stop}
-            onClick={() => appWindow.minimize()}
-            className="h-10 w-11 flex items-center justify-center transition-colors duration-150 ease-meno hover:bg-gray-200"
-          >
-            <MinusIcon className="h-4 w-4" />
-          </button>
-          <button
-            aria-label="Maximize"
-            title="Maximize / Restore"
-            onMouseDown={stop}
-            onClick={() => appWindow.toggleMaximize()}
-            className="h-10 w-11 flex items-center justify-center transition-colors duration-150 ease-meno hover:bg-gray-200"
-          >
-            <StopIcon className="h-4 w-4" />
-          </button>
-          <button
-            aria-label="Close"
-            title="Close"
-            onMouseDown={stop}
-            onClick={() => appWindow.close()}
-            className="h-10 w-11 flex items-center justify-center transition-colors duration-150 ease-meno hover:bg-red-500 hover:text-white"
-          >
-            <XMarkIcon className="h-4 w-4" />
-          </button>
-        </div>
+        {!mac && <WindowButtons />}
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { moleculesToEditorModel, readMoleculesFromText } from "../../utils/impor
 import { bondKind, layoutMolecule, type Atom, type Bond, type LayoutOptions } from "./layout2d";
 import { acsWorldOptions, NOMINAL_BOND_LENGTH } from "./acs";
 import { writeMolfile } from "./molWriter";
-import { emptyStructureDocument, appendModel } from "../../ui/features/StructureEditor/document";
+import { emptyWorkspaceDocument, appendModel } from "../../ui/features/Workspace/document";
 
 const L = NOMINAL_BOND_LENGTH;
 const opts = (): LayoutOptions => acsWorldOptions([], [], { units: "world" });
@@ -107,7 +107,7 @@ describe("a file's Sgroups", () => {
 
   it("are their own when a structure is added twice", () => {
     const model = read(polymer);
-    let doc = appendModel(emptyStructureDocument(), model);
+    let doc = appendModel(emptyWorkspaceDocument(), model);
     doc = appendModel(doc, model);
     const ids = new Set(doc.model.atoms.flatMap((a) => (a.sgroups ?? []).map((g) => g.id)));
     expect(ids.size).toBe(4);

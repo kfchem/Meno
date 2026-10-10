@@ -4,8 +4,8 @@ import { drawnSmiles, picturedStructure } from "../../lib/chem/abbreviationPlace
 import type { GroupStructure } from "../../lib/chem/ligands";
 import { styleOf, type StyleChoice } from "../../lib/chem/style";
 import { useAppSettings } from "../../lib/settings/appSettings";
-import { drawingSvg } from "../features/StructureEditor/fileActions";
-import type { Model } from "../features/StructureEditor/store/types";
+import { drawingSvg } from "../features/Workspace/fileActions";
+import type { Model } from "../features/Workspace/store/types";
 
 /**
  * A structure, laid out by Meno, its groups written by name where Clean-up

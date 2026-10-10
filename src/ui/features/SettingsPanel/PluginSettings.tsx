@@ -5,7 +5,7 @@ import { ROLES } from "../../../lib/plugins/roles";
 import { forThisSystem, systemHere, SYSTEM_NAMES } from "../../../lib/plugins/here";
 import { locate, lookForAll, programKey, useInstalled } from "../../../lib/plugins/installed";
 import { SYSTEMS, type InstalledDecl } from "../../../lib/plugins/manifest";
-import { KINDS } from "../StructureEditor/workflow/kinds";
+import { KINDS } from "../Workspace/workflow/kinds";
 import { kindById } from "../../../lib/io/kinds";
 
 /** The kinds of a workflow's step a plugin fills, by their names - those Meno defines. */

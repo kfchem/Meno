@@ -14,10 +14,10 @@ function withTabs(...ids: string[]): State {
 }
 
 describe("tab reducer", () => {
-  it("starts with a single structure canvas", () => {
+  it("starts with a single workspace", () => {
     const s = createInitialState();
     expect(s.tabOrder).toHaveLength(1);
-    expect(s.tabsById[s.tabOrder[0]].content.kind).toBe("structure");
+    expect(s.tabsById[s.tabOrder[0]].content.kind).toBe("workspace");
     expect(s.activeId).toBe(s.tabOrder[0]);
   });
 
