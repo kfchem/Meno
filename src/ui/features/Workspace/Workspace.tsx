@@ -943,14 +943,15 @@ function WorkspaceContent({
   const textsOpen = useEditor((s) => s.textsOpen);
   const reading = useEditor((s) => s.pdfs.some((p) => p.reading));
   const pdfsHeld = useEditor((s) => s.pdfs.length > 0);
-  const canvasCommands = (): CanvasCommand[] => [
+  // (`at`: where on the page the menu was opened - where a new text's sheet goes)
+  const canvasCommands = (at: { x: number; y: number }): CanvasCommand[] => [
     // (a tab's own workspace: not one in a document's object, which keeps its own)
     ...(ownTab
       ? [
           { name: "Open…", keys: shortcutLabel("O"), run: askToOpen },
           { name: "Save As…", keys: shortcutLabel("S", true), run: () => void saveAs() },
           // (a text of its own, in the column of texts)
-          ...(officeId == null ? [{ name: "New text", keys: "", run: () => store.getState().addTexts([{ name: "", text: "" }], pasteTarget()) }] : []),
+          ...(officeId == null ? [{ name: "New text", keys: "", run: () => store.getState().addTexts([{ name: "", text: "" }], at) }] : []),
         ]
       : []),
     { name: "Fit to content", keys: shortcutLabel("1"), run: requestFit, divider: true },
@@ -1305,7 +1306,7 @@ function WorkspaceContent({
               ? () => store.getState().expandAbbreviation(menu.id!)
               : undefined
           }
-          canvas={canvasCommands()}
+          canvas={canvasCommands(menu.at)}
           onExport={menu.selection === "here" ? () => {
             const taken = clip.part();
             if (taken) startExport(taken);
