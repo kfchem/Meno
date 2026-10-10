@@ -177,8 +177,17 @@ export default function Selection2D() {
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0 || e.target !== gl.domElement) return;
       const st = store.getState();
-      // (on an arrow, a "+", words, a workflow's wire, a PDF, a picture or a text's sheet: theirs)
-      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null || st.hoveredPdf != null || st.hoveredPicture != null || st.hoveredText != null || st.hoveredMark != null;
+      // (on an arrow, a "+", words, a workflow's wire, a PDF, a picture, a text's sheet or a measurement's value: theirs)
+      const onMark =
+        st.hoveredArrow != null ||
+        st.hoveredPlus != null ||
+        st.hoveredCaption != null ||
+        st.hoveredWire != null ||
+        st.hoveredPdf != null ||
+        st.hoveredPicture != null ||
+        st.hoveredText != null ||
+        st.hoveredMark != null ||
+        st.hoveredMeasure3d != null;
       if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || onMark || st.labelEdit.active || st.extend.active || st.captionEdit) return;
       const add = addsToSelection(e);
       const count = pressOnEmpty(lastEmpty, { t: e.timeStamp, x: e.clientX, y: e.clientY }, DOUBLE_CLICK_MS);

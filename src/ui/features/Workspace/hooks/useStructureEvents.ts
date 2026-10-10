@@ -211,8 +211,8 @@ export function useStructureEvents(
       clickTimerRef.current = null;
     }
     if (!camRef.current || !domRef.current) return;
-    // (twice on a molecule in 3D: nothing drawn on the page under it - nor on a mark, put back by it)
-    if (store.getState().hovered3d || store.getState().hoveredMark) return;
+    // (twice on a molecule in 3D: nothing drawn on the page under it - nor on a mark, put back by it, nor on a measurement's value)
+    if (store.getState().hovered3d || store.getState().hoveredMark || store.getState().hoveredMeasure3d) return;
     // (Ctrl or ⌘, or Shift, clicked twice: the selection's, not a bond drawn)
     if (addsToSelection(e) || e.shiftKey) return;
     const stNow = store.getState();
