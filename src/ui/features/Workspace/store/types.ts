@@ -210,6 +210,11 @@ export type Molecule3D = {
   look?: Look3D;
   /** Its atoms' names and residues and its secondary structure, where it is a PDB entry's chains: drawn as ribbons (lib/chem/biopolymer). */
   biopolymer?: Biopolymer;
+  /**
+   * Made by editing a result's shape (utils/edit3d): what it was made from -
+   * "conformer 7", "frame 12", an output's name - as its chip says it.
+   */
+  edited?: { from: string };
   measures?: Measure3D[];
   /** The file it came from. */
   name?: string;
@@ -562,6 +567,19 @@ export type EditorState = {
   chosen3d: { id: number; atoms: number[]; bonds: number[] } | null;
   /** The measurement under the pointer: its molecule and its own id. */
   hoveredMeasure3d: { id: number; measure: number } | null;
+  /** The measurement whose value is being typed in its chip: a molecule's, by id, and its own id. */
+  measureEdit3d: { id: number; measure: number } | null;
+  editMeasure3d: (x: { id: number; measure: number } | null) => void;
+  /**
+   * A measurement set to a value (utils/edit3d), the side of its last atom
+   * moved, in the frame shown - in a copy beside it, where the molecule is
+   * a result; edits sharing `gesture` are one undo step. The molecule
+   * edited, by id - the copy's, where one was made - or null where the
+   * value cannot be set so.
+   */
+  setMeasure3d: (id: number, measure: number, value: number, gesture?: string) => number | null;
+  /** What is chosen of a molecule measured - as the atoms were chosen - and its value opened to be typed. */
+  setChosen3d: () => void;
   setHoveredMeasure3d: (h: { id: number; measure: number } | null) => void;
   setHovered3d: (h: { id: number } | null) => void;
   /** The atom of molecule `id` under the pointer; null, none of its atoms. */

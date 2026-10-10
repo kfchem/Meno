@@ -49,14 +49,15 @@ import { ErrorBoundary, StoppedCard } from "../../layouts/ErrorBoundary";
 import { flowOf, procedureParts, type FlowParts } from "./workflow/parts";
 import { procedureNeeds, proceduresSaved, saveProcedure, suggestedName } from "./workflow/procedures";
 import { knownOf, pluginWriters, WRITERS, type Writer } from "../../../lib/io/writers";
-import { WRITER_PLUGINS } from "../../../lib/calc/catalog";
-import { useReaders } from "../../../lib/calc/workers";
+import { anyPluginById, WRITER_PLUGINS } from "../../../lib/calc/catalog";
+import { addPlugin, useReaders } from "../../../lib/calc/workers";
 import { offeredNames, writtenOf } from "./utils/written";
 import { carriedOf } from "./utils/workspace";
 import PartMenu, { type CanvasCommand, type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { currentStyle3D, useStyle3D, useStyleNames3D } from "./style3d";
 import { askToOpen } from "../../layouts/commands";
-import { chosenPath, frameOf, lookOf, poseOf, seenBounds, solidOf } from "./utils/molecule3d";
+import { bondsAt, chosenPath, frameOf, lookOf, poseOf, seenBounds, solidOf } from "./utils/molecule3d";
+import { movingAtoms, movingFor } from "./utils/edit3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/roles/molblock";
 
@@ -119,6 +120,8 @@ import CaptionTyping2D from "./components/CaptionTyping2D";
 import { ChargeHolds2D } from "./components/MarkHold2D";
 import Workflow2D from "./components/Workflow2D";
 import PageScale from "./components/PageScale";
+import GuideStructure from "./components/GuideStructure";
+import { guideNotice } from "../../../lib/plugins/guides";
 import { selectionFrame } from "./workflow/selectionSet";
 import { offeredSteps } from "./workflow/offered";
 import { PORT_DOWN } from "./workflow/look";
@@ -186,6 +189,7 @@ function WorkspaceContent({
   // the column over the canvas's right side, and the layer the page's HTML goes in, cut off where it begins
   const cover = useEditor((s) => s.cover);
   const [htmlLayer, setHtmlLayer] = useState<HTMLDivElement | null>(null);
+  const guideStructure = useRef<HTMLDivElement>(null);
   // (where PDFs opened go: the middle of what is in view, as a paste - set once the events are known)
   const pdfTarget = useRef<() => { x: number; y: number }>(() => ({ x: 0, y: 0 }));
   const {
@@ -226,6 +230,8 @@ function WorkspaceContent({
   // the plugins that fill the chemistry roles: their marks on the structure
   // and R/S on request; and clean-up, by Meno's own layout engine (chem/cleanUp)
   const store = useEditorStore();
+  // (a structure selected: a guide's step waiting for it goes on)
+  useEffect(() => store.subscribe((s, prev) => void (s.sel.atoms.size && !prev.sel.atoms.size && guideNotice("selected"))), [store]);
   // (a tab's own, unless it is a document's, holds texts opened while it is in front: ui/views/texts)
   useEffect(
     () => (ownTab && officeId == null ? setTextTaker(tabId, (texts) => store.getState().addTexts(texts, pdfTarget.current())) : undefined),
@@ -688,6 +694,17 @@ function WorkspaceContent({
     }
   };
   const menuLink = menuMolecule ? linkOf(menuMolecule, model) : null;
+  // (what is chosen of it, or the measurement right-clicked, can be set: utils/edit3d)
+  const frameShown = (id: number) => store.getState().frames3d[id] ?? 0;
+  const chosenPathOf = menuMolecule && chosen3d?.id === menuMolecule.id ? chosenPath(menuMolecule, chosen3d) : null;
+  const chosenSettable =
+    !!menuMolecule && !!chosenPathOf && !!movingAtoms({ atoms: menuMolecule.atoms, bonds: bondsAt(menuMolecule, frameShown(menuMolecule.id)) }, chosenPathOf);
+  const measureMolecule = menu?.kind === "measure3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
+  const menuMeasure = measureMolecule && menu?.measure != null ? measureMolecule.measures?.find((x) => x.id === menu.measure) : undefined;
+  const measure3dMenu =
+    measureMolecule && menuMeasure && movingFor(measureMolecule, menuMeasure.id, frameShown(measureMolecule.id))
+      ? { atoms: menuMeasure.atoms.length, onSet: () => store.getState().editMeasure3d({ id: measureMolecule.id, measure: menuMeasure.id }) }
+      : undefined;
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
         otherLook: (() => {
@@ -696,6 +713,7 @@ function WorkspaceContent({
         })(),
         chosen: chosen3d?.id === menuMolecule.id ? (chosenPath(menuMolecule, chosen3d)?.length ?? 0) : 0,
         onMeasure: () => store.getState().measureChosen3d(),
+        ...(chosenSettable ? { onSetChosen: () => store.getState().setChosen3d() } : {}),
         onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
         onCut: () => void clip.cut(menuMolecule.id),
         onCopy: () => void clip.copy(menuMolecule.id),
@@ -908,7 +926,7 @@ function WorkspaceContent({
     if (!stereoLabels) return;
     // asked for: what labels them set up now, if it has not been
     setChemError(null);
-    chemWorker("stereo-labels").catch((e: unknown) => {
+    chemWorker("checks").catch((e: unknown) => {
       setChemistry({ ...useAppSettings.getState().chemistry, stereoLabels: false });
       setChemError(
         `R and S cannot be shown: ${e instanceof Error ? e.message : String(e)}`,
@@ -916,7 +934,7 @@ function WorkspaceContent({
     });
   };
 
-  const alert = importError ?? files.error ?? chemError;
+  const alert = importError?.text ?? files.error ?? chemError;
   const dismissAlert = importError
     ? dismissImportError
     : files.error
@@ -998,6 +1016,7 @@ function WorkspaceContent({
   return (
     <div
       ref={dropRef}
+      data-guide="page"
       className={`flex-1 min-w-0 h-full relative${fadeIn ? " meno-fade-in" : ""}`}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseMove={handleWrapperMouseMove}
@@ -1019,6 +1038,7 @@ function WorkspaceContent({
         >
           <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-accel-accent" />
           <span className="break-words">{alert}</span>
+          {importError?.suggest && importError.again && <AddToRead suggest={importError.suggest} again={importError.again} />}
           <button
             aria-label="Dismiss"
             title="Dismiss"
@@ -1197,6 +1217,7 @@ function WorkspaceContent({
             else if (menu.kind && menu.id != null) deletePart(menu.kind, menu.id);
           }}
           molecule3d={menu3d}
+          measure3d={measure3dMenu}
           onArrowStyle={() => {
             if (menu.kind === "arrow" && menu.id != null) openArrowStyle(menu.id);
           }}
@@ -1433,6 +1454,8 @@ function WorkspaceContent({
         </DrawnLayoutProvider>
         {/* the page's scale, for chips drawn on it in HTML */}
         <PageScale />
+        {/* where a guide's step points at a structure (lib/plugins/guide) */}
+        <GuideStructure place={guideStructure} />
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />
         <PanZoom2D />
@@ -1442,6 +1465,8 @@ function WorkspaceContent({
       </PageHtmlLayer.Provider>
       {/* the page's HTML, cut off where the column begins (coverLayer) */}
       <div ref={setHtmlLayer} className="absolute inset-0 pointer-events-none" style={{ clipPath: cover > 0 ? `inset(0 ${cover}px 0 0)` : undefined }} />
+      {/* where a guide's step points at a structure: kept over it (GuideStructure) */}
+      <div ref={guideStructure} data-guide="structure" className="absolute left-0 top-0 pointer-events-none" style={{ display: "none" }} />
       </Remake3D.Provider>
     </div>
   );
@@ -1606,5 +1631,36 @@ export default function Workspace({
         </AnimatePresence>
       </div>
     </EditorProvider>
+  );
+}
+
+/**
+ * The plugins a catalogue suggests to read a file no plugin added reads,
+ * each with Add - asking for the network as adding always does - and the
+ * file read again once one is added.
+ */
+function AddToRead({ suggest, again }: { suggest: readonly string[]; again: () => void }) {
+  const states = useReaders((s) => s.state);
+  return (
+    <>
+      {suggest.map((id) => {
+        const p = anyPluginById(id);
+        if (!p) return null;
+        const adding = states[id] === "adding";
+        return (
+          <button
+            key={id}
+            disabled={adding}
+            onClick={(e) => {
+              e.stopPropagation();
+              void addPlugin(p).then(again, () => undefined);
+            }}
+            className="shrink-0 rounded-md border border-gh-line px-2 py-0.5 transition-colors duration-150 ease-meno hover:bg-gh-base disabled:opacity-60"
+          >
+            {adding ? `Adding ${p.name}…` : `Add ${p.name}`}
+          </button>
+        );
+      })}
+    </>
   );
 }

@@ -245,17 +245,18 @@ describe("a plugin's grammar", () => {
       id: "demo",
       name: "Demo",
       version: "1",
-      environment: { maker: "uv", lock: "requirements.lock" },
-      worker: "worker.py",
+      environment: "uv",
       reads: ["demo-out"],
-      kinds: [{ id: "demo-out", name: "Demo output", extensions: [".out"], marks: [{ text: "D E M O program" }], grammar: { file: "demo.grammar", tones: { Word: "value", Odd: "glow", "bad name": "keyword" } } }],
-      texts: [
-        { id: "demo-in", name: "Demo input", extensions: [".din"], marks: [{ text: "!", at: "line-start" }], grammar: { file: "../outside.grammar", tones: { Word: "keyword" } } },
-        { id: "demo-in2", name: "Demo input", extensions: [".din"], marks: [], grammar: { file: "demo-in.grammar", tones: { Word: "keyword" } } },
+      kinds: [
+        { id: "demo-out", name: "Demo output", extensions: [".out"], marks: [{ text: "D E M O program" }], grammar: { file: "demo.grammar", tones: { Word: "value", Odd: "glow", "bad name": "keyword" } } },
+        // (texts it colours: kinds it does not read)
+        { id: "demo-in", name: "Demo input", extensions: [".din"], lines: ["!"], grammar: { file: "../outside.grammar", tones: { Word: "keyword" } } },
+        { id: "demo-in2", name: "Demo input", extensions: [".din"], grammar: { file: "demo-in.grammar", tones: { Word: "keyword" } } },
       ],
     })!;
     expect(m.kinds[0].grammar).toEqual({ file: "demo.grammar", tones: { Word: "value" } });
-    expect(m.texts.map((t) => t.id)).toEqual(["demo-in2"]);
+    expect(m.kinds.filter((k) => k.grammar).map((k) => k.id)).toEqual(["demo-out", "demo-in2"]);
+    expect(registered([m]).texts.map((t) => t.id)).toEqual(["demo-in2"]);
   });
 
   it("is the first of two plugins' that bring a kind: cclib's before PySCF's", () => {
