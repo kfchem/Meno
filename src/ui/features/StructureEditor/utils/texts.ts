@@ -34,6 +34,9 @@ export function shownText(
   shown: number | null,
 ): { shown: number | null; open?: true } {
   if (before === after) return { shown };
+  // (those read in the column, its tabs: a sheet on the page not read there is none of them)
+  before = before.filter((t) => t.reading !== false);
+  after = after.filter((t) => t.reading !== false);
   const was = new Map(before.map((t) => [t.id, t]));
   const come = after.filter((t) => !was.has(t.id));
   if (come.length) return { shown: come[come.length - 1].id, open: true };

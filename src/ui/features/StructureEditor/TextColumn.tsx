@@ -4,7 +4,8 @@ import clsx from "clsx";
 import { ArrowUpTrayIcon, ChevronDoubleRightIcon, ChevronDownIcon, ChevronUpIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { exists, writeTextFile } from "@tauri-apps/plugin-fs";
-import TextEditor from "../TextEditor";
+import TextBody from "../TextEditor";
+import { columnText } from "../TextEditor/columnText";
 import { DURATION, EASE_SLIDE, FADE } from "../../theme/motion";
 import { useEditor, useEditorStore } from "./store";
 import type { PdfFind, PdfItem, WordPlace, WorkspaceText } from "./store/types";
@@ -130,8 +131,9 @@ export default function TextColumn({ slideIn = false }: { slideIn?: boolean }) {
 }
 
 function Column({ texts, read, shown, pdf, width }: { texts: WorkspaceText[]; read: PdfItem[]; shown?: WorkspaceText; pdf?: PdfItem; width: number }) {
+  const store = useEditorStore();
   const showText = useEditor((s) => s.showText);
-  const removeText = useEditor((s) => s.removeText);
+  const stopReadingText = useEditor((s) => s.stopReadingText);
   const showPdf = useEditor((s) => s.showPdf);
   const stopReadingPdf = useEditor((s) => s.stopReadingPdf);
   const find = useEditor((s) => s.pdfFind);
@@ -152,9 +154,12 @@ function Column({ texts, read, shown, pdf, width }: { texts: WorkspaceText[]; re
     <aside aria-label="Texts" style={{ width }} className="h-full border-l border-gh-line flex flex-col">
       <header className="flex items-center gap-1 pl-2 pr-1.5 h-11 border-b border-gh-line bg-white">
         <div role="tablist" aria-label="Texts" className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto">
-          {texts.map((t) => (
-            <Name key={`text-${t.id}`} name={t.name} title={t.path ?? t.name} chosen={t.id === shown?.id} onShow={() => showText(t.id)} onClose={() => removeText(t.id)} />
-          ))}
+          {/* (those read here: a text's sheet on the page, its tab closed, is not) */}
+          {texts
+            .filter((t) => t.reading !== false)
+            .map((t) => (
+              <Name key={`text-${t.id}`} name={t.name} title={t.path ?? t.name} chosen={t.id === shown?.id} onShow={() => showText(t.id)} onClose={() => stopReadingText(t.id)} />
+            ))}
           {read.map((p) => (
             <Name key={`pdf-${p.id}`} name={p.name} title={p.name} chosen={p.id === pdf?.id} onShow={() => showPdf(p.id)} onClose={() => stopReadingPdf(p.id)} />
           ))}
@@ -191,9 +196,10 @@ function Column({ texts, read, shown, pdf, width }: { texts: WorkspaceText[]; re
       <div className="flex-1 min-h-0 relative">
         <AnimatePresence initial={false}>
           {shown && (
-            <motion.div key={`text-${shown.id}`} {...FADE} className="absolute inset-0 bg-white">
-              <TextEditor value={shown.text} onChange={(v) => editText(shown.id, v)} />
-            </motion.div>
+            // (see-through: the canvas draws the text under it, in the column's pass - components/ColumnText)
+            <div key={`text-${shown.id}`} className="absolute inset-0">
+              <TextBody entry={columnText(store, shown.id, shown.text)} value={shown.text} onChange={(v) => editText(shown.id, v)} />
+            </div>
           )}
         </AnimatePresence>
         {pdf && <PdfBody key={`pdf-${pdf.id}`} pdf={pdf} />}

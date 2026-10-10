@@ -30,6 +30,7 @@ describe("whether the text renderer can draw from a font", () => {
   it("takes Meno's own fonts", () => {
     expect(drawableByTextRenderer(file("../../assets/fonts/IBMPlexSans-Regular.ttf"))).toBe(true);
     expect(drawableByTextRenderer(file("../../assets/fonts/IBMPlexSansJP-Regular.ttf"))).toBe(true);
+    expect(drawableByTextRenderer(file("../../assets/fonts/IBMPlexMono-Regular.ttf"))).toBe(true);
   });
 
   it("takes a map it looks in, of a kind it reads, over outlines it reads", () => {

@@ -30,6 +30,7 @@ export function dragSelection(
   const solids = st.molecules3d.filter((m) => takenSolids.has(m.id)).map((m) => ({ id: m.id, at: m.at }));
   const steps = st.steps.filter((s) => st.selFlow.steps.has(s.id)).map((s) => ({ id: s.id, x: s.x, y: s.y }));
   const pictures = st.pictures.filter((p) => st.selPictures.has(p.id)).map((p) => ({ id: p.id, x: p.x, y: p.y }));
+  const texts = st.texts.flatMap((t) => (t.at && st.selTexts.has(t.id) ? [{ id: t.id, x: t.at.x, y: t.at.y }] : []));
   const p0 = toWorld(from.x, from.y);
   const gesture = `drag-${performance.now()}`;
   let frame: number | null = null;
@@ -47,6 +48,7 @@ export function dragSelection(
       sets: sets.map((b) => ({ id: b.id, x0: b.x0 + dx, x1: b.x1 + dx, y0: b.y0 + dy, y1: b.y1 + dy })),
       steps: steps.map(by),
       pictures: pictures.map(by),
+      texts: texts.map(by),
     });
   };
   const onMove = (ev: PointerEvent) => {

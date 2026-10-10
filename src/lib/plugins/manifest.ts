@@ -4,8 +4,9 @@
  * is, what makes its environment and runs its worker, the kinds of file it
  * brings - their names, the names their files go by, and how a file of one
  * is told - which kinds it reads, by their ids: its own, or Meno's - the
- * kinds it writes, with their options (`writes`), the roles it fills
- * besides, by the ids Meno gives them (lib/plugins/roles), and the kinds of
+ * kinds it writes, with their options (`writes`), the kinds of text it
+ * knows besides (`texts`) - each coloured by its grammar - the roles it
+ * fills besides, by the ids Meno gives them (lib/plugins/roles), and the kinds of
  * a workflow's step it fills (`steps`, docs/WORKFLOWS.md).
  *
  * A plugin stands alone: it knows of no other, and Meno of no program. Two
@@ -22,6 +23,7 @@
  * fetched would be.
  */
 import { acceptOptions, type Option } from "../options";
+import { TONE_NAMES, type Tone } from "../text/tones";
 
 /** Text a file's start holds, which tells a kind: anywhere, or at a line's start; runs of spaces counted as one. */
 export type Mark = {
@@ -31,6 +33,25 @@ export type Mark = {
   /** Whatever its letters' case. */
   anyCase?: true;
 };
+
+/**
+ * How a text of a kind is coloured (docs/PDF.md, *A text*): a grammar in
+ * Lezer's form, in a file in the plugin's folder, and the tone each of its
+ * parts is drawn in, by the name the grammar gives it. Data, as all of a
+ * manifest is: Meno makes the grammar into tables as it is first wanted
+ * (lib/text/grammars) - a tokenizer that reads each letter once, a parser
+ * that never goes back - and takes no code from it (`@external`,
+ * `@context`). What does not read as its kind's grammar says is marked.
+ */
+export type GrammarDecl = { file: string; tones: Record<string, Tone> };
+
+/**
+ * A kind of text a plugin knows besides those it reads and writes - an
+ * input to its program, written by hand: what it is called, the names its
+ * files go by, what a line of one begins with (one of them, in its first
+ * lines; any, where it says none), and its grammar.
+ */
+export type TextDecl = { id: string; name: string; extensions: string[]; marks: Mark[]; grammar: GrammarDecl };
 
 /** A kind of file a plugin brings: what it is called, the names its files go by, and how one is told. */
 export type KindDecl = {
@@ -45,6 +66,8 @@ export type KindDecl = {
   marks: Mark[];
   /** Told by its plugin, asked, where no mark tells it. */
   probe?: true;
+  /** How a text of it is coloured. */
+  grammar?: GrammarDecl;
 };
 
 /**
@@ -60,6 +83,8 @@ export type WriteDecl = {
   /** What it is given: one molecule - one system of molecules in 3D, which Meno asks for where it must. */
   takes: "molecule";
   options: Option[];
+  /** How a text of it is coloured. */
+  grammar?: GrammarDecl;
 };
 
 /**
@@ -110,6 +135,8 @@ export type Manifest = {
   kinds: KindDecl[];
   /** The kinds it writes. */
   writes: WriteDecl[];
+  /** The kinds of text it knows besides. */
+  texts: TextDecl[];
   /** The kinds of step it fills. */
   steps: StepDecl[];
   /** The systems it can be added on - its programs built for those alone; none said, every one. */
@@ -133,6 +160,42 @@ function markOf(v: unknown): Mark | null {
   return { text: t, ...(m?.at === "line-start" ? { at: "line-start" as const } : {}), ...(m?.anyCase === true ? { anyCase: true as const } : {}) };
 }
 
+/** A mark a text's line is tried for, telling a kind of text: as short as a letter - it claims no file. */
+function lineMarkOf(v: unknown): Mark | null {
+  const m = v as Record<string, unknown> | null;
+  const t = text(m?.text, MARK_MOST);
+  if (!t) return null;
+  return { text: t, ...(m?.at === "line-start" ? { at: "line-start" as const } : {}), ...(m?.anyCase === true ? { anyCase: true as const } : {}) };
+}
+
+/** A grammar's file, in the plugin's folder: a name, not a path. */
+const GRAMMAR_FILE = /^[a-z0-9][a-z0-9-]{0,40}\.grammar$/;
+/** A part of a grammar, by the name it gives it. */
+const NODE = /^[A-Za-z_][A-Za-z0-9_]{0,39}$/;
+/** How many parts a grammar gives tones at most. */
+const TONES_MOST = 60;
+
+function grammarOf(v: unknown): { grammar?: GrammarDecl } {
+  const g = v as Record<string, unknown> | null;
+  const file = typeof g?.file === "string" && GRAMMAR_FILE.test(g.file) ? g.file : null;
+  const given = g?.tones && typeof g.tones === "object" && !Array.isArray(g.tones) ? (g.tones as Record<string, unknown>) : null;
+  if (!file || !given) return {};
+  const tones: Record<string, Tone> = {};
+  for (const [node, tone] of Object.entries(given).slice(0, TONES_MOST)) if (NODE.test(node) && (TONE_NAMES as readonly unknown[]).includes(tone)) tones[node] = tone as Tone;
+  return Object.keys(tones).length ? { grammar: { file, tones } } : {};
+}
+
+function textOf(v: unknown): TextDecl | null {
+  const t = v as Record<string, unknown> | null;
+  const id = typeof t?.id === "string" && ID.test(t.id) ? t.id : null;
+  const name = text(t?.name, 80);
+  const extensions = Array.isArray(t?.extensions) ? t.extensions.filter((e): e is string => typeof e === "string" && EXTENSION.test(e)) : [];
+  const marks = Array.isArray(t?.marks) ? t.marks.map(lineMarkOf).filter((m): m is Mark => m != null) : [];
+  const { grammar } = grammarOf(t?.grammar);
+  // (told by its files' names, coloured by its grammar: no use without either)
+  return id && name && extensions.length && grammar ? { id, name, extensions, marks, grammar } : null;
+}
+
 function kindOf(v: unknown): KindDecl | null {
   const k = v as Record<string, unknown> | null;
   const id = typeof k?.id === "string" && ID.test(k.id) ? k.id : null;
@@ -144,7 +207,7 @@ function kindOf(v: unknown): KindDecl | null {
   const probe = k?.probe === true;
   // (told somehow: by its marks, or by its plugin - and then by its files' names first)
   if (!marks.length && !(probe && extensions.length)) return null;
-  return { id, name, ...(program ? { program } : {}), extensions, marks, ...(probe ? { probe: true as const } : {}) };
+  return { id, name, ...(program ? { program } : {}), extensions, marks, ...(probe ? { probe: true as const } : {}), ...grammarOf(k?.grammar) };
 }
 
 function writeOf(v: unknown): WriteDecl | null {
@@ -154,7 +217,7 @@ function writeOf(v: unknown): WriteDecl | null {
   const extensions = Array.isArray(w?.extensions) ? w.extensions.filter((e): e is string => typeof e === "string" && EXTENSION.test(e)) : [];
   // (given one molecule: the one thing a plugin is given, for now)
   if (!id || !name || !extensions.length || w?.takes !== "molecule") return null;
-  return { id, name, extensions, takes: "molecule", options: acceptOptions(w.options) };
+  return { id, name, extensions, takes: "molecule", options: acceptOptions(w.options), ...grammarOf(w.grammar) };
 }
 
 /** A program's name, as a job is given it: a name, not a path. */
@@ -201,6 +264,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
   const reads = ids(m.reads);
   const roles = ids(m.roles);
   const writes = Array.isArray(m.writes) ? m.writes.map(writeOf).filter((w): w is WriteDecl => w != null) : [];
+  const texts = Array.isArray(m.texts) ? m.texts.map(textOf).filter((t): t is TextDecl => t != null) : [];
   // (each kind of step once)
   const steps = (Array.isArray(m.steps) ? m.steps.map(stepOf).filter((d): d is StepDecl => d != null) : []).filter(
     (d, i, all) => all.findIndex((e) => e.kind === d.kind) === i,
@@ -234,6 +298,7 @@ export function acceptManifest(raw: unknown): Manifest | null {
     roleOptions,
     kinds,
     writes,
+    texts,
     steps,
     systems,
     installed,

@@ -80,14 +80,15 @@ export function createSelectionSlice(set: SetState) {
         sel: { atoms: new Set(prev.model.atoms.map((a) => a.id)), bonds: new Set(prev.model.bonds.map((b) => b.id)) },
         sel3d: new Set(prev.molecules3d.map((m) => m.id)),
         selPictures: new Set(prev.pictures.map((p) => p.id)),
+        selTexts: new Set(prev.texts.filter((t) => t.at).map((t) => t.id)),
         selFlow: { sets: new Set(prev.sets.map((b) => b.id)), steps: new Set(prev.steps.map((s) => s.id)) },
       })),
 
     /** Nothing selected, and no atom of a molecule in 3D chosen. */
     clearSel: () =>
       set((prev: EditorState) =>
-        prev.sel.atoms.size || prev.sel.bonds.size || prev.sel3d.size || prev.chosen3d || prev.selFlow.sets.size || prev.selFlow.steps.size || prev.pdfSel || prev.pdfBox || prev.selPictures.size
-          ? { ...prev, sel: none(), selAnchor: null, sel3d: new Set<number>(), chosen3d: null, selFlow: noFlow(), pdfSel: null, pdfBox: null, selPictures: new Set<number>() }
+        prev.sel.atoms.size || prev.sel.bonds.size || prev.sel3d.size || prev.chosen3d || prev.selFlow.sets.size || prev.selFlow.steps.size || prev.pdfSel || prev.pdfBox || prev.selPictures.size || prev.selTexts.size
+          ? { ...prev, sel: none(), selAnchor: null, sel3d: new Set<number>(), chosen3d: null, selFlow: noFlow(), pdfSel: null, pdfBox: null, selPictures: new Set<number>(), selTexts: new Set<number>() }
           : prev,
       ),
 

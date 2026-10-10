@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ARROW_CLEAR, captionLines, captionPlace, captionRuns, captionSet, captionWords, CAPTION_LINE } from "./captions";
+import { ARROW_CLEAR, captionLines, captionPlace, captionPlaceAt, captionPlaces, captionRuns, captionSet, captionWords, CAPTION_LINE } from "./captions";
 import { labelBox, placeLabel, runsWidth } from "./layout2d";
 
 const shown = (line: string) =>
@@ -175,3 +175,49 @@ describe("where a caption put down goes", () => {
     expect(captionPlace({ x: 3, y: 0.5 }, half, [arrow], 1)).toEqual({ x: 3, y: 0.5 });
   });
 });
+
+describe("where a caret stands in a caption", () => {
+  it("is before each letter and at the end, as the line is set: a formula's counts set low, narrower", () => {
+    const p = captionPlaces("K2CO3", 0, 0, 1);
+    expect(p.at).toHaveLength(6);
+    expect(p.lines).toHaveLength(1);
+    // (from the line's start to its end, as wide as it is set, about its middle)
+    const w = runsWidth(captionRuns("K2CO3"), 1);
+    expect(p.at[0].x).toBeCloseTo(-w / 2);
+    expect(p.at[5].x).toBeCloseTo(w / 2);
+    for (let k = 1; k < 6; k++) expect(p.at[k].x).toBeGreaterThan(p.at[k - 1].x);
+    // (the count's place no further on than a letter's would be)
+    expect(p.at[2].x - p.at[1].x).toBeLessThan(p.at[1].x - p.at[0].x);
+  });
+
+  it("goes down a line at a line typed, and where the setting breaks it - spaces run together standing as the one it keeps", () => {
+    const text = "Pd2(dba)3\nK2CO3,  dioxane";
+    const p = captionPlaces(text, 0, 0, 1);
+    expect(p.at).toHaveLength(text.length + 1);
+    expect(p.at[9].line).toBe(0);
+    expect(p.at[10].line).toBe(1);
+    expect(p.lines[0].y - p.lines[1].y).toBeCloseTo(CAPTION_LINE);
+    const wide = captionPlaces("one two three", 0, 0, 1, undefined, runsWidth(captionRuns("one two"), 1) + 0.01, "left");
+    expect(wide.lines).toHaveLength(2);
+    // ("three" begins the second line: the space before it at the first's end, its t at the second's start)
+    expect(wide.at[7]).toMatchObject({ line: 0 });
+    expect(wide.at[8]).toMatchObject({ line: 1, x: wide.lines[1].x0 });
+    expect(wide.lines[1].x0).toBeCloseTo(wide.lines[0].x0);
+  });
+
+  it("is found nearest a point: on the nearest line, the nearest place across", () => {
+    const text = "60 °C\n12 h";
+    const p = captionPlaces(text, 0, 0, 1);
+    expect(captionPlaceAt(p, { x: p.at[2].x + 0.01, y: p.lines[0].y + 0.1 })).toBe(2);
+    expect(captionPlaceAt(p, { x: 100, y: p.lines[1].y - 0.2 })).toBe(text.length);
+    // (an empty caption: its one place)
+    expect(captionPlaceAt(captionPlaces("", 3, 4, 1), { x: 0, y: 0 })).toBe(0);
+  });
+
+  it("keeps every letter of a line where its runs set it, whatever the setting makes of it", () => {
+    for (const t of ["t-BuOK, THF", "NH4+ BF4-", "(R)-BINAP, 2 equiv", "THF/H2O (1:1)", "−78 °C"]) {
+      expect(captionRuns(t).map((r) => r.text).join("").length).toBe(t.length);
+    }
+  });
+});
+

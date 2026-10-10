@@ -1,14 +1,11 @@
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { TAU, follow } from "../../../theme/motion";
 import { labelSetOf, placeLabel, type TextItem } from "../../../../lib/chem/layout2d";
-import {
-  needsFallback,
-  noteUncovered,
-  useLabelFontUrl,
-} from "../../../fonts/typefaces";
+import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
+import { labelFont } from "../../../../lib/chem/labelFonts";
 import { useDrawnLayout } from "./drawnLayoutContext";
 
 /**
@@ -48,12 +45,8 @@ export function Texts2D({ texts: items, moved, shadow, renderOrder = 30 }: { tex
   // label in some other font that then jumps.
   const family = opts.fontFamily ?? "Arial";
   const texts = items.map((t) => t.text);
+  // (a letter no typeface of Meno's has drawn as a white square - as the layout measured it: lib/chem/labelFonts `STAND_IN`)
   const font = useLabelFontUrl(family, needsFallback(texts));
-  // what no font of Meno's has goes on the network's record, once known
-  const key = texts.join("\n");
-  useEffect(() => {
-    if (font !== null) noteUncovered(family, key.split("\n"));
-  }, [font, family, key]);
   // Once the font is in, the labels fade in (TAU.quick) rather than appear:
   // each label's own opacity brought up a frame at a time, not the labels
   // drawn again - a drawing can have thousands.
@@ -79,6 +72,7 @@ export function Texts2D({ texts: items, moved, shadow, renderOrder = 30 }: { tex
   const labels = useMemo(() => {
     if (font === null) return null;
     const set = labelSetOf(opts);
+    const glyphs = labelFont(set.fontFamily);
     const fill = shadow || moved ? 0 : seen.current.level;
     return items.map((t, i) => {
       const fontWorld = labelZoom != null ? t.fontPx / Math.max(labelZoom, 1e-6) : t.fontPx;
@@ -101,7 +95,7 @@ export function Texts2D({ texts: items, moved, shadow, renderOrder = 30 }: { tex
                 material-depthTest={false}
                 material-depthWrite={false}
               >
-                {run.text}
+                {glyphs.shown(run.text)}
               </Text>
             </group>
           ))}

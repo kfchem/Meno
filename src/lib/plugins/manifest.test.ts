@@ -15,6 +15,7 @@ const good = {
   roles: [],
   kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO", at: "line-start" }] }],
   writes: [],
+  texts: [],
   roleOptions: {},
   steps: [],
   systems: [],

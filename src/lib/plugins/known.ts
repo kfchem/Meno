@@ -22,3 +22,10 @@ export const MANIFESTS: readonly Manifest[] = Object.entries(found)
   })
   .filter((m): m is Manifest => m != null)
   .sort((a, b) => a.id.localeCompare(b.id));
+
+const grammars = import.meta.glob<string>("/src-tauri/resources/plugins/*/*.grammar", { eager: true, query: "?raw", import: "default" });
+
+/** A grammar in the folder of a plugin Meno carries (lib/plugins/manifest `GrammarDecl`): its text, or none where the folder holds no such file. */
+export function grammarText(plugin: string, file: string): string | undefined {
+  return grammars[`/src-tauri/resources/plugins/${plugin}/${file}`];
+}

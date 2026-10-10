@@ -222,6 +222,10 @@ stops being part of the work.
   type, and its name under it. A text opened, dropped or made new
   (*New text*) lies on the page as well as being in the column. Seen
   nearer, more of it shows, and it is read where it lies.
+- **It comes onto the page as an icon**, as a PDF does: its sheet made
+  small, its longer side as long as a PDF's icon is tall, its name
+  under it at the size of the drawing's labels. *Show full size* and
+  *Minimize to an icon*, in its menu, change it as they change a PDF.
 - **A calculation's output keeps its molecule as its body**: the
   molecule's *Show <name>* opens the output in the column, rising from
   the molecule. No sheet is laid beside it.
@@ -243,8 +247,8 @@ stops being part of the work.
     should; Meno draws the text, the caret, the selection and what the
     IME is composing. The lines around the caret are kept in that field
     too, so that a word already written can be converted again.
-    (Words on the page are typed today in a field shown over the page,
-    in HTML.)
+    Words on the page are typed in place the same way (*As built*,
+    step 5).
   - **The keys are an editor's**: arrows, by word and by line, to a
     line's ends and the text's, page by page, with Shift to select, each
     as the system has them on a Mac and on Windows.
@@ -256,9 +260,12 @@ stops being part of the work.
   over). Lezer says which part of the text is what; Meno draws the
   colours.
   - a Python script, JSON or XML by their usual grammars;
-  - a calculation's input or output by what its plugin says of its kind
-    - its keywords, its numbers, and its warnings and errors - so that
-    Meno knows no program's format of itself.
+  - a calculation's input or output by its plugin's grammar for its
+    kind - its keywords, its options and values, its atoms and numbers;
+    what a reader of an output looks for, what says a run went well, its
+    warnings and errors - so that Meno knows no program's format of
+    itself. What does not read as the grammar says - a block left open,
+    a molecule with no charge - is marked.
 
 ## Movement
 
@@ -680,6 +687,80 @@ Decided while building it, for the maintainer to confirm:
 Not yet, and where it comes:
 - **A scanned page**: it is one picture over most of the page, so no figure is found on it. A box drawn by hand takes part of it.
 - **Reading a figure as a structure**: stage 5.
+
+### Step 5: texts drawn by Meno (2026-10-10, under way)
+
+Step 5 comes in parts: the trial of typing alone, shown first; the column's text drawn on the canvas, typed through Meno's field (5a); texts' sheets on the page (5b); the movement between the page and the column; colouring; and words on the page typed in place.
+
+**The trial of typing** (its work goes on in 5a, with the fixes the checks on a Mac and on Windows asked for):
+- **A text in the column drawn by Meno** with WebGL: each line a picture drawn by the system's own type - Meno's monospaced first, any letter it lacks from the system's - only the lines in view, numbered; the caret, what is selected and what the IME is composing drawn over them. As sharp as the textarea it took the place of, at 100% and at 175%; a log of 5000 lines scrolls as a short file does.
+- **Typing through a field kept out of sight**, where the IME's candidates show at the caret, holding the caret's line and two either side, and what is selected, so that a word already written can be converted again.
+  - **On a Mac** (WebKit), a textarea, lying just where the drawn lines lie. Composing, its clauses, committing, Escape, and converting again (the kana key twice) were tried with Apple's Japanese input in the built app.
+  - **On Windows** (WebView2), an EditContext on the text's own element. A textarea there tells the page neither the IME's clauses - every clause was underlined alike - nor, converting again a word the caret is in, what it replaces; through the EditContext, the clause being converted is underlined thick, and the candidates follow it. Converting again from within a word, Microsoft's IME may first take away the part before the caret, then put the whole word in again at the caret: Meno takes that as one change of the word (lib/text/field `composingIn`, `withTakenAway`), undone at once, or none where it comes back as it was.
+- **The keys are each system's** (lib/text/keys): on a Mac, Option by words, Command to the ends, Control's keys (A, E, B, F, P, N, H, D, K), Home, End and a page moving the view, with Option the caret; on Windows, Ctrl by words, Home and End a line's ends, Ctrl with Home or End the text's, Ctrl with an arrow up or down the view a line. A page on moves the view a page with the caret.
+- **As quick to show as the textarea**: an EditContext's change comes in an event React does not know, and was drawn a frame late, 30-40 ms after the textarea's; it is now drawn in the frame after it, whatever event it came in (measured on Windows, 5-23 ms from the key to the frame).
+- **What the IME composes kept in view**, its caret where it says, as typing keeps the caret in view: begun scrolled away from the caret, or at the end of a long line.
+
+**5a: the column's text on the canvas.** A text read in the column is drawn by the workspace's one canvas, in the column's pass, as a PDF read there is (*One canvas*): on a white sheet of its own, cut off where the column is, sliding with it. Its HTML half over it is see-through: it takes the pointer - a click puts the caret, two clicks a word, three a line, a drag selects on - the wheel, and holds the field it is typed through. Each text keeps where it was read, and what was selected, while the workspace is open.
+
+**5b: texts' sheets on the page.**
+- **A text opened, dropped or made new** lies on the page as a sheet, made an icon, as well as being read in the column: where it was dropped, or beside what is in view, clear of what lies there, its name's room as a PDF's icon's. A calculation's output shown from its molecule, and a step's log, have no sheet: their molecule, or their step, is their body.
+- **The sheet** shows the text's first lines as they would be printed - Meno's monospaced type at 9 points, a line every 12 - as wide as its longest line among them (at most 80 letters, at least 32), as tall as its first 40 lines (at least 3); its name lies under it, as a PDF's does. Seen from far off, its lines are grey strokes; nearer, its words come up over them, sharp at every zoom (troika). A line with a letter Meno's monospaced type lacks takes it from IBM Plex Sans JP.
+- **Handled as a picture is**: a drag on it moves the view; held still, it is taken hold of, the selection's shade spreading from the pointer, and the drag moves it; a click selects it, Ctrl/Cmd and a click adds it or takes it out; a box or a lasso takes it by its middle; selected, it moves with the selection, and is deleted with it, each as one step. Delete over one deletes it. Fit takes sheets in.
+- **An icon at first**, as a PDF is: the sheet made small about its middle, its longer side as long as a PDF's icon is tall (`ICON_HEIGHT`), its name under its middle at the drawing's labels' size. *Show full size* in its menu makes it the sheet; *Minimize to an icon* makes it small again - each one step, the sheet shrinking or growing about its middle as a PDF does (380 ms). An icon is moved, selected, read and deleted as the sheet is.
+- **Read in the column** by two clicks, or *Read* in its right-click menu (*Read*, *Show full size* or *Minimize to an icon*, *Delete text*). A text's tab closed in the column leaves its sheet on the page, read there no longer; a text with no sheet goes, as before.
+- **Saved** in the workspace: each text's sheet's place (`at`, its top left), whether it is an icon (`icon`) and whether it is read in the column (`reading`).
+
+**Between the page and the column.**
+- **Read**, by two clicks, *Read*, or as it is opened or made new, a text's lines rise from its sheet - from its icon, as small as the icon shows them - a white sheet with a soft shadow under it, and go into the column as it opens, growing to its width; the view eases so that the sheet lies beside the column, as a PDF's does. **Closed**, they go back down to the sheet as the column shuts. A tab gone to in the column, the column open already, comes as it did.
+- **On the way they move in the page's type** - signed-distance glyphs, as large as the sheet shows them at one end and as the column's at the other - and once settled, the column's own lines, drawn in the system's type, take their place under them as they fade (140 ms). The flight sets off once its lines are laid out, a frame or two after, so as never to be blank.
+- **A calculation's output shown from its molecule** (*Show <name>*) rises out of the molecule likewise, coming up as the column's lines made as small as the molecule, and goes back down into it as the column shuts. This holds for any output read as a molecule, opened from outside Meno or brought in by a step: its molecule is the one whose menu showed it. Shown again from another molecule read from the same file, it is that one's.
+- **A step's log** (*Show log*) - what the program said as Meno ran it, read as no molecule - rises out of its step's card likewise, and goes back down into it.
+- **A text without a sheet keeps what it is the text of** (`of`): its step, or its molecule. Saved in the workspace, a step by its id and a molecule by its place among the molecules, as they are numbered again when it opens. Its body gone - the step or the molecule deleted - it comes into the column and goes with it, as a text with no body does.
+
+**Colouring** (`lib/text/colouring.ts`):
+- **A Python script, JSON or XML**, told by its name (`.py`, `.json`, `.xml`), is coloured by Lezer's grammar for it: keywords, strings, numbers, comments, and what a definition names, a JSON object's keys, an XML element's names and attributes. It is parsed as far as the lines shown, 128 KB on at a time, and after an edit from where it changed, the rest of the tree kept: a long file opens and is typed in at once.
+- **A calculation's input or output** is coloured by its plugin's grammar for its kind (`grammar` on a kind it brings or writes, or on a kind of text it knows, `texts`; docs/PLUGINS.md): a grammar in Lezer's form, in a file in the plugin's folder, and the tone each of its parts is drawn in, by the name the grammar gives it.
+  - The grammar is made into a parser as it is first wanted (`lib/text/grammars.ts`): tried in a worker within 5 s, then made on the page and kept. A grammar asking for code (`@external`, `@context`) is refused, so a plugin gives Meno data alone, and no text can hold the page up: Lezer's tokenizer reads each letter once and its parser never goes back.
+  - A *value*, as a grammar's tones say, Meno colours as a number where it is one (a sign, a point, an exponent, a Fortran D's) and leaves as it is where it is not: 6-31G, def2-SVP.
+  - Which grammar: a kind a plugin brings is told by what the text holds, as a file is (lib/io/kinds); a kind it writes, or knows besides, by the text's name and, where it says, what one of its first lines begins with (an ORCA input's `!`, `%` or `*`). Of two plugins that bring a kind, the first's grammar. A plugin not added colours nothing.
+- **What does not read as its grammar says is marked**: underlined in Meno's attention colour - a part read wrongly, or where something is missing, a letter's width. Not on the line the caret is on while the text is typed in, until it is left. An output's grammar takes any text, so nothing in an output is marked.
+- **The grammars the plugins Meno carries bring**, each from the program's own words - its manual, or what it printed in runs made with Meno:
+  - **ORCA's input** (the ORCA interface, `.inp`): simple keyword lines, blocks with their options and values and sub-blocks with their own `end`, `%maxcore` with its one value, the geometry and its atoms, a geometry read from a file, comments (ORCA's manual, *General Structure of the Input File* and *Input of Coordinates*). Marked: a block left open - at the next block or geometry - and a geometry with no closing `*`.
+  - **Gaussian's input** (the Gaussian interface, `.gjf`, `.com`): Link 0 commands, the route section and its lines on, the title, the charge and multiplicity, the atoms (Cartesian or a Z-matrix), further sections, `--Link1--`, comments (Gaussian's *Input* page). Marked: no route section, and a molecule with no charge and multiplicity line.
+  - **Gaussian's output** (cclib, PySCF): *SCF Done:*, the energies with thermal corrections, *Optimization completed.*, *Converged?* as what a reader looks for; *Stationary point found.*, *Normal termination of Gaussian* and a criterion's *YES* as a run gone well; a line from *Warning* on as a warning - as Gaussian 16 printed them.
+  - **ORCA's output** (cclib, PySCF): *FINAL SINGLE POINT ENERGY*, *SCF CONVERGED AFTER*, the geometry's convergence, the free energy and enthalpy, the frequencies; *THE OPTIMIZATION HAS CONVERGED* and *ORCA TERMINATED NORMALLY* as a run gone well - as ORCA 6.1 printed them; *ORCA finished by error termination* as an error (ORCA's manual, *Troubleshooting*).
+  - **xTB's output** (cclib): *TOTAL ENERGY*, *TOTAL FREE ENERGY*, *HOMO-LUMO GAP*, *SCC energy*; *GEOMETRY OPTIMIZATION CONVERGED* and *normal termination of xtb*; *[WARNING]* lines as warnings; *ERROR STOP* and *Error termination* as errors - as xTB 6.7 printed them.
+  - Rules of dashes, equals signs, stars or dots in outputs are grey.
+- **Drawn in the column**: each line's parts in their tones, the line drawn whole in each colour and kept to its parts, so that its letters lie just where they would in one. What the IME is composing is drawn uncoloured, as it is. The colours are from the palette the column's look is taken from: red keywords, dark blue strings, blue numbers, options and keys, grey comments, purple definitions and what an output's reader looks for, green XML names and atoms, a deeper green for a run gone well, amber warnings, and Meno's own attention for errors.
+
+**Words on the page typed in place** (`components/CaptionTyping2D.tsx`, `utils/wordsEditor.ts`), in place of the field shown over them in HTML:
+- **Drawn by Meno as they will be kept**: set as the drawing sets its labels (a formula's counts low, a prefix in italics), in its typeface at its size, broken into lines as wide as they were made where they were given a width, laid as they will lie - so that what is written is what is kept, its lines broken as they will be. Lit round while they are written.
+- **The caret, what is selected and what the IME composes** are drawn over them, in the drawing's units: the caret blinking, the selection in Meno's light, what is composed underlined clause by clause. Where each place lies comes from how the words are set (lib/chem/captions `captionPlaces`): before each letter, a formula's count no wider than it is set, and spaces the setting runs together standing where the space it keeps does.
+- **Typed through the column's field** (TextEditor/typingField, now typing into any text Meno draws, `FieldHost`): an EditContext on Windows, a textarea on a Mac, laid with its caret on the drawn one, in the words' type at the size they are seen, so that the IME's candidates show at the caret.
+  - **Drawn in the frame after a change**, as the column's text is: a change through the EditContext came in an event React does not know and was drawn a frame late - 10 ms at 100 Hz, 33 ms over Remote Desktop. Drawn at once, a conversion shows before the clauses the IME gives just after it: those it gave before are kept to what it has now (lib/text/field `clausesWithin`), where the conversion made it shorter.
+  - **Checked on Windows** with Microsoft's IME (2026-10-10): composing, its clauses, Enter, Escape, converting again a word selected, the candidates at the caret after the view is zoomed or moved. Shown, the candidates stay where they are while the view moves under them, as the IME keeps them, and come to the caret again as they are next shown.
+- **The keys**: an editor's, as in the column - up and down by the lines as they are set, Home and End (Command with the arrows on a Mac) to a set line's ends. Enter keeps the words, Shift+Enter starts another line, Escape lets them go; their own undo while they are written (a run of typing one step), one step for the document once kept.
+- **The pointer**: a click among them puts the caret, two select a word, three a line, a drag selects on; the press is theirs - no box begun, no view moved. A press elsewhere keeps them, as before, and does what it does there.
+
+Decided while building it, for the maintainer to confirm:
+- **On a Mac the textarea, on Windows the EditContext**: each the one its system's webview takes the IME through best. WebKit has no EditContext.
+- **A Mac's Home, End and Page keys move the view**, the caret staying, as in the Mac's own texts; with Option, a page moves the caret too. Tab moves the keys on, as the textarea did.
+- **A sheet's size** (above), and its top left where it lies, so that a text growing at its end grows down.
+- **A text's icon is its sheet made small**, not a page's shape: its longer side as long as a PDF's icon is tall, so that a few lines make a wide, low icon and a long log a tall one, as their sheets are.
+- **Closing a text's tab leaves its sheet on the page**; deleting the sheet takes the text out of the workspace.
+- **Colours in the column only.** A sheet on the page shows its lines as they would be printed, in black; a text rising from it takes its colours as the column's lines take its place.
+- **A plugin's grammar, not patterns** (the maintainer, 2026-10-10, from a sketch of an ORCA input and a Gaussian output coloured part by part): a grammar is data that Meno makes into tables, which no text can hold up as a pattern could, and it reads an input's structure - so that what does not read as it should can be marked (the maintainer: very good). Regular expressions are still taken from no plugin (docs/FILE-IO.md, *Marks are data*).
+- **Errors and landmarks only where a program's own words say them.** Gaussian's error line was found neither in Gaussian's own pages nor in what it printed here, so Gaussian's output marks its warnings, not its errors, for now.
+- **The colours**, from the palette the column's look is taken from, as GitHub colours code, with purple for what an output's reader looks for and green for a run gone well (the maintainer agreed to both).
+- **A letter no typeface of Meno's has - an emoji - is a white square on the page** (labels, words on the page, sheets, names), measured as one, the rest of its text drawn as ever. The canvas's text renderer looked for it on the network, which the window may not reach, and left the whole text it was in undrawn: a word typed in place with an emoji in it showed its first letters alone, and the IME's underline ran under nothing. The column draws it in the system's type, as it is. Drawing it on the page will come with a typeface fetched with leave (the maintainer, 2026-10-10: later): a purpose of its own asked about once, as Python's download is, the app fetching the typeface and keeping it, the window drawing from it - the window itself reaching nothing still (docs/ARCHITECTURE.md, *The network*). One letter at a time in one colour, as troika draws.
+- **troika changed where it is installed** (`scripts/patch-troika.mjs`, after every install; the maintainer chose it, and no report to troika): it applied every GPOS lookup whatever its feature, so IBM Plex Sans JP's half-width and proportional forms closed up its ideographic comma and the letters after it lay over it (found on Windows); and it took each letter from the font the one before came from, so the Latin after a Japanese letter came from IBM Plex Sans JP, a degree sign a full em wide. Now, as a browser does: kerning and marks alone, and each letter from the first font that has it.
+- **Lenient grammars.** A text written as its program reads it should never be marked: an ORCA block's `end` closes the block on the line it opens, and a sub-block's on its own line; a value block (`%maxcore`) is told by its name; Gaussian's route may go on over lines. What a grammar cannot tell without a program's list of keywords is not marked: a missing blank line after Gaussian's route section reads as more of the route.
+
+Not yet, and where it comes:
+- **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
+- **A step's card lies over the canvas**, in HTML, as all a workflow's cards do: a log's lines come out from under its step's card, and pass under the other cards on their way, as a PDF's page does.
+- **More grammars**: a language Lezer has a grammar for is a line here and its few tens of kilobytes; Python, JSON and XML for now, as the specification lists.
 
 ## In order
 

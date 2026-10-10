@@ -4,6 +4,7 @@
   "version": "0.1.9",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/patch-troika.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -22,6 +23,13 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "@lezer/common": "^1.5.3",
+    "@lezer/generator": "^1.8.1",
+    "@lezer/highlight": "^1.2.4",
+    "@lezer/json": "^1.0.3",
+    "@lezer/lr": "^1.4.10",
+    "@lezer/python": "^1.1.19",
+    "@lezer/xml": "^1.0.6",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.1",
     "@tailwindcss/vite": "^4.3.3",

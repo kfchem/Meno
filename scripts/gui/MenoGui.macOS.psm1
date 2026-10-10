@@ -795,11 +795,13 @@ function Send-MenoText {
 }
 
 function Send-MenoKey {
-    param([Parameter(Mandatory)] [ValidateSet("Enter", "Escape", "Tab", "Backspace")] [string] $Key)
+    param([Parameter(Mandatory)] [ValidateSet("Enter", "Escape", "Tab", "Backspace")] [string] $Key, [switch] $Shift)
     Assert-MenoFront
     # Virtual key codes of the ANSI layout; these four are the same on all of them.
     $code = @{ Enter = 36; Escape = 53; Tab = 48; Backspace = 51 }[$Key]
-    [MacGui]::TapKey([uint16] $code)
+    # (with Shift, if asked: Shift+Enter)
+    if ($Shift) { [MacGui]::Chord([uint16[]] @(56), [uint64[]] @(0x20000), [uint16] $code) }
+    else { [MacGui]::TapKey([uint16] $code) }
     Start-Sleep -Milliseconds 150
 }
 
