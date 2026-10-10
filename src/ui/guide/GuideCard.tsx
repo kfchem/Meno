@@ -22,7 +22,8 @@ export default function GuideCard() {
   const shown = shownStep(open);
   const at = shown?.step.at;
   const part = usePart(at && at !== "page" ? at : undefined);
-  const page = usePart("page");
+  // (looked for only while a guide is open)
+  const page = usePart(shown ? "page" : undefined);
   const cardRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 320, height: 160 });
   const isShown = shown != null;
