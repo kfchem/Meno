@@ -460,16 +460,29 @@ All hover-based, as above.
   page - a reaction's reagents and conditions, or anything else
   (`lib/chem/captions`, `Captions2D`, `CaptionTyping2D`).
   - Written in place, from Quick Add or the menu on empty space (*Add
-    text*); written anew by a double-click on it or its menu's *Edit text*.
-    Enter keeps them, Shift+Enter starts another line, Escape lets them go,
-    a press elsewhere keeps them; written away, they are gone. As they are
-    written, undo is their own; kept, one undo step.
+    text*); written anew as words are anywhere (the maintainer,
+    2026-10-10): a click on them puts the caret there, a drag on them
+    selects letters from where it pressed, a second click selects a word
+    and a third a line - the click that opened them counted among those -
+    and their menu's *Edit text* puts the caret at their end. Enter keeps
+    them, Shift+Enter starts another line, Escape lets them go, a press
+    elsewhere keeps them; written away, they are gone. As they are
+    written, undo is their own; kept, one undo step. Over them the pointer
+    is the system's text pointer.
   - Written where they stand, drawn by Meno as they will be kept - set as
     below, broken into lines as wide as they are made - lit round while
     they are written, with the caret, what is selected and what an input
     method composes drawn over them (docs/PDF.md, step 5). A click among
     them puts the caret, two select a word, three a line, a drag selects
     on; an editor's keys move and select as in the column of texts.
+  - Drawn whole: the type draws a text's letters a frame or two after it
+    is given them, and showed the old ones meanwhile - a letter deleted
+    stayed on the page for a moment, the caret already before it (the
+    maintainer, 2026-10-10). Each change is now set out of sight and shown
+    once every letter of it is drawn, the caret and what is selected with
+    it; the words being written take the place of their own only once they
+    are drawn, and give it back, kept or let go, only once those are
+    (`Labels2D` `WholeTexts2D`).
   - Set as a label is set, word by word: a formula's counts low (K₂CO₃,
     Pd₂(dba)₃, Pd(PPh₃)₄), a prefix's t- in italics at a word's start
     (*t*-BuOK, not the o of co-solvent), a sign at a formula's end its
@@ -480,8 +493,15 @@ All hover-based, as above.
     its middle and half an em clear of it, beyond any words already there;
     and go where the arrow goes, moved or drawn out, until they are dragged
     off it. Put down elsewhere, they stay where they are put.
-  - Lit from behind under the pointer, dragged to move, deleted by Delete
-    or Backspace under the pointer or from their menu.
+  - Lit from behind under the pointer. Held still a moment (a long press,
+    as on a structure), they are taken hold of - lit from the pointer out -
+    and selected, as one thing, with the selection's shade; a drag on from
+    there moves them, or the whole selection where they are selected with
+    more, as one undo step. Ctrl (⌘) and a click adds them to the selection
+    or takes them out; Select all takes them. Selected, they are deleted,
+    cut and copied with the rest of the selection, pasted selected; words
+    alone go on the clipboard as Meno's own record. Deleted by Delete or
+    Backspace under the pointer or from their menu, too.
   - Made wider or narrower by their edges, shown as they are lit (the
     maintainer, 2026-10-09): dragged sideways, with Meno's own pointer for
     it, the other edge staying where it is, their words are broken at

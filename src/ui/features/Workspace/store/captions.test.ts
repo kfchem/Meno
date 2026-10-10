@@ -103,10 +103,75 @@ describe("words on the page", () => {
     // (a workspace keeps them all)
     const ws = readWorkspace(workspaceText({ ...state(), turns3d: {}, frames3d: {}, lists3d: {} }))!;
     expect(ws.drawn.captions?.map((c) => c.text)).toEqual(["hv", "far away"]);
-    // (deleted with the selection)
-    state().selectAll();
+    // (deleted with the selection: those among it - not those away from it)
+    state().setSel({ atoms: new Set([a, b]), bonds: new Set() });
     state().deleteSelection();
     expect(state().captions.map((c) => c.id)).toEqual([far]);
+  });
+
+  it("are selected each as one thing - by Select all too - and deleted and pasted as the selection is", () => {
+    const { doc, state } = editor();
+    const a = state().addAtom(0, 0, "C");
+    const one = state().addCaption("one", 30, 30);
+    const two = state().addCaption("two", -30, 30);
+    state().selectCaptions([one]);
+    expect([...state().selCaptions]).toEqual([one]);
+    // (Select all takes every word on the page; nothing selected, none)
+    state().selectAll();
+    expect([...state().selCaptions].sort()).toEqual([one, two]);
+    state().clearSel();
+    expect(state().selCaptions.size).toBe(0);
+    // (words alone pasted: added - numbered on - and selected)
+    const other = editor();
+    other.state().pasteModel({ atoms: [], bonds: [], captions: [{ id: 7, x: 0, y: 0, text: "pasted" }] });
+    expect(other.state().captions.map((c) => c.text)).toEqual(["pasted"]);
+    expect([...other.state().selCaptions]).toEqual([other.state().captions[0].id]);
+    // (deleted as the selection is, the structure left)
+    state().selectCaptions([one]);
+    state().deleteSelection();
+    expect(state().captions.map((c) => c.id)).toEqual([two]);
+    expect(state().model.atoms.map((x) => x.id)).toEqual([a]);
+    // (undone: back)
+    doc.undo();
+    expect(state().captions.map((c) => c.id).sort()).toEqual([one, two]);
+    // (deleted on their own: no longer selected)
+    state().selectCaptions([two]);
+    state().removeCaption(two);
+    expect(state().selCaptions.size).toBe(0);
+  });
+
+  it("written, are drawn in place of their own until kept or let go, and their own again once those are drawn", () => {
+    const { state } = editor();
+    const id = state().addCaption("one", 0, 0);
+    // (each writing its own number)
+    state().setCaptionEdit({ id, at: { x: 0, y: 0 } });
+    const n = state().captionEdit!.n!;
+    expect(n).toBeGreaterThan(0);
+    expect(state().captionEdit!.drawn).toBeFalsy();
+    // (what is written drawn: the caption's own no longer)
+    state().markCaptionDrawn(n);
+    expect(state().captionEdit!.drawn).toBe(true);
+    // (another's word on it changes nothing)
+    state().markCaptionDrawn(n + 1);
+    state().leaveCaptionEdit(n + 1, id);
+    expect(state().captionEdit?.n).toBe(n);
+    // (kept: drawn as written until the caption's own are)
+    state().leaveCaptionEdit(n, id);
+    expect(state().captionEdit).toBeNull();
+    expect(state().captionLeft).toEqual({ id, n, at: { x: 0, y: 0 } });
+    // (another opened meanwhile: both drawn, each as it is)
+    state().setCaptionEdit({ id: null, at: { x: 5, y: 5 } });
+    expect(state().captionEdit!.n).toBeGreaterThan(n);
+    expect(state().captionLeft?.id).toBe(id);
+    state().captionShown(id + 1);
+    expect(state().captionLeft?.id).toBe(id);
+    state().captionShown(id);
+    expect(state().captionLeft).toBeNull();
+    // (new words let go: nothing to hand back)
+    const m = state().captionEdit!.n!;
+    state().leaveCaptionEdit(m, null);
+    expect(state().captionEdit).toBeNull();
+    expect(state().captionLeft).toBeNull();
   });
 
   it("are read only as words, over an arrow that is there", () => {

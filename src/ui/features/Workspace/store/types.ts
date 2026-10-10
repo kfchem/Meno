@@ -63,6 +63,9 @@ export type Arrow = {
 };
 /** A "+" between two structures of a reaction scheme: where its middle is. */
 export type Plus = { id: number; x: number; y: number };
+/** A press on words on the page that opens them to be written: where on the page, where on the screen and when - and whether a drag goes on from it. */
+export type CaptionPress = { at: { x: number; y: number }; client: { x: number; y: number }; t: number; drag: boolean };
+
 /**
  * Words on the page - a reaction's reagents and conditions, or anything
  * else - where their middle is (lib/chem/captions); over or under an arrow,
@@ -633,15 +636,34 @@ export type EditorState = {
   updatePicture: (id: number, patch: Partial<Pick<PictureItem, "x" | "y" | "w" | "h" | "turn">>, gesture?: string) => void;
   removePicture: (id: number) => void;
   setHoveredCaption: (id: number | null) => void;
+  /** Words on the page selected, each as one thing (a long press on them): deleted, copied and moved with the rest of the selection. */
+  selCaptions: Set<number>;
+  /** These words selected: alone, or (`add`) besides what is already. */
+  selectCaptions: (ids: Iterable<number>, add?: boolean) => void;
   /** Words on the page. */
   captions: Caption[];
   nextCaptionId: number;
   /**
    * Words being written, in place: the caption's, or (null) new ones where
-   * `at` is - where Quick Add or the menu was opened.
+   * `at` is - where Quick Add or the menu was opened. Each writing its own
+   * `n`, given as it opens. `drawn` once the words being written are drawn,
+   * in place of the caption's own. `press`, where a press on the caption's
+   * words opened it: the caret put there - and a drag (`drag`) selecting on
+   * from there - as if it had pressed there among them.
    */
-  captionEdit: { id: number | null; at: { x: number; y: number } } | null;
+  captionEdit: { id: number | null; at: { x: number; y: number }; n?: number; drawn?: boolean; press?: CaptionPress } | null;
   setCaptionEdit: (edit: EditorState["captionEdit"]) => void;
+  /** The words being written, drawn in place of their caption's own: from now. */
+  markCaptionDrawn: (n: number) => void;
+  /**
+   * Words written, kept or let go - the caption they are now (`id`), or
+   * none - drawn as they were written until the caption's own are drawn
+   * (`captionLeft`), so that the words never go from the page for a frame.
+   */
+  leaveCaptionEdit: (n: number, id: number | null) => void;
+  captionLeft: { id: number; n: number; at: { x: number; y: number } } | null;
+  /** The caption's own words drawn again: what was written no longer drawn over them. */
+  captionShown: (id: number) => void;
   /** Words added, as one step - taken out of a PDF, where they came from, as wide as their lines were and lying as they did; their id. */
   addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number, align?: Caption["align"]) => number;
   /**

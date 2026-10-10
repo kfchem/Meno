@@ -256,6 +256,7 @@ export function createInteractionSlice(set: SetState, get: GetState) {
         // nothing being written, carried or asked over the canvas
         labelEdit: { active: false, atomId: null, value: "", autoCap: true },
         captionEdit: null,
+        captionLeft: null,
         quickAdd: null,
         workflowMenu: null,
         pdfWords: null,

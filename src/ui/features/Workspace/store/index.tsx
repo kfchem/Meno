@@ -102,6 +102,7 @@ export function connectStoreToDocument(
         ...heldOf(prev, mirrored.molecules3d),
         selFlow: flowHeld(prev.selFlow, mirrored.sets, mirrored.steps),
         selPictures: picturesHeld(prev.selPictures, mirrored.pictures),
+        selCaptions: picturesHeld(prev.selCaptions, mirrored.captions ?? []),
         // (sheets selected kept to those still on the page - and the one under the pointer, if it still is)
         selTexts: picturesHeld(prev.selTexts, (mirrored.texts ?? []).filter((t) => t.at)),
         hoveredText: prev.hoveredText != null && !(mirrored.texts ?? []).some((t) => t.id === prev.hoveredText && t.at) ? null : prev.hoveredText,
@@ -173,7 +174,9 @@ export function createEditorStore(
     hoveredPdf: null,
     hoveredPicture: null,
     selPictures: new Set<number>(),
+    selCaptions: new Set<number>(),
     captionEdit: null,
+    captionLeft: null,
     quickAdd: null,
     hoveredSet: null,
     chosenSet: null,

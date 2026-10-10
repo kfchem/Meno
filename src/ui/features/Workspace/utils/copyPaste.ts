@@ -99,7 +99,7 @@ export function clipItems(part: Drawn): ClipItem[] {
   if (!part.atoms.length) {
     const ms = part.molecules3d ?? [];
     // (a workflow's parts, or pictures, alone: Meno's record, which no other program reads)
-    if (!ms.length) return hasFlow(part) || part.pictures?.length ? [{ flavor: "meno", text: recordText(part) }] : [];
+    if (!ms.length) return hasFlow(part) || part.pictures?.length || part.captions?.length ? [{ flavor: "meno", text: recordText(part) }] : [];
     const placed = ms.length > 1;
     const seen = ms.map((m) => asSeen(m, m.turn, m.frame, placed));
     const offsets = seen.map((_, i) => seen.slice(0, i).reduce((n, a) => n + a.length, 0));

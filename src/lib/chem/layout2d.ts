@@ -308,7 +308,14 @@ export type TextItem = {
    * superscript rather than on a baseline.
    */
   beside?: boolean;
+  /** Set beside: the atom, by index, whose charge it is. */
+  markOf?: number;
 };
+
+/** Whether two sets of texts are drawn alike: the same letters, set the same way, in the same places. */
+export function sameTexts(a: readonly TextItem[], b: readonly TextItem[]): boolean {
+  return a === b || (a.length === b.length && JSON.stringify(a) === JSON.stringify(b));
+}
 
 /** How far a label's ink reaches from its atom: left, right, up and down. */
 export type LabelBox = {

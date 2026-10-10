@@ -558,7 +558,7 @@ function WorkspaceContent({
       const kind = hoveredPart();
       const id = kind === "atom" ? hovered.atomId : hovered.bondId;
       const drawingSelected = sel.atoms.size > 0 || sel.bonds.size > 0;
-      const selected = drawingSelected || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0 || st.selPictures.size > 0 || st.selTexts.size > 0;
+      const selected = drawingSelected || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0 || st.selPictures.size > 0 || st.selTexts.size > 0 || st.selCaptions.size > 0;
       const busy = st.labelEdit.active || st.moveDrag.active || st.extend.active;
       if (isCleanUpKey(e)) {
         e.preventDefault();
@@ -830,8 +830,12 @@ function WorkspaceContent({
       open({ kind: "wire", id: hoveredWire, selection: "none", ...place });
       return;
     }
-    // likewise words on the page
-    if (!kind && hoveredCaption != null && captions.some((c) => c.id === hoveredCaption)) {
+    // likewise words on the page, unless they are selected with more
+    const wordsWithMore = (() => {
+      const s = store.getState();
+      return s.sel.atoms.size > 0 || s.sel3d.size > 0 || s.selFlow.sets.size > 0 || s.selFlow.steps.size > 0 || s.selPictures.size > 0 || s.selTexts.size > 0 || s.selCaptions.size > 1;
+    })();
+    if (!kind && hoveredCaption != null && captions.some((c) => c.id === hoveredCaption) && !(store.getState().selCaptions.has(hoveredCaption) && wordsWithMore)) {
       const target: MenuTarget = { kind: "caption", id: hoveredCaption, selection: "none", ...place };
       if (r?.down) r.pending = target;
       else if (!r?.moved) setMenu(target);
@@ -882,7 +886,7 @@ function WorkspaceContent({
     const { sel, selFlow } = store.getState();
     const part = kind && id != null;
     const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
-    const selected = drawing || sel3d.size > 0 || selFlow.sets.size > 0 || selFlow.steps.size > 0 || selPictures.size > 0 || selTexts.size > 0;
+    const selected = drawing || sel3d.size > 0 || selFlow.sets.size > 0 || selFlow.steps.size > 0 || selPictures.size > 0 || selTexts.size > 0 || store.getState().selCaptions.size > 0;
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));

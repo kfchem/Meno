@@ -1,9 +1,9 @@
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
-import { useMemo, useRef } from "react";
+import { Suspense, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { TAU, follow } from "../../../theme/motion";
-import { labelSetOf, placeLabel, type TextItem } from "../../../../lib/chem/layout2d";
+import { labelSetOf, placeLabel, sameTexts, type TextItem } from "../../../../lib/chem/layout2d";
 import { needsFallback, useLabelFontUrl } from "../../../fonts/typefaces";
 import { labelFont } from "../../../../lib/chem/labelFonts";
 import { useDrawnLayout } from "./drawnLayoutContext";
@@ -29,14 +29,36 @@ export default function Labels2D() {
   return <Texts2D texts={layout.texts} />;
 }
 
+/** troika's text, as far as Meno looks into it: whether its letters are still to be set, or being set. */
+type Setting = THREE.Object3D & { sync?: unknown; _needsSync?: boolean; _isSyncing?: boolean };
+const isText = (o: THREE.Object3D): o is Setting => typeof (o as Setting).sync === "function" && "text" in o;
+const setting = (o: Setting) => !!(o._needsSync || o._isSyncing);
+
+
 /**
  * Texts set as the drawing sets its labels (lib/chem/layout2d `placeLabel`):
  * the labels, and the words on the page (Captions2D) - and words carried
  * out of a PDF (WordsFlight), `moved`: each text's group placed, and its
  * letters seen, by what draws them, frame by frame; given `shadow` (how far
- * it is blurred), as their shadow alone.
+ * it is blurred), as their shadow alone. Not `fade`d in: seen at once, as
+ * soon as they are drawn. `onDrawn` is told the texts once every letter of
+ * them is set (troika sets them a frame or two after it is given them).
  */
-export function Texts2D({ texts: items, moved, shadow, renderOrder = 30 }: { texts: readonly TextItem[]; moved?: boolean; shadow?: string; renderOrder?: number }) {
+export function Texts2D({
+  texts: items,
+  moved,
+  shadow,
+  renderOrder = 30,
+  fade = true,
+  onDrawn,
+}: {
+  texts: readonly TextItem[];
+  moved?: boolean;
+  shadow?: string;
+  renderOrder?: number;
+  fade?: boolean;
+  onDrawn?: (texts: readonly TextItem[]) => void;
+}) {
   const { opts, zoom } = useDrawnLayout();
 
   // Set in the style's typeface, where the layout has placed each run: the
@@ -51,8 +73,30 @@ export function Texts2D({ texts: items, moved, shadow, renderOrder = 30 }: { tex
   // each label's own opacity brought up a frame at a time, not the labels
   // drawn again - a drawing can have thousands.
   const seen = useRef<{ font: string | null; level: number }>({ font: null, level: 0 });
-  if (seen.current.font !== font) seen.current = { font, level: 0 };
+  if (seen.current.font !== font) seen.current = { font, level: fade ? 0 : 1 };
   const group = useRef<THREE.Group>(null);
+  // (each time they are drawn anew: told once every letter is set - after the
+  // texts' own effects, which give troika their letters)
+  useLayoutEffect(() => {
+    const g = group.current;
+    if (!onDrawn || !g) return;
+    const texts: Setting[] = [];
+    g.traverse((o) => {
+      if (isText(o)) texts.push(o);
+    });
+    let told = false;
+    const check = () => {
+      if (told || texts.some(setting)) return;
+      told = true;
+      onDrawn(items);
+    };
+    for (const t of texts) t.addEventListener("synccomplete" as never, check);
+    check();
+    return () => {
+      told = true;
+      for (const t of texts) t.removeEventListener("synccomplete" as never, check);
+    };
+  });
   const invalidate = useThree((st) => st.invalidate);
   useFrame((_, dt) => {
     const s = seen.current;
@@ -105,4 +149,58 @@ export function Texts2D({ texts: items, moved, shadow, renderOrder = 30 }: { tex
   }, [items, opts, labelZoom, labelColor, font, moved, shadow, renderOrder]);
   if (font === null) return null;
   return <group ref={group}>{labels}</group>;
+}
+
+/**
+ * Texts that change as they are typed - words on the page, a label - drawn
+ * whole: each set shown only once every letter of it is set, the set before
+ * it shown until then. troika sets a text's letters a frame or two after it
+ * is given them and draws the old ones meanwhile, where their run now is: a
+ * letter deleted stayed on the page for a moment, the caret already before
+ * it. The first set is shown as it comes - nothing was there before it -
+ * faded in if `fadeIn`. `onDrawn` is told each set once every letter of it
+ * is in view. Moved, they are moved by what holds them: a set placed
+ * elsewhere is another set.
+ */
+export function WholeTexts2D({ texts, fadeIn = false, onDrawn }: { texts: readonly TextItem[]; fadeIn?: boolean; onDrawn?: (texts: readonly TextItem[]) => void }) {
+  // (two sets, one shown and one being set - each set made anew, so that it waits in its own Suspense)
+  const sets = useRef<{ at: [readonly TextItem[] | null, readonly TextItem[] | null]; front: 0 | 1; told: readonly TextItem[] | null }>({ at: [null, null], front: 0, told: null });
+  const [, setShown] = useState(0);
+  const told = useRef(onDrawn);
+  told.current = onDrawn;
+  const s = sets.current;
+  const back = (1 - s.front) as 0 | 1;
+  const front = s.at[s.front];
+  if (!front) s.at[s.front] = texts;
+  else if (sameTexts(front, texts)) s.at[back] = null;
+  else if (!(s.at[back] && sameTexts(s.at[back]!, texts))) s.at[back] = texts;
+  const first = useRef(true);
+  const drawn = (i: 0 | 1, items: readonly TextItem[]) => {
+    const now = sets.current;
+    if (now.at[i] !== items || now.told === items) return;
+    if (i !== now.front) {
+      now.front = i;
+      now.at[(1 - i) as 0 | 1] = null;
+      setShown((n) => n + 1);
+    }
+    now.told = items;
+    told.current?.(items);
+  };
+  const out = (
+    <group>
+      {([0, 1] as const).map((i) => {
+        const items = s.at[i];
+        if (!items) return null;
+        return (
+          <Suspense key={i} fallback={null}>
+            <group visible={i === s.front}>
+              <Texts2D texts={items} fade={fadeIn && first.current} onDrawn={(t) => drawn(i, t)} />
+            </group>
+          </Suspense>
+        );
+      })}
+    </group>
+  );
+  first.current = false;
+  return out;
 }
