@@ -257,6 +257,8 @@ Taken on 2026-10-03:
     and the pictures for other programs all take the look from there. A
     document of its own look, as a drawing can have its own style, is not
     there yet.
+  - Since 2026-10-10 it is two looks, a primary and a secondary, each a
+    style chosen from a list: *Styles in 3D* below.
 
 Taken while stage 1 was built, on 2026-10-03:
 
@@ -275,7 +277,8 @@ Taken while stage 1 was built, on 2026-10-03:
     selected moves all of it, drawing and molecules, as one step.
 - **The right-click menu on a 3D molecule:**
   - a measurement of what is chosen of it (two, three or four atoms);
-  - ball and stick or space-filling, for that molecule;
+  - its other look, the 3D style's secondary or back to the primary (since
+    2026-10-10: *Styles in 3D*);
   - reset orientation;
   - cut, copy and delete.
 - **Measurements** are the document's:
@@ -664,6 +667,59 @@ Orbitals and densities drawn as surfaces. Agreed with the maintainer on
 2. **3d-2.** Grids, promises, surfaces, the value's slider, the colours in
    Settings, and cube files.
 3. **3d-3.** The PySCF plugin.
+
+## Styles in 3D
+
+Built in lane L5 on 2026-10-10. The maintainer's ruling: a molecule in 3D
+has two looks, a thin one and a thick one, and goes from one to the other
+in a single step - seeing a molecule as ball and stick and as
+space-filling side by side is better science than either alone.
+
+- **A list of styles.** Ball and stick (the 3D viewer's look, Meno's
+  first), Glossy and Space-filling. Each is set on its own in Settings,
+  under Molecules in 3D: whether it draws balls and sticks or
+  space-filling, ball size, bond thickness and colour, the surface, and
+  whether the hydrogens on carbon are shown. Changes are kept per style,
+  marked, and taken back one at a time or all at once.
+- **Two roles.** One style is the primary - every molecule's look to
+  begin with - and one the secondary. Each style's card in Settings says
+  which it is; giving a style the other's role swaps the two, so the
+  secondary is never the primary again.
+- **What they share.** The light (from all round and from above right),
+  how a molecule turns and coasts, and an orbital's colours are set once
+  for all styles: lights light the whole scene, so two molecules side by
+  side cannot be lit two ways. Glossy is told apart by its surface and its
+  grey bonds.
+- **A molecule holds its role, not a style.** `look: "secondary"` in the
+  document, unset for the primary: a style changed in Settings changes
+  every molecule shown in it. Copies and the saved workspace carry it.
+- **One step.** A double-click on a molecule switches it to its other
+  look; with others selected with it, they all go to the clicked one's
+  other look, in one undo step. What the double-click's first click chose
+  is let go again. A double-click on a measurement's value is the
+  measurement's. The right-click menu's icon row has the same switch,
+  named after the style it goes to and drawn as balls or as spheres.
+- **No jump.** Going over, each atom's ball grows or shrinks between its
+  two radii, the bonds thicken or give way, the bond colour and the
+  surface's gloss go over, and the molecule rises or sinks to stand as
+  high as it now reaches - all on one 80 ms time constant.
+- **Hydrogens on carbon, hidden only past a warning** (the maintainer's
+  ruling and wording, 2026-10-10). Many synthetic chemists like them out
+  of the way; but a molecule without them looks smaller, flatter and more
+  open than it is, so a picture of it misleads. A style hides them only
+  when set to in Settings, never by default, and only after a box in the
+  way says so in strong words: a box ticked to say the chemist
+  understands, before *Hide hydrogens anyway* can be pressed; *Keep
+  hydrogens* is what Enter and Escape give. Only hydrogens on carbon go:
+  those on a heteroatom take part in hydrogen bonds and in reactions.
+  Every molecule drawn so says *C–H hidden* over it, on the canvas and in
+  every picture made of it (SVG, PNG, EMF), for as long as it is. On the
+  canvas it is not one of the page's chips, which go when their words are
+  too small to read: it stays at any zoom, between three quarters and one
+  and a half times its size, and folds away as the molecule goes over to a
+  look that keeps the hydrogens.
+- **Not read from before.** A settings file from before keeps none of
+  its 3D look (pre-alpha: no migration).
 
 ## Risks
 
