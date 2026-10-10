@@ -58,6 +58,20 @@
   });
 
   let shown = { c: 0, f: 0 };
+  let wanted = null;
+  /** Shows a frame once it has come: until then the one shown stays, rather than the window going blank. */
+  function show(c, f) {
+    wanted = { c, f };
+    if (c === shown.c && f === shown.f) return;
+    const img = frames[c][f];
+    if (!img.complete || img.naturalWidth === 0) {
+      img.addEventListener("load", () => wanted && wanted.c === c && wanted.f === f && show(c, f), { once: true });
+      return;
+    }
+    frames[shown.c][shown.f].classList.remove("on");
+    img.classList.add("on");
+    shown = { c, f };
+  }
   function update() {
     ticking = false;
     const y = scrollY, vh = innerHeight;
@@ -83,11 +97,7 @@
     });
     if (frames) {
       const f = Math.min(frames[c].length - 1, Math.floor(local * frames[c].length));
-      if (f !== shown.f || c !== shown.c) {
-        frames[shown.c][shown.f].classList.remove("on");
-        frames[c][f].classList.add("on");
-        shown = { c, f };
-      }
+      show(c, f);
     }
     storyWindow.style.setProperty("--zoom", reduce ? "0" : local.toFixed(3));
   }
