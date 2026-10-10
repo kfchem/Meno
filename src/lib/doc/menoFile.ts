@@ -3,7 +3,7 @@
  * zip, laid out as EPUB and ODF lay theirs out.
  *
  *   mimetype          first, stored: what the file is, for Meno to tell it by
- *   workspace.json    stored: the workspace (StructureEditor/utils/workspace)
+ *   workspace.json    stored: the workspace (Workspace/utils/workspace)
  *   files.json        stored: each file kept - its name, kind, media type, size
  *   files/<sha256>    each file kept, as it was: text deflated, the rest stored
  *

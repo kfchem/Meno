@@ -112,8 +112,8 @@ export const createInitialState = (): State => {
     mountOrder: [a],
     tabsById: {
       [a]: {
-        meta: { id: a, label: "Structure Canvas" },
-        content: { kind: "structure", data: {} },
+        meta: { id: a, label: "Workspace" },
+        content: { kind: "workspace", data: {} },
       },
     },
     activeId: a,

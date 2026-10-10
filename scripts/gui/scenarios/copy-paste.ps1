@@ -12,7 +12,7 @@
 # (2560x1720); the keys need none.
 
 Start-Meno
-Wait-MenoSettled | Out-Null          # Meno starts on a structure canvas
+Wait-MenoSettled | Out-Null          # Meno starts on a workspace
 Invoke-MenoMenu "SMILES..."                    # its box takes the keys
 Start-Sleep -Seconds 2
 Send-MenoText "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O" -CharMs 10

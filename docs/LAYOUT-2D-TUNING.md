@@ -25,7 +25,7 @@ decided. Read both before changing anything.
 
 Tests: `engine.test.ts`, `metrics.test.ts`, `stereo.test.ts`, `rings.test.ts`, `drawn.test.ts`.
 
-In the app, `src/ui/features/StructureEditor/chem/engineLayout.ts` turns a
+In the app, `src/ui/features/Workspace/chem/engineLayout.ts` turns a
 drawing into what the engine is given and its layout back into edits, and
 `cleanUp.ts` runs it - in a web worker - for Clean-up and for a SMILES.
 

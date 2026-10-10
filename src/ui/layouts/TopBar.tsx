@@ -73,14 +73,14 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
   }, [menuOpen]);
 
   const onSelectMenu = (
-    profile: "texteditor" | "pyconsole" | "structure"
+    profile: "texteditor" | "pyconsole" | "workspace"
   ) => {
     setMenuOpen(false);
     if (!openByKind) return;
     if (profile === "texteditor") ctl.newText?.();
     if (profile === "pyconsole")
       openByKind("pyconsole", { label: "Python Console" });
-    if (profile === "structure") openByKind("structure", { label: "Structure Canvas" });
+    if (profile === "workspace") openByKind("workspace", { label: "Workspace" });
   };
 
   return (
@@ -237,9 +237,9 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
                 </button>
                 <button
                   className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
-                  onClick={() => onSelectMenu("structure")}
+                  onClick={() => onSelectMenu("workspace")}
                 >
-                  <span>Structure Canvas</span>
+                  <span>Workspace</span>
                   <span className="text-xs text-gray-500">test</span>
                 </button>
               </div>

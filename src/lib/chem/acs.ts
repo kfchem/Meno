@@ -1,7 +1,7 @@
 import type { Atom as LAtom, Bond as LBond, LayoutOptions } from "./layout2d";
 import { ACS_1996, layoutOptionsFor } from "./style";
 
-// Fixed nominal bond length in world units used by StructureEditor
+// Fixed nominal bond length in world units used by Workspace
 // This replaces on-the-fly averaging for interactive operations.
 export const NOMINAL_BOND_LENGTH = 1.8; // world units
 

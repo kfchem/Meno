@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { colorRef, emfComments, emfPlusRecords, emfRecords, layoutEmf } from "./emf";
-import { drawingLayout } from "../../ui/features/StructureEditor/fileActions";
+import { drawingLayout } from "../../ui/features/Workspace/fileActions";
 import { ACS_1996 } from "./style";
 import { createSVG } from "./layout2d";
 import { NOMINAL_BOND_LENGTH } from "./acs";
-import type { Model } from "../../ui/features/StructureEditor/store/types";
+import type { Model } from "../../ui/features/Workspace/store/types";
 
 const L = NOMINAL_BOND_LENGTH;
 // an ethanol: two lines, a wedge, and an OH label

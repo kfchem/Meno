@@ -7,10 +7,10 @@
 # zooming until one bond filled the window - but moved the camera's zoom
 # without its position, so the bond ended up off screen until the fit
 # button was pressed. And fitting still zoomed one bond to fill the window.
-# Meno starts on an empty structure canvas, so nothing has to be opened.
+# Meno starts on an empty workspace, so nothing has to be opened.
 
 Start-Meno
-Wait-MenoSettled | Out-Null          # Meno starts on a structure canvas
+Wait-MenoSettled | Out-Null          # Meno starts on a workspace
 Save-Step "empty"
 
 Invoke-MenoClick -X 1280 -Y 900 -Count 2

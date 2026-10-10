@@ -9,11 +9,11 @@ import type {
   TabContentBase,
   TabKind,
 } from "../../lib/core";
-import { StructureCanvas } from "../../ui/features/StructureEditor";
+import { Workspace } from "../../ui/features/Workspace";
 import {
-  createStructureDocument,
-  type StructureDocument,
-} from "../features/StructureEditor/document";
+  createWorkspaceDocument,
+  type WorkspaceDocument,
+} from "../features/Workspace/document";
 
 export type ViewProps = {
   tabId: TabId;
@@ -51,12 +51,12 @@ const create = (label: string, kind: TabKind, data?: unknown): TabInstance => {
 export const viewRegistry: Record<string, ViewEntry> = {
   "2d": {
     kind: "2d",
-    createDocument: () => createStructureDocument(),
+    createDocument: () => createWorkspaceDocument(),
     Component: ({ tabId, content, active, document, renameTab }) => (
-      <StructureCanvas
+      <Workspace
         tabId={tabId}
         active={active}
-        document={document as DocumentStore<StructureDocument>}
+        document={document as DocumentStore<WorkspaceDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
         nameTab={renameTab}
@@ -74,14 +74,14 @@ export const viewRegistry: Record<string, ViewEntry> = {
     Component: () => <PyConsole />,
     create: (label) => create(label, "pyconsole", {}),
   },
-  structure: {
-    kind: "structure",
-    createDocument: (data) => createStructureDocument(data),
+  workspace: {
+    kind: "workspace",
+    createDocument: (data) => createWorkspaceDocument(data),
     Component: ({ tabId, content, active, document, renameTab }) => (
-      <StructureCanvas
+      <Workspace
         tabId={tabId}
         active={active}
-        document={document as DocumentStore<StructureDocument>}
+        document={document as DocumentStore<WorkspaceDocument>}
         initialFilename={(content as any)?.data?.filename}
         initialPayload={(content as any)?.data?.payload}
         initialKind={(content as any)?.data?.kind}
@@ -90,7 +90,7 @@ export const viewRegistry: Record<string, ViewEntry> = {
         nameTab={renameTab}
       />
     ),
-    create: (label) => create(label, "structure", {}),
+    create: (label) => create(label, "workspace", {}),
   },
 };
 

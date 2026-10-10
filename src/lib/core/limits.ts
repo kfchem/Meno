@@ -7,7 +7,7 @@ import type { State, TabKind } from "./types";
  */
 export const CANVASES_PER_KIND: Partial<Record<TabKind, number>> = {
   "2d": 1,
-  structure: 1,
+  workspace: 1,
 };
 
 export const MAX_CANVASES = 16;

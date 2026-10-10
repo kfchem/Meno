@@ -12,7 +12,7 @@ a workspace holding 2D and 3D together - see [`WORKSPACE.md`](./WORKSPACE.md).
 | --- | --- | --- |
 | Tauri shell (Rust) | `src-tauri/src/lib.rs` | Window, plugins (`fs`, `os`, `opener`), and the only code that spawns OS processes: the bundled `uv` binary and the Python sidecar. No chemistry logic lives here. |
 | App shell (React) | `src/App.tsx`, `src/lib/core/`, `src/ui/layouts/`, `src/ui/views/` | Tab model (open/close/reorder/rename), mapping a tab's `kind` to a view component. |
-| Features (React) | `src/ui/features/*` | One folder per view: the structure canvas (2D drawing and molecules in 3D), Python console, text editor, settings. |
+| Features (React) | `src/ui/features/*` | One folder per view: the workspace (2D drawing and molecules in 3D), Python console, text editor, settings. |
 | Chemistry helpers (TS) | `src/lib/chem/`, `src/utils/` | File parsing (MOL/SDF/RXN/XYZ/PDB), editor model conversion, 2D depiction layout (bond lines, wedges, labels) and ACS-style sizing. Pure functions — no React, no Tauri. |
 | Python worker | `src-tauri/resources/workers/interactive_worker.py` | Line-delimited JSON REPL run inside a `uv`-managed venv. |
 
@@ -65,7 +65,7 @@ src/
   ui/views/Deck           renders every open tab, hides inactive ones with CSS
   ui/views/openFile       a file to the tab it opens in: Open (Ctrl/Cmd+O)
   ui/features/
-    StructureEditor/      2D editor (see below)
+    Workspace/            the workspace: 2D editor, molecules in 3D, texts, PDFs, workflows (see below)
     PythonConsole/        UI for the Python sidecar
     TextEditor/           a text Meno draws: its editor, line pictures, and the field typed through
     StyleEditor/          every drawing setting, with a preview
@@ -99,10 +99,10 @@ src-tauri/
   `frameloop` to `"never"`) while inactive. Workflow tabs pass the same flag to
   the canvases embedded in their nodes through `NodeActiveContext`.
 - Because every live canvas holds a WebGL context and browsers keep only about
-  16, `lib/core/limits.ts` budgets them: a 2D or structure tab costs one, a
+  16, `lib/core/limits.ts` budgets them: a 2D or workspace tab costs one, a
   workflow tab two, and opening past the limit is refused with a notice rather
   than silently blanking the oldest view.
-- Meno starts on a structure canvas, and "+" makes another: the canvas is
+- Meno starts on a workspace, and "+" makes another: the canvas is
   the workspace (docs/WORKSPACE.md), so there is no start page.
 - **Open** (Ctrl/Cmd+O, or the menu) reads the files picked in the system's
   dialog - Tauri's, which gives their paths - and opens each in a tab of its
@@ -138,7 +138,7 @@ must not need one undo per frame), and the stack is capped.
 `subscribe` matches React's `useSyncExternalStore`; nothing in `lib/doc`
 imports React.
 
-Adoption is incremental. The structure canvas, with its molecules in 3D
+Adoption is incremental. The workspace, with its molecules in 3D
 and the texts in its column, is on a document.
 
 ## When a part fails
@@ -154,8 +154,8 @@ from nothing. Each logs the error with `console.error`, naming the part
 
 | Part | Where | Its card | Reload also |
 | --- | --- | --- | --- |
-| The canvas | `StructureCanvas.tsx`, `CanvasBoundary` round `StructureCanvasContent` | in the middle of what the column leaves in view | lets go of what the canvas was in the middle of (`letGo`) |
-| The column | `StructureCanvas.tsx`, `ColumnBoundary` round `TextColumn` | at the column's top right; **Hide** closes the column, its texts and PDFs kept | slides the column back in |
+| The canvas | `Workspace.tsx`, `CanvasBoundary` round `WorkspaceContent` | in the middle of what the column leaves in view | lets go of what the canvas was in the middle of (`letGo`) |
+| The column | `Workspace.tsx`, `ColumnBoundary` round `TextColumn` | at the column's top right; **Hide** closes the column, its texts and PDFs kept | slides the column back in |
 | A tab | `ui/views/Deck.tsx`, round each tab's view | at the top of the tab | lets go of what its canvas was in the middle of |
 | The window | `App.tsx`, round all it draws | at the top of the window, which can be dragged by any of it meanwhile; **Close Meno** | lets go of what every canvas was in the middle of |
 
@@ -249,7 +249,7 @@ what a drag there does, not what grabs it, and none is a hand:
   set them up (size, colour). Clickable rows and buttons show the arrow,
   as a desktop program's do, not a pointing hand.
 
-## 2D structure editor (`ui/features/StructureEditor`)
+## 2D structure editor (`ui/features/Workspace`)
 
 What is left before the editor counts as finished, and in what order, is in
 [`EDITOR-2D.md`](./EDITOR-2D.md).
@@ -363,7 +363,7 @@ What is left before the editor counts as finished, and in what order, is in
     presets, the old 3D viewer's first, and a choice of one with changes,
     kept in the app's settings (`style3d`) and edited in Settings by
     `StyleEditor/Style3DEditor`; the canvas reads it through
-    `StructureEditor/style3d.ts`. A 1.5 Å bond is as long as a drawn one.
+    `Workspace/style3d.ts`. A 1.5 Å bond is as long as a drawn one.
   - The pointer: hovered, its outline lights up faintly and the atom under
     the pointer swells on a spring. A drag on it - its atoms, bonds or
     within its rings - turns it, with inertia; on one selected, it moves
@@ -389,7 +389,7 @@ The Workflow Builder tab, a prototype on React Flow, was removed with
 React Flow on 2026-10-08: the workspace's editor is written anew, its code
 not taken from either.
 
-- **The document holds it** (`StructureEditor/document.ts`): `sets`,
+- **The document holds it** (`Workspace/document.ts`): `sets`,
   `steps` and `wires`, numbered from `nextWorkflowId`; each change is an
   edit (`workflow/model.ts`), so undo takes it back and the workspace file
   keeps it (`utils/workspace.ts`, read back by `workflow/saved.ts`).
@@ -578,7 +578,7 @@ which plugin would read a file no plugin added reads
   kind, its files' extensions, what it takes, its options as data, checked
   by `acceptOptions`). Export offers it while the plugin is added, for
   molecules in 3D: the molecules chosen become one `WrittenMolecule`
-  (`StructureEditor/utils/written.ts`; several as they stand on the page),
+  (`Workspace/utils/written.ts`; several as they stand on the page),
   the worker is asked `{"op": "write", "kind", "name", "molecules",
   "options"}` through the same client, and the text it gives back is
   written where the chemist chose. The first is Gaussian's input
@@ -712,7 +712,7 @@ which plugin would read a file no plugin added reads
   set by a slider under the list (from 0.0001 to 0.5, by its logarithm),
   kept in `lists3d` as `iso`.
 
-On the 2D canvas (`StructureEditor/chem/`), `analyse` feeds the marks -
+On the 2D canvas (`Workspace/chem/`), `analyse` feeds the marks -
 valence problems, R/S and E/Z - which `ChemMarks2D` lays over the drawing
 as HTML, outside the drawing and so outside any export; they run only
 while RDKit is set up (`pyEnvReady`), so drawing never starts a download.
@@ -726,7 +726,7 @@ lies closest - keeping the drawn wedges when they still say the same
 stereochemistry and otherwise giving RDKit's; the editor applies it as one
 undo step.
 
-A drawn structure made in 3D (`StructureEditor/chem/make3d.ts`, stage 2 of
+A drawn structure made in 3D (`Workspace/chem/make3d.ts`, stage 2 of
 docs/WORKSPACE.md): `open_stereo` says what its drawing leaves open, which
 Meno asks about first; `conformers` makes each stereoisomer asked for
 (ETKDG, then MMFF94 or UFF, on every core; the same shape twice kept once;

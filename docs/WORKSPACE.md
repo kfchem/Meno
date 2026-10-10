@@ -30,7 +30,7 @@ the interface says what things are, not how Meno reads them.
 Both views already draw with react-three-fiber, which is why one canvas can
 hold both.
 
-- **The 2D canvas** (`ui/features/StructureEditor`):
+- **The 2D canvas** (`ui/features/Workspace`):
   - an orthographic camera, drawn only when something changes;
   - instanced bonds and pick targets, troika text, unlit materials;
   - its structure is the tab's document, with undo and saving: one flat
@@ -327,7 +327,7 @@ Taken while stage 1 was built, on 2026-10-03:
 
 Taken on 2026-10-04:
 
-- **The structure canvas is the workspace**, and everything else is to be
+- **The structure canvas is the workspace** (named Workspace from 2026-10-10), and everything else is to be
   reached from it. The New Tab page is gone: Meno starts on a canvas, "+"
   makes another, and Open puts a file in a tab of its own. The New… menu
   goes too, later: the text editor, the Python console and the workflow

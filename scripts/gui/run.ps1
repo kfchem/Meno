@@ -135,7 +135,7 @@ function Invoke-MenoMenu {
       Invoke-MenoMenu "SMILES..." opens the SMILES card.
 
       .DESCRIPTION
-      The items are where a structure canvas in front has them, read off a
+      The items are where a workspace in front has them, read off a
       Mac's shot (2560x1720); the menu is at the window's left, so they do
       not move with its size. Three dots stand for the ellipsis. A canvas
       holding texts has *Show texts* or *Hide texts* after *Show R and S*,

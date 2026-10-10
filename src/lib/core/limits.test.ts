@@ -24,19 +24,19 @@ describe("canvas budget", () => {
   it("counts canvases per view kind", () => {
     expect(canvasCost("settings")).toBe(0);
     expect(canvasCost("2d")).toBe(1);
-    expect(canvasCost("structure")).toBe(1);
+    expect(canvasCost("workspace")).toBe(1);
   });
 
   it("ignores views without a canvas", () => {
     expect(countCanvases(withKinds("settings", "pyconsole"))).toBe(0);
-    expect(canOpenKind(withKinds("settings", "pyconsole"), "structure")).toBe(true);
+    expect(canOpenKind(withKinds("settings", "pyconsole"), "workspace")).toBe(true);
   });
 
   it("allows filling the budget exactly", () => {
     const s = withKinds(...Array<TabKind>(MAX_CANVASES - 1).fill("2d"));
     expect(countCanvases(s)).toBe(MAX_CANVASES - 1);
-    expect(canOpenKind(s, "structure")).toBe(true);
-    expect(canOpenKind(withKinds(...Array<TabKind>(MAX_CANVASES).fill("2d")), "structure")).toBe(false);
+    expect(canOpenKind(s, "workspace")).toBe(true);
+    expect(canOpenKind(withKinds(...Array<TabKind>(MAX_CANVASES).fill("2d")), "workspace")).toBe(false);
   });
 
   it("refuses to exceed the budget", () => {
@@ -48,14 +48,14 @@ describe("canvas budget", () => {
   it("frees the canvases of a tab being replaced", () => {
     const s = withKinds(
       ...Array<TabKind>(MAX_CANVASES - 1).fill("2d"),
-      "structure",
+      "workspace",
     );
     const blankId = s.tabOrder[s.tabOrder.length - 1];
     // a canvas in place of a canvas: its own freed first
-    expect(canOpenKind(s, "structure", blankId)).toBe(true);
+    expect(canOpenKind(s, "workspace", blankId)).toBe(true);
     // in place of a tab with none, one too many
     const settings = withKinds(...Array<TabKind>(MAX_CANVASES).fill("2d"), "settings");
-    expect(canOpenKind(settings, "structure", settings.tabOrder[MAX_CANVASES])).toBe(false);
+    expect(canOpenKind(settings, "workspace", settings.tabOrder[MAX_CANVASES])).toBe(false);
     // a 2D tab in place of another frees its own canvas first
     expect(canOpenKind(s, "2d", s.tabOrder[0])).toBe(true);
   });

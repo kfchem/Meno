@@ -2,10 +2,10 @@ import { rememberable, valuesOf } from "../../../lib/options";
 import { useAppSettings } from "../../../lib/settings/appSettings";
 import { useReaders } from "../../../lib/calc/workers";
 import OptionRows from "../../options/OptionRows";
-import { stepRole } from "../StructureEditor/store/slices/workflowSlice";
-import { doersAdded, kindsOf, optionsFor } from "../StructureEditor/workflow/doers";
-import { StepGlyph } from "../StructureEditor/workflow/icons";
-import { kindInfo } from "../StructureEditor/workflow/kinds";
+import { stepRole } from "../Workspace/store/slices/workflowSlice";
+import { doersAdded, kindsOf, optionsFor } from "../Workspace/workflow/doers";
+import { StepGlyph } from "../Workspace/workflow/icons";
+import { kindInfo } from "../Workspace/workflow/kinds";
 
 /**
  * Calculations in Settings (docs/WORKFLOWS.md, *Its options*): the
