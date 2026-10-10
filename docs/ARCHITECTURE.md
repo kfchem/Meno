@@ -796,8 +796,9 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   id (`TextEditor/columnText.ts`). Each line is a picture drawn by the
   system's type (`TextEditor/linePictures.ts`), only those in view,
   coloured by what the text is (`lib/text/colouring.ts`: Lezer's grammars
-  for Python, JSON and XML; a plugin's marks, `colours` in its manifest,
-  for a calculation's input or output). Typing
+  for Python, JSON and XML; a plugin's grammar, made into a parser as it
+  is first wanted, `lib/text/grammars.ts`, for a calculation's input or
+  output), what does not read as its grammar says underlined. Typing
   goes through a field kept out of sight (`TextEditor/typingField.ts`): an
   EditContext on Windows, a textarea elsewhere; what it holds and how a
   change in it is read is `lib/text/field.ts`, an editor's keys

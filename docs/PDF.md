@@ -260,9 +260,12 @@ stops being part of the work.
   over). Lezer says which part of the text is what; Meno draws the
   colours.
   - a Python script, JSON or XML by their usual grammars;
-  - a calculation's input or output by what its plugin says of its kind
-    - its keywords, its numbers, and its warnings and errors - so that
-    Meno knows no program's format of itself.
+  - a calculation's input or output by its plugin's grammar for its
+    kind - its keywords, its options and values, its atoms and numbers;
+    what a reader of an output looks for, what says a run went well, its
+    warnings and errors - so that Meno knows no program's format of
+    itself. What does not read as the grammar says - a block left open,
+    a molecule with no charge - is marked.
 
 ## Movement
 
@@ -717,13 +720,19 @@ Step 5 comes in parts: the trial of typing alone, shown first; the column's text
 
 **Colouring** (`lib/text/colouring.ts`):
 - **A Python script, JSON or XML**, told by its name (`.py`, `.json`, `.xml`), is coloured by Lezer's grammar for it: keywords, strings, numbers, comments, and what a definition names, a JSON object's keys, an XML element's names and attributes. It is parsed as far as the lines shown, 128 KB on at a time, and after an edit from where it changed, the rest of the tree kept: a long file opens and is typed in at once.
-- **A calculation's input or output** is coloured as its plugin says, in its manifest (`colours` on a kind it brings or writes, docs/PLUGINS.md), by marks as a kind is told - text, never a pattern - tried a line at a time: a line holding an error's or a warning's mark is all of it an error or a warning; one holding a keyword's mark is keywords; a comment's mark begins a comment, to the line's end. Its numbers - standing alone, not part of a name such as 6-31G or def2 - Meno finds itself. A kind a plugin brings is told by what the text holds, as a file is (lib/io/kinds); a kind it writes, by the text's name. A plugin not added colours nothing.
-- **The plugins Meno carries say**, each from the program's own words - its manual, or what it printed on this Mac:
-  - ORCA's output (cclib, PySCF): *ORCA finished by error termination* is an error (ORCA's manual, *Troubleshooting*).
-  - Gaussian's output (cclib, PySCF): a line beginning *Warning* is a warning, as Gaussian 16 printed.
-  - xTB's output (cclib): a line beginning *[WARNING]* is a warning; *ERROR STOP* and *Error termination* are errors, as xTB 6.7 printed.
-  - Gaussian's input (the Gaussian interface, `.gjf`, `.com`): Link 0 commands (*%*) and the route section (*#*) are keywords, and a comment begins with *!* (Gaussian's *Input* page).
-- **Drawn in the column**: each line's parts in their tones, the line drawn whole in each colour and kept to its parts, so that its letters lie just where they would in one. What the IME is composing is drawn uncoloured, as it is. The colours are from the palette the column's look is taken from: red keywords, dark blue strings, blue numbers, names and keys, grey comments, purple definitions, green XML names, amber warnings, and Meno's own attention for errors.
+- **A calculation's input or output** is coloured by its plugin's grammar for its kind (`grammar` on a kind it brings or writes, or on a kind of text it knows, `texts`; docs/PLUGINS.md): a grammar in Lezer's form, in a file in the plugin's folder, and the tone each of its parts is drawn in, by the name the grammar gives it.
+  - The grammar is made into a parser as it is first wanted (`lib/text/grammars.ts`): tried in a worker within 5 s, then made on the page and kept. A grammar asking for code (`@external`, `@context`) is refused, so a plugin gives Meno data alone, and no text can hold the page up: Lezer's tokenizer reads each letter once and its parser never goes back.
+  - A *value*, as a grammar's tones say, Meno colours as a number where it is one (a sign, a point, an exponent, a Fortran D's) and leaves as it is where it is not: 6-31G, def2-SVP.
+  - Which grammar: a kind a plugin brings is told by what the text holds, as a file is (lib/io/kinds); a kind it writes, or knows besides, by the text's name and, where it says, what one of its first lines begins with (an ORCA input's `!`, `%` or `*`). Of two plugins that bring a kind, the first's grammar. A plugin not added colours nothing.
+- **What does not read as its grammar says is marked**: underlined in Meno's attention colour - a part read wrongly, or where something is missing, a letter's width. Not on the line the caret is on while the text is typed in, until it is left. An output's grammar takes any text, so nothing in an output is marked.
+- **The grammars the plugins Meno carries bring**, each from the program's own words - its manual, or what it printed in runs made with Meno:
+  - **ORCA's input** (the ORCA interface, `.inp`): simple keyword lines, blocks with their options and values and sub-blocks with their own `end`, `%maxcore` with its one value, the geometry and its atoms, a geometry read from a file, comments (ORCA's manual, *General Structure of the Input File* and *Input of Coordinates*). Marked: a block left open - at the next block or geometry - and a geometry with no closing `*`.
+  - **Gaussian's input** (the Gaussian interface, `.gjf`, `.com`): Link 0 commands, the route section and its lines on, the title, the charge and multiplicity, the atoms (Cartesian or a Z-matrix), further sections, `--Link1--`, comments (Gaussian's *Input* page). Marked: no route section, and a molecule with no charge and multiplicity line.
+  - **Gaussian's output** (cclib, PySCF): *SCF Done:*, the energies with thermal corrections, *Optimization completed.*, *Converged?* as what a reader looks for; *Stationary point found.*, *Normal termination of Gaussian* and a criterion's *YES* as a run gone well; a line from *Warning* on as a warning - as Gaussian 16 printed them.
+  - **ORCA's output** (cclib, PySCF): *FINAL SINGLE POINT ENERGY*, *SCF CONVERGED AFTER*, the geometry's convergence, the free energy and enthalpy, the frequencies; *THE OPTIMIZATION HAS CONVERGED* and *ORCA TERMINATED NORMALLY* as a run gone well - as ORCA 6.1 printed them; *ORCA finished by error termination* as an error (ORCA's manual, *Troubleshooting*).
+  - **xTB's output** (cclib): *TOTAL ENERGY*, *TOTAL FREE ENERGY*, *HOMO-LUMO GAP*, *SCC energy*; *GEOMETRY OPTIMIZATION CONVERGED* and *normal termination of xtb*; *[WARNING]* lines as warnings; *ERROR STOP* and *Error termination* as errors - as xTB 6.7 printed them.
+  - Rules of dashes, equals signs, stars or dots in outputs are grey.
+- **Drawn in the column**: each line's parts in their tones, the line drawn whole in each colour and kept to its parts, so that its letters lie just where they would in one. What the IME is composing is drawn uncoloured, as it is. The colours are from the palette the column's look is taken from: red keywords, dark blue strings, blue numbers, options and keys, grey comments, purple definitions and what an output's reader looks for, green XML names and atoms, a deeper green for a run gone well, amber warnings, and Meno's own attention for errors.
 
 **Words on the page typed in place** (`components/CaptionTyping2D.tsx`, `utils/wordsEditor.ts`), in place of the field shown over them in HTML:
 - **Drawn by Meno as they will be kept**: set as the drawing sets its labels (a formula's counts low, a prefix in italics), in its typeface at its size, broken into lines as wide as they were made where they were given a width, laid as they will lie - so that what is written is what is kept, its lines broken as they will be. Lit round while they are written.
@@ -739,8 +748,10 @@ Decided while building it, for the maintainer to confirm:
 - **A text's icon is its sheet made small**, not a page's shape: its longer side as long as a PDF's icon is tall, so that a few lines make a wide, low icon and a long log a tall one, as their sheets are.
 - **Closing a text's tab leaves its sheet on the page**; deleting the sheet takes the text out of the workspace.
 - **Colours in the column only.** A sheet on the page shows its lines as they would be printed, in black; a text rising from it takes its colours as the column's lines take its place.
-- **Errors' and warnings' marks only where a program's own words say them.** Gaussian's error line was not found in Gaussian's own pages, nor printed on this Mac, so Gaussian's output colours its warnings alone for now.
-- **The colours**, from the palette the column's look is taken from, as GitHub colours code.
+- **A plugin's grammar, not patterns** (the maintainer, 2026-10-10, from a sketch of an ORCA input and a Gaussian output coloured part by part): a grammar is data that Meno makes into tables, which no text can hold up as a pattern could, and it reads an input's structure - so that what does not read as it should can be marked (the maintainer: very good). Regular expressions are still taken from no plugin (docs/FILE-IO.md, *Marks are data*).
+- **Errors and landmarks only where a program's own words say them.** Gaussian's error line was found neither in Gaussian's own pages nor in what it printed here, so Gaussian's output marks its warnings, not its errors, for now.
+- **The colours**, from the palette the column's look is taken from, as GitHub colours code, with purple for what an output's reader looks for and green for a run gone well (the maintainer agreed to both).
+- **Lenient grammars.** A text written as its program reads it should never be marked: an ORCA block's `end` closes the block on the line it opens, and a sub-block's on its own line; a value block (`%maxcore`) is told by its name; Gaussian's route may go on over lines. What a grammar cannot tell without a program's list of keywords is not marked: a missing blank line after Gaussian's route section reads as more of the route.
 
 Not yet, and where it comes:
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).

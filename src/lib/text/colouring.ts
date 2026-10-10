@@ -1,40 +1,46 @@
 /**
- * A text coloured by what it is (docs/PDF.md, *A text*): a Python script,
- * JSON or XML by their usual grammars - Lezer's (MIT), parsed as far as it
- * is read, and from where it was changed, the rest kept - and a
- * calculation's input or output by what its plugin says of its kind
- * (lib/plugins/manifest `Colours`): its keywords, comments, warnings and
- * errors, by marks tried a line at a time, and its numbers, which Meno
- * finds itself. Meno knows no program's format of itself.
+ * A text coloured by what it is (docs/PDF.md, *A text*), by a grammar:
+ * a Python script, JSON or XML by Lezer's (MIT); a calculation's input or
+ * output by its plugin's (lib/plugins/manifest `GrammarDecl`), made into a
+ * parser as it is first wanted (./grammars). Each is parsed as far as it is
+ * read, and from where it was changed, the rest kept. Meno knows no
+ * program's format of itself: its plugins' grammars say it.
  *
- * Each line's colours come as spans of it, each a tone; Meno draws the
- * tones (TextEditor/linePictures).
+ * Each line's colours come as spans of it, each a tone (./tones); Meno
+ * draws the tones (TextEditor/linePictures). What does not read as the
+ * grammar says is marked, a line's parts at a time (`wrong`).
  */
 import { TreeFragment, type Parser, type Tree } from "@lezer/common";
-import { highlightTree, tagHighlighter, tags as t, type Highlighter } from "@lezer/highlight";
+import { highlightTree, styleTags, Tag, tagHighlighter, tags as t, type Highlighter } from "@lezer/highlight";
+import type { LRParser } from "@lezer/lr";
 import { parser as pythonParser } from "@lezer/python";
 import { parser as jsonParser } from "@lezer/json";
 import { parser as xmlParser } from "@lezer/xml";
-import { folded, holdsMark, type Colours, type Mark } from "../plugins/manifest";
-import { extensionOf, kindOf, kinds, writtenKinds, type Kind, type WrittenKind } from "../io/kinds";
+import { folded, holdsMark, type GrammarDecl } from "../plugins/manifest";
+import { grammarText } from "../plugins/known";
+import { extensionOf, kindOf, kinds, textKinds, type Kind, type PluginGrammar, type TextKind } from "../io/kinds";
+import { grammarParser } from "./grammars";
+import { isNumber, TONE_NAMES, type Tone } from "./tones";
 import type { Lines } from "./editing";
 
-/** What a part of a line is, as it is coloured. */
-export type Tone = "keyword" | "string" | "number" | "comment" | "name" | "tag" | "attribute" | "property" | "warning" | "error";
-/** A part of a line, in the line's offsets, and what it is. */
-export type Span = { from: number; to: number; tone: Tone };
+export type { Tone };
+/** A part of a line, in the line's offsets, and the tone it is drawn in. */
+export type Span = { from: number; to: number; tone: Exclude<Tone, "value"> };
+/** A part of a line that does not read as its grammar says, in the line's offsets: as wide as it is - none, where something is missing there. */
+export type Wrong = { from: number; to: number };
 
-/** A text's colouring: each line's spans, in order and apart, as the text is now. */
+/** A text's colouring: each line's spans, in order and apart, as the text is now; and where it does not read as it should. */
 export interface Colouring {
   spans(lines: Lines, line: number): Span[];
+  wrong(lines: Lines, line: number): Wrong[];
+  /** Once its grammar has been made into a parser - at once, for Lezer's own. */
+  readonly ready: Promise<void>;
 }
-
-// --- by a grammar -----------------------------------------------------------
 
 /** How much further than the lines asked for a text is parsed at a time. */
 const CHUNK = 128 * 1024;
 
-/** The tones of a grammar's parts, each language's: a JSON object's keys, an XML element's names and attributes. */
+/** The tones of Lezer's grammars' parts, each language's: a JSON object's keys, an XML element's names and attributes. */
 const SHARED = [
   { tag: t.keyword, class: "keyword" },
   { tag: [t.string, t.character, t.attributeValue], class: "string" },
@@ -45,18 +51,41 @@ const PYTHON = tagHighlighter([...SHARED, { tag: [t.function(t.definition(t.vari
 const JSON_TONES = tagHighlighter([...SHARED, { tag: t.propertyName, class: "property" }]);
 const XML = tagHighlighter([...SHARED, { tag: t.tagName, class: "tag" }, { tag: t.attributeName, class: "attribute" }]);
 
+/** A plugin's grammar's tones: a tag of Meno's for each, given to the parts the plugin names. */
+const TONE_TAGS = Object.fromEntries(TONE_NAMES.map((n) => [n, Tag.define()])) as Record<Tone, Tag>;
+const PLUGIN_TONES = tagHighlighter(TONE_NAMES.map((n) => ({ tag: TONE_TAGS[n], class: n })));
+
+/** A plugin's grammar's parser, its parts given their tones. */
+function withTones(parser: LRParser, tones: GrammarDecl["tones"]): Parser {
+  return parser.configure({ props: [styleTags(Object.fromEntries(Object.entries(tones).map(([node, tone]) => [node, TONE_TAGS[tone]])))] });
+}
+
 /** A text coloured by a grammar: parsed as far as its lines are asked for, and again from where it changed. */
 class GrammarColouring implements Colouring {
+  private parser: Parser | null = null;
   private text: string | null = null;
   private tree: Tree | null = null;
   /** How far the tree reaches. */
   private upTo = 0;
   private fragments: readonly TreeFragment[] = [];
+  readonly ready: Promise<void>;
 
   constructor(
-    private readonly parser: Parser,
+    parser: Parser | Promise<Parser | null>,
     private readonly highlighter: Highlighter,
-  ) {}
+    onReady?: () => void,
+  ) {
+    // (Lezer's own at once; a plugin's once it is made)
+    if (!(parser instanceof Promise)) {
+      this.parser = parser;
+      this.ready = Promise.resolve();
+      return;
+    }
+    this.ready = parser.then((p) => {
+      this.parser = p;
+      if (p) onReady?.();
+    });
+  }
 
   /** The text as it is now: what is the same at either end kept from the tree before. */
   private take(text: string): void {
@@ -75,8 +104,10 @@ class GrammarColouring implements Colouring {
     this.upTo = 0;
   }
 
-  /** The tree, reaching `pos` at least. */
-  private treeTo(pos: number): Tree {
+  /** The tree, reaching `pos` at least - none until the grammar is made. */
+  private treeTo(lines: Lines, pos: number): Tree | null {
+    if (!this.parser) return null;
+    this.take(lines.text);
     const text = this.text!;
     if (this.tree && this.upTo >= Math.min(pos, text.length)) return this.tree;
     const want = Math.min(text.length, Math.max(pos, this.upTo) + CHUNK);
@@ -91,113 +122,98 @@ class GrammarColouring implements Colouring {
   }
 
   spans(lines: Lines, line: number): Span[] {
-    this.take(lines.text);
     const from = lines.start(line);
     const to = lines.end(line);
-    if (to <= from) return [];
+    const tree = to > from ? this.treeTo(lines, to) : null;
+    if (!tree) return [];
     const out: Span[] = [];
     highlightTree(
-      this.treeTo(to),
+      tree,
       this.highlighter,
       (a, b, classes) => {
         const f = Math.max(a, from);
         const e = Math.min(b, to);
-        if (e > f) out.push({ from: f - from, to: e - from, tone: classes.split(" ")[0] as Tone });
+        if (e <= f) return;
+        const tone = classes.split(" ")[0] as Tone;
+        // (a value: a number where it is one, else as it is)
+        if (tone === "value") {
+          if (isNumber(lines.text.slice(f, e))) out.push({ from: f - from, to: e - from, tone: "number" });
+        } else out.push({ from: f - from, to: e - from, tone });
       },
       from,
       to,
     );
     return out;
   }
-}
 
-// --- by a plugin's marks ----------------------------------------------------
-
-/** A number as programs write them: a sign, a point, an exponent - a Fortran D's too. */
-const NUMBER = /[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eEdD][-+]?\d+)?/g;
-const WORDLIKE = /[\p{L}\p{N}_.]/u;
-
-/** The numbers in a line, from `from` to `to`: each standing alone - no part of a name, as 6-31G or def2. */
-function numbersIn(line: string, from: number, to: number, out: Span[]): void {
-  NUMBER.lastIndex = from;
-  for (let m = NUMBER.exec(line); m && m.index < to; m = NUMBER.exec(line)) {
-    const a = m.index;
-    const b = Math.min(to, a + m[0].length);
-    const before = a > 0 ? line[a - 1] : "";
-    const rest = line.slice(a + m[0].length, a + m[0].length + 2);
-    // (a letter after it, or a hyphen and more of a name - 6-31G - and it is part of one)
-    if ((before && WORDLIKE.test(before)) || /^[\p{L}_]|^[-+][\p{L}\p{N}]/u.test(rest)) continue;
-    out.push({ from: a, to: b, tone: "number" });
-  }
-}
-
-/** Where in a line a mark is, as it is written there; -1 where it is not. */
-function placeOf(line: string, mark: Mark): number {
-  const said = mark.text.trim();
-  const where = mark.anyCase ? line.toLowerCase() : line;
-  const what = mark.anyCase ? said.toLowerCase() : said;
-  if (mark.at === "line-start") {
-    const lead = line.length - line.trimStart().length;
-    return where.startsWith(what, lead) ? lead : -1;
-  }
-  return where.indexOf(what);
-}
-
-/**
- * A line coloured as its kind's plugin says: all of it an error, or a
- * warning, where it holds one's mark; else a comment from where one's mark
- * begins it, and before that keywords, where it holds one's mark, or its
- * numbers.
- */
-export function lineSpans(line: string, c: Colours): Span[] {
-  if (!line.trim()) return [];
-  const head = folded(line);
-  const holds = (marks: Mark[] | undefined, within = head) => (marks ?? []).some((m) => holdsMark(within, m));
-  if (holds(c.errors)) return [{ from: 0, to: line.length, tone: "error" }];
-  if (holds(c.warnings)) return [{ from: 0, to: line.length, tone: "warning" }];
-  let comment = line.length;
-  for (const m of c.comments ?? []) {
-    const at = placeOf(line, m);
-    if (at >= 0 && at < comment) comment = at;
-  }
-  const out: Span[] = [];
-  const before = line.slice(0, comment);
-  if (before.trim()) {
-    if (holds(c.keywords, folded(before))) out.push({ from: line.length - line.trimStart().length, to: before.trimEnd().length, tone: "keyword" });
-    else numbersIn(line, 0, comment, out);
-  }
-  if (comment < line.length) out.push({ from: comment, to: line.length, tone: "comment" });
-  return out;
-}
-
-class LineColouring implements Colouring {
-  constructor(private readonly colours: Colours) {}
-  spans(lines: Lines, line: number): Span[] {
-    return lineSpans(lines.line(line), this.colours);
+  wrong(lines: Lines, line: number): Wrong[] {
+    const from = lines.start(line);
+    const to = lines.end(line);
+    const tree = this.treeTo(lines, to + 1);
+    if (!tree) return [];
+    const out: Wrong[] = [];
+    tree.iterate({
+      from,
+      to: to + 1,
+      enter: (n) => {
+        if (!n.type.isError) return;
+        // (on this line: what it covers of it - or where something is missing, its line's end included)
+        if (n.from > to || (n.to < from && n.from < from)) return;
+        const f = Math.max(n.from, from);
+        const e = Math.min(n.to, to);
+        if (f <= to && !out.some((w) => w.from === f - from && w.to === Math.max(f, e) - from)) out.push({ from: f - from, to: Math.max(f, e) - from });
+      },
+    });
+    return out;
   }
 }
 
 // --- which ------------------------------------------------------------------
 
-/** The grammars, by the names their files go by. */
+/** Lezer's grammars, by the names their files go by. */
 const GRAMMARS: Record<string, { parser: Parser; highlighter: Highlighter }> = {
   ".py": { parser: pythonParser, highlighter: PYTHON },
   ".json": { parser: jsonParser, highlighter: JSON_TONES },
   ".xml": { parser: xmlParser, highlighter: XML },
 };
 
+/** How far into a text its lines are looked at, for what a kind of text's lines begin with. */
+const HEAD = 4096;
+
+/** A plugin's grammar's colouring: its grammar read from the plugin's folder, made into a parser - none, where there is none to read. */
+function pluginColouring(g: PluginGrammar, grammarOf: (plugin: string, file: string) => string | undefined, onReady?: () => void): Colouring | null {
+  const text = grammarOf(g.plugin, g.decl.file);
+  if (text == null) return null;
+  return new GrammarColouring(
+    grammarParser(text).then((p) => p && withTones(p, g.decl.tones)),
+    PLUGIN_TONES,
+    onReady,
+  );
+}
+
 /**
- * How a text is coloured: by a grammar, where its name says it is Python,
- * JSON or XML; else as the kind it is told to be says, where a plugin
- * added colours it - by what it holds (lib/io/kinds), or, a kind a plugin
- * writes, by its name; else not at all.
+ * How a text is coloured: by Lezer's grammar, where its name says it is
+ * Python, JSON or XML; else by the grammar of the kind it is told to be,
+ * where a plugin added brings one - by what it holds (lib/io/kinds), as a
+ * file is; or, a kind of text a plugin knows by name, by its name and what
+ * its first lines begin with; else not at all. `onReady`, once a plugin's
+ * grammar has been made into a parser.
  */
-export function colouringFor(name: string, text: string, among: readonly Kind[] = kinds(), written: readonly WrittenKind[] = writtenKinds()): Colouring | null {
+export function colouringFor(
+  name: string,
+  text: string,
+  among: readonly Kind[] = kinds(),
+  texts: readonly TextKind[] = textKinds(),
+  onReady?: () => void,
+  grammarOf: (plugin: string, file: string) => string | undefined = grammarText,
+): Colouring | null {
   const ext = extensionOf(name);
-  const grammar = GRAMMARS[ext];
-  if (grammar) return new GrammarColouring(grammar.parser, grammar.highlighter);
+  const lezer = GRAMMARS[ext];
+  if (lezer) return new GrammarColouring(lezer.parser, lezer.highlighter);
   const kind = kindOf(name, text, among);
-  if (kind?.colours) return new LineColouring(kind.colours);
-  const w = ext ? written.find((k) => k.extensions.includes(ext)) : undefined;
-  return w ? new LineColouring(w.colours) : null;
+  if (kind?.grammar) return pluginColouring(kind.grammar, grammarOf, onReady);
+  if (!ext) return null;
+  const head = folded(text.slice(0, HEAD).replace(/\r\n?/g, "\n"));
+  const known = texts.find((k) => k.extensions.includes(ext) && (!k.marks.length || k.marks.some((m) => holdsMark(head, m))));
+  return known ? pluginColouring(known.grammar, grammarOf, onReady) : null;
 }

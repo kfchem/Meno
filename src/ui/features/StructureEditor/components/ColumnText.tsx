@@ -31,6 +31,8 @@ const NUMBER_PAD = 8;
 /** What is selected, lit as words selected in a PDF are; less, where the text has not the keys. */
 const SELECTED = 0.3;
 const SELECTED_AWAY = 0.15;
+/** How wide what is missing is marked, in px: a letter's width, about. */
+const WRONG_LEAST_PX = 8;
 /** The caret: how wide, and how long it shows and hides - steadily, a moment after a key. */
 const CARET_PX = 2;
 const BLINK_MS = 530;
@@ -80,7 +82,8 @@ export default function ColumnText({ text, hidden = false }: { text: WorkspaceTe
 
   // (coloured as what it is told to be by its name, or by what it held as it came - again as plugins are added or taken away)
   const told = useKinds();
-  const colouring = useMemo(() => colouringFor(text.name, ed.text, told.kinds, told.written), [text.name, ed, told]);
+  // (drawn again once a plugin's grammar has been made into a parser)
+  const colouring = useMemo(() => colouringFor(text.name, ed.text, told.kinds, told.texts, () => entry.redraw()), [text.name, ed, told, entry]);
   const plane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   useEffect(() => () => plane.dispose(), [plane]);
   if (!typeIn || hidden) return null;
@@ -115,6 +118,14 @@ export default function ColumnText({ text, hidden = false }: { text: WorkspaceTe
           <meshBasicMaterial map={p.texture} depthTest={false} depthWrite={false} toneMapped={false} />
         </mesh>,
       );
+    }
+    // (what does not read as the text's grammar says, underlined - not on the line being written, until it is left)
+    if (colouring && !composingHere && !(ed.focused && ed.lines.at(ed.sel.head) === i)) {
+      colouring.wrong(ed.lines, i).forEach((w, k) => {
+        const x0 = ed.xOf(start + w.from);
+        const x1 = Math.max(ed.xOf(start + w.to), x0 + WRONG_LEAST_PX);
+        box(`w${i}:${k}`, x0, top + LINE_PX - 3, x1 - x0, 2, COLORS.attention, 1, 2);
+      });
     }
     // (what is selected on the line - and past its end, where it goes on to the next)
     if (!comp && from !== to && from <= end && to > start) {

@@ -23,6 +23,7 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@lezer/common": "^1.5.3",
+    "@lezer/generator": "^1.8.1",
     "@lezer/highlight": "^1.2.4",
     "@lezer/json": "^1.0.3",
     "@lezer/lr": "^1.4.10",

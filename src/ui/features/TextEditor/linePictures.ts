@@ -9,7 +9,7 @@
  */
 import * as THREE from "three";
 import { letterStarts } from "../../../lib/text/editing";
-import type { Span, Tone } from "../../../lib/text/colouring";
+import type { Span } from "../../../lib/text/colouring";
 
 /** The type: as the column's text has always been set (App.css, `--font-mono`). */
 export const FONT_PX = 14;
@@ -26,9 +26,10 @@ export const PAPER = "#ffffff";
 /**
  * The colours of what a text's parts are (lib/text/colouring), from the
  * palette the column's look is taken from (App.css, `--color-gh-*`): its
- * grey for comments, and Meno's own attention for an error.
+ * grey for comments, purple for what an output's reader looks for, green
+ * for a run that has gone well, and Meno's own attention for an error.
  */
-export const TONES: Record<Tone, string> = {
+export const TONES: Record<Span["tone"], string> = {
   keyword: "rgb(207, 34, 46)",
   string: "rgb(10, 48, 105)",
   number: "rgb(5, 80, 174)",
@@ -37,6 +38,8 @@ export const TONES: Record<Tone, string> = {
   tag: "rgb(17, 99, 41)",
   attribute: "rgb(5, 80, 174)",
   property: "rgb(5, 80, 174)",
+  landmark: "rgb(130, 80, 223)",
+  success: "rgb(26, 127, 55)",
   warning: "rgb(154, 103, 0)",
   error: "rgb(205, 69, 96)",
 };

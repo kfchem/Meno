@@ -11,6 +11,16 @@
   "roles": [],
   "kinds": [],
   "writes": [],
+  "texts": [
+    {
+      "id": "orca-input", "name": "ORCA input", "extensions": [".inp"],
+      "marks": [{"text": "!", "at": "line-start"}, {"text": "%", "at": "line-start"}, {"text": "*", "at": "line-start"}],
+      "grammar": {"file": "orca-input.grammar", "tones": {
+        "Keyword": "keyword", "BlockName": "keyword", "End": "keyword", "CoordKind": "keyword", "FileKind": "keyword", "NewJob": "keyword",
+        "Option": "property", "Element": "tag", "Value": "value", "String": "string", "Comment": "comment"
+      }}
+    }
+  ],
   "installed": [
     {"name": "orca", "label": "ORCA", "files": {"macos": "orca", "linux": "orca", "windows": "orca.exe"}, "path": ["{folder}"]}
   ],
