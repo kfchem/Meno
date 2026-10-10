@@ -1,5 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { useEditor, useEditorStore, EditorProvider } from "./store";
+import { selectedOf } from "./store/slices/selectionSlice";
 import { useStructureEvents } from "./hooks/useStructureEvents";
 import { useCanvasSetup } from "./hooks/useCanvasSetup";
 import {
@@ -555,8 +556,7 @@ function WorkspaceContent({
       const { hovered, sel } = st;
       const kind = hoveredPart();
       const id = kind === "atom" ? hovered.atomId : hovered.bondId;
-      const drawingSelected = sel.atoms.size > 0 || sel.bonds.size > 0;
-      const selected = drawingSelected || st.sel3d.size > 0 || st.selFlow.sets.size > 0 || st.selFlow.steps.size > 0 || st.selPictures.size > 0 || st.selTexts.size > 0;
+      const { drawing: drawingSelected, any: selected } = selectedOf(st);
       const busy = st.labelEdit.active || st.moveDrag.active || st.extend.active;
       if (isCleanUpKey(e)) {
         e.preventDefault();
@@ -877,10 +877,9 @@ function WorkspaceContent({
     const id = kind === "atom" ? hovered.atomId : hovered.bondId;
     // on something selected, or on nothing with a selection: the
     // selection's menu; on nothing else, the canvas's (paste, select all)
-    const { sel, selFlow } = store.getState();
+    const { sel } = store.getState();
     const part = kind && id != null;
-    const drawing = sel.atoms.size > 0 || sel.bonds.size > 0;
-    const selected = drawing || sel3d.size > 0 || selFlow.sets.size > 0 || selFlow.steps.size > 0 || selPictures.size > 0 || selTexts.size > 0;
+    const { drawing, any: selected } = selectedOf(store.getState());
     const onSelected =
       part &&
       (kind === "atom" ? sel.atoms.has(id) : sel.bonds.has(id));
