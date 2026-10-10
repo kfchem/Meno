@@ -116,8 +116,9 @@ h1 b { font-weight: 600; }
 /* The window: the app's own, as captured, its corners and title bar its own */
 .window { filter: drop-shadow(0 24px 40px rgba(26, 31, 43, 0.22)) drop-shadow(0 6px 12px rgba(26, 31, 43, 0.12)); }
 .screen { position: relative; aspect-ratio: 16 / 10; }
-.screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 120ms linear; }
-.screen img.on { opacity: 1; }
+.screen img, .screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.screen img { object-fit: contain; transition: opacity 160ms linear; }
+.screen.playing img { opacity: 0; }
 @media (prefers-color-scheme: dark) {
   .window { filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.7)); }
 }
@@ -145,7 +146,6 @@ h1 b { font-weight: 600; }
 .chapter .datum { margin-top: 18px; display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; font: 400 13px/1.2 var(--font-mono); color: var(--ink); background: var(--sheet); }
 .chapter .datum span { color: var(--muted); }
 .chapter .datum sub { font-size: 0.75em; line-height: 0; }
-.stage .window { transform: scale(calc(0.98 + var(--zoom, 0) * 0.03)); transform-origin: 60% 50%; }
 
 .rail { position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; }
 .rail button {
@@ -157,7 +157,7 @@ h1 b { font-weight: 600; }
 .rail button::before { right: 10px; background: var(--line); }
 .rail button::after { width: calc((100% - 20px) * var(--p, 0)); background: var(--teal); }
 .rail button.on { color: var(--ink); }
-.track { height: calc(var(--chapters, 5) * 220vh); }
+.track { height: calc(var(--chapters, 5) * 240vh); }
 html:not(.js) .stage { position: static; height: auto; padding-block: 40px; }
 html:not(.js) .track, html:not(.js) .rail { display: none; }
 
@@ -201,6 +201,6 @@ footer a { color: inherit; }
 .foot-mark { height: 18px; width: auto; aspect-ratio: 2464 / 399; color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-stage .window, .stage .window, .honeycomb, .mol { transform: none !important; }
+  .hero-stage .window, .honeycomb, .mol { transform: none !important; }
   .chapter, .screen img, .btn { transition: none; }
 }
