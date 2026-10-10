@@ -863,7 +863,7 @@ Built (lane L9):
 - **Gathered, they go back to the stack's own place**, as before, and their places are kept: spread again, each page goes back to where it was put. *Put pages in rows*, in the PDF's menu while some lie in places of their own, puts them all back in their rows, as one step.
 - **A page in a place of its own shows its number under it** (*3 / 12*), as small on the screen as the PDF's name, which stays under the pages left in their rows - under the first page, where none is left there.
 - **The light, hovered or taken hold of, lies round each page**, not round all of them, since they may lie far apart.
-- **They glide.** Put back in their rows, or moved by an undo or a redo, the pages glide to where they now lie (320 ms), the one being dragged following the pointer.
+- **They glide.** Put back in their rows, or moved by an undo or a redo, the pages glide to where they now lie (320 ms), lying over one another as they did until they are there, a page's number fading as it leaves its own place or comes to one; the one being dragged follows the pointer, on top.
 
 Decided while building it, for the maintainer to confirm:
 - **A page is taken hold of as the stack is**, by a long press on its rim; its words are still selected by a long press on them, and a box drawn in a figure.

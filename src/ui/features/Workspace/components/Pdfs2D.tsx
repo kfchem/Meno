@@ -153,12 +153,16 @@ export default function Pdfs2D() {
     if (before && before.spread && p.spread && before !== p) {
       const was = spreadSheets(before);
       const to = spreadSheets(p);
-      if (to.some((s, i) => s.x !== was[i]?.x || s.y !== was[i]?.y)) {
-        const d = dragged.current;
+      const d = dragged.current;
+      const followed = (i: number) => d?.id === p.id && (d.page == null || d.page === i);
+      if (to.some((s, i) => !followed(i) && (s.x !== was[i]?.x || s.y !== was[i]?.y))) {
         const m2 = motion.current.get(p.id);
         const now = performance.now();
-        const from = glided(m2, was, now).map((s, i) => (d?.id === p.id && (d.page == null || d.page === i) ? to[i] : s));
-        motion.current.set(p.id, { ...m2, glide: { from, start: now } });
+        const from = glided(m2, was, now).map((s, i) => (followed(i) ? to[i] : s));
+        // (lying over one another as they did until they are there, their numbers coming and going as they go)
+        const order = m2?.glide && now - m2.glide.start < GLIDE_MS ? m2.glide.order : spreadOrder(before);
+        const placed = (before.placed ?? []).map((q) => q.page);
+        motion.current.set(p.id, { ...m2, glide: { from, start: now, order, placed } });
       }
     }
     if (before && !!before.icon !== !!p.icon) motion.current.set(p.id, { ...motion.current.get(p.id), icon: { to: !!p.icon, start: performance.now() } });
@@ -681,11 +685,19 @@ function PdfStack(props: {
       return { k, s: { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k, w: from.w + (to.w - from.w) * k, h: from.h + (to.h - from.h) * k } as Sheet };
     });
     const heldPage = motion?.held?.page;
+    // (gliding: in the order they lay in before, their numbers coming or going)
+    const g = motion?.glide && now - motion.glide.start < GLIDE_MS ? motion.glide : null;
+    const gt = g ? ease((now - g.start) / GLIDE_MS) : 1;
+    const numberSeen = (i: number) => {
+      const is = placedOwn(p, i);
+      const was = g ? g.placed.includes(i) : is;
+      return is && was ? 1 : is ? gt : was ? 1 - gt : 0;
+    };
     const heldBox = heldPage != null && sheets[heldPage] ? sheets[heldPage].s : null;
     return (
       <group onPointerOver={props.onOver} onPointerOut={props.onOut} onPointerDown={props.onDown} onPointerMove={(e) => props.onHover(e.point)}>
         {/* (those in their rows lowest, then those put in places of their own, the last put there on top) */}
-        {spreadOrder(p).map((i, n) => {
+        {(g ? g.order : spreadOrder(p)).map((i, n) => {
           const { k, s } = sheets[i];
           const lift = Math.sin(Math.PI * k);
           return <Page key={i} s={s} pt={p.pages[i]} lift={lift} z={0.02 * n + 0.2 * lift} now={now} px={px} preview={props.previewOf(i)} tiles={props.tilesOf(i)} marks={props.marksOf(i)} />;
@@ -707,11 +719,11 @@ function PdfStack(props: {
           />
         )}
         {name}
-        {/* (a page in a place of its own: its number under it, as the name lies under the rest) */}
+        {/* (a page in a place of its own: its number under it, as the name lies under the rest - over every page, as they may lie over it) */}
         {p.pages.map((_, i) =>
-          placedOwn(p, i) ? (
-            <group key={`n${i}`} position={[sheets[i].s.x - sheets[i].s.w / 2, sheets[i].s.y - sheets[i].s.h / 2 - 14 * px, 0.01]}>
-              <Text font={props.type.font ?? undefined} fontSize={12 * px} anchorX="left" anchorY="top" color={GRAY} fillOpacity={sheets[i].k}>
+          numberSeen(i) > 0.001 ? (
+            <group key={`n${i}`} position={[sheets[i].s.x - sheets[i].s.w / 2, sheets[i].s.y - sheets[i].s.h / 2 - 14 * px, 0.02 * p.pages.length + 0.21]}>
+              <Text font={props.type.font ?? undefined} fontSize={12 * px} anchorX="left" anchorY="top" color={GRAY} fillOpacity={sheets[i].k * numberSeen(i)}>
                 {`${i + 1} / ${p.pages.length}`}
               </Text>
             </group>
@@ -781,8 +793,8 @@ type Motion = {
   lit?: { on: boolean; start: number; from: number };
   /** Held by a page spread (`page`), that page alone. */
   held?: { x: number; y: number; start: number; done?: boolean; let?: number; page?: number };
-  /** Its pages spread gliding to where they lie now, from where they were drawn. */
-  glide?: { from: Sheet[]; start: number };
+  /** Its pages spread gliding to where they lie now, from where they were drawn: in the order they lay in, and which were in places of their own, before. */
+  glide?: { from: Sheet[]; start: number; order: number[]; placed: number[] };
 };
 
 /** Where a PDF's pages spread are drawn now: where they lie, `to`, or on their way there, gliding. */
