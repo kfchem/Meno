@@ -1,11 +1,12 @@
 import { PlusIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
+import clsx from "clsx";
 import type { MouseEvent } from "react";
 import { TabKind } from "../../lib/core";
-import { shortcutLabel } from "../../lib/doc/shortcuts";
+import { IS_MAC, shortcutLabel } from "../../lib/doc/shortcuts";
 import OfflineToggle from "../network/OfflineToggle";
 import MenoMenu from "./MenoMenu";
 import { TabStrip, type TabMeta } from "./Tabs";
-import WindowButtons from "./WindowButtons";
+import WindowButtons, { SystemButtonsRoom } from "./WindowButtons";
 
 export type TabsController = {
   tabOrder: string[];
@@ -25,16 +26,19 @@ const stop = (e: MouseEvent) => e.stopPropagation();
 /**
  * The window's title bar, drawn by Meno: its menu, the tabs on the line
  * that runs under them, "+" for a new workspace, online or offline,
- * Settings, and the window's buttons. Dragged by any of it that is not a
- * button, it moves the window.
+ * Settings, and the window's buttons - on a Mac the system's own, at the
+ * left, on a window with the system's rounded corners and shadow
+ * (tauri.macos.conf.json); elsewhere Meno's, at the right. Dragged by any
+ * of it that is not a button, it moves the window.
  */
-export default function TopBar({ ctl }: { ctl: TabsController }) {
+export default function TopBar({ ctl, mac = IS_MAC }: { ctl: TabsController; mac?: boolean }) {
   const { tabOrder, tabsById, activeId, reorder, select, close, add, openByKind } = ctl;
   return (
     <div
       data-tauri-drag-region
       className="w-full flex items-stretch justify-between h-10 min-h-10 bg-gh-base select-none relative"
     >
+      {mac && <SystemButtonsRoom />}
       <MenoMenu own={[{ title: "File", items: [{ name: "Open…", keys: shortcutLabel("O"), run: ctl.openFiles }] }]} />
       <div className="h-px bg-transparent border-t border-gh-line absolute bottom-0 right-0 left-0" />
 
@@ -47,7 +51,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
         close={close}
       />
 
-      <div className="h-full flex items-center gap-1">
+      <div className={clsx("h-full flex items-center gap-1", mac && "pr-2")}>
         <button
           aria-label="New workspace"
           title="New workspace"
@@ -69,7 +73,7 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
           <Cog6ToothIcon className="h-4.5 w-4.5" />
         </button>
 
-        <WindowButtons />
+        {!mac && <WindowButtons />}
       </div>
     </div>
   );

@@ -1,10 +1,19 @@
 import { MinusIcon, StopIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useMemo, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const stop = (e: MouseEvent) => e.stopPropagation();
 
-/** Minimise, maximise and close, drawn by Meno at the title bar's right. */
+/**
+ * How much of the title bar's left a Mac's own window buttons take, their
+ * margin to the logo included: where tauri.macos.conf.json puts them
+ * (`trafficLightPosition`), and the three of them as wide as the system
+ * draws them.
+ */
+export const SYSTEM_BUTTONS_ROOM = 80;
+
+/** Minimise, maximise and close, drawn by Meno at the title bar's right (not on a Mac). */
 export default function WindowButtons() {
   const appWindow = useMemo(() => getCurrentWindow(), []);
   return (
@@ -38,4 +47,42 @@ export default function WindowButtons() {
       </button>
     </div>
   );
+}
+
+/**
+ * Room at the title bar's left for a Mac's own window buttons, which the
+ * system draws over the bar: none in full screen, where it hides them, the
+ * logo and the tabs moving over as the room closes.
+ */
+export function SystemButtonsRoom() {
+  const full = useFullScreen();
+  return (
+    <div
+      data-tauri-drag-region
+      className="shrink-0 h-full transition-[width] duration-150 ease-meno"
+      style={{ width: full ? 0 : SYSTEM_BUTTONS_ROOM }}
+    />
+  );
+}
+
+/** Whether the window is in full screen, as it goes in and out. */
+function useFullScreen(): boolean {
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    if (!isTauri()) return;
+    const appWindow = getCurrentWindow();
+    let live = true;
+    const check = () =>
+      void appWindow
+        .isFullscreen()
+        .then((f) => live && setFull(f))
+        .catch(() => {});
+    check();
+    const stopListening = appWindow.onResized(check);
+    return () => {
+      live = false;
+      void stopListening.then((f) => f()).catch(() => {});
+    };
+  }, []);
+  return full;
 }

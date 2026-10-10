@@ -53,7 +53,13 @@ src/
   utils/atomUtils         element table (radii, colours)
   samples/                textbook structures and reactions for the tests and the workflow's 3D node
                           (see samples/README.md)
-  ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "+" (a new workspace), online/offline, Settings, window buttons
+  ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "+" (a new workspace), online/offline, Settings,
+                          and the window's buttons - Meno's own on Windows and Linux (WindowButtons), the system's
+                          on a Mac, whose window keeps the system's frame, rounded corners and shadow with the
+                          title bar laid over the page (tauri.macos.conf.json: titleBarStyle Overlay,
+                          trafficLightPosition; SystemButtonsRoom keeps their room, none in full screen)
+  ui/layouts/Tabs         the tab strip: reorder by dragging, the chosen tab's curved corners, the one line under
+                          the tabs (the bar's, which a tab not chosen leaves showing)
   ui/layouts/MenoMenu     the logo's menu: the app's commands and those the tab in front offers (commands.ts)
   ui/layouts/ErrorBoundary a part that fails as it is drawn, and the card left in its place (see *When a part fails*)
   ui/fonts/               the typefaces labels are drawn in, read from their files; troika, which draws
