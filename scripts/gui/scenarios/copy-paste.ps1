@@ -34,7 +34,7 @@ Save-Step "cut"
 Invoke-MenoClick -X 300 -Y 1000 -Right    # (high enough for the whole menu below it)
 Wait-MenoSettled | Out-Null
 Save-Step "canvas-menu"
-Invoke-MenoClick -X 400 -Y 1041     # Paste, its first item
+Invoke-MenoClick -X 346 -Y 1046     # Paste, its first icon
 Wait-MenoSettled | Out-Null
 Save-Step "pasted-from-menu"
 

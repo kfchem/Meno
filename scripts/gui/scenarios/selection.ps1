@@ -48,7 +48,7 @@ Wait-MenoSettled | Out-Null
 Invoke-MenoClick -X 806 -Y 596 -Right
 Wait-MenoSettled | Out-Null
 Save-Step "atom-menu"
-Invoke-MenoClick -X 1006 -Y 892     # Select this structure, below the charge items
+Invoke-MenoClick -X 1006 -Y 790     # Select this structure, the list's second, under the icons
 Wait-MenoSettled | Out-Null
 Save-Step "structure"
 
@@ -56,7 +56,7 @@ Save-Step "structure"
 Invoke-MenoClick -X 1280 -Y 250 -Right
 Wait-MenoSettled | Out-Null
 Save-Step "selection-menu"
-Invoke-MenoClick -X 1480 -Y 630     # Turn over left to right, below the clipboard items
+Invoke-MenoClick -X 1480 -Y 526     # Turn over left to right, after Copy as SMILES and Export, under the icons
 Wait-MenoSettled | Out-Null
 Save-Step "turned-over"
 Send-MenoShortcut Z
