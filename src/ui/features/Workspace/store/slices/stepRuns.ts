@@ -455,7 +455,8 @@ export function createStepRuns(doc: DocumentStore<WorkspaceDocument>, set: SetSt
         // (its log kept with the workspace, as an output it was read from)
         const { kind: _kind, ...source } = await rememberOutput(`${kindInfo(kind).name} ${k + 1}.log`, log, "");
         for (const [i, out] of said.entries()) {
-          const readers = [`${plugin.id} ${plugin.version}`];
+          // (by the version its worker said it runs, as a reader's is kept)
+          const readers = [`${plugin.id} ${client.version || plugin.version}`];
           const made = kind === "conformers" ? conformersWorked(mine[i], out, readers, log ? source : undefined) : workedOf(kind, mine[i], out, readers, log ? source : undefined);
           if (typeof made === "string") whys.push(made);
           else worked.push(...(Array.isArray(made) ? made : [made]));

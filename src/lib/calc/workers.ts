@@ -1,14 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { resolveResource } from "@tauri-apps/api/path";
 import { create } from "zustand";
 import { ensurePyEnv, pyEnvReady, removePyEnv } from "../pyEnv";
 import { manifestOf, READERS, type PythonPlugin, type ReaderPlugin } from "./catalog";
 import { registerKinds } from "../io/kinds";
 import type { Manifest } from "../plugins/manifest";
-import { ReaderClient, type Reader } from "./client";
+import type { ReaderClient, Reader } from "./client";
 import { menoReader } from "./builtin";
-import { stopRoleWorker } from "../roles/worker";
+import { stopWorker, workerOf } from "../plugins/process";
 import { useAppSettings } from "../settings/appSettings";
 import { forThisSystem } from "../plugins/here";
 
@@ -17,12 +14,11 @@ import { forThisSystem } from "../plugins/here";
  * - its environment set up, asking first for the network - in Settings,
  * *Plugins*, and taken away there; a plugin that fills a role is set up as
  * well the first time the role is needed, unless it was taken away
- * (lib/roles/worker). A reader's worker is started the first time it is
- * asked to read, then kept for the session. A worker reads what it is sent
- * and has no business on the network; the app keeps it off it. Meno's own
- * reading is always there, and runs in the app (./builtin). The kinds a
- * plugin brings are registered while it is added, and only then
- * (lib/io/kinds).
+ * (lib/roles/worker). Its worker is started the first time it is asked to
+ * read, write or do a step - or fill a role - then kept for the session, one
+ * for all of these (lib/plugins/process). Meno's own reading is always
+ * there, and runs in the app (./builtin). The kinds a plugin brings are
+ * registered while it is added, and only then (lib/io/kinds).
  */
 export type ReaderState = "absent" | "adding" | "added" | "removing";
 
@@ -48,10 +44,6 @@ const setState = (id: string, state: ReaderState, problem?: string) => {
   );
 };
 
-/** How long a reader's first import may take. */
-const READY_MS = 60_000;
-
-const running = new Map<string, Promise<{ client: ReaderClient; id: string }>>();
 let meno: Reader | null = null;
 
 /** The readers added on this computer, looked at afresh: Meno's own always. */
@@ -97,14 +89,7 @@ export async function addPlugin(p: PythonPlugin): Promise<void> {
 export async function removePlugin(p: PythonPlugin): Promise<void> {
   setState(p.id, "removing");
   try {
-    const worker = running.get(p.id);
-    running.delete(p.id);
-    if (worker) {
-      const { client, id } = await worker.catch(() => ({ client: null, id: null }));
-      client?.close();
-      if (id) await invoke("ext_kill", { id }).catch(() => {});
-    }
-    await stopRoleWorker(p.id);
+    await stopWorker(p.id);
     await removePyEnv(p.profile);
     markTakenAway(p, true);
     setState(p.id, "absent");
@@ -117,69 +102,10 @@ export async function removePlugin(p: PythonPlugin): Promise<void> {
 /** A reader's worker, started the first time it is asked for; the reader must be added. */
 export function readerClient(p: ReaderPlugin): Promise<Reader> {
   if (p.builtin) return Promise.resolve((meno ??= menoReader()));
-  let worker = running.get(p.id);
-  if (!worker) {
-    worker = start(p);
-    running.set(p.id, worker);
-    worker.catch(() => running.delete(p.id));
-  }
-  return worker.then((w) => w.client);
+  return workerOf(p).then((w) => w.reader);
 }
 
 /** A plugin's worker, as its client: what a step it fills is asked of (`prepare`, `collect`); the plugin must be added. */
 export function pluginClient(p: PythonPlugin): Promise<ReaderClient> {
-  let worker = running.get(p.id);
-  if (!worker) {
-    worker = start(p);
-    running.set(p.id, worker);
-    worker.catch(() => running.delete(p.id));
-  }
-  return worker.then((w) => w.client);
-}
-
-type Line = { id: string; line: string };
-
-async function start(p: PythonPlugin): Promise<{ client: ReaderClient; id: string }> {
-  if (!(await pyEnvReady(p.profile))) throw new Error(`${p.name} is not added: add it in Settings, Plugins.`);
-  const python = await ensurePyEnv(p.profile);
-  const script = await resolveResource(p.worker);
-  // (heard from before the worker's id is known, so that nothing it says
-  // first is missed; kept to its own lines once it is)
-  let id: string | null = null;
-  const early: Line[] = [];
-  const onLine = new Set<(line: string) => void>();
-  const hear = (m: Line) => {
-    if (id === null) early.push(m);
-    else if (m.id === id) onLine.forEach((f) => f(m.line));
-  };
-  const client = new ReaderClient(p.name, {
-    send: (line) => {
-      if (id !== null) void invoke("ext_stdin", { id, data: line + "\n" });
-    },
-    listen: (f) => {
-      onLine.add(f);
-      return () => onLine.delete(f);
-    },
-  });
-  const stopOut = await listen<string>("ext:stdout", (e) => hear(JSON.parse(e.payload)));
-  const stopExit = await listen<string>("ext:exit", (e) => {
-    if (JSON.parse(e.payload).id !== id) return;
-    client.close(`the ${p.name} reader stopped`);
-    running.delete(p.id);
-    stopOut();
-    stopExit();
-  });
-  id = await invoke<string>("ext_spawn_sidecar", { payload: { entry: python, args: ["-u", script] } });
-  const worker = id;
-  for (const m of early.splice(0)) if (m.id === worker) onLine.forEach((f) => f(m.line));
-  try {
-    await Promise.race([
-      client.ready,
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${p.name} did not start in time`)), READY_MS)),
-    ]);
-  } catch (e) {
-    void invoke("ext_kill", { id: worker }).catch(() => {});
-    throw e;
-  }
-  return { client, id: worker };
+  return workerOf(p).then((w) => w.reader);
 }
