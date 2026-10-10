@@ -1382,7 +1382,7 @@ export function textsInRow<T extends Omit<WorkspaceText, "id">>(texts: readonly 
   const step = ICON_NAME_WIDTH + NOMINAL_BOND_LENGTH;
   // (each by its top left, its middle where it goes)
   const row = texts.map((t, i) => {
-    const s = sheetOf(t.text);
+    const s = sheetOf(t.text, t.name);
     return { ...t, at: { x: at.x + i * step - s.w / 2, y: at.y + s.h / 2 }, icon: true as const };
   });
   const taken = [
