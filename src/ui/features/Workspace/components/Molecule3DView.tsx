@@ -21,6 +21,8 @@ import PointedCard3D, { type CardGroups } from "./PointedCard3D";
 import Surface3D from "./Surface3D";
 import type { Grid } from "../../../../lib/calc/results";
 import { dollyAt, dollyMatrix, RISE_ACROSS_FROM, RISE_END, RISE_GROW, RISE_UP } from "../utils/rise";
+import { chainRuns } from "../../../../lib/chem/biopolymer";
+import { ribbonMesh } from "../utils/ribbon";
 
 /**
  * Drawn after everything on the page, and depth-tested: what stands off the
@@ -220,6 +222,30 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const markAt = useRef<number | null>(null);
   const [hoverAtom, setHoverAtom] = useState<number | null>(null);
   const [hoverBond, setHoverBond] = useState<number | null>(null);
+  // its chains as ribbons, where a look draws them so (utils/ribbon): the
+  // runs, the residue under the pointer, the band's triangles - shared with
+  // its outline, which pushes them out along their normals - and the size
+  // they were last made at
+  const runs = useMemo(
+    () => (m.biopolymer && (solid.ribbons.primary || solid.ribbons.secondary) ? chainRuns(m.biopolymer, m.atoms) : []),
+    [m.biopolymer, m.atoms, solid.ribbons],
+  );
+  const traceOf = useMemo(() => new Map(runs.flatMap((r) => r.residues.map((res, i) => [res, r.trace[i]] as const))), [runs]);
+  const [hoverResidue, setHoverResidue] = useState<number | null>(null);
+  const ribbon = useRef<THREE.Mesh>(null);
+  const ribbonHull = useRef<THREE.Mesh>(null);
+  const ribbonMat = useRef<THREE.MeshStandardMaterial>(null);
+  const ribbonGeo = useMemo(() => new THREE.BufferGeometry(), []);
+  useEffect(() => () => ribbonGeo.dispose(), [ribbonGeo]);
+  const hullMat = useMemo(() => grownMaterial(), []);
+  useEffect(() => () => hullMat.dispose(), [hullMat]);
+  const ribbonResidues = useRef<Int32Array>(new Int32Array(0));
+  // (going over to a look without ribbons, the residue pointed at is let go)
+  const ribbonsNow = solid.ribbons[look];
+  useEffect(() => {
+    if (!ribbonsNow) setHoverResidue(null);
+  }, [ribbonsNow]);
+  const ribbonMade = useRef(-1);
   const { invalidate, camera, size, gl } = useThree();
   const quaternion = useMemo(() => (turn ? new THREE.Quaternion(...turn) : new THREE.Quaternion()), [turn]);
   // how it is turned as drawn: following a drag at once, going over to a turn set afresh
@@ -243,7 +269,9 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   const bondsMat = useRef<THREE.MeshStandardMaterial>(null);
   // (the atoms either look leaves out, and whether it leaves out any)
   const hidden = solid.hidden;
-  const hides = useMemo(() => ({ primary: hidden.primary.includes(1), secondary: hidden.secondary.includes(1) }), [hidden]);
+  const hides = solid.hidesH;
+  // (a bond to an atom a look leaves out is let go with it: whether either look leaves any out)
+  const leaves = useMemo(() => hidden.primary.includes(1) || hidden.secondary.includes(1), [hidden]);
   const swell = useRef(new Map<number, { v: number; vel: number; to: number }>());
   const rings = useRef(new Map<number, { v: number; vel: number; to: number }>());
   const sleeves = useRef(new Map<number, { v: number; vel: number; to: number }>());
@@ -411,8 +439,15 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
   // has been pointed at a moment - at once, where something is said already
   const atomResults = useMemo(() => resultsOn(m.calc?.results, "atoms"), [m.calc]);
   const pairResults = useMemo(() => resultsOn(m.calc?.results, "pairs"), [m.calc]);
-  const cardOf = (on: { atom: number } | { bond: number }): { title: string; groups: CardGroups; atoms: number[] } | null => {
+  const cardOf = (on: { atom: number } | { bond: number } | { residue: number }): { title: string; groups: CardGroups; atoms: number[] } | null => {
     const name = (i: number) => `${m.atoms[i]?.el ?? "?"} ${i + 1}`;
+    // (a ribbon's residue: its name, number and chain, by its backbone atom)
+    if ("residue" in on) {
+      const r = m.biopolymer?.residues[on.residue];
+      const at = traceOf.get(on.residue);
+      if (!r || at == null) return null;
+      return { title: `${r.name} ${r.seq}${r.iCode}${r.chain ? ` (${r.chain})` : ""}`, groups: [], atoms: [at] };
+    }
     if ("atom" in on) {
       const i = on.atom;
       if (!atomResults.length || i >= n) return null;
@@ -429,8 +464,8 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     });
     return { title: `${name(b.a1)}\u2013${name(b.a2)}`, groups, atoms: [b.a1, b.a2] };
   };
-  const pointedAt = hoverAtom != null ? { atom: hoverAtom } : hoverBond != null ? { bond: hoverBond } : null;
-  const pointedKey = pointedAt ? ("atom" in pointedAt ? `a${pointedAt.atom}` : `b${pointedAt.bond}`) : null;
+  const pointedAt = hoverAtom != null ? { atom: hoverAtom } : hoverBond != null ? { bond: hoverBond } : hoverResidue != null ? { residue: hoverResidue } : null;
+  const pointedKey = pointedAt ? ("atom" in pointedAt ? `a${pointedAt.atom}` : "bond" in pointedAt ? `b${pointedAt.bond}` : `r${pointedAt.residue}`) : null;
   const [card, setCard] = useState<{ key: string; title: string; groups: CardGroups; atoms: number[] } | null>(null);
   const [cardShown, setCardShown] = useState(false);
   const cardEl = useRef<HTMLDivElement>(null);
@@ -672,7 +707,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     const linesNow = () => {
       const all = bondLines(drawn, p, bondR);
       if (fb) all.forEach((l, k) => (l.r *= there.current[lineBond[k]]));
-      if (hides.primary || hides.secondary) all.forEach((l, k) => (l.r *= keptOf(drawn.bonds[lineBond[k]])));
+      if (leaves) all.forEach((l, k) => (l.r *= keptOf(drawn.bonds[lineBond[k]])));
       return all;
     };
     let lines: BondLine[] | null = null;
@@ -684,6 +719,18 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
         bonds.current.visible = bondsShown;
       }
     }
+    // its ribbons: as large as the look it is going over to has them - none,
+    // where it draws the chains as atoms - made afresh as the atoms move
+    const ribbonFrom = solid.ribbons.primary ? 1 : 0;
+    const ribbonScale = (ribbonFrom + ((solid.ribbons.secondary ? 1 : 0) - ribbonFrom) * fill.current) * risen.current;
+    if (runs.length && m.biopolymer && (reshaped || dirty.current || ribbonMade.current !== ribbonScale)) {
+      const made = ribbonMesh(p, runs, m.biopolymer, style.ribbonColours, ribbonScale, WORLD_PER_ANGSTROM);
+      fillGeometry(ribbonGeo, made);
+      ribbonResidues.current = made.residues;
+      ribbonMade.current = ribbonScale;
+    }
+    const ribbonsShown = runs.length > 0 && ribbonScale > 1e-3;
+    if (ribbon.current) ribbon.current.visible = ribbonsShown;
     // (as wide in pixels whatever the zoom - and, in perspective, however
     // high it stands)
     const eye = eyeOf(camera);
@@ -693,6 +740,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     const lightOn = outPx > 0.02 || holdShown;
     atomHull.current.visible = lightOn;
     if (bondHull.current) bondHull.current.visible = lightOn && bondsShown;
+    if (ribbonHull.current) ribbonHull.current.visible = lightOn && ribbonsShown;
     if (lightOn && (reshaped || relit || dirty.current || holdShown)) {
       const w = outPx * px;
       const wide = SELECTED_PX * px;
@@ -714,6 +762,9 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       const colour = blue(k);
       (atomHull.current.material as THREE.MeshBasicMaterial).color.copy(colour);
       if (bondHull.current) (bondHull.current.material as THREE.MeshBasicMaterial).color.copy(colour);
+      // (a ribbon's outline: its band pushed out all round - as wide as the selection's while a press is held)
+      hullMat.color.copy(colour);
+      (hullMat.userData.grow as { value: number }).value = holdShown ? Math.max(w, wide * holdMost) : w;
     }
     // the atom whose drawing's atom is under the pointer, outlined
     {
@@ -939,6 +990,10 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
     const mix = (a: number, b: number) => a + (b - a) * f;
     atomsMat.current.roughness = mix(P.roughness, S.roughness);
     atomsMat.current.metalness = mix(P.metalness, S.metalness);
+    if (ribbonMat.current) {
+      ribbonMat.current.roughness = atomsMat.current.roughness;
+      ribbonMat.current.metalness = atomsMat.current.metalness;
+    }
     const b = bondsMat.current;
     if (b) {
       b.roughness = atomsMat.current.roughness;
@@ -1016,6 +1071,39 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
             <cylinderGeometry args={[1, 1, 1, style.bondSegments]} />
             <meshStandardMaterial ref={bondsMat} transparent opacity={1} />
           </instancedMesh>
+        )}
+        {runs.length > 0 && (
+          <>
+            <mesh
+              ref={ribbon}
+              geometry={ribbonGeo}
+              renderOrder={OVER_PAGE}
+              frustumCulled={false}
+              // (found under the pointer only while it is there to be seen)
+              raycast={function (this: THREE.Mesh, rc, hits) {
+                if (this.visible) THREE.Mesh.prototype.raycast.call(this, rc, hits);
+              }}
+              onPointerMove={(e) => {
+                e.stopPropagation();
+                const index = ribbonGeo.getIndex();
+                const v = e.faceIndex != null && index ? index.getX(3 * e.faceIndex) : -1;
+                const r = v >= 0 ? ribbonResidues.current[v] : undefined;
+                if (r != null && r !== hoverResidue) setHoverResidue(r);
+              }}
+              onPointerOut={() => setHoverResidue(null)}
+            >
+              <meshStandardMaterial ref={ribbonMat} vertexColors transparent opacity={1} />
+            </mesh>
+            <mesh
+              ref={ribbonHull}
+              geometry={ribbonGeo}
+              material={hullMat}
+              renderOrder={OVER_PAGE - 1}
+              frustumCulled={false}
+              visible={false}
+              raycast={() => {}}
+            />
+          </>
         )}
         {/* The outline, and a chosen atom's ring: the molecule, or the atom,
             drawn a little larger, before it and under it - what shows is a
@@ -1245,6 +1333,44 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
 function same(a: Record<number, string>, b: Record<number, string>): boolean {
   const ka = Object.keys(a);
   return ka.length === Object.keys(b).length && ka.every((k) => a[Number(k)] === b[Number(k)]);
+}
+
+/**
+ * An outline's material for a band of triangles: unlit, its surface pushed
+ * out along its normals by `userData.grow` (page units) - drawn before the
+ * band and under it, only a rim of it shows.
+ */
+function grownMaterial(): THREE.MeshBasicMaterial {
+  const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 1, depthWrite: false, toneMapped: false });
+  const grow = { value: 0 };
+  mat.userData.grow = grow;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.grow = grow;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float grow;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\ntransformed += normalize(normal) * grow;");
+  };
+  return mat;
+}
+
+/** A geometry given a ribbon's triangles: in place where it holds as many already, so nothing is made anew as the ribbon moves. */
+function fillGeometry(g: THREE.BufferGeometry, m: { positions: Float32Array; normals: Float32Array; colours: Float32Array; indices: Uint32Array }) {
+  const set = (name: string, data: Float32Array) => {
+    const a = g.getAttribute(name) as THREE.BufferAttribute | undefined;
+    if (a && a.array.length === data.length) {
+      (a.array as Float32Array).set(data);
+      a.needsUpdate = true;
+    } else g.setAttribute(name, new THREE.BufferAttribute(data, 3));
+  };
+  set("position", m.positions);
+  set("normal", m.normals);
+  set("color", m.colours);
+  const index = g.getIndex();
+  if (index && index.array.length === m.indices.length) {
+    (index.array as Uint32Array).set(m.indices);
+    index.needsUpdate = true;
+  } else g.setIndex(new THREE.BufferAttribute(m.indices, 1));
+  g.computeBoundingSphere();
 }
 
 const mtx = new THREE.Matrix4();
