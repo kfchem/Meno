@@ -29,7 +29,7 @@ describe("a plugin's manifest", () => {
     const { writes: _w, roles: _r, steps: _s, systems: _y, installed: _i, guide: _g, suggests: _u, files: _f, ...said } = good;
     expect(acceptManifest(said)).toEqual(good);
     // (each plugin Meno carries, from its folder: Meno names none of them)
-    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "crest", "gaussian", "orca", "pyscf", "rdkit", "xtb"]);
+    expect(MANIFESTS.map((m) => m.id)).toEqual(["cclib", "crest", "gaussian", "getting-started", "orca", "pyscf", "rdkit", "xtb"]);
   });
 
   it("knows each kind of file in one list: those it reads told by their marks, those it only colours by their names and lines", () => {
