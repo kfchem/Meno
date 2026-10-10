@@ -12,7 +12,7 @@ import {
 } from "./lib/core";
 import { Deck, viewRegistry, type ViewEntry } from "./ui/views";
 import DocumentBridge from "./ui/views/DocumentBridge";
-import { openedAs, openedTexts, OPENABLE, textsOf, workspaceOfFile, type Opened } from "./ui/views/openFile";
+import { openable, openedAs, openedTexts, textsOf, workspaceOfFile, type Opened } from "./ui/views/openFile";
 import { pdfTakerOf, type OpenedPdf } from "./ui/views/pdfs";
 import { pictureTakerOf } from "./ui/views/pictures";
 import { holdPdfPath } from "./lib/pdf/reader";
@@ -248,7 +248,7 @@ export default function App() {
     const into = stateRef.current.activeId;
     const picked = await openDialog({
       multiple: true,
-      filters: [{ name: "Files Meno opens", extensions: OPENABLE.map((ext) => ext.slice(1)) }],
+      filters: [{ name: "Files Meno opens", extensions: openable().map((ext) => ext.slice(1)) }],
     }).catch(() => null);
     const texts: OpenedText[] = [];
     const pdfs: OpenedPdf[] = [];
@@ -332,7 +332,9 @@ export default function App() {
     const texts: OpenedText[] = [];
     for (const f of files) {
       const workspace = workspaceOfFile(new Uint8Array(await f.arrayBuffer()));
-      const opened = workspace != null ? openedAs(f.name, workspace, undefined, MENO_KINDS.workspace) : openedAs(f.name, await f.text());
+      const text = workspace == null ? await f.text() : "";
+      // (told as Open through the dialog tells it: a catalogue's kind too)
+      const opened = workspace != null ? openedAs(f.name, workspace, undefined, MENO_KINDS.workspace) : openedAs(f.name, text, undefined, await kindOfFile(f.name, text));
       const asText = textsOf(opened);
       if (asText) texts.push(...asText);
       else openTab(opened);
@@ -577,7 +579,7 @@ export default function App() {
         type="file"
         multiple
         className="hidden"
-        accept={OPENABLE.join(",")}
+        accept={openable().join(",")}
         onChange={(e) => {
           const files = [...(e.target.files ?? [])];
           // (the same file can be picked again)

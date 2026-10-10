@@ -21,5 +21,25 @@
     {"plugin": "crest", "for": "Searches for a molecule's conformers"},
     {"plugin": "orca", "for": "Runs ORCA, installed separately"},
     {"plugin": "gaussian", "for": "Runs Gaussian 16, installed separately"}
+  ],
+  "files": [
+    {"id": "adf", "name": "ADF output", "extensions": [".out", ".log"], "marks": [{"text": "Amsterdam Density Functional", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "cfour", "name": "CFOUR output", "extensions": [".out", ".log"], "marks": [{"text": "CFOUR Coupled-Cluster techniques for Computational Chemistry", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "dalton", "name": "Dalton output", "extensions": [".out", ".log"], "marks": [{"text": "Dalton - An Electronic Structure Program", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "gamess", "name": "GAMESS output", "extensions": [".log", ".out"], "marks": [{"text": "GAMESS VERSION", "anyCase": true}, {"text": "Firefly (PC GAMESS)", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "gamess-uk", "name": "GAMESS-UK output", "extensions": [".out", ".log"], "marks": [{"text": "G A M E S S - U K", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "gaussian", "name": "Gaussian output", "extensions": [".log", ".out"], "marks": [{"text": "Entering Gaussian System", "at": "line-start"}], "suggest": ["cclib", "pyscf"]},
+    {"id": "gaussian-fchk", "name": "Gaussian formatted checkpoint", "extensions": [".fchk", ".fch"], "marks": [{"text": "Number of atoms I", "at": "line-start"}], "suggest": ["cclib", "pyscf"]},
+    {"id": "jaguar", "name": "Jaguar output", "extensions": [".out", ".log"], "marks": [{"text": "Jaguar version", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "molcas", "name": "Molcas output", "extensions": [".log", ".out"], "marks": [{"text": "MOLCAS", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "molpro", "name": "Molpro output", "extensions": [".out", ".log"], "marks": [{"text": "PROGRAM SYSTEM MOLPRO", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "mopac", "name": "MOPAC output", "extensions": [".out"], "marks": [{"text": "MOPAC20", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "nwchem", "name": "NWChem output", "extensions": [".out", ".log", ".nwo"], "marks": [{"text": "Northwest Computational Chemistry Package", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "orca", "name": "ORCA output", "extensions": [".out", ".log"], "marks": [{"text": "* O R C A *"}], "suggest": ["cclib", "pyscf"]},
+    {"id": "psi4", "name": "Psi4 output", "extensions": [".out", ".dat"], "marks": [{"text": "Psi4: An Open-Source Ab Initio Electronic Structure Package", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "qchem", "name": "Q-Chem output", "extensions": [".out", ".log", ".qcout"], "marks": [{"text": "A Quantum Leap Into The Future Of Chemistry", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "turbomole", "name": "Turbomole output", "extensions": [".out", ".log"], "marks": [{"text": "TURBOMOLE", "anyCase": true}], "suggest": ["cclib"]},
+    {"id": "xtb", "name": "xTB output", "extensions": [".out", ".log"], "marks": [{"text": "| x T B |"}, {"text": "* xtb version", "at": "line-start"}], "suggest": ["cclib"]},
+    {"id": "molden", "name": "Molden file", "extensions": [".molden", ".mld"], "marks": [{"text": "[Molden Format]", "at": "line-start", "anyCase": true}], "suggest": ["pyscf"]}
   ]
 }

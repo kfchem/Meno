@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { registerKinds } from "../io/kinds";
+import { MANIFESTS } from "../plugins/known";
 import {
   alsoReadersFor,
   anyKindById,
   MENO,
-  OFFERED,
+  REFUSED,
   PLUGINS,
   pluginsFilling,
   READER_PLUGINS,
@@ -105,12 +107,14 @@ describe("the readers Meno knows of", () => {
       kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO" }], lines: [] }],
     });
     expect(nbo).toMatchObject({ reads: ["nbo-47", "xyz"], lock: "resources/plugins/nbo/requirements.lock", worker: "resources/plugins/nbo/worker.py" });
+    // (each kind it reads one it brings, or Meno's: registered while it is added)
+    registerKinds(MANIFESTS);
     for (const p of READER_PLUGINS) {
       for (const id of p.reads) expect(anyKindById(id), `${p.id} reads ${id}`).toBeDefined();
     }
-    // (the kinds of every plugin on offer, Meno's with them: what a file nothing added reads would be read as)
-    expect(OFFERED.kinds.map((k) => k.id)).toEqual(expect.arrayContaining(["mol", "cube", "orca", "molden", "nwchem"]));
-    expect(OFFERED.refused).toEqual([]);
+    registerKinds([]);
+    // (no mark of the plugins Meno carries - their kinds', their catalogues' - claims a file of Meno's own)
+    expect(REFUSED).toEqual([]);
   });
 
   it("are known by id - a molecule keeps each as its id and version - and named by it", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ALL_PLUGINS, anyPluginById, manifestOf, OFFERED, PLUGINS, runs, type Plugin as AnyPlugin } from "../../../lib/calc/catalog";
+import { ALL_PLUGINS, anyPluginById, manifestOf, PLUGINS, REFUSED, runs, type Plugin as AnyPlugin } from "../../../lib/calc/catalog";
 import { showGuide } from "../../../lib/plugins/guides";
 import { addedReaders, addPlugin, removePlugin, useReaders } from "../../../lib/calc/workers";
 import { ROLES } from "../../../lib/plugins/roles";
@@ -47,7 +47,7 @@ function Plugin({ plugin: p, state, problem }: { plugin: AnyPlugin; state?: stri
   };
   const status =
     state === "added" ? "Added" : state === "adding" ? "Adding…" : state === "removing" ? "Removing…" : state === "absent" ? "Not added" : "";
-  const refused = OFFERED.refused.filter((r) => r.plugin === p.id);
+  const refused = REFUSED.filter((r) => r.plugin === p.id);
   // (the kinds it reads by the names it gives them, or Meno's)
   const named = (id: string) => manifestOf(p.id)?.kinds.find((k) => k.id === id)?.name ?? kindById(id)?.name ?? id;
   return (

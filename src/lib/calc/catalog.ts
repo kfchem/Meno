@@ -17,7 +17,7 @@ import type { Option } from "../options";
 import { MANIFESTS, PLUGINS_ROOT } from "../plugins/known";
 import type { RoleId } from "../plugins/roles";
 import { MENO_READS } from "./menoReads";
-import { kindById, MENO_KINDS, registered, type Kind } from "../io/kinds";
+import { cataloguedKinds, kindById, MENO_KINDS, registered, type Kind } from "../io/kinds";
 
 type Described = {
   id: string;
@@ -122,18 +122,14 @@ export const pluginsFilling = (role: RoleId): PythonPlugin[] => PLUGINS.filter((
 /** The manifest of a plugin Meno knows of. */
 export const manifestOf = (id: string): Manifest | undefined => MANIFESTS.find((m) => m.id === id);
 
-const offered = registered(MANIFESTS);
-
 /**
- * The kinds the plugins on offer bring, added or not, with Meno's own: what
- * a file nothing added reads would be read as, by which plugin - said, so
- * that the plugin can be added. Also the marks refused as they were
- * registered, each of which would have claimed one of Meno's own files.
+ * The marks of the plugins Meno carries refused - each would have claimed
+ * one of Meno's own files - added or not: said in Settings, Plugins.
  */
-export const OFFERED = { kinds: offered.kinds as readonly Kind[], refused: offered.refused };
+export const REFUSED = registered(MANIFESTS).refused;
 
-/** The kind of that id: registered, or else one a plugin on offer brings. */
-export const anyKindById = (id: string): Kind | undefined => kindById(id) ?? kindById(id, OFFERED.kinds);
+/** The kind of that id: registered, or else one the catalogue of a plugin added names. */
+export const anyKindById = (id: string): Kind | undefined => kindById(id) ?? kindById(id, cataloguedKinds());
 
 /**
  * Meno's own reading, as a reader: what it reads under the contract, in its

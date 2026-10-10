@@ -1,7 +1,5 @@
 import type { TabKind } from "../../lib/core";
-import { kindOf, type Kind } from "../../lib/io/kinds";
-import { OFFERED } from "../../lib/calc/catalog";
-import { MANIFESTS } from "../../lib/plugins/known";
+import { cataloguedKinds, kindOf, kinds, textKinds, type Kind } from "../../lib/io/kinds";
 import { holdOutputsOf } from "../../lib/calc/asks";
 import { holdPdfsOf } from "../../lib/pdf/reader";
 import { holdPicturesOf } from "../../lib/picture/held";
@@ -17,24 +15,28 @@ const EXT_TEXT = new Set([
 ]);
 
 /**
- * The files Open offers: every kind Meno takes in (lib/io/kinds) - its own,
- * and those the plugins on offer bring, added or not, so that one not added
- * can be named - and text: what the plugins on offer know besides - a
+ * The files Open offers, as it is asked: every kind Meno takes in
+ * (lib/io/kinds) - its own, those the plugins added bring, and those the
+ * catalogues of the plugins added name, so that a plugin not added can be
+ * suggested - and text: what the plugins added know besides - a
  * calculation's input they write, or colour - to be read and changed in a
  * workspace's column.
  */
-export const OPENABLE = [
-  ...new Set([
-    ...OFFERED.kinds.flatMap((k) => k.extensions),
-    ...MANIFESTS.flatMap((m) => m.kinds.filter((k) => !m.reads.includes(k.id)).flatMap((k) => k.extensions)),
-    ...[...EXT_TEXT].map((ext) => `.${ext}`),
-    // (a PDF goes on the page: docs/PDF.md - and a picture)
-    ".pdf",
-    ".png",
-    ".jpg",
-    ".jpeg",
-  ]),
-];
+export function openable(): string[] {
+  return [
+    ...new Set([
+      ...kinds().flatMap((k) => k.extensions),
+      ...cataloguedKinds().flatMap((k) => k.extensions),
+      ...textKinds().flatMap((k) => k.extensions),
+      ...[...EXT_TEXT].map((ext) => `.${ext}`),
+      // (a PDF goes on the page: docs/PDF.md - and a picture)
+      ".pdf",
+      ".png",
+      ".jpg",
+      ".jpeg",
+    ]),
+  ];
+}
 
 /**
  * A workspace file's workspace, its JSON - where `bytes` are one - with the

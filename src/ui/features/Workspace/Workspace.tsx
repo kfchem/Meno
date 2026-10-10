@@ -49,8 +49,8 @@ import { ErrorBoundary, StoppedCard } from "../../layouts/ErrorBoundary";
 import { flowOf, procedureParts, type FlowParts } from "./workflow/parts";
 import { procedureNeeds, proceduresSaved, saveProcedure, suggestedName } from "./workflow/procedures";
 import { knownOf, pluginWriters, WRITERS, type Writer } from "../../../lib/io/writers";
-import { WRITER_PLUGINS } from "../../../lib/calc/catalog";
-import { useReaders } from "../../../lib/calc/workers";
+import { anyPluginById, WRITER_PLUGINS } from "../../../lib/calc/catalog";
+import { addPlugin, useReaders } from "../../../lib/calc/workers";
 import { offeredNames, writtenOf } from "./utils/written";
 import { carriedOf } from "./utils/workspace";
 import PartMenu, { type CanvasCommand, type MenuMolecule3D, type MenuTarget } from "./PartMenu";
@@ -918,7 +918,7 @@ function WorkspaceContent({
     });
   };
 
-  const alert = importError ?? files.error ?? chemError;
+  const alert = importError?.text ?? files.error ?? chemError;
   const dismissAlert = importError
     ? dismissImportError
     : files.error
@@ -1022,6 +1022,7 @@ function WorkspaceContent({
         >
           <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-accel-accent" />
           <span className="break-words">{alert}</span>
+          {importError?.suggest && importError.again && <AddToRead suggest={importError.suggest} again={importError.again} />}
           <button
             aria-label="Dismiss"
             title="Dismiss"
@@ -1612,5 +1613,36 @@ export default function Workspace({
         </AnimatePresence>
       </div>
     </EditorProvider>
+  );
+}
+
+/**
+ * The plugins a catalogue suggests to read a file no plugin added reads,
+ * each with Add - asking for the network as adding always does - and the
+ * file read again once one is added.
+ */
+function AddToRead({ suggest, again }: { suggest: readonly string[]; again: () => void }) {
+  const states = useReaders((s) => s.state);
+  return (
+    <>
+      {suggest.map((id) => {
+        const p = anyPluginById(id);
+        if (!p) return null;
+        const adding = states[id] === "adding";
+        return (
+          <button
+            key={id}
+            disabled={adding}
+            onClick={(e) => {
+              e.stopPropagation();
+              void addPlugin(p).then(again, () => undefined);
+            }}
+            className="shrink-0 rounded-md border border-gh-line px-2 py-0.5 transition-colors duration-150 ease-meno hover:bg-gh-base disabled:opacity-60"
+          >
+            {adding ? `Adding ${p.name}…` : `Add ${p.name}`}
+          </button>
+        );
+      })}
+    </>
   );
 }

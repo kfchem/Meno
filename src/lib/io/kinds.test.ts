@@ -209,3 +209,32 @@ describe("kinds a plugin registers", () => {
     expect(probeCandidates("job.out", all)).toEqual([]);
   });
 });
+
+describe("kinds a plugin's catalogue names", () => {
+  const guide = (id: string, files: unknown[]): Manifest => acceptManifest({ id, name: id, version: "1", guide: [{ title: "Hi", text: "Hello." }], files })!;
+
+  it("are told by their own marks, each with the plugins suggested to read it - two catalogues' of one id one kind", () => {
+    const { catalogued, kinds: brought } = registered([
+      guide("a", [{ id: "nbo-out", name: "NBO output", extensions: [".nbo"], marks: [{ text: "N A T U R A L   A T O M I C" }], suggest: ["nbo"] }]),
+      guide("b", [{ id: "nbo-out", name: "NBO's", extensions: [".47"], marks: [{ text: "$GENNBO NATOMS" }], suggest: ["nbo", "nbo-lite"] }]),
+    ]);
+    expect(catalogued).toEqual([
+      {
+        id: "nbo-out",
+        name: "NBO output",
+        extensions: [".nbo", ".47"],
+        output: {},
+        marks: [{ text: "N A T U R A L   A T O M I C" }, { text: "$GENNBO NATOMS" }],
+        suggest: ["nbo", "nbo-lite"],
+      },
+    ]);
+    // (registered for no reader: Meno reads them with none)
+    expect(brought.map((k) => k.id)).not.toContain("nbo-out");
+  });
+
+  it("may not take one of Meno's own files for theirs, as a plugin's kinds may not", () => {
+    const { catalogued, refused } = registered([guide("a", [{ id: "greedy", name: "Greedy", extensions: [], marks: [{ text: "RDKit 2D" }], suggest: ["x"] }])]);
+    expect(catalogued).toEqual([]);
+    expect(refused).toEqual([{ plugin: "a", kind: "greedy", mark: "RDKit 2D" }]);
+  });
+});

@@ -479,7 +479,7 @@ export function createStepRuns(doc: DocumentStore<WorkspaceDocument>, set: SetSt
   /** An output a job wrote, read by Meno's readers as one opened is (lib/calc/read) - every reader of its kind added, put together - and kept, by its kind, as what the molecules it gave were read from; why not, where nothing added reads it. */
   async function readWithReaders(r: ToRead, text: string): Promise<{ output: ReaderOutput; readers: string[]; source: CalcSource } | string> {
     const kind = anyKindById(r.kind);
-    if (!kind) return `${r.name} is read by no reader Meno knows of`;
+    if (!kind) return `No plugin added reads ${r.name}`;
     const source = await rememberOutput(r.name, text, kind.id);
     try {
       const { output, readers } = await readOutput(r.name, text, kind, source.sha256);
