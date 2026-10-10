@@ -95,10 +95,9 @@ describe("the right-click menu", () => {
 
 describe("the menu of a molecule in 3D, and of a measurement on one", () => {
   const molecule3d = (extra: object = {}) => ({
-    look: "balls" as const,
+    otherLook: { name: "Space-filling", atoms: "space" as const, run: none },
     chosen: 3,
     onMeasure: none,
-    onLook: none,
     onResetTurn: none,
     onCut: none,
     onCopy: none,

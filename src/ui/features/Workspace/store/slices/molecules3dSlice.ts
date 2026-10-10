@@ -200,8 +200,16 @@ export function createMolecules3dSlice(doc: DocumentStore<WorkspaceDocument>, se
     removeMolecule3d: (id: number) => {
       doc.edit("delete molecule", (d) => ops.removeMolecule3d(d, id));
     },
-    setLook3d: (id: number, look: Look3D) => {
-      doc.edit(look === "space" ? "space-filling" : "balls and sticks", (d) => ops.setLook3d(d, id, look));
+    setLook3d: (ids: number[], look: Look3D) => {
+      doc.edit(look === "secondary" ? "secondary style" : "primary style", (d) => ops.setLook3d(d, ids, look));
+    },
+    switchLook3d: (id: number) => {
+      const { molecules3d, sel3d } = get();
+      const m = molecules3d.find((x) => x.id === id);
+      if (!m) return;
+      // (selected with others, they all go over with it: to its other look)
+      const ids = sel3d.has(id) ? molecules3d.filter((x) => sel3d.has(x.id)).map((x) => x.id) : [id];
+      get().setLook3d(ids, (m.look ?? "primary") === "primary" ? "secondary" : "primary");
     },
     measureChosen3d: () => {
       const { chosen3d: chosen, molecules3d } = get();
@@ -238,7 +246,7 @@ export function createMolecules3dSlice(doc: DocumentStore<WorkspaceDocument>, se
       // out of any set it would fall in - turned as it is
       const copy = editedCopy(m, frame, after, stereo, { x: 0, y: 0 });
       const style = currentStyle3D();
-      const reach = (k: Molecule3D) => solidOf(k, style).reach[lookOf(k, style)];
+      const reach = (k: Molecule3D) => solidOf(k, style).reach[lookOf(k)];
       const own = reach({ ...copy, id: 0 });
       const y = m.at.y;
       let left = m.at.x + reach(m) + NOMINAL_BOND_LENGTH + own;

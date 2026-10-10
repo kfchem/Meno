@@ -54,7 +54,7 @@ import { useReaders } from "../../../lib/calc/workers";
 import { offeredNames, writtenOf } from "./utils/written";
 import { carriedOf } from "./utils/workspace";
 import PartMenu, { type CanvasCommand, type MenuMolecule3D, type MenuTarget } from "./PartMenu";
-import { currentStyle3D, useStyle3D } from "./style3d";
+import { currentStyle3D, useStyle3D, useStyleNames3D } from "./style3d";
 import { askToOpen } from "../../layouts/commands";
 import { bondsAt, chosenPath, frameOf, lookOf, poseOf, seenBounds, solidOf } from "./utils/molecule3d";
 import { movingAtoms, movingFor } from "./utils/edit3d";
@@ -305,7 +305,7 @@ function WorkspaceContent({
         const look3d = currentStyle3D();
         const st = store.getState();
         const solids = st.molecules3d.map((m) => {
-          const b = seenBounds(poseOf(m, solidOf(m, look3d), lookOf(m, look3d), st.turns3d[m.id], st.frames3d[m.id]));
+          const b = seenBounds(poseOf(m, solidOf(m, look3d), lookOf(m), st.turns3d[m.id], st.frames3d[m.id]));
           return { x0: b.minX, x1: b.maxX, y0: b.minY, y1: b.maxY };
         });
         for (const block of blocks) {
@@ -667,6 +667,7 @@ function WorkspaceContent({
   const molecules3d = useEditor((s) => s.molecules3d);
   const chosen3d = useEditor((s) => s.chosen3d);
   const style3d = useStyle3D();
+  const styleNames3d = useStyleNames3D();
   const menuMolecule = menu?.kind === "molecule3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
   // a molecule's output shown in the column of texts, held in the
   // workspace: held this session or in its workspace, read again where it
@@ -701,11 +702,13 @@ function WorkspaceContent({
       : undefined;
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
-        look: lookOf(menuMolecule, style3d),
+        otherLook: (() => {
+          const other = lookOf(menuMolecule) === "primary" ? "secondary" : "primary";
+          return { name: styleNames3d[other], atoms: style3d[other].atoms, run: () => store.getState().switchLook3d(menuMolecule.id) };
+        })(),
         chosen: chosen3d?.id === menuMolecule.id ? (chosenPath(menuMolecule, chosen3d)?.length ?? 0) : 0,
         onMeasure: () => store.getState().measureChosen3d(),
         ...(chosenSettable ? { onSetChosen: () => store.getState().setChosen3d() } : {}),
-        onLook: (look) => store.getState().setLook3d(menuMolecule.id, look),
         onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
         onCut: () => void clip.cut(menuMolecule.id),
         onCopy: () => void clip.copy(menuMolecule.id),

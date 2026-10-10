@@ -71,14 +71,17 @@ export type CanvasCommand = { name: string; keys: string; run: () => void; divid
 
 /** What can be done to a molecule in 3D from the menu. */
 export type MenuMolecule3D = {
-  /** How it is drawn: the menu offers the other. */
-  look: "balls" | "space";
+  /**
+   * Its other look - the 3D style's secondary, or back to its primary - one
+   * step away: that style's name, whether it draws balls and sticks or
+   * space-filling (its icon), and the switch.
+   */
+  otherLook: { name: string; atoms: "balls" | "space"; run: () => void };
   /** How many atoms what is chosen of it measures: two, three or four make a measurement. */
   chosen: number;
   onMeasure: () => void;
   /** What is chosen measured and its value opened to be typed, to set it; unset, where it cannot be set (a torsion angle about a ring's bond). */
   onSetChosen?: () => void;
-  onLook: (look: "balls" | "space") => void;
   /** Turned back to face as its file has it. */
   onResetTurn: () => void;
   /** It alone, cut or copied. */
@@ -254,10 +257,8 @@ export default function PartMenu({
   const measureName = ["", "", "Measure distance", "Measure angle", "Measure torsion angle"];
   const moleculeRow: Item[] = molecule3d
     ? [
-        // (the other look, one step away: where the 3D style's second goes, lane L5)
-        molecule3d.look === "space"
-          ? { name: "Ball and stick", keys: "", run: () => molecule3d.onLook("balls"), icon: MENU_ICONS.balls }
-          : { name: "Space-filling", keys: "", run: () => molecule3d.onLook("space"), icon: MENU_ICONS.space },
+        // (the other look, one step away: the 3D style's secondary, or back to its primary)
+        { name: molecule3d.otherLook.name, keys: "", run: molecule3d.otherLook.run, icon: MENU_ICONS[molecule3d.otherLook.atoms] },
         { name: "Reset orientation", keys: "", run: molecule3d.onResetTurn, icon: MENU_ICONS.resetTurn },
       ]
     : [];

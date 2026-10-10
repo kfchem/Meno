@@ -355,8 +355,8 @@ What is left before the editor counts as finished, and in what order, is in
   distance, an angle or a torsion angle set: docs/WORKSPACE.md, *Editing
   in 3D*):
   - What they are: the document's `molecules3d`. Each has its atoms in
-    ångströms, its other frames and their energies, its look (ball and
-    stick or space-filling), its measurements, and where on the page its
+    ångströms, its other frames and their energies, its look (the 3D
+    style's primary, or its secondary), its measurements, and where on the page its
     centre stands. How each is turned and which frame it shows are the
     store's (`turns3d`, `frames3d`), not the document's, and so are what
     is selected of them (`sel3d`) and the atoms and bonds chosen in one
@@ -371,10 +371,13 @@ What is left before the editor counts as finished, and in what order, is in
     page and depth-tested; double and triple bonds are two and three
     lines. Another frame, another look, or a place set by an undo is gone
     over to, not jumped to. Its look is a style (`lib/chem/style3d.ts`):
-    presets, the old 3D viewer's first, and a choice of one with changes,
-    kept in the app's settings (`style3d`) and edited in Settings by
-    `StyleEditor/Style3DEditor`; the canvas reads it through
-    `Workspace/style3d.ts`. A 1.5 Å bond is as long as a drawn one.
+    a list of styles, the old 3D viewer's first, two of them given the
+    roles of primary and secondary, each with its own changes, and the
+    light and turning they share - kept in the app's settings (`style3d`)
+    and edited in Settings by `StyleEditor/Style3DEditor`; the canvas
+    reads it through `Workspace/style3d.ts`. `solidOf` works out each
+    atom's radius in both looks (none for an atom a look leaves out), and
+    the view eases between them (docs/WORKSPACE.md, *Styles in 3D*). A 1.5 Å bond is as long as a drawn one.
   - The pointer: hovered, its outline lights up faintly and the atom under
     the pointer swells on a spring. A drag on it - its atoms, bonds or
     within its rings - turns it, with inertia; on one selected, it moves

@@ -919,9 +919,17 @@ function withMolecule3d(doc: WorkspaceDocument, id: number, change: (m: Molecule
   return next === all[i] ? doc : { ...doc, molecules3d: all.map((m, k) => (k === i ? next : m)) };
 }
 
-/** A molecule in 3D drawn balls and sticks, or space-filling. */
-export function setLook3d(doc: WorkspaceDocument, id: number, look: Look3D): WorkspaceDocument {
-  return withMolecule3d(doc, id, (m) => ((m.look ?? "balls") === look ? m : { ...m, look }));
+/** Molecules in 3D drawn in the 3D style's primary look, or its secondary. */
+export function setLook3d(doc: WorkspaceDocument, ids: readonly number[], look: Look3D): WorkspaceDocument {
+  return ids.reduce(
+    (d, id) =>
+      withMolecule3d(d, id, (m) => {
+        if ((m.look ?? "primary") === look) return m;
+        const { look: _was, ...rest } = m;
+        return look === "primary" ? rest : { ...rest, look };
+      }),
+    doc,
+  );
 }
 
 /**
