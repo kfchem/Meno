@@ -76,6 +76,12 @@ Everything a plugin is lives in one folder, named by its id:
                      it brings (id, name, extensions, marks) and those it
                      reads, by id - its own, or Meno's; the kinds it writes,
                      each with what it takes and its options (`writes`);
+                     how a text of a kind it brings or writes is coloured
+                     (`grammar`: a grammar file in its folder, and the
+                     tone of each of its parts), and the kinds of text it
+                     knows besides - an input to its program - each with
+                     its files' names, what its lines begin with and its
+                     grammar (`texts`);
                      the kinds of a workflow's step it fills, each with the
                      programs it runs and its options (`steps`); the
                      systems it can be added on, where not every one
@@ -113,6 +119,13 @@ Everything a plugin is lives in one folder, named by its id:
   its lock and worker in its folder (the backend allows nothing else), its
   marks as text of some length, and no mark that one of Meno's own sample
   files holds.
+- **A grammar is data too** (`<name>.grammar`, in Lezer's form, named in
+  the manifest with the tone each of its parts is drawn in): Meno makes it
+  into tables - a tokenizer that reads each letter once, a parser that
+  never goes back - tried apart, in a worker, within 5 seconds. One that
+  asks for code (`@external`, `@context`) is refused. Two plugins that
+  bring a kind each carry a grammar for it, as they do its marks; Meno
+  uses the first's.
 
 ## Several plugins, one role
 

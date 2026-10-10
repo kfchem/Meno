@@ -98,11 +98,18 @@ export function isDeselectKey(event: KeyLike): boolean {
   return event.key === "Escape" && !isTextTarget(event.target);
 }
 
+/**
+ * A field whose words are the document's, its undo the document's: a
+ * `<textarea>`, or what a text Meno draws is typed through
+ * (`data-text-field` - an EditContext's element, where there is one).
+ */
+function isDocumentTextField(target: unknown): boolean {
+  const el = target as { tagName?: string; dataset?: { textField?: string } } | null;
+  return el?.tagName?.toUpperCase() === "TEXTAREA" || el?.dataset?.textField != null;
+}
+
 function isTextTarget(target: unknown): boolean {
-  return (
-    isNativeEditingTarget(target) ||
-    (target as { tagName?: string } | null)?.tagName?.toUpperCase() === "TEXTAREA"
-  );
+  return isNativeEditingTarget(target) || isDocumentTextField(target);
 }
 
 /**
@@ -156,9 +163,7 @@ export function isCleanUpKey(event: KeyLike): boolean {
     (event.ctrlKey || event.metaKey) === true &&
     event.shiftKey === true &&
     (event.key || "").toLowerCase() === "k" &&
-    !isNativeEditingTarget(event.target) &&
-    (event.target as { tagName?: string } | null)?.tagName?.toUpperCase() !==
-      "TEXTAREA"
+    !isTextTarget(event.target)
   );
 }
 
@@ -172,9 +177,7 @@ export function isDeleteKey(event: KeyLike): boolean {
     !event.ctrlKey &&
     !event.metaKey &&
     !event.shiftKey &&
-    !isNativeEditingTarget(event.target) &&
-    (event.target as { tagName?: string } | null)?.tagName?.toUpperCase() !==
-      "TEXTAREA"
+    !isTextTarget(event.target)
   );
 }
 
@@ -186,8 +189,7 @@ export function isDeleteKey(event: KeyLike): boolean {
  */
 export function chargeStep(event: KeyLike): 1 | -1 | 0 {
   if (event.ctrlKey || event.metaKey || event.altKey) return 0;
-  if (isNativeEditingTarget(event.target)) return 0;
-  if ((event.target as { tagName?: string } | null)?.tagName?.toUpperCase() === "TEXTAREA") return 0;
+  if (isTextTarget(event.target)) return 0;
   if (event.key === "+") return 1;
   if (event.key === "-" || event.key === "\u2212") return -1;
   return 0;

@@ -147,8 +147,8 @@ export const createModelSlice = (
   },
 
   deleteSelection: () => {
-    const { sel, sel3d, selFlow, selPictures, steps, model, arrows, pluses, captions } = get();
-    if (!sel.atoms.size && !sel.bonds.size && !sel3d.size && !selFlow.sets.size && !selFlow.steps.size && !selPictures.size) return;
+    const { sel, sel3d, selFlow, selPictures, selTexts, steps, model, arrows, pluses, captions } = get();
+    if (!sel.atoms.size && !sel.bonds.size && !sel3d.size && !selFlow.sets.size && !selFlow.steps.size && !selPictures.size && !selTexts.size) return;
     // the arrows and pluses among it go with it, as with a cut; the
     // molecules in 3D selected, and a workflow's sets and steps, in the same
     // step - but not a step running, which is asked about on its own
@@ -158,7 +158,10 @@ export const createModelSlice = (
     const gone = steps.filter((s) => idle.includes(s.id));
     const deleted = doc.edit("delete selection", (d) =>
       removeParts(
-        ops.removePictures(ops.removeMolecules3d(ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses), ids(among.captions)), sel3d), selPictures),
+        ops.removeTexts(
+          ops.removePictures(ops.removeMolecules3d(ops.deleteDrawn(d, sel.atoms, sel.bonds, ids(among.arrows), ids(among.pluses), ids(among.captions)), sel3d), selPictures),
+          selTexts,
+        ),
         selFlow.sets,
         idle,
       ),
@@ -285,9 +288,9 @@ export const createModelSlice = (
 
   openWorkspace: (ws: Workspace, start = false) => {
     const { drawn } = ws;
-    // (its texts, those read - utils/workspace `readTexts` - numbered from the first)
+    // (its texts, those read - utils/workspace `readTexts` - numbered from the first; a molecule one is of, by its place, as the molecules are numbered)
     const read = ws.texts.filter((t) => t.text != null);
-    const texts = read.map((t, i) => ({ id: i + 1, name: t.name, text: t.text! }));
+    const texts = read.map((t, i) => ({ id: i + 1, name: t.name, text: t.text!, ...(t.at ? { at: t.at } : {}), ...(t.reading === false ? { reading: false as const } : {}), ...(t.icon ? { icon: true as const } : {}), ...(t.of ? { of: "step" in t.of ? t.of : { molecule: t.of.molecule + 1 } } : {}) }));
     const shown = ws.textShown != null ? read.indexOf(ws.texts[ws.textShown]) : -1;
     const opened = (d: StructureDocument) => {
       const next = ops.withImportedScheme(ops.replaceModel(d, drawn), ops.schemeOf(drawn));

@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEditor, useEditorStore } from "../store";
 import { COLORS } from "../../../theme/colors";
 import { SELECTION_SHADE } from "./selectionShade";
+import { sheetMiddle } from "../utils/textSheets";
 import { NOMINAL_BOND_LENGTH } from "../../../../lib/chem/acs";
 import { ATOM_HOVER_RING_RADIUS_RATIO, DOUBLE_CLICK_MS, FREE_MS, LONG_PRESS_MS, MOV_PX, QUICK_ADD_MS } from "../constants";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
@@ -167,6 +168,8 @@ export default function Selection2D() {
         // (the molecules in 3D whose centres it takes, with the drawing - and pictures, and a workflow's sets and steps, likewise)
         s.selectMolecules3d(molecules3dIn(s.molecules3d, kind, points), add);
         s.selectPictures(molecules3dIn(s.pictures.map((p) => ({ id: p.id, at: p })), kind, points), add);
+        // (and texts' sheets, by their middles)
+        s.selectTexts(molecules3dIn(s.texts.flatMap((t) => (t.at ? [{ id: t.id, at: sheetMiddle(t.at, t.text) }] : [])), kind, points), add);
         s.selectFlow(flowIn(s, kind, points), add);
         s.setSel({ atoms, bonds }, taken.length ? taken[taken.length - 1] : s.selAnchor);
         // the box's end is no double-click's, and no click on nothing
@@ -211,8 +214,8 @@ export default function Selection2D() {
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0 || e.target !== gl.domElement) return;
       const st = store.getState();
-      // (on an arrow, a "+", words or a workflow's wire: theirs)
-      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null || st.hoveredPdf != null || st.hoveredPicture != null;
+      // (on an arrow, a "+", words, a workflow's wire, a PDF, a picture or a text's sheet: theirs)
+      const onMark = st.hoveredArrow != null || st.hoveredPlus != null || st.hoveredCaption != null || st.hoveredWire != null || st.hoveredPdf != null || st.hoveredPicture != null || st.hoveredText != null;
       if (st.hovered.atomId != null || st.hovered.bondId != null || st.hovered3d || onMark || st.labelEdit.active || st.extend.active || st.captionEdit) return;
       const add = addsToSelection(e);
       const near =

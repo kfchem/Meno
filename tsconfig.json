@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": ["ES2020", "ES2022.Intl", "DOM", "DOM.Iterable"],
     /* The tests read their fixtures through Node; TypeScript 6 no longer
        takes in every installed @types package by itself. */
     "types": ["node"],

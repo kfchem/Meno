@@ -29,7 +29,7 @@ type Laid = { c: Caption } & CaptionSet;
  * The words on the page (lib/chem/captions), set as the drawing sets its
  * labels: each lit from behind while the pointer is on it - as what is under
  * the pointer is - dragged to move it, put down near an arrow to go over it
- * or under it, and written anew by a double-click (CaptionEditor2D). Its
+ * or under it, and written anew by a double-click (CaptionTyping2D). Its
  * edges, shown as it is lit, are dragged to make it wider or narrower: its
  * words broken into lines as wide as it is made, the other edge staying
  * where it was. The one being written is not drawn: its box stands in its

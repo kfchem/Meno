@@ -458,12 +458,18 @@ All hover-based, as above.
   and in an exported picture: docs/CTFILE.md, "Reaction schemes".)
 - **Text** (the maintainer, 2026-10-08: reagents' labels): words on the
   page - a reaction's reagents and conditions, or anything else
-  (`lib/chem/captions`, `Captions2D`, `CaptionEditor2D`).
+  (`lib/chem/captions`, `Captions2D`, `CaptionTyping2D`).
   - Written in place, from Quick Add or the menu on empty space (*Add
     text*); written anew by a double-click on it or its menu's *Edit text*.
     Enter keeps them, Shift+Enter starts another line, Escape lets them go,
     a press elsewhere keeps them; written away, they are gone. As they are
-    written, undo is the box's own; kept, one undo step.
+    written, undo is their own; kept, one undo step.
+  - Written where they stand, drawn by Meno as they will be kept - set as
+    below, broken into lines as wide as they are made - lit round while
+    they are written, with the caret, what is selected and what an input
+    method composes drawn over them (docs/PDF.md, step 5). A click among
+    them puts the caret, two select a word, three a line, a drag selects
+    on; an editor's keys move and select as in the column of texts.
   - Set as a label is set, word by word: a formula's counts low (K₂CO₃,
     Pd₂(dba)₃, Pd(PPh₃)₄), a prefix's t- in italics at a word's start
     (*t*-BuOK, not the o of co-solvent), a sign at a formula's end its

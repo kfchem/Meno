@@ -56,7 +56,10 @@ src/
   ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "New…" menu, online/offline, Settings, window buttons
   ui/layouts/MenoMenu     the logo's menu: the app's commands and those the tab in front offers (commands.ts)
   ui/layouts/ErrorBoundary a part that fails as it is drawn, and the card left in its place (see *When a part fails*)
-  ui/fonts/               the typefaces labels are drawn in, read from their files
+  ui/fonts/               the typefaces labels are drawn in, read from their files; troika, which draws
+                          them, takes each letter from the first font that has it and places letters
+                          by GPOS's kerning and marks alone, as a browser does (scripts/patch-troika.mjs,
+                          run after every install)
   ui/network/             consent dialog, activity cards, Settings › Network
   ui/views/registry       TabKind -> { Component, create } table
   ui/views/Deck           renders every open tab, hides inactive ones with CSS
@@ -64,7 +67,7 @@ src/
   ui/features/
     StructureEditor/      2D editor (see below)
     PythonConsole/        UI for the Python sidecar
-    TextEditor/           plain textarea with line numbers
+    TextEditor/           a text Meno draws: its editor, line pictures, and the field typed through
     StyleEditor/          every drawing setting, with a preview
     SettingsPanel/        Settings: drawing style, molecules in 3D, chemistry, files, calculations
                           and their jobs, plugins, dictionary, network
@@ -788,6 +791,31 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   link - and the canvas eases and draws; it is kept with the PDF
   (`reading`) once it rests, by amending the document rather than editing
   it, so that it is no step to undo.
+- **A text in the column** (`components/ColumnText.tsx`): drawn in the
+  column's pass as a PDF's pages are, on a white sheet of its own, from the
+  text's editor (`TextEditor/editor.ts`: its lines, what is selected, how
+  far it is scrolled, what the IME composes), which its HTML half
+  (`TextEditor/TextBody.tsx`) shares, kept for each workspace by the text's
+  id (`TextEditor/columnText.ts`). Each line is a picture drawn by the
+  system's type (`TextEditor/linePictures.ts`), only those in view,
+  coloured by what the text is (`lib/text/colouring.ts`: Lezer's grammars
+  for Python, JSON and XML; a plugin's grammar, made into a parser as it
+  is first wanted, `lib/text/grammars.ts`, for a calculation's input or
+  output), what does not read as its grammar says underlined. Typing
+  goes through a field kept out of sight (`TextEditor/typingField.ts`): an
+  EditContext on Windows, a textarea elsewhere; what it holds and how a
+  change in it is read is `lib/text/field.ts`, an editor's keys
+  `lib/text/keys.ts`, moving and selecting `lib/text/editing.ts`.
+- **Texts' sheets on the page** (`components/TextSheets2D.tsx`,
+  `utils/textSheets.ts`): a text with a place (`WorkspaceText.at`) lies on
+  the page, its first lines in troika's signed-distance type (IBM Plex Mono,
+  bundled). Selected with the rest (`selTexts`), moved with a dragged
+  selection (`MarkPlaces.texts`); whether it is read in the column is the
+  text's (`reading`), amended as a PDF's is. Read or closed, its lines go
+  between its sheet - or an output's molecule - and the column
+  (`textFlight`, drawn in the column's last pass by
+  `components/TextFlight.tsx`, set at either end as `textFlightSetting.ts`
+  says), handing over to the column's own lines once settled.
 - **Words** (`pdf_text`, `lib/pdf/text`): each page's letters, read by
   PDFium when first wanted, each with its box in points from the page's
   top left. The place nearest the pointer, words, lines, the marks of a
@@ -957,9 +985,11 @@ to be able to work with nothing going out at all.
 - **The window reaches nothing.** Its content security policy
   (`tauri.conf.json`) keeps it to the app: fonts, workers and pictures come
   from the app or from blobs it made. Anything it is kept from reaching is
-  put on the record (`securitypolicyviolation`), and so are characters no
-  font of Meno's has, which the canvas's text renderer would otherwise look
-  for on its CDN.
+  put on the record (`securitypolicyviolation`). A letter no typeface of
+  Meno's has - an emoji - is drawn on the canvas as a white square, and
+  measured as one (`lib/chem/labelFonts` `STAND_IN`), so that the canvas's
+  text renderer never looks for it on its CDN - which it may not reach,
+  and which left the whole text the letter was in undrawn.
 - **Everything else goes through the app's proxy** (`src-tauri/src/net.rs`),
   on the loopback address. A child process that may use the network - uv
   setting up Python, a Python sidecar - is begun as a *task* with a

@@ -99,6 +99,7 @@ describe("the readers Meno knows of", () => {
       systems: [],
       installed: [],
       writes: [],
+      texts: [],
       kinds: [{ id: "nbo-47", name: "NBO input", program: "NBO", extensions: [".47"], marks: [{ text: "$GENNBO" }] }],
     });
     expect(nbo).toMatchObject({ reads: ["nbo-47", "xyz"], lock: "resources/plugins/nbo/requirements.lock", worker: "resources/plugins/nbo/worker.py" });

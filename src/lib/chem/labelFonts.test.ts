@@ -17,6 +17,7 @@ import {
   labelFont,
   readGlyphs,
   registerGlyphs,
+  STAND_IN,
   tableGlyphs,
 } from "./labelFonts";
 
@@ -126,5 +127,21 @@ describe("a font read from its file", () => {
     const ink = f.hull("化");
     expect(Math.max(...ink.map((p) => p.y))).toBeGreaterThan(0.75);
     expect(Math.min(...ink.map((p) => p.y))).toBeLessThan(0);
+  });
+
+  it("draws a letter none of its typefaces has as a white square, and measures it so - once one of them has the square", () => {
+    // (the fallback read - as the test before reads it: a typeface with the square)
+    registerGlyphs("Square Sans", tableGlyphs(IBM_PLEX_SANS));
+    if (!labelFont("Square Sans").has(STAND_IN)) addFallbackGlyphs(readGlyphs(read("../../assets/fonts/IBMPlexSansJP-Regular.ttf")));
+    const f = labelFont("Square Sans");
+    expect(f.has(STAND_IN)).toBe(true);
+    // (an emoji: the square; one with its variation selector and a joiner: a square each, nothing for those)
+    expect(f.shown("K2CO3, \u{1F4A6}")).toBe(`K2CO3, ${STAND_IN}`);
+    expect(f.shown("\u2764\uFE0F")).toBe(f.has("\u2764") ? "\u2764\uFE0F" : STAND_IN);
+    expect(f.shown("\u{1F468}\u200D\u{1F469}")).toBe(STAND_IN + STAND_IN);
+    expect(f.advance("\u{1F4A6}")).toBe(f.advance(STAND_IN));
+    expect(f.advance("\u200D")).toBe(0);
+    // (what it has, as it is)
+    expect(f.shown("Pd(PPh3)4, 水")).toBe("Pd(PPh3)4, 水");
   });
 });
