@@ -940,6 +940,32 @@ export function addMeasure3d(doc: WorkspaceDocument, id: number, atoms: number[]
   });
 }
 
+/** A measurement's atoms put in another order - the same measurement, the same value: which side setting it moves. */
+export function orderMeasure3d(doc: WorkspaceDocument, id: number, measure: number, atoms: number[]): WorkspaceDocument {
+  return withMolecule3d(doc, id, (m) => {
+    const x = (m.measures ?? []).find((k) => k.id === measure);
+    // (the same atoms, either way along: the same measurement)
+    const same = !!x && (x.atoms.join() === atoms.join() || x.atoms.join() === [...atoms].reverse().join());
+    if (!x || !same || x.atoms.join() === atoms.join()) return m;
+    return { ...m, measures: m.measures!.map((k) => (k.id === measure ? { ...k, atoms: [...atoms] } : k)) };
+  });
+}
+
+/**
+ * A molecule in 3D's atoms put in new places in one of its frames - its
+ * shape edited (utils/edit3d) - and its stereo labels as they now are.
+ */
+export function setPlaces3d(doc: WorkspaceDocument, id: number, frame: number, xyz: readonly number[], stereo?: Molecule3D["stereo"]): WorkspaceDocument {
+  return withMolecule3d(doc, id, (m) => {
+    if (xyz.length !== 3 * m.atoms.length) return m;
+    const next =
+      frame <= 0 || !m.frames?.[frame - 1]
+        ? { ...m, atoms: m.atoms.map((a, i) => ({ ...a, x: xyz[3 * i], y: xyz[3 * i + 1], z: xyz[3 * i + 2] })) }
+        : { ...m, frames: m.frames.map((f, k) => (k === frame - 1 ? [...xyz] : f)) };
+    return stereo ? { ...next, stereo } : next;
+  });
+}
+
 export function removeMeasure3d(doc: WorkspaceDocument, id: number, measure: number): WorkspaceDocument {
   return withMolecule3d(doc, id, (m) => {
     const measures = (m.measures ?? []).filter((x) => x.id !== measure);

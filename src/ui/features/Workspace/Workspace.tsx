@@ -56,7 +56,8 @@ import { carriedOf } from "./utils/workspace";
 import PartMenu, { type CanvasCommand, type MenuMolecule3D, type MenuTarget } from "./PartMenu";
 import { currentStyle3D, useStyle3D } from "./style3d";
 import { askToOpen } from "../../layouts/commands";
-import { chosenPath, frameOf, lookOf, poseOf, seenBounds, solidOf } from "./utils/molecule3d";
+import { bondsAt, chosenPath, frameOf, lookOf, poseOf, seenBounds, solidOf } from "./utils/molecule3d";
+import { movingAtoms, movingFor } from "./utils/edit3d";
 import { abbreviationOf } from "../../../lib/chem/abbreviations";
 import { isElementSymbol } from "../../../lib/roles/molblock";
 
@@ -687,11 +688,23 @@ function WorkspaceContent({
     }
   };
   const menuLink = menuMolecule ? linkOf(menuMolecule, model) : null;
+  // (what is chosen of it, or the measurement right-clicked, can be set: utils/edit3d)
+  const frameShown = (id: number) => store.getState().frames3d[id] ?? 0;
+  const chosenPathOf = menuMolecule && chosen3d?.id === menuMolecule.id ? chosenPath(menuMolecule, chosen3d) : null;
+  const chosenSettable =
+    !!menuMolecule && !!chosenPathOf && !!movingAtoms({ atoms: menuMolecule.atoms, bonds: bondsAt(menuMolecule, frameShown(menuMolecule.id)) }, chosenPathOf);
+  const measureMolecule = menu?.kind === "measure3d" ? molecules3d.find((m) => m.id === menu.id) : undefined;
+  const menuMeasure = measureMolecule && menu?.measure != null ? measureMolecule.measures?.find((x) => x.id === menu.measure) : undefined;
+  const measure3dMenu =
+    measureMolecule && menuMeasure && movingFor(measureMolecule, menuMeasure.id, frameShown(measureMolecule.id))
+      ? { atoms: menuMeasure.atoms.length, onSet: () => store.getState().editMeasure3d({ id: measureMolecule.id, measure: menuMeasure.id }) }
+      : undefined;
   const menu3d: MenuMolecule3D | undefined = menuMolecule
     ? {
         look: lookOf(menuMolecule, style3d),
         chosen: chosen3d?.id === menuMolecule.id ? (chosenPath(menuMolecule, chosen3d)?.length ?? 0) : 0,
         onMeasure: () => store.getState().measureChosen3d(),
+        ...(chosenSettable ? { onSetChosen: () => store.getState().setChosen3d() } : {}),
         onLook: (look) => store.getState().setLook3d(menuMolecule.id, look),
         onResetTurn: () => store.getState().resetTurn3d(menuMolecule.id),
         onCut: () => void clip.cut(menuMolecule.id),
@@ -1194,6 +1207,7 @@ function WorkspaceContent({
             else if (menu.kind && menu.id != null) deletePart(menu.kind, menu.id);
           }}
           molecule3d={menu3d}
+          measure3d={measure3dMenu}
           onArrowStyle={() => {
             if (menu.kind === "arrow" && menu.id != null) openArrowStyle(menu.id);
           }}
