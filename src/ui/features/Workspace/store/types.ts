@@ -11,6 +11,7 @@ import type { Workspace } from "../utils/workspace";
 import type { CalcInfo } from "../../../../lib/calc/output";
 import type { PictureMedia } from "../../../../lib/picture/image";
 import type { JobState } from "../../../../lib/jobs";
+import type { PagePlace } from "../../../../lib/pdf/layout";
 
 /** An atom as the editor holds it: its chemistry (lib/chem/molecule), where it is, and more. */
 export type Atom = EditorAtom & {
@@ -105,6 +106,13 @@ export type PdfItem = {
   y: number;
   page: number;
   spread?: boolean;
+  /**
+   * Its pages put in places of their own while spread, each where its
+   * middle lies from where the PDF lies, the last put there on top (lib/pdf/
+   * layout `PagePlace`). Kept while they are gathered: spread again, they
+   * go back there.
+   */
+  placed?: PagePlace[];
   /** Made small, an icon about a benzene ring's size, its top page on it (lib/pdf/layout `ICON_HEIGHT`). */
   icon?: boolean;
   /**
@@ -634,6 +642,10 @@ export type EditorState = {
   turnPdf: (id: number, page: number) => void;
   /** A PDF's pages spread out, or gathered again. */
   spreadPdf: (id: number, spread: boolean) => void;
+  /** A page of a PDF spread put in a place of its own, its middle at (x, y) on the page, on top of the others: one step for a drag (`gesture`). */
+  placePdfPage: (id: number, page: number, x: number, y: number, gesture?: string) => void;
+  /** A PDF's pages spread put back in their rows, none in a place of its own. */
+  pdfPagesInRows: (id: number) => void;
   /** A PDF made small, an icon - its pages gathered - or full size again. */
   iconPdf: (id: number, icon: boolean) => void;
   removePdf: (id: number) => void;

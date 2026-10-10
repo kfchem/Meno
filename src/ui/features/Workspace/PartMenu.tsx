@@ -175,6 +175,8 @@ export default function PartMenu({
     spread: boolean;
     icon: boolean;
     onSpread: () => void;
+    /** Its pages spread, some in places of their own: all put back in their rows. */
+    onRows?: () => void;
     onIcon: () => void;
     onNext?: () => void;
     onPrevious?: () => void;
@@ -329,6 +331,7 @@ export default function PartMenu({
           ...(pdf?.onPutBox ? [{ name: "Put on the page", keys: "", run: pdf.onPutBox }] : []),
           ...(pdf?.onCopyBox ? [{ name: "Copy picture", keys: "", run: pdf.onCopyBox }] : []),
           ...(pdf && !pdf.icon ? [{ name: pdf.spread ? "Gather pages" : "Spread pages", keys: "", run: pdf.onSpread, divider: !!(pdf.onCopy || pdf.onPutBox) }] : []),
+          ...(pdf?.onRows ? [{ name: "Put pages in rows", keys: "", run: pdf.onRows }] : []),
         ]
       : target.kind === "text"
       ? [

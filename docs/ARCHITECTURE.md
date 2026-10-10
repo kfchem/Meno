@@ -792,7 +792,8 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   those the view has moved on from.
 - **On the page** (`components/Pdfs2D.tsx`, `lib/pdf/layout`): each PDF a
   stack at the size it is printed - a 14.4-point bond is a bond - or its
-  pages spread; a small picture of each page shown at once, tiles at the
+  pages spread, in rows or each in a place of its own kept from the PDF's
+  (`placed`); a small picture of each page shown at once, tiles at the
   screen's resolution asked for once the view is still, each fading in.
   The pictures are the canvas's, shared by the stacks and the column
   (`components/pdfPictures.tsx`): a tile drawn for one is drawn for both.
@@ -822,6 +823,19 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   EditContext on Windows, a textarea elsewhere; what it holds and how a
   change in it is read is `lib/text/field.ts`, an editor's keys
   `lib/text/keys.ts`, moving and selecting `lib/text/editing.ts`.
+- **A Markdown text read formatted** (`components/MarkdownText.tsx`, docs/
+  PDF.md, *Markdown*): read into blocks by `lib/text/markdown.ts` (Lezer's
+  Markdown parser with GitHub's extensions), laid out in rows at the
+  column's width by `TextEditor/markdownLayout.ts` - its words measured by
+  the canvas in IBM Plex (`TextEditor/markdownType.ts`), its code coloured
+  as a text is (`TextEditor/markdownCode.ts`) - and each row in view drawn
+  as a picture (`TextEditor/markdownPictures.ts`). Its HTML half
+  (`TextEditor/MarkdownBody.tsx`) and the canvas share its reader
+  (`TextEditor/markdownReader.ts`: where it is read, what is selected).
+  *Source* in the column's header shows it written, as any text
+  (`TextEditor/columnText.ts`, `showsSource`). Its sheet on the page, and
+  its way between the sheet and the column, draw the same layout in
+  troika's type (`components/MarkdownRows.tsx`).
 - **Texts' sheets on the page** (`components/TextSheets2D.tsx`,
   `utils/textSheets.ts`): a text with a place (`WorkspaceText.at`) lies on
   the page, its first lines in troika's signed-distance type (IBM Plex Mono,

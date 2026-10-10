@@ -1203,22 +1203,43 @@ export function addPdf(doc: WorkspaceDocument, pdf: Omit<PdfItem, "id">): Worksp
   return { ...doc, pdfs: [...(doc.pdfs ?? []), { ...pdf, id }], nextPdfId: id + 1 };
 }
 
-/** `doc` with a PDF moved, turned to another page, spread, or made an icon - unchanged where it has no such PDF, or the page is none of its. */
+/** `doc` with a PDF moved, turned to another page, spread, its pages put back in their rows (`placed: null`), or made an icon - unchanged where it has no such PDF, or the page is none of its. */
 export function updatePdf(
   doc: WorkspaceDocument,
   id: number,
-  patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread" | "icon">> & { reading?: PdfItem["reading"] | null },
+  patch: Partial<Pick<PdfItem, "x" | "y" | "page" | "spread" | "icon">> & { reading?: PdfItem["reading"] | null; placed?: null },
 ): WorkspaceDocument {
   const pdf = doc.pdfs?.find((p) => p.id === id);
   if (!pdf) return doc;
   if (patch.page != null && (!Number.isInteger(patch.page) || patch.page < 0 || patch.page >= pdf.pages.length)) return doc;
-  const { reading, ...rest } = patch;
+  const { reading, placed, ...rest } = patch;
   const next: PdfItem = { ...pdf, ...rest };
   if (next.spread === false) delete next.spread;
   if (next.icon === false) delete next.icon;
+  if (placed === null) {
+    if (!pdf.placed) return doc;
+    delete next.placed;
+  }
   // (read no longer; or read from where it was, no further than its last page, neither far smaller nor far larger)
   if (reading === null) delete next.reading;
   else if (reading) next.reading = readingOf(reading, pdf.pages.length);
+  return { ...doc, pdfs: doc.pdfs!.map((p) => (p.id === id ? next : p)) };
+}
+
+/**
+ * `doc` with a page of a PDF put in a place of its own, its middle at
+ * (x, y) on the page - kept from where the PDF lies, so that it goes with
+ * it - on top of its other pages: unchanged where it has no such PDF or
+ * page, or the page lies there already.
+ */
+export function placePdfPage(doc: WorkspaceDocument, id: number, page: number, x: number, y: number): WorkspaceDocument {
+  const pdf = doc.pdfs?.find((p) => p.id === id);
+  if (!pdf || !Number.isInteger(page) || page < 0 || page >= pdf.pages.length || !Number.isFinite(x) || !Number.isFinite(y)) return doc;
+  const was = pdf.placed ?? [];
+  const at = { page, x: x - pdf.x, y: y - pdf.y };
+  const last = was[was.length - 1];
+  if (last && last.page === page && last.x === at.x && last.y === at.y) return doc;
+  const next: PdfItem = { ...pdf, placed: [...was.filter((q) => q.page !== page), at] };
   return { ...doc, pdfs: doc.pdfs!.map((p) => (p.id === id ? next : p)) };
 }
 
@@ -1457,7 +1478,7 @@ export function textsInRow<T extends Omit<WorkspaceText, "id">>(texts: readonly 
   const step = ICON_NAME_WIDTH + NOMINAL_BOND_LENGTH;
   // (each by its top left, its middle where it goes)
   const row = texts.map((t, i) => {
-    const s = sheetOf(t.text);
+    const s = sheetOf(t.text, t.name);
     return { ...t, at: { x: at.x + i * step - s.w / 2, y: at.y + s.h / 2 }, icon: true as const };
   });
   const taken = [
