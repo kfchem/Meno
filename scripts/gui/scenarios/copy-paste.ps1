@@ -5,7 +5,7 @@
 # - Cmd+V pastes a copy where the pointer is, selected; Cmd+X cuts it again,
 #   and a paste from the empty space's menu brings it back there.
 # - A SMILES another program put on the clipboard as plain text pastes as
-#   the structure it says (RDKit reads it, as the SMILES card does).
+#   the structure it says (RDKit reads it, as for Quick Add's SMILES).
 # - The last copy is left on the clipboard, for a look at what it holds.
 #
 # The pointer is put over empty space by coordinates read off a Mac's shots
@@ -13,12 +13,7 @@
 
 Start-Meno
 Wait-MenoSettled | Out-Null          # Meno starts on a workspace
-Invoke-MenoMenu "SMILES..."                    # its box takes the keys
-Start-Sleep -Seconds 2
-Send-MenoText "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O" -CharMs 10
-Send-MenoKey Enter
-Start-Sleep -Seconds 8
-Invoke-MenoClick -X 869 -Y 1402     # the SMILES card closed
+Add-MenoSmiles "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O"   # from Quick Add, in the middle
 Invoke-MenoWheel -X 1280 -Y 860 -Notches -3
 Start-Sleep -Seconds 1
 Wait-MenoSettled | Out-Null

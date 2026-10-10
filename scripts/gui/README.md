@@ -78,7 +78,9 @@ available:
 |---|---|
 | `Start-Meno` | start the app under test, sized and in front |
 | `Open-MenoFile -Path` | open a structure with Ctrl/Cmd+O: in place of the first tab's blank canvas, or in a tab of its own |
-| `Invoke-MenoMenu -Item` | a command from the menu Meno's logo opens: `"SMILES..."`, `"Clean up all"`, `"Show R and S"` … (positions read off a Mac's shot) |
+| `Invoke-MenoMenu -Item` | a command from the menu Meno's logo opens: `"Clean up all"`, `"Show R and S"` … (positions read off a Mac's shot) |
+| `Invoke-MenoQuickAdd -X -Y -Item` | a double-click on empty space there, and one of Quick Add's icons: `Chain` begins a chain at the point, `SMILES` opens its field |
+| `Add-MenoSmiles -Smiles [-X -Y] [-WaitSec]` | a structure from a SMILES, by Quick Add, centred at the point (the middle of the canvas unless told), and let go of |
 | `Save-MenoFile -Path` | Save As from Meno's menu, under a path not already taken - a workspace (`.meno`), say |
 | `Save-Step -Name` | a numbered screenshot |
 | `Invoke-MenoClick -X -Y [-Count] [-Right] [-Hold]` | client coordinates, not screen; `-Right` for the other button; `-Hold Shortcut, Shift, Alt` holds those keys through it (Shortcut: Ctrl on Windows, ⌘ on a Mac) |

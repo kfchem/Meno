@@ -62,7 +62,7 @@ function mirrorOf(doc: WorkspaceDocument) {
  * else nothing would be seen selected and the keys and the menu would still
  * act on a selection.
  */
-export function drawingHeld(sel: Sel, model: Pick<Model, "atoms" | "bonds">): Sel {
+function drawingHeld(sel: Sel, model: Pick<Model, "atoms" | "bonds">): Sel {
   if (!sel.atoms.size && !sel.bonds.size) return sel;
   const atoms = new Set(model.atoms.map((a) => a.id));
   const bonds = new Set(model.bonds.map((b) => b.id));

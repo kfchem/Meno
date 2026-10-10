@@ -26,9 +26,8 @@ Save-Step "undone"
 Send-MenoShortcut Z -Shift
 Wait-MenoSettled | Out-Null
 
-Invoke-MenoMenu "SMILES..."             # its box takes the keys
-Start-Sleep -Seconds 2
-Send-MenoText "CN1[C@H]2CC[C@@H]1[C@H]([C@H](C2)OC(=O)C3=CC=CC=C3)C(=O)OC" -CharMs 10
-Send-MenoKey Enter
-Start-Sleep -Seconds 10
+# (from Quick Add, in the empty space to the taxol's right, and fitted)
+Add-MenoSmiles "CN1[C@H]2CC[C@@H]1[C@H]([C@H](C2)OC(=O)C3=CC=CC=C3)C(=O)OC" -X 2200 -Y 1200 -WaitSec 10
+Send-MenoShortcut 1
+Wait-MenoSettled | Out-Null
 Save-Step "cocaine"

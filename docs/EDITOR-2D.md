@@ -51,12 +51,15 @@ and in particular:
   - A bond led within reach of an atom closes onto it, and so does one led
     onto an atom however far away - a long bond closes a ring too; the
     preview shows it closed before the button comes up.
-  - **Chains** (agreed 2026-10-03): three clicks on an atom, or on empty
-    space, draw a chain - led by a drag, or, the last click let go where it
-    was, traced with the button up until a click ends it; Escape lets it
-    go. The third click takes back the bond the double-click drew. (Two on
-    empty space drew one until 2026-10-08, when the maintainer gave the
-    double-click there to *Quick Add*, below.)
+  - **Chains** (agreed 2026-10-03): three clicks on an atom draw a chain,
+    and so does Quick Add's *Chain* from empty space - led by a drag, or,
+    the last click (or the press on the icon) let go where it was, traced
+    with the button up until a click ends it; Escape lets it go. The third
+    click takes back the bond the double-click drew. (Two clicks on empty
+    space drew one until 2026-10-08, when the maintainer gave the
+    double-click there to *Quick Add*, below; three did until 2026-10-10,
+    when the maintainer moved the chain from empty space into Quick Add, so
+    that Quick Add need not wait to see whether a third click comes.)
     - It runs on a honeycomb of the drawing's own lengths and angles laid
       out from its start (`utils/honeycomb`), turned so that a bond the
       atom already has is one of its own; across at 30 degrees from empty
@@ -176,19 +179,28 @@ as it comes (`suppressDoubleClick`), not when the edit would begin. On a
 trackpad that taps to click, a long press is a press of
 the pad held.
 
-A triple-click on empty space begins a chain (above); a double-click and
-a drag that starts on an atom draws one bond out of it.
+A double-click and a drag that starts on an atom draws one bond out of it.
 
 **Quick Add** (the maintainer, 2026-10-08). A double-click on empty space
 opens, up and to the right of it, what can be put down there, each an
 icon - named as the pointer rests on it - and none in words: a bond
-(across at 30 degrees, as a chain from empty space begins), text, a
-reaction arrow and a "+". A choice puts it down where the double-click
-was; Escape, a press elsewhere or a turn of the wheel closes it. It opens
-QUICK_ADD_MS (0.28 s) after the double-click, a third click not having
-come: a quicker third click draws a chain instead, and a slower one still
-closes it and draws the chain. A double-click on an atom still draws one
-bond; on an arrow, a "+" or text, none of this (`Selection2D`, `QuickAdd`).
+(across at 30 degrees, as a chain from empty space begins), a chain, a
+SMILES, text, a reaction arrow and a "+". A choice puts it down where the
+double-click was; Escape, a press elsewhere or a turn of the wheel closes
+it. It opens as the second click's button comes up: a third click asks
+for nothing more (the chain is Quick Add's own since 2026-10-10 - before,
+Quick Add waited 0.28 s for a third click that would draw one, and the
+maintainer found it slow). *Chain* begins one where the double-click was,
+led by a drag from the icon or traced with the button up. *SMILES* opens a
+field below the row: Enter draws what is typed there, laid out by Meno's
+engine, centred where the double-click was and selected, as a paste is -
+the first time, once the plugin that reads SMILES is set up; what went
+wrong is said under the field. A double-click on an atom still draws one
+bond; on an arrow, a "+" or text, none of this (`Selection2D`, `QuickAdd`,
+`chainFrom`). With the column open beside the canvas (PDF.md, *One
+canvas*), a double-click on empty space shuts it instead - the work comes
+back to the canvas (the maintainer, 2026-10-10) - and the next opens
+Quick Add.
 After a thin rule, one more button - *Calculations* - opens below the
 row to the kinds of step a workflow can have (WORKFLOWS.md, *A step: from
 Quick Add*); a wire let go on empty space opens Quick Add at those alone.
@@ -252,7 +264,7 @@ V, as everywhere, and the same from the menus.
 - A paste reads Meno's own record first, then a picture that carries one
   (Office's clip format, as Word and PowerPoint hand it back, or a PNG),
   then a MOL file, then plain text that is a MOL file or a SMILES (drawn by
-  the engine, as the SMILES card draws one).
+  the engine, as a SMILES typed in Quick Add is).
 - On empty space with nothing selected, a right-click opens *Paste* and
   *Select all*; the selection's menu starts with *Cut*, *Copy* and *Copy
   as SMILES*, and *Paste* when it was opened on empty space. Either, opened
@@ -625,7 +637,9 @@ traced from reference drawings.
   document's name either way.
 - Import that keeps charges, isotopes, radicals, atom lists and S-groups, and
   V3000 reactions.
-- SMILES in and out. (PR #52: a SMILES card on the canvas)
+- SMILES in and out: in from Quick Add's *SMILES* (2026-10-10; a card on
+  the canvas before, PR #52), out by *Copy as SMILES* in the selection's
+  menu.
 - SVG export, drawn exactly as on the canvas - with the drawing style it was
   drawn in - and PNG. The SVG export draws what the canvas draws (PR #36),
   at ACS 1996's own size (PR #43); PNG to come.

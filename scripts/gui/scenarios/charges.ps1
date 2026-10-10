@@ -37,9 +37,8 @@ Start-Sleep -Milliseconds 400
 Save-Step "menu"
 Send-MenoKey Escape
 # charged molecules from a SMILES
-Invoke-MenoMenu "SMILES..."
-Start-Sleep -Seconds 2
-Send-MenoText "C[N+](=O)[O-].CC(=O)[O-].[Na+].CC[N+](C)(C)C.[13CH3]C" -CharMs 10
-Send-MenoKey Enter
-Start-Sleep -Seconds 10
+# (from Quick Add, below the strokes, and fitted to show them all)
+Add-MenoSmiles "C[N+](=O)[O-].CC(=O)[O-].[Na+].CC[N+](C)(C)C.[13CH3]C" -X 1280 -Y 1400 -WaitSec 10
+Send-MenoShortcut 1
+Wait-MenoSettled | Out-Null
 Save-Step "smiles"

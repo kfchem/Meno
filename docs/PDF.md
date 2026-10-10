@@ -342,6 +342,10 @@ together, in short eased transitions.
   line as they come into view.
 - **Selection, search and the caret** are drawn over them, from where
   PDFium says the letters are, or where the text's type sets them.
+- **A double-click on the canvas shuts the column** (the maintainer,
+  2026-10-10): on empty space, with a PDF or a text open there, the work
+  comes back to the canvas; what was read goes back down to its place, as
+  when the column is hidden. The next double-click opens Quick Add.
 - **A picture is a texture on a sheet**. A figure at 600 dpi - a whole
   A4 page is about 5000 × 7000 pixels - fits within what the graphics
   card takes.

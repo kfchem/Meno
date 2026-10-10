@@ -34,7 +34,8 @@ import DocumentStylePanel from "./DocumentStylePanel";
 import ArrowStylePanel from "./ArrowStylePanel";
 import SaveAbbreviationPanel from "./SaveAbbreviationPanel";
 import { abbreviationFromSelection } from "./chem/abbreviationFromSelection";
-import SmilesPanel from "./SmilesPanel";
+import { chainFrom } from "./components/chainFrom";
+import { structureFromSmiles } from "./chem/fromSmiles";
 import ExportCard, { type Offered3D } from "./ExportCard";
 import { findOutput, outputOf } from "../../../lib/calc/asks";
 import type { CalcSource } from "../../../lib/calc/output";
@@ -920,8 +921,6 @@ function WorkspaceContent({
   // Drops on the drawing: files, and objects and pictures out of Office (lib/drop)
   const dropRef = useRef<HTMLDivElement>(null);
   useDropZone(dropRef, dropZone);
-  // SMILES in and out, by a plugin, in a card over the canvas's corner
-  const [smilesOpen, setSmilesOpen] = useState(false);
   // Export: the kind and its options asked in a card over the canvas, then the file's name
   const [exporting, setExporting] = useState<{ writers: Writer[]; from?: string; what: Holds; molecules: Offered3D[]; selected: number[] } | null>(null);
 
@@ -961,7 +960,6 @@ function WorkspaceContent({
     {
       title: "Edit",
       items: [
-        { name: "SMILES…", run: () => setSmilesOpen(true) },
         ...(pdfsHeld ? [{ name: "Find in PDF…", keys: shortcutLabel("F"), run: openFind }] : []),
         {
           name: "Clean up all",
@@ -1102,9 +1100,6 @@ function WorkspaceContent({
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {smilesOpen && <SmilesPanel key="smiles" onClose={() => setSmilesOpen(false)} />}
-      </AnimatePresence>
-      <AnimatePresence>
         {exporting && (
           <ExportCard
             key="export"
@@ -1152,6 +1147,19 @@ function WorkspaceContent({
               st.putDownProcedure(id, at.x, at.y);
             }}
             onClose={closeQuickAdd}
+            onChain={(press) => {
+              const { at } = quickAdd;
+              store.getState().setQuickAdd(null);
+              chainFrom(store, press, at, clientToWorld);
+            }}
+            onSmiles={async (smiles) => {
+              // (the plugin's drawing says what the SMILES does; the engine draws it - there, selected, as a paste is)
+              const drawn = await structureFromSmiles(smiles);
+              const st = store.getState();
+              const { at } = quickAdd;
+              st.setQuickAdd(null);
+              st.pasteModel(centredAt(drawn, at));
+            }}
             onChoose={(what) => {
               const st = store.getState();
               const { at } = quickAdd;
