@@ -792,8 +792,10 @@ reading in Meno is.
   is named CA too), a nucleic acid's phosphorus - stand near enough (4.5
   and 8.5 Å); further apart, the chain is broken there. A lone residue is
   drawn as its atoms.
-- **The ribbon** (`utils/ribbon.ts`). A smooth curve through a run's
-  backbone atoms; round it a band, its face turned as each peptide's plane
+- **The ribbon** (`utils/ribbon.ts`). A smooth curve along a run's
+  backbone atoms - a cubic B-spline they are the control points of, so a
+  helix winds smoothly within its alpha carbons rather than corner to
+  corner through them; round it a band, its face turned as each peptide's plane
   is (its carbonyl oxygen says which way, each turned as the one before so
   it never flips): flat and 1.6 Å wide through a helix, so it winds round
   the helix's axis; 1.7 Å through a strand, ending in an arrowhead to its
@@ -802,8 +804,10 @@ reading in Meno is.
   by chain, or along the sequence from blue to red: Settings, Molecules in
   3D, *Every style*, *Ribbons*.
 - **With the styles.** Each style says how it draws a PDB entry's chains:
-  as ribbons - what is bound to them (ligands, ions) as atoms, water left
-  out - or every atom. Ball and stick and Glossy draw ribbons;
+  as ribbons - what is bound to them (ligands, ions) as atoms, with the
+  side chains of the residues within 4.5 Å of them, drawn from their alpha
+  carbons, so that what holds a ligand shows; water left out - or every
+  atom. Ball and stick and Glossy draw ribbons;
   Space-filling every atom, so a double-click goes from the fold to the
   protein's surface and its pockets, and back. Going over, the ribbon
   shrinks to its line as the atoms grow, and back.

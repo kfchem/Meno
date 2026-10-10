@@ -1,7 +1,9 @@
 /**
  * A biopolymer's chains as ribbons (docs/WORKSPACE.md, *Ribbons*): a smooth
- * line through each run's backbone atoms - a protein's alpha carbons, a
- * nucleic acid's phosphorus atoms - and round it a band: wide and flat
+ * line along each run's backbone atoms - a protein's alpha carbons, a
+ * nucleic acid's phosphorus atoms: a cubic B-spline they are the control
+ * points of, so that a helix's line winds smoothly within its atoms, not
+ * corner to corner through them - and round it a band: wide and flat
  * through a helix, wide through a strand, ending in an arrowhead at its
  * C-terminal end, a thin tube elsewhere; the band's face turned as each
  * peptide's plane is (its carbonyl oxygen says which way), so a helix's
@@ -72,6 +74,7 @@ export function ribbonPoints(
   const at = (i: number) => new THREE.Vector3(places[3 * i], places[3 * i + 1], places[3 * i + 2]);
   const p = run.trace.map(at);
   // the ends carried on in a line, for the curve's first and last stretch
+  // (so that it begins on the first atom and ends on the last)
   const ctrl = (i: number) => (i < 0 ? p[0].clone().multiplyScalar(2).sub(p[1]) : i >= n ? p[n - 1].clone().multiplyScalar(2).sub(p[n - 2]) : p[i]);
   // which way each residue's band is turned: towards its carbonyl oxygen,
   // or else square to the chain's bend there - each turned as the one
@@ -99,15 +102,17 @@ export function ribbonPoints(
       const t = s / steps;
       const t2 = t * t;
       const t3 = t2 * t;
-      // (Catmull-Rom through the backbone atoms, and its way along)
-      const pt = b.clone().multiplyScalar(2)
-        .add(c.clone().sub(a).multiplyScalar(t))
-        .add(a.clone().multiplyScalar(2).sub(b.clone().multiplyScalar(5)).add(c.clone().multiplyScalar(4)).sub(d).multiplyScalar(t2))
-        .add(b.clone().multiplyScalar(3).sub(a).sub(c.clone().multiplyScalar(3)).add(d).multiplyScalar(t3))
-        .multiplyScalar(0.5);
-      const along = c.clone().sub(a)
-        .add(a.clone().multiplyScalar(2).sub(b.clone().multiplyScalar(5)).add(c.clone().multiplyScalar(4)).sub(d).multiplyScalar(2 * t))
-        .add(b.clone().multiplyScalar(3).sub(a).sub(c.clone().multiplyScalar(3)).add(d).multiplyScalar(3 * t2))
+      // (the uniform cubic B-spline's point and its way along, over its four control points)
+      const u = 1 - t;
+      const pt = a.clone().multiplyScalar(u * u * u)
+        .addScaledVector(b, 3 * t3 - 6 * t2 + 4)
+        .addScaledVector(c, -3 * t3 + 3 * t2 + 3 * t + 1)
+        .addScaledVector(d, t3)
+        .multiplyScalar(1 / 6);
+      const along = a.clone().multiplyScalar(-u * u)
+        .addScaledVector(b, 3 * t2 - 4 * t)
+        .addScaledVector(c, -3 * t2 + 2 * t + 1)
+        .addScaledVector(d, t2)
         .normalize();
       const g = guides[i].clone().lerp(guides[i + 1], t);
       let across = g.sub(along.clone().multiplyScalar(g.dot(along)));

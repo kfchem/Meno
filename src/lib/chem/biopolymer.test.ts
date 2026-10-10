@@ -62,6 +62,19 @@ describe("a PDB entry's chains", () => {
     expect([...hidden.slice(15)]).toEqual([0, 0, 0, 1]);
   });
 
+  it("draws a residue's side chain - from its alpha carbon, not its backbone - where it comes near a ligand", () => {
+    // a ligand atom 3 A from residue 3's alpha carbon
+    const near = [...atoms.slice(0, 15), atom("CB", "C", "ALA", "A", 3, 3.8 * 3, -1.5, 0), atom("C1", "C", "LIG", "A", 101, 3.8 * 3, 3, 0, "HETATM")];
+    const nbp = biopolymerOf(near, [], [])!;
+    const xyz = near.map((a) => ({ el: a.element, x: a.x, y: a.y, z: a.z }));
+    const hidden = ribbonAtoms(nbp, xyz);
+    // residue 3: N, CA, O; then its CB; then the ligand
+    expect([hidden[6], hidden[7], hidden[8]]).toEqual([1, 0, 1]);
+    expect([hidden[15], hidden[16]]).toEqual([0, 0]);
+    // residue 1, far from it: all its ribbon's
+    expect([hidden[0], hidden[1], hidden[2]]).toEqual([1, 1, 1]);
+  });
+
   it("reads back from a copy as it was, and not where it does not fit its molecule", () => {
     const back = readBiopolymer(JSON.parse(JSON.stringify(bp)), atoms.length);
     expect(back).toEqual(bp);

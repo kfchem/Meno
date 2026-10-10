@@ -163,19 +163,45 @@ export function chainRuns(bp: Biopolymer, atoms: readonly { el: string; x: numbe
   return out;
 }
 
+/** How near a residue's atom comes to a ligand's or an ion's, at most, for the residue to be drawn about it, in ångströms: a contact's reach. */
+export const POCKET_REACH = 4.5;
+
+/** A protein residue's backbone atoms by name - what its ribbon stands for even where its side chain is drawn about a ligand. */
+const BACKBONE = new Set(["N", "C", "O", "OXT", "H", "H1", "H2", "H3"]);
+
 /**
  * The atoms a ribbon stands for, and so not drawn as atoms where ribbons
- * are: every atom of a residue in a run (`chainRuns`); and water, which
- * would hide them. What is bound to the chains - a ligand, an ion - is
- * drawn as atoms.
+ * are: every atom of a residue in a run (`chainRuns`) - but for a residue
+ * that comes within `POCKET_REACH` of something bound to the chains (a
+ * ligand, an ion), whose side chain is drawn from its alpha carbon, so
+ * that what holds the ligand shows; and water, which would hide them.
+ * What is bound to the chains is drawn as atoms.
  */
 export function ribbonAtoms(bp: Biopolymer, atoms: readonly { el: string; x: number; y: number; z: number }[]): Uint8Array {
   const inRun = new Uint8Array(bp.residues.length);
   for (const run of chainRuns(bp, atoms)) for (const r of run.residues) inRun[r] = 1;
+  // what is bound: atoms of residues in no run, water left out
+  const bound = atoms.flatMap((a, i) => (!inRun[bp.residueOf[i]] && !isWater(bp.residues[bp.residueOf[i]]) ? [a] : []));
+  const pocket = new Uint8Array(bp.residues.length);
+  if (bound.length) {
+    const reach2 = POCKET_REACH * POCKET_REACH;
+    atoms.forEach((a, i) => {
+      const r = bp.residueOf[i];
+      if (!inRun[r] || pocket[r]) return;
+      for (const b of bound) {
+        const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+        if (dx * dx + dy * dy + dz * dz <= reach2) {
+          pocket[r] = 1;
+          return;
+        }
+      }
+    });
+  }
   const out = new Uint8Array(atoms.length);
   for (let i = 0; i < atoms.length; i++) {
     const r = bp.residueOf[i];
-    if (inRun[r] || isWater(bp.residues[r])) out[i] = 1;
+    if (isWater(bp.residues[r])) out[i] = 1;
+    else if (inRun[r] && !(pocket[r] && !BACKBONE.has(bp.names[i]))) out[i] = 1;
   }
   return out;
 }
