@@ -62,10 +62,13 @@ export const holdsOfDrawn = (part: Drawn): Holds => ({
  * RXN file first; molecules in 3D with nothing drawn beside them, as an SD
  * file, which keeps them; a structure, as a MOL file first. Molecules in 3D
  * as a PDB file too, which holds them and no drawing; always as a picture.
+ * Only what would not come out empty: with no structure drawn and no
+ * molecule in 3D - words, pictures, arrows alone - a picture alone.
  */
 export function exportKinds(what: Holds): WriterId[] {
+  if (!what.drawn && !what.solid) return ["svg"];
   const pdb: WriterId[] = what.solid ? ["pdb"] : [];
-  if (what.reaction) return ["rxn", "mol", "sdf", ...pdb, "svg"];
+  if (what.reaction && what.drawn) return ["rxn", "mol", "sdf", ...pdb, "svg"];
   if (what.solid && !what.drawn) return ["sdf", ...pdb, "svg"];
   return ["mol", "sdf", ...pdb, "svg"];
 }
