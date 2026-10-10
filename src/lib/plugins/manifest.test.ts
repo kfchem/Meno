@@ -77,12 +77,15 @@ describe("a plugin's manifest", () => {
         { kind: "optimise", programs: ["xtb", "../bin/sh", "/usr/bin/xtb", "xtb"], options: [{ id: "level", label: "Level", type: "choice", choices: [{ value: "tight", label: "Tight" }], default: "tight" }] },
         { kind: "optimise", programs: ["other"] },
         { kind: "Not A Kind", programs: ["xtb"] },
-        { kind: "structure-3d" },
+        { kind: "conformers", takes: ["molecules", "drawings", "conformers"] },
+        { kind: "duplicates", takes: [] },
       ],
     };
     expect(acceptManifest(steps)?.steps).toEqual([
       { kind: "optimise", programs: ["xtb"], options: [{ id: "level", label: "Level", type: "choice", choices: [{ value: "tight", label: "Tight" }], default: "tight" }] },
-      { kind: "structure-3d", programs: [], options: [] },
+      // (what it takes, of what flows: none said, all its kind takes)
+      { kind: "conformers", programs: [], options: [], takes: ["molecules", "conformers"] },
+      { kind: "duplicates", programs: [], options: [] },
     ]);
     // (xTB's, as Meno carries it)
     const xtb = MANIFESTS.find((m) => m.id === "xtb")!;

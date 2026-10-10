@@ -84,6 +84,9 @@ export function schemeAmong(drawn: Drawn, ids: Set<number>): { arrows: Arrow[]; 
   };
 }
 
+/** How far from what it is of a mark put by hand is read, in ems of the labels: farther, it is put back. */
+const MARK_REACH = 50;
+
 /** Meno's own record of a structure on the clipboard, and its version. */
 const RECORD = "meno-structure";
 const VERSION = 1;
@@ -99,7 +102,7 @@ export function clipItems(part: Drawn): ClipItem[] {
   if (!part.atoms.length) {
     const ms = part.molecules3d ?? [];
     // (a workflow's parts, or pictures, alone: Meno's record, which no other program reads)
-    if (!ms.length) return hasFlow(part) || part.pictures?.length ? [{ flavor: "meno", text: recordText(part) }] : [];
+    if (!ms.length) return hasFlow(part) || part.pictures?.length || part.captions?.length ? [{ flavor: "meno", text: recordText(part) }] : [];
     const placed = ms.length > 1;
     const seen = ms.map((m) => asSeen(m, m.turn, m.frame, placed));
     const offsets = seen.map((_, i) => seen.slice(0, i).reduce((n, a) => n + a.length, 0));
@@ -222,9 +225,23 @@ export function readDrawn(data: unknown): Drawn | null {
     const read = readPicture(p);
     return read ? [read] : [];
   });
+  // (a mark put by hand where it reads as a place, else where the drawing puts it)
+  const markAt = (p: unknown) => {
+    const q = p as { x?: unknown; y?: unknown } | undefined;
+    return q && isNum(q.x) && isNum(q.y) && Math.hypot(q.x, q.y) < MARK_REACH ? { x: q.x, y: q.y } : undefined;
+  };
+  const withMarks = <T extends { chargeAt?: unknown; stereoAt?: unknown }>(x: T, keys: readonly ("chargeAt" | "stereoAt")[]): T => {
+    const out = { ...x };
+    for (const k of keys) {
+      const at = markAt(x[k]);
+      if (at) out[k] = at;
+      else delete out[k];
+    }
+    return out;
+  };
   return {
-    atoms: atoms.map((a) => ({ r: 0.9, ...a }) as Atom),
-    bonds: bonds as Bond[],
+    atoms: atoms.map((a) => withMarks({ r: 0.9, ...a }, ["chargeAt", "stereoAt"]) as Atom),
+    bonds: bonds.map((b) => withMarks(b, ["stereoAt"])) as Bond[],
     ...(arrows.length ? { arrows } : {}),
     ...(pluses.length ? { pluses } : {}),
     ...(captions.length ? { captions } : {}),

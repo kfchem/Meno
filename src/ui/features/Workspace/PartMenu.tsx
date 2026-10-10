@@ -1,7 +1,8 @@
 import { motion } from "motion/react";
 import { RISE } from "../../theme/motion";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CheckIcon } from "@heroicons/react/24/outline";
+import { MENU_ICONS } from "./menuIcons";
 
 /**
  * What was right-clicked, where in the canvas the menu opens, and how big
@@ -43,6 +44,8 @@ const MAC =
  */
 const WIDTH = 240;
 const ITEM = 32;
+/** Each icon's square along the top, as Quick Add's are, in px. */
+const ROW = 36;
 
 /** What the clipboard's items in the menu do. */
 export type MenuClipboard = {
@@ -53,7 +56,15 @@ export type MenuClipboard = {
   onSelectAll: () => void;
 };
 
-type Item = { name: string; keys: string; run: () => void; divider?: boolean; checked?: boolean };
+/**
+ * One thing the menu does: with an icon, along its top (`del`, Delete, at
+ * the right end of them); without, in the list under them, a rule above it
+ * where `divider` says.
+ */
+type Item = { name: string; keys: string; run: () => void; divider?: boolean; checked?: boolean; icon?: ReactNode; del?: boolean; disabled?: boolean };
+
+/** What the workspace does as a whole, offered on empty space: a rule above it where `divider` says. */
+export type CanvasCommand = { name: string; keys: string; run: () => void; divider?: boolean };
 
 /** What can be done to a molecule in 3D from the menu. */
 export type MenuMolecule3D = {
@@ -85,8 +96,10 @@ export type MenuMolecule3D = {
 /**
  * What can be done to the atom or bond under the pointer - or to the
  * selection, or on empty space - at the pointer: the mouse alone reaches
- * everything a key does. Closes on Escape, on a press anywhere else, and
- * on a turn of the wheel.
+ * everything a key does. What is done most comes first, as a row of icons
+ * named as the pointer rests on them, Delete at its right end; the rest is
+ * listed under it (the maintainer, 2026-10-10: the menus had grown busy).
+ * Closes on Escape, on a press anywhere else, and on a turn of the wheel.
  */
 export default function PartMenu({
   target,
@@ -99,10 +112,8 @@ export default function PartMenu({
   onRadical,
   radical,
   onExpand,
+  asTyped,
   onArrowStyle,
-  onAddArrow,
-  onAddPlus,
-  onAddText,
   onEditText,
   onShowSource,
   onFitWords,
@@ -116,6 +127,7 @@ export default function PartMenu({
   onSaveProcedure,
   onUseAsInput,
   onSaveAbbreviation,
+  onExport,
   canvas = [],
   clipboard,
   molecule3d,
@@ -138,13 +150,10 @@ export default function PartMenu({
   radical: boolean;
   /** An abbreviation's atoms drawn out; unset, where the atom is none. */
   onExpand?: () => void;
+  /** Its label as it was typed (obz, read as OBz), and the label made that again; unset, where it was read as typed. */
+  asTyped?: { typed: string; run: () => void };
   /** A reaction arrow's own line and head, in a panel beside the canvas. */
   onArrowStyle: () => void;
-  /** A reaction arrow, or a "+", added where the menu was opened on empty space. */
-  onAddArrow: () => void;
-  onAddPlus: () => void;
-  /** Words written where the menu was opened on empty space. */
-  onAddText: () => void;
   /** The words right-clicked, written anew. */
   onEditText: () => void;
   /** Words taken out of a PDF: where they came from shown, marked, in the column. */
@@ -182,8 +191,10 @@ export default function PartMenu({
   onUseAsInput?: () => void;
   /** The selection saved as an abbreviation of the user's own. */
   onSaveAbbreviation: () => void;
-  /** What the canvas does as a whole - fit, R and S, its style - offered on empty space. */
-  canvas?: { name: string; keys: string; run: () => void }[];
+  /** The selection exported - written as a file of another kind - where the menu is the selection's. */
+  onExport?: () => void;
+  /** What the workspace does as a whole - open, save as, fit, R and S, its style - offered on empty space. */
+  canvas?: CanvasCommand[];
   clipboard: MenuClipboard;
   /** The molecule in 3D right-clicked, when it is one. */
   molecule3d?: MenuMolecule3D;
@@ -202,10 +213,12 @@ export default function PartMenu({
       if (e.key === "Escape") onClose();
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
       e.preventDefault();
-      const buttons = [...(ref.current?.querySelectorAll("button") ?? [])];
+      const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
       const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
       const step = e.key === "ArrowDown" ? 1 : -1;
-      buttons[(at + step + buttons.length) % buttons.length]?.focus();
+      // (from none, the first going down and the last going up)
+      const next = at < 0 ? (step > 0 ? 0 : buttons.length - 1) : (at + step + buttons.length) % buttons.length;
+      buttons[next]?.focus();
     };
     const onPress = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose();
@@ -213,7 +226,8 @@ export default function PartMenu({
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onPress, true);
     window.addEventListener("wheel", onClose, true);
-    ref.current?.querySelector("button")?.focus();
+    // (the keys the menu's - arrows go through its items from the first - with none of them lit as it opens)
+    ref.current?.focus();
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPress, true);
@@ -226,26 +240,24 @@ export default function PartMenu({
   const shortcut = (key: string) => (MAC ? `⌘${key}` : `Ctrl+${key}`);
   // (with a selection elsewhere, the keys are the selection's)
   const keys = target.selection === "none";
-  const paste: Item = { name: "Paste", keys: shortcut("V"), run: clipboard.onPaste };
-  const cutItem: Item = { name: "Cut", keys: shortcut("X"), run: clipboard.onCut };
   const drawing = target.drawing !== false;
-  // (on empty space: a reaction scheme's arrow, or a "+", there)
-  const scheme: Item[] = [
-    { name: "Add reaction arrow", keys: "", run: onAddArrow, divider: true },
-    { name: "Add plus", keys: "", run: onAddPlus },
-    { name: "Add text", keys: "", run: onAddText },
-  ];
-  // a molecule in 3D: a measurement of its chosen atoms, its look, its turn
+  const del = (name: string, withKey = true): Item => ({ name, keys: withKey ? deleteKey : "", run: onDelete, icon: MENU_ICONS.delete, del: true });
+  // a molecule in 3D: its look and its turn, as icons; a measurement of its chosen atoms, its frames, what its calculation gave and its drawing, listed
   const measureName = ["", "", "Measure distance", "Measure angle", "Measure torsion angle"];
-  const molecule: Item[] = molecule3d
+  const moleculeRow: Item[] = molecule3d
+    ? [
+        // (the other look, one step away: where the 3D style's second goes, lane L5)
+        molecule3d.look === "space"
+          ? { name: "Ball and stick", keys: "", run: () => molecule3d.onLook("balls"), icon: MENU_ICONS.balls }
+          : { name: "Space-filling", keys: "", run: () => molecule3d.onLook("space"), icon: MENU_ICONS.space },
+        { name: "Reset orientation", keys: "", run: molecule3d.onResetTurn, icon: MENU_ICONS.resetTurn },
+      ]
+    : [];
+  const moleculeList: Item[] = molecule3d
     ? [
         ...(molecule3d.chosen >= 2 && molecule3d.chosen <= 4
           ? [{ name: measureName[molecule3d.chosen], keys: "", run: molecule3d.onMeasure }]
           : []),
-        molecule3d.look === "space"
-          ? { name: "Ball and stick", keys: "", run: () => molecule3d.onLook("balls") }
-          : { name: "Space-filling", keys: "", run: () => molecule3d.onLook("space") },
-        { name: "Reset orientation", keys: "", run: molecule3d.onResetTurn },
         ...(molecule3d.overlay
           ? [
               {
@@ -262,135 +274,152 @@ export default function PartMenu({
         ...(molecule3d.onDrawFormula ? [{ name: "Draw as formula", keys: "", run: molecule3d.onDrawFormula }] : []),
       ]
     : [];
+  // What each target's menu has: the frequent, as icons along its top -
+  // Delete at its right end, always - and the rest listed under them.
   const items: Item[] =
     target.kind === "measure3d"
-      ? [{ name: "Delete measurement", keys: deleteKey, run: onDelete }]
+      ? [del("Delete measurement")]
       : target.kind === "molecule3d" && target.selection !== "here" && molecule3d
       ? [
-          ...molecule,
-          { name: "Cut", keys: keys ? shortcut("X") : "", run: molecule3d.onCut, divider: true },
-          { name: "Copy", keys: keys ? shortcut("C") : "", run: molecule3d.onCopy },
-          { name: "Delete molecule", keys: keys ? deleteKey : "", run: onDelete },
+          { name: "Cut", keys: keys ? shortcut("X") : "", run: molecule3d.onCut, icon: MENU_ICONS.cut },
+          { name: "Copy", keys: keys ? shortcut("C") : "", run: molecule3d.onCopy, icon: MENU_ICONS.copy },
+          ...moleculeRow,
+          del("Delete molecule", keys),
+          ...moleculeList,
         ]
       : target.kind === "arrow"
-      ? [
-          { name: "Arrow style…", keys: "", run: onArrowStyle },
-          { name: "Delete arrow", keys: deleteKey, run: onDelete },
-        ]
+      ? [del("Delete arrow"), { name: "Arrow style…", keys: "", run: onArrowStyle }]
       : target.kind === "plus"
-      ? [{ name: "Delete plus", keys: deleteKey, run: onDelete }]
+      ? [del("Delete plus")]
       : target.kind === "caption"
       ? [
-          { name: "Edit text", keys: "", run: onEditText },
-          ...(onShowSource ? [{ name: "Show in the PDF", keys: "", run: onShowSource }] : []),
-          ...(onFitWords ? [{ name: "As wide as its words", keys: "", run: onFitWords }] : []),
+          { name: "Edit text", keys: "", run: onEditText, icon: MENU_ICONS.edit },
           ...(captionAlign
             ? (
                 [
-                  ["left", "Align left"],
-                  ["center", "Align centre"],
-                  ["right", "Align right"],
-                  ["justify", "Justify"],
+                  ["left", "Align left", MENU_ICONS.alignLeft],
+                  ["center", "Align centre", MENU_ICONS.alignCentre],
+                  ["right", "Align right", MENU_ICONS.alignRight],
+                  ["justify", "Justify", MENU_ICONS.justify],
                 ] as const
-              ).map(([align, name], k) => ({ name, keys: "", run: () => captionAlign.set(align), checked: captionAlign.now === align, divider: k === 0 }))
+              ).map(([align, name, icon]) => ({ name, keys: "", run: () => captionAlign.set(align), checked: captionAlign.now === align, icon }))
             : []),
-          { name: "Delete text", keys: deleteKey, run: onDelete, divider: !!captionAlign },
+          del("Delete text"),
+          ...(onShowSource ? [{ name: "Show in the PDF", keys: "", run: onShowSource }] : []),
+          ...(onFitWords ? [{ name: "As wide as its words", keys: "", run: onFitWords }] : []),
         ]
       : target.kind === "pdf"
       ? [
+          ...(pdf
+            ? [
+                { name: "Read", keys: "", run: pdf.onRead, icon: MENU_ICONS.read },
+                // (its pages turned, one on top: at the first or the last, the way on is not there)
+                ...(!pdf.spread && !pdf.icon
+                  ? [
+                      { name: "Previous page", keys: "\u2190", run: pdf.onPrevious ?? (() => {}), icon: MENU_ICONS.previous, disabled: !pdf.onPrevious },
+                      { name: "Next page", keys: "\u2192", run: pdf.onNext ?? (() => {}), icon: MENU_ICONS.next, disabled: !pdf.onNext },
+                    ]
+                  : []),
+                { name: pdf.icon ? "Show full size" : "Minimize to an icon", keys: "", run: pdf.onIcon, icon: pdf.icon ? MENU_ICONS.fullSize : MENU_ICONS.toIcon },
+              ]
+            : []),
+          del("Delete PDF"),
+          ...(pdf?.onCopy ? [{ name: "Copy", keys: shortcut("C"), run: pdf.onCopy }] : []),
           ...(pdf?.onPutBox ? [{ name: "Put on the page", keys: "", run: pdf.onPutBox }] : []),
           ...(pdf?.onCopyBox ? [{ name: "Copy picture", keys: "", run: pdf.onCopyBox }] : []),
-          ...(pdf?.onCopy ? [{ name: "Copy", keys: shortcut("C"), run: pdf.onCopy }] : []),
-          ...(pdf ? [{ name: "Read", keys: "", run: pdf.onRead, divider: !!pdf.onCopy || !!pdf.onPutBox }] : []),
-          ...(pdf?.onNext ? [{ name: "Next page", keys: "\u2192", run: pdf.onNext, divider: true }] : []),
-          ...(pdf?.onPrevious ? [{ name: "Previous page", keys: "\u2190", run: pdf.onPrevious, divider: !pdf.onNext }] : []),
-          ...(pdf && !pdf.icon ? [{ name: pdf.spread ? "Gather pages" : "Spread pages", keys: "", run: pdf.onSpread, divider: true }] : []),
-          ...(pdf ? [{ name: pdf.icon ? "Show full size" : "Minimize to an icon", keys: "", run: pdf.onIcon, divider: pdf.icon }] : []),
-          { name: "Delete PDF", keys: deleteKey, run: onDelete, divider: true },
+          ...(pdf && !pdf.icon ? [{ name: pdf.spread ? "Gather pages" : "Spread pages", keys: "", run: pdf.onSpread, divider: !!(pdf.onCopy || pdf.onPutBox) }] : []),
         ]
       : target.kind === "text"
       ? [
-          ...(text ? [{ name: "Read", keys: "", run: text.onRead }] : []),
-          ...(text ? [{ name: text.icon ? "Show full size" : "Minimize to an icon", keys: "", run: text.onIcon, divider: true }] : []),
-          { name: "Delete text", keys: deleteKey, run: onDelete, divider: true },
+          ...(text
+            ? [
+                { name: "Read", keys: "", run: text.onRead, icon: MENU_ICONS.read },
+                { name: text.icon ? "Show full size" : "Minimize to an icon", keys: "", run: text.onIcon, icon: text.icon ? MENU_ICONS.fullSize : MENU_ICONS.toIcon },
+              ]
+            : []),
+          del("Delete text"),
         ]
       : target.kind === "picture"
       ? [
-          ...(onCopyPicture ? [{ name: "Copy picture", keys: "", run: onCopyPicture }] : []),
+          ...(onCopyPicture ? [{ name: "Copy picture", keys: "", run: onCopyPicture, icon: MENU_ICONS.picture }] : []),
+          del("Delete picture"),
           ...(onShowSource ? [{ name: "Show in the PDF", keys: "", run: onShowSource }] : []),
-          { name: "Delete picture", keys: deleteKey, run: onDelete, divider: !!onCopyPicture || !!onShowSource },
         ]
       : target.kind === "set"
-      ? [
-          ...(onSaveProcedure ? [{ name: "Save as procedure…", keys: "", run: onSaveProcedure }] : []),
-          { name: "Delete set", keys: deleteKey, run: onDelete, divider: !!onSaveProcedure },
-        ]
+      ? [del("Delete set"), ...(onSaveProcedure ? [{ name: "Save as procedure…", keys: "", run: onSaveProcedure }] : [])]
       : target.kind === "step"
       ? [
           ...(step?.onStop
-            ? [{ name: "Stop", keys: "", run: step.onStop }]
-            : [{ name: "Run", keys: "", run: onRunStep }, ...(step?.onRunFrom ? [{ name: "Run from here", keys: "", run: step.onRunFrom }] : [])]),
-          ...(step?.onShowLog ? [{ name: "Show log", keys: "", run: step.onShowLog, divider: true }] : []),
+            ? [{ name: "Stop", keys: "", run: step.onStop, icon: MENU_ICONS.stop }]
+            : [{ name: "Run", keys: "", run: onRunStep, icon: MENU_ICONS.run }, ...(step?.onRunFrom ? [{ name: "Run from here", keys: "", run: step.onRunFrom, icon: MENU_ICONS.runFrom }] : [])]),
+          { name: "Options…", keys: "", run: onStepOptions, icon: MENU_ICONS.options },
+          del("Delete step"),
+          ...(step?.onShowLog ? [{ name: "Show log", keys: "", run: step.onShowLog }] : []),
           ...(step?.onShowFiles ? [{ name: "Show files", keys: "", run: step.onShowFiles }] : []),
-          { name: "Options…", keys: "", run: onStepOptions, divider: !step?.onShowLog },
-          ...(onSaveProcedure ? [{ name: "Save as procedure…", keys: "", run: onSaveProcedure }] : []),
-          { name: "Delete step", keys: deleteKey, run: onDelete, divider: true },
+          ...(onSaveProcedure ? [{ name: "Save as procedure…", keys: "", run: onSaveProcedure, divider: !!step?.onShowLog }] : []),
         ]
       : target.kind === "wire"
-      ? [{ name: "Delete wire", keys: deleteKey, run: onDelete }]
+      ? [del("Delete wire")]
       : target.selection === "here"
       ? [
-          // (on a molecule in 3D in it: that molecule's own, first)
-          ...(molecule.length ? [...molecule, { ...cutItem, divider: true }] : [cutItem]),
-          { name: "Copy", keys: shortcut("C"), run: clipboard.onCopy },
-          ...(drawing ? [{ name: "Copy as SMILES", keys: "", run: clipboard.onCopySmiles }] : []),
+          { name: "Cut", keys: shortcut("X"), run: clipboard.onCut, icon: MENU_ICONS.cut },
+          { name: "Copy", keys: shortcut("C"), run: clipboard.onCopy, icon: MENU_ICONS.copy },
           // (on empty space, a paste goes there)
-          ...(target.kind == null ? [paste] : []),
-          { name: "Delete selection", keys: deleteKey, run: onDelete, divider: true },
-          ...(onUseAsInput ? [{ name: "Use as input", keys: "", run: onUseAsInput, divider: true }] : []),
-          // (what only a drawing has: none, for molecules in 3D alone)
+          ...(target.kind == null ? [{ name: "Paste", keys: shortcut("V"), run: clipboard.onPaste, icon: MENU_ICONS.paste }] : []),
+          // (on a molecule in 3D in it: that molecule's own; what only a drawing has: none, for molecules in 3D alone)
+          ...moleculeRow,
           ...(drawing
             ? [
-                { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical") },
-                { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
-                { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp },
-                { name: "3D structures", keys: "", run: onMake3d },
-                { name: "Save as abbreviation…", keys: "", run: onSaveAbbreviation, divider: true },
+                { name: "Clean up these structures", keys: cleanUpKey, run: onCleanUp, icon: MENU_ICONS.cleanUp },
+                { name: "3D structures", keys: "", run: onMake3d, icon: MENU_ICONS.make3d },
               ]
             : []),
-          ...(target.kind == null ? scheme : []),
+          del("Delete selection"),
+          ...moleculeList,
+          ...(drawing ? [{ name: "Copy as SMILES", keys: "", run: clipboard.onCopySmiles, divider: moleculeList.length > 0 }] : []),
+          ...(onExport ? [{ name: "Export…", keys: "", run: onExport, divider: !drawing && moleculeList.length > 0 }] : []),
+          ...(drawing
+            ? [
+                { name: "Turn over left to right", keys: "", run: () => onTurnOver("vertical"), divider: true },
+                { name: "Turn over top to bottom", keys: "", run: () => onTurnOver("horizontal") },
+              ]
+            : []),
+          ...(onUseAsInput ? [{ name: "Use as input", keys: "", run: onUseAsInput, divider: true }] : []),
+          ...(drawing ? [{ name: "Save as abbreviation…", keys: "", run: onSaveAbbreviation, divider: !onUseAsInput }] : []),
         ]
       : target.kind == null
         ? [
-            paste,
-            { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll },
-            ...scheme,
-            ...canvas.map((item, i) => ({ ...item, divider: i === 0 })),
+            { name: "Paste", keys: shortcut("V"), run: clipboard.onPaste, icon: MENU_ICONS.paste },
+            { name: "Select all", keys: shortcut("A"), run: clipboard.onSelectAll, icon: MENU_ICONS.selectAll },
+            ...canvas.map((item, i) => ({ ...item, divider: i > 0 && item.divider })),
           ]
         : [
-          {
-            name: target.kind === "atom" ? "Delete atom" : "Delete bond",
-            keys: keys ? deleteKey : "",
-            run: onDelete,
-          },
-          // an atom's charge and radical: the + and - keys do the first
+          // an atom's charge - the + and - keys do it too - and its radical
           ...(target.kind === "atom"
             ? [
-                { name: "Charge one up", keys: "+", run: () => onCharge(1) },
-                { name: "Charge one down", keys: "\u2212", run: () => onCharge(-1) },
+                { name: "Charge one up", keys: "+", run: () => onCharge(1), icon: MENU_ICONS.chargeUp },
+                { name: "Charge one down", keys: "\u2212", run: () => onCharge(-1), icon: MENU_ICONS.chargeDown },
+              ]
+            : []),
+          { name: "Clean up this structure", keys: keys ? cleanUpKey : "", run: onCleanUp, icon: MENU_ICONS.cleanUp },
+          { name: "3D structure", keys: "", run: onMake3d, icon: MENU_ICONS.make3d },
+          del(target.kind === "atom" ? "Delete atom" : "Delete bond", keys),
+          ...(target.kind === "atom"
+            ? [
                 { name: radical ? "No unpaired electron" : "Unpaired electron", keys: "", run: onRadical },
                 ...(onExpand ? [{ name: "Expand abbreviation", keys: "", run: onExpand }] : []),
+                ...(asTyped ? [{ name: `As typed: ${asTyped.typed}`, keys: "", run: asTyped.run }] : []),
               ]
             : []),
           { name: "Select this structure", keys: "", run: onSelectStructure },
-          {
-            name: "Clean up this structure",
-            keys: keys ? cleanUpKey : "",
-            run: onCleanUp,
-          },
-          { name: "3D structure", keys: "", run: onMake3d },
         ];
-  const height = items.length * ITEM + items.filter((i) => i.divider).length * 9 + 12;
+  const row = items.filter((i) => i.icon);
+  const list = items.filter((i) => !i.icon);
+  const height = (row.length ? ROW + 9 : 0) + list.length * ITEM + list.filter((i) => i.divider).length * 9 + 12;
+  const run = (item: Item) => () => {
+    onClose();
+    item.run();
+  };
   return (
     <motion.div
       ref={ref}
@@ -427,7 +456,8 @@ export default function PartMenu({
                       ? "Measurement"
                       : "Canvas"
       }
-      className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black"
+      tabIndex={-1}
+      className="absolute z-50 rounded-md border border-gh-line bg-white py-1 shadow-lg text-sm text-gh-black outline-none"
       style={{
         left: Math.max(0, Math.min(target.x, target.within.width - width - 8)),
         top: Math.max(0, Math.min(target.y, target.within.height - height - 8)),
@@ -441,15 +471,32 @@ export default function PartMenu({
         e.stopPropagation();
       }}
     >
-      {items.map((item) => [
+      {/* the frequent, as icons - named as the pointer rests on one - and Delete at the right end */}
+      {row.length > 0 && (
+        <div role="group" aria-label="Frequent" className={`flex items-center gap-0.5 px-1 ${list.length ? "pb-1 mb-1 border-b border-gh-line" : ""}`}>
+          {row.map((item) => (
+            <button
+              key={item.name}
+              role="menuitem"
+              aria-label={item.name}
+              aria-pressed={item.checked}
+              title={item.keys ? `${item.name} (${item.keys})` : item.name}
+              disabled={item.disabled}
+              onClick={run(item)}
+              className={`${item.del ? "ml-auto " : ""}shrink-0 rounded-md flex items-center justify-center outline-none transition-colors duration-150 ease-meno disabled:text-gh-line disabled:hover:bg-transparent ${item.checked ? "bg-gh-base text-gh-black" : "text-gh-black hover:bg-gh-base focus:bg-gh-base"}`}
+              style={{ width: ROW, height: ROW }}
+            >
+              {item.icon}
+            </button>
+          ))}
+        </div>
+      )}
+      {list.map((item) => [
         item.divider && <div key={`${item.name}-divider`} role="separator" className="my-1 border-t border-gh-line" />,
         <button
           key={item.name}
           role="menuitem"
-          onClick={() => {
-            onClose();
-            item.run();
-          }}
+          onClick={run(item)}
           className="w-full h-8 px-3 flex items-center justify-between gap-4 text-left whitespace-nowrap transition-colors duration-150 ease-meno hover:bg-gh-base focus:bg-gh-base outline-none"
         >
           <span>{item.name}</span>

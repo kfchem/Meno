@@ -118,8 +118,11 @@ describe("the abbreviations", () => {
     expect(abbreviationOf("OCF3")?.smiles).toBe("*OC(F)(F)F");
     // as written, however rarely: an S-Boc
     expect(abbreviationOf("SBoc")?.smiles).toBe("*SC(=O)OC(C)(C)C");
-    // but Cp only on a metal (IUPAC's Table II), and no ester of a contracted label
-    for (const no of ["OCp", "SCp", "NHCp", "CO2Cp", "CO2CF3", "OO", "NHNHNH2"]) expect(abbreviationOf(no), no).toBeUndefined();
+    // but Cp only on a metal (IUPAC's Table II), and nothing that makes no molecule with an H before it
+    for (const no of ["OCp", "SCp", "NHCp", "CO2Cp", "CH2Cp", "OO", "CO", "CH2", "NH"]) expect(abbreviationOf(no), no).toBeUndefined();
+    // (an ester of a contracted label, a chain of nitrogens: read as condensed formulas are, since 2026-10-10 - ./chain)
+    expect(abbreviationOf("CO2CF3")?.smiles).toBe("*[C](=[O])[O]C(F)(F)F");
+    expect(abbreviationOf("NHNHNH2")?.smiles).toBe("*[NH]NN");
     // none is listed
     expect(ABBREVIATIONS.some((a) => a.label === "OTBS")).toBe(false);
   });

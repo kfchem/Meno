@@ -61,9 +61,11 @@ describe("making a drawn structure in 3D", () => {
     expect(moleculeOf({ ...answer, how }, blocksOf(ethanol, [11])[0]).made).toEqual({ how });
   });
 
-  it("keeps each centre's label, and which were left open, so that stereoisomers are told apart", () => {
+  it("keeps each centre's label, and - made with the other stereoisomers - which were left open, so that they are told apart", () => {
     const iso = { ...answer, cip: { atoms: { "1": "R" }, bonds: {} }, chosen: { atoms: { "1": "R" }, bonds: {} } };
-    expect(moleculeOf(iso, blocksOf(ethanol, [11])[0]).stereo).toEqual({ atoms: { 1: "R" }, bonds: {}, chosen: { atoms: [1], bonds: [] } });
+    expect(moleculeOf(iso, blocksOf(ethanol, [11])[0], true).stereo).toEqual({ atoms: { 1: "R" }, bonds: {}, chosen: { atoms: [1], bonds: [] } });
+    // (made alone: R and S shown only when asked for, as on the drawing)
+    expect(moleculeOf(iso, blocksOf(ethanol, [11])[0]).stereo).toEqual({ atoms: { 1: "R" }, bonds: {} });
   });
 
   it("made again, gives RDKit the atoms the one before has where it has them, by their index in the block", () => {

@@ -27,6 +27,8 @@ export function dragSelection(
   const takenSolids = new Set([...st.sel3d, ...held.flatMap((h) => h.molecules)]);
   const atoms = st.model.atoms.filter((a) => takenAtoms.has(a.id)).map((a) => ({ id: a.id, x: a.x, y: a.y }));
   const among = schemeAmong({ ...st.model, arrows: st.arrows, pluses: st.pluses, captions: st.captions }, takenAtoms);
+  // (and the words selected, each as one thing)
+  const words = [...among.captions, ...st.captions.filter((c) => st.selCaptions.has(c.id) && !among.captions.some((a) => a.id === c.id))];
   const solids = st.molecules3d.filter((m) => takenSolids.has(m.id)).map((m) => ({ id: m.id, at: m.at }));
   const steps = st.steps.filter((s) => st.selFlow.steps.has(s.id)).map((s) => ({ id: s.id, x: s.x, y: s.y }));
   const pictures = st.pictures.filter((p) => st.selPictures.has(p.id)).map((p) => ({ id: p.id, x: p.x, y: p.y }));
@@ -43,7 +45,7 @@ export function dragSelection(
     store.getState().moveAtoms(atoms.map(by), gesture, {
       arrows: among.arrows.map(by),
       pluses: among.pluses.map(by),
-      captions: among.captions.map(by),
+      captions: words.map(by),
       molecules3d: solids.map((m) => ({ id: m.id, at: { x: m.at.x + dx, y: m.at.y + dy } })),
       sets: sets.map((b) => ({ id: b.id, x0: b.x0 + dx, x1: b.x1 + dx, y0: b.y0 + dy, y1: b.y1 + dy })),
       steps: steps.map(by),

@@ -20,12 +20,7 @@
 
 Start-Meno
 Wait-MenoSettled | Out-Null          # Meno starts on a workspace
-Invoke-MenoMenu "SMILES..."                    # its box takes the keys
-Start-Sleep -Seconds 2
-Send-MenoText "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O.OCC" -CharMs 10
-Send-MenoKey Enter
-Start-Sleep -Seconds 8
-Invoke-MenoClick -X 869 -Y 1402     # the SMILES card closed
+Add-MenoSmiles "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O.OCC"   # from Quick Add, in the middle
 Send-MenoShortcut 1                           # fit to content: the same view every run
 Start-Sleep -Seconds 1
 Wait-MenoSettled | Out-Null
@@ -53,7 +48,7 @@ Wait-MenoSettled | Out-Null
 Invoke-MenoClick -X 806 -Y 596 -Right
 Wait-MenoSettled | Out-Null
 Save-Step "atom-menu"
-Invoke-MenoClick -X 1006 -Y 892     # Select this structure, below the charge items
+Invoke-MenoClick -X 1006 -Y 790     # Select this structure, the list's second, under the icons
 Wait-MenoSettled | Out-Null
 Save-Step "structure"
 
@@ -61,7 +56,7 @@ Save-Step "structure"
 Invoke-MenoClick -X 1280 -Y 250 -Right
 Wait-MenoSettled | Out-Null
 Save-Step "selection-menu"
-Invoke-MenoClick -X 1480 -Y 630     # Turn over left to right, below the clipboard items
+Invoke-MenoClick -X 1480 -Y 526     # Turn over left to right, after Copy as SMILES and Export, under the icons
 Wait-MenoSettled | Out-Null
 Save-Step "turned-over"
 Send-MenoShortcut Z

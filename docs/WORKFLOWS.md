@@ -77,6 +77,23 @@ rearrange and run again, with its results beside the molecule it is about.
     maintainer, 2026-10-08): Settings, *Calculations*, sets each kind's
     default options, by plugin; a step starts with them, and its options
     changed are its own - never written back as the defaults.
+18. **No single 3D structure is made in a workflow** (the maintainer,
+    2026-10-10): one geometry made of a drawing is one of its
+    conformations taken at random, which a calculation on it cannot
+    answer for. A workflow makes 3D structures by a conformer search -
+    *Conformers*, from the drawing - and a step of its own, *Choose one*,
+    takes one of each compound on purpose: its lowest in energy, or one by
+    its number, saying what the energies it ranked by are. The *3D
+    structure* step is gone.
+19. **The look, after review** (the maintainer, 2026-10-10): a set's name
+    and count inside its frame, along its top; a step's card without its
+    rule, what it does said whole, on two lines where it needs them; a set
+    as large as what is drawn in it - labels and molecules as they reach;
+    no list of entries in a set - a molecule's frames chip says each
+    conformer's energy and population; chips on the page grow and shrink
+    with it, as cards and sets do, their words fading out below 75 %
+    (*How it looks*). The ports stay where they were: a step's level with
+    its first lines, a set's half-way down its edge.
 
 No question is left open; the whole is for the maintainer to read and
 agree before step 1 is built.
@@ -115,23 +132,25 @@ agree before step 1 is built.
 A workflow lives among everything else on the page - drawings, molecules
 in 3D, arrows, text - and is made of three things:
 
-- **Sets.** A thin rounded frame, with its name on a tab at its top left
-  - *Input*, or what a step made (*Conformers*, *Optimised*) - and how
+- **Sets.** A thin rounded frame, its name along its top, inside it -
+  *Input*, or what a step made (*Conformers*, *Optimised*) - and how
   many entries it holds (*1 structure*, *81 conformers*, *23 of 81*). It
   gives from a port on its right edge, half-way down; a result set takes
   on its left edge too.
 - **Steps.** A small card: who does it (*xTB*), with the icon of what it
-  does; below it, what it does and how (*Optimise · GFN2-xTB*); a rule; and what it is
-  doing (*Ready*, *Running 0:42*). It takes on its left edge and gives on
-  its right.
+  does; below it, what it does and how (*Optimise · GFN2-xTB*), whole, on
+  two lines where it needs them; and what it is doing (*Ready*, *Running
+  0:42*), with its state's icon under the first. It takes on its left
+  edge and gives on its right.
 - **Wires.** Curves from port to port, leaving and arriving level; while
   a step runs, the wire into it moves (a slow dash),
   and goes still when it is done.
 
 They are page items, as an arrow or a molecule in 3D is: they lie on the
-page, at the page's scale, zoom and pan with it, and are saved with it. A
-step's words stay legible as it zooms: where they would be smaller than 9
-px on the screen, the card shows its icon and its state's icon alone.
+page, at the page's scale, zoom and pan with it, and are saved with it.
+Their words, and the chips on the page, go below 75 % (*How it looks*):
+a card then shows its icon and its state's icon alone, a set its frame
+and what it holds.
 
 ### How it looks
 
@@ -150,6 +169,15 @@ As Meno's own things look (decided: 15), not as the figures here do:
   its icon say it. A part fades in and out only as it comes and goes.
 - **Icons** in the style of the icons Meno already uses (Heroicons'
   outline), from that set where one fits.
+- **Chips on the page** - a molecule's frames chip, a measurement's
+  value, *Its drawing has changed · Make again* - grow and shrink with the
+  page, as its cards and sets do (decided: 19), from where they hang, so
+  that a chip under a molecule in a set stays within the room the set
+  keeps for it. Below 75 %, where their smallest words would be under
+  about 8 px, they fade out, as a set's name and count do and a card's
+  words; what opens for a moment - a card on pointing, a menu, Quick Add -
+  stays the screen's size. The R and S beside atoms are the drawing's, not
+  chips.
 
 Everything comes and goes as Meno's things do (theme/motion): a set, a
 step and a wire fade in where they are put; a state changes its words
@@ -203,8 +231,7 @@ new kind comes with Meno, as a new role does (PLUGINS.md, *Roles*).
 
 | Kind | Icon (Heroicons' outline) | Takes | Gives |
 | --- | --- | --- | --- |
-| 3D structure | a cube | structures | molecules in 3D - the same kind of set |
-| Conformers | a stack of layers | molecules in 3D | **a conformer set**: each compound's conformers |
+| Conformers | a stack of layers | structures drawn, or molecules in 3D | **a conformer set**: each compound's conformers |
 | Optimise | a trend going down | molecules in 3D | each optimised, its path as frames - the same kind of set |
 | Energy | a bolt | molecules in 3D | each with its energy - the same kind of set |
 | Frequencies | a signal | molecules in 3D | each with its vibrations and thermal corrections - the same kind of set |
@@ -212,13 +239,15 @@ new kind comes with Meno, as a new role does (PLUGINS.md, *Roles*).
 | Duplicates | two squares, one over the other | molecules in 3D | each unlike the others of its compound kept; the rest set aside - the same kind of set |
 | Populations | bars | a conformer set, with energies | each with its Boltzmann population within its compound |
 | As conformers | shapes grouped | a compound set of molecules in 3D | **a conformer set**: entries of the same constitution - the same atoms, bonded the same way - as conformers of one compound |
+| Choose one | a pointer choosing | a conformer set | **a compound set**: one conformer of each compound - its lowest in energy, or one by its number; the rest set aside |
 
-The first five run a program; the last four work on a set's entries
+The first four run a program; the last five work on a set's entries
 alone (*Who does a step*). A step that keeps a set keeps its kind: a
-conformer set optimised is still one. More kinds come with Meno as they
-are needed - a free energy from an energy and its corrections, the
-lowest of each compound, a template input written out - each specified
-before it is built.
+conformer set optimised is still one. A plugin's step may take less than
+its kind (PLUGINS.md, `takes`): CREST's *Conformers* starts from
+molecules in 3D only. More kinds come with Meno as they are needed - a
+free energy from an energy and its corrections, a template input written
+out - each specified before it is built.
 
 ### Who does a step
 
@@ -226,7 +255,7 @@ A step is the step of what does it - a plugin added, or Meno - and of
 one of the kinds of calculation it does (decided: 16):
 
 - **Meno does the simple steps itself** - *Energy window*,
-  *Populations*, *As conformers*, and *Duplicates* in a plain way (the
+  *Populations*, *As conformers*, *Choose one*, and *Duplicates* in a plain way (the
   RMSD of the entries' atoms in their own order, after the best fit; it
   does not see symmetric atoms swapped, so two copies of a structure
   numbered differently can both be kept). Meno's part is there from the
@@ -268,7 +297,8 @@ one of the kinds of calculation it does (decided: 16):
   take it are lit in the accent; the others stay as they are.
 - **What may join**: what a port gives to a port that takes it (*Kinds of
   step*). Nothing is converted on the way: a set of structures does not
-  go into *Optimise* - a *3D structure* step goes between, on the page;
+  go into *Optimise* - *Conformers* and *Choose one* go between, on the
+  page;
   a compound set does not go into *Populations* - *As conformers* goes
   between, or a *Conformers* step.
 - **One port may feed several steps**; a port that takes, one wire. A
@@ -329,14 +359,14 @@ Conformers go through a workflow as any set does (decided):
 - **Steps work entry by entry**, or compound by compound where the kind
   says so: *Optimise* each entry; *Energy window* and *Populations*
   within each compound of a conformer set.
-- **What a step sets aside is kept**, struck through in its set, not
-  deleted, so that a window made
-  wider brings it back on the next run.
+- **What a step sets aside is kept** with its set, not deleted, so that a
+  window made wider brings it back on the next run; the set's count says
+  how many of how many it holds (*23 of 81*).
 - **On the page**, a conformer set's compound is shown as one molecule in
   3D with its conformers as frames - the conformer set Meno draws today,
   its chip saying the entry, its energy and population; entries set aside
-  are not among its frames, and are listed, struck through, in its set.
-  A compound set's entries are separate molecules, each its own.
+  are not among its frames. A compound set's entries are separate
+  molecules, each its own.
 - **A set's tab says which it is**: *Compounds · 2*, *Conformers · 2
   compounds · 81*.
 
@@ -350,8 +380,8 @@ Conformers go through a workflow as any set does (decided):
 | | *Run from here* - this step and every step after it |
 | | *Stop* - while it is waiting or running |
 | | *Show log*, *Show files*, *Options…*, *Delete step* |
-| Meno's menu | *Run all* - every step on the page that has not run or has changed, in order |
-| | *Stop all* |
+| The menu on empty space | *Run all* - every step on the page that has not run or has changed, in order |
+| | *Stop all* - while any runs |
 
 No key starts a run (decided: menus, at first). Steps run in the order
 their wires give; steps that do not depend on one another may run at
@@ -536,7 +566,8 @@ gave), and one can be shown again.
 - **Opening an output** keeps working as now; an output read is a
   molecule like any other, and can be put in a set.
 - **RDKit's conformers** (*3D structures*) stay as they are; in a
-  workflow, RDKit fills *3D structure* and *Conformers*.
+  workflow, RDKit fills *Conformers*, from a drawing as from molecules in
+  3D.
 
 ## In order
 
@@ -754,7 +785,8 @@ Not yet, and where it comes:
 
 Built: *Run from here* in a step's menu - the step and every step after
 it, those that take what it gives and those after them; *Run all* and
-*Stop all* in Meno's menu, under *Calculations* - every step that has not
+*Stop all* in Meno's menu, under *Calculations* (on the right-click menu
+on empty space since 2026-10-10) - every step that has not
 run or has changed, in the order their wires give; steps that do not wait
 on one another run at once, their jobs queued as Settings allows; a step
 after one that failed is not run. A step keeps its earlier runs: opened,
@@ -1036,6 +1068,78 @@ Decided while building it, for the maintainer to confirm:
 - **Quick Add offers every procedure saved**: one that needs a plugin
   not added is shown, but cannot be put down, and says what it needs.
   A wire let go on empty space offers none.
+
+### The look, and conformers chosen on purpose (2026-10-10)
+
+Built, as the maintainer chose from pictures (decided: 18, 19):
+
+- **Sets**: the name and count inside the frame, along its top - the top
+  drags the set; no list of entries (the frames chip says each
+  conformer's energy and population); a set made from the selection is
+  made round what is drawn, labels included (an OH reaches past its O); a
+  result set is as large as its molecules reach, each in any of its
+  frames as it is turned, with room for its frames chip below it, and no
+  larger than its name needs.
+- **Steps' cards**: the icons in a column of their own - what it does,
+  and its state's beside its state - and no rule; what it does and how,
+  whole, on two lines where it needs them. A step Meno does may say its
+  options its own way (*Choose one*: *Lowest in energy*, *Number 3*).
+- **Chips on the page** (*How it looks*): drawn at the page's scale -
+  `--page`, set on the layer the page's HTML is drawn in each time the
+  zoom changes - from where each hangs, and faded out below 75 %, with
+  the sets' names and the cards' words (`utils/pageScale`).
+- **Quick Add** opens where it will stay as a panel opens below its row -
+  its calculations, or the field a SMILES is typed in: its side is chosen
+  once, for its largest, and it is held by its top left corner, so that
+  nothing in it moves as the panel grows (`quickAddPlace.ts`).
+- **No *3D structure* step**: *Conformers* takes structures drawn - RDKit's
+  search, in its worker, as *3D structures* on the canvas makes them (the
+  first stereoisomer, where the drawing leaves one open), with the step's
+  own options - and *Choose one*, Meno's, takes one conformer of each
+  compound. A plugin's step says in its manifest what it takes where it
+  takes less than its kind (`takes`: CREST's search starts from 3D).
+
+Decided while building it, for the maintainer to confirm:
+
+- **What *Choose one* ranked by** is said in its card: the conformer
+  chosen, of how many, and the program and method that worked out the
+  energies, as the molecule's calculation says them (*#1 of 9, lowest ·
+  RDKit · MMFF94*). Chosen by its number, the energies are not used and
+  not said.
+- **A conformer search from a drawing runs in the plugin's worker**, as
+  on the canvas, not as a job: it does not go on when Meno closes. A
+  search on molecules in 3D is still a job.
+- **The conformers it chose from are set aside**, kept with the set as
+  any step's are: the set's count says *1 compound · 1 of 9*.
+
+Then, of the leftovers the maintainer chose:
+
+- **A set grows to keep a structure drawn on in it inside it** - an atom
+  added past its edge, one moved on its own, one made another element -
+  as part of the same edit, one step to undo (`fitSets`, settled on each
+  edit of the workspace's document). A structure moved whole, and a frame
+  sized anew, leave it as it is: one is dragged out of a set, and a set
+  made smaller than what it holds, on purpose.
+- **Sets, steps and wires fade out as they go**, as they fade in; a
+  deleted one is left as it was, taking no pointer, for the fade.
+- **A thin bar on a running card** fills as its jobs end, where it runs
+  several (*Running · 3 of 9*). A single job's program saying how far it
+  is comes where a program's documentation says how it says it.
+- **CREST optimises a set of conformers in one run** (*Optimise*, `crest
+  --mdopt`, as its documentation's "Ensemble Optimization" has it): the
+  entries of each molecule written into one ensemble file, optimised, and
+  read back from `crest_ensemble.xyz` in the order they went, each with
+  its energy. GFN2-xTB, GFN1-xTB or GFN-FF, and a solvent; one method,
+  not the search's two.
+- **Each conformer's population, as CREST works it out**: the weight of
+  each conformer's set of rotamers in the table CREGEN prints, read by the
+  plugin and given back as the output form's `populations`, which a
+  conformer set takes as its molecule's shares - what its chip shows -
+  in place of Boltzmann's at room temperature from the energies alone.
+  CREST counts a conformer's rotamers in, which Meno cannot.
+
+Not backward compatible: a workspace or procedure saved with a *3D
+structure* step opens without that step (no shim before 1.0).
 
 ## Questions
 

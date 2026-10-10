@@ -1,4 +1,4 @@
-import type { ImportedScheme, MarkPlaces, Relayout, WrittenAsLabel } from "../document";
+import type { ImportedScheme, MarkOf, MarkPlaces, Relayout, WrittenAsLabel } from "../document";
 import type { SetKind, StepKind } from "../workflow/kinds";
 import type { OptionValues } from "../../../../lib/options";
 import type { ArrowLook } from "../../../../lib/chem/reactionArrow";
@@ -24,7 +24,19 @@ export type Atom = EditorAtom & {
    * with no wedge: it is read from where its bonds point (lib/layout/drawn).
    */
   stereoCentre?: boolean;
+  /**
+   * Where its charge - with a radical's dots - was put by hand: its middle,
+   * from the atom, in ems of the drawing's labels. Unset, where the drawing
+   * puts it (lib/chem/layout2d).
+   */
+  chargeAt?: MarkAt;
+  /** Where its R or S was put by hand, likewise (chem/marks). */
+  stereoAt?: MarkAt;
+  /** What was typed for its label, where it was read as something else (obz, read as OBz): had back from its menu. */
+  typed?: string;
 };
+/** Where a mark was put by hand: its middle, from what it is of - an atom, a bond's middle - in ems of the drawing's labels. */
+export type MarkAt = { x: number; y: number };
 export type Bond = BondChem & {
   id: number;
   a: number;
@@ -43,6 +55,8 @@ export type Bond = BondChem & {
   display?: "plain" | "bold" | "hashed" | "dashed" | "wedge";
   /** A dative bond, drawn as an arrow from `a`, the donor, to `b`. */
   dative?: boolean;
+  /** Where its E or Z - an axis's Ra or Sa - was put by hand, from the bond's middle (`MarkAt`). */
+  stereoAt?: MarkAt;
 };
 
 import type { FlowParts } from "../workflow/parts";
@@ -63,6 +77,9 @@ export type Arrow = {
 };
 /** A "+" between two structures of a reaction scheme: where its middle is. */
 export type Plus = { id: number; x: number; y: number };
+/** A press on words on the page that opens them to be written: where on the page, where on the screen and when - and whether a drag goes on from it. */
+export type CaptionPress = { at: { x: number; y: number }; client: { x: number; y: number }; t: number; drag: boolean };
+
 /**
  * Words on the page - a reaction's reagents and conditions, or anything
  * else - where their middle is (lib/chem/captions); over or under an arrow,
@@ -633,15 +650,43 @@ export type EditorState = {
   updatePicture: (id: number, patch: Partial<Pick<PictureItem, "x" | "y" | "w" | "h" | "turn">>, gesture?: string) => void;
   removePicture: (id: number) => void;
   setHoveredCaption: (id: number | null) => void;
+  /** Words on the page selected, each as one thing (a long press on them): deleted, copied and moved with the rest of the selection. */
+  selCaptions: Set<number>;
+  /** These words selected: alone, or (`add`) besides what is already. */
+  selectCaptions: (ids: Iterable<number>, add?: boolean) => void;
+  /**
+   * A charge, an R or S, an E or Z put where a hand put it - `at`, from what
+   * it is of, in ems of the drawing's labels - or (null) back where the
+   * drawing puts it; a run of changes in one gesture one step.
+   */
+  putMark: (of: MarkOf, at: MarkAt | null, gesture?: string) => void;
+  /** The mark under the pointer: a charge or an R or S of an atom, or an E or Z of a bond. */
+  hoveredMark: MarkOf | null;
+  setHoveredMark: (mark: MarkOf | null) => void;
   /** Words on the page. */
   captions: Caption[];
   nextCaptionId: number;
   /**
    * Words being written, in place: the caption's, or (null) new ones where
-   * `at` is - where Quick Add or the menu was opened.
+   * `at` is - where Quick Add or the menu was opened. Each writing its own
+   * `n`, given as it opens. `drawn` once the words being written are drawn,
+   * in place of the caption's own. `press`, where a press on the caption's
+   * words opened it: the caret put there - and a drag (`drag`) selecting on
+   * from there - as if it had pressed there among them.
    */
-  captionEdit: { id: number | null; at: { x: number; y: number } } | null;
+  captionEdit: { id: number | null; at: { x: number; y: number }; n?: number; drawn?: boolean; press?: CaptionPress } | null;
   setCaptionEdit: (edit: EditorState["captionEdit"]) => void;
+  /** The words being written, drawn in place of their caption's own: from now. */
+  markCaptionDrawn: (n: number) => void;
+  /**
+   * Words written, kept or let go - the caption they are now (`id`), or
+   * none - drawn as they were written until the caption's own are drawn
+   * (`captionLeft`), so that the words never go from the page for a frame.
+   */
+  leaveCaptionEdit: (n: number, id: number | null) => void;
+  captionLeft: { id: number; n: number; at: { x: number; y: number } } | null;
+  /** The caption's own words drawn again: what was written no longer drawn over them. */
+  captionShown: (id: number) => void;
   /** Words added, as one step - taken out of a PDF, where they came from, as wide as their lines were and lying as they did; their id. */
   addCaption: (text: string, x: number, y: number, arrow?: number, from?: WordsFrom, width?: number, align?: Caption["align"]) => number;
   /**
@@ -669,6 +714,12 @@ export type EditorState = {
     wire?: WireEnd;
   } | null;
   setQuickAdd: (q: EditorState["quickAdd"]) => void;
+  /**
+   * A double-click on empty space: Quick Add there - or, with the column
+   * open beside the canvas, the column shut, the work coming back to the
+   * canvas (the maintainer, 2026-10-10).
+   */
+  doubleClickOnEmpty: (q: NonNullable<EditorState["quickAdd"]>) => void;
   /** A workflow on the page (docs/WORKFLOWS.md): its sets, steps and wires. */
   sets: WorkflowSet[];
   steps: WorkflowStep[];
@@ -749,10 +800,19 @@ export type EditorState = {
     active: boolean;
     atomId: number | null;
     value: string;
-    autoCap: boolean;
     /** When it was begun, and with what: a double-click takes back one its first click began. */
     opened?: { at: number; value: string };
+    /** Each edit its own number, given as it begins. */
+    n?: number;
   };
+  /**
+   * A label just written, drawn as it was written until the drawing's own is
+   * drawn in its place (LabelTyping2D), so that it never goes from the page
+   * for a frame: its atom, its edit's number, what it says.
+   */
+  labelLeft: { atomId: number; n: number; text: string } | null;
+  /** The drawing's labels drawn again: a label just written no longer drawn over its own. */
+  labelShown: () => void;
   moveDrag: {
     active: boolean;
     atomId: number | null;
@@ -990,13 +1050,13 @@ export type EditorState = {
     tol?: number,
     excludeId?: number | null,
   ) => number | null;
-  beginLabelEdit: (
-    atomId: number,
-    initial?: string,
-    forceLower?: boolean,
-  ) => void;
+  /** An atom's label opened to be written: as it is, or begun with `initial`, a letter typed over it. */
+  beginLabelEdit: (atomId: number, initial?: string) => void;
   setLabelEditValue: (value: string) => void;
-  commitLabelEdit: () => void;
+  /** The label written kept; `typed`, what was typed for it, where it is read as something else. */
+  commitLabelEdit: (typed?: string) => void;
+  /** An atom's label made what was typed for it, read as nothing else: obz, not OBz - one step. */
+  labelAsTyped: (atomId: number) => void;
   cancelLabelEdit: () => void;
   setAromaticEnabled: (v: boolean) => void;
   /**

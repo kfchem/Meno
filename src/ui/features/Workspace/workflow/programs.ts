@@ -157,12 +157,15 @@ export function conformersWorked(entry: SetEntry, out: ReaderOutput, readers: re
   const frames = out.frames.filter((f) => f.length === 3 * n && f.every(Number.isFinite));
   if (!frames.length) return "It found no conformer";
   const energies = out.energies?.length === frames.length && out.energies.every(Number.isFinite) ? out.energies : undefined;
+  // (the program's own populations, where it gives one for each)
+  const shares = out.populations?.length === frames.length && out.populations.every((p) => Number.isFinite(p) && p >= 0) ? out.populations : undefined;
   const calc = calcOf(out, readers, source);
   return frames.map((f, k) => ({
     ...entry,
     number: k + 1,
     xyz: [...f],
     ...(energies ? { energy: energies[k] } : {}),
+    ...(shares ? { share: shares[k] } : {}),
     ...(k === 0 ? { calc } : {}),
   }));
 }

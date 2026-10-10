@@ -85,3 +85,26 @@ describe("the texts a workspace holds", () => {
     expect(isBlankDocument(solid.doc.getState())).toBe(false);
   });
 });
+
+describe("a double-click on empty space", () => {
+  const quick = { at: { x: 1, y: 2 }, x: 10, y: 20, within: { width: 800, height: 600 } };
+
+  it("opens Quick Add there", () => {
+    const { state } = editor();
+    state().doubleClickOnEmpty(quick);
+    expect(state().quickAdd).toEqual(quick);
+  });
+
+  it("shuts the column instead, while it is open - the work coming back to the canvas - and opens Quick Add the next time", () => {
+    const { state } = editor();
+    state().addTexts([{ name: "notes.txt", text: "x" }], { x: 0, y: 0 });
+    expect(state().textsOpen).toBe(true);
+    state().doubleClickOnEmpty(quick);
+    expect(state().textsOpen).toBe(false);
+    expect(state().quickAdd).toBeNull();
+    // (the text kept, its sheet on the page)
+    expect(state().texts).toHaveLength(1);
+    state().doubleClickOnEmpty(quick);
+    expect(state().quickAdd).toEqual(quick);
+  });
+});

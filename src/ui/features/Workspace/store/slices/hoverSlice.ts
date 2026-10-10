@@ -47,6 +47,11 @@ export function createHoverSlice(set: SetState) {
         prev.hoveredPlus === id ? prev : { ...prev, hoveredPlus: id },
       ),
 
+    setHoveredMark: (mark: EditorState["hoveredMark"]) =>
+      set((prev: EditorState) =>
+        JSON.stringify(prev.hoveredMark) === JSON.stringify(mark) ? prev : { ...prev, hoveredMark: mark },
+      ),
+
     clearAtomHover: () =>
       set((prev: EditorState) => ({
         ...prev,

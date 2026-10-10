@@ -3,7 +3,7 @@ import {
   BoltIcon,
   ChartBarIcon,
   CpuChipIcon,
-  CubeIcon,
+  CursorArrowRaysIcon,
   FunnelIcon,
   QueueListIcon,
   RectangleGroupIcon,
@@ -21,7 +21,6 @@ type Icon = ComponentType<SVGProps<SVGSVGElement>>;
  * Heroicons' outline set, the icons Meno uses elsewhere (*How it looks*).
  */
 const ICONS: Record<StepIcon, Icon> = {
-  cube: CubeIcon,
   rings: Square3Stack3DIcon,
   curve: ArrowTrendingDownIcon,
   level: BoltIcon,
@@ -30,6 +29,7 @@ const ICONS: Record<StepIcon, Icon> = {
   twins: Square2StackIcon,
   bars: ChartBarIcon,
   "grouped": RectangleGroupIcon,
+  pointer: CursorArrowRaysIcon,
 };
 
 /** A kind of step's icon, `size` px square; `stroke`, its lines' weight, as Heroicons' 24-unit square has them. */

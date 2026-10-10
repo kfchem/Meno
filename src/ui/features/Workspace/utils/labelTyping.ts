@@ -11,6 +11,10 @@
  * once the text is committed.
  */
 
+import { abbreviationOf } from "../../../../lib/chem/abbreviations";
+import type { Reading } from "../../../../lib/chem/smartLabel";
+import { isElementSymbol } from "../../../../lib/roles/molblock";
+
 type KeyLike = { key: string; code?: string; keyCode?: number; isComposing?: boolean };
 
 /** The letter a key pressed over an atom starts its label with, or null. */
@@ -27,14 +31,22 @@ export function labelKey(e: KeyLike): string | null {
 }
 
 /**
- * The label as typed, once committed: full-width letters and digits as the
- * ordinary ones (an input method's ＣＯＯＨ is COOH), and the first letter
- * capitalised where it is to be.
+ * What a label reads as (lib/chem/smartLabel `Reading`): an element - with
+ * its H, its charge, its mass number - or a charge alone, an Rgroup, or
+ * what the abbreviations read - Meno's, the user's own, those put together
+ * by rule - part of a structure; a reagent or a complex, a whole molecule.
+ * A group named as an element is - Ac, Pr, Ts, Fm, At - is the group (the
+ * maintainer, 2026-10-10).
  */
-export function typedLabel(value: string, autoCap: boolean): string {
-  const v = value.normalize("NFKC");
-  if (!v.length || !autoCap) return v;
-  return v[0].toUpperCase() + v.slice(1);
+export function labelReading(label: string): Reading {
+  if (!label) return null;
+  const read = readLabel(label, isElementSymbol);
+  const named = abbreviationOf(label);
+  if (read.kind === "element" && named && isElementSymbol(label)) return { whole: false };
+  if (read.kind !== "text") return { whole: false, ...(read.kind === "element" ? { element: read.el } : {}) };
+  if (/^R\d+$/.test(label)) return { whole: false };
+  if (!named) return null;
+  return { whole: named.kind === "reagent" || named.kind === "complex" };
 }
 
 /**

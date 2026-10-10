@@ -1,8 +1,7 @@
 import clsx from "clsx";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { WorkflowSet } from "../store/types";
-import type { ListRow } from "./list";
-import { SET_PAD, SET_TOP, PX, ROW } from "./look";
+import { NAME_DOWN, SET_PAD, PX } from "./look";
 import { HAIR, Port, type PortLook } from "./StepCard";
 
 /** How wide the band along a frame's edge is that a press takes to size it, in px. */
@@ -15,9 +14,10 @@ export type SetFrameProps = {
   /** Its tab's name and count: "Input", "1 structure". */
   name: string;
   count: string;
-  rows: ListRow[];
   hovered: boolean;
   chosen: boolean;
+  /** Its words too small to read at this zoom: its frame alone, and what it holds. */
+  compact: boolean;
   /** Its port that gives; and, made by a step, the one that takes from it. */
   give: PortLook;
   onTabDown: (e: ReactPointerEvent) => void;
@@ -31,11 +31,11 @@ const cursorOf: Record<Edge, string> = { n: "ns-resize", s: "ns-resize", e: "ew-
 
 /**
  * A set (docs/WORKFLOWS.md, *What is on the page*), drawn as Meno's cards
- * are: a rounded frame a hair thick, its name and count on a tab at its top
- * left - its tab drags it, with all it holds; its edges and corners size
- * it - and a port on its right edge that gives. Its frame darker while its
- * tab is under the pointer, in the accent while it is chosen. A list of its
- * entries, where it has one, under its tab.
+ * are: a rounded frame a hair thick, its name and count along its top,
+ * inside it - its top drags it, with all it holds; its edges and corners
+ * size it - and a port half-way down its right edge that gives (and, made
+ * by a step, one on its left that takes). Its frame darker while its top
+ * is under the pointer, in the accent while it is chosen.
  */
 export default function SetFrame(p: SetFrameProps) {
   const w = (p.set.x1 - p.set.x0) / PX;
@@ -63,31 +63,14 @@ export default function SetFrame(p: SetFrameProps) {
         onPointerDown={p.onTabDown}
         onPointerEnter={() => p.onHover(true)}
         onPointerLeave={() => p.onHover(false)}
-        className={clsx(
-          "absolute flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[11px] transition-colors duration-150 ease-meno",
-          line,
-          p.hovered ? "bg-gh-base" : "bg-white",
-        )}
-        style={{ ...hair, left: 12, top: -10, height: 20, pointerEvents: "auto", cursor: "default" }}
+        className="absolute flex items-center gap-1.5 whitespace-nowrap overflow-hidden text-[11px] leading-4"
+        style={{ left: 0, right: 0, top: 0, height: (2 * NAME_DOWN) / PX, paddingLeft: SET_PAD / PX, paddingRight: SET_PAD / PX, pointerEvents: "auto", cursor: "default" }}
       >
-        <span className="font-medium text-gh-black">{p.name}</span>
-        <span className="text-gh-gray">{p.count}</span>
+        <span className={clsx("flex items-center gap-1.5 transition-opacity duration-150 ease-meno", p.compact && "opacity-0")}>
+          <span className="font-medium text-gh-black">{p.name}</span>
+          <span className="text-gh-gray">{p.count}</span>
+        </span>
       </div>
-      {p.rows.length > 0 && (
-        <div className="absolute tabular-nums" style={{ left: SET_PAD / PX, right: SET_PAD / PX, top: SET_TOP / PX - 8 }}>
-          {p.rows.map((r, i) => (
-            <div
-              key={i}
-              className={clsx("flex gap-2 text-[11px]", r.aside ? "text-gh-gray line-through" : "text-gh-black")}
-              style={{ height: ROW / PX, lineHeight: `${ROW / PX}px` }}
-            >
-              <span className={clsx("flex-1 truncate", r.more && "text-gh-gray no-underline")}>{r.label}</span>
-              <span className="w-14 text-right">{r.energy ?? ""}</span>
-              <span className="w-12 text-right">{r.share ?? ""}</span>
-            </div>
-          ))}
-        </div>
-      )}
       <Port look={p.give} label={`Out of ${p.name}`} data={{ "data-give-set": String(p.set.id) }} onPointerDown={p.onGiveDown} style={{ left: w, top: h / 2 }} />
       {p.set.made && <Port look="plain" label={`Into ${p.name}`} data={{}} onPointerDown={(e) => e.stopPropagation()} style={{ left: 0, top: h / 2, pointerEvents: "none" }} />}
     </div>
