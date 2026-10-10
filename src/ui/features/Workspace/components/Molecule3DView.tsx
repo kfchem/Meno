@@ -947,6 +947,14 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       }
     }
     dirty.current = false;
+    // how far an atom reaches as drawn - its ball, or, where its chain is a
+    // ribbon, the ribbon about its backbone atom: what the chips beside the
+    // molecule keep clear of
+    const ribbonReach = ribbonsShown ? ribbonScale : 0;
+    const reachOf = (i: number) => {
+      const r = radius(i);
+      return r > 0 ? r : solid.extent[look][i] > 0 ? solid.extent[look][i] * ribbonReach : 0;
+    };
     // the mark of hydrogens left out: just above it on the page
     if (markAnchor.current) {
       const g = Math.max(grown.current.v, 1e-3);
@@ -954,7 +962,7 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       const v = new THREE.Vector3();
       let high = -Infinity;
       for (let i = 0; i < n; i++) {
-        const r = radius(i);
+        const r = reachOf(i);
         if (r <= 0) continue;
         v.set(p[3 * i], p[3 * i + 1], p[3 * i + 2]).applyQuaternion(shownTurn.current!);
         const seen = seenAt(at.x + v.x, at.y + v.y, at.z + v.z, eye);
@@ -976,10 +984,11 @@ export default function Molecule3DView(props: Molecule3DViewProps) {
       let low = Infinity;
       for (let i = 0; i < n; i++) {
         // (an atom its look leaves out is not its lowest)
-        if (radius(i) <= 0) continue;
+        const r = reachOf(i);
+        if (r <= 0) continue;
         v.set(p[3 * i], p[3 * i + 1], p[3 * i + 2]).applyQuaternion(shownTurn.current!);
         const seen = seenAt(at.x + v.x, at.y + v.y, at.z + v.z, eye);
-        low = Math.min(low, seen.y - radius(i) * seen.k);
+        low = Math.min(low, seen.y - r * seen.k);
       }
       const below = low - at.y;
       pillAt.current = pillAt.current == null || reshaped ? below : follow(pillAt.current, below, step, PILL_TAU);
