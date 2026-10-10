@@ -85,7 +85,7 @@ export function useStructureEvents(
     const a = result.arrow;
     const solids = (result.molecules3d ?? []).map((m) => ({ ...m, id: 0, at }));
     const style = currentStyle3D();
-    const reaches = solids.map((m) => solidOf(m, style).reach[lookOf(m, style)]);
+    const reaches = solids.map((m) => solidOf(m, style).reach[lookOf(m)]);
     // (beside a drawing the same file brings, to its right)
     const drawn = result.model?.atoms ?? [];
     const places = drawn.length

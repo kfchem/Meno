@@ -117,8 +117,9 @@ export default function SettingsPanel() {
             </h2>
             <p className="mt-1 mb-4 text-sm text-gh-gray max-w-2xl">
               How molecules in 3D look, on the canvas and in exported pictures,
-              and how they turn under the pointer. Changes are saved as you
-              make them.
+              and how they turn under the pointer. A molecule is drawn in the
+              primary style; a double-click takes it to the secondary and back.
+              Changes are saved as you make them.
             </p>
             <Style3DEditor
               choice={style3d}

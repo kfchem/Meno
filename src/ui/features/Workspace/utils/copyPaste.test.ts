@@ -127,7 +127,7 @@ describe("molecules in 3D on the clipboard", () => {
     ],
     at: { x: 4, y: 2 },
     frames: [[1, 1, 1, 1.8, 1.6, 1, 0.2, 1.6, 1]],
-    look: "space" as const,
+    look: "secondary" as const,
     measures: [{ id: 1, atoms: [1, 0, 2] }],
     name: "water.xyz",
     turn: [0, 0, Math.SQRT1_2, Math.SQRT1_2] as [number, number, number, number],

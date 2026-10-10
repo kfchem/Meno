@@ -3,10 +3,10 @@ import { setCursor } from "../../../theme/cursors";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { addsToSelection } from "../../../../lib/doc/shortcuts";
-import { KEY_LIGHT_FROM, STYLE_3D, type Style3D } from "../../../../lib/chem/style3d";
+import { bondRadiusOf, KEY_LIGHT_FROM, STYLE_3D, type Style3D } from "../../../../lib/chem/style3d";
 import { LONG_PRESS_MS, MOV_PX } from "../constants";
 import { useEditor, useEditorStore } from "../store";
-import type { Molecule3D, Turn3D } from "../store/types";
+import type { EditorState, Molecule3D, Turn3D } from "../store/types";
 import { atomAt, bondAt, lookOf, nearestAtom, onMolecule, poseOf, seenBounds, solidOf } from "../utils/molecule3d";
 import { setViewGoal } from "./viewGoal";
 import { Remake3D } from "./remake3d";
@@ -98,6 +98,9 @@ type Going = Exclude<Gesture, { kind: "press" }>;
  * - A click on an atom or a bond chooses it, for a measurement, or lets it
  *   go; with Ctrl (⌘ on a Mac), it takes the molecule into the selection,
  *   or out of it.
+ * - A double-click switches it to its other look - the 3D style's
+ *   secondary, or back to its primary - and those selected with it; what
+ *   its first click chose is let go again (the maintainer, 2026-10-10).
  * The page itself never tilts, so a drawing beside it stays as drawn.
  */
 export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
@@ -149,6 +152,9 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
   // molecules turning on by themselves: about which axis, how fast (rad/s)
   const spins = useRef(new Map<number, { axis: THREE.Vector3; speed: number }>());
   const gesture = useRef<Gesture | null>(null);
+  // what was chosen before each of the last two presses on a molecule: a
+  // double-click puts back what its first click changed
+  const chosenBefore = useRef<EditorState["chosen3d"][]>([null, null]);
   const [active, setActive] = useState<{ kind: "turn" | "move"; group: number[] } | null>(null);
   // a press being held on a molecule: the atom its selection spreads from, and since when
   const [hold, setHold] = useState<{ id: number; from: number; start: number } | null>(null);
@@ -176,7 +182,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     };
     const poseNow = (m: Molecule3D) => {
       const st = store.getState();
-      return poseOf(m, solidOf(m, style), lookOf(m, style), st.turns3d[m.id], st.frames3d[m.id]);
+      return poseOf(m, solidOf(m, style), lookOf(m), st.turns3d[m.id], st.frames3d[m.id]);
     };
     // the molecule the pointer is on: the last placed, on top
     const hit = (e: PointerEvent): { id: number } | null => {
@@ -184,7 +190,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       const st = store.getState();
       for (let i = st.molecules3d.length - 1; i >= 0; i--) {
         const m = st.molecules3d[i];
-        if (onMolecule(m, poseNow(m), eyeOf(camera), p.x, p.y, camera.zoom, style.bondRadius)) return { id: m.id };
+        if (onMolecule(m, poseNow(m), eyeOf(camera), p.x, p.y, camera.zoom, bondRadiusOf(style[lookOf(m)]))) return { id: m.id };
       }
       return null;
     };
@@ -325,6 +331,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       const h = store.getState().hovered3d;
       if (!h) return;
       const st = store.getState();
+      chosenBefore.current = [chosenBefore.current[1], st.chosen3d];
       const m = st.molecules3d.find((x) => x.id === h.id);
       if (!m) return;
       e.stopPropagation();
@@ -334,8 +341,8 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       const p = pageOf(e);
       const pose = poseNow(m);
       const atom = atomAt(pose, eyeOf(camera), p.x, p.y);
-      const look = lookOf(m, style);
-      const bond = atom == null && look === "balls" ? bondAt(m, pose, eyeOf(camera), p.x, p.y, style.bondRadius) : null;
+      const look = lookOf(m);
+      const bond = atom == null && style[look].atoms === "balls" ? bondAt(m, pose, eyeOf(camera), p.x, p.y, style[look].bondRadius) : null;
       const press: Press = { id: m.id, group: [m.id], pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, atom, bond, add: addsToSelection(e), moved: false };
       // held still, it selects the molecule - spreading out from the atom pressed on
       const selected = st.sel3d.has(m.id);
@@ -389,6 +396,20 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
       invalidate();
     };
 
+    // a double-click: the molecule - and those selected with it - in its
+    // other look; not on a measurement's value, which is the measurement's
+    const onDouble = (e: MouseEvent) => {
+      if (addsToSelection(e) || e.shiftKey) return;
+      const p = e as PointerEvent;
+      if (labelAt(p)) return;
+      const h = hit(p);
+      if (!h) return;
+      e.stopPropagation();
+      store.setState({ chosen3d: chosenBefore.current[0] });
+      store.getState().switchLook3d(h.id);
+      invalidate();
+    };
+
     const onLeave = () => {
       if (gesture.current) return;
       store.getState().setHovered3d(null);
@@ -400,7 +421,9 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     dom.addEventListener("pointerup", onUp);
     dom.addEventListener("pointercancel", onUp);
     dom.addEventListener("pointerleave", onLeave);
+    dom.addEventListener("dblclick", onDouble);
     return () => {
+      dom.removeEventListener("dblclick", onDouble);
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerdown", onDown);
       dom.removeEventListener("pointerup", onUp);
@@ -457,7 +480,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
     const r = dom.getBoundingClientRect();
     if (bottom <= r.bottom - ROOM_PX) return;
     const st = store.getState();
-    const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m, style), st.turns3d[m.id], st.frames3d[m.id]), eyeOf(camera));
+    const b = seenBounds(poseOf(m, solidOf(m, style), lookOf(m), st.turns3d[m.id], st.frames3d[m.id]), eyeOf(camera));
     // (how far below the molecule the list reaches, which no zoom changes)
     const under = bottom - (r.top + r.height / 2 - (b.minY - cam.position.y) * cam.zoom);
     const zoom = Math.max(cam.zoom / 4, Math.min(cam.zoom, (r.height - 2 * ROOM_PX - under) / Math.max(b.maxY - b.minY, 1e-3)));
@@ -494,7 +517,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
             key={m.id}
             m={m}
             style={style}
-            look={lookOf(m, style)}
+            look={lookOf(m)}
             frame={frames[m.id] ?? 0}
             turn={turns[m.id]}
             lit={litOf(m.id)}
@@ -553,7 +576,7 @@ export default function Molecules3D({ style = STYLE_3D }: { style?: Style3D }) {
           key={`leaving-${m.id}`}
           m={m}
           style={style}
-          look={lookOf(m, style)}
+          look={lookOf(m)}
           frame={frame}
           turn={turn}
           lit={0}
