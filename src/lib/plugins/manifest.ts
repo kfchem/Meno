@@ -94,7 +94,15 @@ export type WriteDecl = {
  * worker; and its options, in the general form (lib/options), which Meno
  * draws in the step and in Settings, *Calculations*.
  */
-export type StepDecl = { kind: string; programs: string[]; options: Option[] };
+/** What flows into a step: structures drawn, molecules in 3D, conformer sets (the workspace's SetKind). */
+export const STEP_TAKES = ["structures", "molecules", "conformers"] as const;
+/**
+ * A kind of step a plugin fills: the kind, the programs it runs, its
+ * options - and, where it takes less than the kind does, what it takes
+ * (`takes`: CREST's conformer search, molecules in 3D and conformer sets,
+ * not structures drawn).
+ */
+export type StepDecl = { kind: string; programs: string[]; options: Option[]; takes?: (typeof STEP_TAKES)[number][] };
 
 /** The systems Meno runs on, as a plugin names those it can be added on. */
 export const SYSTEMS = ["macos", "windows", "linux"] as const;
@@ -228,7 +236,8 @@ function stepOf(v: unknown): StepDecl | null {
   const kind = typeof s?.kind === "string" && ID.test(s.kind) ? s.kind : null;
   if (!kind) return null;
   const programs = Array.isArray(s?.programs) ? s.programs.filter((p): p is string => typeof p === "string" && PROGRAM.test(p)) : [];
-  return { kind, programs: [...new Set(programs)], options: acceptOptions(s?.options) };
+  const takes = Array.isArray(s?.takes) ? STEP_TAKES.filter((t) => (s.takes as unknown[]).includes(t)) : undefined;
+  return { kind, programs: [...new Set(programs)], options: acceptOptions(s?.options), ...(takes?.length ? { takes } : {}) };
 }
 
 /** A program's file, as a system has it: a name, not a path. */

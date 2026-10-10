@@ -1,12 +1,12 @@
 /**
  * The steps Meno does itself (docs/WORKFLOWS.md, *Who does a step*), on a
- * set's entries alone: *As conformers*, *Energy window*, *Duplicates* and
- * *Populations* - written for Meno from the specification and the
+ * set's entries alone: *As conformers*, *Energy window*, *Duplicates*,
+ * *Populations* and *Choose one* - written for Meno from the specification and the
  * published methods. Each takes the entries that came in and says which
  * it keeps, which it sets aside, and what it found; or why it could not.
  */
 import type { OptionValues } from "../../../../lib/options";
-import type { SetEntry } from "./entries";
+import { compoundLetter, type SetEntry } from "./entries";
 import { kindInfo, optionsOf, type SetKind, type StepKind } from "./kinds";
 import { rmsd } from "./rmsd";
 
@@ -22,8 +22,8 @@ export type Outcome =
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** A Meno step of `kind` on `entries`, of a set that holds `holds`, with its options (over its kind's defaults). */
-export function runMeno(kind: StepKind, entries: readonly SetEntry[], holds: SetKind, own?: OptionValues): Outcome {
+/** A Meno step of `kind` on `entries`, of a set that holds `holds`, with its options (over its kind's defaults) - and what their energies are, where it ranks by them (`energiesBy`). */
+export function runMeno(kind: StepKind, entries: readonly SetEntry[], holds: SetKind, own?: OptionValues, energiesBy?: string): Outcome {
   if (!entries.length) return { ok: false, said: "Nothing came in" };
   const options = optionsOf(kindInfo(kind).options ?? [], own);
   switch (kind) {
@@ -35,6 +35,8 @@ export function runMeno(kind: StepKind, entries: readonly SetEntry[], holds: Set
       return duplicates(entries, holds, Number(options.rmsd));
     case "populations":
       return populations(entries, Number(options.temperature));
+    case "choose":
+      return chooseOne(entries, options.which === "number" ? Number(options.number) : null, energiesBy);
     default:
       return { ok: false, said: "Meno does not do this itself" };
   }
@@ -131,6 +133,30 @@ function populations(entries: readonly SetEntry[], kelvin: number): Outcome {
     shares: entries.map((e) => shares.get(e)!),
     said: `${plural(compounds, "compound")} at ${kelvin} K`,
   };
+}
+
+/**
+ * One conformer of each compound, chosen on purpose (docs/WORKFLOWS.md,
+ * *Kinds of step*): its lowest in energy - or, given `number`, the one of
+ * that number - as a compound of its own; the rest set aside. What it says
+ * names the one chosen, of how many, and what the energies it was ranked
+ * by are (`by`: the program and method that worked them out).
+ */
+function chooseOne(entries: readonly SetEntry[], number: number | null, by?: string): Outcome {
+  if (number == null && entries.some((e) => e.energy == null)) return NO_ENERGY;
+  const kept: SetEntry[] = [];
+  const aside: SetEntry[] = [];
+  const groups = byCompound(entries);
+  for (const g of groups) {
+    const chosen = number == null ? g.reduce((a, b) => (b.energy! < a.energy! ? b : a)) : g.find((e) => e.number === number);
+    if (!chosen) return { ok: false, said: `${compoundLetter(g[0].compound)} has no conformer ${number}` };
+    kept.push({ ...chosen, compound: kept.length });
+    aside.push(...g.filter((e) => e !== chosen));
+  }
+  const which = number == null ? "lowest" : "chosen";
+  const said =
+    groups.length === 1 ? `#${kept[0].number} of ${entries.length}, ${which}` : `${plural(groups.length, "compound")}, each its ${number == null ? "lowest" : `#${number}`}`;
+  return { ok: true, holds: "molecules", kept, aside, said: by && number == null ? `${said} · ${by}` : said };
 }
 
 /** Boltzmann's shares of energies in hartrees at `kelvin`, adding up to one. */
