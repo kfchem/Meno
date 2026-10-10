@@ -29,6 +29,9 @@ const EDGE_PX = 3;
 const EDGE_HOLD_PX = 10;
 const NARROWEST_EMS = 2;
 
+/** The selection's shade, as a colour to go over to from the page's white. */
+const SHADE_COLOR = new THREE.Color(SELECTION_SHADE);
+
 /** A caption as it is set about its middle, and the room it takes. */
 type Laid = { c: Caption } & CaptionSet;
 
@@ -94,6 +97,8 @@ function CaptionHold({ laid, selected }: { laid: Laid; selected: boolean }) {
   const margin = MARGIN * opts.fontPx;
   const light = useRef<THREE.MeshBasicMaterial>(null);
   const shade = useRef<THREE.MeshBasicMaterial>(null);
+  // (shaded as a structure is, under the drawing: the page's white going over to the shade - opaque, so behind the bonds)
+  const shaded = useRef(0);
   // (its edges stay shown while one is dragged, the pointer off it)
   const [resizing, setResizing] = useState(false);
   // taken hold of by a press held on it: where, from its middle, lit from there
@@ -126,7 +131,16 @@ function CaptionHold({ laid, selected }: { laid: Laid; selected: boolean }) {
       invalidate();
     };
     step(light.current, hovered ? LIT : 0);
-    step(shade.current, selected ? 1 : 0);
+    const m = shade.current;
+    if (!m) return;
+    const to = selected ? 1 : 0;
+    if (Math.abs(shaded.current - to) < 1e-3) shaded.current = to;
+    else {
+      shaded.current = follow(shaded.current, to, Math.min(dt, 1 / 20), TAU.quick);
+      invalidate();
+    }
+    m.color.set("#ffffff").lerp(SHADE_COLOR, shaded.current);
+    m.visible = shaded.current > 1e-3;
   });
   const toWorld = (cx: number, cy: number) => {
     const rect = gl.domElement.getBoundingClientRect();
@@ -263,10 +277,10 @@ function CaptionHold({ laid, selected }: { laid: Laid; selected: boolean }) {
       }}
       onPointerDown={onDown}
     >
-      {/* (the selection's shade, under the words) */}
-      <mesh position={[0, 0, -0.01]} renderOrder={4}>
+      {/* (the selection's shade, under the words and the drawing) */}
+      <mesh position={[0, 0, -0.05]}>
         <planeGeometry args={[box.x1 - box.x0, box.y1 - box.y0]} />
-        <meshBasicMaterial ref={shade} color={SELECTION_SHADE} transparent opacity={0} depthTest={false} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial ref={shade} color="#ffffff" visible={false} toneMapped={false} />
       </mesh>
       <mesh renderOrder={5}>
         <planeGeometry args={[box.x1 - box.x0, box.y1 - box.y0]} />
