@@ -794,7 +794,10 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   far it is scrolled, what the IME composes), which its HTML half
   (`TextEditor/TextBody.tsx`) shares, kept for each workspace by the text's
   id (`TextEditor/columnText.ts`). Each line is a picture drawn by the
-  system's type (`TextEditor/linePictures.ts`), only those in view. Typing
+  system's type (`TextEditor/linePictures.ts`), only those in view,
+  coloured by what the text is (`lib/text/colouring.ts`: Lezer's grammars
+  for Python, JSON and XML; a plugin's marks, `colours` in its manifest,
+  for a calculation's input or output). Typing
   goes through a field kept out of sight (`TextEditor/typingField.ts`): an
   EditContext on Windows, a textarea elsewhere; what it holds and how a
   change in it is read is `lib/text/field.ts`, an editor's keys

@@ -9,6 +9,7 @@
  */
 import * as THREE from "three";
 import { letterStarts } from "../../../lib/text/editing";
+import type { Span, Tone } from "../../../lib/text/colouring";
 
 /** The type: as the column's text has always been set (App.css, `--font-mono`). */
 export const FONT_PX = 14;
@@ -22,6 +23,23 @@ export const BAND_PX = 2048;
 /** The colours: words, and the sheet they lie on. */
 export const INK = "rgb(31, 35, 40)";
 export const PAPER = "#ffffff";
+/**
+ * The colours of what a text's parts are (lib/text/colouring), from the
+ * palette the column's look is taken from (App.css, `--color-gh-*`): its
+ * grey for comments, and Meno's own attention for an error.
+ */
+export const TONES: Record<Tone, string> = {
+  keyword: "rgb(207, 34, 46)",
+  string: "rgb(10, 48, 105)",
+  number: "rgb(5, 80, 174)",
+  comment: "rgb(89, 99, 110)",
+  name: "rgb(130, 80, 223)",
+  tag: "rgb(17, 99, 41)",
+  attribute: "rgb(5, 80, 174)",
+  property: "rgb(5, 80, 174)",
+  warning: "rgb(154, 103, 0)",
+  error: "rgb(205, 69, 96)",
+};
 
 let ctx: CanvasRenderingContext2D | null = null;
 function measuring(): CanvasRenderingContext2D {
@@ -141,15 +159,16 @@ const MOST_PICTURES = 400;
 
 /**
  * A band of a line drawn, on its sheet: `band` of `BAND_PX` across it, at
- * the screen's resolution. Kept, by what it shows, until it has not been
- * drawn for a while.
+ * the screen's resolution - its parts `spans` in their tones, the rest in
+ * `ink`. Kept, by what it shows, until it has not been drawn for a while.
  */
-export function linePicture(line: string, band: number, dpr: number, ink = INK, paper = PAPER): Picture | null {
+export function linePicture(line: string, band: number, dpr: number, ink = INK, paper = PAPER, spans: readonly Span[] = []): Picture | null {
   const text = shown(line);
   const wide = lineWidth(line);
   const left = band * BAND_PX;
   if (left >= wide) return null;
-  const key = `${dpr}\u0000${ink}\u0000${band}\u0000${text}`;
+  const toned = spans.map((s) => `${s.from},${s.to},${s.tone}`).join(";");
+  const key = `${dpr}\u0000${ink}\u0000${band}\u0000${toned}\u0000${text}`;
   const had = pictures.get(key);
   if (had) {
     // (the latest drawn, last)
@@ -165,9 +184,34 @@ export function linePicture(line: string, band: number, dpr: number, ink = INK, 
   c.fillRect(0, 0, canvas.width, canvas.height);
   c.scale(dpr, dpr);
   c.font = FONT;
-  c.fillStyle = ink;
   c.textBaseline = "alphabetic";
-  c.fillText(text, -left, baselineOf(c));
+  // (the line drawn whole in each colour, kept to that colour's parts: its letters where they would be drawn in one)
+  const base = baselineOf(c);
+  let at = 0;
+  const run = (from: number, to: number, colour: string) => {
+    if (to <= from) return;
+    const x0 = from === 0 ? -1 : xAt(line, from) - left;
+    const x1 = to >= line.length ? wide - left + 2 : xAt(line, to) - left;
+    if (x1 <= 0 || x0 >= BAND_PX) return;
+    c.save();
+    c.beginPath();
+    c.rect(x0, 0, x1 - x0, LINE_PX);
+    c.clip();
+    c.fillStyle = colour;
+    c.fillText(text, -left, base);
+    c.restore();
+  };
+  if (!spans.length) {
+    c.fillStyle = ink;
+    c.fillText(text, -left, base);
+  } else {
+    for (const s of spans) {
+      run(at, s.from, ink);
+      run(s.from, s.to, TONES[s.tone]);
+      at = s.to;
+    }
+    run(at, line.length, ink);
+  }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;

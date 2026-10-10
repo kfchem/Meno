@@ -27,7 +27,7 @@
 import { create } from "zustand";
 import { CUBE_MARK } from "../calc/cube";
 import { recordName, RECORD_NAMES } from "../chem/pdb";
-import { folded, holdsMark, markAt, type KindDecl, type Manifest, type Mark } from "../plugins/manifest";
+import { folded, holdsMark, markAt, type Colours, type KindDecl, type Manifest, type Mark } from "../plugins/manifest";
 import sampleSdf from "../../samples/cholesterol.sdf?raw";
 import sampleXyz from "../../samples/cholesterol.xyz?raw";
 import sampleRxn from "../../samples/diels-alder.rxn?raw";
@@ -51,7 +51,12 @@ export type Kind = {
   layout?: RegExp;
   /** Told by a plugin that reads it, asked, where nothing else tells it. */
   probe?: true;
+  /** How a text of it is coloured, as its plugins say (lib/text/colouring). */
+  colours?: Colours;
 };
+
+/** A kind a plugin writes, as a text of it is coloured: by its files' names, a text written being told by no mark. */
+export type WrittenKind = { id: string; extensions: readonly string[]; colours: Colours };
 
 /** The kinds Meno knows: its own. Each but the cube read on the page; the cube, which programs of every kind write, by Meno under the readers' contract. */
 export const MENO_KINDS = {
@@ -88,7 +93,7 @@ export type Refused = { plugin: string; kind: string; mark: string };
  * that would claim one of Meno's samples are refused, and said; a kind left
  * with no way to be told is left out.
  */
-export function registered(manifests: readonly Manifest[]): { kinds: Kind[]; refused: Refused[] } {
+export function registered(manifests: readonly Manifest[]): { kinds: Kind[]; refused: Refused[]; written: WrittenKind[] } {
   const samples = MENO_SAMPLES.map(headOf);
   const refused: Refused[] = [];
   const brought = new Map<string, Kind>();
@@ -111,12 +116,25 @@ export function registered(manifests: readonly Manifest[]): { kinds: Kind[]; ref
               extensions: [...new Set([...was.extensions, ...k.extensions])],
               marks: [...(was.marks ?? []), ...marks.filter((x) => !was.marks?.some((y) => y.text === x.text && y.at === x.at))],
               ...(k.probe || was.probe ? { probe: true as const } : {}),
+              ...withColours(was.colours, k.colours),
             }
           : kindFrom(k, marks),
       );
     }
   }
-  return { kinds: [...Object.values(MENO_KINDS), ...brought.values()], refused };
+  const written = manifests.flatMap((m) => m.writes.flatMap((w): WrittenKind[] => (w.colours ? [{ id: w.id, extensions: w.extensions, colours: w.colours }] : [])));
+  return { kinds: [...Object.values(MENO_KINDS), ...brought.values()], refused, written };
+}
+
+/** Two plugins' colours for a kind, put together. */
+function withColours(a: Colours | undefined, b: Colours | undefined): { colours?: Colours } {
+  if (!a || !b) return a || b ? { colours: (a ?? b)! } : {};
+  const out: Colours = {};
+  for (const part of ["keywords", "comments", "warnings", "errors"] as const) {
+    const marks = [...(a[part] ?? []), ...(b[part] ?? []).filter((x) => !a[part]?.some((y) => y.text === x.text && y.at === x.at))];
+    if (marks.length) out[part] = marks;
+  }
+  return { colours: out };
 }
 
 const kindFrom = (k: KindDecl, marks: Mark[]): Kind => ({
@@ -126,6 +144,7 @@ const kindFrom = (k: KindDecl, marks: Mark[]): Kind => ({
   output: k.program ? { program: k.program } : {},
   ...(marks.length ? { marks } : {}),
   ...(k.probe ? { probe: true as const } : {}),
+  ...(k.colours ? { colours: k.colours } : {}),
 });
 
 /** A file's start as marks are tried on it: its first `MARK_REACH` characters, line ends "\n", runs of spaces one. */
@@ -134,16 +153,22 @@ export function headOf(text: string): string {
 }
 
 /** The kinds registered: Meno's own, and those the plugins added bring (lib/calc/workers registers them as plugins are added and taken away). */
-export const useKinds = create<{ kinds: readonly Kind[] }>(() => ({ kinds: registered([]).kinds }));
+export const useKinds = create<{ kinds: readonly Kind[]; written: readonly WrittenKind[] }>(() => ({ kinds: registered([]).kinds, written: [] }));
 
 /** Registers the kinds `manifests` - the plugins added - bring, with Meno's own, in place of those registered before. */
 export function registerKinds(manifests: readonly Manifest[]): void {
-  useKinds.setState({ kinds: registered(manifests).kinds });
+  const { kinds, written } = registered(manifests);
+  useKinds.setState({ kinds, written });
 }
 
 /** Every kind registered. */
 export function kinds(): readonly Kind[] {
   return useKinds.getState().kinds;
+}
+
+/** The kinds the plugins added write, as their texts are coloured. */
+export function writtenKinds(): readonly WrittenKind[] {
+  return useKinds.getState().written;
 }
 
 /** The kind of that id, among those registered or `among`. */

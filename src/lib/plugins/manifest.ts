@@ -4,7 +4,8 @@
  * is, what makes its environment and runs its worker, the kinds of file it
  * brings - their names, the names their files go by, and how a file of one
  * is told - which kinds it reads, by their ids: its own, or Meno's - the
- * kinds it writes, with their options (`writes`), the roles it fills
+ * kinds it writes, with their options (`writes`), how a text of a kind
+ * it brings or writes is coloured (`colours`), the roles it fills
  * besides, by the ids Meno gives them (lib/plugins/roles), and the kinds of
  * a workflow's step it fills (`steps`, docs/WORKFLOWS.md).
  *
@@ -32,6 +33,15 @@ export type Mark = {
   anyCase?: true;
 };
 
+/**
+ * How a text of a kind is coloured (docs/PDF.md, *A text*), by marks as a
+ * kind is told - text, never a pattern - each tried on a line: a line
+ * holding an error's or a warning's mark is that, all of it; one holding a
+ * keyword's is keywords; a comment's mark begins a comment, to the line's
+ * end. Its numbers Meno finds itself.
+ */
+export type Colours = { keywords?: Mark[]; comments?: Mark[]; warnings?: Mark[]; errors?: Mark[] };
+
 /** A kind of file a plugin brings: what it is called, the names its files go by, and how one is told. */
 export type KindDecl = {
   id: string;
@@ -45,6 +55,8 @@ export type KindDecl = {
   marks: Mark[];
   /** Told by its plugin, asked, where no mark tells it. */
   probe?: true;
+  /** How a text of it is coloured. */
+  colours?: Colours;
 };
 
 /**
@@ -60,6 +72,8 @@ export type WriteDecl = {
   /** What it is given: one molecule - one system of molecules in 3D, which Meno asks for where it must. */
   takes: "molecule";
   options: Option[];
+  /** How a text of it is coloured. */
+  colours?: Colours;
 };
 
 /**
@@ -133,6 +147,28 @@ function markOf(v: unknown): Mark | null {
   return { text: t, ...(m?.at === "line-start" ? { at: "line-start" as const } : {}), ...(m?.anyCase === true ? { anyCase: true as const } : {}) };
 }
 
+/** A mark a line is tried for, in colouring: as short as a letter - it claims no file. */
+function lineMarkOf(v: unknown): Mark | null {
+  const m = v as Record<string, unknown> | null;
+  const t = text(m?.text, MARK_MOST);
+  if (!t) return null;
+  return { text: t, ...(m?.at === "line-start" ? { at: "line-start" as const } : {}), ...(m?.anyCase === true ? { anyCase: true as const } : {}) };
+}
+
+/** How many marks each part of a kind's colours holds at most. */
+const COLOUR_MARKS_MOST = 40;
+
+function coloursOf(v: unknown): { colours?: Colours } {
+  const c = v as Record<string, unknown> | null;
+  if (!c || typeof c !== "object") return {};
+  const out: Colours = {};
+  for (const part of ["keywords", "comments", "warnings", "errors"] as const) {
+    const marks = Array.isArray(c[part]) ? (c[part] as unknown[]).slice(0, COLOUR_MARKS_MOST).map(lineMarkOf).filter((m): m is Mark => m != null) : [];
+    if (marks.length) out[part] = marks;
+  }
+  return Object.keys(out).length ? { colours: out } : {};
+}
+
 function kindOf(v: unknown): KindDecl | null {
   const k = v as Record<string, unknown> | null;
   const id = typeof k?.id === "string" && ID.test(k.id) ? k.id : null;
@@ -144,7 +180,7 @@ function kindOf(v: unknown): KindDecl | null {
   const probe = k?.probe === true;
   // (told somehow: by its marks, or by its plugin - and then by its files' names first)
   if (!marks.length && !(probe && extensions.length)) return null;
-  return { id, name, ...(program ? { program } : {}), extensions, marks, ...(probe ? { probe: true as const } : {}) };
+  return { id, name, ...(program ? { program } : {}), extensions, marks, ...(probe ? { probe: true as const } : {}), ...coloursOf(k?.colours) };
 }
 
 function writeOf(v: unknown): WriteDecl | null {
@@ -154,7 +190,7 @@ function writeOf(v: unknown): WriteDecl | null {
   const extensions = Array.isArray(w?.extensions) ? w.extensions.filter((e): e is string => typeof e === "string" && EXTENSION.test(e)) : [];
   // (given one molecule: the one thing a plugin is given, for now)
   if (!id || !name || !extensions.length || w?.takes !== "molecule") return null;
-  return { id, name, extensions, takes: "molecule", options: acceptOptions(w.options) };
+  return { id, name, extensions, takes: "molecule", options: acceptOptions(w.options), ...coloursOf(w.colours) };
 }
 
 /** A program's name, as a job is given it: a name, not a path. */

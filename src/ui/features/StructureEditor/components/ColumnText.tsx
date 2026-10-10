@@ -2,8 +2,9 @@
  * A text read in the column, drawn on the canvas (docs/PDF.md, *A text*,
  * *One canvas*): in the column's pass, as a PDF's pages are (PdfColumn) -
  * its lines pictures drawn in the system's type (TextEditor/linePictures),
- * numbered, only those in view; the caret, what is selected and what the
- * IME is composing drawn over them. Its HTML half, over it, takes the
+ * numbered, only those in view, coloured by what the text is (lib/text/
+ * colouring); the caret, what is selected and what the IME is composing
+ * drawn over them. Its HTML half, over it, takes the
  * pointer and the keys (TextEditor/TextBody); the two share its editor
  * (TextEditor/columnText). In the column's units: CSS pixels from its body's
  * top left, down negative.
@@ -14,11 +15,13 @@ import { flushSync, useFrame, useThree } from "@react-three/fiber";
 import { COLORS } from "../../../theme/colors";
 import { selFrom, selTo } from "../../../../lib/text/editing";
 import { lineComposing } from "../../../../lib/text/field";
+import { colouringFor } from "../../../../lib/text/colouring";
+import { useKinds } from "../../../../lib/io/kinds";
 import { useEditorStore } from "../store";
 import type { WorkspaceText } from "../store/types";
 import { columnText } from "../../TextEditor/columnText";
 import { GUTTER_PX, PAD_PX } from "../../TextEditor/editor";
-import { BAND_PX, INK, LINE_PX, linePicture, typeReady, xAt } from "../../TextEditor/linePictures";
+import { BAND_PX, INK, LINE_PX, linePicture, PAPER, typeReady, xAt } from "../../TextEditor/linePictures";
 
 /** The column of line numbers: its colour, and its numbers'. */
 const GUTTER = "rgb(246, 248, 250)";
@@ -75,6 +78,9 @@ export default function ColumnText({ text, hidden = false }: { text: WorkspaceTe
     if (caretRef.current) caretRef.current.visible = ed.focused && (since < BLINK_MS || Math.floor(since / BLINK_MS) % 2 === 0);
   });
 
+  // (coloured as what it is told to be by its name, or by what it held as it came - again as plugins are added or taken away)
+  const told = useKinds();
+  const colouring = useMemo(() => colouringFor(text.name, ed.text, told.kinds, told.written), [text.name, ed, told]);
   const plane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   useEffect(() => () => plane.dispose(), [plane]);
   if (!typeIn || hidden) return null;
@@ -97,10 +103,12 @@ export default function ColumnText({ text, hidden = false }: { text: WorkspaceTe
     const start = ed.lines.start(i);
     const end = ed.lines.end(i);
     let line = ed.lines.line(i);
-    // (what the IME has so far, in place of what it takes the place of)
-    if (i === compLine && comp) line = lineComposing(line, start, comp);
+    // (what the IME has so far, in place of what it takes the place of - uncoloured, while it is)
+    const composingHere = i === compLine && !!comp;
+    if (composingHere) line = lineComposing(line, start, comp);
+    const spans = composingHere ? [] : (colouring?.spans(ed.lines, i) ?? []);
     for (let band = Math.max(0, Math.floor(ed.scrollLeft / BAND_PX)); band * BAND_PX < ed.scrollLeft + ed.viewW; band++) {
-      const p = linePicture(line, band, dpr);
+      const p = linePicture(line, band, dpr, INK, PAPER, spans);
       if (!p) break;
       out.push(
         <mesh key={`l${i}:${band}`} geometry={plane} position={at(left + band * BAND_PX, top, p.w, p.h)} scale={[p.w, p.h, 1]} renderOrder={0}>

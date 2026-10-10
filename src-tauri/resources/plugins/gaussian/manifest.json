@@ -16,6 +16,10 @@
       "name": "Gaussian input",
       "extensions": [".gjf", ".com"],
       "takes": "molecule",
+      "colours": {
+        "keywords": [{"text": "%", "at": "line-start"}, {"text": "#", "at": "line-start"}],
+        "comments": [{"text": "!"}]
+      },
       "options": [
         {"id": "job", "label": "Job", "type": "choice", "choices": [
           {"value": "opt freq", "label": "Optimisation, then frequencies (Opt Freq)"},

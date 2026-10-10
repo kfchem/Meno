@@ -76,6 +76,9 @@ Everything a plugin is lives in one folder, named by its id:
                      it brings (id, name, extensions, marks) and those it
                      reads, by id - its own, or Meno's; the kinds it writes,
                      each with what it takes and its options (`writes`);
+                     how a text of a kind it brings or writes is coloured
+                     (`colours`: marks for keywords, comments, warnings
+                     and errors);
                      the kinds of a workflow's step it fills, each with the
                      programs it runs and its options (`steps`); the
                      systems it can be added on, where not every one

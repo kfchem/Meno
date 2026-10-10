@@ -715,17 +715,31 @@ Step 5 comes in parts: the trial of typing alone, shown first; the column's text
 - **A step's log** (*Show log*) - what the program said as Meno ran it, read as no molecule - rises out of its step's card likewise, and goes back down into it.
 - **A text without a sheet keeps what it is the text of** (`of`): its step, or its molecule. Saved in the workspace, a step by its id and a molecule by its place among the molecules, as they are numbered again when it opens. Its body gone - the step or the molecule deleted - it comes into the column and goes with it, as a text with no body does.
 
+**Colouring** (`lib/text/colouring.ts`):
+- **A Python script, JSON or XML**, told by its name (`.py`, `.json`, `.xml`), is coloured by Lezer's grammar for it: keywords, strings, numbers, comments, and what a definition names, a JSON object's keys, an XML element's names and attributes. It is parsed as far as the lines shown, 128 KB on at a time, and after an edit from where it changed, the rest of the tree kept: a long file opens and is typed in at once.
+- **A calculation's input or output** is coloured as its plugin says, in its manifest (`colours` on a kind it brings or writes, docs/PLUGINS.md), by marks as a kind is told - text, never a pattern - tried a line at a time: a line holding an error's or a warning's mark is all of it an error or a warning; one holding a keyword's mark is keywords; a comment's mark begins a comment, to the line's end. Its numbers - standing alone, not part of a name such as 6-31G or def2 - Meno finds itself. A kind a plugin brings is told by what the text holds, as a file is (lib/io/kinds); a kind it writes, by the text's name. A plugin not added colours nothing.
+- **The plugins Meno carries say**, each from the program's own words - its manual, or what it printed on this Mac:
+  - ORCA's output (cclib, PySCF): *ORCA finished by error termination* is an error (ORCA's manual, *Troubleshooting*).
+  - Gaussian's output (cclib, PySCF): a line beginning *Warning* is a warning, as Gaussian 16 printed.
+  - xTB's output (cclib): a line beginning *[WARNING]* is a warning; *ERROR STOP* and *Error termination* are errors, as xTB 6.7 printed.
+  - Gaussian's input (the Gaussian interface, `.gjf`, `.com`): Link 0 commands (*%*) and the route section (*#*) are keywords, and a comment begins with *!* (Gaussian's *Input* page).
+- **Drawn in the column**: each line's parts in their tones, the line drawn whole in each colour and kept to its parts, so that its letters lie just where they would in one. What the IME is composing is drawn uncoloured, as it is. The colours are from the palette the column's look is taken from: red keywords, dark blue strings, blue numbers, names and keys, grey comments, purple definitions, green XML names, amber warnings, and Meno's own attention for errors.
+
 Decided while building it, for the maintainer to confirm:
 - **On a Mac the textarea, on Windows the EditContext**: each the one its system's webview takes the IME through best. WebKit has no EditContext.
 - **A Mac's Home, End and Page keys move the view**, the caret staying, as in the Mac's own texts; with Option, a page moves the caret too. Tab moves the keys on, as the textarea did.
 - **A sheet's size** (above), and its top left where it lies, so that a text growing at its end grows down.
 - **A text's icon is its sheet made small**, not a page's shape: its longer side as long as a PDF's icon is tall, so that a few lines make a wide, low icon and a long log a tall one, as their sheets are.
 - **Closing a text's tab leaves its sheet on the page**; deleting the sheet takes the text out of the workspace.
+- **Colours in the column only.** A sheet on the page shows its lines as they would be printed, in black; a text rising from it takes its colours as the column's lines take its place.
+- **Errors' and warnings' marks only where a program's own words say them.** Gaussian's error line was not found in Gaussian's own pages, nor printed on this Mac, so Gaussian's output colours its warnings alone for now.
+- **The colours**, from the palette the column's look is taken from, as GitHub colours code.
 
 Not yet, and where it comes:
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
 - **A step's card lies over the canvas**, in HTML, as all a workflow's cards do: a log's lines come out from under its step's card, and pass under the other cards on their way, as a PDF's page does.
-- **Colouring** (Lezer), **words on the page typed in place**: after.
+- **Words on the page typed in place**: after.
+- **More grammars**: a language Lezer has a grammar for is a line here and its few tens of kilobytes; Python, JSON and XML for now, as the specification lists.
 
 ## In order
 
