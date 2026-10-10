@@ -65,9 +65,12 @@ export function openIn(block: Block, answer: { atoms: number[]; bonds: number[];
  * A stereoisomer's conformers as a molecule in 3D: the lowest's coordinates
  * as its atoms, the rest as its frames, their energies; and the drawing's
  * atom each of its atoms is - none for a hydrogen made for it, or an atom
- * written out of an abbreviation.
+ * written out of an abbreviation. Made with others (`several`: all the
+ * stereoisomers a drawing leaves open), it says which of its centres were
+ * left open, for their R and S to tell it from the others; made alone, R and
+ * S show only where they are asked for, as on the drawing.
  */
-export function moleculeOf(c: Conformers, block: Block): Omit<Molecule3D, "id" | "at"> {
+export function moleculeOf(c: Conformers, block: Block, several = false): Omit<Molecule3D, "id" | "at"> {
   const first = c.frames[0] ?? [];
   return {
     atoms: c.atoms.map((a, i) => ({
@@ -87,7 +90,7 @@ export function moleculeOf(c: Conformers, block: Block): Omit<Molecule3D, "id" |
     stereo: {
       atoms: numbered(c.cip?.atoms),
       bonds: numbered(c.cip?.bonds),
-      ...(Object.keys(c.chosen.atoms).length || Object.keys(c.chosen.bonds).length
+      ...(several && (Object.keys(c.chosen.atoms).length || Object.keys(c.chosen.bonds).length)
         ? { chosen: { atoms: Object.keys(c.chosen.atoms).map(Number), bonds: Object.keys(c.chosen.bonds).map(Number) } }
         : {}),
     },

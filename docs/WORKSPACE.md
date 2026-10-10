@@ -385,8 +385,11 @@ Taken on 2026-10-07:
   beside the drawing: to its right, its left, below or above - the first
   that is in view as it is seen - the view taking it in where none is.
   Several rise one after another, in a row.
-- **Told apart.** A stereoisomer's centres that were left open carry
-  their R and S always, every centre's while R and S are shown. They are
+- **Told apart.** Made with the other stereoisomers its drawing leaves
+  open, a stereoisomer's centres that were left open carry their R and S
+  always, every centre's while R and S are shown; made alone - one
+  configuration chosen - it carries them only while they are shown, as
+  the drawing does (the maintainer, 2026-10-10: hidden unless asked for). They are
   as large as the drawing's R and S, and written as the drawing's style
   writes them (bare, or in parentheses), in blue. Each is set clear of
   its atom - beyond its ball by as much as the drawing's style sets them

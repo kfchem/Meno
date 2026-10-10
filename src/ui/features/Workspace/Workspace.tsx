@@ -307,7 +307,9 @@ function WorkspaceContent({
           return { x0: b.minX, x1: b.maxX, y0: b.minY, y1: b.maxY };
         });
         for (const block of blocks) {
-          const ms = (await conformersOf(chem, block, isomers, options)).map((c) => moleculeOf(c, block));
+          const isomersMade = await conformersOf(chem, block, isomers, options);
+          // (several stereoisomers: their R and S shown, to tell them apart)
+          const ms = isomersMade.map((c) => moleculeOf(c, block, isomersMade.length > 1));
           const model = store.getState().model;
           const turned = ms.map((m) => turnedOver(m, model, look3d));
           // beside the drawing, where they can be seen as the view is now,
