@@ -30,6 +30,11 @@ describe("a plugin's guide", () => {
     const carried = MANIFESTS.map((p) => p.id);
     expect(m.guide[m.guide.length - 1]?.suggest).toEqual(["rdkit", "cclib", "xtb"]);
     for (const s of m.suggests) expect(carried).toContain(s.plugin);
+    // (its catalogue's kinds of file, kept in step with the plugins it suggests for them: each reads a kind of that id)
+    expect(m.files.length).toBeGreaterThan(0);
+    for (const f of m.files) {
+      for (const id of f.suggest) expect(MANIFESTS.find((p) => p.id === id)?.reads, `${id} reads ${f.id}`).toContain(f.id);
+    }
   });
 
   it("is shown once, the first time its plugin is there - not before the settings say which were shown", () => {
