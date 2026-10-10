@@ -269,6 +269,68 @@ stops being part of the work.
     warnings and errors - so that Meno knows no program's format of
     itself. What does not read as the grammar says - a block left open,
     a molecule with no charge - is marked.
+- **A Markdown text is read formatted** (*Markdown*, below), and written
+  in its source.
+
+### Markdown
+
+A text whose name ends `.md` or `.markdown` is read as what it says, not
+as its marks (the maintainer asked that Markdown files open formatted, to
+be read).
+
+- **As CommonMark 0.31.2 reads it, with GitHub's tables, task lists,
+  strikethrough and autolinks** (GitHub Flavored Markdown 0.29, its
+  extensions). Markdown is a general text format, not a program's, so it
+  is Meno's own, as Python, JSON and XML are, not a plugin's. Lezer's
+  Markdown parser (`@lezer/markdown`, MIT) reads it; what each part means
+  is as the two specifications say, and Meno sets it.
+- **In the column, and on its sheet**: formatted in both, from one layout
+  - in the column as wide as the column, on the page as wide as a
+  sheet's 80 letters, its first rows, its type as much smaller as the
+  sheet's monospaced type is. An icon shows them too, made small.
+- **Set as GitHub sets Markdown, in Meno's type**: IBM Plex Sans, its
+  code in IBM Plex Mono, on the palette the column's look is taken from.
+  - Headings in six sizes, the first two ruled under.
+  - Strong, emphasised and struck-through words, inline code on its
+    ground.
+  - Lists, ordered from their first number or marked by a disc - a ring
+    deeper in, then a square - tight or loose as CommonMark says; a
+    task's box, checked or not.
+  - Block quotes in grey beside a bar.
+  - Code blocks on their ground, coloured as a text is where their
+    language is known: Python, JSON and XML by Lezer's grammars, a
+    calculation's input by its plugin's, by the language named as a
+    file's name ends (`inp`, `gjf`). On a sheet they are black, as a
+    sheet's lines are.
+  - Tables, their columns as wide as their cells, aligned as the
+    delimiter row says, shared out where too wide, every other row on a
+    ground.
+  - Rules.
+- **Lines broken as a reader expects**: after a word and its spaces, and
+  between Chinese and Japanese letters, never before a closing mark nor
+  after an opening one; a word wider than the column between its
+  letters; a line's end in a paragraph a space, a break where it says.
+- **Links**: a click follows one - to a heading of the text's, by the
+  name GitHub gives it (`#results`), the text moving there; to the web or
+  to mail (`http`, `https`, `mailto`), opened by the system, as a PDF's
+  are; any other, not followed. Over a link, the system's hand.
+- **Nothing a text names is fetched**: an image is its description in a
+  frame. Meno reaches no network for a text, and the text's place on the
+  disk is not kept (*Texts*, WORKSPACE.md), so a picture beside it could
+  not be found again.
+- **HTML is shown as it is written**, grey, never drawn as HTML; its
+  comments are left out, and `<br>` breaks the line.
+- **Read**: the wheel moves it; a drag selects its words, two clicks a
+  word, three a paragraph; Cmd/Ctrl+C copies them as they read -
+  paragraphs and list items on lines of their own, a table's cells apart
+  by tabs - and Cmd/Ctrl+A selects it all. The arrows, Page Up and Down
+  and the space bar, Home and End move it.
+- **Written in its source**: *Source*, at the column's top (the brackets),
+  shows the text as it is written, typed as any text is, IME and all, its
+  marks coloured - headings, code, addresses, and its marks grey - and
+  its code in Python, JSON or XML as those are. Pressed again, it is read
+  formatted. Either way, what was at the top stays there, as near as the
+  two allow.
 
 ## Movement
 
@@ -768,6 +830,30 @@ Not yet, and where it comes:
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
 - **A step's card lies over the canvas**, in HTML, as all a workflow's cards do: a log's lines come out from under its step's card, and pass under the other cards on their way, as a PDF's page does.
 - **More grammars**: a language Lezer has a grammar for is a line here and its few tens of kilobytes; Python, JSON and XML for now, as the specification lists.
+
+### Markdown read formatted (2026-10-10)
+
+Built (lane L9), as *Markdown*, above, says:
+- **Read**: `lib/text/markdown.ts` reads a text into blocks and runs, each rule citing its section of CommonMark 0.31.2 or GFM 0.29; `TextEditor/markdownLayout.ts` lays them out at a width, in rows, each a line of words and what is drawn under and round it; `TextEditor/markdownReader.ts` holds where it is read and what is selected, in its words read as one text.
+- **In the column**: `components/MarkdownText.tsx` draws each row in view as a picture drawn by the canvas in IBM Plex (`TextEditor/markdownPictures.ts`), its HTML half `TextEditor/MarkdownBody.tsx` taking the wheel, the pointer and the keys.
+- **On the page**: a Markdown text's sheet (`utils/textSheets`) shows its first rows laid out as a sheet is wide (`components/MarkdownRows.tsx`), in troika's type: IBM Plex Sans and Mono, a strong part thickened by an outline of its own colour and an emphasised one slanted, each stretched to the width its own face sets it at - the page's type has one face of each. Far off, its words are grey strokes, as a sheet's lines are.
+- **On the way between them**: rising, its sheet's rows fade, and the column's come up in their place, both growing with it (`MarkdownFlight` in `components/TextFlight.tsx`); going back down, the other way.
+- **Its source**: *Source* in the column's header switches a Markdown text between read and written (`TextEditor/columnText.ts`, not saved: a Markdown text opens formatted); the source coloured by Lezer's Markdown grammar, its code by Python's, JSON's or XML's (`lib/text/colouring.ts`).
+
+Decided while building it, for the maintainer to confirm:
+- **The look is GitHub's**, as the column's colours already are: body 15 pixels on 24, headings 2 to 0.85 times it, code 13 pixels, lists 30 pixels in.
+- **A sheet is as wide as 80 letters of a sheet's type**, about six inches, as a page's text is; its rows' type as much smaller than the column's as the sheet's monospaced type is.
+- **A sheet's code is black**, as a sheet's lines are; the column colours it.
+- **Selected words copy as they read**, not as they are written; the source is there to copy the marks.
+- **The source shown is not saved**: a Markdown text opens formatted.
+- **Rising to the column, the sheet's rows fade before the column's come**, the two laid out at different widths: shown at once, both together read as a blur.
+
+Not yet, and where it comes:
+- **Editing in the formatted text** (the maintainer chose read formatted, written in the source).
+- **Pictures in a Markdown text**, and links to other texts: Meno does not keep where a text was opened from, and reaches no network.
+- **A letter no typeface of Meno's has on a sheet** - a superscript minus, as in mol⁻¹ - is a white square there, as on any sheet; the column draws it in the system's type.
+- **Math** (`$...$`), footnotes and other extensions GitHub draws but GFM 0.29 does not specify are shown as written.
+- **Searching a text** (Cmd/Ctrl+F looks in PDFs).
 
 ### Pages placed one by one (2026-10-10)
 
