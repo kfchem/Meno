@@ -721,6 +721,47 @@ space-filling side by side is better science than either alone.
 - **Not read from before.** A settings file from before keeps none of
   its 3D look (pre-alpha: no migration).
 
+## Ribbons
+
+Built in lane L5 on 2026-10-10, as proposed to the maintainer and agreed:
+a protein's or a nucleic acid's chains drawn as ribbons, from what the PDB
+entry itself says - written from the wwPDB's format (v3.3), as every PDB
+reading in Meno is.
+
+- **Read.** HELIX and SHEET records (Secondary Structure Section), every
+  field kept (`lib/chem/pdb.ts`). Each atom's name and residue are kept
+  on the molecule in 3D with each residue's secondary structure
+  (`lib/chem/biopolymer.ts`): a helix's or a strand's residues are those
+  from its first to its last, as the chain lists them. Meno does not work
+  secondary structure out itself: an entry without HELIX or SHEET records
+  is drawn as a tube all along (a plugin could assign it, later).
+- **The chains.** A run is consecutive residues of one chain whose
+  backbone atoms - a protein's alpha carbon (named CA, a carbon: calcium
+  is named CA too), a nucleic acid's phosphorus - stand near enough (4.5
+  and 8.5 Å); further apart, the chain is broken there. A lone residue is
+  drawn as its atoms.
+- **The ribbon** (`utils/ribbon.ts`). A smooth curve through a run's
+  backbone atoms; round it a band, its face turned as each peptide's plane
+  is (its carbonyl oxygen says which way, each turned as the one before so
+  it never flips): flat and 1.6 Å wide through a helix, so it winds round
+  the helix's axis; 1.7 Å through a strand, ending in an arrowhead to its
+  C-terminal end; a 0.5 Å tube elsewhere, and all along a nucleic acid.
+- **Colour.** By helix and strand (muted rose and yellow, the rest grey),
+  by chain, or along the sequence from blue to red: Settings, Molecules in
+  3D, *Every style*, *Ribbons*.
+- **With the styles.** Each style says how it draws a PDB entry's chains:
+  as ribbons - what is bound to them (ligands, ions) as atoms, water left
+  out - or every atom. Ball and stick and Glossy draw ribbons;
+  Space-filling every atom, so a double-click goes from the fold to the
+  protein's surface and its pockets, and back. Going over, the ribbon
+  shrinks to its line as the atoms grow, and back.
+- **Pointing.** A ribbon lights its outline as a molecule's does; pointed
+  at, a residue says its name, number and chain. A click on a ribbon
+  chooses the residue's backbone atom, which can be measured.
+- **Pictures.** An exported picture draws the ribbons as the canvas does
+  (the bitmap); where there is no WebGL, as sticks along each ribbon.
+  NMR models and trajectories: the ribbon follows each frame.
+
 ## Risks
 
 - **The 2D drawing changing.** The thinnest lines and the place of every
