@@ -119,6 +119,8 @@ import CaptionTyping2D from "./components/CaptionTyping2D";
 import { ChargeHolds2D } from "./components/MarkHold2D";
 import Workflow2D from "./components/Workflow2D";
 import PageScale from "./components/PageScale";
+import GuideStructure from "./components/GuideStructure";
+import { guideNotice } from "../../../lib/plugins/guides";
 import { selectionFrame } from "./workflow/selectionSet";
 import { offeredSteps } from "./workflow/offered";
 import { PORT_DOWN } from "./workflow/look";
@@ -186,6 +188,7 @@ function WorkspaceContent({
   // the column over the canvas's right side, and the layer the page's HTML goes in, cut off where it begins
   const cover = useEditor((s) => s.cover);
   const [htmlLayer, setHtmlLayer] = useState<HTMLDivElement | null>(null);
+  const guideStructure = useRef<HTMLDivElement>(null);
   // (where PDFs opened go: the middle of what is in view, as a paste - set once the events are known)
   const pdfTarget = useRef<() => { x: number; y: number }>(() => ({ x: 0, y: 0 }));
   const {
@@ -226,6 +229,8 @@ function WorkspaceContent({
   // the plugins that fill the chemistry roles: their marks on the structure
   // and R/S on request; and clean-up, by Meno's own layout engine (chem/cleanUp)
   const store = useEditorStore();
+  // (a structure selected: a guide's step waiting for it goes on)
+  useEffect(() => store.subscribe((s, prev) => void (s.sel.atoms.size && !prev.sel.atoms.size && guideNotice("selected"))), [store]);
   // (a tab's own, unless it is a document's, holds texts opened while it is in front: ui/views/texts)
   useEffect(
     () => (ownTab && officeId == null ? setTextTaker(tabId, (texts) => store.getState().addTexts(texts, pdfTarget.current())) : undefined),
@@ -995,6 +1000,7 @@ function WorkspaceContent({
   return (
     <div
       ref={dropRef}
+      data-guide="page"
       className={`flex-1 min-w-0 h-full relative${fadeIn ? " meno-fade-in" : ""}`}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseMove={handleWrapperMouseMove}
@@ -1429,6 +1435,8 @@ function WorkspaceContent({
         </DrawnLayoutProvider>
         {/* the page's scale, for chips drawn on it in HTML */}
         <PageScale />
+        {/* where a guide's step points at a structure (lib/plugins/guide) */}
+        <GuideStructure place={guideStructure} />
         {/* Molecules in 3D standing on the page (before PanZoom2D: a press on one is theirs) */}
         <Molecules3D style={style3d} />
         <PanZoom2D />
@@ -1438,6 +1446,8 @@ function WorkspaceContent({
       </PageHtmlLayer.Provider>
       {/* the page's HTML, cut off where the column begins (coverLayer) */}
       <div ref={setHtmlLayer} className="absolute inset-0 pointer-events-none" style={{ clipPath: cover > 0 ? `inset(0 ${cover}px 0 0)` : undefined }} />
+      {/* where a guide's step points at a structure: kept over it (GuideStructure) */}
+      <div ref={guideStructure} data-guide="structure" className="absolute left-0 top-0 pointer-events-none" style={{ display: "none" }} />
       </Remake3D.Provider>
     </div>
   );

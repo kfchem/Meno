@@ -3,6 +3,7 @@ import { RISE } from "../../theme/motion";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CheckIcon } from "@heroicons/react/24/outline";
 import { MENU_ICONS } from "./menuIcons";
+import { guideNotice } from "../../../lib/plugins/guides";
 
 /**
  * What was right-clicked, where in the canvas the menu opens, and how big
@@ -208,6 +209,8 @@ export default function PartMenu({
     const w = ref.current?.offsetWidth;
     if (w) setWidth(w);
   }, [target, radical]);
+  // (opened: a guide's step waiting for it goes on)
+  useEffect(() => guideNotice("menu"), []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -425,6 +428,7 @@ export default function PartMenu({
       ref={ref}
       {...RISE}
       role="menu"
+      data-guide="menu"
       aria-label={
         target.selection === "here"
           ? "Selection"

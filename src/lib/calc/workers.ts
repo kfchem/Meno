@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { ensurePyEnv, pyEnvReady, removePyEnv } from "../pyEnv";
-import { manifestOf, READERS, type PythonPlugin, type ReaderPlugin } from "./catalog";
+import { manifestOf, READERS, runs, type Plugin, type PythonPlugin, type ReaderPlugin } from "./catalog";
 import { registerKinds } from "../io/kinds";
 import type { Manifest } from "../plugins/manifest";
 import type { ReaderClient, Reader } from "./client";
@@ -46,8 +46,8 @@ const setState = (id: string, state: ReaderState, problem?: string) => {
 
 let meno: Reader | null = null;
 
-/** The readers added on this computer, looked at afresh: Meno's own always. */
-export async function addedReaders(plugins: readonly ReaderPlugin[] = READERS): Promise<Set<string>> {
+/** The readers - and plugins - added on this computer, looked at afresh: Meno's own always; one that runs nothing unless taken away. */
+export async function addedReaders(plugins: readonly (ReaderPlugin | Plugin)[] = READERS): Promise<Set<string>> {
   const added = new Set<string>();
   for (const p of plugins) {
     if (p.builtin) {
@@ -57,7 +57,7 @@ export async function addedReaders(plugins: readonly ReaderPlugin[] = READERS): 
     }
     const here = useReaders.getState().state[p.id];
     if (here === "adding" || here === "removing") continue;
-    const ready = await pyEnvReady(p.profile);
+    const ready = runs(p) ? await pyEnvReady(p.profile) : !useAppSettings.getState().plugins.removed.includes(p.id);
     setState(p.id, ready ? "added" : "absent");
     if (ready) added.add(p.id);
   }
@@ -65,15 +65,20 @@ export async function addedReaders(plugins: readonly ReaderPlugin[] = READERS): 
 }
 
 /** Whether the chemist took a plugin away, or brought it back: what sets it up again of itself (lib/roles/worker). */
-function markTakenAway(p: PythonPlugin, away: boolean) {
+function markTakenAway(p: Plugin, away: boolean) {
   const settings = useAppSettings.getState();
   const removed = settings.plugins.removed.filter((id) => id !== p.id);
   settings.setPlugins({ ...settings.plugins, removed: away ? [...removed, p.id] : removed });
 }
 
-/** Adds a plugin: sets its environment up, asking first whether it may download. */
-export async function addPlugin(p: PythonPlugin): Promise<void> {
+/** Adds a plugin: sets its environment up, asking first whether it may download - one that runs nothing, at once. */
+export async function addPlugin(p: Plugin): Promise<void> {
   if (!forThisSystem(p)) throw new Error(`${p.name} is not made for this system.`);
+  if (!runs(p)) {
+    markTakenAway(p, false);
+    setState(p.id, "added");
+    return;
+  }
   setState(p.id, "adding");
   try {
     await ensurePyEnv(p.profile);
@@ -85,8 +90,13 @@ export async function addPlugin(p: PythonPlugin): Promise<void> {
   }
 }
 
-/** Takes a plugin away: its workers stopped, its environment removed - and, where it fills a role, not set up again of itself. */
-export async function removePlugin(p: PythonPlugin): Promise<void> {
+/** Takes a plugin away: its worker stopped, its environment removed - and, where it fills a role, not set up again of itself; one that runs nothing, at once. */
+export async function removePlugin(p: Plugin): Promise<void> {
+  if (!runs(p)) {
+    markTakenAway(p, true);
+    setState(p.id, "absent");
+    return;
+  }
   setState(p.id, "removing");
   try {
     await stopWorker(p.id);
