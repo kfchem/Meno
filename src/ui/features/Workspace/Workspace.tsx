@@ -63,9 +63,9 @@ import { isElementSymbol } from "../../../lib/roles/molblock";
 /** No atoms or bonds: the same array each time, so that nothing redraws for it. */
 const NO_IDS: number[] = [];
 
-/** Whether an atom is an abbreviation that can be drawn out: a file's, or one the dictionary knows. */
+/** Whether an atom is an abbreviation that can be drawn out: a file's, one typed as a group named as an element is (Ac), or one the dictionary knows. */
 function expandable(a: { el: string; abbrev?: unknown } | undefined): boolean {
-  return !!a && !isElementSymbol(a.el) && (!!a.abbrev || !!abbreviationOf(a.el));
+  return !!a && (!!a.abbrev || (!isElementSymbol(a.el) && !!abbreviationOf(a.el)));
 }
 import { useClipboardActions } from "./clipboardActions";
 import {
@@ -1313,6 +1313,10 @@ function WorkspaceContent({
               ? () => store.getState().expandAbbreviation(menu.id!)
               : undefined
           }
+          asTyped={(() => {
+            const a = menu.kind === "atom" && menu.id != null ? model.atoms.find((x) => x.id === menu.id) : undefined;
+            return a?.typed && a.typed !== a.el ? { typed: a.typed, run: () => store.getState().labelAsTyped(a.id) } : undefined;
+          })()}
           canvas={canvasCommands(menu.at)}
           onExport={menu.selection === "here" ? () => {
             const taken = clip.part();

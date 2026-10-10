@@ -6,6 +6,7 @@ import { StoreApi } from "zustand";
 import type { StyleChoice } from "../../../../../lib/chem/style";
 import { isElementSymbol } from "../../../../../lib/roles/molblock";
 import { labelTextOf, readLabel } from "../../utils/labelTyping";
+import { abbreviationOf } from "../../../../../lib/chem/abbreviations";
 
 type SetState = StoreApi<EditorState>["setState"];
 type GetState = StoreApi<EditorState>["getState"];
@@ -29,24 +30,17 @@ export function createUiSlice(
     markOpenedOver: (name: string) =>
       set((prev: EditorState) => ({ ...prev, savedPath: null, openedName: name })),
 
-    beginLabelEdit: (atomId: number, initial = "", forceLower = false) =>
+    beginLabelEdit: (atomId: number, initial = "") =>
       set((prev: EditorState) => {
         const base = prev.model.atoms.find((a) => a.id === atomId);
-        // (with its charge and mass number, as they are typed: N+, 13C)
-        const start = initial.length ? initial : base ? labelTextOf(base) : "";
-        const autoCap = !forceLower;
-        const val = start.length
-          ? autoCap
-            ? start[0].toUpperCase() + start.slice(1)
-            : start
-          : "";
+        // (with its charge and mass number, as they are typed: N+, 13C - or the letter it is begun with, as typed)
+        const val = initial.length ? initial : base ? labelTextOf(base) : "";
         return {
           ...prev,
           labelEdit: {
             active: true,
             atomId,
             value: val,
-            autoCap,
             opened: { at: typeof performance !== "undefined" ? performance.now() : Date.now(), value: val },
             n: ++labelEdits,
           },
@@ -54,15 +48,12 @@ export function createUiSlice(
       }),
 
     setLabelEditValue: (value: string) =>
-      set((prev: EditorState) => {
-        const autoCap = prev.labelEdit.autoCap && value.length > 0;
-        return {
-          ...prev,
-          labelEdit: { ...prev.labelEdit, value, autoCap },
-        };
-      }),
+      set((prev: EditorState) => ({
+        ...prev,
+        labelEdit: { ...prev.labelEdit, value },
+      })),
 
-    commitLabelEdit: () => {
+    commitLabelEdit: (typed?: string) => {
       const { labelEdit } = get();
       if (!labelEdit.active || labelEdit.atomId == null) return;
       const id = labelEdit.atomId;
@@ -70,13 +61,18 @@ export function createUiSlice(
       const value = labelEdit.value.normalize("NFKC").trim();
       // An empty input keeps the current label.
       // An element with a charge, or a charge alone, sets the atom's
-      // chemistry (labelTyping); anything else is a label as typed.
+      // chemistry (labelTyping); a group named as an element is - Ac, Pr,
+      // Ts, Fm, At - is the group (the maintainer, 2026-10-10), holding it;
+      // anything else is a label as typed.
       const atom = get().model.atoms.find((a) => a.id === id);
       let changed = false;
       if (value && atom) {
         const read = readLabel(value, isElementSymbol);
-        const chem =
-          read.kind === "charge"
+        const named = read.kind === "element" && isElementSymbol(value) && abbreviationOf(value);
+        const chem = (d: WorkspaceDocument) =>
+          named
+            ? { el: value, abbrev: ops.groupHeldAt(d, id, value) }
+            : read.kind === "charge"
             ? { ...atom, charge: read.charge }
             : read.kind === "element"
               ? {
@@ -90,14 +86,23 @@ export function createUiSlice(
                 /^R\d+$/.test(read.el)
                 ? { el: "R#", rgroups: [Number.parseInt(read.el.slice(1), 10)] }
                 : { el: read.el };
-        changed = doc.edit("rename atom", (d) => ops.setAtomChemistry(d, id, chem));
+        // (what was typed, where it is read as something else: to be had back from the atom's menu)
+        const as = typed != null && typed.normalize("NFKC").trim() !== value ? typed.normalize("NFKC").trim() : undefined;
+        changed = doc.edit("rename atom", (d) => ops.setAtomChemistry(d, id, chem(d), as));
       }
       set((prev: EditorState) => ({
         ...prev,
-        labelEdit: { active: false, atomId: null, value: "", autoCap: true },
+        labelEdit: { active: false, atomId: null, value: "" },
         // (written anew: drawn as written until the drawing's own label is)
         labelLeft: changed && labelEdit.n != null ? { atomId: id, n: labelEdit.n, text: value } : prev.labelLeft,
       }));
+    },
+
+    labelAsTyped: (atomId: number) => {
+      const atom = get().model.atoms.find((a) => a.id === atomId);
+      if (!atom?.typed) return;
+      const typed = atom.typed;
+      doc.edit("label as typed", (d) => ops.setAtomChemistry(d, atomId, { el: typed }));
     },
 
     labelShown: () => set((prev: EditorState) => (prev.labelLeft ? { ...prev, labelLeft: null } : prev)),
@@ -105,7 +110,7 @@ export function createUiSlice(
     cancelLabelEdit: () =>
       set((prev: EditorState) => ({
         ...prev,
-        labelEdit: { active: false, atomId: null, value: "", autoCap: true },
+        labelEdit: { active: false, atomId: null, value: "" },
       })),
 
     setAromaticEnabled: (v: boolean) => {

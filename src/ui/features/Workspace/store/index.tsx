@@ -208,7 +208,7 @@ export function createEditorStore(
     doubleClickBond: null,
     fitNonce: 0,
     autoFitSuspended: false,
-    labelEdit: { active: false, atomId: null, value: "", autoCap: true },
+    labelEdit: { active: false, atomId: null, value: "" },
     labelLeft: null,
     moveDrag: {
       active: false,

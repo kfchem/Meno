@@ -604,6 +604,11 @@ function setUnits(): void {
 }
 setUnits();
 
+/** The names labels are read into - the groups', the user's own among them, ligands' and reagents' - as they are written. */
+export function labelUnitNames(): readonly string[] {
+  return UNITS;
+}
+
 /**
  * A label's units, as a chemist reads it: each element or group with its
  * count - CO2Me is C, O2, Me - parentheses with what they hold, and any

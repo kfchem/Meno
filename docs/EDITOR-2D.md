@@ -462,6 +462,33 @@ All hover-based, as above.
   with no label, nor with the old one. The drawing's labels are drawn each
   by its atom (`Labels2D` `keyOf`): a label added or taken away sets no
   other label's letters again.
+- **Labels read as they are meant** (the maintainer, 2026-10-10: nh2 is
+  NH2, obz OBz, hnfmoc NHFmoc; `lib/chem/smartLabel.ts`). No list of what
+  is typed: of the labels Meno reads (docs/CTFILE.md, *Atoms that are not
+  elements*), the one the letters typed spell, by these rules.
+  1. A letter typed small may be a capital, one typed as a capital stays
+     one. Part of a structure - an element, a group - comes before a whole
+     molecule - a reagent, a complex - as a label on a structure stands
+     for part of one (co2me is CO2Me, not a complex of cobalt; hf is Hf,
+     HF typed so); then the fewest letters made capitals (co is Co, ph Ph,
+     ipr iPr - not the NHC IPr).
+  2. No element after uranium is read from letters typed small: nh is NH,
+     cn CN, no NO; ts is tosyl, fm Fm.
+  3. Typed as it is drawn on a bond's left - aco, meo, bochn, ho2c, h2n,
+     or HN before a group, hnfmoc - it is kept as it reads from the bond:
+     OAc, OMe, NHBoc, CO2H, NH2, NHFmoc (and drawn the other way round
+     again where its bond leaves to the left).
+  4. A prefix set in italics gets its hyphen: tbu is t-Bu, co2tbu CO2t-Bu;
+     iPr stays.
+  5. What reads as nothing stays exactly as typed - no capital made.
+
+  As it is typed, only its letters' case changes, as they are read so far
+  - the same letters in the same places, the caret where it was; rules 3
+  and 4 as it is kept. An input method's composition is left alone until
+  it is given. Where what is kept is not what was typed, the atom's menu
+  has it back, read as nothing else (*As typed: obz*, one step); Settings
+  › General, *Read labels as they are meant*, turned off keeps every label
+  exactly as typed.
 - Ring templates (3- to 8-membered, benzene), fused onto a bond or an atom;
   chains. (Chains and rings came back on 2026-10-03 as the honeycomb: three
   clicks on an atom or two on empty space, the honeycomb's ring where a

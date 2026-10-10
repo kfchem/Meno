@@ -2015,7 +2015,8 @@ function specialLabel(a: Atom, fromRight: boolean): { runs: TextRun[]; anchor: n
     const text = `${a.list.not ? "NOT " : ""}[${a.list.symbols.join(",")}]`;
     return { runs: [{ text }], anchor: 0 };
   }
-  if (ELEMENT_SYMBOLS.has(a.el)) return null;
+  // (a group named as an element is - Ac, Pr, Ts - set as the group it holds)
+  if (ELEMENT_SYMBOLS.has(a.el) && !a.abbrev) return null;
   // (a ring's substituents named before it - 2,6-diMeBz - are not read
   // outward: on the right of its bond, the label starts at the bond)
   const ringFirst = namesRingFirst(a.el);

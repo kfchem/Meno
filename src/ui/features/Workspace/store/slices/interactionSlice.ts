@@ -255,7 +255,7 @@ export function createInteractionSlice(set: SetState, get: GetState) {
         panHold: { active: false, pointerId: null },
         wireDrag: null,
         // nothing being written, carried or asked over the canvas
-        labelEdit: { active: false, atomId: null, value: "", autoCap: true },
+        labelEdit: { active: false, atomId: null, value: "" },
         captionEdit: null,
         captionLeft: null,
         quickAdd: null,

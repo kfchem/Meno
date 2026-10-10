@@ -39,6 +39,8 @@ export type AppSettings = {
   pictures: PictureSettings;
   /** How the mouse and the trackpad work the canvas. */
   pointer: PointerSettings;
+  /** How an atom's label is read as it is typed. */
+  labels: LabelSettings;
   /** How a workflow's jobs run (Settings, Calculations; docs/WORKFLOWS.md). */
   calculations: CalculationSettings;
   /** The procedures saved (docs/WORKFLOWS.md, *Procedures*): put down again from Quick Add. */
@@ -70,6 +72,12 @@ export const CORES_MOST = 1024;
 export type PointerSettings = {
   /** A turn of the wheel upwards zooms in (as maps do), or out. */
   wheelUp: "in" | "out";
+};
+
+/** How an atom's label is read as it is typed (Workspace/LabelTyping2D; lib/chem/smartLabel). */
+export type LabelSettings = {
+  /** As it was meant - nh2 as NH2, obz as OBz - or, off, exactly as typed. */
+  smart: boolean;
 };
 
 /** The resolutions a copied picture may be made at, in pixels to the inch. */
@@ -137,6 +145,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   plugins: { removed: [], roles: {}, programs: {} },
   pictures: { dpi: 600 },
   pointer: { wheelUp: "in" },
+  labels: { smart: true },
   calculations: {},
   procedures: [],
 };
@@ -160,6 +169,7 @@ export function acceptAppSettings(raw: unknown): AppSettings {
     plugins: acceptPlugins(r.plugins),
     pictures: acceptPictures(r.pictures),
     pointer: acceptPointer(r.pointer),
+    labels: { smart: (r.labels as { smart?: unknown } | undefined)?.smart !== false },
     calculations: acceptCalculations(r.calculations),
     procedures: acceptProcedures(r.procedures),
   };
@@ -359,6 +369,7 @@ type SettingsState = AppSettings & {
   setPlugins: (plugins: PluginSettings) => void;
   setPictures: (pictures: PictureSettings) => void;
   setPointer: (pointer: PointerSettings) => void;
+  setLabels: (labels: LabelSettings) => void;
   setCalculations: (calculations: CalculationSettings) => void;
   setProcedures: (procedures: SavedProcedure[]) => void;
 };
@@ -371,9 +382,9 @@ export const useAppSettings = create<SettingsState>((set, get) => {
   const scheduleSave = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer, calculations, procedures } = get();
+      const { drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer, labels, calculations, procedures } = get();
       writeSettingsText(
-        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer, calculations, procedures }),
+        settingsFileText({ drawingStyle, style3d, network, chemistry, updates, options, abbreviations, files, plugins, pictures, pointer, labels, calculations, procedures }),
       ).then(
         () => set({ error: null }),
         (e) => set({ error: `Settings could not be saved: ${String(e)}` }),
@@ -414,6 +425,10 @@ export const useAppSettings = create<SettingsState>((set, get) => {
     },
     setPointer: (pointer) => {
       set({ pointer });
+      scheduleSave();
+    },
+    setLabels: (labels) => {
+      set({ labels });
       scheduleSave();
     },
     setCalculations: (calculations) => {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { connectStoreToDocument, createEditorStore } from ".";
-import { createWorkspaceDocument } from "../document";
+import { createWorkspaceDocument, writtenAsLabels } from "../document";
+import { writeMolfile } from "../../../../lib/chem/molWriter";
+import { forFlatReaders } from "../chem/drawing";
 import { stereoPlaces } from "../chem/marks";
 import { readDrawn, recordText } from "../utils/copyPaste";
 import { readWorkspace, workspaceText } from "../utils/workspace";
@@ -125,5 +127,48 @@ describe("charges, R and S put by hand", () => {
     const other = fixed.find((p) => p.key === "centre-2")!;
     expect(Math.abs(other.x - 0.75) > 0.25 || Math.abs(other.y - 0.2) > 0.25).toBe(true);
     expect(free.find((p) => p.key === "centre-1")).not.toMatchObject({ x: 0.75, y: 0.2 });
+  });
+});
+
+describe("a group named as an element is (Ac, Pr, Ts, Fm, At)", () => {
+  it("typed as a label, is the group it holds: written out as the group, drawn out again as it", () => {
+    const { doc, state } = editor();
+    const c = state().addAtom(0, 0, "C");
+    const x = state().addAtomBonded(c, 1.5, 0, "C", 1);
+    state().beginLabelEdit(x, "ac");
+    state().setLabelEditValue("Ac");
+    state().commitLabelEdit("ac");
+    const a = state().model.atoms.find((at) => at.id === x)!;
+    expect(a.el).toBe("Ac");
+    expect(a.abbrev?.atoms.map((at) => at.el)).toEqual(["C", "C", "O"]);
+    // (what was typed, kept: to be had back from its menu)
+    expect(a.typed).toBe("ac");
+    // (a MOL file holds the acetyl group, as a superatom - no actinium)
+    const mol = writeMolfile(forFlatReaders(drawnOf(state())));
+    expect(mol).not.toMatch(/\bAc\s+0\s+0/);
+    expect(mol).toMatch(/SUP|STY/);
+    // (drawn out: the acetyl's atoms)
+    state().expandAbbreviation(x);
+    expect(state().model.atoms.map((at) => at.el).sort()).toEqual(["C", "C", "C", "O"]);
+    doc.undo();
+    // (typed as an element with more: the element, as typed - AcH is no group)
+    state().beginLabelEdit(x, "");
+    state().setLabelEditValue("N");
+    state().commitLabelEdit("N");
+    expect(state().model.atoms.find((at) => at.id === x)).toMatchObject({ el: "N" });
+    expect(state().model.atoms.find((at) => at.id === x)!.typed).toBeUndefined();
+  });
+
+  it("written by Clean-up by its label, holds the group: N-tosyl stays tosyl, not tennessine", () => {
+    const { state } = editor();
+    const n = state().addAtom(0, 0, "N");
+    const s = state().addAtomBonded(n, 1.5, 0, "S", 1);
+    const done = writtenAsLabels(
+      { ...createWorkspaceDocument().getState(), model: state().model },
+      [{ atoms: [s], at: s, label: "Ts" }],
+    );
+    const ts = done.model.atoms.find((a) => a.id === s)!;
+    expect(ts.el).toBe("Ts");
+    expect(ts.abbrev?.atoms.some((a) => a.el === "S")).toBe(true);
   });
 });

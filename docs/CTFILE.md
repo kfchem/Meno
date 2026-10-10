@@ -335,7 +335,12 @@ ester as a group does.
 
 A label known any of these ways can be expanded, is counted and written out
 whole, and is what RDKit is asked about; one not known is text. Ar is
-argon's symbol as well as aryl's (GR-9.2): typed, it is argon. Settings ›
+argon's symbol as well as aryl's (GR-9.2): typed, it is argon. The groups
+named as an element is - Ac (acetyl), Pr (propyl), Ts (tosyl), Fm
+(fluorenylmethyl), At (HOAt's) - are the groups (the maintainer,
+2026-10-10): typed, or written by Clean-up, the atom holds the group
+(`abbrev`), drawn as a label, written out whole and expanded as any
+abbreviation is; typed with more - AcH, Ac+ - it is the element. Settings ›
 Abbreviations shows Meno's list, each drawn as what it stands for.
 
 A bond that came from a file as one of these becomes an ordinary bond once

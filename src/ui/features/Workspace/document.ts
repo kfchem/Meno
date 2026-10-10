@@ -9,6 +9,7 @@
 import { createDocument, type DocumentStore } from "../../../lib/doc";
 import { bondChem, chemistry, type AtomChem } from "../../../lib/chem/molecule";
 import { placedAbbreviation } from "../../../lib/chem/abbreviationPlace";
+import { isElementSymbol } from "../../../lib/roles/molblock";
 import { NOMINAL_BOND_LENGTH } from "../../../lib/chem/acs";
 import type { StyleChoice } from "../../../lib/chem/style";
 import type { ArrowLook } from "../../../lib/chem/reactionArrow";
@@ -522,8 +523,18 @@ export function writtenAsLabels(doc: WorkspaceDocument, groups: readonly Written
     const ids = new Set(g.atoms);
     const crossing = bonds.filter((b) => ids.has(b.a) !== ids.has(b.b) || b.endpoints?.some((e) => ids.has(e) !== ids.has(b.a)));
     if (crossing.length !== 1 || ![crossing[0].a, crossing[0].b].includes(g.at)) continue;
+    // (a group named as an element is - Ts, Ac, Pr - holds the group: not the element)
+    const outside = crossing[0].a === g.at ? crossing[0].b : crossing[0].a;
+    const here = atoms.find((a) => a.id === g.at);
+    const there = atoms.find((a) => a.id === outside);
+    const toward = here && there ? { x: there.x - here.x, y: there.y - here.y } : null;
+    const held = isElementSymbol(g.label) ? placedAbbreviation(g.label, toward, NOMINAL_BOND_LENGTH) : null;
     atoms = atoms.flatMap((a) =>
-      a.id === g.at ? [{ id: a.id, x: a.x, y: a.y, r: a.r, el: g.label }] : ids.has(a.id) ? [] : [a],
+      a.id === g.at
+        ? [{ id: a.id, x: a.x, y: a.y, r: a.r, el: g.label, ...(held ? { abbrev: { ...held, ...(toward ? { toward } : {}) } } : {}) }]
+        : ids.has(a.id)
+          ? []
+          : [a],
     );
     bonds = bonds.filter((b) => !(ids.has(b.a) && ids.has(b.b)));
   }
@@ -575,10 +586,27 @@ export function contractToAbbreviation(
   return { ...doc, model: { atoms, bonds } };
 }
 
+/**
+ * The group a label names, laid out to hang where the atom `id` hangs - its
+ * bond out turned toward the atom it is bound to - as the atom's own
+ * (`abbrev`): what a group named as an element is holds, so that it is the
+ * group and not the element (Ac, Pr, Ts, Fm, At).
+ */
+export function groupHeldAt(doc: WorkspaceDocument, id: number, label: string): AtomChem["abbrev"] {
+  const a = doc.model.atoms.find((x) => x.id === id);
+  const touching = doc.model.bonds.filter((b) => b.a === id || b.b === id);
+  const out = a && touching[0] ? doc.model.atoms.find((x) => x.id === (touching[0].a === id ? touching[0].b : touching[0].a)) : undefined;
+  const toward = a && out ? { x: out.x - a.x, y: out.y - a.y } : null;
+  const s = placedAbbreviation(label, toward, NOMINAL_BOND_LENGTH);
+  return s ? { ...s, ...(toward ? { toward } : {}) } : undefined;
+}
+
 export function setAtomChemistry(
   doc: WorkspaceDocument,
   id: number,
   chem: AtomChem,
+  /** What was typed, where the label it was read as is not it (`Atom.typed`). */
+  typed?: string,
 ): WorkspaceDocument {
   const atoms = doc.model.atoms;
   const index = atoms.findIndex((a) => a.id === id);
@@ -588,7 +616,8 @@ export function setAtomChemistry(
   // leaves no abbreviation, list or Rgroup of the old one behind)
   const same =
     was.el === chem.el &&
-    JSON.stringify(chemistry(was)) === JSON.stringify(chemistry(chem));
+    JSON.stringify(chemistry(was)) === JSON.stringify(chemistry(chem)) &&
+    was.typed === typed;
   if (same) return doc;
   const {
     charge: _q,
@@ -600,12 +629,13 @@ export function setAtomChemistry(
     hCount: _h,
     abbrev: _a,
     chargeAt,
+    typed: _t,
     ...rest
   } = was;
   const next = atoms.slice();
   // (a charge put by hand stays where it was put while there is a charge - or a radical's dots - to put)
   const marked = (chem.charge ?? 0) !== 0 || !!chem.radical;
-  next[index] = { ...rest, el: chem.el, ...chemistry(chem), ...(marked && chargeAt ? { chargeAt } : {}) };
+  next[index] = { ...rest, el: chem.el, ...chemistry(chem), ...(marked && chargeAt ? { chargeAt } : {}), ...(typed != null ? { typed } : {}) };
   return { ...doc, model: { atoms: next, bonds: doc.model.bonds } };
 }
 

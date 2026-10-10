@@ -54,7 +54,7 @@ export function undrawnHydrogens(model: Model): Map<number, number> {
   return new Map(
     model.atoms.map((a) => [
       a.id,
-      !isElementSymbol(a.el)
+      !isElementSymbol(a.el) || a.abbrev
         ? 0
         : a.valence != null
           ? // (a valence a file sets: what the bonds leave of it)

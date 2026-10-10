@@ -32,6 +32,8 @@ export type Atom = EditorAtom & {
   chargeAt?: MarkAt;
   /** Where its R or S was put by hand, likewise (chem/marks). */
   stereoAt?: MarkAt;
+  /** What was typed for its label, where it was read as something else (obz, read as OBz): had back from its menu. */
+  typed?: string;
 };
 /** Where a mark was put by hand: its middle, from what it is of - an atom, a bond's middle - in ems of the drawing's labels. */
 export type MarkAt = { x: number; y: number };
@@ -798,7 +800,6 @@ export type EditorState = {
     active: boolean;
     atomId: number | null;
     value: string;
-    autoCap: boolean;
     /** When it was begun, and with what: a double-click takes back one its first click began. */
     opened?: { at: number; value: string };
     /** Each edit its own number, given as it begins. */
@@ -1049,13 +1050,13 @@ export type EditorState = {
     tol?: number,
     excludeId?: number | null,
   ) => number | null;
-  beginLabelEdit: (
-    atomId: number,
-    initial?: string,
-    forceLower?: boolean,
-  ) => void;
+  /** An atom's label opened to be written: as it is, or begun with `initial`, a letter typed over it. */
+  beginLabelEdit: (atomId: number, initial?: string) => void;
   setLabelEditValue: (value: string) => void;
-  commitLabelEdit: () => void;
+  /** The label written kept; `typed`, what was typed for it, where it is read as something else. */
+  commitLabelEdit: (typed?: string) => void;
+  /** An atom's label made what was typed for it, read as nothing else: obz, not OBz - one step. */
+  labelAsTyped: (atomId: number) => void;
   cancelLabelEdit: () => void;
   setAromaticEnabled: (v: boolean) => void;
   /**

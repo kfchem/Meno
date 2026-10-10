@@ -24,7 +24,9 @@ import { COLORS } from "../../../theme/colors";
 import { TAU, follow } from "../../../theme/motion";
 import type { TypingField } from "../../TextEditor/typingField";
 import { useEditor, useEditorStore } from "../store";
-import { labelKey, typedLabel } from "../utils/labelTyping";
+import { keptLabel, liveLabel } from "../../../../lib/chem/smartLabel";
+import { useAppSettings } from "../../../../lib/settings/appSettings";
+import { labelKey, labelReading } from "../utils/labelTyping";
 import { LabelWords } from "../utils/labelWords";
 import { pageAt } from "../utils/page";
 import { useDrawnLayout } from "./drawnLayoutContext";
@@ -67,7 +69,8 @@ export default function LabelTyping2D() {
       if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable || t.dataset.textField != null)) return;
       const ch = labelKey(e);
       if (!ch) return;
-      store.getState().beginLabelEdit(hoveredAtom, ch.toUpperCase());
+      // (the letter as typed: what it is read as, the label's to say)
+      store.getState().beginLabelEdit(hoveredAtom, ch);
       e.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
@@ -116,8 +119,9 @@ function Typing({ session }: { session: Session }) {
   const [, setTick] = useState(0);
   const [ed] = useState(() => {
     const e = new LabelWords(store.getState().labelEdit.value);
-    // (the label's rules, as it is typed: its first letter a capital, until it is written away)
-    e.settle = (t) => typedLabel(t, store.getState().labelEdit.autoCap);
+    // (as it is typed: its letters' case as they are meant - nh2 NH2 - or, so set, as typed)
+    e.reading = (t) => (useAppSettings.getState().labels.smart ? liveLabel(t, labelReading) : t);
+    e.read();
     return e;
   });
   const field = useRef<TypingField | null>(null);
@@ -192,8 +196,9 @@ function Typing({ session }: { session: Session }) {
     const s = store.getState();
     if (!s.labelEdit.active || s.labelEdit.n !== n) return;
     if (keep) {
-      s.setLabelEditValue(ed.text);
-      s.commitLabelEdit();
+      // (as it is kept: as it reads from its bond - aco OAc - its italic prefixes hyphenated - tbu t-Bu)
+      s.setLabelEditValue(useAppSettings.getState().labels.smart ? keptLabel(ed.typed, labelReading) : ed.typed);
+      s.commitLabelEdit(ed.typed);
     } else s.cancelLabelEdit();
   };
   const finishing = useRef(finish);
