@@ -12,7 +12,7 @@ a workspace holding 2D and 3D together - see [`WORKSPACE.md`](./WORKSPACE.md).
 | --- | --- | --- |
 | Tauri shell (Rust) | `src-tauri/src/lib.rs` | Window, plugins (`fs`, `os`, `opener`), and the only code that spawns OS processes: the bundled `uv` binary and the Python sidecar. No chemistry logic lives here. |
 | App shell (React) | `src/App.tsx`, `src/lib/core/`, `src/ui/layouts/`, `src/ui/views/` | Tab model (open/close/reorder/rename), mapping a tab's `kind` to a view component. |
-| Features (React) | `src/ui/features/*` | One folder per view: the workspace (2D drawing and molecules in 3D), Python console, text editor, settings. |
+| Features (React) | `src/ui/features/*` | One folder per view: the workspace (2D drawing, molecules in 3D, texts, PDFs, workflows) and settings, with the text and style editors they share. |
 | Chemistry helpers (TS) | `src/lib/chem/`, `src/utils/` | File parsing (MOL/SDF/RXN/XYZ/PDB), editor model conversion, 2D depiction layout (bond lines, wedges, labels) and ACS-style sizing. Pure functions — no React, no Tauri. |
 | Python worker | `src-tauri/resources/workers/interactive_worker.py` | Line-delimited JSON REPL run inside a `uv`-managed venv. |
 
@@ -53,7 +53,7 @@ src/
   utils/atomUtils         element table (radii, colours)
   samples/                textbook structures and reactions for the tests and the workflow's 3D node
                           (see samples/README.md)
-  ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "New…" menu, online/offline, Settings, window buttons
+  ui/layouts/TopBar       custom title bar: Meno's menu (its logo), tabs, "+" (a new workspace), online/offline, Settings, window buttons
   ui/layouts/MenoMenu     the logo's menu: the app's commands and those the tab in front offers (commands.ts)
   ui/layouts/ErrorBoundary a part that fails as it is drawn, and the card left in its place (see *When a part fails*)
   ui/fonts/               the typefaces labels are drawn in, read from their files; troika, which draws
@@ -66,7 +66,6 @@ src/
   ui/views/openFile       a file to the tab it opens in: Open (Ctrl/Cmd+O)
   ui/features/
     Workspace/            the workspace: 2D editor, molecules in 3D, texts, PDFs, workflows (see below)
-    PythonConsole/        UI for the Python sidecar
     TextEditor/           a text Meno draws: its editor, line pictures, and the field typed through
     StyleEditor/          every drawing setting, with a preview
     SettingsPanel/        Settings: drawing style, molecules in 3D, chemistry, files, calculations
@@ -99,9 +98,9 @@ src-tauri/
   `frameloop` to `"never"`) while inactive. Workflow tabs pass the same flag to
   the canvases embedded in their nodes through `NodeActiveContext`.
 - Because every live canvas holds a WebGL context and browsers keep only about
-  16, `lib/core/limits.ts` budgets them: a 2D or workspace tab costs one, a
-  workflow tab two, and opening past the limit is refused with a notice rather
-  than silently blanking the oldest view.
+  16, `lib/core/limits.ts` budgets them: a workspace costs one, and opening
+  past the limit is refused with a notice rather than silently blanking the
+  oldest view.
 - Meno starts on a workspace, and "+" makes another: the canvas is
   the workspace (docs/WORKSPACE.md), so there is no start page.
 - **Open** (Ctrl/Cmd+O, or the menu) reads the files picked in the system's
@@ -161,8 +160,8 @@ from nothing. Each logs the error with `console.error`, naming the part
 
 Each part is caught by the nearest of them: the canvas's scene (react-three-
 fiber passes an error inside its `<Canvas>` out to the tree round it) and
-the canvas's own HTML by the canvas's; the panel beside the canvas, Settings
-and the Python console by their tab's; the title bar and the notices by the
+the canvas's own HTML by the canvas's; the panel beside the canvas and
+Settings by their tab's; the title bar and the notices by the
 window's. Errors thrown in event handlers, timers, promises and `useFrame`
 are not React's to catch and do not blank the window; they are not shown.
 
@@ -514,17 +513,20 @@ closes*).
   answers for the step cards and Settings, Plugins, and what was located
   in the settings' `plugins.programs`).
 
-## Python console and sidecar
+## Python sidecars
 
 ```
-PyConsole ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_setup_uv (Rust)
-          │                          ├─ tools::ensure(Uv): <data>/tools/uv/<version>/uv[.exe], fetched once
-          │                          └─ runs it: `uv venv`, `uv pip install -r <lock>`
-          │                             stdout/stderr → events uv:log / uv:err
-          └─ext_spawn_sidecar({ entry: <venv python>, args: ["-u", <worker.py>] }) → id
-             ext_stdin(id, JSON line) ─▶ worker ─▶ events ext:stdout / ext:stderr / ext:exit
-             ext_kill(id)
+worker ──ensurePyEnv(profile)──▶ py_env_python_path_uv / py_env_setup_uv (Rust)
+       │                          ├─ tools::ensure(Uv): <data>/tools/uv/<version>/uv[.exe], fetched once
+       │                          └─ runs it: `uv venv`, `uv pip install -r <lock>`
+       │                             stdout/stderr → events uv:log / uv:err
+       └─ext_spawn_sidecar({ entry: <venv python>, args: ["-u", <worker.py>] }) → id
+          ext_stdin(id, JSON line) ─▶ worker ─▶ events ext:stdout / ext:stderr / ext:exit
+          ext_kill(id)
 ```
+
+The workers are the chemistry roles' (`lib/roles/worker.ts`) and the
+readers' (`lib/calc/workers.ts`).
 
 The chemistry roles (`lib/plugins/roles.ts`: SMILES, the checks, R and S,
 stereoisomers, conformers, a formula of a molecule in 3D) are filled by a
@@ -873,9 +875,9 @@ window decodes; nothing of it goes through Rust but the clipboard.
 | --- | --- | --- |
 | `py_env_python_path_uv` | `lib/pyEnv.ts` | Resolve the venv's Python path under app data. |
 | `py_env_setup_uv` | `lib/pyEnv.ts` | Create the venv and install the lock file with `uv`. |
-| `ext_spawn_sidecar` | `PyConsole` | Spawn a process with piped stdio; returns an id. |
-| `ext_stdin` | `PyConsole` | Write to a sidecar's stdin. |
-| `ext_kill` | `PyConsole` | Kill a sidecar and emit `ext:exit`. |
+| `ext_spawn_sidecar` | `lib/roles/worker.ts`, `lib/calc/workers.ts` | Spawn a process with piped stdio; returns an id. |
+| `ext_stdin` | `lib/roles/worker.ts`, `lib/calc/workers.ts` | Write to a sidecar's stdin. |
+| `ext_kill` | `lib/roles/worker.ts`, `lib/calc/workers.ts` | Kill a sidecar and emit `ext:exit`. |
 | `pdf_hold_path`, `pdf_hold_bytes` | `lib/pdf/reader.ts` | A PDF held in Meno's cache by its SHA-256; its pages' sizes (`pdf.rs`). |
 | `pdf_bytes` | `utils/workspace.ts` | A PDF held, as its bytes, for a workspace's file. |
 | `pdf_render` | `lib/pdf/reader.ts` | A part of a page drawn by PDFium, as a PNG. |

@@ -475,9 +475,6 @@ export default function App() {
       dispatch({ type: "ADD_TAB", tab: viewRegistry.workspace.create("Workspace") });
     },
     openFiles: pickFiles,
-    newText: () => {
-      openTexts([{ name: "", text: "" }], state.activeId);
-    },
     openByKind: async (kind: TabKind, opts?: { label?: string }) => {
       // There is one Settings tab: asking again brings it to the front.
       if (kind === "settings") {
@@ -507,7 +504,7 @@ export default function App() {
 
   const resolveView = useCallback(
     (kind: string): ViewEntry | Promise<ViewEntry> => {
-      if (kind in viewRegistry) return viewRegistry[kind];
+      if (kind in viewRegistry) return viewRegistry[kind as TabKind];
       return viewRegistry.workspace;
     },
     []

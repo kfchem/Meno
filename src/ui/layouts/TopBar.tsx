@@ -1,15 +1,14 @@
 import { AnimatePresence, Reorder, motion } from "motion/react";
-import { DURATION, EASE, FADE, LEAVE, RISE } from "../theme/motion";
+import { DURATION, EASE, FADE, LEAVE } from "../theme/motion";
 import {
   XMarkIcon,
   PlusIcon,
   MinusIcon,
   StopIcon,
-  ChevronDownIcon,
   Cog6ToothIcon,
 } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import { useMemo, MouseEvent, useRef, useState, useEffect } from "react";
+import { useMemo, MouseEvent, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TabKind } from "../../lib/core";
 import { shortcutLabel } from "../../lib/doc/shortcuts";
@@ -29,8 +28,6 @@ export type TabsController = {
   openByKind?: (kind: TabKind, opts?: { label?: string }) => void;
   /** Files picked in the system's dialog, each opened in a tab (Open…). */
   openFiles: () => void;
-  /** A new text, in the column of the workspace in front - or of a canvas of its own. */
-  newText?: () => void;
 };
 
 export default function TopBar({ ctl }: { ctl: TabsController }) {
@@ -47,41 +44,6 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
   const draggingRef = useRef(false);
   const appWindow = useMemo(() => getCurrentWindow(), []);
   const stop = (e: MouseEvent) => e.stopPropagation();
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc as any);
-    return () => document.removeEventListener("mousedown", onDoc as any);
-  }, []);
-  // Escape closes the menu, as a click elsewhere does - and only that: the
-  // tab beneath does not take it as well
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      setMenuOpen(false);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [menuOpen]);
-
-  const onSelectMenu = (
-    profile: "texteditor" | "pyconsole" | "workspace"
-  ) => {
-    setMenuOpen(false);
-    if (!openByKind) return;
-    if (profile === "texteditor") ctl.newText?.();
-    if (profile === "pyconsole")
-      openByKind("pyconsole", { label: "Python Console" });
-    if (profile === "workspace") openByKind("workspace", { label: "Workspace" });
-  };
 
   return (
     <div
@@ -186,67 +148,15 @@ export default function TopBar({ ctl }: { ctl: TabsController }) {
       </Reorder.Group>
 
       <div className="h-full flex items-center gap-1">
-        <div className="relative flex" ref={menuRef}>
-          <button
-            aria-label="New tab"
-            onClick={() => {
-              // (beside the menu's own button, so not a click elsewhere: it closes the menu itself)
-              setMenuOpen(false);
-              add();
-            }}
-            onMouseDown={stop}
-            className="h-7 px-2 rounded-l-md border border-gh-line bg-white transition-colors duration-150 ease-meno hover:bg-gray-100"
-          >
-            <div className="flex items-center gap-1">
-              <PlusIcon className="h-3 w-3" />
-            </div>
-          </button>
-          <button
-            aria-label="New…"
-            title="New…"
-            onMouseDown={stop}
-            onClick={() => setMenuOpen((v) => !v)}
-            className="h-7 px-2 rounded-r-md border border-l-0 border-gh-line bg-white transition-colors duration-150 ease-meno hover:bg-gray-100 -ml-px"
-          >
-            <ChevronDownIcon className="h-3.5 w-3.5" />
-          </button>
-
-          <AnimatePresence>
-          {menuOpen && (
-            <motion.div
-              key="new-menu"
-              {...RISE}
-              style={{ transformOrigin: "top right" }}
-              className="absolute right-0 mt-7 w-56 rounded-md border border-gh-line bg-white shadow-lg z-50 overflow-hidden"
-              onMouseDown={stop}
-            >
-              <div className="py-1">
-                <button
-                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
-                  onClick={() => onSelectMenu("texteditor")}
-                >
-                  <span>Text</span>
-                  <span className="text-xs text-gray-500">new</span>
-                </button>
-                <button
-                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
-                  onClick={() => onSelectMenu("pyconsole")}
-                >
-                  <span>Python Console</span>
-                  <span className="text-xs text-gray-500">accel</span>
-                </button>
-                <button
-                  className="w-full px-3 py-2 text-left transition-colors duration-150 ease-meno hover:bg-gray-100 flex items-center justify-between text-sm"
-                  onClick={() => onSelectMenu("workspace")}
-                >
-                  <span>Workspace</span>
-                  <span className="text-xs text-gray-500">test</span>
-                </button>
-              </div>
-            </motion.div>
-          )}
-          </AnimatePresence>
-        </div>
+        <button
+          aria-label="New workspace"
+          title="New workspace"
+          onClick={add}
+          onMouseDown={stop}
+          className="h-7 px-2 rounded-md border border-gh-line bg-white transition-colors duration-150 ease-meno hover:bg-gray-100"
+        >
+          <PlusIcon className="h-3 w-3" />
+        </button>
 
         <OfflineToggle />
         <button

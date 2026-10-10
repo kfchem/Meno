@@ -331,7 +331,8 @@ Taken on 2026-10-04:
   reached from it. The New Tab page is gone: Meno starts on a canvas, "+"
   makes another, and Open puts a file in a tab of its own. The New… menu
   goes too, later: the text editor, the Python console and the workflow
-  builder are to be reached from the canvas.
+  builder are to be reached from the canvas. (Done 2026-10-10: "+" opens
+  a workspace and nothing else, and the Python console was removed.)
 - **Text files and PDFs on the page**: a small preview of each sits on the
   workspace, and is edited in a split view or in a window inside Meno's.
 - **No buttons on the canvas.** Commands are in Meno's menu, from its logo,
@@ -349,7 +350,7 @@ Taken on 2026-10-07:
 - **Texts.** A workspace is a tab, and a tab is a workspace: text no
   longer opens in a tab of its own. A text file opened, or dropped on the
   canvas, a molecule's output shown and a new text (Meno's menu, *New
-  text*; the New… menu, *Text*) are held in the workspace in front - one
+  text*) are held in the workspace in front - one
   of its own where none is in front - and shown in a column on the
   canvas's right (the maintainer chose the column over a window inside
   Meno's). It is the workspace's:

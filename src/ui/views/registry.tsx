@@ -1,6 +1,5 @@
 import type { JSX } from "react";
 import type { DocumentStore } from "../../lib/doc";
-import PyConsole from "../features/PythonConsole";
 import SettingsPanel from "../features/SettingsPanel";
 
 import type {
@@ -48,31 +47,11 @@ const create = (label: string, kind: TabKind, data?: unknown): TabInstance => {
   } as unknown as TabInstance;
 };
 
-export const viewRegistry: Record<string, ViewEntry> = {
-  "2d": {
-    kind: "2d",
-    createDocument: () => createWorkspaceDocument(),
-    Component: ({ tabId, content, active, document, renameTab }) => (
-      <Workspace
-        tabId={tabId}
-        active={active}
-        document={document as DocumentStore<WorkspaceDocument>}
-        initialFilename={(content as any)?.data?.filename}
-        initialPayload={(content as any)?.data?.payload}
-        nameTab={renameTab}
-      />
-    ),
-    create: (label) => create(label, "2d", {}),
-  },
+export const viewRegistry: Record<TabKind, ViewEntry> = {
   settings: {
     kind: "settings",
     Component: () => <SettingsPanel />,
     create: (label) => create(label, "settings", {}),
-  },
-  pyconsole: {
-    kind: "pyconsole",
-    Component: () => <PyConsole />,
-    create: (label) => create(label, "pyconsole", {}),
   },
   workspace: {
     kind: "workspace",
