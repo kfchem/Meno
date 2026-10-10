@@ -1188,15 +1188,12 @@ function WorkspaceContent({
           onArrowStyle={() => {
             if (menu.kind === "arrow" && menu.id != null) openArrowStyle(menu.id);
           }}
-          onAddArrow={() => store.getState().addArrow(menu.at.x, menu.at.y)}
           onSaveAbbreviation={() => {
             const { model: m, sel } = store.getState();
             const made = abbreviationFromSelection(m, sel.atoms);
             if ("problem" in made) setChemError(`This selection cannot be saved as an abbreviation. ${made.problem}`);
             else openSaveAbbreviation([...sel.atoms], made.smiles);
           }}
-          onAddPlus={() => store.getState().addPlus(menu.at.x, menu.at.y)}
-          onAddText={() => store.getState().setCaptionEdit({ id: null, at: menu.at })}
           onRunStep={() => {
             if (menu.kind !== "step" || menu.id == null) return;
             // (a program installed separately found nowhere: Settings, Plugins, where it is located)
