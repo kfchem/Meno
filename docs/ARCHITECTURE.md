@@ -788,7 +788,8 @@ its own (`src-tauri/src/pdf.rs`, `lib/pdf`).
   those the view has moved on from.
 - **On the page** (`components/Pdfs2D.tsx`, `lib/pdf/layout`): each PDF a
   stack at the size it is printed - a 14.4-point bond is a bond - or its
-  pages spread; a small picture of each page shown at once, tiles at the
+  pages spread, in rows or each in a place of its own kept from the PDF's
+  (`placed`); a small picture of each page shown at once, tiles at the
   screen's resolution asked for once the view is still, each fading in.
   The pictures are the canvas's, shared by the stacks and the column
   (`components/pdfPictures.tsx`): a tile drawn for one is drawn for both.

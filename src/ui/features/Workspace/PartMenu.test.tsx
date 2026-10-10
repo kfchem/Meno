@@ -78,6 +78,12 @@ describe("the right-click menu", () => {
     expect(html).not.toMatch(/aria-label="Next page"[^>]*disabled=""/);
   });
 
+  it("offers a PDF's pages spread, some in places of their own, put back in their rows", () => {
+    const spread = { spread: true, icon: false, onSpread: none, onIcon: none, onRead: none };
+    expect(menu(target({ kind: "pdf", id: 1 }), { pdf: spread }).listed).not.toContain("Put pages in rows");
+    expect(menu(target({ kind: "pdf", id: 1 }), { pdf: { ...spread, onRows: none } }).listed).toEqual(expect.arrayContaining(["Gather pages", "Put pages in rows"]));
+  });
+
   it("marks the words' alignment as it is, among their icons", () => {
     const { icons, html } = menu(target({ kind: "caption", id: 1 }), { captionAlign: { now: "right", set: none } });
     expect(icons).toEqual(["Edit text", "Align left", "Align centre", "Align right", "Justify", "Delete text"]);

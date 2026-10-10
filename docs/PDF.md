@@ -111,6 +111,9 @@ stops being part of the work.
   - The right-click menu has *Spread pages*. The pages lift off the
     stack one after another and lie side by side on the page, in rows,
     to be read and compared at once. *Gather pages* puts them back.
+  - Spread, each page can be put where it is wanted - beside a structure
+    drawn from it, or next to another page to compare - and gathered
+    again (*Pages placed one by one*, below).
 - **It comes onto the page as an icon**, its top page on it and its name
   under it. The name is set in the drawing's type, at the size of its
   labels, and the icon is five times as tall as it, as a file's icon is
@@ -281,7 +284,7 @@ together, in short eased transitions.
   goes up and over, and lies under the others; or comes back.
 - **Spreading and gathering**: the pages lift off one after another and
   go to their places in a short wave; gathered, they come back the same
-  way.
+  way. Pages put back in their rows, or moved by an undo, glide there.
 - **Into the column and back**: a page or a sheet rises from where it
   lies and goes into the column as it opens, growing to the column's
   width; closed, it goes back down to its place.
@@ -765,6 +768,24 @@ Not yet, and where it comes:
 - **Copying and pasting sheets**, and turning them with the selection's handle (it carries them not).
 - **A step's card lies over the canvas**, in HTML, as all a workflow's cards do: a log's lines come out from under its step's card, and pass under the other cards on their way, as a PDF's page does.
 - **More grammars**: a language Lezer has a grammar for is a line here and its few tens of kilobytes; Python, JSON and XML for now, as the specification lists.
+
+### Pages placed one by one (2026-10-10)
+
+Built (lane L9):
+- **A page spread is moved alone.** Held still a moment on its rim - or anywhere on it, where its words are too small to read - a page spread is taken hold of, the selection's shade spreading over it alone from the pointer, and the drag moves it to a place of its own, as one step. It then lies over the other pages; of those put in places of their own, the last put there lies on top. Held so on its name, the PDF is taken hold of whole, and all its pages move together.
+- **Where each lies is kept from the PDF's place** (`placed` in `workspace.json`'s `pdfs`: each page's middle from where the PDF lies, in the order they were put there), so the pages go with the PDF wherever it is moved. A page in a place of its own leaves its place in its row empty; the others keep theirs.
+- **Gathered, they go back to the stack's own place**, as before, and their places are kept: spread again, each page goes back to where it was put. *Put pages in rows*, in the PDF's menu while some lie in places of their own, puts them all back in their rows, as one step.
+- **A page in a place of its own shows its number under it** (*3 / 12*), as small on the screen as the PDF's name, which stays under the pages left in their rows - under the first page, where none is left there.
+- **The light, hovered or taken hold of, lies round each page**, not round all of them, since they may lie far apart.
+- **They glide.** Put back in their rows, or moved by an undo or a redo, the pages glide to where they now lie (320 ms), the one being dragged following the pointer.
+
+Decided while building it, for the maintainer to confirm:
+- **A page is taken hold of as the stack is**, by a long press on its rim; its words are still selected by a long press on them, and a box drawn in a figure.
+- **The number under a page is *3 / 12***, as the column's page number reads.
+
+Not yet, and where it comes:
+- **A stack moved by an undo still jumps** there, as before; only pages spread glide.
+- **Selecting PDFs, or pages, with others**, to be moved, copied or deleted together (*Not yet* in step 1).
 
 ## In order
 
